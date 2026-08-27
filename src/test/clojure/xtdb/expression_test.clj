@@ -1743,6 +1743,54 @@
   (t/testing "Nested expr"
     (t/is (= [42] (project1 '[(+ 1 a)] {:a 41})))))
 
+(t/deftest a-column-of-empty-lists-compares-as-a-literal-does-5948
+  (with-open [rel (tu/open-rel {:xs [[] []]})]
+    (t/is (= #xt/type [:list :nothing]
+             (.getType (.vectorForOrNull rel "xs")))
+          "the column's element type is the lattice bottom, which is what makes this test cover anything")
+
+    (t/are [form expected] (= expected (:res (run-projection rel form)))
+      '(== xs [])     [true true]
+      '(== xs [1])    [false false]
+      '(<> xs [])     [false false]
+      '(=== xs [])    [true true]
+      '(== xs xs)     [true true]))
+
+  (t/testing "an element written as null heals to `Null`, an empty list does not"
+    (with-open [rel (tu/open-rel {:xs [[nil]]})]
+      (t/is (= #xt/type [:list :null] (.getType (.vectorForOrNull rel "xs"))))
+      (t/is (= [nil] (:res (run-projection rel '(== xs [nil])))))))
+
+  (t/testing "a null list leaves the element type at the bottom"
+    (with-open [rel (tu/open-rel {:xs [nil []]})]
+      (t/is (= #xt/type [:? :list :nothing]
+               (.getType (.vectorForOrNull rel "xs"))))
+      (t/is (= [nil true] (:res (run-projection rel '(== xs []))))))))
+
+(t/deftest reading-a-valueless-struct-field-yields-null-5948
+  (with-open [rel (vr/rel-reader [(tu/open-vec "s" #xt/type [:struct {"a" :nothing}] [nil])])]
+    (t/is (= #xt/type [:? :struct {"a" :nothing}]
+             (.getType (.vectorForOrNull rel "s")))
+          "the field's type is the lattice bottom, which is what makes this test cover anything")
+
+    (t/are [form expected-type expected-res] (= [expected-type expected-res]
+                                                ((juxt :res-type :res) (run-projection rel form)))
+      '(. s a) #xt/type :null [nil]
+      '(== s s) #xt/type [:? :bool] [nil]
+      '(=== s s) #xt/type :bool [true])))
+
+(t/deftest indexing-a-column-of-empty-lists-yields-null-5948
+  (with-open [rel (tu/open-rel {:xs [[] []]})]
+    (t/are [form] (= [nil nil] (:res (run-projection rel form)))
+      '(nth xs 0)
+      '(nth xs 1)
+      '(nth xs -1))))
+
+(t/deftest a-struct-field-holding-an-empty-list-compares-5948
+  (with-open [rel (tu/open-rel {:s [{:xs []}]})]
+    (t/is (= [true] (:res (run-projection rel '(== s s))))
+          "struct comparison recurses into the field, so the bottom is reached one level down")))
+
 (t/deftest test-list-equal
   (t/is (= true (project1 '(== [] []) {})))
   (t/is (= false (project1 '(== [1 2] [1 2 3]) {})))

@@ -22,6 +22,43 @@
     (util/with-open [page-metadata (.openPageMetadataSync metadata-mgr meta-file-path)]
       (f page-metadata))))
 
+(t/deftest a-declared-column-holds-the-bottom-until-a-put-writes-a-row-5948
+  (xt/execute-tx tu/*node* [[:sql "CREATE TABLE foo (a)"]])
+
+  (t/is (= [{:data-type ":nothing"}]
+           (xt/q tu/*node* "SELECT data_type FROM information_schema.columns
+                            WHERE table_name = 'foo' AND column_name = 'a'")))
+
+  (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo (_id) VALUES (1)"]])
+
+  (t/is (= [{:data-type ":null"}]
+           (xt/q tu/*node* "SELECT data_type FROM information_schema.columns
+                            WHERE table_name = 'foo' AND column_name = 'a'"))
+        "the put pads the declared column, which is what takes it off the bottom"))
+
+;; the read-side handling is tested in `xtdb.expression-test`, which states the struct type by hand;
+;; this is here to show a user query still reaches that type, so that handling isn't dead code
+(t/deftest pull-reaches-a-struct-of-valueless-fields-5948
+  (xt/execute-tx tu/*node* [[:sql "CREATE TABLE foo (a, b)"]])
+
+  (t/is (= [{:xt/id 1}]
+           (xt/q tu/*node* '(-> (rel [{:_id 1}] [_id])
+                                (with {:p (pull (from :foo [a b]))})
+                                (with {:m (== p {:a 1, :b 2})}))))
+        "struct comparison reads every field of the pulled struct")
+
+  (t/is (= [{:xt/id 1, :m false}]
+           (xt/q tu/*node* '(-> (rel [{:_id 1}] [_id])
+                                (with {:p (pull (from :foo [a b]))})
+                                (with {:m (=== p {:a 1, :b 2})}))))
+        "identity comparison doesn't short-circuit a null, so it compiles the struct leg too")
+
+  (t/is (= [{:xt/id 1}]
+           (xt/q tu/*node* '(-> (rel [{:_id 1}] [_id])
+                                (with {:p (pull (from :foo [a b]))})
+                                (with {:x (. p a)}))))
+        "get_field reads one"))
+
 (t/deftest test-find-gt-ivan
   (with-open [node (xtn/start-node (assoc tu/*node-opts* :indexer {:rows-per-block 10}))]
     (xt/execute-tx node [[:put-docs :xt_docs {:name "Håkan", :xt/id :hak}]])

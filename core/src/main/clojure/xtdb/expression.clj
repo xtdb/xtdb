@@ -1935,7 +1935,7 @@
                                                  emitted-vals)]) map-sym)))}))
 
 (defmethod codegen-call [:get_field :struct] [{[^VectorType$Struct struct-type] :arg-types, :keys [field]}]
-  (if-let [val-type (.get (.getChildren struct-type) (str field))]
+  (if-let [val-type (some-> (.get (.getChildren struct-type) (str field)) read-type)]
     {:return-type val-type
      :continue-call (fn [f [struct-code]]
                       (continue-read f val-type
@@ -1966,10 +1966,14 @@
                          ~(f #xt/type :transit val-sym)
                          ~(f #xt/type :null nil))))})
 
+(defn- read-field-types [^VectorType$Struct struct-type]
+  (-> (into {} (.getChildren struct-type))
+      (update-vals read-type)))
+
 (doseq [[op return-code] [[:== 1] [:<> -1]]]
   (defmethod codegen-call [op :struct :struct] [{[^VectorType$Struct l-type, ^VectorType$Struct r-type] :arg-types}]
-    (let [l-field-types (.getChildren l-type)
-          r-field-types (.getChildren r-type)
+    (let [l-field-types (read-field-types l-type)
+          r-field-types (read-field-types r-type)
           fields (set (keys l-field-types))]
       (if-not (= fields (set (keys r-field-types)))
         {:return-type #xt/type :bool, :->call-code (constantly (if (= :== op) false true))}
@@ -2017,8 +2021,8 @@
                                    ~(f #xt/type :bool `(== ~return-code ~res-sym))))))})))))
 
 (defmethod codegen-call [:=== :struct :struct] [{[^VectorType$Struct l-type, ^VectorType$Struct r-type] :arg-types}]
-  (let [l-field-types (.getChildren l-type)
-        r-field-types (.getChildren r-type)
+  (let [l-field-types (read-field-types l-type)
+        r-field-types (read-field-types r-type)
         fields (set (keys l-field-types))]
     (if-not (= fields (set (keys r-field-types)))
       {:return-type #xt/type :bool, :->call-code (constantly false)}
@@ -2164,18 +2168,24 @@
                                             (f return-type code))))))))
 
 (defmethod codegen-call [:nth :list :int] [{[^VectorType list-type _n-type] :arg-types}]
-  (let [list-el-vec-type (types/unnest-type list-type)
-        return-type (types/merge-types list-el-vec-type #xt/type :null)]
-    {:return-type return-type
-     :continue-call (fn [f [list-code n-code]]
-                      (let [list-sym (gensym 'list)
-                            n-sym (gensym 'n)]
-                        `(let [~list-sym ~list-code
-                               ~n-sym ~n-code]
-                           (if (and (>= ~n-sym 0) (< ~n-sym (.size ~list-sym)))
-                             (do
-                               ~(continue-read f list-el-vec-type `(.nth ~list-sym ~n-sym)))
-                             ~(f #xt/type :null nil)))))}))
+  (let [list-el-vec-type (types/unnest-type list-type)]
+    (if (bottom? list-el-vec-type)
+      ;; a bottom element type means the list is empty on every row, so every index is out of range.
+      ;; the operands are still evaluated - an index expression that throws must still throw
+      {:return-type #xt/type :null
+       :->call-code (fn [[list-code n-code]] `(do ~list-code ~n-code nil))}
+
+      (let [return-type (types/merge-types list-el-vec-type #xt/type :null)]
+        {:return-type return-type
+         :continue-call (fn [f [list-code n-code]]
+                          (let [list-sym (gensym 'list)
+                                n-sym (gensym 'n)]
+                            `(let [~list-sym ~list-code
+                                   ~n-sym ~n-code]
+                               (if (and (>= ~n-sym 0) (< ~n-sym (.size ~list-sym)))
+                                 (do
+                                   ~(continue-read f list-el-vec-type `(.nth ~list-sym ~n-sym)))
+                                 ~(f #xt/type :null nil)))))}))))
 
 (defmethod codegen-call [:nth :any :int] [_]
   {:return-type #xt/type :null, :->call-code (constantly nil)})
@@ -2261,6 +2271,72 @@
 
 (doseq [[op return-code] [[:== 1] [:<> -1]]]
   (defmethod codegen-call [op :list :list] [{[^VectorType$Listy l-type ^VectorType$Listy r-type] :arg-types}]
+    (if (or (bottom? (.getElType l-type)) (bottom? (.getElType r-type)))
+      ;; a bottom element type means that side is empty on every row, so length alone decides and no
+      ;; element is read - hence :bool, where the general case is [:? :bool] for an unknown comparison
+      {:return-type #xt/type :bool
+       :->call-code (fn [[l r]]
+                      (let [l-sym (gensym 'l), r-sym (gensym 'r)
+                            both-empty `(let [~(with-tag l-sym ListValueReader) ~l
+                                              ~(with-tag r-sym ListValueReader) ~r]
+                                          (and (zero? (.size ~l-sym)) (zero? (.size ~r-sym))))]
+                        (if (= :== op) both-empty `(not ~both-empty))))}
+
+      (let [l-el-type (.getElType l-type)
+            r-el-type (.getElType r-type)
+            n-sym (gensym 'n)
+            len-sym (gensym 'len)
+            res-sym (gensym 'res)
+            inner-calls (->> (for [l-el-type (.getLegs l-el-type)
+                                   r-el-type (.getLegs r-el-type)]
+                               (MapEntry/create [l-el-type r-el-type]
+                                                (if (or (= #xt/type :null l-el-type) (= #xt/type :null r-el-type))
+                                                  {:return-type #xt/type :null, :->call-code (constantly nil)}
+                                                  (codegen-call {:f :==, :arg-types [l-el-type r-el-type]}))))
+                             (into {}))]
+
+        {:return-type #xt/type [:? :bool]
+         :children (vals inner-calls)
+         :continue-call (fn continue-list= [f [l-code r-code]]
+                          (let [l-sym (gensym 'l), r-sym (gensym 'r)]
+                            ;; this is essentially `(every? = ...)` but with 3VL
+                            `(let [~l-sym ~l-code, ~r-sym ~r-code
+                                   ~(-> res-sym (with-tag 'long))
+                                   (let [~len-sym (.size ~l-sym)]
+                                     (if-not (= ~len-sym (.size ~r-sym))
+                                       -1
+                                       (loop [~n-sym 0, ~res-sym 1]
+                                         (cond
+                                           (>= ~n-sym ~len-sym) ~res-sym
+                                           (== -1 ~res-sym) -1
+                                           :else (recur (inc ~n-sym)
+                                                        (min ~res-sym
+                                                             (do
+                                                               ~(continue-read
+                                                                 (fn cont-l [l-el-type l-el-code]
+                                                                   `(do
+                                                                      ~(continue-read (fn cont-r [r-el-type r-el-code]
+                                                                                        (let [{:keys [return-type continue-call ->call-code]} (get inner-calls [l-el-type r-el-type])]
+                                                                                          (if continue-call
+                                                                                            (continue-call cont-b3-call [l-el-code r-el-code])
+                                                                                            (cont-b3-call return-type (->call-code [l-el-code r-el-code])))))
+                                                                                      r-el-type
+                                                                                      `(.nth ~r-sym ~n-sym))))
+                                                                 l-el-type
+                                                                 `(.nth ~l-sym ~n-sym)))))))))]
+                               (if (zero? ~res-sym)
+                                 ~(f #xt/type :null nil)
+                                 ~(f #xt/type :bool `(== ~return-code ~res-sym))))))}))))
+
+(defmethod codegen-call [:=== :list :list] [{[^VectorType$Listy l-type ^VectorType$Listy r-type] :arg-types}]
+  (if (or (bottom? (.getElType l-type)) (bottom? (.getElType r-type)))
+    {:return-type #xt/type :bool
+     :->call-code (fn [[l r]]
+                    (let [l-sym (gensym 'l), r-sym (gensym 'r)]
+                      `(let [~(with-tag l-sym ListValueReader) ~l
+                             ~(with-tag r-sym ListValueReader) ~r]
+                         (and (zero? (.size ~l-sym)) (zero? (.size ~r-sym))))))}
+
     (let [l-el-type (.getElType l-type)
           r-el-type (.getElType r-type)
           n-sym (gensym 'n)
@@ -2269,83 +2345,36 @@
           inner-calls (->> (for [l-el-type (.getLegs l-el-type)
                                  r-el-type (.getLegs r-el-type)]
                              (MapEntry/create [l-el-type r-el-type]
-                                              (if (or (= #xt/type :null l-el-type) (= #xt/type :null r-el-type))
-                                                {:return-type #xt/type :null, :->call-code (constantly nil)}
-                                                (codegen-call {:f :==, :arg-types [l-el-type r-el-type]}))))
+                                              (codegen-call {:f :===, :arg-types [l-el-type r-el-type]})))
                            (into {}))]
 
-      {:return-type #xt/type [:? :bool]
+      {:return-type #xt/type :bool
        :children (vals inner-calls)
        :continue-call (fn continue-list= [f [l-code r-code]]
                         (let [l-sym (gensym 'l), r-sym (gensym 'r)]
-                          ;; this is essentially `(every? = ...)` but with 3VL
-                          `(let [~l-sym ~l-code, ~r-sym ~r-code
-                                 ~(-> res-sym (with-tag 'long))
-                                 (let [~len-sym (.size ~l-sym)]
-                                   (if-not (= ~len-sym (.size ~r-sym))
-                                     -1
-                                     (loop [~n-sym 0, ~res-sym 1]
-                                       (cond
-                                         (>= ~n-sym ~len-sym) ~res-sym
-                                         (== -1 ~res-sym) -1
-                                         :else (recur (inc ~n-sym)
-                                                      (min ~res-sym
-                                                           (do
-                                                             ~(continue-read
-                                                               (fn cont-l [l-el-type l-el-code]
-                                                                 `(do
-                                                                    ~(continue-read (fn cont-r [r-el-type r-el-code]
-                                                                                      (let [{:keys [return-type continue-call ->call-code]} (get inner-calls [l-el-type r-el-type])]
-                                                                                        (if continue-call
-                                                                                          (continue-call cont-b3-call [l-el-code r-el-code])
-                                                                                          (cont-b3-call return-type (->call-code [l-el-code r-el-code])))))
-                                                                                    r-el-type
-                                                                                    `(.nth ~r-sym ~n-sym))))
-                                                               l-el-type
-                                                               `(.nth ~l-sym ~n-sym)))))))))]
-                             (if (zero? ~res-sym)
-                               ~(f #xt/type :null nil)
-                               ~(f #xt/type :bool `(== ~return-code ~res-sym))))))})))
-
-(defmethod codegen-call [:=== :list :list] [{[^VectorType$Listy l-type ^VectorType$Listy r-type] :arg-types}]
-  (let [l-el-type (.getElType l-type)
-        r-el-type (.getElType r-type)
-        n-sym (gensym 'n)
-        len-sym (gensym 'len)
-        res-sym (gensym 'res)
-        inner-calls (->> (for [l-el-type (.getLegs l-el-type)
-                               r-el-type (.getLegs r-el-type)]
-                           (MapEntry/create [l-el-type r-el-type]
-                                            (codegen-call {:f :===, :arg-types [l-el-type r-el-type]})))
-                         (into {}))]
-
-    {:return-type #xt/type :bool
-     :children (vals inner-calls)
-     :continue-call (fn continue-list= [f [l-code r-code]]
-                      (let [l-sym (gensym 'l), r-sym (gensym 'r)]
-                        (f #xt/type :bool
-                           `(let [~l-sym ~l-code, ~r-sym ~r-code
-                                  ~len-sym (.size ~l-sym)]
-                              (if-not (= ~len-sym (.size ~r-sym))
-                                false
-                                (loop [~n-sym 0]
-                                  (cond
-                                    (>= ~n-sym ~len-sym) true
-                                    :else (let [~res-sym ~(continue-read
-                                                           (fn cont-l [l-el-type l-el-code]
-                                                             `(do
-                                                                ~(continue-read (fn cont-r [r-el-type r-el-code]
-                                                                                  (let [{:keys [return-type continue-call ->call-code]} (get inner-calls [l-el-type r-el-type])]
-                                                                                    (if continue-call
-                                                                                      (continue-call cont-b3-call [l-el-code r-el-code])
-                                                                                      (cont-b3-call return-type (->call-code [l-el-code r-el-code])))))
-                                                                                r-el-type
-                                                                                `(.nth ~r-sym ~n-sym))))
-                                                           l-el-type
-                                                           `(.nth ~l-sym ~n-sym))]
-                                            (if (< ~res-sym 1)
-                                              false
-                                              (recur (inc ~n-sym)))))))))))}))
+                          (f #xt/type :bool
+                             `(let [~l-sym ~l-code, ~r-sym ~r-code
+                                    ~len-sym (.size ~l-sym)]
+                                (if-not (= ~len-sym (.size ~r-sym))
+                                  false
+                                  (loop [~n-sym 0]
+                                    (cond
+                                      (>= ~n-sym ~len-sym) true
+                                      :else (let [~res-sym ~(continue-read
+                                                             (fn cont-l [l-el-type l-el-code]
+                                                               `(do
+                                                                  ~(continue-read (fn cont-r [r-el-type r-el-code]
+                                                                                    (let [{:keys [return-type continue-call ->call-code]} (get inner-calls [l-el-type r-el-type])]
+                                                                                      (if continue-call
+                                                                                        (continue-call cont-b3-call [l-el-code r-el-code])
+                                                                                        (cont-b3-call return-type (->call-code [l-el-code r-el-code])))))
+                                                                                  r-el-type
+                                                                                  `(.nth ~r-sym ~n-sym))))
+                                                             l-el-type
+                                                             `(.nth ~l-sym ~n-sym))]
+                                              (if (< ~res-sym 1)
+                                                false
+                                                (recur (inc ~n-sym)))))))))))})))
 
 (defn series [^long start, ^long end, ^long step, inclusive?]
   (let [box (ValueBox.)
