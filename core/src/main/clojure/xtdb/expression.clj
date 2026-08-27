@@ -408,6 +408,13 @@
 
   (defmethod write-value-code k [_ & args] `(.writeObject ~@args)))
 
+(defn- bottom? [^VectorType vec-type]
+  (= vec-type VectorType$Nothing/INSTANCE))
+
+(defn- read-type ^VectorType [^VectorType vec-type]
+  ;; a column or field with no cells reads null on every row
+  (if (bottom? vec-type) #xt/type :null vec-type))
+
 (defn- continue-read-union [f inner-types reader-sym args]
   (let [without-null (disj inner-types #xt/type :null)]
     (if (empty? without-null)
@@ -515,10 +522,10 @@
                                     :or {extract-vecs-from-rel? true}}]
   (let [return-type (or (get var-types variable)
                         (throw (AssertionError. (str "unknown variable: " variable))))
-        ;; `Nothing` is the catalog's lattice bottom for a declared-but-valueless column; when such a
-        ;; column is read in a query its rows are simply null, so the EE treats it as `:null` and never
-        ;; needs `:nothing` call definitions (Nothing's empty legs would otherwise collapse codegen).
-        return-type (if (= return-type VectorType$Nothing/INSTANCE) #xt/type :null return-type)
+        ;; this normalises the outward `:return-type` as well as the read - writer allocation in
+        ;; `->expression-projection-spec` and every parent's leg enumeration take it from here, and the
+        ;; bottom there would declare a column with no values while the emitted code writes nulls into it
+        return-type (read-type return-type)
         var-rdr-sym (gensym (util/symbol->normal-form-symbol variable))]
 
     ;; NOTE: when used from metadata exprs, incoming vectors might not exist
