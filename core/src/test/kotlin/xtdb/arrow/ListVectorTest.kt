@@ -47,4 +47,17 @@ class ListVectorTest {
             assertEquals(listOf(listOf(null), listOf(1, 2, 3)), listVec.asList)
         }
     }
+
+    // xtdb.expression's list comparisons emit a read that faults on a bottom element type, relying on
+    // this to keep their `.size` gate exact - so promotion here is not a local change (#5948).
+    @Test
+    fun `a bottom el-type and a non-empty list cannot coexist`() {
+        ListVector(allocator, "list", false, NullVector($$"$data$", false)).use { listVec ->
+            listVec.writeObject(emptyList<Any>())
+            assertEquals(listTypeOf(VectorType.Nothing), listVec.type)
+
+            listVec.writeObject(listOf(1))
+            assertEquals(listTypeOf(VectorType.I32), listVec.type, "the first element promotes it")
+        }
+    }
 }

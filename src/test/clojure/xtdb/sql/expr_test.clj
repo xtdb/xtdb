@@ -582,6 +582,21 @@
   (t/is (= [{:eq true}]
            (xt/q tu/*node* "SELECT (INTERVAL '3 1' DAY TO HOUR = INTERVAL '3 1' DAY TO HOUR) as eq"))))
 
+(t/deftest empty-array-column-compares-5948
+  (xt/execute-tx tu/*node* [[:sql "INSERT INTO docs (_id, xs) VALUES (1, ARRAY[])"]])
+
+  (t/is (= [] (xt/q tu/*node* "SELECT _id FROM docs WHERE xs = ARRAY[1]")))
+  (t/is (= [{:xt/id 1}] (xt/q tu/*node* "SELECT _id FROM docs WHERE xs = ARRAY[]")))
+
+  (xt/execute-tx tu/*node* [[:sql "UPDATE docs SET seen = true WHERE xs = ARRAY[1]"]])
+
+  (t/is (= [{:xt/id 1, :xs []}] (xt/q tu/*node* "SELECT * FROM docs"))
+        "the predicate evaluates false, so `seen` is never written at all - and an answer means a fault didn't stop the database's ingestion")
+
+  (t/is (anomalous? [:incorrect ::expr/division-by-zero]
+                    (xt/q tu/*node* "SELECT xs[_id/0] FROM docs"))
+        "the index expression is still evaluated, even though every index is out of range"))
+
 (t/deftest test-array-construction
   (t/are [sql expected]
       (= expected (plan-expr-with-foo sql))

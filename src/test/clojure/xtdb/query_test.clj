@@ -22,6 +22,44 @@
     (util/with-open [page-metadata (.openPageMetadataSync metadata-mgr meta-file-path)]
       (f page-metadata))))
 
+(t/deftest a-declared-column-holds-the-bottom-until-a-put-writes-a-row-5948
+  (xt/execute-tx tu/*node* [[:sql "CREATE TABLE foo (a)"]])
+
+  (t/is (= [{:data-type ":nothing"}]
+           (xt/q tu/*node* "SELECT data_type FROM information_schema.columns
+                            WHERE table_name = 'foo' AND column_name = 'a'")))
+
+  (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo (_id) VALUES (1)"]])
+
+  (t/is (= [{:data-type ":null"}]
+           (xt/q tu/*node* "SELECT data_type FROM information_schema.columns
+                            WHERE table_name = 'foo' AND column_name = 'a'"))
+        "the put pads the declared column, which is what takes it off the bottom"))
+
+;; `p` is null over the empty table, so every assertion here is about codegen succeeding rather than
+;; about the struct leg running. `NEST_ONE` won't do instead: its fields go through `codegen-expr
+;; :variable` and arrive as `Null`, so `pull` is the only surface that reaches a bottom-typed child.
+(t/deftest pull-reaches-a-struct-of-valueless-fields-5948
+  (xt/execute-tx tu/*node* [[:sql "CREATE TABLE foo (a, b)"]])
+
+  (t/is (= [{:xt/id 1}]
+           (xt/q tu/*node* '(-> (rel [{:_id 1}] [_id])
+                                (with {:p (pull (from :foo [a b]))})
+                                (with {:m (== p {:a 1, :b 2})}))))
+        "struct comparison reads every field of the pulled struct")
+
+  (t/is (= [{:xt/id 1, :m false}]
+           (xt/q tu/*node* '(-> (rel [{:_id 1}] [_id])
+                                (with {:p (pull (from :foo [a b]))})
+                                (with {:m (=== p {:a 1, :b 2})}))))
+        "identity comparison doesn't short-circuit a null, so it compiles the struct leg too")
+
+  (t/is (= [{:xt/id 1}]
+           (xt/q tu/*node* '(-> (rel [{:_id 1}] [_id])
+                                (with {:p (pull (from :foo [a b]))})
+                                (with {:x (. p a)}))))
+        "get_field reads one"))
+
 (t/deftest test-find-gt-ivan
   (with-open [node (xtn/start-node (assoc tu/*node-opts* :indexer {:rows-per-block 10}))]
     (xt/execute-tx node [[:put-docs :xt_docs {:name "Håkan", :xt/id :hak}]])

@@ -15,7 +15,8 @@
            (java.time Duration Instant InstantSource LocalDate LocalDateTime LocalTime Period ZoneId ZonedDateTime)
            (java.time.temporal ChronoUnit)
            org.apache.arrow.vector.types.TimeUnit
-           (xtdb.arrow RelationReader Vector VectorReader)
+           (xtdb.arrow NullVector RelationReader Vector VectorReader)
+           (xtdb.operator ProjectionSpec$Star)
            (xtdb.time Interval)
            (xtdb.util StringUtil)))
 
@@ -1742,6 +1743,82 @@
 
   (t/testing "Nested expr"
     (t/is (= [42] (project1 '[(+ 1 a)] {:a 41})))))
+
+(t/deftest a-column-of-empty-lists-compares-as-a-literal-does-5948
+  (with-open [rel (tu/open-rel {:xs [[] []]})]
+    (t/is (= #xt/type [:list :nothing]
+             (.getType (.vectorForOrNull rel "xs")))
+          "the column's element type is the lattice bottom, which is what makes this test cover anything")
+
+    (t/are [form expected] (= expected (:res (run-projection rel form)))
+      '(== xs [])     [true true]
+      '(== xs [1])    [false false]
+      '(<> xs [])     [false false]
+      '(=== xs [])    [true true]
+      '(=== xs [1])   [false false]
+      '(== xs xs)     [true true]))
+
+  (t/testing "an element written as null heals to `Null`, an empty list does not"
+    (with-open [rel (tu/open-rel {:xs [[nil]]})]
+      (t/is (= #xt/type [:list :null] (.getType (.vectorForOrNull rel "xs"))))
+      (t/is (= [nil] (:res (run-projection rel '(== xs [nil])))))))
+
+  (t/testing "a null list leaves the element type at the bottom"
+    (with-open [rel (tu/open-rel {:xs [nil []]})]
+      (t/is (= #xt/type [:? :list :nothing]
+               (.getType (.vectorForOrNull rel "xs"))))
+      (t/is (= [nil true] (:res (run-projection rel '(== xs []))))))))
+
+(t/deftest a-null-struct-row-never-reaches-its-valueless-field-5948
+  (with-open [rel (vr/rel-reader [(tu/open-vec "s" #xt/type [:struct {"a" :nothing}] [nil])])]
+    (t/is (= #xt/type [:? :struct {"a" :nothing}]
+             (.getType (.vectorForOrNull rel "s")))
+          "the field's type is the lattice bottom, which is what makes this test cover anything")
+
+    (t/are [form expected-type expected-res] (= [expected-type expected-res]
+                                                ((juxt :res-type :res) (run-projection rel form)))
+      '(. s a) #xt/type :null [nil]
+      '(== s s) #xt/type [:? :bool] [nil]
+      '(=== s s) #xt/type :bool [true])))
+
+(t/deftest indexing-a-column-of-empty-lists-yields-null-5948
+  (with-open [rel (tu/open-rel {:xs [[] []]})]
+    (t/are [form] (= [nil nil] (:res (run-projection rel form)))
+      '(nth xs 0)
+      '(nth xs 1)
+      '(nth xs -1))))
+
+(t/deftest a-struct-field-holding-an-empty-list-compares-5948
+  (with-open [rel (tu/open-rel {:s [{:xs []}]})]
+    (t/is (= [true] (:res (run-projection rel '(== s s))))
+          "struct comparison recurses into the field, so the bottom is reached one level down")))
+
+;; `RelationAsStructReader.valueReader()` has no `pos`, so an expression can only ever see a copy -
+;; which is why the read below goes through `rowCopier` rather than reading the view directly.
+(t/deftest a-star-struct-cannot-carry-the-bottom-to-a-read-5948
+  (with-open [inner (vr/rel-reader [(doto (NullVector. "a" false 0)
+                                      (.writeUndefined)
+                                      (.writeUndefined))]
+                                   2)
+              s (.project (ProjectionSpec$Star. "s" #xt/type [:struct {"a" :nothing}])
+                          tu/*allocator* inner {} vw/empty-args)
+              out (Vector/open tu/*allocator* "s" #xt/type [:struct {"a" :nothing}])]
+
+    (t/is (= #xt/type [:struct {"a" :nothing}] (.getType s))
+          "the premise: rows present, child still at the bottom")
+    (t/is (= 2 (.getValueCount s)))
+    (t/is (false? (.isNull s 0)))
+
+    (let [copier (.rowCopier s out)]
+      (dotimes [idx 2] (.copyRow copier idx)))
+
+    (t/is (= #xt/type [:struct {"a" :null}] (.getType out))
+          "copying is what heals it - the child's rowCopier writes a real null")
+
+    (let [rel (vr/rel-reader [out] 2)]
+      (t/is (= [nil nil] (:res (run-projection rel '(== s s))))
+            "3VL: the only field is null on both sides, so the comparison is unknown")
+      (t/is (= [nil nil] (:res (run-projection rel '(. s a))))))))
 
 (t/deftest test-list-equal
   (t/is (= true (project1 '(== [] []) {})))

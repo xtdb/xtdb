@@ -371,4 +371,19 @@ class StructVectorTest {
             }
         }
     }
+
+    // xtdb.expression's struct comparisons emit a read that faults on a bottom-typed field, relying
+    // on this to keep it unreachable - so relaxing the padding here is not a local change (#5948).
+    @Test
+    fun `a bottom-typed child and a non-null struct row cannot coexist`() {
+        StructVector(allocator, "struct", true, linkedMapOf("a" to NullVector("a", false))).use { structVec ->
+            assertEquals(VectorType.Nothing, structVec.vectorFor("a").type)
+
+            structVec.writeNull()
+            assertEquals(VectorType.Nothing, structVec.vectorFor("a").type, "a null row writes undefineds")
+
+            structVec.endStruct()
+            assertEquals(VectorType.Null, structVec.vectorFor("a").type, "a non-null row pads with writeNull()")
+        }
+    }
 }

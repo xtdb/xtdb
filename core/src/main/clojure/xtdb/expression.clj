@@ -410,9 +410,14 @@
 
 (defn- continue-read-union [f inner-types reader-sym args]
   (let [without-null (disj inner-types #xt/type :null)]
-    (if (empty? without-null)
+    (cond
+      (empty? inner-types)
+      `(throw (err/fault ::zero-leg-read "internal error: read of a zero-leg type"))
+
+      (empty? without-null)
       (f #xt/type :null nil)
 
+      :else
       (let [nn-code (if (= 1 (count without-null))
                       (let [nn-type (first (seq without-null))]
                         (f nn-type (read-value-code nn-type reader-sym)))
