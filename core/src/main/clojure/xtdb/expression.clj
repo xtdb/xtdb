@@ -416,6 +416,11 @@
   (if (bottom? vec-type) #xt/type :null vec-type))
 
 (defn- continue-read-union [f inner-types reader-sym args]
+  (when (empty? inner-types)
+    (throw (err/fault ::zero-leg-read
+                      "no values to read from a zero-leg type - the calling codegen should normalise it with `read-type`, or fold the read away"
+                      {:reader-sym reader-sym})))
+
   (let [without-null (disj inner-types #xt/type :null)]
     (if (empty? without-null)
       (f #xt/type :null nil)
