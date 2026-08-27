@@ -16,6 +16,7 @@ import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider
 import software.amazon.awssdk.core.FileTransformerConfiguration
 import software.amazon.awssdk.core.async.AsyncRequestBody
 import software.amazon.awssdk.core.async.AsyncResponseTransformer
+import software.amazon.awssdk.core.checksums.RequestChecksumCalculation.WHEN_REQUIRED
 import software.amazon.awssdk.regions.Region
 import software.amazon.awssdk.services.s3.S3AsyncClient
 import software.amazon.awssdk.services.s3.S3Configuration
@@ -72,13 +73,9 @@ class S3(
         client.close()
     }
 
-    private fun efficientAsyncRequestBody(buf: ByteBuffer): AsyncRequestBody =
-        buf
-            // prevents copying the buffer into a new heap ByteBuffer, as `fromByteBuffer` would do
-            .let(AsyncRequestBody::fromByteBufferUnsafe)
-            // makes the buffer non-replayable, again preventing heap copies for payload-signing or checksum calculations
-            // (couldn't achive this effect by S3 client configuration)
-            .let(AsyncRequestBody::fromPublisher)
+    // `fromByteBuffer` would copy into a new heap ByteBuffer; the Unsafe variant wraps ours as-is.
+    private fun asyncRequestBody(buf: ByteBuffer): AsyncRequestBody =
+        AsyncRequestBody.fromByteBufferUnsafe(buf)
 
     override suspend fun startMultipart(k: Path): IMultipartUpload<CompletedPart> {
         val s3Key = prefix.resolve(k).toString()
@@ -101,7 +98,7 @@ class S3(
                 val contentLength = buf.remaining().toLong()
                 val partNum = idx + 1
 
-                val partResp = client.uploadPart(efficientAsyncRequestBody(buf)) {
+                val partResp = client.uploadPart(asyncRequestBody(buf)) {
                     it.bucket(bucket)
                     it.key(s3Key)
                     it.uploadId(uploadId)
@@ -178,7 +175,7 @@ class S3(
 
         val contentLength = buf.remaining().toLong()
 
-        client.putObject(efficientAsyncRequestBody(buf)) {
+        client.putObject(asyncRequestBody(buf)) {
             it.bucket(bucket)
             it.key(s3Key)
             it.contentLength(contentLength)
@@ -355,10 +352,21 @@ class S3(
                                 .let { StaticCredentialsProvider.create(it) }
                                 .also { credentialsProvider(it) }
                         }
-                        endpoint?.let { endpointOverride(URI(it)) }
+                        val endpointUri = endpoint?.let(::URI)
+                        endpointUri?.let { endpointOverride(it) }
 
-                        if (pathStyleAccessEnabled)
-                            serviceConfiguration { it.pathStyleAccessEnabled(true) }
+                        // one decision, not two: with chunk encoding off the signer still calculates a checksum,
+                        // and does that by buffering the whole payload. Only worth it over HTTPS - over plain
+                        // HTTP the signer hashes the payload whatever we ask for, and buffers all of it to do
+                        // so, where chunk framing would have bounded the copy to a frame at a time (#5373).
+                        val httpsEndpoint = !"http".equals(endpointUri?.scheme, ignoreCase = true)
+
+                        if (httpsEndpoint) requestChecksumCalculation(WHEN_REQUIRED)
+
+                        serviceConfiguration {
+                            if (httpsEndpoint) it.chunkedEncodingEnabled(false)
+                            if (pathStyleAccessEnabled) it.pathStyleAccessEnabled(true)
+                        }
 
                         s3Configurator.configureClient(this)
                     }.build()
