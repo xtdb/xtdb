@@ -143,21 +143,6 @@ internal suspend fun runLeaderTerm(
     }
 }
 
-/**
- * Run a follower's work until it ends.
- *
- * A failure is already logged and on the watchers by the time it arrives — `FollowerLogProcessor` applies
- * records inside `processRecords`, which reports before it throws — so there is nothing left to decide.
- */
-internal suspend fun runFollower(follower: FollowerLogProcessor) {
-    try {
-        while (true) selectUnbiased { with(follower) { selectWork() } }
-    } catch (e: CancellationException) {
-        throw e
-    } catch (_: Throwable) {
-    }
-}
-
 class LogProcessor(
     private val allocator: BufferAllocator,
     private val base: NodeBase,
@@ -201,7 +186,7 @@ class LogProcessor(
     fun checkTermUnfenced(term: Long) {
         val maxTerm = termFence.highest
         if (maxTerm > term)
-            throw Conflict(
+            throw Incorrect(
                 "[$dbName] leader term ${LeaderTerm.format(term)} is already fenced by " +
                         "${LeaderTerm.format(maxTerm)} on the replica log — the leader-election counter " +
                         "has regressed (a recreated Kafka consumer group, or a restarted local log), so " +
@@ -299,10 +284,18 @@ class LogProcessor(
             meterRegistry = base.meterRegistry,
         )
 
-        return Following(proc, scope.launch {
-            launch { tailReplica(proc::queueRecords) }
-            runFollower(proc)
-        })
+        val inbound = Channel<List<Log.Record<ReplicaMessage>>>()
+
+        return Following(
+            proc,
+
+            scope.launch {
+                launch { tailReplica(inbound::send) }
+
+                for (batch in inbound) {
+                    proc.processRecords(batch)
+                }
+            })
     }
 
     @Volatile

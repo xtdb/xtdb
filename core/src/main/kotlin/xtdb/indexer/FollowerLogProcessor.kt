@@ -3,8 +3,6 @@ package xtdb.indexer
 import io.micrometer.core.instrument.DistributionSummary
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Timer
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.selects.SelectBuilder
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.DatabaseName
 import xtdb.api.TransactionKey
@@ -230,17 +228,6 @@ class FollowerLogProcessor @JvmOverloads constructor(
         }
 
         if (msg.stale) watchers.notifyApplied(replicaMsgId) else processRecord(record, replicaMsgId)
-    }
-
-    // Rendezvous, so the read runs no further ahead than the loop has applied — a follower's consume
-    // position is what a transition's catch-up awaits, and buffering here would advance the read
-    // without advancing that.
-    private val inbound = Channel<List<Log.Record<ReplicaMessage>>>()
-
-    suspend fun queueRecords(records: List<Log.Record<ReplicaMessage>>) = inbound.send(records)
-
-    fun SelectBuilder<Unit>.selectWork() {
-        inbound.onReceive { records -> processRecords(records) }
     }
 
     suspend fun processRecords(records: List<Log.Record<ReplicaMessage>>) {
