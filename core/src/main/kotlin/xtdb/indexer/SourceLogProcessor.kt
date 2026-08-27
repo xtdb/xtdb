@@ -1,8 +1,11 @@
 package xtdb.indexer
 
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.selects.SelectBuilder
 import xtdb.api.DatabaseName
+import xtdb.api.TransactionResult
 import xtdb.api.error.Anomaly
 import xtdb.api.log.DbOp
 import xtdb.api.log.Log
@@ -22,6 +25,24 @@ import xtdb.util.trace
 import java.time.Duration
 
 private val LOG = SourceLogProcessor::class.logger
+
+/**
+ * Run a resolution task, routing failures onto its completion handle (and any external-source result) so
+ * that no caller hangs. Interrupts are shutdown signals, not ingestion faults, so they don't poison the
+ * watchers. A successful source batch completes its own handle, possibly deferred if a block cut paused it.
+ */
+private inline fun runTaskGuarded(
+    onComplete: CompletableDeferred<Unit>,
+    extResult: CompletableDeferred<TransactionResult>? = null,
+    block: () -> Unit,
+) =
+    try {
+        block()
+    } catch (e: Throwable) {
+        if (!e.isShutdownSignal) extResult?.let { if (!it.isCompleted) it.completeExceptionally(e) }
+        onComplete.completeExceptionally(e)
+        throw e
+    }
 
 /**
  * The source log's side of a leader term: the flush timer, the batches the transport hands over, and what
@@ -183,15 +204,16 @@ internal class SourceLogProcessor(
     }
 
     /** Arm this processor's clauses. The term arms them only while no block cut is in progress. */
-    fun SelectBuilder<Unit>.selectWork() {
-        if (pausedBatch != null) resumeCh.onReceive {
-            val pb = pausedBatch ?: return@onReceive
-            pausedBatch = null
-            watchers.runTaskGuarded(pb.task.onComplete) { runBatch(pb.task, pb.nextIdx) }
-        }
+    fun SelectBuilder<Unit>.armSelect() {
+        if (pausedBatch != null)
+            resumeCh.onReceive {
+                val pb = pausedBatch ?: return@onReceive
+                pausedBatch = null
+                runTaskGuarded(pb.task.onComplete) { runBatch(pb.task, pb.nextIdx) }
+            }
 
         driver.sourceBatches.onBatch { batch ->
-            watchers.runTaskGuarded(batch.onComplete) { runBatch(batch, 0) }
+            runTaskGuarded(batch.onComplete) { runBatch(batch, 0) }
         }
     }
 

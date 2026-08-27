@@ -1,35 +1,20 @@
 package xtdb.indexer
 
 import io.micrometer.core.instrument.Gauge
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.CoroutineName
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.async
-import kotlinx.coroutines.cancelAndJoin
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.selects.SelectBuilder
 import kotlinx.coroutines.selects.selectUnbiased
-import kotlinx.coroutines.withContext
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.NodeBase
-import xtdb.api.TransactionResult
-import xtdb.api.log.*
-import xtdb.compactor.Compactor
 import xtdb.api.DatabaseName
+import xtdb.api.error.Fault
+import xtdb.api.error.Interrupted
+import xtdb.api.log.*
+import xtdb.api.tx.ExternalSource
+import xtdb.compactor.Compactor
 import xtdb.database.Database
 import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
-import xtdb.api.tx.ExternalSource
-import xtdb.api.error.Fault
-import xtdb.api.error.Interrupted
 import xtdb.types.MessageId
 import xtdb.util.debug
 import xtdb.util.error
@@ -45,66 +30,6 @@ internal val Throwable.isShutdownSignal
     get() = this is CancellationException || this is InterruptedException || this is Interrupted
 
 /**
- * Run a resolution task, routing failures onto its completion handle (and any external-source result) so
- * that no caller hangs. Interrupts are shutdown signals, not ingestion faults, so they don't poison the
- * watchers. A successful source batch completes its own handle, possibly deferred if a block cut paused it.
- */
-internal inline fun Watchers.runTaskGuarded(
-    onComplete: CompletableDeferred<Unit>,
-    extResult: CompletableDeferred<TransactionResult>? = null,
-    block: () -> Unit,
-) {
-    try {
-        block()
-    } catch (e: CancellationException) {
-        if (!onComplete.isCompleted) onComplete.cancel(e)
-        throw e
-    } catch (e: Throwable) {
-        if (!e.isShutdownSignal) {
-            notifyError(e)
-            extResult?.let { if (!it.isCompleted) it.completeExceptionally(e) }
-        }
-        if (!onComplete.isCompleted) onComplete.completeExceptionally(e)
-        throw e
-    }
-}
-
-/**
- * Arm the work a leader term will take right now.
- *
- * Consume-back stays armed throughout: it is the only thing that acks a write, so a term that stopped
- * applying while a block cut was in flight would never see the boundary land. Resolution is the part that
- * pauses, which [LeaderLogProcessor.acceptingResolution] answers for.
- */
-private fun SelectBuilder<Unit>.selectLeaderWork(watchers: Watchers, term: LeaderLogProcessor) {
-    // supersession fails the term, not the database — rationale on the outer ladder
-    term.onReplicaMsg { record ->
-        try {
-            term.applyRecord(record)
-        } catch (e: Throwable) {
-            if (!e.isShutdownSignal && e !is LeaderSupersededException) watchers.notifyError(e)
-            throw e
-        }
-    }
-
-    if (term.acceptingResolution) {
-        with(term.srcLogProc) { selectWork() }
-
-        term.extSrcProc?.let { extSrcProc ->
-            extSrcProc.onTask { task ->
-                watchers.runTaskGuarded(task.onComplete, extResult = task.msg.pending) {
-                    extSrcProc.handleTask(task)
-                }
-            }
-        }
-
-        term.gc.onTask { task ->
-            watchers.runTaskGuarded(task.onComplete) { term.gc.handleTask(task) }
-        }
-    }
-}
-
-/**
  * Run a leader term until it ends, then fail everything staged on it.
  *
  * The term's work and its append pump are structured together, so whichever fails first cancels the other
@@ -117,28 +42,34 @@ private fun SelectBuilder<Unit>.selectLeaderWork(watchers: Watchers, term: Leade
 internal suspend fun runLeaderTerm(
     dbName: DatabaseName, watchers: Watchers, term: LeaderLogProcessor, appender: ReplicaLogAppender,
 ) {
-    var cause: Throwable? = null
     try {
         coroutineScope {
-            launch(CoroutineName("$dbName-append-pump")) { appender.run() }
-            while (true) selectUnbiased { selectLeaderWork(watchers, term) }
+            launch(CoroutineName("$dbName-replica-appender")) { appender.run() }
+
+            while (true)
+                selectUnbiased {
+                    term.onReplicaMsg { term.applyRecord(it) }
+
+                    if (term.acceptingResolution) {
+                        term.srcLogProc.run { armSelect() }
+                        term.extSrcProc?.run { armSelect() }
+                        term.gc.run { armSelect() }
+                    }
+                }
         }
-    } catch (_: CancellationException) {
-    } catch (e: LeaderSupersededException) {
-        // superseded by a newer leader — expected, not a query-facing fault; the transport re-follows on
-        // the next rebalance.
-        LOG.info("[$dbName] ${e.message}")
-        cause = e
     } catch (t: Throwable) {
-        // A genuine term fault (e.g. an append fault) surfaces to queries as a failed term. Idempotent —
-        // the apply arm may already have notified for its own faults.
-        if (!t.isShutdownSignal) {
-            LOG.error(t) { "[$dbName] leader term failed" }
-            watchers.notifyError(t)
+        when {
+            t is LeaderSupersededException -> {
+                LOG.info("[$dbName] ${t.message}")
+            }
+
+            !t.isShutdownSignal -> {
+                LOG.error(t) { "[$dbName] leader term failed" }
+                watchers.notifyError(t)
+            }
         }
-        cause = t
-    } finally {
-        term.shutdown(cause ?: CancellationException("leader term closed"))
+
+        term.shutdown(t)
     }
 }
 

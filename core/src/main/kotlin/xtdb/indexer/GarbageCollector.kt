@@ -6,6 +6,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.selects.SelectBuilder
 import kotlinx.coroutines.supervisorScope
 import xtdb.NodeBase
 import xtdb.api.DatabaseName
@@ -49,7 +50,31 @@ internal class GarbageCollector(
         onUndeliveredElement = { it.abandon(CancellationException("leader term closed")) }
     )
 
-    val onTask get() = gcCh.onReceive
+    fun SelectBuilder<Unit>.armSelect() {
+        gcCh.onReceive { task ->
+            try {
+                when (task) {
+                    is GcTask.TriesDeleted -> {
+                        // Remove from the local catalog here, then replicate for followers — eager on the resolve side so
+                        // the GC's `commitTriesDeleted` await returns with the catalog already updated (its contract; the
+                        // GC has already deleted the files). Safe as a fenced-log projection for the same reason as
+                        // TriesAdded: the block-cut pause serialises this against any boundary, and gcCh is excluded while a
+                        // block is in progress. Skipped on our own consume-back (see applyRecord); the follower applies it.
+                        trieCatalog.deleteTries(task.tableName, task.trieKeys)
+
+                        replicaAppender.append(
+                            ControlItem(TriesDeleted(task.tableName.schemaAndTable, task.trieKeys, termId = leaderTerm))
+                        )
+
+                        task.onComplete.complete(Unit)
+                    }
+                }
+            } catch (e: Throwable) {
+                task.onComplete.completeExceptionally(e)
+                throw e
+            }
+        }
+    }
 
     private val trieGc = nodeBase.config.garbageCollector.let { cfg ->
         // Routed through the persister rather than applied inline: the catalog removal has to be serialised
@@ -78,25 +103,6 @@ internal class GarbageCollector(
         }
 
         data class TriesDeleted(val tableName: TableRef, val trieKeys: Set<TrieKey>) : GcTask()
-    }
-
-    suspend fun handleTask(task: GcTask) {
-        when (task) {
-            is GcTask.TriesDeleted -> {
-                // Remove from the local catalog here, then replicate for followers — eager on the resolve side so
-                // the GC's `commitTriesDeleted` await returns with the catalog already updated (its contract; the
-                // GC has already deleted the files). Safe as a fenced-log projection for the same reason as
-                // TriesAdded: the block-cut pause serialises this against any boundary, and gcCh is excluded while a
-                // block is in progress. Skipped on our own consume-back (see applyRecord); the follower applies it.
-                trieCatalog.deleteTries(task.tableName, task.trieKeys)
-
-                replicaAppender.append(
-                    ControlItem(TriesDeleted(task.tableName.schemaAndTable, task.trieKeys, termId = leaderTerm))
-                )
-
-                task.onComplete.complete(Unit)
-            }
-        }
     }
 
     fun signal() {

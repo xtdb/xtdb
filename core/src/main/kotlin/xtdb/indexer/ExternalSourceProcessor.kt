@@ -4,6 +4,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.selects.SelectBuilder
 import xtdb.api.TransactionResult
 import xtdb.api.log.Watchers
 import xtdb.api.tx.ExternalSource
@@ -35,7 +36,7 @@ internal class ExternalSourceProcessor(
 
     override val latestBlock get() = tableCatalog.latestBlock
 
-    class Task(val msg: ExtSourceMessage) {
+    private class Task(val msg: ExtSourceMessage) {
         val onComplete = CompletableDeferred<Unit>()
 
         /**
@@ -61,11 +62,22 @@ internal class ExternalSourceProcessor(
         onUndeliveredElement = { it.abandon(CancellationException("leader term closed")) }
     )
 
-    val onTask get() = tasks.onReceive
-
-    suspend fun handleTask(task: Task) {
-        appendTx(txResolver.indexTx(task.msg))
-        task.onComplete.complete(Unit)
+    fun SelectBuilder<Unit>.armSelect() {
+        tasks.onReceive { task ->
+            try {
+                appendTx(txResolver.indexTx(task.msg))
+                task.onComplete.complete(Unit)
+            } catch (e: CancellationException) {
+                if (!task.onComplete.isCompleted) task.onComplete.cancel(e)
+                throw e
+            } catch (e: Throwable) {
+                if (!e.isShutdownSignal) {
+                    task.msg.pending.let { if (!it.isCompleted) it.completeExceptionally(e) }
+                }
+                task.onComplete.completeExceptionally(e)
+                throw e
+            }
+        }
     }
 
     override suspend fun executeTx(

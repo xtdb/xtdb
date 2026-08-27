@@ -1,22 +1,24 @@
-@file:OptIn(xtdb.InternalApi::class)
-
 package xtdb.indexer
 
-import kotlinx.coroutines.*
-import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.launch
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.NodeBase
 import xtdb.api.DatabaseName
-import xtdb.api.log.*
-import xtdb.api.log.ReplicaMessage.BlockBoundary
-import xtdb.database.*
+import xtdb.api.log.Log
 import xtdb.api.log.ReplicaMessage
-import xtdb.util.*
-import java.time.*
+import xtdb.api.log.ReplicaMessage.BlockBoundary
+import xtdb.api.log.Watchers
 import xtdb.api.tx.ExternalSource
+import xtdb.database.Database
+import xtdb.database.PartitionState
+import xtdb.database.PartitionStorage
 import xtdb.types.MessageId
+import xtdb.util.debug
+import xtdb.util.logger
+import java.time.Duration
+import java.time.InstantSource
 
 private val LOG = LeaderLogProcessor::class.logger
 
@@ -39,9 +41,9 @@ internal class LeaderLogProcessor(
 
     private val replicaAppender: ReplicaLogAppender,
 
-    private val extSource: ExternalSource?,
+    extSource: ExternalSource?,
     skipTxs: Set<MessageId>,
-    private val dbCatalog: Database.Catalog?,
+    dbCatalog: Database.Catalog?,
     private val leaderTerm: Long = 0,
     instantSource: InstantSource = InstantSource.system(),
     flushTimeout: Duration,
