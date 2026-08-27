@@ -10,8 +10,10 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.assertDoesNotThrow
 import org.junit.jupiter.api.assertThrows
 import xtdb.api.IndexerConfig
+import xtdb.block.proto.block
 import xtdb.api.error.Incorrect
 import org.junit.jupiter.api.Timeout
 import org.apache.arrow.memory.BufferAllocator
@@ -50,12 +52,16 @@ class LogProcessorTest {
     private fun mockBufferPool(epoch: Int = 0) =
         mockk<BufferPool>(relaxed = true) { every { this@mockk.epoch } returns epoch }
 
-    private fun newPartitionState(name: String = "test-db", liveIndex: LiveIndex = mockk(relaxed = true)) =
-        PartitionState(
-            TableCatalog(mockBufferPool()),
-            createTrieCatalog(),
-            liveIndex
-        )
+    private fun newPartitionState(
+        liveIndex: LiveIndex = mockk(relaxed = true),
+        boundaryTermId: Long? = null,
+    ) = PartitionState(
+        boundaryTermId
+            ?.let { TableCatalog(mockBufferPool(), block { blockIndex = 0; termId = it }) }
+            ?: TableCatalog(mockBufferPool()),
+        createTrieCatalog(),
+        liveIndex
+    )
 
     private fun logProcessor(
         partitionStorage: PartitionStorage,
@@ -266,11 +272,63 @@ class LogProcessorTest {
         logProc.demoteLeader(0)
 
         assertEquals(
-            highTerm, partitionState.termFence.highest,
+            highTerm, logProc.termFence.highest,
             "the demote does not lower what the log has been seen to reach"
         )
 
         assertThrows<Incorrect> { logProc.transitionToLeader(0, LeaderTerm.of(0, 5)).await() }
+
+        scope.coroutineContext.job.cancelAndJoin()
+        logProc.close()
+        sourceLog.close()
+        replicaLog.close()
+    }
+
+    @Test
+    fun `refuses a leader term the persisted boundary has moved past`() = runTest {
+        val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0)
+        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
+        val bufferPool = mockBufferPool()
+
+        // the election counter is back to 1 — a Kafka group deleted while the cluster was down, or a
+        // local log's process restarting — while the last block was cut at 9
+        val partitionState = newPartitionState(boundaryTermId = LeaderTerm.of(0, 9))
+        val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
+        val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", mockk(relaxed = true), null, null, backgroundScope)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
+
+        val scope = CoroutineScope(SupervisorJob())
+        val logProc = logProcessor(partitionStorage, partitionState, watchers, blockUploader, scope)
+
+        assertThrows<Incorrect> { logProc.checkTermUnfenced(LeaderTerm.of(0, 1)) }
+        assertDoesNotThrow("bumping the term epoch clears the regression") {
+            logProc.checkTermUnfenced(LeaderTerm.of(1, 1))
+        }
+
+        scope.coroutineContext.job.cancelAndJoin()
+        logProc.close()
+        sourceLog.close()
+        replicaLog.close()
+    }
+
+    @Test
+    fun `a term equal to the highest seen is unfenced, one below it is not`() = runTest {
+        val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0)
+        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
+        val bufferPool = mockBufferPool()
+        val partitionState = newPartitionState()
+        val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
+        val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", mockk(relaxed = true), null, null, backgroundScope)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
+
+        val scope = CoroutineScope(SupervisorJob())
+        val logProc = logProcessor(partitionStorage, partitionState, watchers, blockUploader, scope)
+
+        logProc.termFence.admit(LeaderTerm.of(0, 9))
+
+        // a transition checks its own claim once it has been read back, so the max *is* the claim
+        assertDoesNotThrow { logProc.checkTermUnfenced(LeaderTerm.of(0, 9)) }
+        assertThrows<Incorrect> { logProc.checkTermUnfenced(LeaderTerm.of(0, 8)) }
 
         scope.coroutineContext.job.cancelAndJoin()
         logProc.close()

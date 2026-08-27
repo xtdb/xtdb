@@ -28,8 +28,6 @@ import xtdb.trie.TrieCatalog
 import xtdb.util.closeAll
 import java.time.Instant
 import xtdb.api.log.LeaderTerm
-import xtdb.api.error.Incorrect
-import org.junit.jupiter.api.assertDoesNotThrow
 
 class FollowerLogProcessorTest {
 
@@ -70,10 +68,11 @@ class FollowerLogProcessorTest {
         maxBufferedRecords: Int = 1024,
         hasExternalSource: Boolean = false,
         meterRegistry: MeterRegistry? = null,
+        termFence: TermFence = TermFence(LeaderTerm.NONE),
     ) =
         FollowerLogProcessor(
             allocator, bufferPool, partitionState, "test", compactor,
-            watchers, null, null,
+            watchers, null, null, termFence,
             hasExternalSource = hasExternalSource,
             meterRegistry = meterRegistry,
             maxBufferedRecords = maxBufferedRecords,
@@ -158,31 +157,6 @@ class FollowerLogProcessorTest {
         verify { liveIndex.commitTx(match { it.txId == 1L }, any()) }
         verify { liveIndex.commitTx(match { it.txId == 2L }, any()) }
         verify(exactly = 0) { liveIndex.commitTx(match { it.txId == 3L }, any()) }
-    }
-
-    @Test
-    fun `refuses a leader term the persisted boundary has moved past`() = runTest {
-        // the election counter is back to 1 — a Kafka group deleted while the cluster was down, or a
-        // local log's process restarting — while the last block was cut at 9
-        tableCatalog = TableCatalog(bufferPool, block { blockIndex = 0; termId = LeaderTerm.of(0, 9) })
-        partitionState = PartitionState(tableCatalog, trieCatalog, liveIndex)
-        val proc = makeProcessor()
-
-        assertThrows<Incorrect> { proc.checkTermUnfenced(LeaderTerm.of(0, 1)) }
-        assertDoesNotThrow("bumping the term epoch clears the regression") {
-            proc.checkTermUnfenced(LeaderTerm.of(1, 1))
-        }
-    }
-
-    @Test
-    fun `refuses a leader term the replica log has moved past`() = runTest {
-        val proc = makeProcessor()
-
-        proc.processRecords(listOf(record(0, ReplicaMessage.NoOp(termId = LeaderTerm.of(0, 9)))))
-
-        // the transition checks its own claim once it's been read back, so the max *is* the claim
-        assertDoesNotThrow { proc.checkTermUnfenced(LeaderTerm.of(0, 9)) }
-        assertThrows<Incorrect> { proc.checkTermUnfenced(LeaderTerm.of(0, 8)) }
     }
 
     @Test

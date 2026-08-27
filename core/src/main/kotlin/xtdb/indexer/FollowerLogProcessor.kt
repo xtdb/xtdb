@@ -41,6 +41,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
     private val watchers: Watchers,
     private val dbCatalog: Database.Catalog?,
     pendingBlock: PendingBlock?,
+    private val termFence: TermFence,
     private val hasExternalSource: Boolean,
     private val meterRegistry: MeterRegistry? = null,
     private val maxBufferedRecords: Int = 1024,
@@ -94,37 +95,6 @@ class FollowerLogProcessor @JvmOverloads constructor(
     private val tableCatalog = partitionState.tableCatalog
     private val trieCatalog = partitionState.trieCatalog
     private val liveIndex = partitionState.liveIndex
-
-    // A record below the fence was written by a superseded leader and is discarded — its consume
-    // position still advances, so a transition catch-up never hangs on a fenced no-op. See #5817.
-    private val termFence = partitionState.termFence
-
-    /**
-     * Refuse a leader term the replica log has already moved past: a claim stamped with it would be
-     * discarded by every reader, so leading under it would index nothing.
-     *
-     * Call this once the claim itself has been read back, at which point it is expected to *be* the max
-     * — so a higher one is someone else's. In practice that means the election counter regressed
-     * underneath us, which is what the term's epoch is there to declare (see [LeaderTerm]). Refusing
-     * costs liveness only and never safety, so unlike the fence's ordering it is sound to decide from
-     * whatever we happen to have read.
-     */
-    fun checkTermUnfenced(term: Long) {
-        val maxTerm = termFence.highest
-        if (maxTerm > term)
-            throw Incorrect(
-                "[$dbName] leader term ${LeaderTerm.format(term)} is already fenced by " +
-                        "${LeaderTerm.format(maxTerm)} on the replica log — the leader-election counter " +
-                        "has regressed (a recreated Kafka consumer group, or a restarted local log), so " +
-                        "bump the log's termEpoch above ${LeaderTerm.epochOf(maxTerm)}",
-                "xtdb/leader-term-fenced",
-                mapOf(
-                    "db-name" to dbName,
-                    "term" to LeaderTerm.format(term),
-                    "fenced-by" to LeaderTerm.format(maxTerm),
-                ),
-            )
-    }
 
     private val allocator = allocator.newChildAllocator("follower-log-processor", 0, Long.MAX_VALUE)
 
@@ -262,9 +232,9 @@ class FollowerLogProcessor @JvmOverloads constructor(
         if (msg.stale) watchers.notifyApplied(replicaMsgId) else processRecord(record, replicaMsgId)
     }
 
-    // Batches read off the replica log, awaiting application. Rendezvous, so the read runs no further
-    // ahead than the loop has applied — a follower's consume position is what a transition's catch-up
-    // awaits, and buffering here would advance the read without advancing that.
+    // Rendezvous, so the read runs no further ahead than the loop has applied — a follower's consume
+    // position is what a transition's catch-up awaits, and buffering here would advance the read
+    // without advancing that.
     private val inbound = Channel<List<Log.Record<ReplicaMessage>>>()
 
     suspend fun queueRecords(records: List<Log.Record<ReplicaMessage>>) = inbound.send(records)

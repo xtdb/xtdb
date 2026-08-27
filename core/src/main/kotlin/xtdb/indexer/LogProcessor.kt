@@ -29,6 +29,7 @@ import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
 import xtdb.api.tx.ExternalSource
 import xtdb.api.error.Fault
+import xtdb.api.error.Incorrect
 import xtdb.api.error.Interrupted
 import xtdb.types.MessageId
 import xtdb.util.debug
@@ -124,7 +125,6 @@ internal suspend fun runLeaderTerm(
             while (true) selectUnbiased { selectLeaderWork(watchers, term) }
         }
     } catch (_: CancellationException) {
-        // term cancellation
     } catch (e: LeaderSupersededException) {
         // superseded by a newer leader — expected, not a query-facing fault; the transport re-follows on
         // the next rebalance.
@@ -155,7 +155,6 @@ internal suspend fun runFollower(follower: FollowerLogProcessor) {
     } catch (e: CancellationException) {
         throw e
     } catch (_: Throwable) {
-        // already reported
     }
 }
 
@@ -179,6 +178,42 @@ class LogProcessor(
 
     private val replicaLog = partitionStorage.replicaLog
     private val hasExternalSource = externalSource != null
+
+    /**
+     * The highest leader term this partition has seen on its replica log.
+     *
+     * Seeded from the persisted block boundary and only ever raised, so it spans every role change —
+     * held per role it would be reseeded from the boundary at each one, forgetting every term written
+     * since the last block flush, and the same term could be admitted twice either side of a demote.
+     */
+    val termFence = TermFence(partitionState.tableCatalogOrNull?.boundaryTermId ?: LeaderTerm.NONE)
+
+    /**
+     * Refuse a leader term the replica log has already moved past: a claim stamped with it would be
+     * discarded by every reader, so leading under it would index nothing.
+     *
+     * Call this once the claim itself has been read back, at which point it is expected to *be* the max
+     * — so a higher one is someone else's. In practice that means the election counter regressed
+     * underneath us, which is what the term's epoch is there to declare (see [LeaderTerm]). Refusing
+     * costs liveness only and never safety, so unlike the fence's ordering it is sound to decide from
+     * whatever we happen to have read.
+     */
+    fun checkTermUnfenced(term: Long) {
+        val maxTerm = termFence.highest
+        if (maxTerm > term)
+            throw Conflict(
+                "[$dbName] leader term ${LeaderTerm.format(term)} is already fenced by " +
+                        "${LeaderTerm.format(maxTerm)} on the replica log — the leader-election counter " +
+                        "has regressed (a recreated Kafka consumer group, or a restarted local log), so " +
+                        "bump the log's termEpoch above ${LeaderTerm.epochOf(maxTerm)}",
+                "xtdb/leader-term-fenced",
+                mapOf(
+                    "db-name" to dbName,
+                    "term" to LeaderTerm.format(term),
+                    "fenced-by" to LeaderTerm.format(maxTerm),
+                ),
+            )
+    }
 
     // The role state machine — see allium/log-processor-lifecycle.allium.
     // `state` is written by the off-thread transition coroutine (cutoverToLeader → Leading, or its catch
@@ -259,7 +294,7 @@ class LogProcessor(
 
         val proc = FollowerLogProcessor(
             allocator, partitionStorage.bufferPool, partitionState, dbName, compactor, watchers,
-            dbCatalog, pendingBlock,
+            dbCatalog, pendingBlock, termFence,
             hasExternalSource = hasExternalSource,
             meterRegistry = base.meterRegistry,
         )
@@ -308,7 +343,7 @@ class LogProcessor(
             LOG.debug("[$dbName] transition: replica caught up to $replayTarget")
             // Our own claim is now read back, so the follower's max term is the log's — anything above
             // it fences us, and leading would index nothing. Refuse loudly instead (#5817).
-            following.proc.checkTermUnfenced(termId)
+            checkTermUnfenced(termId)
             return cutoverToLeader(following, termId)
         } catch (e: Throwable) {
             // Cutover already restored a live `state` if it had to; here we only report.

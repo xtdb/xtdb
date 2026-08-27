@@ -2,11 +2,9 @@ package xtdb.database
 
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.IndexerConfig
-import xtdb.api.log.LeaderTerm
 import xtdb.catalog.TableCatalog
 import xtdb.catalog.TableCatalog.Companion.latestBlock
 import xtdb.indexer.LiveIndex
-import xtdb.indexer.TermFence
 import xtdb.api.TableRef
 import xtdb.trie.TrieCatalog
 import xtdb.util.requiringResolve
@@ -20,12 +18,6 @@ class PartitionState(
     val tableCatalog: TableCatalog get() = tableCatalogOrNull ?: error("no table-catalog")
     val trieCatalog: TrieCatalog get() = trieCatalogOrNull ?: error("no trie-catalog")
     val liveIndex: LiveIndex get() = liveIndexOrNull ?: error("no live-index")
-
-    /**
-     * Seeded from the persisted block boundary, then only ever raised — so it outlives every role
-     * change on this partition. See [TermFence].
-     */
-    val termFence = TermFence(tableCatalogOrNull?.boundaryTermId ?: LeaderTerm.NONE)
 
     override fun close() {
         liveIndexOrNull?.close()
