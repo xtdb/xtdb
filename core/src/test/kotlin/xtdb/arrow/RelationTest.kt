@@ -264,4 +264,16 @@ class RelationTest {
             assertEquals(rows, rel.toMaps(SNAKE_CASE_STRING))
         }
     }
+
+    // xtdb.expression emits a read that faults on a bottom-typed column, relying on this to keep it
+    // unreachable - so a change to this padding is not a local change (#5948).
+    @Test
+    fun `endRows takes a short column off the lattice bottom`() {
+        Relation(allocator, listOf(NullVector("a", false)), 0).use { rel ->
+            assertEquals(VectorType.Nothing, rel["a"].type)
+
+            rel.endRows(1)
+            assertEquals(VectorType.Null, rel["a"].type, "padding writes a real null")
+        }
+    }
 }
