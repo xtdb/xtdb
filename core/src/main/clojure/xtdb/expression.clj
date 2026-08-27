@@ -555,7 +555,7 @@
 
 (defmethod codegen-expr :let [{:keys [local expr body]} opts]
   (let [{^VectorType local-return-type :return-type, continue-expr :continue, :as emitted-expr} (codegen-expr expr opts)
-        emitted-bodies (->> (for [local-type (.getLegs local-return-type)]
+        emitted-bodies (->> (for [local-type (.getReadsAs local-return-type)]
                               (MapEntry/create local-type
                                                (codegen-expr body (assoc-in opts [:local-types local] local-type))))
                             (into {}))
@@ -572,7 +572,7 @@
   (let [{continue-expr :continue, ^VectorType expr-return-type :return-type, :as emitted-expr}
         (codegen-expr expr opts)
 
-        expr-rets (set (.getLegs expr-return-type))
+        expr-rets (set (.getReadsAs expr-return-type))
 
         emitted-thens (->> (for [local-type (disj expr-rets #xt/type :null)]
                              (MapEntry/create local-type
@@ -721,7 +721,7 @@
 
         all-arg-types (reduce (fn [acc {:keys [^VectorType return-type]}]
                                 (for [el acc
-                                      arg-type (.getLegs return-type)]
+                                      arg-type (.getReadsAs return-type)]
                                   (conj el arg-type)))
                               [[]]
                               emitted-args)
@@ -1969,8 +1969,8 @@
 
         (let [inner-calls (->> (for [field fields]
                                  (MapEntry/create field
-                                                  (->> (for [l-val-type (VectorType/.getLegs (get l-field-types field))
-                                                             r-val-type (VectorType/.getLegs (get r-field-types field))]
+                                                  (->> (for [l-val-type (VectorType/.getReadsAs (get l-field-types field))
+                                                             r-val-type (VectorType/.getReadsAs (get r-field-types field))]
                                                          (MapEntry/create [l-val-type r-val-type]
                                                                           (if (or (= #xt/type :null l-val-type) (= #xt/type :null r-val-type))
                                                                             {:return-type #xt/type :null, :->call-code (constantly nil)}
@@ -2017,8 +2017,8 @@
       {:return-type #xt/type :bool, :->call-code (constantly false)}
       (let [inner-calls (->> (for [field fields]
                                (MapEntry/create field
-                                                (->> (for [l-val-type (VectorType/.getLegs (get l-field-types field))
-                                                           r-val-type (VectorType/.getLegs (get r-field-types field))]
+                                                (->> (for [l-val-type (VectorType/.getReadsAs (get l-field-types field))
+                                                           r-val-type (VectorType/.getReadsAs (get r-field-types field))]
                                                        (MapEntry/create [l-val-type r-val-type]
                                                                         (codegen-call {:f :===, :arg-types [l-val-type r-val-type]})))
                                                      (into {}))))
@@ -2061,11 +2061,11 @@
 (defmethod codegen-call [:_patch :struct :struct] [{[^VectorType$Struct l-type, ^VectorType$Struct r-type] :arg-types}]
   (let [l-ks (into {} (.getChildren l-type))
         r-ks (into {} (.getChildren r-type))
-        flattened-r-types (update-vals r-ks (fn [^VectorType r-field-type]
-                                               (set (.getLegs r-field-type))))
+        r-read-legs (update-vals r-ks (fn [^VectorType r-field-type]
+                                       (set (.getReadsAs r-field-type))))
         ret-type (VectorType/structOf (into l-ks
                                             (map (fn [[k ^VectorType r-field-type]]
-                                                   (let [r-types (get flattened-r-types k)]
+                                                   (let [r-types (get r-read-legs k)]
                                                      (MapEntry/create k
                                                                       (if-not (contains? r-types #xt/type :null)
                                                                         r-field-type
@@ -2087,7 +2087,7 @@
                                            (let [k-str (str k)]
                                              [k-str
                                               (if (and (contains? l-ks k)
-                                                       (get-in flattened-r-types [k #xt/type :null]))
+                                                       (get-in r-read-legs [k #xt/type :null]))
                                                 `(-patch (get ~l-sym ~k-str) (get ~r-sym ~k-str))
                                                 `(get ~r-sym ~k-str))])))
                                     (keys r-ks))))))}))
@@ -2259,8 +2259,8 @@
           n-sym (gensym 'n)
           len-sym (gensym 'len)
           res-sym (gensym 'res)
-          inner-calls (->> (for [l-el-type (.getLegs l-el-type)
-                                 r-el-type (.getLegs r-el-type)]
+          inner-calls (->> (for [l-el-type (.getReadsAs l-el-type)
+                                 r-el-type (.getReadsAs r-el-type)]
                              (MapEntry/create [l-el-type r-el-type]
                                               (if (or (= #xt/type :null l-el-type) (= #xt/type :null r-el-type))
                                                 {:return-type #xt/type :null, :->call-code (constantly nil)}
@@ -2306,8 +2306,8 @@
         n-sym (gensym 'n)
         len-sym (gensym 'len)
         res-sym (gensym 'res)
-        inner-calls (->> (for [l-el-type (.getLegs l-el-type)
-                               r-el-type (.getLegs r-el-type)]
+        inner-calls (->> (for [l-el-type (.getReadsAs l-el-type)
+                               r-el-type (.getReadsAs r-el-type)]
                            (MapEntry/create [l-el-type r-el-type]
                                             (codegen-call {:f :===, :arg-types [l-el-type r-el-type]})))
                          (into {}))]

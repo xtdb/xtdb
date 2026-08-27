@@ -15,7 +15,7 @@
            (java.time Duration Instant InstantSource LocalDate LocalDateTime LocalTime Period ZoneId ZonedDateTime)
            (java.time.temporal ChronoUnit)
            org.apache.arrow.vector.types.TimeUnit
-           (xtdb.arrow RelationReader Vector VectorReader)
+           (xtdb.arrow RelationReader Vector VectorReader VectorType VectorType$Nothing)
            (xtdb.time Interval)
            (xtdb.util StringUtil)))
 
@@ -1742,6 +1742,35 @@
 
   (t/testing "Nested expr"
     (t/is (= [42] (project1 '[(+ 1 a)] {:a 41})))))
+
+(t/deftest a-column-of-empty-lists-compares-as-a-literal-does-5948
+  (with-open [rel (tu/open-rel {:xs [[] []]})]
+    (t/is (= (types/->type [:list VectorType$Nothing/INSTANCE])
+             (.getType (.vectorForOrNull rel "xs")))
+          "the column's element type is the lattice bottom, which is what makes this test cover anything")
+
+    (t/are [form expected] (= expected (:res (run-projection rel form)))
+      '(== xs [])     [true true]
+      '(== xs [1])    [false false]
+      '(<> xs [])     [false false]
+      '(=== xs [])    [true true]
+      '(== xs xs)     [true true]))
+
+  (t/testing "an element written as null heals to `Null`, an empty list does not"
+    (with-open [rel (tu/open-rel {:xs [[nil]]})]
+      (t/is (= (types/->type [:list :null]) (.getType (.vectorForOrNull rel "xs"))))
+      (t/is (= [nil] (:res (run-projection rel '(== xs [nil])))))))
+
+  (t/testing "a null list leaves the element type at the bottom"
+    (with-open [rel (tu/open-rel {:xs [nil []]})]
+      (t/is (= (VectorType/maybe (types/->type [:list VectorType$Nothing/INSTANCE]))
+               (.getType (.vectorForOrNull rel "xs"))))
+      (t/is (= [nil true] (:res (run-projection rel '(== xs []))))))))
+
+(t/deftest a-struct-field-holding-an-empty-list-compares-5948
+  (with-open [rel (tu/open-rel {:s [{:xs []}]})]
+    (t/is (= [true] (:res (run-projection rel '(== s s))))
+          "struct comparison recurses into the field, so the bottom is reached one level down")))
 
 (t/deftest test-list-equal
   (t/is (= true (project1 '(== [] []) {})))
