@@ -27,7 +27,6 @@ import xtdb.database.DatabaseLogs
 import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
 import xtdb.storage.BufferPool
-import xtdb.trie.TrieCatalog
 import java.time.InstantSource
 import java.util.concurrent.TimeUnit
 
@@ -272,7 +271,7 @@ class LogProcessorTest {
         logProc.demoteLeader(0)
 
         assertEquals(
-            highTerm, logProc.termFence.highest,
+            highTerm, logProc.termFence.highestSeen,
             "the demote does not lower what the log has been seen to reach"
         )
 
@@ -300,9 +299,9 @@ class LogProcessorTest {
         val scope = CoroutineScope(SupervisorJob())
         val logProc = logProcessor(partitionStorage, partitionState, watchers, blockUploader, scope)
 
-        assertThrows<Conflict> { logProc.checkTermUnfenced(LeaderTerm.of(0, 1)) }
+        assertThrows<Conflict> { logProc.termFence.checkUnfenced(LeaderTerm.of(0, 1)) }
         assertDoesNotThrow("bumping the term epoch clears the regression") {
-            logProc.checkTermUnfenced(LeaderTerm.of(1, 1))
+            logProc.termFence.checkUnfenced(LeaderTerm.of(1, 1))
         }
 
         scope.coroutineContext.job.cancelAndJoin()
@@ -327,8 +326,8 @@ class LogProcessorTest {
         logProc.termFence.admit(LeaderTerm.of(0, 9))
 
         // a transition checks its own claim once it has been read back, so the max *is* the claim
-        assertDoesNotThrow { logProc.checkTermUnfenced(LeaderTerm.of(0, 9)) }
-        assertThrows<Conflict> { logProc.checkTermUnfenced(LeaderTerm.of(0, 8)) }
+        assertDoesNotThrow { logProc.termFence.checkUnfenced(LeaderTerm.of(0, 9)) }
+        assertThrows<Conflict> { logProc.termFence.checkUnfenced(LeaderTerm.of(0, 8)) }
 
         scope.coroutineContext.job.cancelAndJoin()
         logProc.close()

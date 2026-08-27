@@ -15,7 +15,6 @@ import xtdb.compactor.Compactor
 import xtdb.database.Database
 import xtdb.database.PartitionState
 import xtdb.api.error.Anomaly
-import xtdb.api.error.Incorrect
 import xtdb.types.LogTimestamp
 import xtdb.types.MessageId
 import xtdb.log.proto.TrieDetails
@@ -241,7 +240,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
                     // so a transition catch-up can't hang on a fenced no-op.
                     LOG.debug {
                         "[$dbName] follower: discarding fenced record ${record.msgId} " +
-                                "(term ${LeaderTerm.format(term)} < ${LeaderTerm.format(termFence.highest)})"
+                                "(term ${LeaderTerm.format(term)} < ${LeaderTerm.format(termFence.highestSeen)})"
                     }
                     watchers.notifyApplied(record.msgId)
                 }

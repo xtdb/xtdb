@@ -1,5 +1,7 @@
 package xtdb.indexer
 
+import xtdb.api.DatabaseName
+import xtdb.api.error.Conflict
 import xtdb.api.log.LeaderTerm
 
 /**
@@ -11,16 +13,14 @@ import xtdb.api.log.LeaderTerm
  * seeded afresh from the persisted block boundary would forget every term written since the last
  * block flush — so the same term could be admitted twice, once either side of a demote.
  *
- * Threading: [admit] is called only from the partition's single replica-log reader, while [highest]
+ * Threading: [admit] is called only from the partition's single replica-log reader, while [highestSeen]
  * is read from the transition coroutine, hence the volatile.
  */
-class TermFence(seed: Long) {
+class TermFence(private val dbName: DatabaseName, seed: Long) {
 
     @Volatile
-    private var highestSeen: Long = seed
-
-    /** The highest term seen so far, at or above the seed. */
-    val highest: Long get() = highestSeen
+    var highestSeen: Long = seed
+        private set
 
     /**
      * Folds [term] into the highest seen, and says whether the record carrying it should be processed.
@@ -40,5 +40,22 @@ class TermFence(seed: Long) {
 
         highestSeen = term
         return true
+    }
+
+    fun checkUnfenced(term: Long) {
+        val maxTerm = highestSeen
+        if (maxTerm > term)
+            throw Conflict(
+                "[$dbName] leader term ${LeaderTerm.format(term)} is already fenced by " +
+                        "${LeaderTerm.format(maxTerm)} on the replica log — the leader-election counter " +
+                        "has regressed (a recreated Kafka consumer group, or a restarted local log), so " +
+                        "bump the log's termEpoch above ${LeaderTerm.epochOf(maxTerm)}",
+                "xtdb/leader-term-fenced",
+                mapOf(
+                    "db-name" to dbName,
+                    "term" to LeaderTerm.format(term),
+                    "fenced-by" to LeaderTerm.format(maxTerm),
+                ),
+            )
     }
 }

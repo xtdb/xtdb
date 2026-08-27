@@ -31,6 +31,8 @@ import xtdb.api.log.LeaderTerm
 
 class FollowerLogProcessorTest {
 
+    private val dbName = "test"
+
     private lateinit var allocator: RootAllocator
     private lateinit var bufferPool: BufferPool
     private lateinit var liveIndex: LiveIndex
@@ -68,10 +70,10 @@ class FollowerLogProcessorTest {
         maxBufferedRecords: Int = 1024,
         hasExternalSource: Boolean = false,
         meterRegistry: MeterRegistry? = null,
-        termFence: TermFence = TermFence(LeaderTerm.NONE),
+        termFence: TermFence = TermFence(dbName, LeaderTerm.NONE),
     ) =
         FollowerLogProcessor(
-            allocator, bufferPool, partitionState, "test", compactor,
+            allocator, bufferPool, partitionState, dbName, compactor,
             watchers, null, null, termFence,
             hasExternalSource = hasExternalSource,
             meterRegistry = meterRegistry,
