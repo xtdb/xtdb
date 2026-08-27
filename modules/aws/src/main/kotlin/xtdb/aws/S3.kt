@@ -38,7 +38,6 @@ import java.net.URI
 import java.nio.ByteBuffer
 import java.nio.file.Path
 import java.util.function.Consumer
-import kotlin.coroutines.CoroutineContext
 
 /**
  * Used to set configuration options for an S3 Object Store, which can be used as implementation of objectStore within a [xtdb.api.storage.Storage.RemoteStorageFactory].
@@ -66,8 +65,7 @@ class S3(
     private val bucket: String,
     private val prefix: Path,
     private val configurator: S3Configurator,
-    private val factory: Factory,
-    coroutineContext: CoroutineContext = Dispatchers.IO
+    private val factory: Factory
 ) : ObjectStore, SupportsMultipart<CompletedPart> {
 
     override fun close() {
@@ -293,8 +291,7 @@ class S3(
         var endpoint: String? = null,
         var pathStyleAccessEnabled: Boolean = false,
         var remote: RemoteAlias? = null,
-        @Transient var s3Configurator: S3Configurator = S3Configurator.Default,
-        @Transient var coroutineContext: CoroutineContext = Dispatchers.IO
+        @Transient var s3Configurator: S3Configurator = S3Configurator.Default
     ) : ObjectStore.Factory {
 
         fun prefix(prefix: Path) = apply { this.prefix = prefix }
@@ -319,8 +316,6 @@ class S3(
         fun pathStyleAccessEnabled(enabled: Boolean) = apply { this.pathStyleAccessEnabled = enabled }
 
         fun s3Configurator(s3Configurator: S3Configurator) = apply { this.s3Configurator = s3Configurator }
-
-        fun coroutineContext(coroutineContext: CoroutineContext) = apply { this.coroutineContext = coroutineContext }
 
         private fun resolveCredentials(remotes: Map<RemoteAlias, Remote>): BasicCredentials? {
             val alias = remote ?: return credentials
@@ -368,7 +363,7 @@ class S3(
                         s3Configurator.configureClient(this)
                     }.build()
 
-            return S3(client, bucket, prefix?.resolve(storageRoot) ?: storageRoot, s3Configurator, this, coroutineContext)
+            return S3(client, bucket, prefix?.resolve(storageRoot) ?: storageRoot, s3Configurator, this)
         }
 
         override val configProto by lazy {
