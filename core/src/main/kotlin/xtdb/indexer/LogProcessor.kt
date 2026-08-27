@@ -180,12 +180,10 @@ class LogProcessor(
     private val replicaLog = partitionStorage.replicaLog
     private val hasExternalSource = externalSource != null
 
-    // The committed-role state machine — see allium/log-processor-lifecycle.allium.
-    // `state` is written from two places: the transport's serialization point (commitLeader /
-    // demoteLeader) and the off-thread transition coroutine (cutoverToLeader → Prepared, or its catch
-    // → Following). They don't race: a revoke cancel-and-joins the transition before demoteLeader reads
-    // `state`, and the transport commits a leader only for the transition instance it still holds — so the
-    // *committed* role change still happens only at the serialization point.
+    // The role state machine — see allium/log-processor-lifecycle.allium.
+    // `state` is written by the off-thread transition coroutine (cutoverToLeader → Leading, or its catch
+    // → Following) and by demoteLeader on the transport's thread. They don't race: a revoke
+    // cancel-and-joins the transition before demoteLeader reads `state`.
     //
     // The leader and the follower process different message types, so the only thing a state can offer
     // without narrowing to its variant is the teardown: a role is stopped by cancelling its job and freed
@@ -197,18 +195,9 @@ class LogProcessor(
 
     private class Following(override val proc: FollowerLogProcessor, override val job: Job) : State
 
-    // A built leader, committed or not.
-    private sealed interface Leader : State {
-        override val proc: LeaderLogProcessor
-    }
+    private class Leading(override val proc: LeaderLogProcessor, override val job: Job) : State
 
-    private class Prepared(
-        override val proc: LeaderLogProcessor, override val job: Job, val resumeAfterMsgId: MessageId,
-    ) : Leader
-
-    private class Leading(override val proc: LeaderLogProcessor, override val job: Job) : Leader
-
-    private fun openLeader(termId: Long, resumeAfterMsgId: MessageId): Prepared {
+    private fun openLeader(termId: Long): Leading {
         // The leader term owns (and frees) its driver; the ext source it borrows outlives every term.
         val driver = RealLeaderDriver(partitionStorage, partitionState, blockUploader)
         val replicaAppender = ReplicaLogAppender(driver)
@@ -233,7 +222,7 @@ class LogProcessor(
             runLeaderTerm(dbName, watchers, proc, replicaAppender)
         }
 
-        return Prepared(proc, termJob, resumeAfterMsgId)
+        return Leading(proc, termJob)
     }
 
 
@@ -293,13 +282,13 @@ class LogProcessor(
         }
     }
 
-    override fun launchTransition(partition: Int, termId: Long): Deferred<Unit> {
+    override fun transitionToLeader(partition: Int, termId: Long): Deferred<Log.TailSpec<SourceMessage>> {
         // Transport contract: transition only from Following (see SubscriptionListener). A raw cast
         // would surface an out-of-order call as a cryptic ClassCastException; name it instead.
         val following = (state as? Following)
             ?: throw Fault(
-                "[$dbName] launchTransition while not following (${state::class.simpleName})",
-                "xtdb/log-prepare-not-following"
+                "[$dbName] transitionToLeader while not following (${state::class.simpleName})",
+                "xtdb/log-transition-not-following"
             )
 
         // Launched on the database scope (not the caller's): the transition is a child of the db job
@@ -308,7 +297,7 @@ class LogProcessor(
         return scope.async { runTransition(following, termId) }
     }
 
-    private suspend fun runTransition(following: Following, termId: Long) {
+    private suspend fun runTransition(following: Following, termId: Long): Log.TailSpec<SourceMessage> {
         try {
             // Append a NoOp stamped with the new term as the replay target: the follower catches up to it
             // before we cut over, which is what proves our own claim has been read back. A plain append
@@ -320,7 +309,7 @@ class LogProcessor(
             // Our own claim is now read back, so the follower's max term is the log's — anything above
             // it fences us, and leading would index nothing. Refuse loudly instead (#5817).
             following.proc.checkTermUnfenced(termId)
-            cutoverToLeader(following, termId)
+            return cutoverToLeader(following, termId)
         } catch (e: Throwable) {
             // Cutover already restored a live `state` if it had to; here we only report.
             if (!e.isShutdownSignal) {
@@ -332,15 +321,15 @@ class LogProcessor(
     }
 
     // The point of no return: stop the follower, finish its pending block, build the leader. Once the
-    // follower is stopped, `state` references a dead term until we publish Prepared — so any early exit
+    // follower is stopped, `state` references a dead term until we publish Leading — so any early exit
     // (a revoke cancelling us mid-cutover) re-opens a live follower from the catch, seeded from where the
     // follower got to, and `state` never keeps a corpse. Recovery is structural, not flag-guarded:
-    // reaching the catch *is* "the follower was stopped", and `state` is exclusively ours until Prepared
-    // (the transport writes it only at its serialization point, after joining us), so no staleness guard
-    // is needed. NonCancellable guards only the resource release — the follower's allocator must close
+    // reaching the catch *is* "the follower was stopped", and `state` is exclusively ours until Leading
+    // (demoteLeader only reads it after joining us), so no staleness guard is needed.
+    // NonCancellable guards only the resource release — the follower's allocator must close
     // cleanly once teardown begins, whatever the cancellation (bounded: the follower's coroutines just
     // unwind). Watermark/pendingBlock stay readable after close (not allocator-backed).
-    private suspend fun cutoverToLeader(following: Following, termId: Long) {
+    private suspend fun cutoverToLeader(following: Following, termId: Long): Log.TailSpec<SourceMessage> {
         val pendingBlock = following.proc.pendingBlock
         try {
             LOG.debug("[$dbName] transition: closing follower")
@@ -363,36 +352,24 @@ class LogProcessor(
             LOG.debug("[$dbName] transition: building leader processor")
             val resumeAfterMsgId = watchers.latestSourceMsgId
 
-            // Built, not committed: `state` moves to Prepared but no records flow as leader until
-            // commitLeader installs it at the serialization point.
-            state = openLeader(termId, resumeAfterMsgId)
+            val leading = openLeader(termId)
+            state = leading
+            LOG.info("[$dbName] leader startup complete, resuming after $resumeAfterMsgId")
+            return Log.TailSpec(resumeAfterMsgId, leading.proc.srcLogProc)
         } catch (e: Throwable) {
             state = openFollower(pendingBlock)
             throw e
         }
     }
 
-    override fun commitLeader(partition: Int): Log.TailSpec<SourceMessage> {
-        val prepared = (state as? Prepared)
-            ?: throw Fault(
-                "[$dbName] commitLeader without a prepared leader (${state::class.simpleName})",
-                "xtdb/log-commit-not-prepared"
-            )
-        state = Leading(prepared.proc, prepared.job)
-        LOG.info("[$dbName] leader startup complete, resuming after ${prepared.resumeAfterMsgId}")
-        return Log.TailSpec(prepared.resumeAfterMsgId, prepared.proc.srcLogProc)
-    }
-
     override suspend fun demoteLeader(partition: Int) {
-        // Genuine revoke (Leading) and abandoning an uncommitted leader (Prepared) tear down the
-        // same way; an already-following listener is a no-op.
         val leader = when (val s = state) {
             is Following -> {
                 LOG.debug("[$dbName] demote — already follower, no transition needed")
                 return
             }
 
-            is Leader -> s
+            is Leading -> s
         }
 
         LOG.info("[$dbName] demote — tearing down leader, re-opening follower")

@@ -162,8 +162,8 @@ entity Database {
 entity LogProcessor {
     -- See: indexer/LogProcessor.kt
     -- Owns the indexing pipeline lifecycle for a database.
-    -- Implements Log.SubscriptionListener (launchTransition/commitLeader/demoteLeader
-    -- drive transitions). Starts in follower mode. Always in exactly one mode.
+    -- Implements Log.SubscriptionListener (transitionToLeader/demoteLeader drive
+    -- transitions). Starts in follower mode. Always in exactly one mode.
     --
     -- latest_replica_msg_id: the replica-log position this processor has reached — on a
     --   leader, the CONSUME-BACK position (how far it has read its own writes back); on
@@ -176,11 +176,10 @@ entity LogProcessor {
     --   and lag each other are two fields, not one.
     --
     -- Transitions are driven by the transport's group subscription:
-    --   launchTransition → TransitionToLeader (off the serialization point)
-    --   demoteLeader     → TransitionToFollower (at the serialization point)
-    -- The intermediate Prepared role — a built-but-uncommitted leader — is modelled in
-    -- log-processor-lifecycle.allium, which owns the committed-role state machine; `mode`
-    -- here is the coarser view db.allium's rules need.
+    --   transitionToLeader → TransitionToLeader (off the serialization point)
+    --   demoteLeader       → TransitionToFollower (at the serialization point)
+    -- log-processor-lifecycle.allium owns the role state machine; `mode` here is the
+    -- coarser view db.allium's rules need.
     -- For local log, the single node is always immediately assigned.
     mode: Leader | Follower | Transition
     latest_replica_msg_id: MessageId
@@ -748,9 +747,8 @@ config {
 rule TransitionToLeader {
     -- db.allium's view of the transition: what it means for THIS database's pipeline.
     -- log-processor-lifecycle.allium owns the five steps, the off-serialization-point
-    -- split, the Prepared role and the cancellation-recovery path; don't duplicate them
-    -- here.
-    when: LaunchTransition(database, term)
+    -- split and the cancellation-recovery path; don't duplicate them here.
+    when: TransitionToLeaderRequested(database, term)
     requires: log_processor.mode = Follower
 
     ensures:

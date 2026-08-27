@@ -219,11 +219,14 @@ class KafkaCluster(
         class Register(val topic: String, val subscription: SharedGroupConsumer.TopicSubscription<*>) : GroupCommand
         class Unregister(val topic: String, val cont: CancellableContinuation<Unit>) : GroupCommand
 
-        // Posted by a transition's off-thread joiner back onto the poll thread, so the committed role
-        // change (commitLeader/seek/resume, or eviction on failure) happens at the poll thread's
+        // Posted by a transition's off-thread joiner back onto the poll thread, so the seek/resume that
+        // starts feeding the new leader — or the eviction on failure — happens at the poll thread's
         // serialization point. Carries the Transitioning state it ran for: if the subscription has since
         // moved on (revoke, reassign) its state is no longer that instance, and the post is dropped (#5773).
-        class TransitionComplete(val tp: TopicPartition, val transitioning: Transitioning<*>) : GroupCommand
+        class TransitionComplete<M>(
+            val tp: TopicPartition, val transitioning: Transitioning<*>, val tailSpec: Log.TailSpec<M>,
+        ) : GroupCommand
+
         class TransitionFailed(val tp: TopicPartition, val transitioning: Transitioning<*>, val cause: Throwable) : GroupCommand
     }
 
@@ -233,10 +236,10 @@ class KafkaCluster(
     //   Following       — not leading, no transition in flight (initial, and after a demote/recovery).
     //   Transitioning   — an off-thread follower→leader transition is running; the instance is its own
     //                     identity token, so a stale completion for a superseded transition is dropped.
-    //   LeaderCommitted — committed leader; holds the record processor the poll loop feeds.
+    //   LeaderCommitted — a leader we've committed to feeding; holds the record processor the poll loop feeds.
     private sealed interface ListenerState<M>
     private class Following<M> : ListenerState<M>
-    private class Transitioning<M>(val transition: Deferred<Unit>) : ListenerState<M>
+    private class Transitioning<M>(val transition: Deferred<Log.TailSpec<M>>) : ListenerState<M>
     private class LeaderCommitted<M>(val processor: Log.RecordProcessor<M>) : ListenerState<M>
 
     private inner class SharedGroupConsumer : AutoCloseable {
@@ -283,17 +286,16 @@ class KafkaCluster(
                 // The consumer group's generation orders elections, but only within this incarnation of
                 // the group — see LeaderTerm for why `termEpoch` has to carry across a reset (#5817).
                 val term = LeaderTerm.of(termEpoch, consumer.groupMetadata().generationId().toLong())
-                val transition = listener.launchTransition(tp.partition(), term)
+                val transition = listener.transitionToLeader(tp.partition(), term)
                 val transitioning = Transitioning<M>(transition)
                 listenerState = transitioning
 
                 scope.launch {
                     val outcome: GroupCommand? =
                         try {
-                            transition.await()
-                            GroupCommand.TransitionComplete(tp, transitioning)
+                            GroupCommand.TransitionComplete(tp, transitioning, transition.await())
                         } catch (_: CancellationException) {
-                            null   // revoked / torn down — nothing to commit
+                            null   // revoked / torn down — nothing to feed
                         } catch (e: Throwable) {
                             GroupCommand.TransitionFailed(tp, transitioning, e)
                         }
@@ -306,8 +308,8 @@ class KafkaCluster(
 
             suspend fun onPartitionRevoked(partitions: Collection<TopicPartition>) {
                 // Abandon any in-flight transition first — cancel-and-join is bounded (the catch-up await
-                // is cancellable) and lets the transition's own recovery settle `state`. Then demote:
-                // Prepared→abandon, Leading→teardown, Following→no-op. Back to Following either way.
+                // is cancellable) and lets the transition's own recovery settle `state`. Then demote,
+                // which tears down a leader the transition had already built and is a no-op otherwise.
                 (listenerState as? Transitioning)?.transition?.cancelAndJoin()
                 listener.demoteLeader(partitions.single().partition())
                 listenerState = Following()
@@ -325,13 +327,15 @@ class KafkaCluster(
                     })
             }
 
-            // Poll thread, at the serialization point: install the prepared leader, seek, resume. Drops a
-            // stale completion whose state has moved on (revoke / reassign) — it is no longer this
-            // Transitioning instance.
-            fun onTransitionComplete(cmd: GroupCommand.TransitionComplete) {
+            // Poll thread, at the serialization point. Drops a stale completion whose state has moved on
+            // (revoke / reassign): it is no longer this Transitioning instance, and the leader it built was
+            // torn down by the demote that superseded it — so its TailSpec is discarded rather than fed.
+            fun onTransitionComplete(cmd: GroupCommand.TransitionComplete<*>) {
                 if (listenerState !== cmd.transitioning) return
 
-                val tailSpec = listener.commitLeader(cmd.tp.partition())
+                @Suppress("UNCHECKED_CAST")
+                val tailSpec = cmd.tailSpec as Log.TailSpec<M>
+
                 listenerState = LeaderCommitted(tailSpec.processor)
                 consumer.seekToAfterMsgId(cmd.tp, epoch, tailSpec.afterMsgId)   // seek before resume — #5633
                 consumer.resume(listOf(cmd.tp))
@@ -414,7 +418,7 @@ class KafkaCluster(
                     cmd.cont.resume(Unit)
                 }
 
-                is GroupCommand.TransitionComplete ->
+                is GroupCommand.TransitionComplete<*> ->
                     subscriptions[cmd.tp.topic()]?.onTransitionComplete(cmd)
 
                 is GroupCommand.TransitionFailed ->
@@ -438,7 +442,7 @@ class KafkaCluster(
                     is GroupCommand.Register -> cmd.subscription.evict(cause)
 
                     is GroupCommand.Unregister -> cmd.cont.resume(Unit)
-                    is GroupCommand.TransitionComplete, is GroupCommand.TransitionFailed -> {}
+                    is GroupCommand.TransitionComplete<*>, is GroupCommand.TransitionFailed -> {}
                 }
             }
             try {

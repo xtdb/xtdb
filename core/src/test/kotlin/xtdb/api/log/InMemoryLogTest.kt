@@ -125,30 +125,22 @@ class InMemoryLogTest {
 
             val job = backgroundScope.launch { log.openGroupSubscription(listener) }
 
-            // Wait for all N partitions to have been transitioned + committed.
-            while (listener.committed.size < 3) yield()
+            while (listener.transitioned.size < 3) yield()
 
             job.cancelAndJoin()
 
             assertEquals(setOf(0, 1, 2), listener.transitioned.toSet())
-            assertEquals(setOf(0, 1, 2), listener.committed.toSet())
             assertEquals(setOf(0, 1, 2), listener.demoted.toSet())
         }
     }
 
     private class RecordingListener<M> : Log.SubscriptionListener<M> {
         val transitioned = mutableListOf<Int>()
-        val committed = mutableListOf<Int>()
         val demoted = mutableListOf<Int>()
 
-        override fun launchTransition(partition: Int, termId: Long): Deferred<Unit> {
+        override fun transitionToLeader(partition: Int, termId: Long): Deferred<Log.TailSpec<M>> {
             transitioned.add(partition)
-            return CompletableDeferred(Unit)
-        }
-
-        override fun commitLeader(partition: Int): Log.TailSpec<M> {
-            committed.add(partition)
-            return Log.TailSpec(-1L) { _ -> }
+            return CompletableDeferred(Log.TailSpec(-1L) { _ -> })
         }
 
         override suspend fun demoteLeader(partition: Int) {

@@ -134,7 +134,7 @@ So at most one leader's writes are ever confirmed for a database, without relyin
 
 === Three LogProcessor states
 
-`xtdb.indexer.LogProcessor` is a small state machine, driven by the transport through three `Log.SubscriptionListener` operations — `launchTransition`, `commitLeader`, `demoteLeader`:
+`xtdb.indexer.LogProcessor` is a small state machine, driven by the transport through two `Log.SubscriptionListener` operations — `transitionToLeader`, `demoteLeader`:
 
 Follower (`FollowerLogProcessor`)::
 The default state for a node that isn't currently leader.

@@ -4,13 +4,10 @@
 -- Scope: the per-database leader-election lifecycle in XTDB's LogProcessor. A
 --   node following a database's replica log can be promoted to LEADER (the sole
 --   writer of that database's replica log) and demoted back. Promotion is a
---   multi-step transition; the point of this design is to let the expensive,
---   unbounded part run OFF the transport's shared serialization point while
---   keeping the committed role change on that single serialization point.
--- Includes: the Following / Prepared / Leading state machine; the split between
---   launching the transition (off the serialization point) and committing the
---   leader (cheap, at the serialization point); the five steps the transition runs
---   and which one needs the live follower; the term fence that enforces one
+--   multi-step transition, run OFF the transport's shared serialization point so
+--   that the transport never waits on its unbounded step.
+-- Includes: the Following / Leading state machine; the five steps the transition
+--   runs and which one needs the live follower; the term fence that enforces one
 --   CONFIRMED leader per database (a leader's writes are only ever confirmed at its
 --   own term); the transport's own guarantees (modelled as an external actor).
 -- Excludes: live-index internals (see live-index.allium), record processing,
@@ -19,14 +16,12 @@
 -- Complementarity with live-index.allium:
 --   live-index.allium owns "whichever LogProcessor variant owns the live index
 --   drives it as a single-threaded writer", treating WHICH variant is in play as
---   a given. This spec fills that gap: how the committed role is selected and
+--   a given. This spec fills that gap: how the role is selected and
 --   swapped. Reference live-index where relevant; do not duplicate its internals.
 --
--- The motivating split: the launched transition does the unbounded work (a
---   catch-up await) but MUST NOT commit the role, because it runs off the
---   serialization point and could race a concurrent revoke. Only committing the
---   leader or demoting commit the role, and only at the serialization point. See
---   SingleWriterCommittedRole (I1).
+-- The role has two writers, the transition and the demote, and they never run at
+--   once: a demote joins the in-flight transition before it reads the role. See
+--   SingleWriterRole (I1).
 
 ------------------------------------------------------------
 -- External Entities
@@ -53,9 +48,8 @@ external entity FollowerTerm {
 
 external entity LeaderTerm {
     -- A leader: consumes the SOURCE log, resolves client txs and writes the replica
-    -- log via plain (non-transactional) appends. Built by the launched transition
-    -- (uncommitted while the role is Prepared) and installed when the leader is
-    -- committed. See: live-index.allium (Leader variant).
+    -- log via plain (non-transactional) appends. Built and installed by the
+    -- transition. See: live-index.allium (Leader variant).
     --
     -- term is the leader's fencing term: the transport's consumer-group generation
     -- (Kafka's generationId, strictly increasing per rebalance; an incrementing
@@ -76,8 +70,8 @@ external entity LeaderTerm {
 }
 
 external entity RecordProcessor {
-    -- The record processor handed back when the leader is committed: the sink the
-    -- transport feeds source-log records to once the leader is committed.
+    -- The sink the transport feeds source-log records to, handed back by the
+    -- transition that built the leader owning it.
 }
 
 external entity ReplicaLog {
@@ -98,9 +92,9 @@ value MessageId {
 }
 
 value TailSpec {
-    -- The result of committing the leader. The source-log offset to resume from
-    -- and the record processor to feed. The transport resumes from after_msg_id
-    -- and delivers records into processor.
+    -- The transition's result: the source-log offset to resume from and the record
+    -- processor to feed. The transport resumes from after_msg_id and delivers
+    -- records into processor.
     after_msg_id: MessageId
     processor: RecordProcessor
 }
@@ -174,26 +168,17 @@ contract DurableTotalOrder {
 }
 
 contract SubscriptionListener {
-    -- The obligation the LogProcessor fulfils toward the transport. The three
-    -- operations -- launch the transition, commit the leader, demote -- plus the
-    -- ordering / fencing / atomicity properties that cannot be expressed as
-    -- single-point-in-time state assertions. Launching the transition returns a
-    -- handle: the transition runs off the serialization point, and the transport
-    -- joins or cancels that handle. It carries the new leader's fencing term (the
-    -- transport's consumer-group generation), which the transition stamps onto every
-    -- replica record it writes.
-    launch_transition: (listener: Listener, term: Integer) -> Listener
-    commit_leader: (listener: Listener) -> TailSpec
+    -- The obligation the LogProcessor fulfils toward the transport.
+    -- Two operations -- transition to leader, demote -- plus the ordering, fencing and atomicity properties that cannot be expressed as single-point-in-time state assertions.
+    -- The transition returns a handle the transport joins or cancels, and its TailSpec once it has one: the transition runs off the serialization point, so the transport's thread is never the one waiting.
+    -- It carries the new leader's fencing term (the transport's consumer-group generation), which the transition stamps onto every replica record it writes.
+    transition_to_leader: (listener: Listener, term: Integer) -> TailSpec
     demote_leader: (listener: Listener) -> Listener
 
-    @invariant SingleWriterCommittedRole
-        -- I1. The committed role (the Following/Prepared/Leading state) is mutated
-        -- ONLY at the transport's serialization point. The launched transition
-        -- builds the leader term but does not commit; committing the leader and
-        -- demoting are the only committers, and they run at the serialization point.
-        -- This is what prevents the off-serialization-point transition from racing a
-        -- concurrent revoke -- the motivating reason for splitting the transition
-        -- from commit.
+    @invariant SingleWriterRole
+        -- I1. The Following/Leading state has one writer at a time.
+        --   The transition writes it, off the serialization point, and a demote writes it at the serialization point.
+        --   A demote joins the in-flight transition before it reads the state, so the two never overlap and a demote always runs against a settled role.
 
     @invariant ExactlyOneConfirmedLeaderPerDatabase
         -- I2. At most one leader's writes are ever CONFIRMED per database, enforced
@@ -221,19 +206,19 @@ contract SubscriptionListener {
         -- draining them first. So the launched transition must await the follower
         -- reaching replay_target BEFORE stopping it.
 
-    @invariant LiveTermBackingCommittedRole
-        -- I4. The committed role is ALWAYS backed by a LIVE term -- a follower whose
+    @invariant LiveTermBackingRole
+        -- I4. The role is ALWAYS backed by a LIVE term -- a follower whose
         -- replica consumer is running, or a live leader -- never a torn-down one.
-        -- This is stronger than CommittedRoleHasItsTerm (which asserts the term is
-        -- merely present): the launched transition stops its follower (step 3)
-        -- before committing the leader (step 5), so a revoke's cancel-and-join
+        -- This is stronger than RoleHasItsTerm (which asserts the term is
+        -- merely present): the transition stops its follower (step 3) before it
+        -- publishes the leader (step 5), so a revoke's cancel-and-join
         -- (RevokeCancelsInFlightTransition) can land while Following holds a
         -- torn-down follower. The failure path re-opens a live follower
         -- (RecoverFollowerOnTransitionCancelled) so the next transition's step-2
         -- await never hangs on a follower that can no longer advance. To keep this
         -- robust, the follower teardown and the recovery decision are atomic with
         -- respect to cancellation, so a cancel landing mid-teardown never leaves the
-        -- committed role backing a dead term.
+        -- role backing a dead term.
 }
 
 ------------------------------------------------------------
@@ -244,42 +229,30 @@ entity Listener {
     -- The per-database SubscriptionListener state machine. This is the spec's view
     -- of a LogProcessor's role lifecycle. Starts Following.
     --
-    -- The committed role is the `state` field: it is mutated ONLY at the
-    -- transport's serialization point (committing the leader / demoting). The
-    -- launched transition runs off that point and moves state to `prepared`, but
-    -- the prepared leader is not the committed role until it is committed -- see
-    -- SingleWriterCommittedRole (I1). Modelled as a single writer of `state`.
+    -- The role is the `state` field.
+    -- The transition writes it off the transport's serialization point and a demote writes it at that point, joining the transition first -- see SingleWriterRole (I1).
     database: Database
 
-    -- The committed role.
+    -- The role.
     --   following  -- holds a live follower term.
-    --   prepared   -- holds a built-but-not-yet-committed leader term; the follower
-    --                 has already been stopped. Transient: committing the leader or
-    --                 demoting leaves it promptly.
-    --   leading    -- holds the committed, live leader term.
-    state: following | prepared | leading
+    --   leading    -- holds a live leader term.
+    state: following | leading
 
     transitions state {
-        following -> prepared    -- launch the transition: built the leader term, not committed
-        prepared -> leading      -- commit the leader: install the prepared leader
-        prepared -> following    -- demote: abandon an uncommitted leader
+        following -> leading     -- the transition: built the leader term and published it
         leading -> following     -- demote: genuine revoke
         -- No terminal state: a listener cycles following/leading indefinitely.
     }
 
-    -- The live follower term, present while Following. The launched transition
-    -- reads its catch-up target (step 2) and stops it (step 3).
+    -- The live follower term, present while Following. The transition reads its
+    -- catch-up target (step 2) and stops it (step 3).
     follower_term: FollowerTerm when state = following
 
-    -- The built-but-not-committed leader term, present while Prepared. Produced by
-    -- the launched transition's five steps; installed as leader_term when the leader
-    -- is committed, or discarded on demote.
-    prepared_leader: LeaderTerm when state = prepared
-
-    -- The committed, live leader term, present while Leading.
+    -- The live leader term, present while Leading. Produced by the transition's
+    -- five steps.
     leader_term: LeaderTerm when state = leading
 
-    -- Derived: this listener is the committed leader for its database.
+    -- Derived: this listener is the leader for its database.
     is_leading: state = leading
 }
 
@@ -287,31 +260,27 @@ entity Listener {
 -- Rules
 --
 -- Operations and where they run:
---   - launch the transition (LaunchTransition): off the serialization point. The
---     launched work runs the five steps and builds the leader term; does NOT commit
---     the role.
---   - commit the leader (CommitLeader): at the serialization point. Cheap.
---     Installs the prepared leader and returns a TailSpec.
---   - demote (DemoteLeader, AbandonPreparedLeader): at the serialization point.
---     Tears the leader/prepared term down and re-opens a follower.
---     following -> following is a no-op (RevokeWhileFollowing).
+--   - transition to leader (TransitionToLeader): off the serialization point. Runs
+--     the five steps, publishes the leader term and returns a TailSpec.
+--   - demote (DemoteLeader): at the serialization point. Tears the leader term down
+--     and re-opens a follower. following -> following is a no-op
+--     (RevokeWhileFollowing).
 ------------------------------------------------------------
 
 ------------------------------------------------------------
--- Rule: launch the transition (runs off the serialization point)
+-- Rule: transition to leader (runs off the serialization point)
 --
 -- The five steps, and their key property: only step 2 needs the follower alive,
--- and it is the only UNBOUNDED step. The launched transition builds the leader
--- term but does not commit -- the state moves to `prepared` as the transition's
--- result, but the committed role change happens when the leader is committed (I1).
+-- and it is the only UNBOUNDED step -- which is why the whole transition runs off
+-- the transport's serialization point.
 ------------------------------------------------------------
 
-rule LaunchTransition {
+rule TransitionToLeader {
     -- term is the transport's current consumer-group generation (Kafka's
     -- generationId), the new leader's fencing term. It is stamped onto every replica
     -- record this term writes, including the step-2 no-op, and checked on
     -- consume-back (see ExactlyOneConfirmedLeaderPerDatabase / I2).
-    when: LaunchTransitionRequested(transport, listener, term)
+    when: TransitionToLeaderRequested(transport, listener, term)
 
     requires: listener.state = following
     requires: listener.follower_term != null
@@ -370,37 +339,17 @@ rule LaunchTransition {
         if listener.follower_term.mid_block:
             DanglingBlockFinished(follower_term: listener.follower_term)
 
-        -- Step 5: build the leader term (uncommitted), carrying the fencing term.
+        -- Step 5: build the leader term, carrying the fencing term, and publish it as the role.
         -- Replica records reach it from the Listener's read, continuing from where the follower left off.
-        listener.prepared_leader = LeaderTerm.created(
+        listener.leader_term = LeaderTerm.created(
             term: term,
             replay_target: target
         )
         listener.follower_term = null
-        listener.state = prepared
-}
-
-------------------------------------------------------------
--- Rule: commit the leader (serialization point)
---
--- Cheap. Installs the prepared leader as the committed role and returns a
--- TailSpec(after_msg_id, processor). One of only two committers (with demote),
--- both at the serialization point -- this is what prevents the
--- off-serialization-point transition from racing a concurrent revoke (I1).
-------------------------------------------------------------
-
-rule CommitLeader {
-    when: CommitLeaderRequested(transport, listener)
-
-    requires: listener.state = prepared
-
-    ensures:
-        listener.leader_term = listener.prepared_leader
-        listener.prepared_leader = null
         listener.state = leading
 
-        -- Return the TailSpec: resume from just after the replay target, feeding
-        -- the leader's record processor.
+        -- Return the TailSpec: the transport resumes the source log from just after
+        -- the replay target, feeding the leader's record processor.
         TailSpecReturned(
             listener: listener,
             tail_spec: TailSpec{
@@ -413,9 +362,8 @@ rule CommitLeader {
 ------------------------------------------------------------
 -- Rule: demote (serialization point)
 --
--- Tears down the leader term and re-opens a follower. Fires for a genuine revoke
--- (leading -> following) AND to abandon an uncommitted prepared leader
--- (prepared -> following) -- same teardown. following -> following is a no-op.
+-- Tears down the leader term and re-opens a follower. following -> following is a
+-- no-op.
 ------------------------------------------------------------
 
 rule DemoteLeader {
@@ -437,25 +385,9 @@ rule DemoteLeader {
         listener.state = following
 }
 
-rule AbandonPreparedLeader {
-    -- Abandon an uncommitted leader: same teardown, reached from Prepared.
-    -- The prepared leader term is torn down; leadership is non-resumable, so a later promotion builds a fresh term at a higher term id.
-    when: DemoteLeaderRequested(transport, listener)
-
-    requires: listener.state = prepared
-
-    ensures:
-        listener.follower_term = FollowerTerm.created(
-            replica_pos: listener.prepared_leader.replay_target,
-            mid_block: false
-        )
-        listener.prepared_leader = null
-        listener.state = following
-}
-
 rule RevokeWhileFollowing {
-    -- Demote on an already-following listener is a no-op: no committed leader term
-    -- to tear down.
+    -- Demote on an already-following listener is a no-op: no leader term to tear
+    -- down.
     when: DemoteLeaderRequested(transport, listener)
 
     requires: listener.state = following
@@ -469,12 +401,12 @@ rule RevokeWhileFollowing {
 --
 -- OQ2 resolution, recovery half. The launched transition stops its follower
 -- (step 3) BEFORE it commits the leader (step 5). If the revoke's cancel-and-join
--- (RevokeCancelsInFlightTransition) lands in that window, the committed role is
+-- (RevokeCancelsInFlightTransition) lands in that window, the role is
 -- still `following` but its follower term has been torn down -- its replica
 -- consumer is gone. The failure path re-opens a live follower so `state` never
 -- holds a torn-down follower; otherwise the next transition's step-2 catch-up
 -- await would wait forever on a follower that can no longer advance. See
--- LiveTermBackingCommittedRole (I4).
+-- LiveTermBackingRole (I4).
 ------------------------------------------------------------
 
 rule RecoverFollowerOnTransitionCancelled {
@@ -486,7 +418,7 @@ rule RecoverFollowerOnTransitionCancelled {
 
     ensures:
         -- Re-open a live follower seeded from the (now stale) follower position, so
-        -- the committed role is backed by a live replica consumer again.
+        -- the role is backed by a live replica consumer again.
         listener.follower_term = FollowerTerm.created(
             replica_pos: listener.follower_term.replica_pos,
             mid_block: false
@@ -498,23 +430,21 @@ rule RecoverFollowerOnTransitionCancelled {
 -- Invariants
 ------------------------------------------------------------
 
-invariant CommittedRoleHasItsTerm {
-    -- Structural counterpart of the single-writer discipline: whatever committed
-    -- role the listener holds, it holds the matching term. A committed leader has
-    -- a live leader term; a follower has a live follower term. (The single-writer
-    -- property itself -- that only the serialization point mutates `state` -- is a
-    -- temporal/threading property; see SingleWriterCommittedRole below.)
+invariant RoleHasItsTerm {
+    -- Structural counterpart of the single-writer discipline: whatever role the
+    -- listener holds, it holds the matching term. A leader has a live leader term;
+    -- a follower has a live follower term. (The single-writer property itself --
+    -- how many writers `state` has at once -- is a temporal/threading property; see
+    -- SingleWriterRole below.)
     for listener in Listeners:
         (listener.state = leading implies listener.leader_term != null)
         and (listener.state = following implies listener.follower_term != null)
-        and (listener.state = prepared implies listener.prepared_leader != null)
 }
 
 -- The serialization, fencing and delivery-ordering properties (I1, I2, the sole-
--- consumer topology, and step 2's drain rationale) are not expressible as
--- single-point-in-time assertions over entity state -- they constrain WHO mutates
--- state and WHEN, a cross-node fence, and record-delivery ordering across a role
--- switch. They live as prose @invariants on the SubscriptionListener contract.
+-- consumer topology, and step 2's drain rationale) constrain WHO mutates state and
+-- WHEN, a cross-node fence, and record-delivery ordering across a role switch.
+-- They live as prose @invariants on the SubscriptionListener contract.
 
 ------------------------------------------------------------
 -- Actor Declarations
@@ -522,11 +452,9 @@ invariant CommittedRoleHasItsTerm {
 
 actor Transport {
     -- The log's group-subscription driver (Kafka's shared consumer is one
-    -- instance). It launches the transition, commits the leader and demotes, and
-    -- keeps its own mirror of which partitions it leads. Modelled as the external
-    -- actor that drives the listener's role changes. Its serialization point is the
-    -- single point at which the committed role is mutated. Identified by the
-    -- database it is driving.
+    -- instance). It launches the transition and demotes, and keeps its own mirror
+    -- of which partitions it leads. Modelled as the external actor that drives the
+    -- listener's role changes. Identified by the database it is driving.
     identified_by: Database where name != ""
 }
 
@@ -535,10 +463,10 @@ actor Transport {
 ------------------------------------------------------------
 
 surface SubscriptionListenerInterface {
-    -- The SubscriptionListener boundary: the three operations the transport calls
-    -- to drive the per-database role. Committing the leader and demoting run at the
-    -- transport's serialization point; launching the transition runs it off that
-    -- point and returns a handle the transport joins or cancels.
+    -- The SubscriptionListener boundary: the two operations the transport calls to
+    -- drive the per-database role. Demoting runs at the transport's serialization
+    -- point; the transition runs off that point and returns a handle the transport
+    -- joins or cancels.
     facing transport: Transport
 
     context listener: Listener
@@ -548,26 +476,20 @@ surface SubscriptionListenerInterface {
         listener.is_leading
 
     provides:
-        LaunchTransitionRequested(transport, listener, term) when listener.state = following
-        CommitLeaderRequested(transport, listener) when listener.state = prepared
+        TransitionToLeaderRequested(transport, listener, term) when listener.state = following
         DemoteLeaderRequested(transport, listener)
         -- The revoke's cancel-and-join of an in-flight transition, driving its
         -- failure path (RevokeCancelsInFlightTransition). Only meaningful while the
-        -- committed role is still following (the transition has not committed).
+        -- role is still following (the transition has not published its leader).
         TransitionCancelled(transport, listener) when listener.state = following
 
     contracts:
         fulfils SubscriptionListener
 
-    @guarantee CommitAtSerializationPoint
-        -- Committing the leader and demoting are the only operations that commit a
-        -- role change, and the transport calls them only at its serialization point.
-        -- Launching the transition runs it off that point.
-
-    @guarantee PrepareDoesNotCommit
-        -- The launched transition builds the leader term but does not install it as
-        -- the committed role; a subsequent commit (or, on revoke, a demote) decides
-        -- its fate at the serialization point.
+    @guarantee DemoteAtSerializationPoint
+        -- The transport calls demote only at its serialization point, and launches
+        -- the transition off that point. So the transport's thread waits on the
+        -- transition only where it chooses to -- the cancel-and-join of a revoke.
 
     @guarantee OneConfirmedLeaderViaTermFence
         -- At most one leader's writes are ever confirmed per database, enforced by
@@ -599,7 +521,7 @@ surface TransportGuarantees {
         -- The transport allows at most one leadership transition in flight per
         -- partition at a time.
 
-    @guarantee NoRePrepareWhileLeading
+    @guarantee NoTransitionWhileLeading
         -- The transport does not re-launch the transition for a partition it
         -- already leads. A retained partition under cooperative rebalancing fires
         -- no callback; the transport guards on its own "am I leading" state.
@@ -619,34 +541,36 @@ surface TransportGuarantees {
         -- step 2's catch-up await, which is cancellable and unwinds promptly. So the
         -- cancel-and-join is itself the teardown stop step, not an unbounded block on
         -- the serialization point. After the join, the demote runs against the
-        -- settled committed role (Prepared -> abandon, Leading -> genuine teardown,
-        -- Following -> no-op).
+        -- settled role (Leading -> teardown, Following -> no-op).
 
     @guarantee TransitionIdentityDropsSupersededCompletions
         -- OQ2 resolution (b). The transport's supersession check is the transition's
         -- own object identity, NOT a generation token threaded through the interface.
         -- A completion or failure posted back to the serialization point for a
         -- superseded assignment finds the subscription's state is no longer that
-        -- transition instance and is dropped -- so a late completion cannot commit
-        -- over a role the transport has already moved on from. (The leader's fencing
-        -- term is a separate mechanism: it fences a ZOMBIE leader's writes on the
-        -- REPLICA LOG via consume-back, not late completions at the serialization
-        -- point. The two are orthogonal.)
+        -- transition instance and is dropped -- so its TailSpec is discarded rather
+        -- than fed, and the leader it built is torn down by the demote that
+        -- superseded it. (The leader's fencing term is a separate mechanism: it
+        -- fences a ZOMBIE leader's writes on the REPLICA LOG via consume-back, not
+        -- late completions at the serialization point. The two are orthogonal.)
 }
 
 ------------------------------------------------------------
 -- Open Questions
 ------------------------------------------------------------
 
-open question "Phase 1 (current) vs Phase 2 (target) sequencing. Phase 1: the transport launches the transition then commits the leader synchronously, back to back, at the serialization point (behaviour-preserving). Phase 2: the transport pauses the partition, launches the transition off the serialization point, and on its completion commits the leader and resumes delivery at the serialization point; a revoke cancels the in-flight transition. This spec models the operations and their commit discipline (I1) uniformly; the phase is a sequencing choice over the same interface. Should the two phases be distinguished in the spec (e.g. a config flag or documented variant), or does the interface model suffice with the phase left to the transport?"
+-- (OQ1 resolved: how long a transport waits for the transition is not visible at
+--  this boundary. The in-process logs await it inline and Kafka posts its
+--  completion back to the poll thread; both call the one operation, and the
+--  difference is the transport's own sequencing.)
 
--- (OQ2 resolved: the Phase-2 race between an in-flight off-serialization-point
---  transition and a revoke at the serialization point is locked. The revoke
---  cancel-and-joins the in-flight transition (RevokeCancelsInFlightTransition) --
---  bounded, because step 2's catch-up await is cancellable, so the cancel-and-join
---  IS the teardown stop step, not an unbounded block -- and per-transition identity
+-- (OQ2 resolved: the race between an in-flight off-serialization-point transition
+--  and a revoke at the serialization point is locked. The revoke cancel-and-joins
+--  the in-flight transition (RevokeCancelsInFlightTransition) -- bounded, because
+--  step 2's catch-up await is cancellable, so the cancel-and-join IS the teardown
+--  stop step, not an unbounded block -- and per-transition identity
 --  (TransitionIdentityDropsSupersededCompletions) drops a late completion posted
 --  for a superseded assignment. Both are transport-internal; the interface is
 --  unchanged. The cancel can land after the transition stopped its follower but
---  before commit, so the failure path re-opens a live follower
---  (LiveTermBackingCommittedRole / RecoverFollowerOnTransitionCancelled).)
+--  before it published its leader, so the failure path re-opens a live follower
+--  (LiveTermBackingRole / RecoverFollowerOnTransitionCancelled).)

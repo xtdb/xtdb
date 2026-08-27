@@ -204,8 +204,7 @@ class ReadOnlyLocalLog<M> @JvmOverloads constructor(
         for (p in 0 until partitions) {
             launch {
                 try {
-                    listener.launchTransition(p, LeaderTerm.of(termEpoch, elections.incrementAndGet())).await()
-                    val spec = listener.commitLeader(p)
+                    val spec = listener.transitionToLeader(p, LeaderTerm.of(termEpoch, elections.incrementAndGet())).await()
                     tailAll(p, spec.afterMsgId, spec.processor)
                 } finally {
                     withContext(NonCancellable) { listener.demoteLeader(p) }

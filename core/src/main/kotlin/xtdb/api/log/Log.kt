@@ -133,20 +133,16 @@ interface Log<M> : AutoCloseable {
     suspend fun openGroupSubscription(listener: SubscriptionListener<M>)
 
     /**
-     * The transport's handle on one partition's leader election, driven as a three-step state
-     * machine (follower → prepared → leading). See allium/log-processor-lifecycle.allium.
+     * The transport's handle on one partition's leader election. See allium/log-processor-lifecycle.allium.
      *
-     * [launchTransition] launches the follower→leader transition on the listener's *own* scope and
-     * returns its [Deferred] — it builds the leader term but does NOT commit the role, so it runs off the
-     * transport's thread (which joins/cancels the handle) and, because it runs under the listener's
-     * scope, is torn down by that scope's cancellation on shutdown. [commitLeader] installs the prepared
-     * leader and hands back the offset to resume from and the processor to feed; it (and [demoteLeader])
-     * are the only committers, run at the transport's serialization point. This split keeps the
-     * committed role single-writer while the unbounded catch-up runs off the poll thread.
+     * [transitionToLeader] runs the whole follower→leader transition on the listener's *own* scope and
+     * returns its [Deferred], so the unbounded catch-up runs off the transport's thread and the handle is
+     * torn down by that scope's cancellation on shutdown. The transport joins or cancels it, and a
+     * transition it no longer wants — revoked, reassigned — is one whose [TailSpec] it discards rather than
+     * feeds; [demoteLeader] then tears the leader down.
      */
     interface SubscriptionListener<M> {
-        fun launchTransition(partition: Int, termId: Long): Deferred<Unit>
-        fun commitLeader(partition: Int): TailSpec<M>
+        fun transitionToLeader(partition: Int, termId: Long): Deferred<TailSpec<M>>
         suspend fun demoteLeader(partition: Int)
     }
 

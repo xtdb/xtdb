@@ -49,13 +49,9 @@ class KafkaConsumerGroupKeepaliveTest {
 
     private class TermCapturingListener : SubscriptionListener<SourceMessage> {
         val term = CompletableDeferred<Long>()
-        val leading = CompletableDeferred<Unit>()
 
-        override fun launchTransition(partition: Int, termId: Long) =
-            CompletableDeferred(Unit).also { term.complete(termId) }
-
-        override fun commitLeader(partition: Int) =
-            TailSpec<SourceMessage>(-1L) { }.also { leading.complete(Unit) }
+        override fun transitionToLeader(partition: Int, termId: Long) =
+            CompletableDeferred(TailSpec<SourceMessage>(-1L) { }).also { term.complete(termId) }
 
         override suspend fun demoteLeader(partition: Int) {}
     }
@@ -75,12 +71,7 @@ class KafkaConsumerGroupKeepaliveTest {
                         val listener = TermCapturingListener()
                         val job = launch { log.openGroupSubscription(listener) }
                         try {
-                            // Leadership has to be committed, not merely claimed: committing is what
-                            // seeks the partition, so only then does the consumer have a position to
-                            // commit at all.
-                            val term = withTimeout(30.seconds) {
-                                listener.term.await().also { listener.leading.await() }
-                            }
+                            val term = withTimeout(30.seconds) { listener.term.await() }
 
                             // Best-effort — the keepalive has to land before we leave or there is
                             // nothing holding the group open, but a keepalive that never arrives is

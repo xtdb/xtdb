@@ -259,8 +259,7 @@ class LogProcessorTest {
         val logProc = logProcessor(partitionStorage, partitionState, watchers, blockUploader, scope)
 
         val highTerm = LeaderTerm.of(0, 9)
-        logProc.launchTransition(0, highTerm).await()
-        logProc.commitLeader(0)
+        logProc.transitionToLeader(0, highTerm).await()
 
         // Nothing has been flushed, so the persisted boundary still carries no term at all — which is
         // what a fence re-seeded on the new follower would fall back to.
@@ -271,7 +270,7 @@ class LogProcessorTest {
             "the demote does not lower what the log has been seen to reach"
         )
 
-        assertThrows<Incorrect> { logProc.launchTransition(0, LeaderTerm.of(0, 5)).await() }
+        assertThrows<Incorrect> { logProc.transitionToLeader(0, LeaderTerm.of(0, 5)).await() }
 
         scope.coroutineContext.job.cancelAndJoin()
         logProc.close()

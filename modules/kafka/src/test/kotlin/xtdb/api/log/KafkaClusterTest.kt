@@ -357,11 +357,9 @@ class KafkaClusterTest {
 
         private val processor = RecordProcessor<SourceMessage> { recs -> records.addAll(recs) }
 
-        override fun launchTransition(partition: Int, termId: Long) = CompletableDeferred(Unit)
-
-        override fun commitLeader(partition: Int): TailSpec<SourceMessage> {
+        override fun transitionToLeader(partition: Int, termId: Long): CompletableDeferred<TailSpec<SourceMessage>> {
             assignedPartitions.add(Unit)
-            return TailSpec(afterMsgId, processor)
+            return CompletableDeferred(TailSpec(afterMsgId, processor))
         }
 
         override suspend fun demoteLeader(partition: Int) {
@@ -441,12 +439,11 @@ class KafkaClusterTest {
 
         // Launch on a real scope (not the runTest virtual dispatcher): the poll thread joins this
         // handle via runBlocking, so a virtual-dispatcher job would never get to run.
-        override fun launchTransition(partition: Int, termId: Long) = scope.async {
+        override fun transitionToLeader(partition: Int, termId: Long) = scope.async {
             entered.complete(Unit)
             release.await()
+            TailSpec(-1L) { recs: List<Record<SourceMessage>> -> records.addAll(recs) }
         }
-
-        override fun commitLeader(partition: Int) = TailSpec(-1L) { recs -> records.addAll(recs) }
 
         override suspend fun demoteLeader(partition: Int) {}
     }
@@ -491,8 +488,9 @@ class KafkaClusterTest {
     }
 
     private class ThrowingOnAssignListener(private val toThrow: Throwable) : SubscriptionListener<SourceMessage> {
-        override fun launchTransition(partition: Int, termId: Long) = CompletableDeferred<Unit>().apply { completeExceptionally(toThrow) }
-        override fun commitLeader(partition: Int): TailSpec<SourceMessage> = error("unreachable")
+        override fun transitionToLeader(partition: Int, termId: Long) =
+            CompletableDeferred<TailSpec<SourceMessage>>().apply { completeExceptionally(toThrow) }
+
         override suspend fun demoteLeader(partition: Int) {}
     }
 
@@ -795,9 +793,8 @@ class KafkaClusterTest {
         val anchorInTruncatedPrefix = MsgIdUtil.offsetToMsgId(0, 1L)
         val caught = AtomicReference<Throwable?>(null)
         val listener = object : SubscriptionListener<SourceMessage> {
-            override fun launchTransition(partition: Int, termId: Long) = CompletableDeferred(Unit)
-            override fun commitLeader(partition: Int): TailSpec<SourceMessage> =
-                TailSpec(afterMsgId = anchorInTruncatedPrefix, processor = { _ -> })
+            override fun transitionToLeader(partition: Int, termId: Long) =
+                CompletableDeferred(TailSpec<SourceMessage>(afterMsgId = anchorInTruncatedPrefix) { _ -> })
 
             override suspend fun demoteLeader(partition: Int) {}
         }
@@ -933,9 +930,8 @@ class KafkaClusterTest {
         val msgs = synchronizedList(mutableListOf<List<Record<SourceMessage>>>())
         val processor = RecordProcessor { records -> msgs.add(records) }
         val listener = object : SubscriptionListener<SourceMessage> {
-            override fun launchTransition(partition: Int, termId: Long) = CompletableDeferred(Unit)
-            override fun commitLeader(partition: Int): TailSpec<SourceMessage> =
-                TailSpec(afterMsgId = -1L, processor = processor)
+            override fun transitionToLeader(partition: Int, termId: Long) =
+                CompletableDeferred(TailSpec(afterMsgId = -1L, processor = processor))
 
             override suspend fun demoteLeader(partition: Int) {}
         }

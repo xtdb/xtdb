@@ -39,7 +39,7 @@ internal class SimLog<M>(private val name: String, private val rand: Random) : L
     class PlainConsumer<M>(val proc: Log.RecordProcessor<M>, var nextOffset: Int, val job: Job)
 
     /** The consumer being promoted plus its in-flight transition handle — see [pending]. */
-    class Pending<M>(val leader: GroupConsumer<M>, val transition: Deferred<Unit>)
+    class Pending<M>(val leader: GroupConsumer<M>, val transition: Deferred<Log.TailSpec<M>>)
 
     val groupConsumers = mutableSetOf<GroupConsumer<M>>()
     val plainConsumers = mutableSetOf<PlainConsumer<M>>()
@@ -73,7 +73,7 @@ internal class SimLog<M>(private val name: String, private val rand: Random) : L
                 wakeLeader.onReceive { deliverGroupRecords() }
                 // Install the pending leader once its off-thread transition completes (the sim's
                 // equivalent of Kafka's TransitionComplete arriving back on the poll thread).
-                pending?.let { it.transition.onAwait { commitPendingLeader() } }
+                pending?.let { it.transition.onAwait { spec -> commitPendingLeader(spec) } }
             }
             yield()
         }
@@ -144,9 +144,10 @@ internal class SimLog<M>(private val name: String, private val rand: Random) : L
     private suspend fun doRebalance() {
         LOG.debug("$name/chooseLeader: rebalance triggered (${groupConsumers.size} consumers)")
 
-        // Tear down whatever we hold — a committed leader, or an in-flight/Prepared transition. For the
-        // pending one, cancel-and-join (bounded; drives the LogProcessor's recovery) then demote, which
-        // abandons a Prepared leader or is a no-op if recovery already re-followed. Mirrors Kafka revoke.
+        // Tear down whatever we hold — a leader we're feeding, or an in-flight transition. For the pending
+        // one, cancel-and-join (bounded; drives the LogProcessor's recovery) then demote, which tears down
+        // a leader the transition had already built or is a no-op if recovery re-followed. Mirrors Kafka
+        // revoke.
         pending?.let { p ->
             p.transition.cancelAndJoin()
             p.leader.listener.demoteLeader(0)
@@ -162,19 +163,18 @@ internal class SimLog<M>(private val name: String, private val rand: Random) : L
         if (groupConsumers.isNotEmpty()) {
             val newLeader = groupConsumers.random(rand)
             LOG.debug("$name/chooseLeader: launching transition for new leader")
-            pending = Pending(newLeader, newLeader.listener.launchTransition(0, LeaderTerm.of(0, termCounter.incrementAndGet())))
+            pending = Pending(newLeader, newLeader.listener.transitionToLeader(0, LeaderTerm.of(0, termCounter.incrementAndGet())))
             // installed by commitPendingLeader (group-loop select clause) once the transition completes
         } else {
             LOG.debug("$name/chooseLeader: no consumers, no leader elected")
         }
     }
 
-    // Group loop (serialization point): install the pending leader once its transition has completed.
-    private fun commitPendingLeader() {
+    // Group loop (serialization point): start feeding the leader its transition built.
+    private fun commitPendingLeader(tailSpec: Log.TailSpec<M>) {
         val newLeader = pending?.leader ?: return
         pending = null
         LOG.debug("$name/chooseLeader: committing new leader")
-        val tailSpec = newLeader.listener.commitLeader(0)
         newLeader.tailSpec = tailSpec
         newLeader.nextOffset = (MsgIdUtil.afterMsgIdToOffset(epoch, tailSpec.afterMsgId) + 1).toInt()
         leader = newLeader
