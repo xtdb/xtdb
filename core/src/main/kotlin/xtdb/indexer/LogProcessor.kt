@@ -190,7 +190,7 @@ class LogProcessor(
     private class Leading(override val proc: LeaderLogProcessor, override val job: Job) : State
 
     private fun openLeader(termId: Long): Leading {
-        // The leader term owns (and frees) its driver; the ext source it borrows outlives every term.
+        // The ext source the term borrows outlives every term.
         val driver = RealLeaderDriver(partitionStorage, partitionState, blockUploader)
         val replicaAppender = ReplicaLogAppender(driver)
 

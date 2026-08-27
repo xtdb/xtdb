@@ -81,7 +81,7 @@ internal interface SourceBatches {
  * in-memory state (`liveIndex.isFull()`, `tableCatalog.currentBlockIndex`). A mock holds real state
  * objects, so those reads stay consistent with what the driver has applied.
  */
-internal interface LeaderDriver : AutoCloseable {
+internal interface LeaderDriver {
 
     val sourceBatches: SourceBatches
 
@@ -154,8 +154,4 @@ internal class RealLeaderDriver(
 
     override suspend fun requestFlushBlock(expectedBlockIdx: Long): MessageId =
         sourceLog.appendMessage(SourceMessage.FlushBlock(expectedBlockIdx)).msgId
-
-    // Nothing to release: the logs outlive the term, and the only driver-owned resource is
-    // `sourceBatches`' channel, which the term shuts down (with its cause) via `sourceBatches.shutdown`.
-    override fun close() = Unit
 }
