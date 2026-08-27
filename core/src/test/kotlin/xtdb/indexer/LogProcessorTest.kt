@@ -14,7 +14,7 @@ import org.junit.jupiter.api.assertDoesNotThrow
 import org.junit.jupiter.api.assertThrows
 import xtdb.api.IndexerConfig
 import xtdb.block.proto.block
-import xtdb.api.error.Incorrect
+import xtdb.api.error.Conflict
 import org.junit.jupiter.api.Timeout
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.NodeBase
@@ -145,7 +145,7 @@ class LogProcessorTest {
 
         // ...so the fresh counter's first term, 0.1, is one every reader would discard
         val subscription = scope.async { sourceLog.openGroupSubscription(logProc) }
-        val e = assertThrows<Incorrect> { subscription.await() }
+        val e = assertThrows<Conflict> { subscription.await() }
         assertTrue(
             e.message!!.contains("termEpoch"),
             "the refusal names the knob that fixes it, was: ${e.message}"
@@ -276,7 +276,7 @@ class LogProcessorTest {
             "the demote does not lower what the log has been seen to reach"
         )
 
-        assertThrows<Incorrect> { logProc.transitionToLeader(0, LeaderTerm.of(0, 5)).await() }
+        assertThrows<Conflict> { logProc.transitionToLeader(0, LeaderTerm.of(0, 5)).await() }
 
         scope.coroutineContext.job.cancelAndJoin()
         logProc.close()
@@ -300,7 +300,7 @@ class LogProcessorTest {
         val scope = CoroutineScope(SupervisorJob())
         val logProc = logProcessor(partitionStorage, partitionState, watchers, blockUploader, scope)
 
-        assertThrows<Incorrect> { logProc.checkTermUnfenced(LeaderTerm.of(0, 1)) }
+        assertThrows<Conflict> { logProc.checkTermUnfenced(LeaderTerm.of(0, 1)) }
         assertDoesNotThrow("bumping the term epoch clears the regression") {
             logProc.checkTermUnfenced(LeaderTerm.of(1, 1))
         }
@@ -328,7 +328,7 @@ class LogProcessorTest {
 
         // a transition checks its own claim once it has been read back, so the max *is* the claim
         assertDoesNotThrow { logProc.checkTermUnfenced(LeaderTerm.of(0, 9)) }
-        assertThrows<Incorrect> { logProc.checkTermUnfenced(LeaderTerm.of(0, 8)) }
+        assertThrows<Conflict> { logProc.checkTermUnfenced(LeaderTerm.of(0, 8)) }
 
         scope.coroutineContext.job.cancelAndJoin()
         logProc.close()

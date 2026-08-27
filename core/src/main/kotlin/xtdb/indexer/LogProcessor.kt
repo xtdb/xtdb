@@ -28,8 +28,8 @@ import xtdb.database.Database
 import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
 import xtdb.api.tx.ExternalSource
+import xtdb.api.error.Conflict
 import xtdb.api.error.Fault
-import xtdb.api.error.Incorrect
 import xtdb.api.error.Interrupted
 import xtdb.types.MessageId
 import xtdb.util.debug
@@ -186,7 +186,7 @@ class LogProcessor(
     fun checkTermUnfenced(term: Long) {
         val maxTerm = termFence.highest
         if (maxTerm > term)
-            throw Incorrect(
+            throw Conflict(
                 "[$dbName] leader term ${LeaderTerm.format(term)} is already fenced by " +
                         "${LeaderTerm.format(maxTerm)} on the replica log — the leader-election counter " +
                         "has regressed (a recreated Kafka consumer group, or a restarted local log), so " +
