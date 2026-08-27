@@ -582,6 +582,15 @@
   (t/is (= [{:eq true}]
            (xt/q tu/*node* "SELECT (INTERVAL '3 1' DAY TO HOUR = INTERVAL '3 1' DAY TO HOUR) as eq"))))
 
+(t/deftest empty-array-column-compares-5948
+  (xt/execute-tx tu/*node* [[:sql "INSERT INTO docs (_id, xs) VALUES (1, ARRAY[])"]])
+
+  (t/is (= [] (xt/q tu/*node* "SELECT _id FROM docs WHERE xs = ARRAY[1]")))
+  (t/is (= [{:xt/id 1}] (xt/q tu/*node* "SELECT _id FROM docs WHERE xs = ARRAY[]")))
+
+  (t/is (nil? (:error (xt/execute-tx tu/*node* [[:sql "UPDATE docs SET seen = true WHERE xs = ARRAY[1]"]])))
+        "a fault here stops the database's ingestion rather than aborting the transaction"))
+
 (t/deftest test-array-construction
   (t/are [sql expected]
       (= expected (plan-expr-with-foo sql))
