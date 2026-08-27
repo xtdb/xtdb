@@ -145,11 +145,11 @@ Leader (`LeaderLogProcessor`)::
 Consumes the source log via the consumer-group subscription, resolves each transaction, appends the resulting `ReplicaMessage` to the replica log, and indexes it once it reads that message back at its own term.
 Only the leader writes L0 files to the object store.
 
-Transition (`TransitionLogProcessor`)::
-An ephemeral state entered during follower→leader promotion.
+Transition::
+A phase of follower→leader promotion rather than a role of its own.
 The incoming leader may have a partially-filled in-memory block (from its time as a follower) that is not yet reflected on the replica log — the previous leader died before flushing it.
-The transition processor finishes that pending block — uploading it to the object store and replaying the buffered records through the leader's pipeline — before the leader starts accepting new source-log messages.
-This keeps the replica log the single source of truth for what's committed: by the time `LeaderLogProcessor` starts, the replica log agrees with what every follower has in its live index.
+The incoming `LeaderLogProcessor` finishes that pending block — uploading it to the object store and replaying the buffered records through its own apply path — before it starts accepting new source-log messages.
+This keeps the replica log the single source of truth for what's committed: by the time the leader reads its first source message, the replica log agrees with what every follower has in its live index.
 
 === Watchers and poisoning
 

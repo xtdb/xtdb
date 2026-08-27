@@ -48,7 +48,22 @@ internal suspend fun runLeaderTerm(
 
             while (true)
                 selectUnbiased {
-                    term.onReplicaMsg { term.applyRecord(it) }
+                    term.onReplicaMsg {
+                        val msg = it.message
+                        val termId = msg.termId
+
+                        if (termId > term.leaderTerm)
+                            throw LeaderSupersededException("[$dbName] superseded: read term $termId > our term ${term.leaderTerm} at ${it.msgId}")
+
+                        // Below our term should not appear past our replay target; discard defensively, still advancing.
+
+                        if (termId != 0L && termId < term.leaderTerm) {
+                            LOG.debug { "[$dbName] leader: discarding stale-term record ${it.msgId} (term $termId < ${term.leaderTerm})" }
+                            watchers.notifyApplied(replicaMsgId = it.msgId)
+                        } else {
+                            term.applyReplicaMessage(it)
+                        }
+                    }
 
                     if (term.acceptingResolution) {
                         term.srcLogProc.run { armSelect() }
@@ -119,43 +134,6 @@ class LogProcessor(
     private class Following(override val proc: FollowerLogProcessor, override val job: Job) : State
 
     private class Leading(override val proc: LeaderLogProcessor, override val job: Job) : State
-
-    private fun openLeader(termId: Long): Leading {
-        // The ext source the term borrows outlives every term.
-        val driver = RealLeaderDriver(partitionStorage, partitionState, blockUploader)
-        val replicaAppender = ReplicaLogAppender(driver)
-
-        val proc = LeaderLogProcessor(
-            allocator, base, partitionStorage, crashLogger, partitionState, dbName, driver, watchers,
-            replicaAppender,
-            externalSource,
-            skipTxs, dbCatalog,
-            leaderTerm = termId,
-            flushTimeout = flushTimeout,
-            gcDispatcher = gcDispatcher,
-        )
-
-        // Reading is the partition's for a leader too — the term's own writes are confirmed by arriving
-        // back here. One job over all of them, so a read that fails cancels the term: consume-back is the
-        // only thing that acks a write, so a term outliving its reader hangs whatever is staged on it.
-        val termJob = scope.launch {
-            launch { tailReplica { records -> records.forEach { proc.queueReplicaMessage(it) } } }
-            launch { proc.gc.runGc() }
-            proc.extSrcProc?.let { extSrcProc -> launch { extSrcProc.run() } }
-            runLeaderTerm(dbName, watchers, proc, replicaAppender)
-        }
-
-        return Leading(proc, termJob)
-    }
-
-
-    private fun openTransition(termId: Long): TransitionLogProcessor =
-        TransitionLogProcessor(
-            allocator, partitionStorage.bufferPool, partitionState, dbName, partitionState.liveIndex,
-            blockUploader, watchers, dbCatalog,
-            hasExternalSource = hasExternalSource,
-            termId = termId,
-        )
 
     // Read the partition's replica log into [apply] until cancelled. The reader belongs to the partition
     // rather than to a role: a follower and a leader consume the same log from the same position, and what
@@ -253,6 +231,23 @@ class LogProcessor(
         }
     }
 
+    private suspend fun LeaderLogProcessor.applyPendingBlock(pendingBlock: PendingBlock) {
+        var oldTerm = pendingBlock.boundaryMessage.termId
+        LOG.debug("[${dbName}] transition: finishing pending block b${pendingBlock.blockIdx} with ${pendingBlock.bufferedRecords.size} buffered records")
+        blockUploader.uploadBlock(pendingBlock.boundaryMsgId, leaderTerm, pendingBlock.boundaryMessage)
+        LOG.debug("[${dbName}] transition: replaying ${pendingBlock.bufferedRecords.size} buffered records")
+
+        pendingBlock.bufferedRecords.forEach {
+            val msgTermId = it.message.termId
+            if (msgTermId >= oldTerm) {
+                oldTerm = msgTermId
+                applyReplicaMessage(it)
+            } else {
+                watchers.notifyApplied(replicaMsgId = it.msgId)
+            }
+        }
+    }
+
     // The point of no return: stop the follower, finish its pending block, build the leader. Once the
     // follower is stopped, `state` references a dead term until we publish Leading — so any early exit
     // (a revoke cancelling us mid-cutover) re-opens a live follower from the catch, seeded from where the
@@ -271,22 +266,36 @@ class LogProcessor(
                 following.proc.close()
             }
 
-            openTransition(termId).use { transition ->
-                if (pendingBlock != null) {
-                    LOG.debug("[$dbName] transition: finishing pending block b${pendingBlock.blockIdx} with ${pendingBlock.bufferedRecords.size} buffered records")
-                    blockUploader.uploadBlock(
-                        pendingBlock.boundaryMsgId, termId, pendingBlock.boundaryMessage,
-                    )
-                    LOG.debug("[$dbName] transition: replaying ${pendingBlock.bufferedRecords.size} buffered records through transition processor")
-                    transition.processRecords(pendingBlock.bufferedRecords)
-                }
-            }
+            val driver = RealLeaderDriver(partitionStorage, partitionState, blockUploader)
+            val replicaAppender = ReplicaLogAppender(driver)
+
+            val proc = LeaderLogProcessor(
+                allocator, base, partitionStorage, crashLogger, partitionState, dbName, driver, watchers,
+                replicaAppender, termFence,
+                externalSource,
+                skipTxs, dbCatalog,
+                leaderTerm = termId,
+                flushTimeout = flushTimeout,
+                gcDispatcher = gcDispatcher,
+            )
+
+            pendingBlock?.let { proc.applyPendingBlock(it) }
 
             LOG.debug("[$dbName] transition: building leader processor")
             val resumeAfterMsgId = watchers.latestSourceMsgId
 
-            val leading = openLeader(termId)
-            state = leading
+            // Reading is the partition's for a leader too — the term's own writes are confirmed by arriving
+            // back here. One job over all of them, so a read that fails cancels the term: consume-back is the
+            // only thing that acks a write, so a term outliving its reader hangs whatever is staged on it.
+            val termJob = scope.launch {
+                launch { tailReplica { records -> records.forEach { proc.queueReplicaMessage(it) } } }
+                launch { proc.gc.runGc() }
+                proc.extSrcProc?.let { extSrcProc -> launch { extSrcProc.run() } }
+                runLeaderTerm(dbName, watchers, proc, replicaAppender)
+            }
+
+            val leading = Leading(proc, termJob).also { state = it }
+
             LOG.info("[$dbName] leader startup complete, resuming after $resumeAfterMsgId")
             return Log.TailSpec(resumeAfterMsgId, leading.proc.srcLogProc)
         } catch (e: Throwable) {

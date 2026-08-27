@@ -20,7 +20,7 @@
 -- See:
 --   garbage_collector/TrieGarbageCollector.kt
 --   indexer/LeaderLogProcessor.kt (commitTriesDeleted callback, finishBlock signal)
---   indexer/FollowerLogProcessor.kt + TransitionLogProcessor.kt (TriesDeleted replay)
+--   indexer/FollowerLogProcessor.kt (TriesDeleted replay)
 --   api/log/ReplicaMessage.kt (TriesDeleted)
 --   api/GarbageCollectorConfig.kt
 
@@ -373,21 +373,15 @@ rule CommitTriesDeletedRule {
 ------------------------------------------------------------
 
 rule FollowerReplaysTriesDeleted {
-    -- Both the FollowerLogProcessor and the TransitionLogProcessor handle
-    -- TriesDeleted by removing the keys from their local trie catalog.
+    -- The follower handles TriesDeleted by removing the keys from its local trie catalog.
     --
-    -- Replay is unconditionally non-stale — `trieCatalog.deleteTries` is
-    -- set-removal and therefore idempotent, so even a redundant replay is
-    -- harmless. (Contrast with ResolvedTx, TriesAdded, BlockBoundary and
-    -- BlockUploaded, each of which has a staleness guard against the watermark
-    -- that records its own effect — see db.allium "Staleness".)
+    -- Replay is unconditionally non-stale — `trieCatalog.deleteTries` is set-removal and therefore idempotent, so even a redundant replay is harmless.
+    -- (Contrast with ResolvedTx, TriesAdded, BlockBoundary and BlockUploaded, each of which has a staleness guard against the watermark that records its own effect — see db.allium "Staleness".)
     --
-    -- See: indexer/FollowerLogProcessor.kt + TransitionLogProcessor.kt
-    --      (TriesDeleted handler), api/log/ReplicaMessage.kt (TriesDeleted)
-    -- Fires when a follower (or transition processor) parses a TriesDeleted
-    -- record off the replica log into a TriesDeletedMessage entity.
+    -- See: indexer/FollowerLogProcessor.kt (TriesDeleted handler), api/log/ReplicaMessage.kt (TriesDeleted)
+    -- Fires when a follower parses a TriesDeleted record off the replica log into a TriesDeletedMessage entity.
     when: msg: TriesDeletedMessage.created
-    requires: log_processor.mode = Follower or log_processor.mode = Transition
+    requires: log_processor.mode = Follower
 
     ensures:
         trie_cat/trie_catalog.deleteTries(

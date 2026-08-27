@@ -29,6 +29,7 @@ import xtdb.NodeBase
 import xtdb.api.IndexerConfig
 import xtdb.api.TransactionResult
 import xtdb.api.log.InMemoryLog
+import xtdb.api.log.LeaderTerm
 import xtdb.api.log.Log
 import xtdb.types.MessageId
 import xtdb.api.log.ReplicaMessage
@@ -134,6 +135,7 @@ class LeaderLogProcessorTest {
         wrapDriver: (LeaderDriver) -> LeaderDriver = { it },
         termJob: Job = SupervisorJob(backgroundScope.coroutineContext.job),
     ): LeaderLogProcessor {
+        val dbName = if (dbCatalog != null) "xtdb" else "test"
         val tableCatalog = TableCatalog(bufferPool)
         val partitionState = PartitionState(tableCatalog, trieCatalog, liveIndex)
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
@@ -151,8 +153,8 @@ class LeaderLogProcessorTest {
             partitionStorage, replicaAppender, watchers,
             LeaderLogProcessor(
                 allocator, nodeBase, partitionStorage, mockk(relaxed = true),
-                partitionState, if (dbCatalog != null) "xtdb" else "test",
-                driver, watchers, replicaAppender, extSource,
+                partitionState, dbName,
+                driver, watchers, replicaAppender, TermFence(dbName, LeaderTerm.NONE), extSource,
                 skipTxs = skipTxs, dbCatalog = dbCatalog,
                 leaderTerm = leaderTerm,
                 flushTimeout = IndexerConfig().flushDuration,
@@ -393,7 +395,8 @@ class LeaderLogProcessorTest {
 
         val proc = LeaderLogProcessor(
             allocator, nodeBase, partitionStorage, mockk(relaxed = true),
-            partitionState, "test", leaderDriver, watchers, appender, extSource,
+            partitionState, "test", leaderDriver, watchers, appender,
+            TermFence("test", LeaderTerm.NONE), extSource,
             skipTxs = emptySet(), dbCatalog = null,
             leaderTerm = 1,
             flushTimeout = IndexerConfig().flushDuration,
@@ -442,6 +445,28 @@ class LeaderLogProcessorTest {
     }
 
     @Test
+    fun `an ext-source tx applied from the record alone does not advance the source watermark`() = runTest {
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
+        val (proc, _) = unstartedTerm(watchers, extSource = mockk(relaxed = true))
+
+        // Not in the resolver's queue, so it is re-materialised from the record — the path a promotion's
+        // replay takes for every record the follower buffered.
+        //
+        // srcMsgId is null only on a pre-#5586 record, and a CDC tx's txId is a per-database counter
+        // rather than a source-log offset — so there is nothing to recover the position from, and
+        // standing still is the only value that keeps Watchers' srcMsgId non-decreasing against the
+        // next BlockBoundary's, which carries the leader's genuine source-log position.
+        proc.applyReplicaMessage(
+            Log.Record(
+                0, 0, Instant.now(),
+                ReplicaMessage.ResolvedTx(0, Instant.now(), true, null, emptyMap(), srcMsgId = null)
+            )
+        )
+
+        assertEquals(-1L, watchers.latestSourceMsgId)
+    }
+
+    @Test
     fun `FlushBlock triggers block finish when CAS matches`() = runTest(timeout = 5.seconds) {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val liveIndex = liveIndexMock {
@@ -468,6 +493,7 @@ class LeaderLogProcessorTest {
             LeaderLogProcessor(
                 allocator, nodeBase, partitionStorage, mockk(relaxed = true),
                 partitionState, "test", driver, watchers, replicaAppender,
+                TermFence("test", LeaderTerm.NONE),
                 extSource = null,
                 skipTxs = emptySet(), dbCatalog = null,
                 flushTimeout = IndexerConfig().flushDuration,
@@ -540,6 +566,7 @@ class LeaderLogProcessorTest {
             LeaderLogProcessor(
                 allocator, nodeBase, partitionStorage, mockk(relaxed = true),
                 partitionState, "test", driver, watchers, replicaAppender,
+                TermFence("test", LeaderTerm.NONE),
                 extSource = null,
                 skipTxs = emptySet(), dbCatalog = null,
                 flushTimeout = IndexerConfig().flushDuration,
@@ -915,6 +942,7 @@ class LeaderLogProcessorTest {
             LeaderLogProcessor(
                 allocator, nodeBase, partitionStorage, mockk(relaxed = true),
                 partitionState, "test", driver, watchers, replicaAppender,
+                TermFence("test", LeaderTerm.NONE),
                 extSource = mockk(relaxed = true),
                 skipTxs = setOf(10), dbCatalog = null,
                 flushTimeout = IndexerConfig().flushDuration,

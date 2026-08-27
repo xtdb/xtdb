@@ -74,7 +74,7 @@ use "./compaction.allium" as compaction
 given {
     database: Database
     log_processor: LogProcessor
-    tx_resolver: TxResolver?           -- leader-only (persister-owned); absent in follower/transition modes
+    tx_resolver: TxResolver?           -- leader-only (persister-owned); absent in follower mode
     live_index: LiveIndex              -- shared across leader/follower modes
     watchers: Watchers                 -- single instance: correlates source msg_ids and tx_ids with client futures
     table_catalog: TableCatalog
@@ -127,7 +127,7 @@ entity LiveIndex {
     -- latest_completed_tx — DURABLE head / QUERY BASIS: the highest tx in the durable
     --   live tables. External snapshots open at this. On a leader it is advanced by
     --   apply on CONSUME-BACK (so it lags the resolved head by everything staged but
-    --   not yet read back); on a follower/transition by importTx, which has no lag
+    --   not yet read back); on a follower by importTx, which has no lag
     --   because every message it imports is already durable.
     -- The RESOLVED head is NOT a field here: on a leader it lives on the resolver (see
     --   TxResolver). LiveIndex is resolver-agnostic — it knows only the durable layer.
@@ -181,7 +181,7 @@ entity LogProcessor {
     -- log-processor-lifecycle.allium owns the role state machine; `mode` here is the
     -- coarser view db.allium's rules need.
     -- For local log, the single node is always immediately assigned.
-    mode: Leader | Follower | Transition
+    mode: Leader | Follower
     latest_replica_msg_id: MessageId
 }
 
@@ -191,6 +191,10 @@ variant Leader : LogProcessor {
     -- back and applies them. Also owns block finishing via BlockUploader, and the trie
     -- and block garbage collectors.
     -- See: indexer/LeaderLogProcessor.kt, indexer/LeaderDriver.kt
+    --
+    -- A promotion's pending block is finished through this processor, before it reads its first source message.
+    --   - The boundary the outgoing leader cut is uploaded under the INCOMING term — see BlockUploader.
+    --   - The follower's buffered records then replay in log order, a record whose term is below the highest the replay has reached advancing the watermark alone.
     --
     -- external_source is present iff the database has one configured; it makes this
     -- leader external-source-fed rather than client-driven (see the header).
@@ -241,19 +245,6 @@ variant Follower : LogProcessor {
     max_leader_term: Integer
 }
 
-variant Transition : LogProcessor {
-    -- Processes replica messages during leader startup, driven synchronously through the
-    -- transition rather than looping on its own.
-    -- Used to replay buffered records from a pending block and any BlockBoundary messages
-    -- encountered during the replay.
-    -- On BlockBoundary: directly calls blockUploader.uploadBlock() (unlike the follower,
-    -- which enters pending mode and waits for BlockUploaded).
-    -- Appends under the INCOMING term, not the term that cut the boundary — see
-    -- BlockUploader.
-    -- See: indexer/TransitionLogProcessor.kt
-    term_id: Integer
-}
-
 entity TxResolver {
     -- The leader's transaction resolver, opaque here: its full structure (the FIFO of
     -- resolved-but-not-yet-applied txs and their relations, the read-your-writes staged
@@ -301,7 +292,7 @@ entity Watchers {
     -- resume token for external-source databases. These are the DURABLE watermarks:
     -- every mode advances them only once a message has been applied.
     -- Clients call awaitTx(txId) to wait for a transaction result.
-    -- Transition code calls awaitSource(srcMsgId) to wait for source processing.
+    -- A promotion calls awaitSource(srcMsgId) to wait for source processing.
     --
     -- notifyTx(result, srcMsgId, externalSourceToken): advances txId and
     --   sourceMsgId; if the token is non-null it overrides the tracked token
@@ -324,8 +315,7 @@ entity Watchers {
 }
 
 entity BlockUploader {
-    -- Shared class used by both LeaderLogProcessor (for normal block finishing) and
-    -- TransitionLogProcessor (for completing interrupted blocks during transition).
+    -- The leader's, for finishing its own blocks and for completing the one a promotion inherited.
     --
     -- uploadBlock(boundaryMsgId, termId, boundaryMessage):
     --   1. Finishes live index block (liveIndex.finishBlock), yielding L0 tries — one per
@@ -728,9 +718,8 @@ config {
 
 -- == Staleness ==
 --
--- Both FollowerLogProcessor and TransitionLogProcessor skip a replica message whose effect
--- has already been applied. Each kind is compared against the watermark that actually
--- records its effect, rather than against a single source-log position:
+-- The follower skips a replica message whose effect has already been applied.
+-- Each kind is compared against the watermark that actually records its effect, rather than against a single source-log position:
 --   ResolvedTx:     stale if tx_id <= watchers.latest_tx_id
 --   TriesAdded:     stale if source_msg_id <= watchers.latest_source_msg_id
 --   BlockBoundary:  stale if block_index <= table_catalog.current_block_index
@@ -778,32 +767,9 @@ rule TransitionToLeader {
         -- but not BlockUploaded before the replay target).
         let pending_block = log_processor.pending_block
 
-        -- If the follower had a pending block, the new leader must finish it. The block's
-        -- data is already in the live index (applied before BlockBoundary), but the block
-        -- file was never persisted. The BlockUploaded is appended under the INCOMING term,
-        -- not the term that cut the boundary: followers have already advanced past that
-        -- term and would fence it, never completing the block.
-        if pending_block != null:
-            block_uploader.uploadBlock(
-                pending_block.boundary_msg_id,
-                term,
-                pending_block.boundary_message
-            )
-
-            -- Replay buffered records through a transient transition processor, which
-            -- handles BlockBoundary by uploading immediately (unlike the follower, which
-            -- enters pending mode).
-            let transition = Transition.created(
-                latest_replica_msg_id: log_processor.latest_replica_msg_id,
-                term_id: term
-            )
-            transition.processRecords(pending_block.buffered_records)
-
-        -- Switch to leader mode. It resumes the SOURCE log from the durable watermark
-        -- (which the replay above has advanced), and its consume pump tails the REPLICA
-        -- log from the replay target. Its resolver is seeded at the durable head, and its
-        -- block gauge from the rows already in the open block, so it cuts this block where
-        -- the previous leader would have.
+        -- Switch to leader mode.
+        -- It resumes the SOURCE log from the durable watermark (which the replay below advances), and its consume pump tails the REPLICA log from the replay target.
+        -- Its resolver is seeded at the durable head, and its block gauge from the rows already in the open block, so it cuts this block where the previous leader would have.
         log_processor.mode = Leader.created(
             -- The database's own source, borrowed for the length of this term, so this leader is CDC-fed iff the database is.
             external_source: database.external_source,
@@ -818,6 +784,19 @@ rule TransitionToLeader {
         TxResolver.created(
             latest_completed_tx: live_index.latest_completed_tx
         )
+
+        -- The new leader finishes the block the outgoing one left behind, before it reads a source message.
+        --   - The block's data is already in the live index (applied before BlockBoundary), but the block file was never persisted.
+        --   - The BlockUploaded is appended under the INCOMING term, not the term that cut the boundary: followers have already advanced past that term and would fence it, never completing the block.
+        --   - The buffered records then replay through this same leader, which uploads on a BlockBoundary among them rather than entering the follower's pending mode.
+        if pending_block != null:
+            block_uploader.uploadBlock(
+                pending_block.boundary_msg_id,
+                term,
+                pending_block.boundary_message
+            )
+            log_processor.applyPendingBlock(pending_block)
+
         log_processor.start(after_source: watchers.latest_source_msg_id, after_replica: replay_target)
 
     @guidance
@@ -1444,43 +1423,6 @@ rule FollowerHandlesBlockUploaded {
         log_processor.pending_block = null
         for record in buffered:
             HandleReplicaMessage(record)
-}
-
----- Rules: Transition Processor Message Handling
-
--- The transition processor handles BlockBoundary differently from the follower: instead
--- of entering pending mode, it immediately calls blockUploader.uploadBlock to persist the
--- block. Everything else matches the follower, staleness check included.
---
--- It runs no term fence of its own: it is driven synchronously through the transition,
--- over the records the follower buffered, which the follower already fenced.
-
-rule TransitionHandlesBlockBoundary {
-    -- Subscribes to the same dispatch event as HandleReplicaMessage and overrides it for
-    -- the transition processor, which uploads immediately instead of entering pending mode.
-    when: HandleReplicaMessage(msg)
-    requires: msg.kind = BlockBoundaryMessage
-    requires: log_processor.mode = Transition
-
-    ensures:
-        -- Under the INCOMING term, not the term that cut the boundary: followers have
-        -- already advanced past that term and would fence this BlockUploaded, never
-        -- completing the block.
-        block_uploader.uploadBlock(msg.msg_id, log_processor.term_id, msg)
-        watchers.notifyMsg(msg.latest_processed_msg_id)
-}
-
-rule TransitionHandlesBlockUploaded {
-    -- Ignored: the block was already uploaded by the BlockBoundary handler above, whose
-    -- own BlockUploaded this may be. Still advances the watermark.
-    -- Subscribes to the same dispatch event as HandleReplicaMessage (which has no
-    -- BlockUploadedMessage branch of its own).
-    when: HandleReplicaMessage(msg)
-    requires: msg.kind = BlockUploadedMessage
-    requires: log_processor.mode = Transition
-
-    ensures:
-        watchers.notifyMsg(msg.latest_processed_msg_id)
 }
 
 ---- Rules: Compaction Orchestration

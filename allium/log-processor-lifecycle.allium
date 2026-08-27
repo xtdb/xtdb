@@ -331,11 +331,9 @@ rule TransitionToLeader {
         -- Step 3: stop the follower (cancel + close its term).
         FollowerStopped(follower_term: listener.follower_term)
 
-        -- Step 4: finish any dangling block. If the follower was mid-block (an old
-        -- leader died before uploading it), upload the block and replay its
-        -- buffered records through a transient transition processor, with
-        -- leader-upload semantics. Requires the follower stopped (step 3) so it
-        -- cannot double-process.
+        -- Step 4: finish any dangling block.
+        -- If the follower was mid-block (an old leader died before uploading it), the incoming leader uploads the block and replays its buffered records, with leader-upload semantics.
+        -- Requires the follower stopped (step 3) so it cannot double-process.
         if listener.follower_term.mid_block:
             DanglingBlockFinished(follower_term: listener.follower_term)
 

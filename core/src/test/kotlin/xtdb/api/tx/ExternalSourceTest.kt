@@ -35,6 +35,7 @@ import xtdb.indexer.LeaderLogProcessor
 import xtdb.indexer.LiveIndex
 import xtdb.indexer.RealLeaderDriver
 import xtdb.indexer.ReplicaLogAppender
+import xtdb.indexer.TermFence
 import xtdb.indexer.runLeaderTerm
 import xtdb.storage.MemoryStorage
 import xtdb.tx.TxOpts
@@ -129,7 +130,8 @@ class ExternalSourceTest {
 
         return LeaderLogProcessor(
             allocator, nodeBase, partitionStorage, crashLogger,
-            partitionState, "test", driver, watchers, replicaAppender, extSource,
+            partitionState, "test", driver, watchers, replicaAppender,
+            TermFence("test", LeaderTerm.NONE), extSource,
             skipTxs = emptySet(), dbCatalog = null,
             flushTimeout = IndexerConfig().flushDuration,
         ).also { proc ->

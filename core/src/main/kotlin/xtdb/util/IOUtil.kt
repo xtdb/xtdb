@@ -65,6 +65,13 @@ inline fun <R> Path.deleteOnCatch(block: (Path) -> R): R =
         throw e
     }
 
+inline fun <C : AutoCloseable?, L : Map<*, C>, R> L.useAll(block: (L) -> R): R =
+    try {
+        block(this)
+    } finally {
+        closeAll()
+    }
+
 inline fun <C : AutoCloseable?, L : Iterable<C>, R> L.useAll(block: (L) -> R): R =
     try {
         block(this)

@@ -6,6 +6,8 @@ import kotlinx.coroutines.channels.Channel
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.NodeBase
 import xtdb.api.DatabaseName
+import xtdb.api.TransactionKey
+import xtdb.api.TransactionResult
 import xtdb.api.error.Anomaly
 import xtdb.api.error.Fault
 import xtdb.api.log.DbOp
@@ -21,6 +23,7 @@ import xtdb.types.MessageId
 import xtdb.util.debug
 import xtdb.util.error
 import xtdb.util.logger
+import xtdb.util.useAll
 import java.time.Duration
 import java.time.InstantSource
 
@@ -34,7 +37,7 @@ private val LOG = LeaderLogProcessor::class.logger
 internal class LeaderSupersededException(message: String) : RuntimeException(message)
 
 internal class LeaderLogProcessor(
-    allocator: BufferAllocator,
+    private val al: BufferAllocator,
     nodeBase: NodeBase,
     partitionStorage: PartitionStorage,
     crashLogger: CrashLogger,
@@ -44,11 +47,12 @@ internal class LeaderLogProcessor(
     private val watchers: Watchers,
 
     private val replicaAppender: ReplicaLogAppender,
+    private val termFence: TermFence,
 
     extSource: ExternalSource?,
     skipTxs: Set<MessageId>,
     private val dbCatalog: Database.Catalog?,
-    private val leaderTerm: Long = 0,
+    val leaderTerm: Long = 0,
     instantSource: InstantSource = InstantSource.system(),
     flushTimeout: Duration,
     // Base for the GCs' delete fan-out; defaults to IO in prod, sims inject the seeded dispatcher.
@@ -72,7 +76,7 @@ internal class LeaderLogProcessor(
     // joined; see TxResolver.
     private val txResolver =
         TxResolver(
-            allocator, nodeBase, partitionStorage, partitionState, dbName, crashLogger, skipTxs,
+            al, nodeBase, partitionStorage, partitionState, dbName, crashLogger, skipTxs,
             resolvedSrcMsgId = watchers.latestSourceMsgId, resolvedExtToken = watchers.externalSourceToken,
             instantSource
         )
@@ -149,52 +153,60 @@ internal class LeaderLogProcessor(
      */
     suspend fun queueReplicaMessage(record: Log.Record<ReplicaMessage>) = replicaMsgs.send(record)
 
-    // ---- apply loop (consume-back) ----
+    private suspend fun applyResolvedTx(record: Log.Record<ReplicaMessage>, msg: ReplicaMessage.ResolvedTx) {
+        val txKey = TransactionKey(msg.txId, msg.systemTime)
 
-    // Apply one record read back off our own replica log. By term:
-    //  - term > ours: a newer leader has superseded us → resign (fail the term).
-    //  - term < ours: shouldn't appear past our replay target; discard defensively, still advancing.
-    //  - term == ours (the common case; terms are unique per leader, so an equal-term record IS our own):
-    //      - ResolvedTx  → import from the resolver's head (we still hold its relations — no re-materialisation).
-    //      - BlockBoundary → trigger the block upload (liveIndex now holds exactly this block's txs).
-    //      - everything else mirrors the follower.
-    suspend fun applyRecord(record: Log.Record<ReplicaMessage>) {
+        msg.loadTableData(al).useAll { tables -> driver.applyTx(txKey, tables) }
+
+        val result =
+            if (msg.committed) TransactionResult.Committed(txKey)
+            else TransactionResult.Aborted(txKey, msg.error)
+
+        // Handling for pre-`f3eb8d7d9` ResolvedTx records — see #5586.
+        val effectiveSrcMsgId = msg.srcMsgId
+            ?: if (extSrcProc != null) watchers.latestSourceMsgId else msg.txId
+
+        watchers.notifyApplied(
+            record.msgId, srcMsgId = effectiveSrcMsgId, result, msg.externalSourceToken
+        )
+    }
+
+    private suspend fun applyResolvedTx(record: Log.Record<ReplicaMessage>, tx: ResolvedTx) {
+        try {
+            driver.applyTx(tx.txKey, tx.allTables.associate { it.ref to it.relation })
+
+            watchers.notifyApplied(record.msgId, tx.srcMsgId, tx.txResult, tx.externalSourceToken)
+
+            tx.pending?.complete(tx.txResult)
+        } catch (e: Throwable) {
+            // tx is already off the queue, so teardown's failPending can't reach it — this catch is the
+            // only thing that will ever fail its handle.
+            tx.pending?.completeExceptionally(e)
+            throw e
+        }
+    }
+
+    suspend fun applyReplicaMessage(record: Log.Record<ReplicaMessage>) {
         val msg = record.message
-        val term = msg.termId
 
-        if (term > leaderTerm)
-            throw LeaderSupersededException("[$dbName] superseded: read term $term > our term $leaderTerm at ${record.msgId}")
-
-        // Below our term should not appear past our replay target; discard defensively, still advancing.
-        if (term != 0L && term < leaderTerm) {
-            LOG.debug { "[$dbName] leader: discarding stale-term record ${record.msgId} (term $term < $leaderTerm)" }
-            watchers.notifyApplied(record.msgId)
+        if (!termFence.admit(msg.termId)) {
+            watchers.notifyApplied(replicaMsgId = record.msgId)
             return
         }
 
         when (msg) {
             is ReplicaMessage.ResolvedTx -> {
-                val head = txResolver.removeHead()
-                // check is inside the try: head is already off the queue, so teardown's failPending can't
-                // reach it — the catch must fail its handle and the finally must free it, on ANY throw here
-                // (a queue-head mismatch included), or we leak Arrow buffers and hang an awaiting executeTx.
-                try {
-                    check(head.txKey.txId == msg.txId) {
-                        "[$dbName] queue head ${head.txKey.txId} != consumed tx ${msg.txId}"
+                // Ahead of the tx itself, so a caller that submitted an attach can use the database as
+                // soon as its transaction returns — and once, whichever way the tx below is applied.
+                // Nothing to guard on `committed`: a refused dbOp resolves to an abort carrying no dbOp.
+                applyDbOp(msg.dbOp)
+
+                txResolver.removeHead(msg.txId).use { tx ->
+                    if (tx != null) {
+                        applyResolvedTx(record, tx)
+                    } else {
+                        applyResolvedTx(record, msg)
                     }
-                    driver.applyTx(head.txKey, head.allTables.associate { it.ref to it.relation })
-
-                    // Before the handle completes, so a caller that submitted an attach can use the
-                    // database as soon as its transaction returns.
-                    if (msg.committed) applyDbOp(msg.dbOp)
-
-                    watchers.notifyApplied(record.msgId, head.srcMsgId, head.txResult, head.externalSourceToken)
-                    head.pending?.complete(head.txResult)
-                } catch (e: Throwable) {
-                    head.pending?.completeExceptionally(e)
-                    throw e
-                } finally {
-                    head.close()
                 }
             }
 

@@ -142,7 +142,8 @@ internal class TxResolver(
     fun stagedDbOp(dbName: DatabaseName): DbOp? = queue.lastOrNull { it.dbOp?.dbName == dbName }?.dbOp
 
     /** Remove and return the head (oldest) tx; ownership passes to the caller, which imports then closes it. */
-    fun removeHead(): ResolvedTx = queue.removeFirst()
+    fun removeHead(txId: MessageId): ResolvedTx? =
+        queue.takeIf { it.firstOrNull()?.txKey?.txId == txId }?.removeFirst()
 
     /**
      * Fail every pending deferred we're still holding. Called on teardown paths where queued txs will never
