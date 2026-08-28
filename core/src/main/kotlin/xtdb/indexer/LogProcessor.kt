@@ -83,6 +83,7 @@ class LogProcessor(
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val logsDriver: LogsDriver =
         OffloadingLogsDriver(RealLogsDriver(partitionStorage), partitionStorage, partitionState),
+    private val electionDriver: ElectionDriver = RealElectionDriver(),
 ) : Log.SubscriptionListener<SourceMessage>, AutoCloseable {
 
     /** The partition's log appends, behind one seam, so that a test can fail or stall one. */
@@ -398,7 +399,7 @@ class LogProcessor(
                     // follower is still live, and the tail folds until the join above.
                     checkUnfenced(termId)
 
-                    val replicaAppender = ReplicaLogAppender(logsDriver)
+                    val replicaAppender = ReplicaLogAppender(logsDriver, termId, electionDriver)
 
                     val blockCutter =
                         BlockCutter(
