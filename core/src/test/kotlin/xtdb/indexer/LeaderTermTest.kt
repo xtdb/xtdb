@@ -18,6 +18,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import xtdb.NodeBase
 import xtdb.SimulationTestUtils.Companion.createTrieCatalog
+import xtdb.api.DatabaseName
 import xtdb.api.IndexerConfig
 import xtdb.api.log.InMemoryLog
 import xtdb.api.log.LeaderTerm
@@ -79,7 +80,31 @@ internal abstract class LeaderTermTest {
             configure()
         }
 
-    /** Holds every append open until [gate], reporting through [appendStarted] that one has arrived. */
+    // Records what was asked of it, so a test can ask what this node's set holds rather than what was
+    // called. Nothing here opens a database, so a name is attached the moment it is asked for.
+    protected class RecordingDbCatalog : Database.Catalog {
+        val attached = mutableListOf<DatabaseName>()
+
+        override val databaseNames get() = attached.toSet()
+        override val txScoped = false
+        override fun databaseOrNull(dbName: DatabaseName): Database? = null
+
+        override fun checkCanAttach(dbName: DatabaseName, config: Database.Config) {}
+        override fun checkCanDetach(dbName: DatabaseName) {}
+
+        override fun attach(dbName: DatabaseName, config: Database.Config?) {
+            attached += dbName
+        }
+
+        override fun detach(dbName: DatabaseName) {
+            attached -= dbName
+        }
+    }
+
+    // Decorate a driver so its replica-log append blocks on [gate] before the message lands, completing
+    // [appendStarted] the first time the pump reaches it. Models a slow append-ack: while the gate is shut
+    // the message is not on the log, so it can't be consumed back — the ReadIndex ack (and thus executeTx)
+    // stays pending. Everything else, the tail included, delegates to the real driver.
     protected fun gatedDriver(
         inner: LeaderDriver, gate: CompletableDeferred<Unit>, appendStarted: CompletableDeferred<Unit>,
     ): LeaderDriver = object : LeaderDriver by inner {
