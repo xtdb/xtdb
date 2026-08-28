@@ -80,6 +80,7 @@ class LogProcessor(
     // Injected so a simulation can seed it; each consumer caps its own fan-out off it.
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val logsDriver: LogsDriver = RealLogsDriver(partitionStorage),
+    private val electionDriver: ElectionDriver = RealElectionDriver(),
 ) : Log.SubscriptionListener<SourceMessage>, AutoCloseable {
 
     /** The partition's log appends, behind one seam, so that a test can fail or stall one. */
@@ -333,7 +334,7 @@ class LogProcessor(
 
                     checkNotSuperseded(termId, pendingBlock)
 
-                    val replicaAppender = ReplicaLogAppender(logsDriver)
+                    val replicaAppender = ReplicaLogAppender(logsDriver, termId, electionDriver)
 
                     val blockCutter =
                         BlockCutter(

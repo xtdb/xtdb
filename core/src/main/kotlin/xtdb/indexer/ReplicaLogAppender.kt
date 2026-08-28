@@ -1,7 +1,9 @@
 package xtdb.indexer
 
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.selects.select
 import xtdb.api.log.ReplicaMessage
+import xtdb.api.log.ReplicaMessage.NoOp
 
 /**
  * One item queued for append to the replica log.
@@ -30,7 +32,11 @@ internal class ControlItem(private val message: ReplicaMessage) : AppendItem {
  * Appending is its own coroutine so that the serialization and the log round-trip stay off the term's work
  * loop — which is what releases the transport's poll thread at "resolved" rather than at "durable" (#5741).
  */
-internal class ReplicaLogAppender(private val logsDriver: LogProcessor.LogsDriver) {
+internal class ReplicaLogAppender(
+    private val logsDriver: LogProcessor.LogsDriver,
+    private val leaderTerm: Long,
+    private val electionDriver: ElectionDriver,
+) {
 
     // Unbounded: the term queues here from the same coroutine that services its consume-back, so a bounded
     // channel could block that send — and consume-back is what makes the progress the send would be
@@ -39,8 +45,18 @@ internal class ReplicaLogAppender(private val logsDriver: LogProcessor.LogsDrive
 
     suspend fun append(item: AppendItem) = queue.send(item)
 
+    // `onReceive` throws whatever `shutdown` closed the queue with, which is how a failed term unwinds.
+    // Handing the closure back as a value instead would end the term normally, with nothing to report.
     suspend fun run() {
-        for (item in queue) logsDriver.appendToReplica(item.toReplicaMessage())
+        while (true) {
+            val item = select {
+                queue.onReceive { it }
+
+                electionDriver.run { onAssertTimeout { ControlItem(NoOp(termId = leaderTerm)) } }
+            }
+
+            logsDriver.appendToReplica(item.toReplicaMessage())
+        }
     }
 
     /**
