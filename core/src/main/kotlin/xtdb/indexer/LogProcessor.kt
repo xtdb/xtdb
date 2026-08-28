@@ -150,6 +150,7 @@ class LogProcessor(
     private val skipTxs: Set<MessageId> = emptySet(),
     private val flushTimeout: Duration,
     private val gcDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val electionDriver: ElectionDriver = RealElectionDriver(),
 ) : Log.SubscriptionListener<SourceMessage>, AutoCloseable {
 
     private val replicaLog = partitionStorage.replicaLog
@@ -322,7 +323,7 @@ class LogProcessor(
                     }
 
                     val driver = RealLeaderDriver(partitionStorage, partitionState, blockUploader)
-                    val replicaAppender = ReplicaLogAppender(driver)
+                    val replicaAppender = ReplicaLogAppender(driver, termId, electionDriver)
 
                     val proc = LeaderLogProcessor(
                         allocator, base, partitionStorage, crashLogger, partitionState, dbName, driver, watchers,

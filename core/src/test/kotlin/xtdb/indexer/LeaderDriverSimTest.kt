@@ -126,7 +126,7 @@ class LeaderDriverSimTest : SimulationTestBase() {
             )
         )
 
-        private val replicaAppender = ReplicaLogAppender(driver)
+        private val replicaAppender = ReplicaLogAppender(driver, termId, NoAssertElectionDriver)
 
         val proc = LeaderLogProcessor(
             allocator, nodeBase, partitionStorage, CrashLogger(allocator, bufferPool, "sim-$name"),

@@ -176,6 +176,9 @@ class LogProcessorSimTest : SimulationTestBase() {
                 scope = scope,
                 flushTimeout = indexerConfig.flushDuration,
                 gcDispatcher = dispatcher,
+                // A real `onTimeout` would schedule on kotlinx's own timer thread, which
+                // DeterministicDispatcher checks against — a real clock firing into a seeded harness.
+                electionDriver = NoAssertElectionDriver,
             ).also { logProcessor = it }
 
         override fun close() {

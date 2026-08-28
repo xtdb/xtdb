@@ -179,7 +179,7 @@ internal abstract class LeaderTermTest {
         val driver = wrapDriver(RealLeaderDriver(partitionStorage, partitionState, blockUploader))
 
         val termScope = backgroundScope + termJob
-        val replicaAppender = ReplicaLogAppender(driver)
+        val replicaAppender = ReplicaLogAppender(driver, leaderTerm, NoAssertElectionDriver)
 
         return termScope.startTerm(
             partitionStorage, replicaAppender, watchers,
@@ -215,7 +215,7 @@ internal abstract class LeaderTermTest {
             backgroundScope, StandardTestDispatcher(testScheduler)
         )
         val leaderDriver = driver(RealLeaderDriver(partitionStorage, partitionState, blockUploader))
-        val appender = ReplicaLogAppender(leaderDriver)
+        val appender = ReplicaLogAppender(leaderDriver, leaderTerm = 1, NoAssertElectionDriver)
 
         val proc = LeaderLogProcessor(
             allocator, nodeBase, partitionStorage, mockk(relaxed = true),

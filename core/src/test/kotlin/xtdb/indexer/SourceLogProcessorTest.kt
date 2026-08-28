@@ -236,7 +236,7 @@ internal class SourceLogProcessorTest : LeaderTermTest() {
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
 
         val termScope = backgroundScope + SupervisorJob(backgroundScope.coroutineContext.job)
-        val replicaAppender = ReplicaLogAppender(driver)
+        val replicaAppender = ReplicaLogAppender(driver, leaderTerm = 0, NoAssertElectionDriver)
         val lp = termScope.startTerm(
             partitionStorage, replicaAppender, watchers,
             LeaderLogProcessor(
@@ -296,7 +296,7 @@ internal class SourceLogProcessorTest : LeaderTermTest() {
         val driver = RealLeaderDriver(partitionStorage, partitionState, blockUploader)
 
         val termScope = backgroundScope + SupervisorJob(backgroundScope.coroutineContext.job)
-        val replicaAppender = ReplicaLogAppender(driver)
+        val replicaAppender = ReplicaLogAppender(driver, leaderTerm = 0, NoAssertElectionDriver)
         val lp = termScope.startTerm(
             partitionStorage, replicaAppender, watchers,
             LeaderLogProcessor(

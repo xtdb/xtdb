@@ -193,6 +193,12 @@ contract SubscriptionListener {
         -- leader's unconfirmed writes are discarded (a lower-term record read back is
         -- dropped). See live-index.allium, applyRecord.
 
+    @invariant LiveLeadershipIsVisibleOnTheLog
+        -- A leader writes to the replica log within a bounded interval of its last write, whether or not it has work.
+        --   - With traffic: met by the writes it is making anyway.
+        --   - Idle: a no-op stamped with its own term.
+        --   Otherwise a quiet database and a leaderless one are the same log to a reader.
+
     @invariant StandingDownLeavesTheDatabaseReadable
         -- A node that stands down for a higher term leaves its database queryable on that node.
         --   The end of a term reaches everything it was driving, the external source included, each of which reports a role that has changed rather than a database that has failed.

@@ -36,6 +36,7 @@ import xtdb.indexer.LeaderSupersededException
 import xtdb.indexer.LiveIndex
 import xtdb.indexer.RealLeaderDriver
 import xtdb.indexer.ReplicaApply
+import xtdb.indexer.NoAssertElectionDriver
 import xtdb.indexer.ReplicaLogAppender
 import xtdb.indexer.applyAndAwait
 import xtdb.indexer.runLeaderTerm
@@ -128,7 +129,7 @@ class ExternalSourceTest {
         )
 
         val crashLogger = mockk<CrashLogger>(relaxed = true)
-        val replicaAppender = ReplicaLogAppender(driver)
+        val replicaAppender = ReplicaLogAppender(driver, leaderTerm = 0, NoAssertElectionDriver)
 
         return LeaderLogProcessor(
             allocator, nodeBase, partitionStorage, crashLogger,
