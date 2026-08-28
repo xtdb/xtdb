@@ -8,7 +8,6 @@ import xtdb.api.log.Log
 import xtdb.types.LogOffset
 import xtdb.types.MessageId
 import xtdb.util.MsgIdUtil
-import kotlin.coroutines.coroutineContext
 import xtdb.util.debug
 import xtdb.util.error
 import xtdb.util.logger
@@ -32,11 +31,10 @@ internal class SimLog<M>(private val name: String, private val rand: Random) : L
         var nextOffset = 0
     }
 
-    /**
-     * A plain consumer that receives all records independently (not part of the consumer group).
-     * Used by the replica log's follower subscription via Log.tailAll.
-     */
-    class PlainConsumer<M>(val proc: Log.RecordProcessor<M>, var nextOffset: Int, val job: Job)
+    /** A plain consumer, which receives every record independently of the consumer group. */
+    class PlainConsumer<M>(var nextOffset: Int) {
+        val wake = Channel<Unit>(Channel.CONFLATED)
+    }
 
     /** The consumer being promoted plus its in-flight transition handle — see [pending]. */
     class Pending<M>(val leader: GroupConsumer<M>, val transition: Deferred<Log.TailSpec<M>>)
@@ -47,7 +45,6 @@ internal class SimLog<M>(private val name: String, private val rand: Random) : L
     val topic = mutableListOf<Log.Record<M>>()
 
     val wakeLeader = Channel<Unit>(Channel.CONFLATED)
-    val wakePlainConsumers = Channel<Unit>(Channel.CONFLATED)
     val rebalanceTrigger = Channel<Unit>(Channel.CONFLATED)
     private val termCounter = java.util.concurrent.atomic.AtomicLong(0)
 
@@ -109,38 +106,6 @@ internal class SimLog<M>(private val name: String, private val rand: Random) : L
         }
     }
 
-    /**
-     * Delivers records to all plain (non-group) consumers.
-     */
-    suspend fun plainConsumerLoop() {
-        while (true) {
-            wakePlainConsumers.receive()
-            yield()
-
-            for (consumer in plainConsumers.toList()) {
-                if (!consumer.job.isActive) continue
-                val nextOffset = consumer.nextOffset
-                val lag = topic.size - nextOffset
-                if (lag > 0) {
-                    val messageCount = rand.nextInt(1, lag + 1)
-                    LOG.debug("$name/plainConsumer: delivering $messageCount record(s) [$nextOffset..${nextOffset + messageCount - 1}] (lag=$lag)")
-                    try {
-                        consumer.proc.processRecords(topic.subList(nextOffset, nextOffset + messageCount).toList())
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Throwable) {
-                        LOG.error(e, "$name/plainConsumer: processRecords failed")
-                        throw e
-                    }
-                    consumer.nextOffset += messageCount
-                }
-            }
-
-            if (plainConsumers.any { it.job.isActive && it.nextOffset < topic.size })
-                wakePlainConsumers.send(Unit)
-        }
-    }
-
     private suspend fun doRebalance() {
         LOG.debug("$name/chooseLeader: rebalance triggered (${groupConsumers.size} consumers)")
 
@@ -186,7 +151,6 @@ internal class SimLog<M>(private val name: String, private val rand: Random) : L
             LOG.debug("${log.name}: starting loops")
 
             launch(CoroutineName("SimLog/group")) { log.groupLoop() }
-            launch(CoroutineName("SimLog/plainConsumers")) { log.plainConsumerLoop() }
         }
     }
 
@@ -196,7 +160,7 @@ internal class SimLog<M>(private val name: String, private val rand: Random) : L
         LOG.debug("$name/append: offset=$offset message=${message!!::class.simpleName}")
         topic += Log.Record(epoch, offset, ts, message)
         wakeLeader.trySend(Unit)
-        wakePlainConsumers.trySend(Unit)
+        plainConsumers.forEach { it.wake.trySend(Unit) }
         return Log.MessageMetadata(epoch, offset, ts)
     }
 
@@ -211,17 +175,44 @@ internal class SimLog<M>(private val name: String, private val rand: Random) : L
         return topic.subList(fromOffset.coerceAtLeast(0), toOffset.coerceAtMost(topic.size)).asSequence()
     }
 
+    /**
+     * Reads on the caller's own coroutine, as every real [Log] does.
+     *
+     * A shared loop delivering into each consumer from outside its job cannot be cancelled per
+     * consumer: [Log.RecordProcessor.processRecords] suspends until the consumer has applied the
+     * batch, so cancelling one mid-delivery would leave that loop suspended forever and starve
+     * every other subscription behind it.
+     */
     override suspend fun tailAll(partition: Int, afterMsgId: MessageId, processor: Log.RecordProcessor<M>) {
         val startOffset = (MsgIdUtil.afterMsgIdToOffset(epoch, afterMsgId) + 1).toInt()
         LOG.debug("$name/tailAll: startOffset=$startOffset topicSize=${topic.size}")
-        val consumer = PlainConsumer(processor, startOffset, coroutineContext.job)
+        val consumer = PlainConsumer<M>(startOffset)
         plainConsumers += consumer
-
-        if (consumer.nextOffset < topic.size)
-            wakePlainConsumers.trySend(Unit)
+        consumer.wake.trySend(Unit)
 
         try {
-            awaitCancellation()
+            while (true) {
+                consumer.wake.receive()
+                yield()
+
+                val nextOffset = consumer.nextOffset
+                val lag = topic.size - nextOffset
+                if (lag == 0) continue
+
+                val messageCount = rand.nextInt(1, lag + 1)
+                LOG.debug("$name/plainConsumer: delivering $messageCount record(s) [$nextOffset..${nextOffset + messageCount - 1}] (lag=$lag)")
+                try {
+                    processor.processRecords(topic.subList(nextOffset, nextOffset + messageCount).toList())
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Throwable) {
+                    LOG.error(e, "$name/plainConsumer: processRecords failed")
+                    throw e
+                }
+                consumer.nextOffset += messageCount
+
+                if (consumer.nextOffset < topic.size) consumer.wake.trySend(Unit)
+            }
         } finally {
             LOG.debug("$name/tailAll: closing plain subscription")
             plainConsumers -= consumer
@@ -256,8 +247,8 @@ internal class SimLog<M>(private val name: String, private val rand: Random) : L
      * Waits until all active plain consumers have processed all messages currently on the topic.
      */
     suspend fun awaitAllDelivered() {
-        while (plainConsumers.any { it.job.isActive && it.nextOffset < topic.size }) {
-            wakePlainConsumers.trySend(Unit)
+        while (plainConsumers.any { it.nextOffset < topic.size }) {
+            plainConsumers.forEach { it.wake.trySend(Unit) }
             yield()
         }
     }
