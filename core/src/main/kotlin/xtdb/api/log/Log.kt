@@ -75,6 +75,11 @@ interface Log<M> : AutoCloseable {
     }
 
     fun interface RecordProcessor<in M> {
+        /**
+         * Called once per read, whether or not it found anything: a read that came back empty arrives
+         * here as an empty list. That is how a consumer tells a quiet log from one it is no longer
+         * being delivered from.
+         */
         suspend fun processRecords(records: List<Record<M>>)
     }
 

@@ -681,7 +681,7 @@ class KafkaCluster(
 
                 while (isActive) {
                     val records = runInterruptible(Dispatchers.IO) { c.pollRecords() }
-                    if (records.isNotEmpty()) processor.processRecords(records)
+                    processor.processRecords(records)
                 }
             }
         }

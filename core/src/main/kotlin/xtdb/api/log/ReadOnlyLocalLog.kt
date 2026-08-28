@@ -196,7 +196,7 @@ class ReadOnlyLocalLog<M> @JvmOverloads constructor(
             val msg = withTimeoutOrNull(1.minutes) {
                 ch.receiveCatching().let { if (it.isClosed) null else it.getOrThrow() }
             }
-            if (msg != null) processor.processRecords(listOf(msg))
+            processor.processRecords(listOfNotNull(msg))
         }
     }
 
