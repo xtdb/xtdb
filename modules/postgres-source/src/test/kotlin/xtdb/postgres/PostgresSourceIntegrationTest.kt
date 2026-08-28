@@ -317,7 +317,7 @@ class PostgresSourceIntegrationTest {
     }
 
     @Test
-    fun `slot is confirmed only as far as the last durable block`() = runTest(timeout = 180.seconds) {
+    fun `slot is not confirmed past a streamed transaction no block covers`() = runTest(timeout = 180.seconds) {
         val pubName = "test_pub_${UUID.randomUUID().toString().replace("-", "_")}"
         val slotName = "test_slot_${UUID.randomUUID().toString().replace("-", "_")}"
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
@@ -338,35 +338,38 @@ class PostgresSourceIntegrationTest {
             eventually(30.seconds) { assertTrue(cdc.tableCatalog.currentBlockIndex != null, "first block persisted") }
             val blockLsn = PostgresSourceToken.parseFrom(cdc.tableCatalog.externalSourceToken!!).latestCommittedLsn
 
-            pgExecute(
-                "INSERT INTO pg_confirm (_id, name) VALUES (2, 'streamed-two')",
-                "INSERT INTO pg_confirm (_id, name) VALUES (3, 'streamed-three')",
-            )
+            pgExecute("INSERT INTO pg_confirm (_id, name) VALUES (2, 'streamed-two')")
+
+            // Sampled between the two rows, so it sits above every WAL record of the first: reaching it
+            // means confirming over a transaction the replica log and the live index are the only copies
+            // of. A sample taken before the inserts would not mean that — heldLsn moves at the Commit
+            // message, so the source legitimately confirms positions inside a transaction it is part-way
+            // through reading, and Postgres pins restart_lsn at the start of one and re-sends it whole.
+            val pastFirstStreamed = pgCurrentWalLsn()
+
+            pgExecute("INSERT INTO pg_confirm (_id, name) VALUES (3, 'streamed-three')")
+
             eventually(30.seconds) {
                 assertEquals(3, xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_confirm").size, "streamed rows applied")
             }
 
-            // Applied but unblocked, so the leader has imported past the block — which also rules out the
-            // idle walEnd advance, since that requires everything imported to be in a block. Confirming
-            // further here would tell Postgres to recycle WAL for transactions whose only copies are the
-            // replica log and the leader's live index.
-            //
             // `continually`, not a single read: the ack reaches the slot asynchronously, so one sample taken
             // straight after the rows apply passes whether or not the gate is there. Holding the invariant
             // over a window is what makes it fail when confirmation tracks apply.
             continually(5.seconds) {
                 val confirmed = pgSlotConfirmedFlushLsn(slotName)
-                assertTrue(confirmed <= blockLsn, "slot confirmed at $confirmed, past the last durable block at $blockLsn")
+                assertTrue(confirmed < pastFirstStreamed, "slot confirmed at $confirmed, past the streamed transaction below $pastFirstStreamed")
             }
 
             cdc.sendFlushBlockMessage()
-            eventually(30.seconds) {
-                val persisted = PostgresSourceToken.parseFrom(cdc.tableCatalog.externalSourceToken!!).latestCommittedLsn
-                assertTrue(persisted > blockLsn, "second block's token covers the streamed rows")
+            val persisted = eventually(30.seconds) {
+                PostgresSourceToken.parseFrom(cdc.tableCatalog.externalSourceToken!!).latestCommittedLsn
+                    .also { assertTrue(it > blockLsn, "second block's token covers the streamed rows") }
             }
 
             eventually(30.seconds) {
-                assertTrue(pgSlotConfirmedFlushLsn(slotName) > blockLsn, "slot advances once the block is durable")
+                val confirmed = pgSlotConfirmedFlushLsn(slotName)
+                assertTrue(confirmed >= persisted, "slot confirmed at $confirmed, short of the durable extent at $persisted")
             }
         }
     }
@@ -1610,6 +1613,16 @@ class PostgresSourceIntegrationTest {
                         assertTrue(rs.next(), "slot '$slotName' should exist")
                         LogSequenceNumber.valueOf(rs.getString("lsn")).asLong()
                     }
+            }
+        }
+
+    private fun pgCurrentWalLsn(): Long =
+        DriverManager.getConnection(postgres.jdbcUrl, postgres.username, postgres.password).use { conn ->
+            conn.createStatement().use { stmt ->
+                stmt.executeQuery("SELECT pg_current_wal_lsn()::text AS lsn").use { rs ->
+                    assertTrue(rs.next(), "pg_current_wal_lsn() should return a row")
+                    LogSequenceNumber.valueOf(rs.getString("lsn")).asLong()
+                }
             }
         }
 
