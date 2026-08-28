@@ -172,7 +172,7 @@ class LogProcessor(
 
     private class Following(override val proc: FollowerLogProcessor, override val scope: CoroutineScope) : State {
         override suspend fun handleReplicaMessage(record: Log.Record<ReplicaMessage>) {
-            scope.async { proc.processRecord(record) }.await()
+            scope.async { proc.handleRecord(record) }.await()
         }
     }
 
@@ -196,6 +196,20 @@ class LogProcessor(
         try {
             replicaLog.tailAll(watchers.latestReplicaMsgId) { recs ->
                 recs.forEach { record ->
+                    // Folded outside the retry below, so a record offered again is not folded twice.
+                    if (!termFence.admit(record.message.termId)) {
+                        // Fenced: a higher-term leader has superseded this message's writer. Discard it,
+                        // but still advance the consume position — discard suppresses application, not
+                        // consumption — so a transition catch-up can't hang on a fenced no-op.
+                        LOG.debug {
+                            "[$dbName] discarding fenced record ${record.msgId} " +
+                                    "(term ${LeaderTerm.format(record.message.termId)} < " +
+                                    "${LeaderTerm.format(termFence.highestSeen)})"
+                        }
+                        watchers.notifyApplied(record.msgId)
+                        return@forEach
+                    }
+
                     // A role ending cancels the handle mid-record, leaving the record unapplied and its
                     // position unadvanced — so it is offered again to whatever replaces that role.
                     while (true) {
@@ -207,14 +221,19 @@ class LogProcessor(
                             break
                         } catch (_: CancellationException) {
                             stateFlow.first { it !== role }
+                        } catch (e: Throwable) {
+                            LOG.error(
+                                e,
+                                "[$dbName] failed to process replica record ${record.msgId} (${record.message::class.simpleName})"
+                            )
+                            throw e
                         }
                     }
                 }
             }
-        } catch (e: CancellationException) {
-            throw e
         } catch (e: Throwable) {
-            watchers.notifyError(e); throw e
+            if (!e.isShutdownSignal) watchers.notifyError(e)
+            throw e
         }
     }
 
@@ -230,7 +249,7 @@ class LogProcessor(
 
         val proc = FollowerLogProcessor(
             allocator, partitionStorage.bufferPool, partitionState, dbName, compactor, watchers,
-            dbCatalog, pendingBlock, termFence,
+            dbCatalog, pendingBlock,
             hasExternalSource = hasExternalSource,
             meterRegistry = base.meterRegistry,
         )
@@ -307,7 +326,7 @@ class LogProcessor(
 
                     val proc = LeaderLogProcessor(
                         allocator, base, partitionStorage, crashLogger, partitionState, dbName, driver, watchers,
-                        replicaAppender, termFence,
+                        replicaAppender,
                         externalSource,
                         skipTxs, dbCatalog,
                         leaderTerm = termId,

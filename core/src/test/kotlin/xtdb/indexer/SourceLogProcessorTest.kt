@@ -17,7 +17,6 @@ import xtdb.SimulationTestUtils.Companion.createTrieCatalog
 import xtdb.api.DatabaseName
 import xtdb.api.IndexerConfig
 import xtdb.api.log.InMemoryLog
-import xtdb.api.log.LeaderTerm
 import xtdb.api.log.Log
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.SourceMessage
@@ -243,7 +242,6 @@ internal class SourceLogProcessorTest : LeaderTermTest() {
             LeaderLogProcessor(
                 allocator, nodeBase, partitionStorage, mockk(relaxed = true),
                 partitionState, "test", driver, watchers, replicaAppender,
-                TermFence("test", LeaderTerm.NONE),
                 extSource = null,
                 skipTxs = emptySet(), dbCatalog = null,
                 flushTimeout = IndexerConfig().flushDuration,
@@ -304,7 +302,6 @@ internal class SourceLogProcessorTest : LeaderTermTest() {
             LeaderLogProcessor(
                 allocator, nodeBase, partitionStorage, mockk(relaxed = true),
                 partitionState, "test", driver, watchers, replicaAppender,
-                TermFence("test", LeaderTerm.NONE),
                 extSource = mockk(relaxed = true),
                 skipTxs = setOf(10), dbCatalog = null,
                 flushTimeout = IndexerConfig().flushDuration,

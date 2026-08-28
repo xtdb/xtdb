@@ -38,7 +38,6 @@ class FollowerLogProcessor @JvmOverloads constructor(
     private val watchers: Watchers,
     private val dbCatalog: Database.Catalog?,
     pendingBlock: PendingBlock?,
-    private val termFence: TermFence,
     private val hasExternalSource: Boolean,
     private val meterRegistry: MeterRegistry? = null,
     private val maxBufferedRecords: Int = 1024,
@@ -113,7 +112,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
                 is ReplicaMessage.TriesDeleted -> false
             }
 
-    private suspend fun processRecord(record: Log.Record<ReplicaMessage>, replicaMsgId: MessageId?) {
+    private fun processRecord(record: Log.Record<ReplicaMessage>, replicaMsgId: MessageId?) {
         when (val msg = record.message) {
             is ReplicaMessage.ResolvedTx -> resolvedTxTimer.timed {
                 val systemTime = msg.systemTime
@@ -186,9 +185,9 @@ class FollowerLogProcessor @JvmOverloads constructor(
 
     }
 
-    private suspend fun handleRecord(record: Log.Record<ReplicaMessage>, replicaMsgId: MessageId?) {
+    fun handleRecord(record: Log.Record<ReplicaMessage>, replicaMsgId: MessageId? = record.msgId) {
         val msg = record.message
-        LOG.trace { "[$dbName] follower: message ${record.msgId} (${msg::class.simpleName})" }
+        LOG.trace { "[$dbName] follower: message $replicaMsgId (${msg::class.simpleName})" }
 
         pendingBlock?.let { pendingBlock ->
             val pendingBlockIdx = pendingBlock.blockIdx
@@ -227,32 +226,6 @@ class FollowerLogProcessor @JvmOverloads constructor(
         }
 
         if (msg.stale) watchers.notifyApplied(replicaMsgId) else processRecord(record, replicaMsgId)
-    }
-
-    suspend fun processRecord(record: Log.Record<ReplicaMessage>) {
-        try {
-            val term = record.message.termId
-            if (termFence.admit(term)) handleRecord(record, record.msgId)
-            else {
-                // Fenced: a higher-term leader has superseded this message's writer. Discard it, but
-                // still advance the consume position (discard suppresses application, not consumption)
-                // so a transition catch-up can't hang on a fenced no-op.
-                LOG.debug {
-                    "[$dbName] follower: discarding fenced record ${record.msgId} " +
-                            "(term ${LeaderTerm.format(term)} < ${LeaderTerm.format(termFence.highestSeen)})"
-                }
-                watchers.notifyApplied(record.msgId)
-            }
-        } catch (e: Throwable) {
-            if (e.isShutdownSignal) throw e
-
-            LOG.error(
-                e,
-                "[$dbName] follower: failed to process log record with msgId ${record.msgId} (${record.message::class.simpleName})"
-            )
-            watchers.notifyError(e)
-            throw e
-        }
     }
 
     override fun close() {

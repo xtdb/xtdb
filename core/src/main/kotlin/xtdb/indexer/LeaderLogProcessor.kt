@@ -47,7 +47,6 @@ internal class LeaderLogProcessor(
     private val watchers: Watchers,
 
     private val replicaAppender: ReplicaLogAppender,
-    private val termFence: TermFence,
 
     extSource: ExternalSource?,
     skipTxs: Set<MessageId>,
@@ -175,11 +174,6 @@ internal class LeaderLogProcessor(
 
     suspend fun applyReplicaMessage(record: Log.Record<ReplicaMessage>) {
         val msg = record.message
-
-        if (!termFence.admit(msg.termId)) {
-            watchers.notifyApplied(replicaMsgId = record.msgId)
-            return
-        }
 
         when (msg) {
             is ReplicaMessage.ResolvedTx -> {

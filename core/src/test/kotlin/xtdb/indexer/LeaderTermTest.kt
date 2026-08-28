@@ -21,7 +21,6 @@ import xtdb.SimulationTestUtils.Companion.createTrieCatalog
 import xtdb.api.DatabaseName
 import xtdb.api.IndexerConfig
 import xtdb.api.log.InMemoryLog
-import xtdb.api.log.LeaderTerm
 import xtdb.api.log.Log
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.SourceMessage
@@ -187,7 +186,7 @@ internal abstract class LeaderTermTest {
             LeaderLogProcessor(
                 allocator, nodeBase, partitionStorage, mockk(relaxed = true),
                 partitionState, dbName,
-                driver, watchers, replicaAppender, TermFence(dbName, LeaderTerm.NONE), extSource,
+                driver, watchers, replicaAppender, extSource,
                 skipTxs = skipTxs, dbCatalog = dbCatalog,
                 leaderTerm = leaderTerm,
                 flushTimeout = IndexerConfig().flushDuration,
@@ -221,7 +220,7 @@ internal abstract class LeaderTermTest {
         val proc = LeaderLogProcessor(
             allocator, nodeBase, partitionStorage, mockk(relaxed = true),
             partitionState, "test", leaderDriver, watchers, appender,
-            TermFence("test", LeaderTerm.NONE), extSource,
+            extSource,
             skipTxs = emptySet(), dbCatalog = null,
             leaderTerm = 1,
             flushTimeout = IndexerConfig().flushDuration,

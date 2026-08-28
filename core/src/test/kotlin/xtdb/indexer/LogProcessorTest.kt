@@ -27,6 +27,7 @@ import xtdb.database.DatabaseLogs
 import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
 import xtdb.storage.BufferPool
+import java.time.Instant
 import java.time.InstantSource
 import java.util.concurrent.TimeUnit
 
@@ -303,6 +304,38 @@ class LogProcessorTest {
         assertDoesNotThrow("bumping the term epoch clears the regression") {
             logProc.termFence.checkUnfenced(LeaderTerm.of(1, 1))
         }
+
+        scope.coroutineContext.job.cancelAndJoin()
+        logProc.close()
+        sourceLog.close()
+        replicaLog.close()
+    }
+
+    @Test
+    fun `the reader discards a fenced record, still advancing the consume position`() = runTest {
+        val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0)
+        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
+        val bufferPool = mockBufferPool()
+        val partitionState = newPartitionState()
+        val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
+        val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", mockk(relaxed = true), null, null, backgroundScope)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
+
+        val scope = CoroutineScope(SupervisorJob())
+        val logProc = logProcessor(partitionStorage, partitionState, watchers, blockUploader, scope)
+
+        val leader = replicaLog.appendMessage(
+            ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap(), srcMsgId = 1, termId = LeaderTerm.of(0, 2))
+        )
+        val superseded = replicaLog.appendMessage(
+            ReplicaMessage.ResolvedTx(2, Instant.now(), true, null, emptyMap(), srcMsgId = 2, termId = LeaderTerm.of(0, 1))
+        )
+
+        watchers.awaitReplicaMsg(superseded.msgId)
+
+        assertEquals(1L, watchers.latestTxId, "the superseded leader's tx was never applied")
+        assertEquals(LeaderTerm.of(0, 2), logProc.termFence.highestSeen)
+        assertTrue(leader.msgId < superseded.msgId)
 
         scope.coroutineContext.job.cancelAndJoin()
         logProc.close()

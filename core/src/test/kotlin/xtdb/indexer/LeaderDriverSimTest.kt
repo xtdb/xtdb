@@ -26,7 +26,6 @@ import xtdb.api.IndexerConfig
 import xtdb.api.TableRef
 import xtdb.api.TransactionResult
 import xtdb.api.log.InMemoryLog
-import xtdb.api.log.LeaderTerm
 import xtdb.api.log.Log
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.ReplicaMessage.BlockBoundary
@@ -132,7 +131,6 @@ class LeaderDriverSimTest : SimulationTestBase() {
         val proc = LeaderLogProcessor(
             allocator, nodeBase, partitionStorage, CrashLogger(allocator, bufferPool, "sim-$name"),
             partitionState, "test-db", driver, watchers, replicaAppender,
-            TermFence("test-db", LeaderTerm.NONE),
             // The sim submits through the processor rather than driving an adapter, so the source only has
             // to exist for the processor to.
             extSource = mockk(relaxed = true),
