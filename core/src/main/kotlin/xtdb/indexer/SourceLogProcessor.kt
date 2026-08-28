@@ -28,6 +28,63 @@ import java.time.Duration
 
 private val LOG = SourceLogProcessor::class.logger
 
+/** One poll batch inbound from the transport, plus the handle its submitter awaits. */
+internal class SourceBatch(val records: List<Log.Record<SourceMessage>>) {
+    val onComplete = CompletableDeferred<Unit>()
+
+    /**
+     * Fail the awaiting submitter, because the term is going away without finishing this batch.
+     *
+     * Always a cancellation, whatever the term's cause. The transport's poll thread awaits this inside
+     * `processRecords`, and anything other than a CancellationException escaping there unwinds
+     * `openGroupSubscription` into the Database scope's `CoroutineExceptionHandler` — which calls
+     * `watchers.notifyError`, so a *clean* resignation would end up poisoning queries and evicting the
+     * shared consumer. The term's real fault, if any, is already on the watchers; we keep it as this
+     * cancellation's cause for the logs. See #5817.
+     */
+    fun abandon(cause: Throwable?) = onComplete.cancel(cause.asCancellation())
+}
+
+/**
+ * The inbound source-log pipe — the one edge that runs the other way, so the persister *pulls*
+ * batches through a select clause rather than being pushed at.
+ *
+ * One owned object rather than three members on [SourceLogProcessor]: submitting, selecting and shutting
+ * down are the three ends of a single pipe, and keeping them together is what stops them drifting.
+ */
+internal class SourceBatches {
+    // capacity 1: the poll thread can deposit one batch ahead and read the next while the persister
+    // works, bounding lookahead to ~2 batches. Backpressure falls out of a full channel suspending
+    // the send.
+    private val ch = Channel<SourceBatch>(capacity = 1, onUndeliveredElement = { it.abandon(null) })
+
+    /** Armed by the persister's select, alongside its own channels. */
+    val onBatch get() = ch.onReceive
+
+    /** Hand a batch to the persister; the returned handle completes once it has been processed. */
+    suspend fun submit(records: List<Log.Record<SourceMessage>>) =
+        SourceBatch(records).also { ch.send(it) }.onComplete
+
+    /**
+     * Term teardown: no batch will be processed after this, and a later [submit] throws.
+     *
+     * Fails everyone still waiting — senders via the close cause, and whatever is still queued via
+     * [SourceBatch.abandon]. Miss the queued ones and the symptom is a hang on the transport's poll
+     * thread, which is also the sole servicer of the transport's unregister, so it wedges the whole
+     * subscription teardown (#5711 / #5817).
+     *
+     * Close and drain, in that order: `close` alone doesn't visit buffered elements (only `cancel` does),
+     * so a queued batch's submitter would wait forever; and closing first means no send can slip into a
+     * buffer we've already drained. The close cause must be a cancellation too — it is what a later `send`
+     * throws, and the poll thread sends here. Only safe on the persister's exit path: it is the sole
+     * receiver, so nothing competes with these `tryReceive`s.
+     */
+    fun shutdown(cause: Throwable?) {
+        ch.close(cause.asCancellation())
+        while (true) (ch.tryReceive().getOrNull() ?: break).abandon(cause)
+    }
+}
+
 /**
  * Run a resolution task, routing failures onto its completion handle (and any external-source result) so
  * that no caller hangs. Interrupts are shutdown signals, not ingestion faults, so they don't poison the
@@ -72,6 +129,8 @@ internal class SourceLogProcessor(
     /** Inject a block boundary covering the source log up to [MessageId], pausing resolution behind it. */
     private val cutBlock: suspend (MessageId) -> Unit,
 ) : Log.RecordProcessor<SourceMessage> {
+
+    private val sourceBatches = SourceBatches()
 
     private val bufferPool = partitionStorage.bufferPool
     private val tableCatalog = partitionState.tableCatalog
@@ -243,7 +302,7 @@ internal class SourceLogProcessor(
                 runTaskGuarded(pb.task.onComplete) { runBatch(pb.task, pb.nextIdx) }
             }
 
-        driver.sourceBatches.onBatch { batch ->
+        sourceBatches.onBatch { batch ->
             runTaskGuarded(batch.onComplete) { runBatch(batch, 0) }
         }
     }
@@ -263,7 +322,7 @@ internal class SourceLogProcessor(
         //  - blocking here until the batch is resolved keeps the poll loop and the persister roughly in
         //    step (channel cap 1 → ~2 batches of lookahead);
         //  - so a rebalance/transition under runBlocking doesn't pile up behind unbounded resolution (#5741).
-        if (records.isNotEmpty()) driver.sourceBatches.submit(records).await()
+        if (records.isNotEmpty()) sourceBatches.submit(records).await()
     }
 
     /**
@@ -274,6 +333,6 @@ internal class SourceLogProcessor(
      */
     fun shutdown(cause: Throwable) {
         pausedBatch?.task?.abandon(cause)
-        driver.sourceBatches.shutdown(cause)
+        sourceBatches.shutdown(cause)
     }
 }

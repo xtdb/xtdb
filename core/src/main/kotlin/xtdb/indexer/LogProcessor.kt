@@ -33,6 +33,17 @@ internal val Throwable.isShutdownSignal
     get() = this is CancellationException || this is InterruptedException || this is Interrupted
 
 /**
+ * Re-cast a term-teardown cause as a cancellation, preserving the original for the logs.
+ *
+ * The failure *kind* is load-bearing for anything the transport's poll thread observes: a
+ * CancellationException unwinds `processRecords` as cancellation, while anything else reaches the Database
+ * scope's `CoroutineExceptionHandler`, which calls `watchers.notifyError`.
+ */
+internal fun Throwable?.asCancellation(): CancellationException =
+    this as? CancellationException
+        ?: CancellationException("leader term closed").also { c -> this?.let { c.initCause(it) } }
+
+/**
  * Run a leader term until it ends, then fail everything staged on it.
  *
  * The term's work, its append pump and its replica reader are structured together, so whichever fails

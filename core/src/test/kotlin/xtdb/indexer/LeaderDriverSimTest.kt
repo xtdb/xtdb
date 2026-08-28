@@ -49,9 +49,13 @@ import kotlin.time.Duration.Companion.seconds
  * Two `LeaderLogProcessor`s, each believing it leads the same database, against one shared replica
  * log and one shared object store.
  *
- * This is what the [LeaderDriver] seam bought: a leader can be built and fed without a transport, so
- * a test can hold two of them live at once — something no rebalance-driven harness can produce,
- * because a rebalance demotes the old leader before promoting the new one.
+ * A leader drives no loop of its own — it is fed by whoever holds one — so a test can build two and
+ * hold them live at once, which no rebalance-driven harness can produce: a rebalance demotes the old
+ * leader before promoting the new one.
+ *
+ * What the [LeaderDriver] seam adds on top is interception: [RecordingDriver] observes each upload, and
+ * `a leader fenced mid-upload has its block ignored` stalls one mid-flight. Neither is something the
+ * in-memory log and object store express on their own.
  */
 @Tag("property")
 class LeaderDriverSimTest : SimulationTestBase() {
