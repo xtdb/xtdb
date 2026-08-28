@@ -1,15 +1,10 @@
 package xtdb.indexer
 
 import io.mockk.coEvery
-import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.verify
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
@@ -20,20 +15,14 @@ import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.plus
 import kotlinx.coroutines.test.StandardTestDispatcher
-import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
-import org.apache.arrow.memory.BufferAllocator
-import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
-import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import xtdb.NodeBase
 import xtdb.api.IndexerConfig
 import xtdb.api.TransactionResult
 import xtdb.api.log.InMemoryLog
 import xtdb.api.log.LeaderTerm
 import xtdb.api.log.Log
-import xtdb.types.MessageId
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.SourceMessage
 import xtdb.api.log.Watchers
@@ -51,8 +40,6 @@ import xtdb.log.proto.trieMetadata
 import xtdb.storage.BufferPool
 import xtdb.table.fromSchemaAndTable
 import xtdb.trie.Trie
-import xtdb.trie.TrieCatalog
-import xtdb.util.closeAll
 import java.time.Instant
 import java.time.InstantSource
 import java.time.ZoneId
@@ -60,109 +47,7 @@ import kotlin.time.Duration.Companion.seconds
 import xtdb.api.tx.ExternalSource
 import xtdb.api.tx.TxIndexer
 
-class LeaderLogProcessorTest {
-
-    private lateinit var nodeBase: NodeBase
-    private lateinit var allocator: BufferAllocator
-
-    // runTest cancels and joins backgroundScope before tearDown, so the leaders are quiescent here
-    // and freed before `allocator` closes.
-    private val leadersToClose = mutableListOf<AutoCloseable>()
-
-    @BeforeEach
-    fun setUp() {
-        nodeBase = NodeBase.openBase(openMeterRegistry = false)
-        allocator = nodeBase.allocator.newChildAllocator("test", 0, Long.MAX_VALUE)
-    }
-
-    @AfterEach
-    fun tearDown() {
-        leadersToClose.closeAll()
-        allocator.close()
-        nodeBase.close()
-    }
-
-    /**
-     * A relaxed [LiveIndex] mock carrying the production block threshold. Worth stubbing explicitly:
-     * a bare relaxed mock answers 0 for `rowsPerBlock`, which the leader's resolve-side gauge reads as
-     * "cut a block on every tx". These tests drive their cuts explicitly, via FlushBlock or the CAS.
-     */
-    private fun liveIndexMock(configure: LiveIndex.() -> Unit = {}) =
-        mockk<LiveIndex>(relaxed = true) {
-            every { rowsPerBlock } returns IndexerConfig().rowsPerBlock
-            configure()
-        }
-
-    /**
-     * Start a term the way [LogProcessor] does: the term and the partition's replica-log reader launched
-     * into the term's own job, so cancelling that job is what stops it, and freed once the test has joined it.
-     */
-    private fun CoroutineScope.startTerm(
-        partitionStorage: PartitionStorage,
-        replicaAppender: ReplicaLogAppender,
-        watchers: Watchers,
-        proc: LeaderLogProcessor,
-    ) =
-        proc.also {
-            leadersToClose += it
-            val replicaMsgs = Channel<Log.Record<ReplicaMessage>>(capacity = 128)
-            launch {
-                launch { proc.gc.runGc() }
-                proc.extSrcProc?.let { extSrcProc -> launch { extSrcProc.run() } }
-
-                runLeaderTerm("test", watchers, proc, replicaMsgs, replicaAppender) {
-                    partitionStorage.replicaLog.tailAll(-1) { records ->
-                        records.forEach { replicaMsgs.send(it) }
-                    }
-                }
-            }
-        }
-
-    private fun TestScope.leaderProc(
-        uploadDispatcher: CoroutineDispatcher,
-        sourceLog: InMemoryLog<SourceMessage> = InMemoryLog(InstantSource.system(), 0),
-        replicaLog: InMemoryLog<ReplicaMessage> = InMemoryLog(InstantSource.system(), 0),
-        bufferPool: BufferPool = mockk(relaxed = true) { every { epoch } returns 0 },
-        liveIndex: LiveIndex = liveIndexMock(),
-        trieCatalog: TrieCatalog = createTrieCatalog(),
-        compactor: Compactor.ForDatabase = mockk(relaxed = true),
-        watchers: Watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1),
-        // These tests submit through the processor rather than driving an adapter, so the source only has
-        // to exist for the processor to.
-        extSource: ExternalSource = mockk(relaxed = true),
-        skipTxs: Set<MessageId> = emptySet(),
-        leaderTerm: Long = 1,
-        // A leader may only hold one if it is the primary's, so supplying one names this database 'xtdb'.
-        dbCatalog: Database.Catalog? = null,
-        wrapDriver: (LeaderDriver) -> LeaderDriver = { it },
-        termJob: Job = SupervisorJob(backgroundScope.coroutineContext.job),
-    ): LeaderLogProcessor {
-        val dbName = if (dbCatalog != null) "xtdb" else "test"
-        val tableCatalog = TableCatalog(bufferPool)
-        val partitionState = PartitionState(tableCatalog, trieCatalog, liveIndex)
-        val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
-        val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", compactor, null, null, backgroundScope, uploadDispatcher)
-        val driver = wrapDriver(
-            RealLeaderDriver(
-                partitionStorage, partitionState, blockUploader
-            )
-        )
-
-        val termScope = backgroundScope + termJob
-        val replicaAppender = ReplicaLogAppender(driver)
-
-        return termScope.startTerm(
-            partitionStorage, replicaAppender, watchers,
-            LeaderLogProcessor(
-                allocator, nodeBase, partitionStorage, mockk(relaxed = true),
-                partitionState, dbName,
-                driver, watchers, replicaAppender, TermFence(dbName, LeaderTerm.NONE), extSource,
-                skipTxs = skipTxs, dbCatalog = dbCatalog,
-                leaderTerm = leaderTerm,
-                flushTimeout = IndexerConfig().flushDuration,
-            )
-        )
-    }
+internal class LeaderLogProcessorTest : LeaderTermTest() {
 
     // Records what was asked of it, so a test can ask what this node's set holds rather than what was
     // called. Nothing here opens a database, so a name is attached the moment it is asked for.
@@ -330,16 +215,6 @@ class LeaderLogProcessorTest {
     // [appendStarted] the first time the pump reaches it. Models a slow append-ack: while the gate is shut
     // the message is not on the log, so it can't be consumed back — the ReadIndex ack (and thus executeTx)
     // stays pending. Everything else, the tail included, delegates to the real driver.
-    private fun gatedDriver(
-        inner: LeaderDriver, gate: CompletableDeferred<Unit>, appendStarted: CompletableDeferred<Unit>,
-    ): LeaderDriver = object : LeaderDriver by inner {
-        override suspend fun appendToReplica(msg: ReplicaMessage): Log.MessageMetadata {
-            appendStarted.complete(Unit)
-            gate.await()
-            return inner.appendToReplica(msg)
-        }
-    }
-
     @Test
     fun `TriesAdded forwarded to replica log`() = runTest {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
@@ -370,41 +245,6 @@ class LeaderLogProcessorTest {
             "the trie is in the catalog"
         )
         assertTrue(replicaLog.latestSubmittedOffset() >= 0, "replica log should have received a message")
-    }
-
-    /**
-     * A term wired up but not started, so a test can drive [runLeaderTerm] or one of its components
-     * directly and have it return. [leaderProc] launches the term into a scope instead, where the only
-     * handle on its completion is scheduler advancement.
-     */
-    private fun TestScope.unstartedTerm(
-        watchers: Watchers,
-        driver: (LeaderDriver) -> LeaderDriver = { it },
-        extSource: ExternalSource? = null,
-    ): Pair<LeaderLogProcessor, ReplicaLogAppender> {
-        val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0)
-        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
-        val bufferPool = mockk<BufferPool>(relaxed = true) { every { epoch } returns 0 }
-        val partitionState =
-            PartitionState(TableCatalog(bufferPool), createTrieCatalog(), liveIndexMock())
-        val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
-        val blockUploader = BlockUploader(
-            partitionStorage, partitionState, "xtdb", mockk(relaxed = true), null, null,
-            backgroundScope, StandardTestDispatcher(testScheduler)
-        )
-        val leaderDriver = driver(RealLeaderDriver(partitionStorage, partitionState, blockUploader))
-        val appender = ReplicaLogAppender(leaderDriver)
-
-        val proc = LeaderLogProcessor(
-            allocator, nodeBase, partitionStorage, mockk(relaxed = true),
-            partitionState, "test", leaderDriver, watchers, appender,
-            TermFence("test", LeaderTerm.NONE), extSource,
-            skipTxs = emptySet(), dbCatalog = null,
-            leaderTerm = 1,
-            flushTimeout = IndexerConfig().flushDuration,
-        )
-        leadersToClose += proc
-        return proc to appender
     }
 
     @Test
@@ -469,64 +309,20 @@ class LeaderLogProcessorTest {
     }
 
     @Test
-    fun `FlushBlock triggers block finish when CAS matches`() = runTest(timeout = 5.seconds) {
-        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
-        val liveIndex = liveIndexMock {
-            coEvery { finishBlock(any(), any()) } returns emptyMap()
-            every { latestCompletedTx } returns null
-        }
-        val trieCatalog = createTrieCatalog()
-        val compactor = mockk<Compactor.ForDatabase>(relaxed = true)
-        val bufferPool = mockk<BufferPool>(relaxed = true) { every { epoch } returns 0 }
-        val tableCatalog = TableCatalog(bufferPool)
-        val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0)
-        val partitionState = PartitionState(tableCatalog, trieCatalog, liveIndex)
-        val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
-        val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", compactor, null, null, backgroundScope, StandardTestDispatcher(testScheduler))
-        val driver = RealLeaderDriver(
-            partitionStorage, partitionState, blockUploader
-        )
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
-
-        val termScope = backgroundScope + SupervisorJob(backgroundScope.coroutineContext.job)
-        val replicaAppender = ReplicaLogAppender(driver)
-        val lp = termScope.startTerm(
-            partitionStorage, replicaAppender, watchers,
-            LeaderLogProcessor(
-                allocator, nodeBase, partitionStorage, mockk(relaxed = true),
-                partitionState, "test", driver, watchers, replicaAppender,
-                TermFence("test", LeaderTerm.NONE),
-                extSource = null,
-                skipTxs = emptySet(), dbCatalog = null,
-                flushTimeout = IndexerConfig().flushDuration,
-            )
-        )
-
-        val now = Instant.now()
-        lp.srcLogProc.processRecords(listOf(
-            Log.Record(0, 0, now, SourceMessage.FlushBlock(-1))
-        ))
-        watchers.awaitSource(0)
-
-        coVerify { liveIndex.finishBlock(any(), eq(0)) }
-        verify { liveIndex.nextBlock() }
-        verify { compactor.signalBlock() }
-        assertTrue(replicaLog.latestSubmittedOffset() >= 0, "replica log should have block messages")
-    }
-
-    @Test
     fun `FlushBlock ignored when CAS does not match`() = runTest {
-        val liveIndex = liveIndexMock()
+        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
-        val lp = leaderProc(StandardTestDispatcher(testScheduler), liveIndex = liveIndex, watchers = watchers)
+        val lp = leaderProc(StandardTestDispatcher(testScheduler), replicaLog = replicaLog, watchers = watchers)
 
-        val now = Instant.now()
         lp.srcLogProc.processRecords(listOf(
-            Log.Record(0, 0, now, SourceMessage.FlushBlock(5))
+            Log.Record(0, 0, Instant.now(), SourceMessage.FlushBlock(5))
         ))
         watchers.awaitSource(0)
 
-        coVerify(exactly = 0) { liveIndex.finishBlock(any(), any()) }
+        val boundaries = replicaLog.readRecords(0, 0, replicaLog.latestSubmittedMsgId() + 1)
+            .mapNotNull { it.message as? ReplicaMessage.BlockBoundary }.toList()
+
+        assertEquals(emptyList<ReplicaMessage.BlockBoundary>(), boundaries)
     }
 
     @Test
