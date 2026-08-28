@@ -29,6 +29,9 @@ import xtdb.util.closeAll
 import java.time.Instant
 import xtdb.api.log.LeaderTerm
 
+private suspend fun FollowerLogProcessor.processRecords(records: List<Log.Record<ReplicaMessage>>) =
+    records.forEach { processRecord(it) }
+
 class FollowerLogProcessorTest {
 
     private val dbName = "test"

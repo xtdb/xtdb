@@ -144,19 +144,25 @@ class LeaderDriverSimTest : SimulationTestBase() {
             gcDispatcher = dispatcher,
         )
 
-        private val replicaMsgs = Channel<Log.Record<ReplicaMessage>>(capacity = 128)
+        private val replicaMsgs = Channel<ReplicaApply>()
 
         init {
             scope.launch {
                 launch { proc.gc.runGc() }
                 proc.extSrcProc?.let { extSrcProc -> launch { extSrcProc.run() } }
 
-                runLeaderTerm("test-db", watchers, proc, replicaMsgs, replicaAppender) {
+                val reader = launch {
                     // From the claim record rather than the start of the log: a sim leader begins with empty
                     // catalogs and never replays, so anything before its claim is not its to apply.
                     partitionStorage.replicaLog.tailAll(afterReplicaMsgId) { records ->
-                        records.forEach { replicaMsgs.send(it) }
+                        records.forEach { replicaMsgs.applyAndAwait(it) }
                     }
+                }
+
+                try {
+                    runLeaderTerm("test-db", watchers, proc, replicaMsgs, replicaAppender)
+                } finally {
+                    reader.cancel()
                 }
             }
         }

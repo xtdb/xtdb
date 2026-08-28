@@ -88,7 +88,7 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
         appender.append(ControlItem(ReplicaMessage.NoOp(termId = 1)))
 
         // returns once the pump's failure has ended the term
-        runLeaderTerm("test", watchers, proc, Channel(), appender) { awaitCancellation() }
+        runLeaderTerm("test", watchers, proc, Channel(), appender)
 
         assertNull(
             watchers.exception,

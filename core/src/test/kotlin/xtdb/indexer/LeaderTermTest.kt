@@ -116,8 +116,11 @@ internal abstract class LeaderTermTest {
     }
 
     /**
-     * Start a term the way [LogProcessor] does: the term and the partition's replica-log reader launched
-     * into the term's own job, so cancelling that job is what stops it, and freed once the test has joined it.
+     * Start a term the way [LogProcessor] does: the term and a replica-log reader feeding it launched into
+     * the term's own job, so cancelling that job is what stops it, and freed once the test has joined it.
+     *
+     * The reader stands in for the partition's tail, which in production outlives the term — so it is the
+     * term ending that has to stop it here.
      */
     protected fun CoroutineScope.startTerm(
         partitionStorage: PartitionStorage,
@@ -127,15 +130,21 @@ internal abstract class LeaderTermTest {
     ) =
         proc.also {
             leadersToClose += it
-            val replicaMsgs = Channel<Log.Record<ReplicaMessage>>(capacity = 128)
+            val replicaMsgs = Channel<ReplicaApply>()
             launch {
                 launch { proc.gc.runGc() }
                 proc.extSrcProc?.let { extSrcProc -> launch { extSrcProc.run() } }
 
-                runLeaderTerm("test", watchers, proc, replicaMsgs, replicaAppender) {
+                val reader = launch {
                     partitionStorage.replicaLog.tailAll(-1) { records ->
-                        records.forEach { replicaMsgs.send(it) }
+                        records.forEach { replicaMsgs.applyAndAwait(it) }
                     }
+                }
+
+                try {
+                    runLeaderTerm("test", watchers, proc, replicaMsgs, replicaAppender)
+                } finally {
+                    reader.cancel()
                 }
             }
         }

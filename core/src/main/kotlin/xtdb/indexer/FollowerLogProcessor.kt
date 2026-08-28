@@ -229,31 +229,29 @@ class FollowerLogProcessor @JvmOverloads constructor(
         if (msg.stale) watchers.notifyApplied(replicaMsgId) else processRecord(record, replicaMsgId)
     }
 
-    suspend fun processRecords(records: List<Log.Record<ReplicaMessage>>) {
-        for (record in records) {
-            try {
-                val term = record.message.termId
-                if (termFence.admit(term)) handleRecord(record, record.msgId)
-                else {
-                    // Fenced: a higher-term leader has superseded this message's writer. Discard it, but
-                    // still advance the consume position (discard suppresses application, not consumption)
-                    // so a transition catch-up can't hang on a fenced no-op.
-                    LOG.debug {
-                        "[$dbName] follower: discarding fenced record ${record.msgId} " +
-                                "(term ${LeaderTerm.format(term)} < ${LeaderTerm.format(termFence.highestSeen)})"
-                    }
-                    watchers.notifyApplied(record.msgId)
+    suspend fun processRecord(record: Log.Record<ReplicaMessage>) {
+        try {
+            val term = record.message.termId
+            if (termFence.admit(term)) handleRecord(record, record.msgId)
+            else {
+                // Fenced: a higher-term leader has superseded this message's writer. Discard it, but
+                // still advance the consume position (discard suppresses application, not consumption)
+                // so a transition catch-up can't hang on a fenced no-op.
+                LOG.debug {
+                    "[$dbName] follower: discarding fenced record ${record.msgId} " +
+                            "(term ${LeaderTerm.format(term)} < ${LeaderTerm.format(termFence.highestSeen)})"
                 }
-            } catch (e: Throwable) {
-                if (e.isShutdownSignal) throw e
-
-                LOG.error(
-                    e,
-                    "[$dbName] follower: failed to process log record with msgId ${record.msgId} (${record.message::class.simpleName})"
-                )
-                watchers.notifyError(e)
-                throw e
+                watchers.notifyApplied(record.msgId)
             }
+        } catch (e: Throwable) {
+            if (e.isShutdownSignal) throw e
+
+            LOG.error(
+                e,
+                "[$dbName] follower: failed to process log record with msgId ${record.msgId} (${record.message::class.simpleName})"
+            )
+            watchers.notifyError(e)
+            throw e
         }
     }
 

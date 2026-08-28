@@ -34,8 +34,10 @@ import xtdb.indexer.LeaderDriver
 import xtdb.indexer.LeaderLogProcessor
 import xtdb.indexer.LiveIndex
 import xtdb.indexer.RealLeaderDriver
+import xtdb.indexer.ReplicaApply
 import xtdb.indexer.ReplicaLogAppender
 import xtdb.indexer.TermFence
+import xtdb.indexer.applyAndAwait
 import xtdb.indexer.runLeaderTerm
 import xtdb.storage.MemoryStorage
 import xtdb.tx.TxOpts
@@ -136,15 +138,21 @@ class ExternalSourceTest {
             flushTimeout = IndexerConfig().flushDuration,
         ).also { proc ->
             leadersToClose += proc
-            val replicaMsgs = Channel<Log.Record<ReplicaMessage>>(capacity = 128)
+            val replicaMsgs = Channel<ReplicaApply>()
             backgroundScope.launch {
                 launch { proc.gc.runGc() }
                 proc.extSrcProc?.let { extSrcProc -> launch { extSrcProc.run() } }
 
-                runLeaderTerm("test", watchers, proc, replicaMsgs, replicaAppender) {
+                val reader = launch {
                     partitionStorage.replicaLog.tailAll(-1) { records ->
-                        records.forEach { replicaMsgs.send(it) }
+                        records.forEach { replicaMsgs.applyAndAwait(it) }
                     }
+                }
+
+                try {
+                    runLeaderTerm("test", watchers, proc, replicaMsgs, replicaAppender)
+                } finally {
+                    reader.cancel()
                 }
             }
         }
