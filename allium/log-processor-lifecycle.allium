@@ -127,6 +127,12 @@ contract LeaderElection {
         -- A leader confirms — and so acknowledges — a write only when it reads that write back at its OWN term; reading back a HIGHER term means a newer leader has superseded it, so it is demoted without confirming its outstanding writes.
         -- Two nodes may therefore briefly both believe themselves leader and both append, but only the newer term's writes are ever confirmed, and the older leader's are discarded.
 
+    @invariant LiveLeadershipIsVisibleOnTheLog
+        -- A leader writes to the replica log within a bounded interval of its last write, whether or not it has work.
+        --   - With traffic: met by the writes it is making anyway.
+        --   - Idle: a no-op stamped with its own term.
+        --   Otherwise a quiet database and a leaderless one are the same log to a reader.
+
     @invariant StandingDownLeavesTheDatabaseReadable
         -- A node that stands down for a higher term leaves its database queryable on that node.
         --   The end of a term reaches everything it was driving, the external source included, each of which reports a role that has changed rather than a database that has failed.

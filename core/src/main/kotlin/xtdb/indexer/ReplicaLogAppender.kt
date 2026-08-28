@@ -1,7 +1,9 @@
 package xtdb.indexer
 
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.selects.select
 import xtdb.api.log.ReplicaMessage
+import xtdb.api.log.ReplicaMessage.NoOp
 
 /**
  * One item queued for append to the replica log.
@@ -23,7 +25,11 @@ internal class ControlItem(private val message: ReplicaMessage) : AppendItem {
     override fun toReplicaMessage() = message
 }
 
-internal class ReplicaLogAppender(private val logsDriver: LogProcessor.LogsDriver) {
+internal class ReplicaLogAppender(
+    private val logsDriver: LogProcessor.LogsDriver,
+    private val leaderTerm: Long,
+    private val electionDriver: ElectionDriver,
+) {
 
     // Unbounded: the term queues here from the same coroutine that services its consume-back, so a bounded
     // channel could block that send — and consume-back is what makes the progress the send would be
@@ -34,7 +40,15 @@ internal class ReplicaLogAppender(private val logsDriver: LogProcessor.LogsDrive
 
     suspend fun run() {
         try {
-            for (item in queue) logsDriver.appendToReplica(item.toReplicaMessage())
+            while (true) {
+                val item = select {
+                    queue.onReceive { it }
+
+                    electionDriver.run { onAssertTimeout { ControlItem(NoOp(termId = leaderTerm)) } }
+                }
+
+                logsDriver.appendToReplica(item.toReplicaMessage())
+            }
         } finally {
             queue.cancel()
         }
