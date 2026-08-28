@@ -12,7 +12,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
@@ -36,7 +38,6 @@ import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.SourceMessage
 import xtdb.api.log.Watchers
 import xtdb.api.storage.Storage
-import xtdb.block.proto.TableBlock
 import xtdb.SimulationTestUtils.Companion.createTrieCatalog
 import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
@@ -104,15 +105,16 @@ class LeaderLogProcessorTest {
     ) =
         proc.also {
             leadersToClose += it
+            val replicaMsgs = Channel<Log.Record<ReplicaMessage>>(capacity = 128)
             launch {
-                launch {
-                    partitionStorage.replicaLog.tailAll(-1) { records ->
-                        records.forEach { proc.queueReplicaMessage(it) }
-                    }
-                }
                 launch { proc.gc.runGc() }
                 proc.extSrcProc?.let { extSrcProc -> launch { extSrcProc.run() } }
-                runLeaderTerm("test", watchers, proc, replicaAppender)
+
+                runLeaderTerm("test", watchers, proc, replicaMsgs, replicaAppender) {
+                    partitionStorage.replicaLog.tailAll(-1) { records ->
+                        records.forEach { replicaMsgs.send(it) }
+                    }
+                }
             }
         }
 
@@ -420,7 +422,7 @@ class LeaderLogProcessorTest {
         appender.append(ControlItem(ReplicaMessage.NoOp(termId = 1)))
 
         // returns once the pump's failure has ended the term
-        runLeaderTerm("test", watchers, proc, appender)
+        runLeaderTerm("test", watchers, proc, Channel(), appender) { awaitCancellation() }
 
         assertNull(
             watchers.exception,

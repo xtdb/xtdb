@@ -140,19 +140,6 @@ internal class LeaderLogProcessor(
             ExternalSourceProcessor(source, partition, tableCatalog, watchers, txResolver) { appendTx(it) }
         }
 
-    // Records read back off the replica log, awaiting application. The partition's reader fills it
-    // through [queueReplicaMessage]; its capacity is what bounds how far that reader may run ahead.
-    private val replicaMsgs = Channel<Log.Record<ReplicaMessage>>(capacity = 128)
-
-
-    /**
-     * Hand a record read back off the replica log to the apply loop, suspending while the loop is behind.
-     *
-     * Confirmation, not delivery: a leader learns its own writes landed by reading them back (#5817), so
-     * every record reaches this — its own, and a superseding leader's alike.
-     */
-    suspend fun queueReplicaMessage(record: Log.Record<ReplicaMessage>) = replicaMsgs.send(record)
-
     private suspend fun applyResolvedTx(record: Log.Record<ReplicaMessage>, msg: ReplicaMessage.ResolvedTx) {
         val txKey = TransactionKey(msg.txId, msg.systemTime)
 
@@ -305,8 +292,6 @@ internal class LeaderLogProcessor(
         return true
     }
 
-    val onReplicaMsg get() = replicaMsgs.onReceive
-
     /**
      * Whether this term will take resolution work right now.
      *
@@ -334,11 +319,6 @@ internal class LeaderLogProcessor(
         gc.shutdown(cause)
 
         replicaAppender.shutdown(cause)
-
-        // The partition's reader is suspended on a send here rather than awaiting a task, so a close is
-        // all it needs — as a cancellation, since it is the reader's own coroutine that sees it and a
-        // benign teardown must not poison the watchers.
-        replicaMsgs.close(cause.asCancellation())
     }
 
     override fun close() {

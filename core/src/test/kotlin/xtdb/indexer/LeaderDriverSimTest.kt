@@ -4,6 +4,7 @@ import io.mockk.mockk
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
@@ -26,6 +27,7 @@ import xtdb.api.TableRef
 import xtdb.api.TransactionResult
 import xtdb.api.log.InMemoryLog
 import xtdb.api.log.LeaderTerm
+import xtdb.api.log.Log
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.ReplicaMessage.BlockBoundary
 import xtdb.api.log.SourceMessage
@@ -138,18 +140,20 @@ class LeaderDriverSimTest : SimulationTestBase() {
             gcDispatcher = dispatcher,
         )
 
+        private val replicaMsgs = Channel<Log.Record<ReplicaMessage>>(capacity = 128)
+
         init {
             scope.launch {
-                // From the claim record rather than the start of the log: a sim leader begins with empty
-                // catalogs and never replays, so anything before its claim is not its to apply.
-                launch {
-                    partitionStorage.replicaLog.tailAll(afterReplicaMsgId) { records ->
-                        records.forEach { proc.queueReplicaMessage(it) }
-                    }
-                }
                 launch { proc.gc.runGc() }
                 proc.extSrcProc?.let { extSrcProc -> launch { extSrcProc.run() } }
-                runLeaderTerm("test-db", watchers, proc, replicaAppender)
+
+                runLeaderTerm("test-db", watchers, proc, replicaMsgs, replicaAppender) {
+                    // From the claim record rather than the start of the log: a sim leader begins with empty
+                    // catalogs and never replays, so anything before its claim is not its to apply.
+                    partitionStorage.replicaLog.tailAll(afterReplicaMsgId) { records ->
+                        records.forEach { replicaMsgs.send(it) }
+                    }
+                }
             }
         }
 

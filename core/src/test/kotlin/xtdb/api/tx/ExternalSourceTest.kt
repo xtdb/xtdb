@@ -136,15 +136,16 @@ class ExternalSourceTest {
             flushTimeout = IndexerConfig().flushDuration,
         ).also { proc ->
             leadersToClose += proc
+            val replicaMsgs = Channel<Log.Record<ReplicaMessage>>(capacity = 128)
             backgroundScope.launch {
-                launch {
-                    partitionStorage.replicaLog.tailAll(-1) { records ->
-                        records.forEach { proc.queueReplicaMessage(it) }
-                    }
-                }
                 launch { proc.gc.runGc() }
                 proc.extSrcProc?.let { extSrcProc -> launch { extSrcProc.run() } }
-                runLeaderTerm("test", watchers, proc, replicaAppender)
+
+                runLeaderTerm("test", watchers, proc, replicaMsgs, replicaAppender) {
+                    partitionStorage.replicaLog.tailAll(-1) { records ->
+                        records.forEach { replicaMsgs.send(it) }
+                    }
+                }
             }
         }
     }

@@ -3,6 +3,7 @@ package xtdb.indexer
 import io.micrometer.core.instrument.Gauge
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.selects.selectUnbiased
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.NodeBase
@@ -10,6 +11,8 @@ import xtdb.api.DatabaseName
 import xtdb.api.error.Fault
 import xtdb.api.error.Interrupted
 import xtdb.api.log.*
+import xtdb.api.log.Log.TailSpec
+import xtdb.api.log.ReplicaMessage.NoOp
 import xtdb.api.tx.ExternalSource
 import xtdb.compactor.Compactor
 import xtdb.database.Database
@@ -32,23 +35,31 @@ internal val Throwable.isShutdownSignal
 /**
  * Run a leader term until it ends, then fail everything staged on it.
  *
- * The term's work and its append pump are structured together, so whichever fails first cancels the other
- * and arrives here as the cause. Cancelling the caller is what ends a term that hasn't failed.
+ * The term's work, its append pump and its replica reader are structured together, so whichever fails
+ * first cancels the others and arrives here as the cause. Cancelling the caller is what ends a term that
+ * hasn't failed. The reader belongs in here for the same reason the pump does: consume-back is the only
+ * thing that acks a write, so a term outliving its reader hangs whatever is staged on it.
  *
  * Which failures reach the watchers is decided here rather than in the term, because the term is not the
  * thing that knows a resignation from a fault: a supersession means this node is merely no longer the
  * leader, and poisoning the watchers over it would leave a healthy database unqueryable (#5817).
  */
 internal suspend fun runLeaderTerm(
-    dbName: DatabaseName, watchers: Watchers, term: LeaderLogProcessor, appender: ReplicaLogAppender,
+    dbName: DatabaseName,
+    watchers: Watchers,
+    term: LeaderLogProcessor,
+    replicaMsgs: ReceiveChannel<Log.Record<ReplicaMessage>>,
+    appender: ReplicaLogAppender,
+    readReplica: suspend () -> Unit,
 ) {
     try {
         coroutineScope {
             launch(CoroutineName("$dbName-replica-appender")) { appender.run() }
+            launch(CoroutineName("$dbName-replica-reader")) { readReplica() }
 
             while (true)
                 selectUnbiased {
-                    term.onReplicaMsg {
+                    replicaMsgs.onReceive {
                         val msg = it.message
                         val termId = msg.termId
 
@@ -191,7 +202,7 @@ class LogProcessor(
         }
     }
 
-    override fun transitionToLeader(partition: Int, termId: Long): Deferred<Log.TailSpec<SourceMessage>> {
+    override fun transitionToLeader(partition: Int, termId: Long): Deferred<TailSpec<SourceMessage>> {
         // Transport contract: transition only from Following (see SubscriptionListener). A raw cast
         // would surface an out-of-order call as a cryptic ClassCastException; name it instead.
         val following = (state as? Following)
@@ -203,31 +214,85 @@ class LogProcessor(
         // Launched on the database scope (not the caller's): the transition is a child of the db job
         // tree, so the transport joins/cancels this handle while db teardown cancels-and-joins it
         // before close(). See dev/doc/coroutines.adoc and allium/log-processor-lifecycle.allium.
-        return scope.async { runTransition(following, termId) }
-    }
+        return scope.async {
+            try {
+                // Append a NoOp stamped with the new term as the replay target: the follower catches up to it
+                // before we cut over, which is what proves our own claim has been read back. A plain append
+                // now — the term on read-back is the fence, replacing the transactional producer (#5817).
+                val replayTarget = replicaLog.appendMessage(NoOp(termId = termId)).msgId
+                LOG.debug("[${dbName}] transition: awaiting replica catch-up to $replayTarget")
+                watchers.awaitReplicaMsg(replayTarget)
+                LOG.debug("[${dbName}] transition: replica caught up to $replayTarget")
 
-    private suspend fun runTransition(following: Following, termId: Long): Log.TailSpec<SourceMessage> {
-        try {
-            // Append a NoOp stamped with the new term as the replay target: the follower catches up to it
-            // before we cut over, which is what proves our own claim has been read back. A plain append
-            // now — the term on read-back is the fence, replacing the transactional producer (#5817).
-            val replayTarget = replicaLog.appendMessage(ReplicaMessage.NoOp(termId = termId)).msgId
-            LOG.debug("[$dbName] transition: awaiting replica catch-up to $replayTarget")
-            watchers.awaitReplicaMsg(replayTarget)
-            LOG.debug("[$dbName] transition: replica caught up to $replayTarget")
+                // Our own claim is now read back, so the follower's max term is the log's — anything above
+                // it fences us, and leading would index nothing. Refuse loudly instead (#5817).
+                termFence.checkUnfenced(termId)
 
-            // Our own claim is now read back, so the follower's max term is the log's — anything above
-            // it fences us, and leading would index nothing. Refuse loudly instead (#5817).
-            termFence.checkUnfenced(termId)
+                val pendingBlock = following.proc.pendingBlock
 
-            return cutoverToLeader(following, termId)
-        } catch (e: Throwable) {
-            // Cutover already restored a live `state` if it had to; here we only report.
-            if (!e.isShutdownSignal) {
-                LOG.error(e, "[$dbName] transition: failed to prepare leader")
-                watchers.notifyError(e)
+                // The point of no return. Once the follower is stopped, `state` references a dead term until
+                // Leading is published, so any early exit — a revoke cancelling us mid-cutover — has to
+                // re-open a live follower, seeded from where this one got to. That recovery is structural
+                // rather than flag-guarded: reaching the catch below *is* "the follower was stopped".
+                try {
+                    LOG.debug("[${dbName}] transition: closing follower")
+                    // Guards the release alone: the follower's allocator must close cleanly once teardown has
+                    // begun, whatever the cancellation. Bounded — its coroutines only unwind.
+                    withContext(NonCancellable) {
+                        following.job.cancelAndJoin()
+                        following.proc.close()
+                    }
+
+                    val driver = RealLeaderDriver(partitionStorage, partitionState, blockUploader)
+                    val replicaAppender = ReplicaLogAppender(driver)
+
+                    val proc = LeaderLogProcessor(
+                        allocator, base, partitionStorage, crashLogger, partitionState, dbName, driver, watchers,
+                        replicaAppender, termFence,
+                        externalSource,
+                        skipTxs, dbCatalog,
+                        leaderTerm = termId,
+                        flushTimeout = flushTimeout,
+                        gcDispatcher = gcDispatcher,
+                    )
+
+                    pendingBlock?.let { proc.applyPendingBlock(it) }
+
+                    LOG.debug("[${dbName}] transition: building leader processor")
+                    val resumeAfterMsgId = watchers.latestSourceMsgId
+
+                    // Records read back off the replica log, awaiting application. Its capacity is what bounds
+                    // how far the term's reader may run ahead of the apply loop.
+                    val replicaMsgs = Channel<Log.Record<ReplicaMessage>>(capacity = 128)
+
+                    // Reading is the partition's for a leader too — the term's own writes are confirmed by
+                    // arriving back here. The GCs and the external source are the term's to stop, so
+                    // `shutdown` reaches them; the reader is structured into the term instead.
+                    val termJob = scope.launch {
+                        launch { proc.gc.runGc() }
+                        proc.extSrcProc?.let { extSrcProc -> launch { extSrcProc.run() } }
+
+                        runLeaderTerm(dbName, watchers, proc, replicaMsgs, replicaAppender) {
+                            tailReplica { records -> records.forEach { replicaMsgs.send(it) } }
+                        }
+                    }
+
+                    val leading = Leading(proc, termJob).also { state = it }
+
+                    LOG.info("[${dbName}] leader startup complete, resuming after $resumeAfterMsgId")
+                    TailSpec(resumeAfterMsgId, leading.proc.srcLogProc)
+                } catch (e: Throwable) {
+                    state = openFollower(pendingBlock)
+                    throw e
+                }
+            } catch (e: Throwable) {
+                // Cutover already restored a live `state` if it had to; here we only report.
+                if (!e.isShutdownSignal) {
+                    LOG.error(e, "[${dbName}] transition: failed to prepare leader")
+                    watchers.notifyError(e)
+                }
+                throw e
             }
-            throw e
         }
     }
 
@@ -245,62 +310,6 @@ class LogProcessor(
             } else {
                 watchers.notifyApplied(replicaMsgId = it.msgId)
             }
-        }
-    }
-
-    // The point of no return: stop the follower, finish its pending block, build the leader. Once the
-    // follower is stopped, `state` references a dead term until we publish Leading — so any early exit
-    // (a revoke cancelling us mid-cutover) re-opens a live follower from the catch, seeded from where the
-    // follower got to, and `state` never keeps a corpse. Recovery is structural, not flag-guarded:
-    // reaching the catch *is* "the follower was stopped", and `state` is exclusively ours until Leading
-    // (demoteLeader only reads it after joining us), so no staleness guard is needed.
-    // NonCancellable guards only the resource release — the follower's allocator must close
-    // cleanly once teardown begins, whatever the cancellation (bounded: the follower's coroutines just
-    // unwind). Watermark/pendingBlock stay readable after close (not allocator-backed).
-    private suspend fun cutoverToLeader(following: Following, termId: Long): Log.TailSpec<SourceMessage> {
-        val pendingBlock = following.proc.pendingBlock
-        try {
-            LOG.debug("[$dbName] transition: closing follower")
-            withContext(NonCancellable) {
-                following.job.cancelAndJoin()
-                following.proc.close()
-            }
-
-            val driver = RealLeaderDriver(partitionStorage, partitionState, blockUploader)
-            val replicaAppender = ReplicaLogAppender(driver)
-
-            val proc = LeaderLogProcessor(
-                allocator, base, partitionStorage, crashLogger, partitionState, dbName, driver, watchers,
-                replicaAppender, termFence,
-                externalSource,
-                skipTxs, dbCatalog,
-                leaderTerm = termId,
-                flushTimeout = flushTimeout,
-                gcDispatcher = gcDispatcher,
-            )
-
-            pendingBlock?.let { proc.applyPendingBlock(it) }
-
-            LOG.debug("[$dbName] transition: building leader processor")
-            val resumeAfterMsgId = watchers.latestSourceMsgId
-
-            // Reading is the partition's for a leader too — the term's own writes are confirmed by arriving
-            // back here. One job over all of them, so a read that fails cancels the term: consume-back is the
-            // only thing that acks a write, so a term outliving its reader hangs whatever is staged on it.
-            val termJob = scope.launch {
-                launch { tailReplica { records -> records.forEach { proc.queueReplicaMessage(it) } } }
-                launch { proc.gc.runGc() }
-                proc.extSrcProc?.let { extSrcProc -> launch { extSrcProc.run() } }
-                runLeaderTerm(dbName, watchers, proc, replicaAppender)
-            }
-
-            val leading = Leading(proc, termJob).also { state = it }
-
-            LOG.info("[$dbName] leader startup complete, resuming after $resumeAfterMsgId")
-            return Log.TailSpec(resumeAfterMsgId, leading.proc.srcLogProc)
-        } catch (e: Throwable) {
-            state = openFollower(pendingBlock)
-            throw e
         }
     }
 
