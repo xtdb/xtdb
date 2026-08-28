@@ -360,6 +360,13 @@ class PgWireDriver(
                     .withStartPosition(LogSequenceNumber.valueOf(startLsn))
                     .withSlotOption("proto_version", "1")
                     .withSlotOption("publication_names", publicationName)
+                    // on by default, and pgjdbc's flush is not ours: a keepalive otherwise raises its flush
+                    // LSN to the server's, which the next status update sends, confirming the slot without
+                    // ever reaching [acknowledge]. The two LSNs its guard compares both start invalid, so
+                    // the window is open from stream open — where the resume position leads the durable
+                    // extent and is exactly what must not be confirmed over. SoleConfirmer in
+                    // dev/doc/pgsrc.allium; #5975.
+                    .withAutomaticFlush(false)
                     .start()
 
                 if (attempt > 1)

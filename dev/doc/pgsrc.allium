@@ -113,6 +113,7 @@ contract ConfirmablePosition {
         -- At most one party confirms a given slot.
         -- - Two would race to a position neither could justify, each knowing
         --   only its own durable extent.
+        -- - A driver that advances the flush position on a schedule of its own is such a party, and knows no durable extent at all.
 }
 
 ---- Entities and Variants
