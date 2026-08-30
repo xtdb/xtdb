@@ -62,11 +62,6 @@ log: !Local
   # The path to the local directory to store the log in.
   # (Can be set as an !Env value)
   path: /var/lib/xtdb/log
-
-  # -- optional
-
-  # The number of entries of the buffer to use when writing to the log.
-  # bufferSize: 4096
 ```
 
 If configured as an in-process node, you can also specify an [InstantSource](https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/time/InstantSource.html) implementation - this is used to override the local machine's clock when providing a system-time timestamp for each transaction.

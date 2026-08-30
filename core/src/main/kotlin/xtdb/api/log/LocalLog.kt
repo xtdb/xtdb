@@ -343,8 +343,6 @@ class LocalLog<M> @JvmOverloads constructor(
      * Xtdb.openNode {
      *    log = localLog(Path("test-path")) {
      *      instantSource = InstantSource.system()
-     *      bufferSize = 4096
-     *      pollSleepDuration = Duration.ofMillis(100)
      *    }
      *    ...
      * }
