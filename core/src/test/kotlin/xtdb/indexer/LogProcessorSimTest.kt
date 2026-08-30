@@ -28,7 +28,6 @@ import xtdb.database.PartitionStorage
 import xtdb.api.tx.ExternalSource
 import xtdb.api.tx.ExternalSourceToken
 import xtdb.api.error.Incorrect
-import xtdb.indexer.SimLog.Companion.launchSimLog
 import xtdb.api.tx.TxIndexer.TxResult
 import xtdb.storage.MemoryStorage
 import xtdb.api.TableRef
@@ -315,8 +314,6 @@ class LogProcessorSimTest : SimulationTestBase() {
             MemoryStorage(allocator, epoch = 0).use { bp ->
                 SimNode("test-db", bp, IndexerConfig(rowsPerBlock = rowsPerBlock), simExtSource).use { node ->
                     launch(dispatcher) {
-                        launchSimLog(srcLog)
-                        launchSimLog(replicaLog)
 
                         val logProc = node.openLogProcessor(this)
 
@@ -396,8 +393,6 @@ class LogProcessorSimTest : SimulationTestBase() {
                     SimNode("test-db", bp, indexerConfig, simExtSource).use { followerA ->
                         SimNode("test-db", bp, indexerConfig, simExtSource).use { followerB ->
                             launch(dispatcher) {
-                                launchSimLog(srcLog)
-                                launchSimLog(replicaLog)
 
                                 leader.openLogProcessor(this)
                                 followerA.openLogProcessor(this)
@@ -492,8 +487,6 @@ class LogProcessorSimTest : SimulationTestBase() {
                 SimNode("test-db", bp, indexerConfig, simExtSource).use { nodeA ->
                     SimNode("test-db", bp, indexerConfig, simExtSource).use { nodeB ->
                         launch(dispatcher) {
-                            launchSimLog(srcLog)
-                            launchSimLog(replicaLog)
 
                             nodeA.openLogProcessor(this)
                             nodeB.openLogProcessor(this)

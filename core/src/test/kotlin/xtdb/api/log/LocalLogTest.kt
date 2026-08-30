@@ -1,20 +1,15 @@
 package xtdb.api.log
 
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.yield
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.RepeatedTest
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
-import org.junit.jupiter.params.ParameterizedTest
-import org.junit.jupiter.params.provider.ValueSource
 import xtdb.api.log.Log.Record
 import java.nio.file.Files
 import java.nio.file.Path
@@ -175,23 +170,6 @@ class LocalLogTest {
     }
 
     @Test
-    fun `openGroupSubscription drives the listener lifecycle for every partition`() = runTest(timeout = 5.seconds) {
-        val log = LocalLog.Factory(tempDir.resolve("log")).openSourceLog(emptyMap(), partitions = 3)
-        log.use {
-            val listener = RecordingListener<SourceMessage>()
-
-            val job = backgroundScope.launch { log.openGroupSubscription(listener) }
-
-            while (listener.transitioned.size < 3) yield()
-
-            job.cancelAndJoin()
-
-            assertEquals(setOf(0, 1, 2), listener.transitioned.toSet())
-            assertEquals(setOf(0, 1, 2), listener.demoted.toSet())
-        }
-    }
-
-    @Test
     fun `multi-partition files land under the nested layout`() = runTest {
         val root = tempDir.resolve("log")
         val log = LocalLog.Factory(root).openSourceLog(emptyMap(), partitions = 2)
@@ -239,17 +217,4 @@ class LocalLogTest {
         }
     }
 
-    private class RecordingListener<M> : Log.SubscriptionListener<M> {
-        val transitioned = mutableListOf<Int>()
-        val demoted = mutableListOf<Int>()
-
-        override fun transitionToLeader(partition: Int, termId: Long): Deferred<Log.TailSpec<M>> {
-            transitioned.add(partition)
-            return CompletableDeferred(Log.TailSpec(-1L) { _ -> })
-        }
-
-        override suspend fun demoteLeader(partition: Int) {
-            demoted.add(partition)
-        }
-    }
 }

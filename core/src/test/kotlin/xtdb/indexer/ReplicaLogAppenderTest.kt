@@ -12,7 +12,6 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import xtdb.api.TableRef
 import xtdb.api.TransactionKey
-import xtdb.api.log.LeaderTerm
 import xtdb.api.log.Log
 import xtdb.api.log.ReplicaMessage
 import xtdb.arrow.RelationReader
@@ -50,7 +49,7 @@ class ReplicaLogAppenderTest {
 
     @Test
     fun `an idle leader asserts, stamped with its own term`() = runTest {
-        val term = LeaderTerm.of(0, 7)
+        val term = 7L
         val leaderDriver = RecordingDriver()
         val election = TriggeredElectionDriver()
         val appender = ReplicaLogAppender(leaderDriver, term, election)
@@ -74,9 +73,9 @@ class ReplicaLogAppenderTest {
     fun `a leader with traffic to append does not assert`() = runTest {
         val leaderDriver = RecordingDriver()
         val election = TriggeredElectionDriver()
-        val appender = ReplicaLogAppender(leaderDriver, LeaderTerm.of(0, 1), election)
+        val appender = ReplicaLogAppender(leaderDriver, 1L, election)
 
-        appender.append(ControlItem(ReplicaMessage.NoOp(srcMsgId = 42, termId = LeaderTerm.of(0, 1))))
+        appender.append(ControlItem(ReplicaMessage.NoOp(srcMsgId = 42, termId = 1L)))
 
         backgroundScope.launch { appender.run() }
         election.trigger.send(Unit)
@@ -89,7 +88,7 @@ class ReplicaLogAppenderTest {
 
     @Test
     fun `the shutdown cause unwinds the append loop`() = runTest {
-        val appender = ReplicaLogAppender(RecordingDriver(), LeaderTerm.of(0, 1), NoAssertElectionDriver)
+        val appender = ReplicaLogAppender(RecordingDriver(), 1L, NoAssertElectionDriver)
         val cause = RuntimeException("term failed")
 
         appender.shutdown(cause)

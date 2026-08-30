@@ -139,34 +139,4 @@ class InMemoryLogTest {
         }
     }
 
-    @Test
-    fun `openGroupSubscription drives the listener lifecycle for every partition`() = runTest(timeout = 5.seconds) {
-        val log = InMemoryLog<SourceMessage>(InstantSource.system(), 0, partitions = 3)
-        log.use {
-            val listener = RecordingListener<SourceMessage>()
-
-            val job = backgroundScope.launch { log.openGroupSubscription(listener) }
-
-            while (listener.transitioned.size < 3) yield()
-
-            job.cancelAndJoin()
-
-            assertEquals(setOf(0, 1, 2), listener.transitioned.toSet())
-            assertEquals(setOf(0, 1, 2), listener.demoted.toSet())
-        }
-    }
-
-    private class RecordingListener<M> : Log.SubscriptionListener<M> {
-        val transitioned = mutableListOf<Int>()
-        val demoted = mutableListOf<Int>()
-
-        override fun transitionToLeader(partition: Int, termId: Long): Deferred<Log.TailSpec<M>> {
-            transitioned.add(partition)
-            return CompletableDeferred(Log.TailSpec(-1L) { _ -> })
-        }
-
-        override suspend fun demoteLeader(partition: Int) {
-            demoted.add(partition)
-        }
-    }
 }

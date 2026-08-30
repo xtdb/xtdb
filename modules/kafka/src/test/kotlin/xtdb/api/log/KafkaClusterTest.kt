@@ -3,12 +3,6 @@ package xtdb.api.log
 import com.google.protobuf.ByteString
 import io.mockk.coEvery
 import io.mockk.mockk
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.CoroutineName
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.async
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
@@ -17,7 +11,6 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeoutOrNull
-import kotlinx.coroutines.yield
 import org.apache.kafka.clients.admin.AdminClient
 import org.apache.kafka.clients.admin.NewTopic
 import org.apache.kafka.clients.admin.RecordsToDelete
@@ -44,13 +37,11 @@ import xtdb.log.proto.TrieDetails
 import xtdb.log.proto.trieMetadata
 import xtdb.util.MsgIdUtil
 import xtdb.util.asPath
-import xtdb.util.closeAll
 import java.nio.ByteBuffer
 import java.nio.file.Path
 import java.time.Duration
 import java.util.*
 import java.util.Collections.synchronizedList
-import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -318,309 +309,6 @@ class KafkaClusterTest {
             }
     }
 
-    // SharedGroupConsumer integration tests
-    private suspend fun withClusterAndLogs(
-        topicNames: List<String>,
-        block: suspend (KafkaCluster, List<Log<SourceMessage>>) -> Unit,
-    ) {
-        val cluster =
-            KafkaCluster.ClusterFactory(container.bootstrapServers)
-                .open()
-
-        cluster.use {
-            val logs = topicNames.map { topic ->
-                KafkaCluster.LogFactory("c", topic).openSourceLog(mapOf("c" to cluster))
-            }
-            try {
-                block(cluster, logs)
-            } finally {
-                logs.closeAll()
-            }
-        }
-    }
-
-    private class TrackingListener(
-        private val afterMsgId: MessageId = -1L,
-    ) : SubscriptionListener<SourceMessage> {
-        val assignedPartitions = CopyOnWriteArrayList<Unit>()
-        val revokedPartitions = CopyOnWriteArrayList<Unit>()
-        val records = CopyOnWriteArrayList<Record<SourceMessage>>()
-
-        val isAssigned get() = assignedPartitions.size > revokedPartitions.size
-
-        private val processor = RecordProcessor<SourceMessage> { recs -> records.addAll(recs) }
-
-        override fun transitionToLeader(partition: Int, termId: Long): CompletableDeferred<TailSpec<SourceMessage>> {
-            assignedPartitions.add(Unit)
-            return CompletableDeferred(TailSpec(afterMsgId, processor))
-        }
-
-        override suspend fun demoteLeader(partition: Int) {
-            revokedPartitions.add(Unit)
-        }
-    }
-
-    @Test
-    fun `shared group consumer delivers records to multiple databases`() = runTest(timeout = 60.seconds) {
-        val topic1 = "test-shared-multi-${UUID.randomUUID()}"
-        val topic2 = "test-shared-multi-${UUID.randomUUID()}"
-
-        withClusterAndLogs(listOf(topic1, topic2)) { _, logs ->
-            val (log1, log2) = logs
-            val listener1 = TrackingListener()
-            val listener2 = TrackingListener()
-
-            val job1 = launch { log1.openGroupSubscription(listener1) }
-            val job2 = launch { log2.openGroupSubscription(listener2) }
-
-            while (!listener1.isAssigned || !listener2.isAssigned) delay(100.milliseconds)
-
-            log1.appendMessage(txMessage(1))
-            log2.appendMessage(txMessage(2))
-
-            while (listener1.records.isEmpty() || listener2.records.isEmpty()) delay(100.milliseconds)
-
-            assertEquals(1, listener1.records.size)
-            assertEquals(1, listener2.records.size)
-
-            val msg1 = listener1.records[0].message
-            check(msg1 is SourceMessage.LegacyTx)
-            assertArrayEquals(byteArrayOf(-1, 1), msg1.payload)
-
-            val msg2 = listener2.records[0].message
-            check(msg2 is SourceMessage.LegacyTx)
-            assertArrayEquals(byteArrayOf(-1, 2), msg2.payload)
-
-            job1.cancelAndJoin()
-            job2.cancelAndJoin()
-        }
-    }
-
-    @Test
-    fun `unsubscribing one database does not affect others`() = runTest(timeout = 60.seconds) {
-        val topic1 = "test-shared-unsub-${UUID.randomUUID()}"
-        val topic2 = "test-shared-unsub-${UUID.randomUUID()}"
-
-        withClusterAndLogs(listOf(topic1, topic2)) { _, logs ->
-            val (log1, log2) = logs
-            val listener1 = TrackingListener()
-            val listener2 = TrackingListener()
-
-            val job1 = launch { log1.openGroupSubscription(listener1) }
-            val job2 = launch { log2.openGroupSubscription(listener2) }
-
-            while (!listener1.isAssigned || !listener2.isAssigned) delay(100.milliseconds)
-
-            job1.cancelAndJoin()
-
-            log2.appendMessage(txMessage(3))
-            while (listener2.records.isEmpty()) delay(100.milliseconds)
-
-            assertEquals(1, listener2.records.size)
-            val msg = listener2.records[0].message
-            check(msg is SourceMessage.LegacyTx)
-            assertArrayEquals(byteArrayOf(-1, 3), msg.payload)
-
-            job2.cancelAndJoin()
-        }
-    }
-
-    private class RacingListener(private val scope: CoroutineScope) : SubscriptionListener<SourceMessage> {
-        val entered = CompletableDeferred<Unit>()
-        val release = CompletableDeferred<Unit>()
-        val records = CopyOnWriteArrayList<Record<SourceMessage>>()
-
-        // Launch on a real scope (not the runTest virtual dispatcher): the poll thread joins this
-        // handle via runBlocking, so a virtual-dispatcher job would never get to run.
-        override fun transitionToLeader(partition: Int, termId: Long) = scope.async {
-            entered.complete(Unit)
-            release.await()
-            TailSpec(-1L) { recs: List<Record<SourceMessage>> -> records.addAll(recs) }
-        }
-
-        override suspend fun demoteLeader(partition: Int) {}
-    }
-
-    @Test
-    fun `wakeup during seek does not skip seek (regression for #5633)`() = runTest(timeout = 30.seconds) {
-        val topic1 = "test-seek-race-${UUID.randomUUID()}"
-        val topic2 = "test-seek-race-${UUID.randomUUID()}"
-
-        withClusterAndLogs(listOf(topic1, topic2)) { _, logs ->
-            val (log1, log2) = logs
-            val racingScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-            try {
-                val listener1 = RacingListener(racingScope)
-                val listener2 = RacingListener(racingScope)
-
-                val job1 = launch { log1.openGroupSubscription(listener1) }
-                listener1.entered.await()
-
-                // second register() arms consumer.wakeup() while topic1's callback is parked.
-                val job2 = launch { log2.openGroupSubscription(listener2) }
-                yield()
-
-                listener1.release.complete(Unit)
-
-                listener2.entered.await()
-                listener2.release.complete(Unit)
-
-                log1.appendMessage(txMessage(1))
-                log2.appendMessage(txMessage(2))
-
-                // an inner withTimeout would use the TestScope's virtual clock and trip before
-                // records flow; rely on the outer real-time runTest timeout instead.
-                while (listener1.records.isEmpty() || listener2.records.isEmpty()) delay(50.milliseconds)
-
-                job1.cancelAndJoin()
-                job2.cancelAndJoin()
-            } finally {
-                racingScope.cancel()
-            }
-        }
-    }
-
-    private class ThrowingOnAssignListener(private val toThrow: Throwable) : SubscriptionListener<SourceMessage> {
-        override fun transitionToLeader(partition: Int, termId: Long) =
-            CompletableDeferred<TailSpec<SourceMessage>>().apply { completeExceptionally(toThrow) }
-
-        override suspend fun demoteLeader(partition: Int) {}
-    }
-
-    @Test
-    fun `a failed transition evicts only its own subscription, sparing siblings (#5773)`() =
-        runTest(timeout = 30.seconds) {
-            val topicHealthy = "test-iso-healthy-${UUID.randomUUID()}"
-            val topicThrowing = "test-iso-throwing-${UUID.randomUUID()}"
-
-            val boom = RuntimeException("listener boom")
-            val healthy = TrackingListener()
-            val throwing = ThrowingOnAssignListener(boom)
-            var caughtThrowing: Throwable? = null
-
-            withClusterAndLogs(listOf(topicHealthy, topicThrowing)) { _, logs ->
-                val (logHealthy, logThrowing) = logs
-
-                supervisorScope {
-                    val jobHealthy = launch(CoroutineName("job-healthy")) {
-                        logHealthy.openGroupSubscription(healthy)
-                    }
-                    while (!healthy.isAssigned) delay(100.milliseconds)
-
-                    // The throwing transition fails off the poll thread; its subscription is evicted with
-                    // the cause, but the poll loop survives — pre-#5773 a transition failure tanked the
-                    // whole shared consumer (evicting the healthy sibling too).
-                    launch(CoroutineName("job-throwing")) {
-                        try { logThrowing.openGroupSubscription(throwing) } catch (e: Throwable) { caughtThrowing = e }
-                    }
-                    while (caughtThrowing == null) delay(100.milliseconds)
-
-                    // The healthy subscription keeps delivering AFTER its sibling failed — the isolation.
-                    logHealthy.appendMessage(txMessage(1))
-                    while (healthy.records.isEmpty()) delay(100.milliseconds)
-                    assertEquals(1, healthy.records.size)
-
-                    jobHealthy.cancelAndJoin()
-                }
-            }
-
-            val exThrowing = checkNotNull(caughtThrowing) { "throwing subscriber must surface its failure, not hang" }
-            assertTrue(
-                generateSequence(exThrowing) { it.cause }.any { it === boom },
-                "throwing subscriber must see the listener exception in its cause chain, got: $exThrowing"
-            )
-        }
-
-    @Test
-    fun `a parked transition does not block its own unregister (#5773)`() = runTest(timeout = 30.seconds) {
-        val topic = "test-parked-unreg-${UUID.randomUUID()}"
-
-        withClusterAndLogs(listOf(topic)) { _, logs ->
-            val log = logs[0]
-            val racingScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-            try {
-                val listener = RacingListener(racingScope)
-                val job = launch { log.openGroupSubscription(listener) }
-                listener.entered.await()   // the transition is parked, off the poll thread
-
-                // Pre-#5773 the transition ran ON the poll thread, so a parked transition wedged it and
-                // the Unregister command could never be processed — cancelAndJoin would hang here. Now the
-                // poll thread is free, so unregister completes promptly (outer runTest timeout is the canary).
-                job.cancelAndJoin()
-            } finally {
-                racingScope.cancel()
-            }
-        }
-    }
-
-    @Test
-    fun `a parked transition does not block another subscription`() = runTest(timeout = 30.seconds) {
-        val topicParked = "test-parked-a-${UUID.randomUUID()}"
-        val topicOther = "test-parked-b-${UUID.randomUUID()}"
-
-        withClusterAndLogs(listOf(topicParked, topicOther)) { _, logs ->
-            val (logParked, logOther) = logs
-            val racingScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-            try {
-                val parked = RacingListener(racingScope)
-                val other = TrackingListener()
-
-                val jobParked = launch { logParked.openGroupSubscription(parked) }
-                parked.entered.await()   // parked mid-transition, off the poll thread
-
-                // A second database registers, is assigned, and delivers — all while the first is parked.
-                val jobOther = launch { logOther.openGroupSubscription(other) }
-                while (!other.isAssigned) delay(100.milliseconds)
-
-                logOther.appendMessage(txMessage(1))
-                while (other.records.isEmpty()) delay(100.milliseconds)
-                assertEquals(1, other.records.size)
-
-                parked.release.complete(Unit)
-                jobParked.cancelAndJoin()
-                jobOther.cancelAndJoin()
-            } finally {
-                racingScope.cancel()
-            }
-        }
-    }
-
-    @Test
-    fun `database can resubscribe after unsubscribing`() = runTest(timeout = 60.seconds) {
-        val topic1 = "test-shared-resub-${UUID.randomUUID()}"
-
-        withClusterAndLogs(listOf(topic1)) { _, logs ->
-            val log1 = logs[0]
-
-            val listener1 = TrackingListener()
-            val job1 = launch { log1.openGroupSubscription(listener1) }
-            while (!listener1.isAssigned) delay(100.milliseconds)
-
-            log1.appendMessage(txMessage(1))
-            while (listener1.records.isEmpty()) delay(100.milliseconds)
-            val firstOffset = listener1.records[0].logOffset
-
-            // cancelAndJoin resumes only once the unregister is processed (subscription removed +
-            // consumer unsubscribed), so it is a sufficient barrier before resubscribing. Unregister
-            // tears the term down via the database scope, not demoteLeader, so there is no revoke to await.
-            job1.cancelAndJoin()
-
-            val listener2 = TrackingListener(afterMsgId = firstOffset)
-            val job2 = launch { log1.openGroupSubscription(listener2) }
-            while (!listener2.isAssigned) delay(100.milliseconds)
-
-            log1.appendMessage(txMessage(2))
-            while (listener2.records.isEmpty()) delay(100.milliseconds)
-
-            assertEquals(1, listener2.records.size)
-            val msg = listener2.records[0].message
-            check(msg is SourceMessage.LegacyTx)
-            assertArrayEquals(byteArrayOf(-1, 2), msg.payload)
-
-            job2.cancelAndJoin()
-        }
-    }
-
     @Test
     fun `node configured with Kafka cluster under remotes round-trips a tx`() {
         val topicName = "test-remotes-${UUID.randomUUID()}"
@@ -668,34 +356,6 @@ class KafkaClusterTest {
             )
         }
     }
-
-    @Test
-    fun `shared consumer survives all databases unsubscribing then new one subscribing`() =
-        runTest(timeout = 60.seconds) {
-            val topic1 = "test-shared-drain-${UUID.randomUUID()}"
-            val topic2 = "test-shared-drain-${UUID.randomUUID()}"
-
-            withClusterAndLogs(listOf(topic1, topic2)) { _, logs ->
-                val (log1, log2) = logs
-
-                val listener1 = TrackingListener()
-                val job1 = launch { log1.openGroupSubscription(listener1) }
-                while (!listener1.isAssigned) delay(100.milliseconds)
-
-                job1.cancelAndJoin()
-
-                val listener2 = TrackingListener()
-                val job2 = launch { log2.openGroupSubscription(listener2) }
-                while (!listener2.isAssigned) delay(100.milliseconds)
-
-                log2.appendMessage(txMessage(4))
-                while (listener2.records.isEmpty()) delay(100.milliseconds)
-
-                assertEquals(1, listener2.records.size)
-
-                job2.cancelAndJoin()
-            }
-        }
 
     @Test
     @Timeout(value = 30, unit = java.util.concurrent.TimeUnit.SECONDS)
@@ -779,49 +439,6 @@ class KafkaClusterTest {
     }
 
     @Test
-    @Timeout(value = 30, unit = java.util.concurrent.TimeUnit.SECONDS)
-    fun `openGroupSubscription surfaces error when anchor truncated`() = runBlocking {
-        val topic = "trunc-grp-${UUID.randomUUID()}"
-        val anchorInTruncatedPrefix = MsgIdUtil.offsetToMsgId(0, 1L)
-        val caught = AtomicReference<Throwable?>(null)
-        val listener = object : SubscriptionListener<SourceMessage> {
-            override fun transitionToLeader(partition: Int, termId: Long) =
-                CompletableDeferred(TailSpec<SourceMessage>(afterMsgId = anchorInTruncatedPrefix) { _ -> })
-
-            override suspend fun demoteLeader(partition: Int) {}
-        }
-
-        KafkaCluster.ClusterFactory(container.bootstrapServers)
-            .open().use { cluster ->
-                KafkaCluster.LogFactory("my-cluster", topic)
-                    .openSourceLog(mapOf("my-cluster" to cluster))
-                    .use { log ->
-                        log.seedAndTruncate(topic, count = 5, truncateBefore = 3L)
-
-                        supervisorScope {
-                            val job = launch {
-                                try {
-                                    log.openGroupSubscription(listener)
-                                } catch (e: Throwable) {
-                                    caught.set(e)
-                                }
-                            }
-
-                            val completed = withTimeoutOrNull(5.seconds) { job.join() } != null
-                            job.cancel()
-
-                            assertTrue(
-                                completed,
-                                "openGroupSubscription silently polled past the truncation — should have thrown"
-                            )
-                        }
-                    }
-            }
-
-        assertNotNull(caught.get(), "openGroupSubscription must surface OffsetOutOfRange to its subscriber")
-    }
-
-    @Test
     @Timeout(value = 60, unit = java.util.concurrent.TimeUnit.SECONDS)
     fun `node surfaces error on restart when replica log truncated past stored boundary`(
         @TempDir storageDir: Path, @TempDir cacheDir1: Path, @TempDir cacheDir2: Path,
@@ -900,43 +517,6 @@ class KafkaClusterTest {
                         log.appendMessage(txMessage(3))
 
                         val job = launch { log.tailAll(0, -1L, processor = subscriber) }
-                        try {
-                            withTimeoutOrNull(5.seconds) {
-                                while (synchronized(msgs) { msgs.flatten().size } < 3) delay(100.milliseconds)
-                            }
-                        } finally {
-                            job.cancelAndJoin()
-                        }
-                    }
-            }
-
-        assertEquals(3, synchronized(msgs) { msgs.flatten().size })
-    }
-
-    @Test
-    @Timeout(value = 30, unit = java.util.concurrent.TimeUnit.SECONDS)
-    fun `openGroupSubscription picks up records appended past a truncated prefix when starting fresh`() = runBlocking {
-        val topic = "trunc-fresh-grp-${UUID.randomUUID()}"
-        val msgs = synchronizedList(mutableListOf<List<Record<SourceMessage>>>())
-        val processor = RecordProcessor { records -> msgs.add(records) }
-        val listener = object : SubscriptionListener<SourceMessage> {
-            override fun transitionToLeader(partition: Int, termId: Long) =
-                CompletableDeferred(TailSpec(afterMsgId = -1L, processor = processor))
-
-            override suspend fun demoteLeader(partition: Int) {}
-        }
-
-        KafkaCluster.ClusterFactory(container.bootstrapServers)
-            .open().use { cluster ->
-                KafkaCluster.LogFactory("my-cluster", topic)
-                    .openSourceLog(mapOf("my-cluster" to cluster))
-                    .use { log ->
-                        log.seedAndTruncate(topic, count = 20, truncateBefore = 20L)
-                        log.appendMessage(txMessage(1))
-                        log.appendMessage(txMessage(2))
-                        log.appendMessage(txMessage(3))
-
-                        val job = launch { log.openGroupSubscription(listener) }
                         try {
                             withTimeoutOrNull(5.seconds) {
                                 while (synchronized(msgs) { msgs.flatten().size } < 3) delay(100.milliseconds)

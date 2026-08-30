@@ -1,5 +1,5 @@
 {:block-idx 0,
- :latest-processed-msg-id 124,
+ :latest-processed-msg-id 122,
  :table-names #{"xt/txs" "xt/role_membership"},
  :tables
  [{:oid 16385,

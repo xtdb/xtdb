@@ -291,7 +291,7 @@ class LogProcessor(
 
         val termId = termFence.highestSeen + 1
         following.claimMsgId = replicaLog.appendMessage(NoOp(termId = termId)).msgId
-        LOG.debug("[$dbName] claiming leadership at term ${LeaderTerm.format(termId)}")
+        LOG.debug("[$dbName] claiming leadership at term $termId")
     }
 
     private suspend fun handleRecord(record: Log.Record<ReplicaMessage>) {
@@ -304,8 +304,7 @@ class LogProcessor(
             // hang on a fenced no-op.
             LOG.debug {
                 "[$dbName] discarding fenced record ${record.msgId} " +
-                        "(term ${LeaderTerm.format(record.message.termId)} < " +
-                        "${LeaderTerm.format(termFence.highestSeen)})"
+                        "(term ${record.message.termId} < ${termFence.highestSeen})"
             }
             watchers.notifyApplied(record.msgId)
         } else {
@@ -405,7 +404,7 @@ class LogProcessor(
      * we meet it on the next poll.
      */
     private suspend fun cutOverToLeader(following: Following, termId: Long) {
-        LOG.info("[$dbName] claim at term ${LeaderTerm.format(termId)} conferred leadership")
+        LOG.info("[$dbName] claim at term $termId conferred leadership")
 
         val pendingBlock = following.pendingBlock
 

@@ -126,7 +126,7 @@ class LogProcessorTest {
             awaitLeadership(node, expected = true)
 
             assertEquals(
-                LeaderTerm.of(0, 1), node.logProc.termFence.highestSeen,
+                1L, node.logProc.termFence.highestSeen,
                 "the first term on a log nobody has led is 1"
             )
         }
@@ -221,10 +221,10 @@ class LogProcessorTest {
         TestNode(sourceLog, replicaLog, electionDriver = noElectionTimeout()).use { node ->
             awaitLeadership(node, expected = true)
 
-            replicaLog.appendMessage(ReplicaMessage.NoOp(termId = LeaderTerm.of(0, 2)))
+            replicaLog.appendMessage(ReplicaMessage.NoOp(termId = 2L))
 
             awaitLeadership(node, expected = false)
-            assertEquals(LeaderTerm.of(0, 2), node.logProc.termFence.highestSeen)
+            assertEquals(2L, node.logProc.termFence.highestSeen)
         }
 
         sourceLog.close()
@@ -235,15 +235,15 @@ class LogProcessorTest {
     fun `the fence seeds from the persisted block boundary and only rises`() = runTest {
         val (sourceLog, replicaLog) = freshLogs()
 
-        TestNode(sourceLog, replicaLog, boundaryTermId = LeaderTerm.of(0, 9)).use { node ->
+        TestNode(sourceLog, replicaLog, boundaryTermId = 9L).use { node ->
             assertEquals(
-                LeaderTerm.of(0, 9), node.logProc.termFence.highestSeen,
+                9L, node.logProc.termFence.highestSeen,
                 "a node that has flushed a block starts from the term that cut it"
             )
 
             // So it cannot claim on sight, and when it does claim it claims above the boundary.
             awaitLeadership(node, expected = true)
-            assertEquals(LeaderTerm.of(0, 10), node.logProc.termFence.highestSeen)
+            assertEquals(10L, node.logProc.termFence.highestSeen)
         }
 
         sourceLog.close()
@@ -256,16 +256,16 @@ class LogProcessorTest {
 
         TestNode(sourceLog, replicaLog, readOnly = true).use { node ->
             val leader = replicaLog.appendMessage(
-                ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap(), srcMsgId = 1, termId = LeaderTerm.of(0, 2))
+                ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap(), srcMsgId = 1, termId = 2L)
             )
             val superseded = replicaLog.appendMessage(
-                ReplicaMessage.ResolvedTx(2, Instant.now(), true, null, emptyMap(), srcMsgId = 2, termId = LeaderTerm.of(0, 1))
+                ReplicaMessage.ResolvedTx(2, Instant.now(), true, null, emptyMap(), srcMsgId = 2, termId = 1L)
             )
 
             node.watchers.awaitReplicaMsg(superseded.msgId)
 
             assertEquals(1L, node.watchers.latestTxId, "the superseded leader's tx was never applied")
-            assertEquals(LeaderTerm.of(0, 2), node.logProc.termFence.highestSeen)
+            assertEquals(2L, node.logProc.termFence.highestSeen)
             assertTrue(leader.msgId < superseded.msgId)
         }
 
