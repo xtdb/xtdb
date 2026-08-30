@@ -268,7 +268,7 @@ class Database(
 
             // buffer pool + metadata manager open before the logs, preserving the pre-split failure
             // order: a storage misconfig must surface before any log/broker interaction (opening a
-            // Kafka log can create topics and consumer-group state as a side effect).
+            // Kafka log can create topics as a side effect).
             val bufferPool = open {
                 val bp = dbConfig.storage.open(
                     allocator, base.memoryCache, base.diskCache,
@@ -307,8 +307,8 @@ class Database(
             val crashLogger = CrashLogger(allocator, storage.bufferPool, base.config.nodeId)
 
             // SupervisorJob child of the catalog's root job: the owner's single cancel still cascades
-            // down to this database's whole tree (term, compactor, source-log subscription), but a
-            // failure *within* the database (e.g. the source-log subscription) surfaces through this
+            // down to this database's whole tree (term, compactor, replica-log reader), but a
+            // failure *within* the database (e.g. the replica-log reader) surfaces through this
             // scope's CoroutineExceptionHandler — `watchers.notifyError` — rather than propagating
             // up. A CoroutineExceptionHandler only fires for a root coroutine or a direct child of a
             // SupervisorJob, so this must be a SupervisorJob (cf. LogProcessor.openTerm). Sibling-
@@ -342,8 +342,9 @@ class Database(
 
             // One per database, outliving every leader term: the partition frees it after the processor that
             // borrows it, and the `open` registration covers only an open that fails before we get there.
-            // Gated exactly as the group subscription below is — only a node that can lead has any use for a
-            // source, so a read-only or non-indexing node opens none and validates no source config.
+            // Gated exactly as the processor's own eligibility to lead is — only a node that can lead has
+            // any use for a source, so a read-only or non-indexing node opens none and validates no
+            // source config.
             val extSource =
                 if (indexerConfig.enabled && !readOnly)
                     open { dbConfig.externalSource?.open(dbName, base.remotes, base.meterRegistry) }
@@ -360,9 +361,10 @@ class Database(
                     scope = scope,
                     skipTxs = indexerConfig.skipTxs.toSet(),
                     flushTimeout = indexerConfig.flushDuration,
+                    readOnly = readOnly,
                 )
                     .also { lp ->
-                        // job.cancelAndJoin joins the term *and* the source-log subscription below.
+                        // job.cancelAndJoin joins the term *and* the partition's replica-log reader.
                         open { AutoCloseable { runBlocking { job.cancelAndJoin() }; lp.close() } }
                     }
             } else null
@@ -410,18 +412,6 @@ class Database(
                 job = job,
                 registeredGauges = gauges,
             )
-
-            if (indexerConfig.enabled && !readOnly) {
-                val listener = object : Log.SubscriptionListener<SourceMessage> {
-                    override fun transitionToLeader(partition: Int, termId: Long) =
-                        db.partitions[partition].logProcessor!!.transitionToLeader(partition, termId)
-
-                    override suspend fun demoteLeader(partition: Int) {
-                        db.partitions.getOrNull(partition)?.logProcessor?.demoteLeader(partition)
-                    }
-                }
-                scope.launch { logs.sourceLog.openGroupSubscription(listener) }
-            }
 
             db
         }

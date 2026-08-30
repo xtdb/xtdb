@@ -31,7 +31,7 @@ internal class ControlItem(private val message: ReplicaMessage) : AppendItem {
  * in that order.
  *
  * Appending is its own coroutine so that the serialization and the log round-trip stay off the term's work
- * loop — which is what releases the transport's poll thread at "resolved" rather than at "durable" (#5741).
+ * loop — which is what releases the source-log tail at "resolved" rather than at "durable" (#5741).
  */
 internal class ReplicaLogAppender(
     private val driver: LeaderDriver,

@@ -2,24 +2,21 @@ package xtdb.indexer
 
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.verify
 import kotlinx.coroutines.*
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.assertDoesNotThrow
-import org.junit.jupiter.api.assertThrows
-import xtdb.api.IndexerConfig
-import xtdb.block.proto.block
-import xtdb.api.error.Conflict
 import org.junit.jupiter.api.Timeout
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.NodeBase
 import xtdb.NodeBase.Companion.openBase
+import xtdb.api.IndexerConfig
 import xtdb.api.log.*
+import xtdb.block.proto.block
 import xtdb.SimulationTestUtils.Companion.createTrieCatalog
 import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
@@ -30,6 +27,8 @@ import xtdb.storage.BufferPool
 import java.time.Instant
 import java.time.InstantSource
 import java.util.concurrent.TimeUnit
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.minutes
 
 @Timeout(10, unit = TimeUnit.SECONDS)
 class LogProcessorTest {
@@ -63,307 +62,230 @@ class LogProcessorTest {
         liveIndex
     )
 
-    private fun logProcessor(
-        partitionStorage: PartitionStorage,
-        partitionState: PartitionState,
-        watchers: Watchers,
-        blockUploader: BlockUploader,
-        scope: CoroutineScope,
-    ) = LogProcessor(
-        allocator, nodeBase, mockk(relaxed = true),
-        partitionStorage, partitionState, "test-db", watchers, blockUploader,
-        mockk<Compactor.ForDatabase>(relaxed = true), dbCatalog = null,
-        externalSource = null,
-        scope = scope,
-        flushTimeout = IndexerConfig().flushDuration,
-    )
-
-    @Test
-    fun `fresh node starts up with epoch 0`() = runTest {
-        val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0)
-        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
-        val bufferPool = mockBufferPool()
-        val partitionState = newPartitionState()
-        val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
-        val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", mockk(relaxed = true), null, null, backgroundScope)
+    /**
+     * One node's worth of the fixture, torn down as a unit.
+     *
+     * Every case here drives a real [LogProcessor] against real in-memory logs, because the election is
+     * only observable in what reaches those logs and in whether the node ends up leading.
+     */
+    private inner class TestNode(
+        val sourceLog: InMemoryLog<SourceMessage>,
+        val replicaLog: InMemoryLog<ReplicaMessage>,
+        boundaryTermId: Long? = null,
+        liveIndex: LiveIndex = mockk(relaxed = true),
+        readOnly: Boolean = false,
+        // A quarter of the in-process scale, so a case turning on an empty poll settles within
+        // awaitLeadership's budget. The 5-10x election range comes off this, as in production.
+        electionDriver: ElectionDriver = RealElectionDriver(assertInterval = 25.milliseconds),
+    ) : AutoCloseable {
+        val partitionState = newPartitionState(liveIndex = liveIndex, boundaryTermId = boundaryTermId)
+        val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), mockBufferPool(), null)
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
-
         val scope = CoroutineScope(SupervisorJob())
-        val logProc = logProcessor(partitionStorage, partitionState, watchers, blockUploader, scope)
 
-        scope.launch { sourceLog.openGroupSubscription(logProc) }
-
-        // Teardown: cancel+join the scope reaps the subscription and the live term, then free it.
-        scope.coroutineContext.job.cancelAndJoin()
-        logProc.close()
-        sourceLog.close()
-        replicaLog.close()
-    }
-
-    @Test
-    fun `fresh node starts up with non-zero epoch`() = runTest {
-        val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 1)
-        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 1)
-        val bufferPool = mockBufferPool(epoch = 1)
-        val partitionState = newPartitionState()
-        val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
-        val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", mockk(relaxed = true), null, null, backgroundScope)
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
-
-        val scope = CoroutineScope(SupervisorJob())
-        val logProc = logProcessor(partitionStorage, partitionState, watchers, blockUploader, scope)
-
-        scope.launch { sourceLog.openGroupSubscription(logProc) }
-
-        // Teardown: cancel+join the scope reaps the subscription and the live term, then free it.
-        scope.coroutineContext.job.cancelAndJoin()
-        logProc.close()
-        sourceLog.close()
-        replicaLog.close()
-    }
-
-    // A leader's election counter is only monotonic within one incarnation of the mechanism that
-    // elects it: Kafka deletes an idle consumer group, and the local logs' counter dies with the
-    // process. The next pair covers both sides of a counter that has restarted below the terms
-    // already on the replica log — see LeaderTerm and #5817.
-
-    @Test
-    fun `refuses to lead when the election counter has regressed below the replica log`() = runTest {
-        val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0)
-        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
-        val bufferPool = mockBufferPool()
-        val partitionState = newPartitionState()
-        val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
-        val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", mockk(relaxed = true), null, null, backgroundScope)
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
-
-        // a previous incarnation of the counter reached 9
-        replicaLog.appendMessage(ReplicaMessage.NoOp(termId = LeaderTerm.of(0, 9)))
-
-        val scope = CoroutineScope(SupervisorJob())
-        val logProc = logProcessor(partitionStorage, partitionState, watchers, blockUploader, scope)
-
-        // ...so the fresh counter's first term, 0.1, is one every reader would discard
-        val subscription = scope.async { sourceLog.openGroupSubscription(logProc) }
-        val e = assertThrows<Conflict> { subscription.await() }
-        assertTrue(
-            e.message!!.contains("termEpoch"),
-            "the refusal names the knob that fixes it, was: ${e.message}"
+        val logProc = LogProcessor(
+            allocator, nodeBase, mockk(relaxed = true),
+            partitionStorage, partitionState, "test-db", watchers,
+            BlockUploader(partitionStorage, partitionState, "xtdb", mockk(relaxed = true), null, null, scope),
+            mockk<Compactor.ForDatabase>(relaxed = true), dbCatalog = null,
+            externalSource = null,
+            scope = scope,
+            flushTimeout = IndexerConfig().flushDuration,
+            electionDriver = electionDriver,
+            readOnly = readOnly,
         )
 
-        scope.coroutineContext.job.cancelAndJoin()
-        logProc.close()
-        sourceLog.close()
-        replicaLog.close()
-    }
-
-    @Test
-    fun `leads once the term epoch is raised past the regressed counter`() = runTest {
-        val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0, termEpoch = 1)
-        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
-        val bufferPool = mockBufferPool()
-        val liveIndex = mockk<LiveIndex>(relaxed = true) { every { latestCompletedTx } returns null }
-        val partitionState = newPartitionState(liveIndex = liveIndex)
-        val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
-        val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", mockk(relaxed = true), null, null, backgroundScope)
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
-
-        replicaLog.appendMessage(ReplicaMessage.NoOp(termId = LeaderTerm.of(0, 9)))
-        replicaLog.appendMessage(ReplicaMessage.ResolvedTx(1, java.time.Instant.now(), true, null, emptyMap()))
-
-        val scope = CoroutineScope(SupervisorJob())
-        val logProc = logProcessor(partitionStorage, partitionState, watchers, blockUploader, scope)
-
-        scope.launch { sourceLog.openGroupSubscription(logProc) }
-
-        // term 1.1 outranks 0.9, so the transition goes through and replays the log
-        watchers.awaitTx(1)
-        verify { liveIndex.commitTx(any(), any()) }
-
-        scope.coroutineContext.job.cancelAndJoin()
-        logProc.close()
-        sourceLog.close()
-        replicaLog.close()
-    }
-
-    @Test
-    fun `leader replays existing replica messages during transition`() = runTest {
-        val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0)
-        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
-        val bufferPool = mockBufferPool()
-        val liveIndex = mockk<LiveIndex>(relaxed = true) {
-            every { latestCompletedTx } returns null
+        override fun close() {
+            runBlocking { scope.coroutineContext.job.cancelAndJoin() }
+            logProc.close()
         }
-        val partitionState = newPartitionState(liveIndex = liveIndex)
-        val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
-        val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", mockk(relaxed = true), null, null, backgroundScope)
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
-
-        // Pre-populate the replica log with a transaction
-        replicaLog.appendMessage(ReplicaMessage.ResolvedTx(1, java.time.Instant.now(), true, null, emptyMap()))
-
-        val scope = CoroutineScope(SupervisorJob())
-        val logProc = logProcessor(partitionStorage, partitionState, watchers, blockUploader, scope)
-
-        scope.launch { sourceLog.openGroupSubscription(logProc) }
-
-        // wait for the follower→leader transition to complete (runs on Dispatchers.Default)
-        watchers.awaitTx(1)
-
-        verify { liveIndex.commitTx(any(), any()) }
-
-        // Teardown: cancel+join the scope reaps the subscription and the live term, then free it.
-        scope.coroutineContext.job.cancelAndJoin()
-        logProc.close()
-        sourceLog.close()
-        replicaLog.close()
     }
 
-    @Test
-    fun `leader replays existing replica messages with non-zero epoch`() = runTest {
-        val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 1)
-        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 1)
-        val bufferPool = mockBufferPool(epoch = 1)
-        val liveIndex = mockk<LiveIndex>(relaxed = true) {
-            every { latestCompletedTx } returns null
+    private fun freshLogs() =
+        InMemoryLog<SourceMessage>(InstantSource.system(), 0) to InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
+
+    /**
+     * An election timeout no test reaches, leaving a claim taken before reading as the only one available.
+     *
+     * For a case about what a node does with the log it starts against, where a second election arriving
+     * part-way would decide the outcome instead.
+     */
+    private fun noElectionTimeout() = RealElectionDriver(assertInterval = 2.minutes)
+
+    /** Polls the node's own view rather than the clock: every case here settles in a bounded number of steps. */
+    private suspend fun awaitLeadership(node: TestNode, expected: Boolean) =
+        withContext(Dispatchers.Default) {
+            withTimeout(5_000) { while (node.logProc.isLeader != expected) yield() }
         }
-        val partitionState = newPartitionState(liveIndex = liveIndex)
-        val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
-        val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", mockk(relaxed = true), null, null, backgroundScope)
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
 
-        // Pre-populate the replica log
-        replicaLog.appendMessage(ReplicaMessage.ResolvedTx(1, java.time.Instant.now(), true, null, emptyMap()))
+    @Test
+    fun `a node claims without reading when the log is empty and no block has been written`() = runTest {
+        val (sourceLog, replicaLog) = freshLogs()
 
-        val scope = CoroutineScope(SupervisorJob())
-        val logProc = logProcessor(partitionStorage, partitionState, watchers, blockUploader, scope)
+        TestNode(sourceLog, replicaLog, electionDriver = noElectionTimeout()).use { node ->
+            awaitLeadership(node, expected = true)
 
-        scope.launch { sourceLog.openGroupSubscription(logProc) }
+            assertEquals(
+                LeaderTerm.of(0, 1), node.logProc.termFence.highestSeen,
+                "the first term on a log nobody has led is 1"
+            )
+        }
 
-        watchers.awaitTx(1)
-
-        verify { liveIndex.commitTx(any(), any()) }
-
-        // Teardown: cancel+join the scope reaps the subscription and the live term, then free it.
-        scope.coroutineContext.job.cancelAndJoin()
-        logProc.close()
         sourceLog.close()
         replicaLog.close()
     }
 
     @Test
-    fun `a term already on the replica log still fences after a demote`() = runTest {
-        val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0)
-        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
-        val bufferPool = mockBufferPool()
-        val partitionState = newPartitionState()
-        val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
-        val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", mockk(relaxed = true), null, null, backgroundScope)
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
+    fun `a node that may not lead never claims`() = runTest {
+        val (sourceLog, replicaLog) = freshLogs()
 
-        val scope = CoroutineScope(SupervisorJob())
-        val logProc = logProcessor(partitionStorage, partitionState, watchers, blockUploader, scope)
+        TestNode(sourceLog, replicaLog, readOnly = true).use { node ->
+            val seeded = replicaLog.appendMessage(
+                ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap(), srcMsgId = 1)
+            )
 
-        val highTerm = LeaderTerm.of(0, 9)
-        logProc.transitionToLeader(0, highTerm).await()
+            // Applying a record proves the reader has been round its loop, so it has had every chance to
+            // claim that an eligible node would have taken before its first poll.
+            node.watchers.awaitReplicaMsg(seeded.msgId)
 
-        // Nothing has been flushed, so the persisted boundary still carries no term at all — which is
-        // what a fence re-seeded on the new follower would fall back to.
-        logProc.demoteLeader(0)
+            assertFalse(node.logProc.isLeader)
+            assertEquals(
+                seeded.logOffset, replicaLog.latestSubmittedOffset(),
+                "nothing of ours reached the log"
+            )
+        }
 
-        assertEquals(
-            highTerm, logProc.termFence.highestSeen,
-            "the demote does not lower what the log has been seen to reach"
+        sourceLog.close()
+        replicaLog.close()
+    }
+
+    @Test
+    fun `a claim tying a term already on the log confers nothing`() = runTest {
+        val (sourceLog, replicaLog) = freshLogs()
+
+        val seeded = replicaLog.appendMessage(
+            ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap(), srcMsgId = 1, termId = 1)
         )
 
-        assertThrows<Conflict> { logProc.transitionToLeader(0, LeaderTerm.of(0, 5)).await() }
+        TestNode(sourceLog, replicaLog, electionDriver = noElectionTimeout()).use { node ->
+            // The fence starts unset, so the node claims before its first read and the claim lands behind
+            // the seeded record — where it ties term 1 rather than exceeding it.
+            val claim = withContext(Dispatchers.Default) {
+                withTimeout(5_000) {
+                    while (replicaLog.latestSubmittedOffset() == seeded.logOffset) yield()
+                    replicaLog.latestSubmittedMsgId()
+                }
+            }
 
-        scope.coroutineContext.job.cancelAndJoin()
-        logProc.close()
+            node.watchers.awaitReplicaMsg(claim)
+            assertFalse(node.logProc.isLeader)
+        }
+
         sourceLog.close()
         replicaLog.close()
     }
 
     @Test
-    fun `refuses a leader term the persisted boundary has moved past`() = runTest {
-        val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0)
-        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
-        val bufferPool = mockBufferPool()
+    fun `two nodes claiming the same fresh log settle on one leader`() = runTest {
+        val (sourceLog, replicaLog) = freshLogs()
 
-        // the election counter is back to 1 — a Kafka group deleted while the cluster was down, or a
-        // local log's process restarting — while the last block was cut at 9
-        val partitionState = newPartitionState(boundaryTermId = LeaderTerm.of(0, 9))
-        val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
-        val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", mockk(relaxed = true), null, null, backgroundScope)
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
+        TestNode(sourceLog, replicaLog).use { a ->
+            TestNode(sourceLog, replicaLog).use { b ->
+                withContext(Dispatchers.Default) {
+                    withTimeout(5_000) {
+                        while (!a.logProc.isLeader && !b.logProc.isLeader) yield()
 
-        val scope = CoroutineScope(SupervisorJob())
-        val logProc = logProcessor(partitionStorage, partitionState, watchers, blockUploader, scope)
-
-        assertThrows<Conflict> { logProc.termFence.checkUnfenced(LeaderTerm.of(0, 1)) }
-        assertDoesNotThrow("bumping the term epoch clears the regression") {
-            logProc.termFence.checkUnfenced(LeaderTerm.of(1, 1))
+                        // Position decides the claim, so the loser's confers nothing; and the winner
+                        // asserts often enough that the loser's polls never come back empty for it to
+                        // try again.
+                        repeat(200) {
+                            assertFalse(
+                                a.logProc.isLeader && b.logProc.isLeader,
+                                "two nodes never lead one database at the same time"
+                            )
+                            delay(5)
+                        }
+                    }
+                }
+            }
         }
 
-        scope.coroutineContext.job.cancelAndJoin()
-        logProc.close()
+        sourceLog.close()
+        replicaLog.close()
+    }
+
+    @Test
+    fun `a leader superseded by a higher term stands down and follows`() = runTest {
+        val (sourceLog, replicaLog) = freshLogs()
+
+        TestNode(sourceLog, replicaLog, electionDriver = noElectionTimeout()).use { node ->
+            awaitLeadership(node, expected = true)
+
+            replicaLog.appendMessage(ReplicaMessage.NoOp(termId = LeaderTerm.of(0, 2)))
+
+            awaitLeadership(node, expected = false)
+            assertEquals(LeaderTerm.of(0, 2), node.logProc.termFence.highestSeen)
+        }
+
+        sourceLog.close()
+        replicaLog.close()
+    }
+
+    @Test
+    fun `the fence seeds from the persisted block boundary and only rises`() = runTest {
+        val (sourceLog, replicaLog) = freshLogs()
+
+        TestNode(sourceLog, replicaLog, boundaryTermId = LeaderTerm.of(0, 9)).use { node ->
+            assertEquals(
+                LeaderTerm.of(0, 9), node.logProc.termFence.highestSeen,
+                "a node that has flushed a block starts from the term that cut it"
+            )
+
+            // So it cannot claim on sight, and when it does claim it claims above the boundary.
+            awaitLeadership(node, expected = true)
+            assertEquals(LeaderTerm.of(0, 10), node.logProc.termFence.highestSeen)
+        }
+
         sourceLog.close()
         replicaLog.close()
     }
 
     @Test
     fun `the reader discards a fenced record, still advancing the consume position`() = runTest {
-        val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0)
-        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
-        val bufferPool = mockBufferPool()
-        val partitionState = newPartitionState()
-        val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
-        val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", mockk(relaxed = true), null, null, backgroundScope)
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
+        val (sourceLog, replicaLog) = freshLogs()
 
-        val scope = CoroutineScope(SupervisorJob())
-        val logProc = logProcessor(partitionStorage, partitionState, watchers, blockUploader, scope)
+        TestNode(sourceLog, replicaLog, readOnly = true).use { node ->
+            val leader = replicaLog.appendMessage(
+                ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap(), srcMsgId = 1, termId = LeaderTerm.of(0, 2))
+            )
+            val superseded = replicaLog.appendMessage(
+                ReplicaMessage.ResolvedTx(2, Instant.now(), true, null, emptyMap(), srcMsgId = 2, termId = LeaderTerm.of(0, 1))
+            )
 
-        val leader = replicaLog.appendMessage(
-            ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap(), srcMsgId = 1, termId = LeaderTerm.of(0, 2))
-        )
-        val superseded = replicaLog.appendMessage(
-            ReplicaMessage.ResolvedTx(2, Instant.now(), true, null, emptyMap(), srcMsgId = 2, termId = LeaderTerm.of(0, 1))
-        )
+            node.watchers.awaitReplicaMsg(superseded.msgId)
 
-        watchers.awaitReplicaMsg(superseded.msgId)
+            assertEquals(1L, node.watchers.latestTxId, "the superseded leader's tx was never applied")
+            assertEquals(LeaderTerm.of(0, 2), node.logProc.termFence.highestSeen)
+            assertTrue(leader.msgId < superseded.msgId)
+        }
 
-        assertEquals(1L, watchers.latestTxId, "the superseded leader's tx was never applied")
-        assertEquals(LeaderTerm.of(0, 2), logProc.termFence.highestSeen)
-        assertTrue(leader.msgId < superseded.msgId)
-
-        scope.coroutineContext.job.cancelAndJoin()
-        logProc.close()
         sourceLog.close()
         replicaLog.close()
     }
 
     @Test
-    fun `a term equal to the highest seen is unfenced, one below it is not`() = runTest {
-        val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0)
-        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
-        val bufferPool = mockBufferPool()
-        val partitionState = newPartitionState()
-        val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
-        val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", mockk(relaxed = true), null, null, backgroundScope)
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
+    fun `a node applies the messages already on the log, then claims`() = runTest {
+        val (sourceLog, replicaLog) = freshLogs()
+        val liveIndex = mockk<LiveIndex>(relaxed = true) { every { latestCompletedTx } returns null }
 
-        val scope = CoroutineScope(SupervisorJob())
-        val logProc = logProcessor(partitionStorage, partitionState, watchers, blockUploader, scope)
+        replicaLog.appendMessage(ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap()))
 
-        logProc.termFence.admit(LeaderTerm.of(0, 9))
+        TestNode(sourceLog, replicaLog, liveIndex = liveIndex).use { node ->
+            node.watchers.awaitTx(1)
 
-        // a transition checks its own claim once it has been read back, so the max *is* the claim
-        assertDoesNotThrow { logProc.termFence.checkUnfenced(LeaderTerm.of(0, 9)) }
-        assertThrows<Conflict> { logProc.termFence.checkUnfenced(LeaderTerm.of(0, 8)) }
+            awaitLeadership(node, expected = true)
+        }
 
-        scope.coroutineContext.job.cancelAndJoin()
-        logProc.close()
         sourceLog.close()
         replicaLog.close()
     }

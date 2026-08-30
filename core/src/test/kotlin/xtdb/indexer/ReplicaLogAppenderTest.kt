@@ -44,6 +44,8 @@ class ReplicaLogAppenderTest {
         val trigger = Channel<Unit>()
 
         override fun <R> SelectBuilder<R>.onAssertTimeout(body: suspend () -> R) = trigger.onReceive { body() }
+
+        override fun electionTimeout() = error("no reader here")
     }
 
     @Test

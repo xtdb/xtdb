@@ -1,5 +1,6 @@
 package xtdb.api.log
 
+import xtdb.types.LogOffset
 import xtdb.types.MessageId
 
 /**

@@ -1,51 +1,70 @@
 package xtdb.indexer
 
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertFalse
-import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import xtdb.api.log.LeaderTerm
+import xtdb.indexer.TermFence.Admission.ADMITTED
+import xtdb.indexer.TermFence.Admission.CONFERRING
+import xtdb.indexer.TermFence.Admission.FENCED
 
 class TermFenceTest {
 
-    private val dbName = "test-db"
+    @Test
+    fun `a term equal to the highest seen is admitted, and confers nothing`() {
+        val fence = TermFence(LeaderTerm.of(0, 5))
+
+        assertEquals(ADMITTED, fence.admit(LeaderTerm.of(0, 5)), "the highest seen is not fenced by itself")
+        assertEquals(LeaderTerm.of(0, 5), fence.highestSeen)
+    }
 
     @Test
-    fun `admits a term at or above the highest seen, and raises to it`() {
-        val fence = TermFence(dbName, LeaderTerm.of(0, 5))
+    fun `a term above the highest seen confers, and raises the fence to it`() {
+        val fence = TermFence(LeaderTerm.of(0, 5))
 
-        assertTrue(fence.admit(LeaderTerm.of(0, 5)), "the highest seen is not fenced by itself")
-        assertEquals(LeaderTerm.of(0, 5), fence.highestSeen)
-
-        assertTrue(fence.admit(LeaderTerm.of(0, 7)))
+        assertEquals(CONFERRING, fence.admit(LeaderTerm.of(0, 7)))
         assertEquals(LeaderTerm.of(0, 7), fence.highestSeen)
     }
 
     @Test
-    fun `fences a term below the highest seen, and does not lower it`() {
-        val fence = TermFence(dbName, LeaderTerm.of(0, 7))
+    fun `a second record at a conferred term confers nothing further`() {
+        val fence = TermFence(LeaderTerm.of(0, 5))
 
-        assertFalse(fence.admit(LeaderTerm.of(0, 6)))
+        assertEquals(CONFERRING, fence.admit(LeaderTerm.of(0, 7)))
+        assertEquals(ADMITTED, fence.admit(LeaderTerm.of(0, 7)), "leadership is conferred once, by the first record at a term")
+    }
+
+    @Test
+    fun `fences a term below the highest seen, and does not lower it`() {
+        val fence = TermFence(LeaderTerm.of(0, 7))
+
+        assertEquals(FENCED, fence.admit(LeaderTerm.of(0, 6)))
         assertEquals(LeaderTerm.of(0, 7), fence.highestSeen, "a fenced record teaches the fence nothing")
     }
 
     @Test
     fun `the unset term is never fenced and never counts`() {
-        val fence = TermFence(dbName, LeaderTerm.of(0, 7))
+        val fence = TermFence(LeaderTerm.of(0, 7))
 
-        assertTrue(fence.admit(LeaderTerm.NONE), "a record from before terms existed is still applied")
+        assertEquals(ADMITTED, fence.admit(LeaderTerm.NONE), "a record from before terms existed is still applied")
         assertEquals(LeaderTerm.of(0, 7), fence.highestSeen)
 
-        val fresh = TermFence(dbName, LeaderTerm.NONE)
-        assertTrue(fresh.admit(LeaderTerm.NONE))
+        val fresh = TermFence(LeaderTerm.NONE)
+        assertEquals(ADMITTED, fresh.admit(LeaderTerm.NONE), "and never reads as an election")
         assertEquals(LeaderTerm.NONE, fresh.highestSeen)
     }
 
     @Test
-    fun `a higher epoch outranks any election within a lower one`() {
-        val fence = TermFence(dbName, LeaderTerm.of(0, 9))
+    fun `the first term on a fresh log confers`() {
+        val fence = TermFence(LeaderTerm.NONE)
 
-        assertTrue(fence.admit(LeaderTerm.of(1, 1)))
-        assertFalse(fence.admit(LeaderTerm.of(0, 9)), "the earlier epoch is now behind, whatever its election")
+        assertEquals(CONFERRING, fence.admit(LeaderTerm.of(0, 1)))
+    }
+
+    @Test
+    fun `a higher epoch outranks any election within a lower one`() {
+        val fence = TermFence(LeaderTerm.of(0, 9))
+
+        assertEquals(CONFERRING, fence.admit(LeaderTerm.of(1, 1)))
+        assertEquals(FENCED, fence.admit(LeaderTerm.of(0, 9)), "the earlier epoch is now behind, whatever its election")
     }
 }

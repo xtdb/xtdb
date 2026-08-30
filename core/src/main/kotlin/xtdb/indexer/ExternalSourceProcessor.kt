@@ -43,7 +43,7 @@ internal class ExternalSourceProcessor(
          * Fail this task's awaiting caller, because the term is going away without finishing it.
          *
          * With the term's real cause, not a cancellation: this is an ext-source caller's own transaction
-         * awaiting its own result, and it isn't on the transport's poll thread — so it both wants and can
+         * awaiting its own result, and it isn't the source-log tail — so it both wants and can
          * safely see why the term died.
          */
         fun abandon(cause: Throwable) {

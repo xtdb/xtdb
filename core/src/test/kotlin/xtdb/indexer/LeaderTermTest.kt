@@ -22,6 +22,7 @@ import xtdb.api.DatabaseName
 import xtdb.api.IndexerConfig
 import xtdb.api.log.InMemoryLog
 import xtdb.api.log.Log
+import xtdb.api.log.PartitionLog
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.SourceMessage
 import xtdb.api.log.Watchers
@@ -131,9 +132,6 @@ internal abstract class LeaderTermTest {
             leadersToClose += it
             val replicaMsgs = Channel<ReplicaApply>()
             launch {
-                launch { proc.gc.runGc() }
-                proc.extSrcProc?.let { extSrcProc -> launch { extSrcProc.run() } }
-
                 val reader = launch {
                     partitionStorage.replicaLog.tailAll(-1) { records ->
                         records.forEach { replicaMsgs.applyAndAwait(it) }
@@ -141,7 +139,10 @@ internal abstract class LeaderTermTest {
                 }
 
                 try {
-                    runLeaderTerm("test", watchers, proc, replicaMsgs, replicaAppender)
+                    runLeaderTerm(
+                        "test", watchers, proc, replicaMsgs, replicaAppender,
+                        partitionStorage.sourceLog, resumeAfterMsgId = -1
+                    )
                 } finally {
                     reader.cancel()
                 }
@@ -203,7 +204,7 @@ internal abstract class LeaderTermTest {
         watchers: Watchers,
         driver: (LeaderDriver) -> LeaderDriver = { it },
         extSource: ExternalSource? = null,
-    ): Pair<LeaderLogProcessor, ReplicaLogAppender> {
+    ): Triple<LeaderLogProcessor, ReplicaLogAppender, PartitionLog<SourceMessage>> {
         val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0)
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val bufferPool = mockk<BufferPool>(relaxed = true) { every { epoch } returns 0 }
@@ -226,6 +227,6 @@ internal abstract class LeaderTermTest {
             flushTimeout = IndexerConfig().flushDuration,
         )
         leadersToClose += proc
-        return proc to appender
+        return Triple(proc, appender, partitionStorage.sourceLog)
     }
 }

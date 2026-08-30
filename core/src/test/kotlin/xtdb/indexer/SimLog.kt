@@ -3,7 +3,6 @@ package xtdb.indexer
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.selects.*
-import kotlinx.coroutines.selects.select
 import xtdb.api.log.LeaderTerm
 import xtdb.api.log.Log
 import xtdb.types.LogOffset
@@ -36,6 +35,11 @@ internal class SimLog<M>(private val name: String, private val rand: Random) : L
     /** A plain consumer, which receives every record independently of the consumer group. */
     class PlainConsumer<M>(var nextOffset: Int) {
         val wake = Channel<Unit>(Channel.CONFLATED)
+
+        // Set only by reportTip. A wake that merely found nothing to deliver is not a tip report: the
+        // wakes are how the sim drives delivery at all, so treating each barren one as an election
+        // would make every await of the log a leadership change.
+        var reportTip = false
     }
 
     /** The consumer being promoted plus its in-flight transition handle — see [pending]. */
@@ -186,29 +190,32 @@ internal class SimLog<M>(private val name: String, private val rand: Random) : L
         LOG.debug("$name/withTail: startOffset=$startOffset topicSize=${topic.size}")
         val consumer = PlainConsumer<M>(startOffset)
         plainConsumers += consumer
-        if (startOffset < topic.size) consumer.wake.trySend(Unit)
+        consumer.wake.trySend(Unit)
 
         try {
             return action(object : Log.Tail<M> {
                 override suspend fun poll(timeout: Duration): List<Log.Record<M>> {
-                    val woke = if (timeout > Duration.ZERO) {
-                        (withTimeoutOrNull(timeout) { consumer.wake.receive() } != null).also { yield() }
-                    } else {
-                        consumer.wake.tryReceive().isSuccess
+                    while (true) {
+                        consumer.wake.receive()
+                        yield()
+
+                        val nextOffset = consumer.nextOffset
+                        val lag = topic.size - nextOffset
+
+                        if (lag == 0) {
+                            if (!consumer.reportTip) continue
+                            consumer.reportTip = false
+                            return emptyList()
+                        }
+
+                        val messageCount = rand.nextInt(1, lag + 1)
+                        LOG.debug("$name/plainConsumer: delivering $messageCount record(s) [$nextOffset..${nextOffset + messageCount - 1}] (lag=$lag)")
+                        consumer.nextOffset += messageCount
+
+                        if (consumer.nextOffset < topic.size) consumer.wake.trySend(Unit)
+
+                        return topic.subList(nextOffset, nextOffset + messageCount).toList()
                     }
-                    if (!woke) return emptyList()
-
-                    val nextOffset = consumer.nextOffset
-                    val lag = topic.size - nextOffset
-                    if (lag == 0) return emptyList()
-
-                    val messageCount = rand.nextInt(1, lag + 1)
-                    LOG.debug("$name/plainConsumer: delivering $messageCount record(s) [$nextOffset..${nextOffset + messageCount - 1}] (lag=$lag)")
-                    consumer.nextOffset += messageCount
-
-                    if (consumer.nextOffset < topic.size) consumer.wake.trySend(Unit)
-
-                    return topic.subList(nextOffset, nextOffset + messageCount).toList()
                 }
             })
         } finally {
@@ -240,6 +247,14 @@ internal class SimLog<M>(private val name: String, private val rand: Random) : L
             groupConsumerClosed(consumer)
         }
     }
+
+    /**
+     * Asks every open tail to report the log's tip once it has nothing left to deliver.
+     *
+     * The sim's stand-in for a poll that timed out, and with it for an election: a real timeout would need
+     * a clock the seeded scheduler does not have, but the *observation* it produces is the same one.
+     */
+    fun reportTip() = plainConsumers.forEach { it.reportTip = true; it.wake.trySend(Unit) }
 
     /**
      * Waits until all active plain consumers have processed all messages currently on the topic.

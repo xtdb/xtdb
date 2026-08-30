@@ -32,7 +32,7 @@ private val LOG = LeaderLogProcessor::class.logger
 /**
  * A higher-term record read back on our own replica log: a newer leader has superseded us. Thrown from
  * the apply loop to fail the term cleanly (not a query-facing fault, so it doesn't poison the watchers);
- * the transport re-follows on the next rebalance. See #5817.
+ * the partition's reader re-opens a follower when it finds the term over. See #5817.
  */
 internal class LeaderSupersededException(message: String) : RuntimeException(message)
 
@@ -108,10 +108,10 @@ internal class LeaderLogProcessor(
     private var blockState: BlockState = Filling(liveIndex.blockRowCount)
 
     /**
-     * The block this term would have to hand on, were it demoted right now.
+     * The block this term would have to hand on, were it to end right now.
      *
-     * Read from the transport's serialization point rather than from the work loop, and after this term has
-     * been cancelled and closed — so it must not touch anything allocator-backed.
+     * Read by the partition's reader rather than from the work loop, and after this term has been
+     * cancelled and closed — so it must not touch anything allocator-backed.
      */
     val pendingBlock: PendingBlock?
         get() = when (val state = blockState) {
@@ -199,7 +199,7 @@ internal class LeaderLogProcessor(
                 // liveIndex now holds exactly this block's txs (by log order); snapshot, upload the files,
                 // append BlockUploaded and roll the index — all inside uploadBlock.
                 driver.uploadBlock(record.msgId, leaderTerm, msg)
-                // Straight after the upload, so a demote landing here hands on nothing: the block is done.
+                // Straight after the upload, so a term ending here hands on nothing: the block is done.
                 blockState = Filling(0)
 
                 // the block's covered source position, as the follower does
@@ -301,10 +301,9 @@ internal class LeaderLogProcessor(
      * gets failed here. Each task's own `abandon` picks the failure *kind*, so this is a flat sweep with no
      * per-caller special-casing.
      *
-     * Miss anything and the symptom is a hang, not an error — and for a source-log batch that hang is on
-     * the transport's poll thread (inside `processRecords`), which is also the sole servicer of the
-     * transport's unregister. So it wedges the whole subscription teardown and blows
-     * `DatabaseCatalog.close`'s bound (#5711 / #5817).
+     * Miss anything and the symptom is a hang, not an error — and for a source-log batch that hang is
+     * inside `processRecords`, on the tail this term reads its source log with. So the term's own teardown
+     * never completes, and `DatabaseCatalog.close`'s bound goes with it (#5711 / #5817).
      */
     fun shutdown(cause: Throwable) {
         txResolver.failPending(cause)

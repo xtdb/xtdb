@@ -87,7 +87,13 @@ interface Log<M> : AutoCloseable {
     interface Tail<out M> {
         /**
          * Waits up to [timeout] for at least one record, then returns it and any records already available.
-         * Returns empty only when no record becomes available before [timeout].
+         * Returns empty only when this tail has reached the partition's tip and nothing arrived before [timeout].
+         *
+         * An empty return is therefore a claim about position rather than about quiet. `EmptyPollMeansTheTipWasReached`
+         * (allium/log-processor-lifecycle.allium) makes that a safety requirement: leadership is claimed on this
+         * observation, so an implementation MUST NOT report empty for any other reason — not on a fetch failure, a
+         * dropped subscription, or a timer of its own. A tail that can no longer read has to throw, because a reader
+         * that has stopped reading must not be able to conclude that nobody has written.
          *
          * A [timeout] of zero or less returns what is already buffered without waiting, and
          * [Duration.INFINITE] waits until a record arrives or the caller is cancelled.
