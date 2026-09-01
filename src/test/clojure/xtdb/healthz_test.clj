@@ -222,6 +222,26 @@
     (t/is (= [] (#'healthz/all-databases db-cat))
           "a name that no longer resolves must not reach the callers that dereference it")))
 
+(t/deftest test-started-ignores-non-critical-catchup-5909
+  (util/with-tmp-dirs #{local-path}
+    (with-open [node (tu/->local-node {:node-dir local-path})]
+      (let [^Database$Catalog db-cat (db/<-node node)]
+        (.attach db-cat "critical-db" (-> (Database$Config.) (.critical true)))
+        (.attach db-cat "non-critical-db" (Database$Config.))
+
+        (let [h (healthz/handler {:db-cat db-cat})
+              still-catching-up [Long/MAX_VALUE]]
+
+          (t/testing "non-critical db still catching up doesn't block /healthz/started"
+            (let [resp (h {:request-method :get, :uri "/healthz/started"
+                           :initial-target-message-ids {"non-critical-db" still-catching-up}})]
+              (t/is (= 200 (:status resp)))))
+
+          (t/testing "critical db still catching up does block /healthz/started"
+            (let [resp (h {:request-method :get, :uri "/healthz/started"
+                           :initial-target-message-ids {"critical-db" still-catching-up}})]
+              (t/is (= 503 (:status resp))))))))))
+
 (t/deftest test-alive-primary-always-critical
   (util/with-tmp-dirs #{local-path}
     (with-open [node (tu/->local-node {:node-dir local-path})]

@@ -62,8 +62,8 @@
                 ["/healthz/started" {:name :started
                                      :get (fn [{:keys [^Database$Catalog db-cat initial-target-message-ids]}]
                                             (let [catching-up (for [[^String db-name, target-msg-ids] initial-target-message-ids
-                                                                    :let [db (.databaseOrNull db-cat db-name)]
-                                                                    :when db
+                                                                    :let [^Database db (.databaseOrNull db-cat db-name)]
+                                                                    :when (and db (.isCritical db))
                                                                     :let [lpm-id (.getLatestProcessedMsgId db)]
                                                                     :when (some #(< lpm-id (long %)) target-msg-ids)]
                                                                 {:db db-name, :current lpm-id, :targets target-msg-ids})]
