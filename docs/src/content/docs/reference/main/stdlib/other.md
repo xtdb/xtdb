@@ -5,9 +5,18 @@ title: Other Functions
 <details>
 <summary>Changelog (last updated v2.2)</summary>
 
+v2.2: `version()` names XTDB
+
+: [`version()`](#postgresql-built-in-functions) returns `'PostgreSQL 16 (XTDB 2.2.0)'`, and [`current_setting('xtdb.version')`](#postgresql-built-in-functions) returns the XTDB version on its own.
+
+  Previously `version()` returned a bare `'PostgreSQL 16'`, indistinguishable from a real PostgreSQL.
+  A client that speaks both dialects has to know which engine it has reached before it sends dialect-specific SQL, and with no intentional probe to ask, it was left keying on incidental behaviour that changes between releases.
+
+  Upgrade: a client matching `version()` against a prefix such as `/^PostgreSQL (\d+)/` is unaffected; one matching the whole string needs to allow for the parenthetical.
+
 v2.2: `current_database` requires parentheses
 
-: `current_database` is now a function — [`current_database()`](#postgresql-compatibility-functions) — rather than a bare keyword.
+: `current_database` is now a function — [`current_database()`](#postgresql-built-in-functions) — rather than a bare keyword.
 
   Previously `SELECT current_database` parsed as a reference to a reserved keyword.
   Now it's a regular function call, which lets tools like Metabase use `SELECT current_database() AS current_database` (same name as keyword and column alias) without a parse error.
@@ -85,4 +94,23 @@ v2.2: `current_database` requires parentheses
 `current_setting(name)` (v2.2+)
 : returns the value of a GUC parameter.
 
-  XTDB recognises a fixed set of parameter names — e.g. `'search_path'` returns `'"$user", public'`, `'server_version_num'` returns the reported PostgreSQL version.
+  XTDB recognises a fixed set of parameter names, and throws on any other:
+
+  - `'search_path'` returns `'public'`.
+  - `'server_version_num'` returns `'160000'` — the PostgreSQL version XTDB reports compatibility with, not XTDB's own version.
+  - `'xtdb.version'` returns XTDB's own version, e.g. `'2.2.0'`.
+
+`version()`
+: returns `'PostgreSQL 16 (XTDB 2.2.0)'`.
+
+  The `PostgreSQL 16` prefix is the wire-protocol compatibility level XTDB claims; the parenthetical names the engine answering, in the position PostgreSQL fills with build information.
+
+  Also spelled `pg_catalog.version()`.
+
+## XTDB functions
+
+`xt.version()`
+: returns XTDB's version and build, e.g. `'XTDB @ 2.2.0 [a1b2c3d]'`.
+
+  The bracketed value is the build's short git SHA, and is omitted where the build doesn't carry one.
+  For the version on its own, use [`current_setting('xtdb.version')`](#postgresql-built-in-functions).
