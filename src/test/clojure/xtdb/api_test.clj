@@ -530,6 +530,19 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
         (t/is (>= scan-rows-read (:row-count scan-row)))
         (t/is (pos? scan-rows-read) "read at least the row we emitted")))))
 
+(t/deftest test-explain-analyze-of-an-unadvanced-plan
+  (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 7 :name "seven"}]])
+
+  (doseq [[what q] {"a join the limit never advances"
+                    "SELECT d._id FROM docs d JOIN docs e ON d._id = e._id LIMIT 0"
+
+                    "a materialized CTE nothing references"
+                    "WITH MATERIALIZED unused AS (SELECT _id FROM docs) SELECT 1 AS one"}]
+    (let [rows (xt/q tu/*node* (str "EXPLAIN ANALYZE " q))]
+      (t/is (seq rows) what)
+      (t/is (every? (comp zero? :row-count) (filter (comp nil? :time-to-first-page) rows))
+            (str what " — an unadvanced operator reports no first page and no rows")))))
+
 (t/deftest test-explain-analyze-pushdowns
   (let [id1 #uuid "00000000-0000-0000-0000-000000000001"
         id2 #uuid "00000000-0000-0000-0000-000000000002"

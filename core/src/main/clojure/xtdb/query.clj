@@ -236,7 +236,8 @@
                                                                   "scan_pages_pruned" :i64, "scan_pages_used" :i64
                                                                   "scan_rows_read" :i64}]
                                   "total_time" #xt/type [:duration :micro]
-                                  "time_to_first_page" #xt/type [:duration :micro]
+                                  ;; null for a branch the plan never advanced — a LIMIT 0 above it, or an unreferenced CTE
+                                  "time_to_first_page" #xt/type [:? :duration :micro]
                                   "page_count" #xt/type :i64
                                   "row_count" #xt/type :i64
                                   "pushdowns" #xt/type :transit})))
