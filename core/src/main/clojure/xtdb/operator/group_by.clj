@@ -591,11 +591,11 @@
                                                              #(.getType ^AggregateSpec$Factory %))))))]
           {:op :group-by
            :children [inner-rel]
-           :explain {:group-by (mapv str group-cols)
+           :explain {:group-by (vec group-cols)
                      :aggregates (->> aggs
                                       (mapv (fn [[_ agg]]
                                               (let [[to-column agg-form] (first agg)]
-                                                [(str to-column) (pr-str agg-form)]))))}
+                                                [to-column (pr-str agg-form)]))))}
            :vec-types out-vec-types
 
            :->cursor (fn [{:keys [allocator args schema explain-analyze? tracer query-span]} in-cursor]

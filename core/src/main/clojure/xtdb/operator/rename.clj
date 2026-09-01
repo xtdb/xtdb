@@ -52,7 +52,7 @@
     (lp/with-col-mapping
       {:op :rename
        :children [emitted-child-relation]
-       :explain {:prefix (some-> prefix str), :columns (some-> columns pr-str)}
+       :explain {:prefix prefix, :columns (some-> columns pr-str)}
        :vec-types out-vec-types
        :stats (:stats emitted-child-relation)
        :col-mapping col-mapping
