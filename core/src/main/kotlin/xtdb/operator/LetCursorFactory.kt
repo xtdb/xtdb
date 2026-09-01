@@ -55,7 +55,7 @@ class LetCursorFactory(
 
     fun wrapBodyCursor(bodyCursor: ICursor) = object : ICursor by bodyCursor {
         override val cursorType get() = "let"
-        override val childCursors get() = listOf(bodyCursor)
+        override val childCursors get() = listOf(boundCursor, bodyCursor)
 
         override fun close() {
             bodyCursor.close()
