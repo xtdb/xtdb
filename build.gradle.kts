@@ -4,6 +4,7 @@ import dev.clojurephant.plugin.clojure.tasks.ClojureCompile
 import org.gradle.jvm.toolchain.JavaInstallationMetadata
 import org.gradle.jvm.toolchain.JavaLauncher
 import org.gradle.jvm.toolchain.JavaToolchainService
+import org.jetbrains.kotlin.gradle.dsl.KotlinJvmProjectExtension
 import org.jreleaser.gradle.plugin.dsl.deploy.maven.MavenDeployer
 import org.jreleaser.gradle.plugin.tasks.JReleaserDeployTask
 import org.jreleaser.model.Active
@@ -117,6 +118,14 @@ allprojects {
     group = if (proj.hasProperty("labs")) "com.xtdb.labs" else "com.xtdb"
 
     version = System.getenv("XTDB_VERSION") ?: "2.x-SNAPSHOT"
+
+    // Kotlin 2.4 defaults the JVM module name to `{group}:{name}`, and that name is mangled into the JVM
+    // symbol of every `internal` declaration - at the default, `getPath$xtdb_core` becomes
+    // `getPath$com_xtdb_xtdb_core`, out of reach of the Clojure interop that names those symbols literally.
+    plugins.withId("org.jetbrains.kotlin.jvm") {
+        extensions.getByType(KotlinJvmProjectExtension::class.java)
+            .compilerOptions.moduleName.set(proj.name)
+    }
 
     repositories {
         mavenCentral()

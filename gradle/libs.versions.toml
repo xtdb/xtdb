@@ -13,7 +13,7 @@ confluent = "7.8.0"
 # On bump: update docs/src/content/docs/ops/external-sources/kafka-connect/reference.md — it names this version and links kafka.apache.org/<NN>/ docs.
 kafka = "4.3.1"
 kotest = "6.1.11"
-kotlin = "2.3.0"
+kotlin = "2.4.10"
 kotlin-coroutines = "1.11.0"
 dokka = "2.2.0"
 clojurephant = "0.9.1"
