@@ -60,6 +60,13 @@ Two questions locate the state that wants collapsing:
 * *What resets it?* A field that nothing resets, alongside one that something does, is the asymmetry that produces a stale read.
 --
 
+Know whether the thing you're adding is active, passive or a monitor::
++
+**The taxonomy is the `xtdb-active-passive-split` skill's** (`.claude/skills/xtdb-active-passive-split/`) — the three definitions, the test that tells them apart, the `coroutineScope` carve-out, `Watchers` as the worked example, and the prior art each name points at.
++
+Read it before you add or move a class, an interface, a coroutine scope, or a field that outlives a single call.
+In one line: an *active* object offers a choice among simultaneously-ready events and owns a `select`; a *passive* one completes everything it does on the caller's coroutine; a *monitor* is passive state that someone waits on, which in this codebase usually has no lock to give it away.
+
 Tidy first::
 +
 We develop using https://tidyfirst.substack.com/[tidy-first] methodology — separate equivalence changes (refactorings that don't affect runtime behaviour, changes that increase our options) from changes that advance behaviour.

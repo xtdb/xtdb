@@ -105,6 +105,13 @@ Trust the test body to show the rest.
 
 For errors, see the "Errors" section in @dev/CODING.adoc — use `xtdb.error`, not raw Java exceptions.
 
+## Concurrency structure
+
+Before you add or move a class, an interface, a coroutine scope, or a field that outlives a single call — and before you review a diff that does — you MUST invoke the `xtdb-active-passive-split` skill.
+
+It carries the three categories XTDB's concurrency is designed against (active, passive, monitor), the mechanical test that tells them apart, the two ways a diff misclassifies, and the prior art each name points at.
+`Watchers` is its worked example, in `references/watchers.md`.
+
 ## Running tests
 
 Before you run a test, or delegate a test run to a sub-agent, you MUST invoke the `xtdb-testing` skill.
