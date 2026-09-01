@@ -1284,6 +1284,22 @@
     (-> (.expr filter-ctx)
         (.accept (assoc this :!aggs nil, :scope (assoc scope :!implied-gicrs nil))))))
 
+(defn- ->param-idx-visitor
+  "Resolves a `parameterSpecification` to its index into the args relation.
+
+  A `?`'s index comes from the pre-pass rather than a counter bumped on visit:
+  the planner visits WHERE before the select list, and a subquery before the projection that wraps it,
+  so allocating on visit binds arguments to the wrong placeholders."
+  ^SqlVisitor [{:keys [^Map dynamic-param-idxs]}]
+  (reify SqlVisitor
+    (visitDynamicParameter [_ ctx] (long (.get dynamic-param-idxs ctx)))
+    (visitPostgresParameter [_ ctx] (dec (parse-long (subs (.getText ^ParserRuleContext ctx) 1))))))
+
+(defn- ->param-sym [{:keys [!param-count]} param-idx]
+  (swap! !param-count max (inc (long param-idx)))
+  (-> (symbol (str "?_" param-idx))
+      (vary-meta assoc :param? true)))
+
 (defrecord ExprPlanVisitor [env scope]
   SqlVisitor
   (visitSearchCondition [this ctx] (list* 'and (mapv (partial accept-visitor this) (.expr ctx))))
@@ -1364,20 +1380,13 @@
 
   (visitParamExpr [this ctx] (-> (.parameterSpecification ctx) (.accept this)))
 
-  ;; the index comes from the pre-pass rather than a counter bumped here:
-  ;; the planner visits WHERE before the select list, and a subquery before the projection that wraps it,
-  ;; so allocating on visit binds arguments to the wrong placeholders.
-  (visitDynamicParameter [{{:keys [!param-count ^Map dynamic-param-idxs]} :env} ctx]
-    (let [param-idx (long (.get dynamic-param-idxs ctx))]
-      (swap! !param-count max (inc param-idx))
-      (-> (symbol (str "?_" param-idx))
-          (vary-meta assoc :param? true))))
+  (visitDynamicParameter [{:keys [env]} ctx]
+    (->> (.accept ^ParserRuleContext ctx (->param-idx-visitor env))
+         (->param-sym env)))
 
-  (visitPostgresParameter [{{:keys [!param-count]} :env} ctx]
-    (-> (symbol (str "?_" (let [param-idx (parse-long (subs (.getText ctx) 1))]
-                            (swap! !param-count max param-idx)
-                            (dec param-idx))))
-        (vary-meta assoc :param? true)))
+  (visitPostgresParameter [{:keys [env]} ctx]
+    (->> (.accept ^ParserRuleContext ctx (->param-idx-visitor env))
+         (->param-sym env)))
 
   (visitStaticLiteral [this ctx] (-> (.literal ctx) (.accept this)))
   (visitStaticParam [this ctx] (-> (.parameterSpecification ctx) (.accept this)))
@@ -2507,11 +2516,10 @@
                          (->> (.recordValueConstructor ctx)
                               (into [] (comp (mapcat (partial accept-visitor
                                                               (reify SqlVisitor
-                                                                (visitParameterRecord [this ctx] (.accept (.parameterSpecification ctx) this))
-
-                                                                (visitDynamicParameter [_ ctx] (emit-param (long (.get ^Map (:dynamic-param-idxs env) ctx))))
-                                                                (visitPostgresParameter [_ ctx]
-                                                                  (emit-param (dec (parse-long (subs (.getText ctx) 1)))))
+                                                                (visitParameterRecord [_ ctx]
+                                                                  (-> (.parameterSpecification ctx)
+                                                                      (.accept (->param-idx-visitor env))
+                                                                      (emit-param)))
 
                                                                 (visitObjectRecord [this ctx]
                                                                   (->> (.objectNameAndValue (.objectConstructor ctx))
