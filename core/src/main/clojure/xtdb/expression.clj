@@ -1426,14 +1426,6 @@
      :->call-code (fn [[include-implicit?]]
                     `(current-schemas ~include-implicit?))})
 
-(defn parse-version [version-str]
-  (let [[^long major, ^long minor, ^long patch] (->> (re-find #"^(\d+)\.(\d+)\.(\d+)" version-str)
-                                                     rest
-                                                     (map parse-long))]
-    (+ (* major 1000000)
-       (* minor 1000)
-       patch)))
-
 (defn current-setting [setting-name]
   (case setting-name
     "server_version_num" "160000"
