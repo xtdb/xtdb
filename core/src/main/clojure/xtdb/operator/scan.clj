@@ -125,20 +125,20 @@
         (= '_id (nth eid-select 2))
         (second eid-select)))
 
-(def ^:private dummy-iid (byte-array 16))
+(defn- resolve-eid-to-iid
+  "nil where we can't prove the eid resolves to a single IID, so the caller must not narrow the scan.
+   A value of a type no ID can have is one of those: `_id = 7.0` still matches an integer ID of 7."
+  ^bytes [eid ^RelationReader args-rel]
+  (cond
+    (and (s/valid? ::lp/value eid) (util/valid-iid? eid))
+    (util/->iid eid)
 
-(defn- resolve-eid-to-iid ^bytes [eid ^RelationReader args-rel]
-  (or (cond
-        (and (s/valid? ::lp/value eid) (util/valid-iid? eid))
-        (util/->iid eid)
-
-        (s/valid? ::lp/param eid)
-        (when-let [eid-rdr (.vectorForOrNull args-rel (name eid))]
-          (when (= 1 (.getValueCount eid-rdr))
-            (let [eid-val (.getObject eid-rdr 0)]
-              (when (util/valid-iid? eid-val)
-                (util/->iid eid-val))))))
-      dummy-iid))
+    (s/valid? ::lp/param eid)
+    (when-let [eid-rdr (.vectorForOrNull args-rel (name eid))]
+      (when (= 1 (.getValueCount eid-rdr))
+        (let [eid-val (.getObject eid-rdr 0)]
+          (when (util/valid-iid? eid-val)
+            (util/->iid eid-val)))))))
 
 (defn- flatten-or
   [expr]
@@ -161,20 +161,18 @@
 
 (defn selects->iid-set ^SortedSet [selects ^RelationReader args-rel]
   (when-let [eid-select (get selects "_id")]
-    (cond
-      ;; Single equality: (== _id value)
-      (= '== (first eid-select))
-      (when-let [eid (eid-select->eid eid-select)]
-        (doto (TreeSet. Bytes/COMPARATOR)
-          (.add (resolve-eid-to-iid eid args-rel))))
+    (when-let [eids (cond
+                      ;; Single equality: (== _id value)
+                      (= '== (first eid-select))
+                      (some-> (eid-select->eid eid-select) vector)
 
-      ;; OR chain: (or (== _id v1) (== _id v2) ...)
-      (= 'or (first eid-select))
-      (when-let [eids (extract-id-eqs-from-or eid-select)]
-        (let [iid-set (TreeSet. Bytes/COMPARATOR)]
-          (doseq [eid eids]
-            (.add iid-set (resolve-eid-to-iid eid args-rel)))
-          iid-set)))))
+                      ;; OR chain: (or (== _id v1) (== _id v2) ...)
+                      (= 'or (first eid-select))
+                      (extract-id-eqs-from-or eid-select))]
+      (let [iids (mapv #(resolve-eid-to-iid % args-rel) eids)]
+        (when (every? some? iids)
+          (doto (TreeSet. Bytes/COMPARATOR)
+            (.addAll iids)))))))
 
 (defn filter-pushdown-bloom-page-idx-pred ^IntPredicate [^PageMetadata page-metadata, pushdown-blooms, ^String col-name]
   (when-let [^MutableRoaringBitmap pushdown-bloom (get pushdown-blooms (symbol col-name))]

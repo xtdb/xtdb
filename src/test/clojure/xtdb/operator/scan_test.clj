@@ -404,7 +404,7 @@
 
     (with-open [^RelationReader args-rel (tu/open-args {:search-uuid [#uuid "00000000-0000-0000-0000-000000000000"
                                                                       #uuid "80000000-0000-0000-0000-000000000000"]})]
-      (t/is (nil? (scan/selects->iid-set '{_id (== _id ?search_uuid)} args-rel))))
+      (t/is (nil? (scan/selects->iid-set '{"_id" (== _id ?search_uuid)} args-rel))))
 
     (let [old-selects->iid-set scan/selects->iid-set]
       (with-redefs [scan/selects->iid-set
@@ -483,6 +483,35 @@
                                                                       (list '== '_id uuid1)
                                                                       (list '== '_id uuid2))}]}]
                                      {:node tu/*node*})))))))))
+
+(t/deftest test-id-equality-against-an-unresolvable-eid-still-finds-the-row-5987
+  (xt/execute-tx tu/*node* ["INSERT INTO docs RECORDS {_id: 7, name: 'seven'}, {_id: 'abc', name: 'abc'}"])
+
+  (t/testing "no IID to narrow to"
+    (t/is (nil? (scan/selects->iid-set '{"_id" (== _id (cast 7 #xt/type :i64))} vw/empty-args))
+          "an expression we don't evaluate here")
+
+    (t/is (nil? (scan/selects->iid-set {"_id" (list '== '_id 7.0)} vw/empty-args))
+          "no ID can be a double, but = can still match the integer 7")
+
+    (t/is (nil? (scan/selects->iid-set {"_id" (list '== '_id 7N)} vw/empty-args))
+          "Iid/getAsIid rejects a BigInt, so we must decline rather than throw")
+
+    (t/is (nil? (scan/selects->iid-set '{"_id" (or (== _id 7) (== _id (cast 8 #xt/type :i64)))} vw/empty-args))
+          "one unresolvable branch poisons the whole OR chain"))
+
+  (t/testing "the row comes back anyway"
+    (doseq [q ["SELECT * FROM docs WHERE _id = 7"
+               "SELECT * FROM docs WHERE _id = 7::bigint"
+               "SELECT * FROM docs WHERE _id = CAST(7 AS BIGINT)"
+               "SELECT * FROM docs WHERE 7::bigint = _id"
+               "SELECT * FROM docs WHERE _id = 7.0"
+               "SELECT * FROM docs WHERE _id = COALESCE(7::bigint, 0)"]]
+      (t/is (= [{:xt/id 7, :name "seven"}] (xt/q tu/*node* q)) q))
+
+    (t/is (= [{:xt/id 7, :name "seven"}] (xt/q tu/*node* ["SELECT * FROM docs WHERE _id = ?::bigint" 7])))
+
+    (t/is (= [{:xt/id "abc", :name "abc"}] (xt/q tu/*node* "SELECT * FROM docs WHERE _id = 'abc'::text")))))
 
 (t/deftest test-iid-fast-path-block-boundary
   (let [before-uuid #uuid "00000000-0000-0000-0000-000000000000"

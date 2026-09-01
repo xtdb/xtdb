@@ -186,7 +186,8 @@
 (defn ->iid ^bytes [eid]
   (Iid/getAsIid eid))
 
-(def valid-iid? (some-fn uuid? string? keyword? integer?))
+;; `int?` rather than `integer?`: `Iid/getAsIid` throws on BigInt and BigInteger.
+(def valid-iid? (some-fn uuid? string? keyword? int?))
 
 (defn ->lex-hex-string
   "Turn a long into a lexicographically-sortable hex string by prepending the length"
