@@ -47,7 +47,7 @@ arrow-flight-sql = { group = "org.apache.arrow", name = "flight-sql", version.re
 netty-common = { group = "io.netty", name = "netty-common", version.ref = "netty" }
 
 roaring-bitmap = { group = "org.roaringbitmap", name = "RoaringBitmap", version = "1.6.14" }
-hppc = { group = "com.carrotsearch", name = "hppc", version = "0.10.0" }
+hppc = { group = "com.carrotsearch", name = "hppc", version = "0.11.1" }
 caffeine = { group = "com.github.ben-manes.caffeine", name = "caffeine", version = "3.2.3" }
 commons-codec = { group = "commons-codec", name = "commons-codec", version = "1.21.0" }
 bouncycastle = { group = "org.bouncycastle", name = "bcprov-jdk18on", version = "1.84" }
