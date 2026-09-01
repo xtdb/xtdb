@@ -120,8 +120,8 @@ object Metrics {
         val tracer = this
         val span = tracer?.let { t ->
             (if (parentSpan != null) t.nextSpan(parentSpan) else t.nextSpan())
-                .name(name).start()
-                .also { sp -> for ((k, v) in attributes) sp.tag(k, v.toString()) }
+                ?.name(name)?.start()
+                ?.also { sp -> for ((k, v) in attributes) sp.tag(k, v.toString()) }
         }
         val scope = if (tracer != null && span != null) tracer.withSpan(span) else null
 

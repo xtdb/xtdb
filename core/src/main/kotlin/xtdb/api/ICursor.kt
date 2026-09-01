@@ -70,10 +70,10 @@ interface ICursor : Spliterator<RelationReader>, AutoCloseable {
                     started = true
                     startTime = clock.instant()
                     if (tracer != null && parentSpan != null) {
-                        span = tracer.nextSpan(parentSpan)!!
-                            .name(spanName ?: "query.cursor.${inner.cursorType}")
-                            .tag("cursor.type", inner.cursorType)
-                            .start()
+                        span = tracer.nextSpan(parentSpan)
+                            ?.name(spanName ?: "query.cursor.${inner.cursorType}")
+                            ?.tag("cursor.type", inner.cursorType)
+                            ?.start()
                     }
                 }
                 val pageStart = clock.instant()
