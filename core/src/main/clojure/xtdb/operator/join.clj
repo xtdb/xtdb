@@ -235,10 +235,11 @@
                          pushdown-blooms]
   ICursor
   (getCursorType [_] "mark-join")
-  (getChildCursors [_] [build-cursor])
+  (getChildCursors [_]
+    (cond-> [build-cursor]
+      probe-cursor (conj probe-cursor)))
 
   (tryAdvance [this c]
-
     (when-not probe-cursor
       (build-phase build-side build-cursor)
       (build-pushdowns build-side pushdown-blooms nil)
