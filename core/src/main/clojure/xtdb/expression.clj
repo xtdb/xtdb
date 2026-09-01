@@ -46,12 +46,15 @@
 (defn xtdb-server-version []
   (util/xtdb-version-string))
 
+(defn postgres-version-string []
+  (str "PostgreSQL " postgres-server-version " (XTDB " (util/xtdb-version) ")"))
+
 (defn form->expr [form {:keys [var-types param-types locals] :as env}]
   (cond
     (symbol? form) (cond
                      (= 'xtdb/start-of-time form) {:op :literal, :literal time/start-of-time}
                      (= 'xtdb/end-of-time form) {:op :literal, :literal time/end-of-time}
-                     (= 'xtdb/postgres-server-version form) {:op :literal, :literal (str "PostgreSQL " postgres-server-version)}
+                     (= 'xtdb/postgres-server-version form) {:op :literal, :literal (postgres-version-string)}
                      (= 'xtdb/xtdb-server-version form) {:op :literal, :literal (str "XTDB @ " (xtdb-server-version))}
                      (contains? locals form) {:op :local, :local form}
                      (contains? param-types form) {:op :param, :param form,
@@ -1426,18 +1429,11 @@
      :->call-code (fn [[include-implicit?]]
                     `(current-schemas ~include-implicit?))})
 
-(defn parse-version [version-str]
-  (let [[^long major, ^long minor, ^long patch] (->> (re-find #"^(\d+)\.(\d+)\.(\d+)" version-str)
-                                                     rest
-                                                     (map parse-long))]
-    (+ (* major 1000000)
-       (* minor 1000)
-       patch)))
-
 (defn current-setting [setting-name]
   (case setting-name
     "server_version_num" "160000"
     "search_path" (str/join ", " explicit-search-path)
+    "xtdb.version" (util/xtdb-version)
     (throw (err/unsupported ::unsupported-setting (str "Setting not supported: " setting-name)
                             {:setting-name setting-name}))))
 

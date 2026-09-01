@@ -2492,8 +2492,9 @@ SELECT PERIOD(DATE '2022-12-31', TIMESTAMP '2023-01-02') CONTAINS (DATE '2023-01
   (t/is (= [{:transaction-isolation "read committed"}]
            (xt/q tu/*node* "SHOW TRANSACTION ISOLATION LEVEL")))
 
-  (t/is (= [{:version "PostgreSQL 16"}]
-           (xt/q tu/*node* "SELECT pg_catalog.version()")))
+  (t/is (re-matches #"PostgreSQL 16 \(XTDB .+\)"
+                    (:version (first (xt/q tu/*node* "SELECT pg_catalog.version()"))))
+        "version() names XTDB in PostgreSQL's build-info parenthetical")
 
   (t/is (= [{:timezone "America/New_York"}]
            (xt/q tu/*node* "SHOW TIME ZONE"

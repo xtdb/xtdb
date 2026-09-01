@@ -514,18 +514,30 @@
     (when attributes
       (.getValue attributes "Implementation-Version"))))
 
+(def ^:private !xtdb-version
+  (delay (or (some-> (System/getenv "XTDB_VERSION") str/trim not-empty)
+             (manifest-version)
+             "2.x")))
+
+(defn xtdb-version []
+  @!xtdb-version)
+
+(def ^:private !xtdb-git-sha
+  (delay (or (some-> (System/getenv "GIT_SHA") str/trim not-empty (subs 0 7))
+             (when-let [{:keys [out ^long exit]} (try
+                                                   (sh/sh "git" "rev-parse" "--short" "HEAD")
+                                                   (catch IOException _))] ; couldn't start git
+               (when (zero? exit)
+                 (str/trim out))))))
+
+(defn xtdb-git-sha []
+  @!xtdb-git-sha)
+
 (defn xtdb-version-string []
-  (let [version (or (some-> (System/getenv "XTDB_VERSION") str/trim not-empty)
-                    (manifest-version)
-                    "2.x")
-        git-sha (or (some-> (System/getenv "GIT_SHA") str/trim not-empty (subs 0 7))
-                    (when-let [{:keys [out ^long exit]} (try
-                                                          (sh/sh "git" "rev-parse" "--short" "HEAD")
-                                                          (catch IOException _))] ; couldn't start git
-                      (when (zero? exit)
-                        (str/trim out))))]
-    (str/join " " [version
-                   (when git-sha (str "[" git-sha "]"))])))
+  (let [version (xtdb-version)]
+    (if-let [git-sha (xtdb-git-sha)]
+      (str version " [" git-sha "]")
+      version)))
 
 (def unconstraint-temporal-metadata
   (let [^TemporalMetadata$Builder builder (TemporalMetadata/newBuilder)]

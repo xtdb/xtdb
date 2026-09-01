@@ -1,5 +1,6 @@
 (ns xtdb.sql.expr-test
-  (:require [clojure.test :as t]
+  (:require [clojure.string :as str]
+            [clojure.test :as t]
             [next.jdbc :as jdbc]
             [xtdb.api :as xt]
             [xtdb.basis :as basis]
@@ -1062,6 +1063,14 @@
 
   (t/is (= [{:v "160000"}]
            (xt/q tu/*node* "SELECT current_setting('server_version_num') AS v")))
+
+  (let [version (:v (first (xt/q tu/*node* "SELECT current_setting('xtdb.version') AS v")))]
+    (t/is (not (str/blank? version))
+          "xtdb.version resolves rather than throwing")
+
+    (t/is (str/starts-with? (:version (first (xt/q tu/*node* "SELECT xt.version()")))
+                            (str "XTDB @ " version))
+          "xtdb.version agrees with the version xt.version() reports"))
 
   (t/is (anomalous? [:unsupported ::expr/unsupported-setting]
                     (xt/q tu/*node* "SELECT current_setting('block_size') AS v"))))
