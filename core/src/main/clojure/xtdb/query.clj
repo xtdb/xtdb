@@ -51,7 +51,7 @@
            (xtdb.indexer DatabaseSnapshot Snapshot)
            xtdb.NodeBase
            xtdb.operator.scan.IScanEmitter
-           (xtdb.query IQuerySource IQuerySource$Factory ParsedStatement PreparedQuery SqlStatement$Assert SqlStatement$CreateTable SqlStatement$Delete SqlStatement$Erase SqlStatement$GrantRole SqlStatement$Patch SqlStatement$Put SqlStatement$RevokeRole)
+           (xtdb.query ExplainAnalyze ExplainAnalyze$Node IQuerySource IQuerySource$Factory ParsedStatement PreparedQuery SqlStatement$Assert SqlStatement$CreateTable SqlStatement$Delete SqlStatement$Erase SqlStatement$GrantRole SqlStatement$Patch SqlStatement$Put SqlStatement$RevokeRole)
            xtdb.util.RefCounter))
 
 (defn- wrap-result-types [^ICursor cursor, result-types]
@@ -258,20 +258,31 @@
                col-pushdowns))))
 
 (defn- explain-analyze-results [^ResultCursor cursor]
-  (letfn [(->results [^ICursor cursor, depth]
+  (letfn [(->row [depth op ^ExplainAnalyze ea]
+            {:depth (str (str/join (repeat depth "  ")) "->")
+             :op (keyword op)
+             :attributes (not-empty (into {} (.getCursorAttributes ea)))
+             :total-time (.getTotalTime ea)
+             :time-to-first-page (.getTimeToFirstPage ea)
+             :page-count (.getPageCount ea)
+             :row-count (.getRowCount ea)
+             :pushdowns (not-empty (truncate-pushdowns (.getPushdowns ea)))})
+
+          (->node-results [^ExplainAnalyze$Node node, depth]
+            (lazy-seq
+             (cons (->row depth (.getCursorType node) (.getExplainAnalyze node))
+                   (->> (for [child (.getChildren node)]
+                          (->node-results child (inc depth)))
+                        (sequence cat)))))
+
+          (->results [^ICursor cursor, depth]
             (lazy-seq
              (if-let [ea (.getExplainAnalyze cursor)]
-               (cons (let [attrs (.getCursorAttributes ea)]
-                       {:depth (str (str/join (repeat depth "  ")) "->")
-                        :op (keyword (.getCursorType cursor))
-                        :attributes (not-empty (into {} attrs))
-                        :total-time (.getTotalTime ea)
-                        :time-to-first-page (.getTimeToFirstPage ea)
-                        :page-count (.getPageCount ea)
-                        :row-count (.getRowCount ea)
-                        :pushdowns (not-empty (truncate-pushdowns (.getPushdowns ea)))})
-                     (->> (for [child (.getChildCursors cursor)]
-                            (->results child (inc depth)))
+               (cons (->row depth (.getCursorType cursor) ea)
+                     (->> (concat (for [child (.getChildCursors cursor)]
+                                    (->results child (inc depth)))
+                                  (for [node (.getExtraExplainNodes cursor)]
+                                    (->node-results node (inc depth))))
                           (sequence cat)))
                (->results (first (.getChildCursors cursor)) depth))))]
 

@@ -28,6 +28,12 @@ interface ICursor : Spliterator<RelationReader>, AutoCloseable {
     val childCursors: List<ICursor>
     val explainAnalyze: ExplainAnalyze? get() = null
 
+    /**
+     * Sub-plans to report beneath this cursor that have no live cursor for the walk to reach — a dependent
+     * sub-plan opened and closed once per input row, say. Implementors accumulate the counters themselves.
+     */
+    val extraExplainNodes: List<ExplainAnalyze.Node> get() = emptyList()
+
     /** Operator-specific explain-analyze values, evaluated when read (after consumption), so they can include runtime counters. */
     val cursorAttributes: Map<String, Any>? get() = null
 

@@ -7,6 +7,7 @@ import xtdb.arrow.FieldName
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorType
+import xtdb.query.ExplainAnalyze
 import java.util.function.Consumer
 
 class ApplyCursor(
@@ -26,6 +27,11 @@ class ApplyCursor(
         is ApplyMode.SingleJoin -> "apply-single-join"
     }
     override val childCursors get() = listOf(independentCursor)
+
+    private var depReport: DependentPlanReport? = null
+
+    override val extraExplainNodes: List<ExplainAnalyze.Node> get() = listOfNotNull(depReport)
+
     override fun tryAdvance(c: Consumer<in RelationReader>) =
         independentCursor.tryAdvance { inRel ->
             val idxs = IntArrayList()
@@ -33,6 +39,14 @@ class ApplyCursor(
                 repeat(inRel.rowCount) { inIdx ->
                     depCursorFactory.open(inRel, inIdx).use { depCursor ->
                         mode.accept(depCursor, depOutWriter, idxs, inIdx)
+
+                        // inside the `use`: DependentPlanReport reads state that closing the cursor finalises
+                        depCursor.reportingCursor?.let { reporting ->
+                            val report = depReport
+                                ?: DependentPlanReport(reporting.cursorType).also { depReport = it }
+
+                            report.accumulate(reporting)
+                        }
                     }
                 }
 
