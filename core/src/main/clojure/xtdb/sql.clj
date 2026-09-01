@@ -19,13 +19,14 @@
            (com.github.benmanes.caffeine.cache Cache Caffeine)
            (java.net URI)
            (java.time Duration LocalDate LocalTime OffsetTime ZoneOffset)
-           (java.util Collection HashMap HashSet LinkedHashSet Map SequencedSet Set UUID)
+           (java.util Collection HashMap HashSet IdentityHashMap LinkedHashSet Map SequencedSet Set UUID)
            java.util.function.Function
            (org.antlr.v4.runtime ParserRuleContext)
+           (org.antlr.v4.runtime.tree ParseTree)
            (org.apache.arrow.vector.types.pojo Field)
            (org.apache.commons.codec.binary Hex)
            (xtdb.tx TxOp$PatchDocs TxOp$PutDocs)
-           (xtdb.antlr Sql$DirectlyExecutableStatementContext Sql$GroupByClauseContext Sql$HavingClauseContext Sql$JoinSpecificationContext Sql$JoinTypeContext Sql$ObjectNameAndValueContext Sql$OrderByClauseContext Sql$QualifiedRenameColumnContext Sql$QueryBodyTermContext Sql$QuerySpecificationContext Sql$QueryTailContext Sql$RenameColumnContext Sql$SearchedWhenClauseContext Sql$SelectClauseContext Sql$SetClauseContext Sql$SimpleWhenClauseContext Sql$SortSpecificationContext Sql$SortSpecificationListContext Sql$WhenOperandContext Sql$WhereClauseContext Sql$WithTimeZoneContext SqlLexer SqlVisitor)
+           (xtdb.antlr Sql$DirectlyExecutableStatementContext Sql$DynamicParameterContext Sql$GroupByClauseContext Sql$HavingClauseContext Sql$JoinSpecificationContext Sql$JoinTypeContext Sql$ObjectNameAndValueContext Sql$OrderByClauseContext Sql$QualifiedRenameColumnContext Sql$QueryBodyTermContext Sql$QuerySpecificationContext Sql$QueryTailContext Sql$RenameColumnContext Sql$SearchedWhenClauseContext Sql$SelectClauseContext Sql$SetClauseContext Sql$SimpleWhenClauseContext Sql$SortSpecificationContext Sql$SortSpecificationListContext Sql$WhenOperandContext Sql$WhereClauseContext Sql$WithTimeZoneContext SqlLexer SqlVisitor)
            (xtdb.arrow RelationReader VectorReader)
            (xtdb.query ParsedStatement$Dml SqlParser SqlPlanner)
            xtdb.api.TableRef
@@ -1363,9 +1364,14 @@
 
   (visitParamExpr [this ctx] (-> (.parameterSpecification ctx) (.accept this)))
 
-  (visitDynamicParameter [{{:keys [!param-count]} :env} _]
-    (-> (symbol (str "?_" (dec (swap! !param-count inc))))
-        (vary-meta assoc :param? true)))
+  ;; the index comes from the pre-pass rather than a counter bumped here:
+  ;; the planner visits WHERE before the select list, and a subquery before the projection that wraps it,
+  ;; so allocating on visit binds arguments to the wrong placeholders.
+  (visitDynamicParameter [{{:keys [!param-count ^Map dynamic-param-idxs]} :env} ctx]
+    (let [param-idx (long (.get dynamic-param-idxs ctx))]
+      (swap! !param-count max (inc param-idx))
+      (-> (symbol (str "?_" param-idx))
+          (vary-meta assoc :param? true))))
 
   (visitPostgresParameter [{{:keys [!param-count]} :env} ctx]
     (-> (symbol (str "?_" (let [param-idx (parse-long (subs (.getText ctx) 1))]
@@ -2503,7 +2509,7 @@
                                                               (reify SqlVisitor
                                                                 (visitParameterRecord [this ctx] (.accept (.parameterSpecification ctx) this))
 
-                                                                (visitDynamicParameter [_ _] (emit-param @(:!param-count env)))
+                                                                (visitDynamicParameter [_ ctx] (emit-param (long (.get ^Map (:dynamic-param-idxs env) ctx))))
                                                                 (visitPostgresParameter [_ ctx]
                                                                   (emit-param (dec (parse-long (subs (.getText ctx) 1)))))
 
@@ -3379,6 +3385,18 @@
   (doseq [warning @!warnings]
     (log/debug (error-string warning))))
 
+(defn- ->dynamic-param-idxs
+  "Maps each `?` in the tree to its ordinal among the tree's `?`s, in source order."
+  ^Map [^ParseTree tree]
+  (let [idxs (IdentityHashMap.)]
+    (letfn [(walk! [^ParseTree node]
+              (if (instance? Sql$DynamicParameterContext node)
+                (.put idxs node (.size idxs))
+                (dotimes [child-idx (.getChildCount node)]
+                  (walk! (.getChild node child-idx)))))]
+      (walk! tree))
+    idxs))
+
 (defn ->env
   ([] (->env {}))
   ([{:keys [table-info default-db db-names tx-scoped?], :or {default-db "xtdb"}}]
@@ -3399,7 +3417,8 @@
 (extend-protocol PlanExpr
   ParserRuleContext
   (-plan-expr [ast {:keys [scope], :as opts}]
-    (let [{:keys [!errors !warnings] :as env} (->env opts)
+    (let [{:keys [!errors !warnings] :as env} (-> (->env opts)
+                                                  (assoc :dynamic-param-idxs (->dynamic-param-idxs ast)))
 
           plan (-> ast
                    #_(doto (-> (.toStringTree parser) read-string (clojure.pprint/pprint))) ; <<no-commit>>
@@ -3477,6 +3496,7 @@
                :!warnings !warnings
                :!id-count (atom 0)
                :!param-count !param-count
+               :dynamic-param-idxs (->dynamic-param-idxs ctx)
                :table-info table-info
                :table-chains (->table-chains (keys table-info) db-names default-db)
                ;; NOTE this may not necessarily be provided
@@ -3629,7 +3649,8 @@
                arg-fields (mapv VectorReader/.getField (or args-rel []))
 
                {:keys [!errors !warnings] :as env} (-> (->env opts)
-                                                       (assoc :arg-fields arg-fields))
+                                                       (assoc :arg-fields arg-fields
+                                                              :dynamic-param-idxs (->dynamic-param-idxs (.getAst parsed))))
                tx-ops (.accept (.getAst parsed) (->SqlToStaticOpsVisitor env scope arg-rows))]
            (when (and (empty? @!errors) (empty? @!warnings))
              tx-ops))
