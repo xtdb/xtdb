@@ -514,18 +514,24 @@
     (when attributes
       (.getValue attributes "Implementation-Version"))))
 
+(def ^:private !xtdb-version
+  (delay (or (some-> (System/getenv "XTDB_VERSION") str/trim not-empty)
+             (manifest-version)
+             "2.x")))
+
 (defn xtdb-version []
-  (or (some-> (System/getenv "XTDB_VERSION") str/trim not-empty)
-      (manifest-version)
-      "2.x"))
+  @!xtdb-version)
+
+(def ^:private !xtdb-git-sha
+  (delay (or (some-> (System/getenv "GIT_SHA") str/trim not-empty (subs 0 7))
+             (when-let [{:keys [out ^long exit]} (try
+                                                   (sh/sh "git" "rev-parse" "--short" "HEAD")
+                                                   (catch IOException _))] ; couldn't start git
+               (when (zero? exit)
+                 (str/trim out))))))
 
 (defn xtdb-git-sha []
-  (or (some-> (System/getenv "GIT_SHA") str/trim not-empty (subs 0 7))
-      (when-let [{:keys [out ^long exit]} (try
-                                            (sh/sh "git" "rev-parse" "--short" "HEAD")
-                                            (catch IOException _))] ; couldn't start git
-        (when (zero? exit)
-          (str/trim out)))))
+  @!xtdb-git-sha)
 
 (defn xtdb-version-string []
   (let [version (xtdb-version)]
