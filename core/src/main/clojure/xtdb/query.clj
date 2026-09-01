@@ -2,6 +2,7 @@
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
+            [clojure.walk :as walk]
             [xtdb.basis :as basis]
             [xtdb.error :as err]
             [xtdb.expression :as expr]
@@ -212,7 +213,8 @@
             (lazy-seq
              (cons {:depth (str (str/join (repeat depth "  ")) "->")
                     :op op
-                    :explain explain}
+                    ;; a symbol left in an explain value throws in `asVectorType` when the rows are typed
+                    :explain (walk/postwalk #(cond-> % (symbol? %) str) explain)}
                    (->> (for [child children]
                           (->explain-plan* child (inc depth)))
                         (sequence cat)))))]
