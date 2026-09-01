@@ -2502,7 +2502,7 @@
                                               ^Field struct-key (.getChildren child-field)]
                                           (symbol (.getName struct-key))))
 
-                                   (add-err! env (->InvalidParamIndex param-idx (count arg-fields)))))]
+                                   (add-err! env (->InvalidParamIndex (count arg-fields) param-idx))))]
 
                          (->> (.recordValueConstructor ctx)
                               (into [] (comp (mapcat (partial accept-visitor
