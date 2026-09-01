@@ -561,7 +561,8 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
   (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 7 :name "seven"}]
                            [:put-docs :docs {:xt/id 8 :name "eight"}]])
 
-  (doseq [q ["SELECT d._id, (SELECT e.name FROM docs e WHERE e._id = d._id) AS n FROM docs d"]]
+  (doseq [q ["SELECT d._id, (SELECT e.name FROM docs e WHERE e._id = d._id) AS n FROM docs d"
+             "SELECT d._id FROM docs d WHERE d.name IN (SELECT e.name FROM docs e WHERE e._id = d._id) OR d.name IS NULL"]]
     (let [rows (xt/q tu/*node* (str "EXPLAIN ANALYZE " q))]
 
       (t/is (seq (filter #(.startsWith (name (:op %)) "apply-") rows))
