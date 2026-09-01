@@ -151,7 +151,7 @@ aws-ssooidc = { group = "software.amazon.awssdk", name = "ssooidc", version.ref 
 # Azure
 azure-storage-blob = { group = "com.azure", name = "azure-storage-blob", version.ref = "azure-storage" }
 azure-identity = { group = "com.azure", name = "azure-identity", version.ref = "azure" }
-azure-core-management = { group = "com.azure", name = "azure-core-management", version = "1.15.1" }
+azure-core-management = { group = "com.azure", name = "azure-core-management", version = "1.19.6" }
 
 # Google Cloud
 google-cloud-storage = { group = "com.google.cloud", name = "google-cloud-storage", version.ref = "google-cloud-storage" }
