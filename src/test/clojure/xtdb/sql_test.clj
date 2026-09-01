@@ -764,6 +764,29 @@
          (sql/plan "SELECT _id FROM foo FOR VALID_TIME AS OF ? WHERE _id = ?"
                    {:table-info {#xt/table foo #{"_id"}}}))))
 
+(t/deftest anonymous-params-bound-in-lexical-order-5988
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1, :region "eu"}]])
+
+  (t/is (= [{:p1 "one", :p2 "two", :region "eu"}]
+           (xt/q tu/*node* ["SELECT ? AS p1, ? AS p2, region FROM docs WHERE region = ?"
+                            "one" "two" "eu"]))
+        "the select list is numbered before the predicate")
+
+  (t/is (= [{:p1 "one", :p2 "two"}]
+           (xt/q tu/*node* ["SELECT ? AS p1, ? AS p2 FROM docs GROUP BY region HAVING region > ?"
+                            "one" "two" "a"]))
+        "the select list is numbered before HAVING")
+
+  (t/is (= [{:p1 "one", :x "two"}]
+           (xt/q tu/*node* ["SELECT ? AS p1, s.x FROM (SELECT ? AS x FROM docs) s"
+                            "one" "two"]))
+        "an outer projection is numbered before the subquery it wraps")
+
+  (t/is (= [{:p1 "onetwo"}]
+           (xt/q tu/*node* ["SELECT ? || ? AS p1 FROM docs WHERE region = ?"
+                            "one" "two" "eu"]))
+        "placeholders within one projected expression keep their order relative to the predicate"))
+
 (t/deftest test-dynamic-temporal-filters-3068
   (t/testing "AS OF"
     (t/is
