@@ -123,7 +123,8 @@ A plan MUST name the role of every object it adds, moves, or changes the shape o
 Naming it is what makes the identification checkable: a plan that considered the roles silently is indistinguishable from one that skipped them, and the plan is the cheapest place to be told the answer is wrong.
 
 XTDB is a functional core with an imperative shell, and every object is an Active Object, a passive object or a Monitor Object.
-The skill carries the three definitions, the test that tells them apart, and the rule that one object holds one role; `Watchers` is its worked example.
+The skill carries the three definitions, the test that tells them apart, and the rule that one object holds one role.
+It also covers the state each object owns — what counts as one value, whether it is an atom or a transient, and which region and which writer it belongs to.
 
 ## Running tests
 

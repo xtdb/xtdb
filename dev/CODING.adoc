@@ -35,6 +35,7 @@ Four smells travel together; spot one and go looking for the other three:
   If you're holding the object, you don't need to number it.
 * A field that's null in some states and set in others, guarded at each use -> a sealed hierarchy, one variant per state carrying exactly its valid data, driven by an exhaustive `when` with no `else`.
 * Reaching into another object's fields to decide what to do to it -> move the behaviour onto that object; pass the event in and let it extract what it needs.
+  This is _Tell, Don't Ask_, and Fowler's _Feature Envy_ from the other direction.
 --
 
 Related state SHOULD be updated atomically::
@@ -45,8 +46,8 @@ Spread across several fields, "all of it moved together" becomes an invariant ma
 This is the concurrency-facing half of _Make illegal states unrepresentable_: there, the illegal state is one the types admit; here, it is one an interleaving admits.
 Both are fixed by making the valid combinations the only representable ones.
 +
-The shape is a sealed hierarchy in an `AtomicReference`, with each variant holding exactly the state that variant has.
-Arming it is one `set`; a variant that accumulates as it runs holds `@Volatile var` fields and is mutated in place by whichever coroutine owns it, so the reader that races it sees a consistent generation rather than a mixture of two.
+**The two shapes, and the tests that pick between them, are the `xtdb-object-boundaries` skill's**: an *atom* — a sealed hierarchy behind one reference, swapped whole, so a reader sees a consistent generation rather than a mixture of two — and a *transient*, mutated in place by its one owner and never published mid-flight.
+Clojure's identity/state model and Evans' aggregate boundary are what they rest on; the skill carries the test for what counts as one value, and for which of the two shapes you are holding.
 +
 --
 *Worked example* - the Postgres source's assignment (`modules/postgres-source/src/main/kotlin/xtdb/postgres/PostgresSource.kt`).
@@ -56,7 +57,7 @@ Collapsing them means a new assignment is `assignment.set(Assigned())`, and ther
 
 Two questions locate the state that wants collapsing:
 
-* *What is the lifetime of this field?* Two fields with the same lifetime, held separately, are one value waiting to be written.
+* *What is the lifetime of this field?* Same lifetime puts two fields in the same region — whether they are also one *value* is a separate question, and the skill's.
 * *What resets it?* A field that nothing resets, alongside one that something does, is the asymmetry that produces a stale read.
 --
 
