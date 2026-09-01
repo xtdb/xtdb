@@ -193,7 +193,8 @@
                      ^ComparatorFactory cmp-factory, ^JoinType join-type]
   ICursor
   (getCursorType [_] (.getJoinTypeName join-type))
-  (getChildCursors [_] (into [build-cursor] (.getChildCursors hash-join-cursor)))
+  (getChildCursors [_] (cond-> [build-cursor]
+                         hash-join-cursor (into (.getChildCursors hash-join-cursor))))
 
   (tryAdvance [this c]
     (when-not hash-join-cursor
