@@ -60,6 +60,15 @@ Two questions locate the state that wants collapsing:
 * *What resets it?* A field that nothing resets, alongside one that something does, is the asymmetry that produces a stale read.
 --
 
+Identify each object's role before you change it::
++
+XTDB is a functional core with an imperative shell, with autonomy substituted for purity.
+An *Active Object* offers a choice among simultaneously-ready events and owns a `select`; a *passive object* completes everything it does on the caller's coroutine; a *Monitor Object* is passive state that someone waits on, which here usually has no lock to give it away.
++
+One object holds one role — identify which before you change it.
+The definitions, their tests and `Watchers` as the worked example are the `xtdb-object-boundaries` skill's (`.claude/skills/xtdb-object-boundaries/`) — read it when planning a change, and when deciding which type holds a piece of state, whether something is one object or two, or which object a method goes on.
+A plan names the role of each object it touches, so that a wrong answer is caught while it is still cheap.
+
 Tidy first::
 +
 We develop using https://tidyfirst.substack.com/[tidy-first] methodology — separate equivalence changes (refactorings that don't affect runtime behaviour, changes that increase our options) from changes that advance behaviour.

@@ -105,6 +105,26 @@ Trust the test body to show the rest.
 
 For errors, see the "Errors" section in @dev/CODING.adoc — use `xtdb.error`, not raw Java exceptions.
 
+## Object roles and boundaries
+
+You MUST invoke the `xtdb-object-boundaries` skill when planning a change, whenever you decide where something belongs, and before you review a diff that does.
+That covers:
+
+* deciding which type holds a piece of state, whether something is one object or two, or which object a method goes on;
+* adding or moving a class, an interface, an object or a namespace;
+* adding a field that outlives a single call, or a coroutine scope;
+* splitting a type up, or merging two;
+* threading a value through a new parameter — often the tell that the boundary is in the wrong place;
+* a `Map<Id, State>` sitting beside the objects it identifies, or a field only set in some states.
+
+Adding a method to the type it obviously belongs on is not one of these; moving one between types is.
+
+A plan MUST name the role of every object it adds, moves, or changes the shape of.
+Naming it is what makes the identification checkable: a plan that considered the roles silently is indistinguishable from one that skipped them, and the plan is the cheapest place to be told the answer is wrong.
+
+XTDB is a functional core with an imperative shell, and every object is an Active Object, a passive object or a Monitor Object.
+The skill carries the three definitions, the test that tells them apart, and the rule that one object holds one role; `Watchers` is its worked example.
+
 ## Running tests
 
 Before you run a test, or delegate a test run to a sub-agent, you MUST invoke the `xtdb-testing` skill.
