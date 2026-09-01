@@ -543,6 +543,40 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
            (xt/q tu/*node*
                  "EXPLAIN SELECT u._id, u.foo FROM users u WHERE u.a + u.b = 12 AND u.b = 1"))))
 
+(t/deftest test-explain-plan-window-fn-5990
+  (xt/execute-tx tu/*node* [[:sql "INSERT INTO docs RECORDS {_id: 7, name: 'seven'}"]])
+
+  (t/is (= [{:depth "->", :op :project
+             :explain {:project "[{_id t.1/_id} {rk xt$row_number_2}]", :append? false}}
+            {:depth "  ->", :op :window
+             :explain {:partition-by ["t.1/_id"]
+                       :order-by "[[_ob4 {:direction :desc, :null-ordering :nulls-first}]]"
+                       :window-functions [["xt$row_number_2" "[:nullary {:f row-number}]"]]}}
+            {:depth "    ->", :op :project
+             :explain {:project "[{_ob4 t.1/_id}]", :append? true}}
+            {:depth "      ->", :op :rename
+             :explain {:prefix "t.1"}}
+            {:depth "        ->", :op :scan
+             :explain {:table "xtdb.public.docs", :columns ["_id"], :predicates []}}]
+           (xt/q tu/*node*
+                 "EXPLAIN SELECT t._id, row_number() OVER (PARTITION BY t._id ORDER BY t._id DESC) AS rk FROM docs t"))))
+
+(t/deftest test-explain-plan-unnest-5990
+  (xt/execute-tx tu/*node* [[:sql "INSERT INTO arrs RECORDS {_id: 1, xs: [1, 2, 3]}"]])
+
+  (t/is (= [{:depth "->", :op :project
+             :explain {:project "[{_id a.1/_id} {x u.3/x}]", :append? false}}
+            {:depth "  ->", :op :unnest
+             :explain {:from "unnest", :to "u.3/x", :ordinality "u.3/o"}}
+            {:depth "    ->", :op :project
+             :explain {:project "[{unnest a.1/xs}]", :append? true}}
+            {:depth "      ->", :op :rename
+             :explain {:prefix "a.1"}}
+            {:depth "        ->", :op :scan
+             :explain {:table "xtdb.public.arrs", :columns ["xs" "_id"], :predicates []}}]
+           (xt/q tu/*node*
+                 "EXPLAIN SELECT a._id, u.x FROM arrs a, UNNEST(a.xs) WITH ORDINALITY AS u(x, o)"))))
+
 (t/deftest test-normalising-nested-cols-2483
   (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 :foo {:a/b "foo"}}]])
   (t/is (= [{:foo {:a/b "foo"}}] (xt/q tu/*node* "SELECT docs.foo FROM docs")))
