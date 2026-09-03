@@ -96,12 +96,11 @@ class KafkaClusterTest {
         val topicName = "test-topic-${UUID.randomUUID()}"
 
         KafkaCluster.ClusterFactory(container.bootstrapServers)
-            .pollDuration(Duration.ofMillis(100))
             .open().use { cluster ->
                 KafkaCluster.LogFactory("my-cluster", topicName)
                     .openSourceLog(mapOf("my-cluster" to cluster))
                     .use { log ->
-                        val job = launch { log.tailAll(0, -1, subscriber) }
+                        val job = launch { log.tailAll(0, -1, processor = subscriber) }
                         try {
                             val txPayload = ByteBuffer.allocate(9).put(-1).putLong(42).flip().array()
                             log.appendMessage(SourceMessage.LegacyTx(txPayload))
@@ -152,7 +151,6 @@ class KafkaClusterTest {
         val topicName = "test-topic-${UUID.randomUUID()}"
 
         KafkaCluster.ClusterFactory(container.bootstrapServers)
-            .pollDuration(Duration.ofMillis(100))
             .open().use { cluster ->
                 KafkaCluster.LogFactory("my-cluster", topicName)
                     .openSourceLog(mapOf("my-cluster" to cluster))
@@ -167,7 +165,6 @@ class KafkaClusterTest {
         val topicName = "test-topic-${UUID.randomUUID()}"
 
         KafkaCluster.ClusterFactory(container.bootstrapServers)
-            .pollDuration(Duration.ofMillis(100))
             .open().use { cluster ->
                 KafkaCluster.LogFactory("my-cluster", topicName)
                     .openSourceLog(mapOf("my-cluster" to cluster))
@@ -186,7 +183,6 @@ class KafkaClusterTest {
         val topicName = "test-topic-${UUID.randomUUID()}"
 
         KafkaCluster.ClusterFactory(container.bootstrapServers)
-            .pollDuration(Duration.ofMillis(100))
             .open().use { cluster ->
                 KafkaCluster.LogFactory("my-cluster", topicName)
                     .openSourceLog(mapOf("my-cluster" to cluster))
@@ -272,12 +268,11 @@ class KafkaClusterTest {
                             "max.partition.fetch.bytes" to fourMB.toString()
                         )
                     )
-                    .pollDuration(Duration.ofMillis(100))
                     .open().use { cluster ->
                         KafkaCluster.LogFactory("my-cluster", topicName, autoCreateTopic = false)
                             .openReplicaLog(mapOf("my-cluster" to cluster))
                             .use { log ->
-                                val job = launch { log.tailAll(0, -1, subscriber) }
+                                val job = launch { log.tailAll(0, -1, processor = subscriber) }
                                 try {
                                     log.appendMessage(blockUploaded)
 
@@ -312,7 +307,6 @@ class KafkaClusterTest {
 
         // Default producer max.request.size is 1MB — sending a >1MB message should fail
         KafkaCluster.ClusterFactory(container.bootstrapServers)
-            .pollDuration(Duration.ofMillis(100))
             .open().use { cluster ->
                 KafkaCluster.LogFactory("my-cluster", topicName)
                     .openReplicaLog(mapOf("my-cluster" to cluster))
@@ -331,7 +325,6 @@ class KafkaClusterTest {
     ) {
         val cluster =
             KafkaCluster.ClusterFactory(container.bootstrapServers)
-                .pollDuration(Duration.ofMillis(100))
                 .open()
 
         cluster.use {
@@ -751,7 +744,6 @@ class KafkaClusterTest {
         val caught = AtomicReference<Throwable?>(null)
 
         KafkaCluster.ClusterFactory(container.bootstrapServers)
-            .pollDuration(Duration.ofMillis(100))
             .open().use { cluster ->
                 KafkaCluster.LogFactory("my-cluster", topic)
                     .openSourceLog(mapOf("my-cluster" to cluster))
@@ -763,7 +755,7 @@ class KafkaClusterTest {
                         val completed = supervisorScope {
                             val job = launch {
                                 try {
-                                    log.tailAll(0, anchorInTruncatedPrefix, subscriber)
+                                    log.tailAll(0, anchorInTruncatedPrefix, processor = subscriber)
                                 } catch (e: Throwable) {
                                     caught.set(e)
                                 }
@@ -800,7 +792,6 @@ class KafkaClusterTest {
         }
 
         KafkaCluster.ClusterFactory(container.bootstrapServers)
-            .pollDuration(Duration.ofMillis(100))
             .open().use { cluster ->
                 KafkaCluster.LogFactory("my-cluster", topic)
                     .openSourceLog(mapOf("my-cluster" to cluster))
@@ -899,7 +890,6 @@ class KafkaClusterTest {
         }
 
         KafkaCluster.ClusterFactory(container.bootstrapServers)
-            .pollDuration(Duration.ofMillis(100))
             .open().use { cluster ->
                 KafkaCluster.LogFactory("my-cluster", topic)
                     .openSourceLog(mapOf("my-cluster" to cluster))
@@ -909,7 +899,7 @@ class KafkaClusterTest {
                         log.appendMessage(txMessage(2))
                         log.appendMessage(txMessage(3))
 
-                        val job = launch { log.tailAll(0, -1L, subscriber) }
+                        val job = launch { log.tailAll(0, -1L, processor = subscriber) }
                         try {
                             withTimeoutOrNull(5.seconds) {
                                 while (synchronized(msgs) { msgs.flatten().size } < 3) delay(100.milliseconds)
@@ -937,7 +927,6 @@ class KafkaClusterTest {
         }
 
         KafkaCluster.ClusterFactory(container.bootstrapServers)
-            .pollDuration(Duration.ofMillis(100))
             .open().use { cluster ->
                 KafkaCluster.LogFactory("my-cluster", topic)
                     .openSourceLog(mapOf("my-cluster" to cluster))

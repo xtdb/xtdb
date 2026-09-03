@@ -65,11 +65,15 @@ import kotlin.coroutines.resume
 import kotlin.io.path.inputStream
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Duration as KotlinDuration
 import com.google.protobuf.Any as ProtoAny
 
 private val LOG = KafkaCluster::class.logger
 
 private typealias KafkaConfigMap = Map<String, String>
+
+// One second keeps cancellation responsive without making idle calls a tight loop; tail polls use their caller's timeout.
+private val FETCH_WAIT: Duration = Duration.ofSeconds(1)
 
 private object UnitSerializer : Serializer<Unit> {
     override fun serialize(topic: String?, data: Unit) = null
@@ -207,7 +211,6 @@ private fun AdminClient.warnIfTruncatable(topic: String, replicas: Int) {
 
 class KafkaCluster(
     val kafkaConfigMap: KafkaConfigMap,
-    private val pollDuration: Duration,
     val schemaRegistryUrl: String? = null,
     private val groupId: String = "xtdb",
     coroutineContext: CoroutineContext = Dispatchers.Default
@@ -455,7 +458,7 @@ class KafkaCluster(
         private suspend fun KafkaConsumer<*, ByteArray>.pollRecords() =
             runInterruptible(Dispatchers.IO) {
                 try {
-                    poll(pollDuration)
+                    poll(FETCH_WAIT)
                 } catch (_: WakeupException) {
                     ConsumerRecords.empty()
                 } catch (e: InterruptException) {
@@ -555,7 +558,6 @@ class KafkaCluster(
     @SerialName("!Kafka")
     data class ClusterFactory @JvmOverloads constructor(
         val bootstrapServers: String,
-        var pollDuration: Duration = Duration.ofSeconds(1),
         var propertiesMap: Map<String, String> = emptyMap(),
         var propertiesFile: Path? = null,
         var schemaRegistryUrl: String? = null,
@@ -563,7 +565,6 @@ class KafkaCluster(
         @kotlinx.serialization.Transient var coroutineContext: CoroutineContext = Dispatchers.Default
     ) : Remote.Factory<KafkaCluster> {
 
-        fun pollDuration(pollDuration: Duration) = apply { this.pollDuration = pollDuration }
         fun propertiesMap(propertiesMap: Map<String, String>) = apply { this.propertiesMap = propertiesMap }
         fun propertiesFile(propertiesFile: Path) = apply { this.propertiesFile = propertiesFile }
         fun schemaRegistryUrl(schemaRegistryUrl: String) = apply { this.schemaRegistryUrl = schemaRegistryUrl }
@@ -582,7 +583,7 @@ class KafkaCluster(
                 .plus(propertiesFile?.asPropertiesMap.orEmpty())
 
         override fun open(): KafkaCluster =
-            KafkaCluster(configMap, pollDuration, schemaRegistryUrl, groupId, coroutineContext)
+            KafkaCluster(configMap, schemaRegistryUrl, groupId, coroutineContext)
     }
 
     private inner class KafkaLog<M>(
@@ -627,7 +628,7 @@ class KafkaCluster(
                 c.assign(listOf(tp))
                 c.seek(tp, lastOffset)
 
-                val records = c.poll(pollDuration).records(topic)
+                val records = c.poll(FETCH_WAIT).records(topic)
                 records.firstOrNull()?.let { record -> codec.decode(record.value()) }
             }
 
@@ -648,7 +649,7 @@ class KafkaCluster(
                 c.seek(tp, fromOffset)
 
                 while (c.position(tp) < effectiveToOffset) {
-                    for (rec in c.poll(pollDuration).records(topic)) {
+                    for (rec in c.poll(FETCH_WAIT).records(topic)) {
                         if (rec.offset() >= effectiveToOffset) return@sequence
                         val msg = codec.decode(rec.value()) ?: continue
                         yield(Log.Record(epoch, rec.offset(), ofEpochMilli(rec.timestamp()), msg))
@@ -657,9 +658,9 @@ class KafkaCluster(
             }
         }
 
-        private fun KafkaConsumer<*, ByteArray>.pollRecords(): List<Log.Record<M>> =
+        private fun KafkaConsumer<*, ByteArray>.pollRecords(timeout: Duration): List<Log.Record<M>> =
             try {
-                poll(pollDuration)
+                poll(timeout)
                     .records(topic)
                     .mapNotNull { rec ->
                         Log.Record(
@@ -673,17 +674,34 @@ class KafkaCluster(
                 throw InterruptedException().initCause(e)
             }
 
-        override suspend fun tailAll(partition: Int, afterMsgId: MessageId, processor: Log.RecordProcessor<M>) = coroutineScope {
-            kafkaConfigMap.openConsumer().use { c ->
-                val tp = TopicPartition(topic, 0)
-                c.assign(listOf(tp))
-                c.seekToAfterMsgId(tp, epoch, afterMsgId)
+        override suspend fun <R> withTail(
+            partition: Int,
+            afterMsgId: MessageId,
+            action: suspend (Log.Tail<M>) -> R,
+        ): R = kafkaConfigMap.openConsumer().use { c ->
+            val tp = TopicPartition(topic, 0)
+            c.assign(listOf(tp))
+            c.seekToAfterMsgId(tp, epoch, afterMsgId)
 
-                while (isActive) {
-                    val records = runInterruptible(Dispatchers.IO) { c.pollRecords() }
-                    processor.processRecords(records)
+            action(object : Log.Tail<M> {
+                override suspend fun poll(timeout: KotlinDuration): List<Log.Record<M>> {
+                    val started = kotlin.time.TimeSource.Monotonic.markNow()
+                    var remaining = timeout
+
+                    do {
+                        // Millis rather than `toJavaDuration`, which renders an infinite timeout as a
+                        // seconds-and-nanos pair that overflows the `toMillis` the consumer does internally.
+                        val waitFor = Duration.ofMillis(remaining.coerceAtLeast(KotlinDuration.ZERO).inWholeMilliseconds)
+
+                        val records = runInterruptible(Dispatchers.IO) { c.pollRecords(waitFor) }
+                        if (records.isNotEmpty()) return records
+
+                        remaining = timeout - started.elapsedNow()
+                    } while (remaining > KotlinDuration.ZERO)
+
+                    return emptyList()
                 }
-            }
+            })
         }
 
         override suspend fun openGroupSubscription(listener: Log.SubscriptionListener<M>) {

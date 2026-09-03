@@ -70,7 +70,6 @@
 (t/deftest ^:integration test-kafka-setup-with-provided-opts
   (let [test-uuid (random-uuid)]
     (with-open [node (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*
-                                                                        :poll-duration "PT2S"
                                                                         :properties-map {}
                                                                         :properties-file nil}]}
                                       :log [:kafka {:cluster :my-kafka
@@ -83,7 +82,6 @@
   (let [test-uuid (random-uuid)]
     (util/with-tmp-dirs #{path}
       (with-open [node (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*
-                                                                          :poll-duration "PT2S"
                                                                           :properties-map {}
                                                                           :properties-file nil}]}
                                         :log [:kafka {:cluster :my-kafka
@@ -115,7 +113,6 @@
     (util/with-tmp-dirs #{local-disk-path}
       ;; Node with storage and log topic
       (with-open [node (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*
-                                                                          :poll-duration "PT2S"
                                                                           :properties-map {}
                                                                           :properties-file nil}]}
                                         :log [:kafka {:cluster :my-kafka
@@ -145,7 +142,6 @@
         IllegalStateException
         #"Database 'xtdb' failed to start due to an invalid transaction log state \(the log is empty\)"
         (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*
-                                                           :poll-duration "PT2S"
                                                            :properties-map {}
                                                            :properties-file nil}]}
                          :log [:kafka {:cluster :my-kafka
@@ -155,7 +151,6 @@
 
       ;; Node with intact storage and topic 2 (ie, empty topic) along with setting log offset
       (with-open [node (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*
-                                                                          :poll-duration "PT2S"
                                                                           :properties-map {}
                                                                           :properties-file nil}]}
                                         :log [:kafka {:cluster :my-kafka
@@ -180,7 +175,6 @@
           (t/is (nil? (tu/flush-block! node)))))
 
       (with-open [node (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*
-                                                                          :poll-duration "PT2S"
                                                                           :properties-map {}
                                                                           :properties-file nil}]}
                                         :log [:kafka {:cluster :my-kafka
@@ -211,8 +205,7 @@
 
     (util/with-tmp-dirs #{local-disk-path}
       ;; Start a node, write a few transactions to the original topic
-      (with-open [node (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*
-                                                                          :poll-duration "PT2S"}]}
+      (with-open [node (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*}]}
                                         :log [:kafka {:cluster :my-kafka, :topic original-topic}]
                                         :storage [:local {:path local-disk-path}]})]
         (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :foo}]])
@@ -232,8 +225,7 @@
       ;; Setup a "stale log":
       ;; - Start a node with a new topic and memory storage.
       ;; - Submit two txes to it.
-      (with-open [node (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*
-                                                                          :poll-duration "PT2S"}]}
+      (with-open [node (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*}]}
                                         :log [:kafka {:cluster :my-kafka
                                                       :topic stale-topic
                                                       :create-topic? true}]
@@ -246,8 +238,7 @@
        (thrown-with-msg?
         IllegalStateException
         #"Database 'xtdb' failed to start due to an invalid transaction log state \(epoch=0, offset=1\) that does not correspond with the latest processed message \(epoch=0 and offset=\d+\)"
-        (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*
-                                                           :poll-duration "PT2S"}]}
+        (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*}]}
                          :log [:kafka {:cluster :my-kafka
                                        :topic stale-topic
                                        :create-topic? false}]
@@ -255,7 +246,6 @@
 
       ;; Attempt to restart the node with intact storage, a new topic + new epoch
       (with-open [node (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*
-                                                                          :poll-duration "PT2S"
                                                                           :properties-map {}
                                                                           :properties-file nil}]}
                                         :log [:kafka {:cluster :my-kafka
@@ -282,7 +272,6 @@
 
 ;; Restarting the node again with the same new log path and epoch 1
       (with-open [node (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*
-                                                                          :poll-duration "PT2S"
                                                                           :properties-map {}
                                                                           :properties-file nil}]}
                                         :log [:kafka {:cluster :my-kafka
@@ -314,8 +303,7 @@
   (let [topic (str "xtdb.kafka-test." (random-uuid))]
     (util/with-tmp-dirs #{local-disk-path}
       (t/testing "Start a node, write a number of transactions to the topic - ensure block is cut"
-        (with-open [node (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*
-                                                                            :poll-duration "PT2S"}]}
+        (with-open [node (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*}]}
                                           :log [:kafka {:cluster :my-kafka, :topic topic}]
                                           :storage [:local {:path local-disk-path}]
                                           :indexer {:rows-per-block 20}
@@ -331,8 +319,7 @@
                      (tu/read-files-from-bp-path node "tables/public$docs/meta/"))))))
 
       (t/testing "Restart the node, ensure it picks up from the correct position in the log"
-        (with-open [node (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*
-                                                                            :poll-duration "PT2S"}]}
+        (with-open [node (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*}]}
                                           :log [:kafka {:cluster :my-kafka, :topic topic}]
                                           :storage [:local {:path local-disk-path}]
                                           :indexer {:rows-per-block 20}
@@ -354,8 +341,7 @@
   (let [topic (str "xtdb.kafka-test." (random-uuid))]
     (util/with-tmp-dirs #{local-disk-path}
       (t/testing "Start a node, write a number of transactions to the log - ensure block is cut"
-        (with-open [node (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*
-                                                                            :poll-duration "PT2S"}]}
+        (with-open [node (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*}]}
                                           :log [:kafka {:cluster :my-kafka, :topic topic}]
                                           :storage [:local {:path local-disk-path}]
                                           :compactor {:threads 0}})]
@@ -369,8 +355,7 @@
             (t/is (= ["l00-rc-b00.arrow"] (tu/read-files-from-bp-path node "tables/public$docs/meta/"))))))
 
       (t/testing "Restart the node, ensure it picks up from the correct position in the log"
-        (with-open [node (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*
-                                                                            :poll-duration "PT2S"}]}
+        (with-open [node (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*}]}
                                           :log [:kafka {:cluster :my-kafka, :topic topic}]
                                           :storage [:local {:path local-disk-path}]
                                           :compactor {:threads 0}})]
@@ -386,13 +371,11 @@
 (t/deftest ^:integration test-implicit-conn-awaiting
   (let [topic (str "xtdb.kafka-test." (random-uuid))]
     (util/with-tmp-dirs #{local-disk-path}
-      (with-open [node-1 (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*
-                                                                            :poll-duration "PT2S"}]}
+      (with-open [node-1 (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*}]}
                                           :log [:kafka {:cluster :my-kafka, :topic topic}]
                                           :storage [:local {:path local-disk-path}]
                                           :compactor {:threads 0}})
-                  node-2 (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*
-                                                                            :poll-duration "PT2S"}]}
+                  node-2 (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*}]}
                                           :log [:kafka {:cluster :my-kafka, :topic topic}]
                                           :storage [:local {:path local-disk-path}]
                                           :compactor {:threads 0}})
@@ -415,4 +398,3 @@
         (jdbc/execute! xtdb-conn-2 ["INSERT INTO foo RECORDS {_id: 'primary3'}"])
         (t/is (= #{{:_id "primary"} {:_id "primary2"} {:_id "primary3"}}
                  (set (jdbc/execute! xtdb-conn-2 ["SELECT * FROM foo"]))))))))
-

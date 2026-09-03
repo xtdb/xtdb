@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import xtdb.api.log.Log.Record
 import java.nio.file.Path
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
 class ReadOnlyLocalLogTest {
@@ -29,6 +30,25 @@ class ReadOnlyLocalLogTest {
     @Test
     fun `tailAll observes external writes at N greater than 1`(): Unit = runBlocking {
         observesExternalWrites(partitions = 2)
+    }
+
+    @Test
+    fun `poll reads both existing and subsequent external writes`(): Unit = runBlocking {
+        val factory = LocalLog.Factory(tempDir.resolve("poll-log"))
+
+        factory.openSourceLog(emptyMap()).use { writer ->
+            writer.appendMessage(txMessage(1))
+
+            factory.openReadOnlySourceLog(emptyMap()).use { reader ->
+                reader.withTail(0, -1L) { tail ->
+                    assertEquals(1, tail.poll(Duration.ZERO).size)
+
+                    writer.appendMessage(txMessage(2))
+                    assertEquals(1, tail.poll(3.seconds).size)
+                    assertTrue(tail.poll(Duration.ZERO).isEmpty())
+                }
+            }
+        }
     }
 
     // msg1's arrival via catch-up is a synchronisation barrier: it proves the reader has finished

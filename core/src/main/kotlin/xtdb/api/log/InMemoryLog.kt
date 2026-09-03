@@ -20,7 +20,7 @@ import xtdb.types.MessageId
 import java.time.Instant
 import java.time.InstantSource
 import java.time.temporal.ChronoUnit.MICROS
-import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration
 
 class InMemoryLog<M> @JvmOverloads constructor(
     private val instantSource: InstantSource,
@@ -94,7 +94,8 @@ class InMemoryLog<M> @JvmOverloads constructor(
     override suspend fun appendMessage(message: M, partition: Int): MessageMetadata {
         val ps = state(partition)
         return ps.mutex.withLock {
-            val ts = if (message is SourceMessage.Tx || message is SourceMessage.LegacyTx) instantSource.instant() else Instant.now()
+            val ts =
+                if (message is SourceMessage.Tx || message is SourceMessage.LegacyTx) instantSource.instant() else Instant.now()
             val record = Record(epoch, ++ps.latestSubmittedOffset, ts.truncatedTo(MICROS), message)
             ps.committedCh.emit(record)
             MessageMetadata(epoch, record.logOffset, ts.truncatedTo(MICROS))
@@ -113,30 +114,37 @@ class InMemoryLog<M> @JvmOverloads constructor(
         }
     }
 
-    override suspend fun tailAll(partition: Int, afterMsgId: MessageId, processor: RecordProcessor<M>) = coroutineScope {
+    override suspend fun <R> withTail(
+        partition: Int, afterMsgId: MessageId, action: suspend (Tail<M>) -> R
+    ): R = coroutineScope {
         var latestCompletedOffset = MsgIdUtil.afterMsgIdToOffset(epoch, afterMsgId)
 
-        val ch = state(partition).committedCh
-            .filter {
-                val logOffset = it.logOffset
-                check(logOffset <= latestCompletedOffset + 1) {
-                    "InMemoryLog emitted out-of-order record (expected ${latestCompletedOffset + 1}, got $logOffset)"
-                }
-                logOffset > latestCompletedOffset
-            }
-            .onEach { latestCompletedOffset = it.logOffset }
-            .buffer(100)
+        val committed = state(partition).committedCh
+            .dropWhile { it.logOffset <= latestCompletedOffset }
             .produceIn(this)
 
-        while (isActive) {
-            val records = select {
-                ch.onReceiveCatching { if (it.isClosed) emptyList() else listOf(it.getOrThrow()) }
+        try {
+            action(object : Tail<M> {
+                override suspend fun poll(timeout: Duration): List<Record<M>> {
+                    val first = if (timeout <= Duration.ZERO) {
+                        committed.tryReceive().getOrNull()
+                    } else {
+                        withTimeoutOrNull(timeout) { committed.receive() }
+                    } ?: return emptyList()
 
-                @OptIn(ExperimentalCoroutinesApi::class)
-                onTimeout(1.minutes) { emptyList() }
-            }
-
-            processor.processRecords(records)
+                    return buildList {
+                        add(first)
+                        while (true) add(committed.tryReceive().getOrNull() ?: break)
+                    }.also { records ->
+                        check(records.first().logOffset == latestCompletedOffset + 1) {
+                            "InMemoryLog replay buffer rolled past offset ${latestCompletedOffset + 1}"
+                        }
+                        latestCompletedOffset = records.last().logOffset
+                    }
+                }
+            })
+        } finally {
+            committed.cancel()
         }
     }
 
@@ -145,8 +153,9 @@ class InMemoryLog<M> @JvmOverloads constructor(
         for (p in 0 until partitions) {
             launch {
                 try {
-                    val spec = listener.transitionToLeader(p, LeaderTerm.of(termEpoch, elections.incrementAndGet())).await()
-                    tailAll(p, spec.afterMsgId, spec.processor)
+                    val spec =
+                        listener.transitionToLeader(p, LeaderTerm.of(termEpoch, elections.incrementAndGet())).await()
+                    tailAll(p, spec.afterMsgId, processor = spec.processor)
                 } finally {
                     withContext(NonCancellable) { listener.demoteLeader(p) }
                 }

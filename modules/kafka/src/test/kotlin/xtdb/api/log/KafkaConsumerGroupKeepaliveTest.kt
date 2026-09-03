@@ -18,7 +18,6 @@ import org.junit.jupiter.api.Test
 import org.testcontainers.kafka.ConfluentKafkaContainer
 import xtdb.api.log.Log.SubscriptionListener
 import xtdb.api.log.Log.TailSpec
-import java.time.Duration
 import java.util.UUID
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -62,7 +61,6 @@ class KafkaConsumerGroupKeepaliveTest {
      */
     private suspend fun leadThenLeave(groupId: String, topic: String): Long =
         KafkaCluster.ClusterFactory(container.bootstrapServers)
-            .pollDuration(Duration.ofMillis(100))
             .groupId(groupId)
             .open()
             .use { cluster ->

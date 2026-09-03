@@ -73,7 +73,11 @@ class RecordingLog<M>(private val instantSource: InstantSource, messages: List<M
         }
     }
 
-    override suspend fun tailAll(partition: Int, afterMsgId: Long, processor: Log.RecordProcessor<M>): Unit = error("tailAll")
+    override suspend fun <R> withTail(
+        partition: Int,
+        afterMsgId: Long,
+        action: suspend (Log.Tail<M>) -> R,
+    ): R = error("withTail")
 
     override suspend fun openGroupSubscription(listener: Log.SubscriptionListener<M>): Unit = error("openGroupSubscription")
 

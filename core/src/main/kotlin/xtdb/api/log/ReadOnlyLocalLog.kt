@@ -1,29 +1,25 @@
 package xtdb.api.log
 
 import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.Channel
 import xtdb.api.log.Log.*
 import xtdb.api.error.Incorrect
 import xtdb.types.LogOffset
 import xtdb.types.MessageId
 import xtdb.util.MsgIdUtil
 import xtdb.util.MsgIdUtil.msgIdToOffset
+import xtdb.util.rethrowingChannelInterrupts
 import xtdb.time.InstantUtil.fromMicros
 import java.io.DataInputStream
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
-import java.nio.channels.ClosedByInterruptException
 import java.nio.channels.FileChannel
 import java.nio.file.FileSystems
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption.READ
 import java.nio.file.StandardWatchEventKinds.ENTRY_MODIFY
-import java.nio.file.WatchKey
-import kotlin.coroutines.CoroutineContext
+import java.util.concurrent.TimeUnit.NANOSECONDS
 import kotlin.io.path.exists
-import kotlin.io.path.name
-import kotlin.time.Duration.Companion.minutes
-import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Duration
 import kotlin.Int.Companion.SIZE_BYTES as INT_BYTES
 import kotlin.Long.Companion.SIZE_BYTES as LONG_BYTES
 
@@ -38,12 +34,10 @@ class ReadOnlyLocalLog<M> @JvmOverloads constructor(
     private val codec: MessageCodec<M>,
     override val epoch: Int,
     private val termEpoch: Int = 0,
-    coroutineContext: CoroutineContext = Dispatchers.Default,
     private val baseFileName: String = "LOG",
     val partitions: Int = 1,
 ) : Log<M> {
 
-    private val scope = CoroutineScope(coroutineContext)
     private val elections = java.util.concurrent.atomic.AtomicLong(0)
 
     companion object {
@@ -144,59 +138,59 @@ class ReadOnlyLocalLog<M> @JvmOverloads constructor(
         }
     }
 
-    override suspend fun tailAll(partition: Int, afterMsgId: MessageId, processor: Log.RecordProcessor<M>) = coroutineScope {
+    override suspend fun <R> withTail(
+        partition: Int,
+        afterMsgId: MessageId,
+        action: suspend (Log.Tail<M>) -> R,
+    ): R {
         requirePartition(partition)
         val filePath = logFilePath(partition)
-        // Watch the partition file's parent — rootPath at N=1, rootPath/LOG at N>1 — because WatchService
-        // events are direct-children only, not recursive. Match against the file's last segment (its name
-        // in that parent), which is baseFileName at N=1 and the partition index at N>1.
         val watchDir = filePath.parent
-        val watchedName = filePath.fileName.toString()
-        val ch = Channel<Log.Record<M>>(100)
 
-        launch {
+        java.nio.file.Files.createDirectories(watchDir)
+
+        return FileSystems.getDefault().newWatchService().use { watchService ->
+            watchDir.register(watchService, ENTRY_MODIFY)
             var currentOffset = MsgIdUtil.afterMsgIdToOffset(epoch, afterMsgId)
 
-            FileSystems.getDefault().newWatchService().use { watchService ->
-                // Idempotent — the writer's process may not have created the parent yet at N>1.
-                java.nio.file.Files.createDirectories(watchDir)
-                watchDir.register(watchService, ENTRY_MODIFY)
+            fun readNewMessages(): List<Log.Record<M>> = rethrowingChannelInterrupts {
+                val newLatestOffset = readLatestSubmittedOffset(filePath)
+                if (newLatestOffset <= currentOffset) return@rethrowingChannelInterrupts emptyList()
 
-                try {
-                    readNewMessages(filePath, currentOffset, ch)?.let { currentOffset = it }
+                FileChannel.open(filePath, READ).use { fileCh ->
+                    if (currentOffset >= 0) {
+                        fileCh.position(currentOffset)
+                        fileCh.readMessage()
+                    }
+
+                    buildList {
+                        while (fileCh.position() <= newLatestOffset) fileCh.readMessage()?.let { add(it) }
+                    }
+                }.also { records -> records.lastOrNull()?.let { currentOffset = it.logOffset } }
+            }
+
+            action(object : Log.Tail<M> {
+                override suspend fun poll(timeout: Duration): List<Log.Record<M>> {
+                    val started = kotlin.time.TimeSource.Monotonic.markNow()
+                    var remaining = timeout
 
                     while (true) {
-                        val key: WatchKey = runInterruptible(Dispatchers.IO) { watchService.take() }
+                        runInterruptible(Dispatchers.IO) { readNewMessages() }
+                            .takeIf { it.isNotEmpty() }
+                            ?.let { return it }
 
-                        var logModified = false
-                        for (event in key.pollEvents()) {
-                            val changedPath = event.context() as? Path
-                            if (changedPath?.name == watchedName) {
-                                logModified = true
-                            }
-                        }
+                        if (remaining <= Duration.ZERO) return emptyList()
 
-                        if (logModified) {
-                            readNewMessages(filePath, currentOffset, ch)?.let { currentOffset = it }
-                        }
+                        val key = runInterruptible(Dispatchers.IO) {
+                            watchService.poll(remaining.inWholeNanoseconds, NANOSECONDS)
+                        } ?: return emptyList()
 
-                        if (!key.reset()) {
-                            break
-                        }
+                        key.pollEvents()
+                        check(key.reset()) { "local log watch is no longer valid" }
+                        remaining = timeout - started.elapsedNow()
                     }
-                } catch (_: ClosedByInterruptException) {
-                    cancel()
-                } catch (_: InterruptedException) {
-                    cancel()
                 }
-            }
-        }
-
-        while (isActive) {
-            val msg = withTimeoutOrNull(1.minutes) {
-                ch.receiveCatching().let { if (it.isClosed) null else it.getOrThrow() }
-            }
-            processor.processRecords(listOfNotNull(msg))
+            })
         }
     }
 
@@ -205,7 +199,7 @@ class ReadOnlyLocalLog<M> @JvmOverloads constructor(
             launch {
                 try {
                     val spec = listener.transitionToLeader(p, LeaderTerm.of(termEpoch, elections.incrementAndGet())).await()
-                    tailAll(p, spec.afterMsgId, spec.processor)
+                    tailAll(p, spec.afterMsgId, processor = spec.processor)
                 } finally {
                     withContext(NonCancellable) { listener.demoteLeader(p) }
                 }
@@ -213,31 +207,5 @@ class ReadOnlyLocalLog<M> @JvmOverloads constructor(
         }
     }
 
-    private suspend fun readNewMessages(logFilePath: Path, currentOffset: LogOffset, ch: Channel<Log.Record<M>>): LogOffset? {
-        val newLatestOffset = readLatestSubmittedOffset(logFilePath)
-
-        if (newLatestOffset <= currentOffset) return null
-
-        var lastOffset = currentOffset
-        FileChannel.open(logFilePath, READ).use { fileCh ->
-            if (currentOffset >= 0) {
-                fileCh.position(currentOffset)
-                fileCh.readMessage()
-            }
-
-            while (fileCh.position() <= newLatestOffset) {
-                val record = fileCh.readMessage()
-                if (record != null) {
-                    ch.send(record)
-                    lastOffset = record.logOffset
-                }
-            }
-        }
-
-        return lastOffset
-    }
-
-    override fun close() {
-        runBlocking { withTimeout(5.seconds) { scope.coroutineContext.job.cancelAndJoin() } }
-    }
+    override fun close() = Unit
 }

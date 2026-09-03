@@ -93,7 +93,6 @@ Main article: [Kafka](/ops/config/log/kafka)
         ;; -- optional
 
         ;; :create-topic? true
-        ;; :poll-duration #xt/duration "PT1S"
         ;; :properties-file "kafka.properties"
         ;; :properties-map {}
         ;; :replication-factor 1

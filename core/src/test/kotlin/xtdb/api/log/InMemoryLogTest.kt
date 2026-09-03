@@ -118,6 +118,28 @@ class InMemoryLogTest {
     }
 
     @Test
+    fun `tail stays subscribed while its caller is between polls`() = runTest(timeout = 10.seconds) {
+        val log = InMemoryLog<SourceMessage>(InstantSource.system(), 0)
+
+        log.use {
+            log.withTail(0, -1L) { tail ->
+                val appendJob = backgroundScope.launch {
+                    repeat(5000) { log.appendMessage(txMessage((it % Byte.MAX_VALUE).toByte())) }
+                }
+                yield()
+                assertFalse(appendJob.isCompleted)
+
+                val records = buildList {
+                    while (size < 5000) addAll(tail.poll(1.seconds))
+                }
+
+                appendJob.join()
+                assertEquals((0L until 5000L).toList(), records.map { it.logOffset })
+            }
+        }
+    }
+
+    @Test
     fun `openGroupSubscription drives the listener lifecycle for every partition`() = runTest(timeout = 5.seconds) {
         val log = InMemoryLog<SourceMessage>(InstantSource.system(), 0, partitions = 3)
         log.use {

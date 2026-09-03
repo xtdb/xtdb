@@ -36,7 +36,6 @@ v2.1: multi-database support
     bootstrapServers: "localhost:9092"
     topic: "xtdb-log"
     # autoCreateTopic: true
-    # pollDuration: "PT1S"
     # propertiesFile: "kafka.properties"
     # propertiesMap:
 
@@ -45,7 +44,6 @@ v2.1: multi-database support
   logClusters:
     kafkaCluster: !Kafka
   bootstrapServers: "localhost:9092"
-      # pollDuration: "PT1S"
       # propertiesFile: "kafka.properties"
       # propertiesMap:
 
@@ -119,10 +117,6 @@ remotes:
     # initial connection to the Kafka cluster.
     # (Can be set as an !Env value)
     bootstrapServers: "localhost:9092"
-
-    # -- optional
-    # The maximum time to block waiting for records to be returned by the Kafka consumer.
-    # pollDuration: "PT1S"
 
     # Path to a Java properties file containing Kafka connection properties,
     # supplied directly to the Kafka client.

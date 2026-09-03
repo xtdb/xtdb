@@ -1,5 +1,6 @@
 package xtdb.util
 
+import java.nio.channels.ClosedByInterruptException
 import java.nio.channels.FileChannel
 import java.nio.channels.WritableByteChannel
 import java.nio.file.Files
@@ -10,6 +11,19 @@ import kotlin.contracts.InvocationKind.EXACTLY_ONCE
 import kotlin.contracts.contract
 import kotlin.io.path.createTempFile
 import kotlin.io.path.deleteIfExists
+
+/**
+ * Runs [block], re-raising an interrupt reported by an NIO channel as an [InterruptedException].
+ *
+ * `runInterruptible` translates [InterruptedException] into cancellation, but an interrupted channel operation
+ * throws [ClosedByInterruptException] instead.
+ */
+internal inline fun <T> rethrowingChannelInterrupts(block: () -> T): T =
+    try {
+        block()
+    } catch (e: ClosedByInterruptException) {
+        throw InterruptedException("interrupted mid channel operation").apply { initCause(e) }
+    }
 
 internal fun Path.openReadableChannel(): FileChannel = FileChannel.open(this, READ)
 internal fun Path.openWritableChannel(): WritableByteChannel = Files.newByteChannel(this, WRITE, CREATE)

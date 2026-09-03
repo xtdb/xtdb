@@ -18,6 +18,7 @@ import org.junit.jupiter.params.provider.ValueSource
 import xtdb.api.log.Log.Record
 import java.nio.file.Files
 import java.nio.file.Path
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
 class LocalLogTest {
@@ -43,7 +44,7 @@ class LocalLogTest {
 
         val jobs = List(partitions) { p ->
             launch {
-                log.tailAll(p, -1L, object : Log.RecordProcessor<SourceMessage> {
+                log.tailAll(p, -1L, processor = object : Log.RecordProcessor<SourceMessage> {
                     override suspend fun processRecords(records: List<Record<SourceMessage>>) = Unit
                 })
             }
@@ -155,6 +156,21 @@ class LocalLogTest {
 
             job0.cancelAndJoin()
             job1.cancelAndJoin()
+        }
+    }
+
+    @Test
+    fun `poll returns the available records and advances the tail`() = runTest {
+        val log = LocalLog.Factory(tempDir.resolve("poll-log")).openSourceLog(emptyMap())
+
+        log.use {
+            log.appendMessage(txMessage(1))
+            log.appendMessage(txMessage(2))
+
+            log.withTail(0, -1L) { tail ->
+                assertEquals(2, tail.poll(Duration.ZERO).size)
+                assertTrue(tail.poll(Duration.ZERO).isEmpty())
+            }
         }
     }
 

@@ -1,13 +1,11 @@
 (ns xtdb.kafka
-  (:require [xtdb.time :as time]
-            [xtdb.util :as util]
+  (:require [xtdb.util :as util]
             [xtdb.log :as log])
   (:import [xtdb.api.log KafkaCluster$ClusterFactory KafkaCluster$LogFactory]))
 
 (defmethod log/->log-cluster-factory ::cluster
-  [_ {:keys [bootstrap-servers poll-duration properties-map properties-file group-id]}]
+  [_ {:keys [bootstrap-servers properties-map properties-file group-id]}]
   (cond-> (KafkaCluster$ClusterFactory. bootstrap-servers)
-    poll-duration (.pollDuration (time/->duration poll-duration))
     properties-map (.propertiesMap properties-map)
     properties-file (.propertiesFile (util/->path properties-file))
     group-id (.groupId group-id)))

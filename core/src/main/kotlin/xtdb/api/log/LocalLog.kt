@@ -5,9 +5,8 @@ package xtdb.api.log
 import kotlinx.coroutines.*
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
@@ -20,6 +19,7 @@ import xtdb.api.log.Log.*
 import xtdb.database.proto.DatabaseConfig
 import xtdb.util.MsgIdUtil
 import xtdb.util.MsgIdUtil.msgIdToOffset
+import xtdb.util.rethrowingChannelInterrupts
 import xtdb.database.proto.localLog
 import xtdb.types.LogOffset
 import xtdb.types.MessageId
@@ -37,7 +37,7 @@ import java.time.InstantSource
 import kotlin.coroutines.CoroutineContext
 import kotlin.io.path.createParentDirectories
 import kotlin.io.path.exists
-import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlin.Int.Companion.SIZE_BYTES as INT_BYTES
 import kotlin.Long.Companion.SIZE_BYTES as LONG_BYTES
@@ -130,11 +130,7 @@ class LocalLog<M> @JvmOverloads constructor(
         val logFileChannel: FileChannel =
             FileChannel.open(logFilePath.createParentDirectories(), CREATE, WRITE, APPEND)
         val appendCh = Channel<NewMessage<M>>(capacity = 10)
-        val committedCh = MutableSharedFlow<Record<M>>(extraBufferCapacity = 100)
-        val mutex = Mutex()
-
-        @Volatile
-        var latestSubmittedOffset: LogOffset = readLatestSubmittedOffset(logFilePath)
+        val committedOffset = MutableStateFlow(readLatestSubmittedOffset(logFilePath))
     }
 
     private val partitionStates: List<PartitionState> = List(partitions) { PartitionState(it) }
@@ -143,7 +139,7 @@ class LocalLog<M> @JvmOverloads constructor(
         partitionStates.getOrNull(partition)
             ?: error("no such partition $partition (partitions=$partitions)")
 
-    private fun PartitionState.writeMessages(msgs: List<NewMessage<M>>): Array<Record<M>> {
+    private suspend fun PartitionState.writeMessages(msgs: List<NewMessage<M>>): Array<Record<M>> = runInterruptible {
         val initialOffset = logFileChannel.position()
 
         try {
@@ -173,43 +169,46 @@ class LocalLog<M> @JvmOverloads constructor(
 
             logFileChannel.force(true)
 
-            return res
+            res
+        } catch (e: ClosedByInterruptException) {
+            // Nothing to roll back to: an interrupted channel operation closes the channel as it throws, and
+            // this is the partition's one writer, so `truncate` below would only raise ClosedChannelException
+            // over the top of the cause. Nothing to roll back *for* either — the only thing that interrupts
+            // this writer is the log closing. Re-raised as the interrupt it is, which `runInterruptible`
+            // re-casts to cancellation; an IOException would reach the caller as a fault instead.
+            throw InterruptedException().apply { initCause(e) }
         } catch (t: Throwable) {
-            logFileChannel.truncate(initialOffset)
+            // Never over the top of the cause that got us here — a failed rollback is worth reporting, but
+            // it is the write's failure the caller has to act on.
+            try {
+                logFileChannel.truncate(initialOffset)
+            } catch (e: Throwable) {
+                t.addSuppressed(e)
+            }
+
             throw t
         }
     }
 
-    override fun latestSubmittedOffset(partition: Int): LogOffset = state(partition).latestSubmittedOffset
+    override fun latestSubmittedOffset(partition: Int): LogOffset = state(partition).committedOffset.value
 
     init {
         for (ps in partitionStates) {
             scope.launch {
-                try {
+                while (true) {
+                    val msgs = mutableListOf(ps.appendCh.receive())
+
                     while (true) {
-                        val msgs = mutableListOf(ps.appendCh.receive())
-
-                        while (true) {
-                            if (msgs.size >= 10) break
-                            msgs.add(ps.appendCh.tryReceive().getOrNull() ?: break)
-                        }
-
-                        val records = ps.writeMessages(msgs)
-
-                        msgs.forEachIndexed { idx, msg ->
-                            records[idx].also {
-                                ps.mutex.withLock {
-                                    ps.committedCh.emit(it)
-                                    ps.latestSubmittedOffset = it.logOffset
-                                }
-                                msg.onCommit.complete(it)
-                            }
-                        }
+                        if (msgs.size >= 10) break
+                        msgs.add(ps.appendCh.tryReceive().getOrNull() ?: break)
                     }
-                } catch (_: ClosedByInterruptException) {
-                    cancel()
-                } catch (_: InterruptedException) {
-                    cancel()
+
+                    val records = ps.writeMessages(msgs)
+
+                    ps.committedOffset.value = records.last().logOffset
+                    msgs.forEachIndexed { idx, msg ->
+                        msg.onCommit.complete(records[idx])
+                    }
                 }
             }
         }
@@ -231,10 +230,10 @@ class LocalLog<M> @JvmOverloads constructor(
 
     override fun readLastMessage(partition: Int): M? {
         val ps = state(partition)
-        if (ps.latestSubmittedOffset < 0) return null
+        if (ps.committedOffset.value < 0) return null
 
         return FileChannel.open(ps.logFilePath).use { ch ->
-            ch.position(ps.latestSubmittedOffset)
+            ch.position(ps.committedOffset.value)
             ch.readMessage()?.message
         }
     }
@@ -244,7 +243,7 @@ class LocalLog<M> @JvmOverloads constructor(
         val ps = state(partition)
         val fromOffset = msgIdToOffset(fromMsgId)
         val toOffset = msgIdToOffset(toMsgId)
-        if (fromOffset > ps.latestSubmittedOffset || fromOffset >= toOffset) return@sequence
+        if (fromOffset > ps.committedOffset.value || fromOffset >= toOffset) return@sequence
 
         FileChannel.open(ps.logFilePath).use { ch ->
             ch.position(fromOffset)
@@ -256,65 +255,45 @@ class LocalLog<M> @JvmOverloads constructor(
         }
     }
 
-    override suspend fun tailAll(partition: Int, afterMsgId: MessageId, processor: RecordProcessor<M>) = coroutineScope {
+    private fun PartitionState.readRange(afterOffset: LogOffset, toOffset: LogOffset): List<Record<M>> =
+        rethrowingChannelInterrupts {
+            FileChannel.open(logFilePath).use { fileCh ->
+                if (afterOffset >= 0) {
+                    fileCh.position(afterOffset)
+                    fileCh.readMessage()
+                }
+
+                buildList {
+                    while (fileCh.position() <= toOffset) fileCh.readMessage()?.let { add(it) }
+                }
+            }
+        }
+
+    override suspend fun <R> withTail(
+        partition: Int,
+        afterMsgId: MessageId,
+        action: suspend (Tail<M>) -> R,
+    ): R {
         val ps = state(partition)
         var latestCompletedOffset = MsgIdUtil.afterMsgIdToOffset(epoch, afterMsgId)
 
-        val ch = Channel<Record<M>>(100)
+        return action(object : Tail<M> {
+            override suspend fun poll(timeout: Duration): List<Record<M>> {
+                val targetOffset = ps.committedOffset.value.takeIf { it > latestCompletedOffset }
+                    ?: (if (timeout <= Duration.ZERO) null
+                    else withTimeoutOrNull(timeout) { ps.committedOffset.first { it > latestCompletedOffset } })
+                    ?: return emptyList()
 
-        launch {
-            ps.committedCh
-                .onSubscription {
-                    val targetOffset = ps.mutex.withLock { ps.latestSubmittedOffset }
-                    if (targetOffset < 0) return@onSubscription
-
-                    val catchUpRecords = runInterruptible {
-                        FileChannel.open(ps.logFilePath).use { fileCh ->
-                            val latestCompleted = latestCompletedOffset
-                            if (latestCompleted >= 0) {
-                                fileCh.position(latestCompleted)
-                                fileCh.readMessage()
-                            }
-
-                            buildList {
-                                while (fileCh.position() <= targetOffset) {
-                                    fileCh.readMessage()?.let { add(it) }
-                                }
-                            }
-                        }
+                return runInterruptible(Dispatchers.IO) {
+                    ps.readRange(latestCompletedOffset, targetOffset)
+                }.also { records ->
+                    check(records.isNotEmpty()) {
+                        "LocalLog committed offset $targetOffset yielded no records after $latestCompletedOffset"
                     }
-
-                    for (record in catchUpRecords) {
-                        ch.send(record)
-                    }
-
-                    latestCompletedOffset = targetOffset
+                    latestCompletedOffset = records.last().logOffset
                 }
-                .onEach {
-                    if (it.logOffset > latestCompletedOffset) {
-                        latestCompletedOffset = it.logOffset
-                        ch.send(it)
-                    }
-                }
-                .onCompletion { ch.close() }
-                .catch {
-                    try {
-                        throw it
-                    } catch (_: ClosedByInterruptException) {
-                        throw CancellationException()
-                    } catch (_: InterruptedException) {
-                        throw CancellationException()
-                    }
-                }
-                .collect()
-        }
-
-        while (isActive) {
-            val msg = withTimeoutOrNull(1.minutes) {
-                ch.receiveCatching().let { if (it.isClosed) null else it.getOrThrow() }
             }
-            processor.processRecords(listOfNotNull(msg))
-        }
+        })
     }
 
     override suspend fun openGroupSubscription(listener: SubscriptionListener<M>) = coroutineScope {
@@ -322,7 +301,7 @@ class LocalLog<M> @JvmOverloads constructor(
             launch {
                 try {
                     val spec = listener.transitionToLeader(p, LeaderTerm.of(termEpoch, elections.incrementAndGet())).await()
-                    tailAll(p, spec.afterMsgId, spec.processor)
+                    tailAll(p, spec.afterMsgId, processor = spec.processor)
                 } finally {
                     withContext(NonCancellable) { listener.demoteLeader(p) }
                 }
@@ -376,13 +355,13 @@ class LocalLog<M> @JvmOverloads constructor(
             LocalLog(path, SourceMessage.Codec, instantSource, epoch, termEpoch, useInstantSourceForNonTx, coroutineContext, partitions = partitions)
 
         override fun openReadOnlySourceLog(remotes: Map<RemoteAlias, Remote>, partitions: Int) =
-            ReadOnlyLocalLog(path, SourceMessage.Codec, epoch, termEpoch, coroutineContext, partitions = partitions)
+            ReadOnlyLocalLog(path, SourceMessage.Codec, epoch, termEpoch, partitions = partitions)
 
         override fun openReplicaLog(remotes: Map<RemoteAlias, Remote>, partitions: Int) =
             LocalLog(path, ReplicaMessage.Codec, instantSource, epoch, termEpoch, useInstantSourceForNonTx, coroutineContext, baseFileName = "REPLICA_LOG", partitions = partitions)
 
         override fun openReadOnlyReplicaLog(remotes: Map<RemoteAlias, Remote>, partitions: Int) =
-            ReadOnlyLocalLog(path, ReplicaMessage.Codec, epoch, termEpoch, coroutineContext, baseFileName = "REPLICA_LOG", partitions = partitions)
+            ReadOnlyLocalLog(path, ReplicaMessage.Codec, epoch, termEpoch, baseFileName = "REPLICA_LOG", partitions = partitions)
 
         override fun writeTo(dbConfig: DatabaseConfig.Builder) {
             dbConfig.localLog = localLog {

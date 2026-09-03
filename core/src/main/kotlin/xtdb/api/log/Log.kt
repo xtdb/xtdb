@@ -3,6 +3,8 @@
 package xtdb.api.log
 
 import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.UseSerializers
 import kotlinx.serialization.modules.PolymorphicModuleBuilder
@@ -23,6 +25,8 @@ import xtdb.util.asPath
 import java.nio.file.Path
 import java.time.Instant
 import java.util.*
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 import com.google.protobuf.Any as ProtoAny
 
 
@@ -75,12 +79,21 @@ interface Log<M> : AutoCloseable {
     }
 
     fun interface RecordProcessor<in M> {
-        /**
-         * Called once per read, whether or not it found anything: a read that came back empty arrives
-         * here as an empty list. That is how a consumer tells a quiet log from one it is no longer
-         * being delivered from.
-         */
+        /** Called once per poll, whether or not it found anything: an empty poll arrives as an empty list. */
         suspend fun processRecords(records: List<Record<M>>)
+    }
+
+    /** One consumer's position in a partition, valid only for the duration of [withTail]. */
+    interface Tail<out M> {
+        /**
+         * Waits up to [timeout] for at least one record, then returns it and any records already available.
+         * Returns empty only when no record becomes available before [timeout].
+         *
+         * A [timeout] of zero or less returns what is already buffered without waiting, and
+         * [Duration.INFINITE] waits until a record arrives or the caller is cancelled.
+         * Calls on one tail must not overlap.
+         */
+        suspend fun poll(timeout: Duration): List<Record<M>>
     }
 
     companion object {
@@ -134,7 +147,22 @@ interface Log<M> : AutoCloseable {
      */
     fun readRecords(partition: Int, fromMsgId: MessageId, toMsgId: MessageId): Sequence<Record<M>>
 
-    suspend fun tailAll(partition: Int, afterMsgId: MessageId, processor: RecordProcessor<M>)
+    /**
+     * Runs [action] with a tail positioned after [afterMsgId].
+     * The tail and its subscription are valid only until [action] returns.
+     */
+    suspend fun <R> withTail(partition: Int, afterMsgId: MessageId, action: suspend (Tail<M>) -> R): R
+
+    /** Polls a tail until cancelled, handing every poll to [processor], including empty polls. */
+    suspend fun tailAll(
+        partition: Int,
+        afterMsgId: MessageId,
+        pollTimeout: Duration = 1.seconds,
+        processor: RecordProcessor<M>,
+    ): Unit = withTail(partition, afterMsgId) { tail ->
+        while (currentCoroutineContext().isActive) processor.processRecords(tail.poll(pollTimeout))
+    }
+
     suspend fun openGroupSubscription(listener: SubscriptionListener<M>)
 
     /**

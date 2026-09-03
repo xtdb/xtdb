@@ -2,6 +2,7 @@ package xtdb.indexer
 
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.selects.*
 import kotlinx.coroutines.selects.select
 import xtdb.api.log.LeaderTerm
 import xtdb.api.log.Log
@@ -12,6 +13,7 @@ import xtdb.util.debug
 import xtdb.util.error
 import xtdb.util.logger
 import java.time.Instant
+import kotlin.time.Duration
 import kotlin.random.Random
 
 private val LOG = SimLog::class.logger
@@ -175,46 +177,42 @@ internal class SimLog<M>(private val name: String, private val rand: Random) : L
         return topic.subList(fromOffset.coerceAtLeast(0), toOffset.coerceAtMost(topic.size)).asSequence()
     }
 
-    /**
-     * Reads on the caller's own coroutine, as every real [Log] does.
-     *
-     * A shared loop delivering into each consumer from outside its job cannot be cancelled per
-     * consumer: [Log.RecordProcessor.processRecords] suspends until the consumer has applied the
-     * batch, so cancelling one mid-delivery would leave that loop suspended forever and starve
-     * every other subscription behind it.
-     */
-    override suspend fun tailAll(partition: Int, afterMsgId: MessageId, processor: Log.RecordProcessor<M>) {
+    override suspend fun <R> withTail(
+        partition: Int,
+        afterMsgId: MessageId,
+        action: suspend (Log.Tail<M>) -> R,
+    ): R {
         val startOffset = (MsgIdUtil.afterMsgIdToOffset(epoch, afterMsgId) + 1).toInt()
-        LOG.debug("$name/tailAll: startOffset=$startOffset topicSize=${topic.size}")
+        LOG.debug("$name/withTail: startOffset=$startOffset topicSize=${topic.size}")
         val consumer = PlainConsumer<M>(startOffset)
         plainConsumers += consumer
-        consumer.wake.trySend(Unit)
+        if (startOffset < topic.size) consumer.wake.trySend(Unit)
 
         try {
-            while (true) {
-                consumer.wake.receive()
-                yield()
+            return action(object : Log.Tail<M> {
+                override suspend fun poll(timeout: Duration): List<Log.Record<M>> {
+                    val woke = if (timeout > Duration.ZERO) {
+                        (withTimeoutOrNull(timeout) { consumer.wake.receive() } != null).also { yield() }
+                    } else {
+                        consumer.wake.tryReceive().isSuccess
+                    }
+                    if (!woke) return emptyList()
 
-                val nextOffset = consumer.nextOffset
-                val lag = topic.size - nextOffset
-                if (lag == 0) continue
+                    val nextOffset = consumer.nextOffset
+                    val lag = topic.size - nextOffset
+                    if (lag == 0) return emptyList()
 
-                val messageCount = rand.nextInt(1, lag + 1)
-                LOG.debug("$name/plainConsumer: delivering $messageCount record(s) [$nextOffset..${nextOffset + messageCount - 1}] (lag=$lag)")
-                try {
-                    processor.processRecords(topic.subList(nextOffset, nextOffset + messageCount).toList())
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Throwable) {
-                    LOG.error(e, "$name/plainConsumer: processRecords failed")
-                    throw e
+                    val messageCount = rand.nextInt(1, lag + 1)
+                    LOG.debug("$name/plainConsumer: delivering $messageCount record(s) [$nextOffset..${nextOffset + messageCount - 1}] (lag=$lag)")
+                    consumer.nextOffset += messageCount
+
+                    if (consumer.nextOffset < topic.size) consumer.wake.trySend(Unit)
+
+                    return topic.subList(nextOffset, nextOffset + messageCount).toList()
                 }
-                consumer.nextOffset += messageCount
-
-                if (consumer.nextOffset < topic.size) consumer.wake.trySend(Unit)
-            }
+            })
         } finally {
-            LOG.debug("$name/tailAll: closing plain subscription")
+            LOG.debug("$name/withTail: closing plain subscription")
             plainConsumers -= consumer
         }
     }
