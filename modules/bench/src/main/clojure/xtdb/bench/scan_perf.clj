@@ -56,7 +56,7 @@
 (defn scan-items-point-benchmark-queries
   "Individual point lookups at each 10% position in the index."
   [{:keys [spread-10]}]
-  (for [[i id] (map-indexed vector spread-10)]
+  (for [[i {id :xt/id}] (map-indexed vector spread-10)]
     {:id (keyword (str "scan-p" (* i 10)))
      :f #(xt/q % ["SELECT _id FROM items WHERE _id = ?" id])}))
 
