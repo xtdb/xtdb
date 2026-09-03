@@ -133,13 +133,13 @@
         ;; Pick a length value at the 99th percentile for a narrow BETWEEN (~1%)
         len-p99 (nth lengths (int (* 0.99 n-samples)))
         len-p98 (nth lengths (int (* 0.98 n-samples)))
-        ;; Pick a specific length value from the middle for point equality (~0.05%)
-        len-point (nth lengths (quot n-samples 2))
+        len-median (nth lengths (quot n-samples 2))
 
         timestamps (sort (mapv :item/published-at spread-1000))
         ;; Narrow timestamp window: top ~1% of the range
         ts-p99 (nth timestamps (int (* 0.99 n-samples)))
         ts-p98 (nth timestamps (int (* 0.98 n-samples)))
+        ts-median (nth timestamps (quot n-samples 2))
 
         ;; Pick a single lang for equality (~12.5%)
         lang-single (first langs)
@@ -157,7 +157,7 @@
 
      ;; Integer point equality (~0.05%)
      {:id :length-eq
-      :f #(xt/q % ["SELECT _id FROM items WHERE item$length = ?" len-point])}
+      :f #(xt/q % ["SELECT _id FROM items WHERE item$length = ?" len-median])}
 
      ;; Integer narrow range (~1%)
      {:id :length-range-1pct
@@ -169,11 +169,11 @@
 
      ;; Compound: string + integer (~6%)
      {:id :lang-eq-and-length-gt
-      :f #(xt/q % ["SELECT _id FROM items WHERE item$lang = ? AND item$length > ?" lang-single len-p99])}
+      :f #(xt/q % ["SELECT _id FROM items WHERE item$lang = ? AND item$length > ?" lang-single len-median])}
 
      ;; Compound: string + timestamp (~0.75%)
      {:id :author-and-published-gt
-      :f #(xt/q % ["SELECT _id FROM items WHERE item$author_name = ? AND item$published_at > ?" author-name-single ts-p99])}
+      :f #(xt/q % ["SELECT _id FROM items WHERE item$author_name = ? AND item$published_at > ?" author-name-single ts-median])}
 
      ;; Sparse column (~0.1%)
      {:id :doc-type-not-null
