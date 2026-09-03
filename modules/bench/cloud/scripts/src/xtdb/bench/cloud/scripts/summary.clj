@@ -45,13 +45,14 @@
      :total-ms total-ms}))
 
 (defn yakbench-query->query-row
-  [profile {:keys [id mean p50 p90 p99 n sum]}]
+  [profile {:keys [id mean p50 p90 p99 n rows sum]}]
   {:query (str (name profile) "/" id)
    :mean (util/format-duration :nanos mean)
    :p50 (util/format-duration :nanos p50)
    :p90 (util/format-duration :nanos p90)
    :p99 (util/format-duration :nanos p99)
    :n n
+   :rows rows
    :sum sum})
 
 (defn yakbench-summary->query-rows
@@ -386,7 +387,7 @@
   (let [{:keys [rows total-ms]} (yakbench-summary->query-rows summary)]
     (str (util/totals->string total-ms (:benchmark-total-time-ms summary))
          "\n\n"
-         (rows->string [:query :n :p50 :p90 :p99 :mean :percent-of-total] rows))))
+         (rows->string [:query :n :rows :p50 :p90 :p99 :mean :percent-of-total] rows))))
 
 ;; summary->slack multimethod
 
@@ -501,6 +502,7 @@
 
 (defmethod summary->slack "scan-perf" [summary]
   (let [{:keys [rows total-ms]} (yakbench-summary->query-rows summary)
+        columns [:query :rows :p50 :p99 :mean]
         mid (Math/ceil (/ (count rows) 2))
         [first-half second-half] (split-at mid rows)]
     (if (seq second-half)
@@ -508,15 +510,15 @@
        (util/totals->string total-ms (:benchmark-total-time-ms summary))
        "\n\n"
        (util/wrap-slack-code
-        (rows->string [:query :p50 :p99 :mean] first-half))
+        (rows->string columns first-half))
        "\n---SLACK-SPLIT---\n"
        (util/wrap-slack-code
-        (rows->string [:query :p50 :p99 :mean] second-half)))
+        (rows->string columns second-half)))
       (str
        (util/totals->string total-ms (:benchmark-total-time-ms summary))
        "\n\n"
        (util/wrap-slack-code
-        (rows->string [:query :p50 :p99 :mean] rows))))))
+        (rows->string columns rows))))))
 
 ;; summary->github-markdown multimethod
 
@@ -640,6 +642,7 @@
   (let [{:keys [rows total-ms]} (yakbench-summary->query-rows summary)
         columns [{:key :query :header "Query"}
                  {:key :n :header "N"}
+                 {:key :rows :header "Rows"}
                  {:key :p50 :header "P50"}
                  {:key :p90 :header "P90"}
                  {:key :p99 :header "P99"}

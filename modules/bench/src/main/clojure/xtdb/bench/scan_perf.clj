@@ -6,6 +6,7 @@
             [xtdb.bench :as b]
             [xtdb.compactor :as c]
             [xtdb.datasets.scan-items :as scan-items]
+            [xtdb.error :as err]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
   (:import (java.time Duration)))
@@ -58,50 +59,68 @@
   [{:keys [spread-10]}]
   (for [[i {id :xt/id}] (map-indexed vector spread-10)]
     {:id (keyword (str "scan-p" (* i 10)))
+     :expected-rows 1
      :f #(xt/q % ["SELECT _id FROM items WHERE _id = ?" id])}))
 
 (defn scan-items-set-benchmark-queries
   [{:keys [spread-10 spread-100 spread-1000 clustered-10 clustered-100 clustered-1000]}]
   (let [ids #(mapv :xt/id %)]
     [{:id :scan-spread-in-10
+      :expected-rows (count spread-10)
       :f #(xt/q % (into [(str "SELECT _id FROM items WHERE _id IN " (?s 10))] (ids spread-10)))}
      {:id :scan-clustered-in-10
+      :expected-rows (count clustered-10)
       :f #(xt/q % (into [(str "SELECT _id FROM items WHERE _id IN " (?s 10))] (ids clustered-10)))}
      {:id :scan-spread-or-10
+      :expected-rows (count spread-10)
       :f #(xt/q % (into [(str "SELECT _id FROM items WHERE " (or-clause "_id" 10))] (ids spread-10)))}
      {:id :scan-clustered-or-10
+      :expected-rows (count clustered-10)
       :f #(xt/q % (into [(str "SELECT _id FROM items WHERE " (or-clause "_id" 10))] (ids clustered-10)))}
 
      {:id :scan-spread-in-100
+      :expected-rows (count spread-100)
       :f #(xt/q % (into [(str "SELECT _id FROM items WHERE _id IN " (?s 100))] (ids spread-100)))}
      {:id :scan-clustered-in-100
+      :expected-rows (count clustered-100)
       :f #(xt/q % (into [(str "SELECT _id FROM items WHERE _id IN " (?s 100))] (ids clustered-100)))}
 
      {:id :scan-spread-in-1000
+      :expected-rows (count spread-1000)
       :f #(xt/q % (into [(str "SELECT _id FROM items WHERE _id IN " (?s 1000))] (ids spread-1000)))}
      {:id :scan-clustered-in-1000
+      :expected-rows (count clustered-1000)
       :f #(xt/q % (into [(str "SELECT _id FROM items WHERE _id IN " (?s 1000))] (ids clustered-1000)))}]))
 
 (defn scan-items-by-content-key-queries
   [{:keys [spread-10 spread-100 spread-1000 clustered-10 clustered-100 clustered-1000]}]
   (let [ckeys #(mapv :item/content-key %)]
+    ;; content_key is a random uuid per item, so an IN over n of them matches n rows just as an _id IN does
     [{:id :content-key-spread-in-10
+      :expected-rows (count spread-10)
       :f #(xt/q % (into [(str "SELECT _id FROM items WHERE item$content_key IN " (?s 10))] (ckeys spread-10)))}
      {:id :content-key-clustered-in-10
+      :expected-rows (count clustered-10)
       :f #(xt/q % (into [(str "SELECT _id FROM items WHERE item$content_key IN " (?s 10))] (ckeys clustered-10)))}
      {:id :content-key-spread-or-10
+      :expected-rows (count spread-10)
       :f #(xt/q % (into [(str "SELECT _id FROM items WHERE " (or-clause "item$content_key" 10))] (ckeys spread-10)))}
      {:id :content-key-clustered-or-10
+      :expected-rows (count clustered-10)
       :f #(xt/q % (into [(str "SELECT _id FROM items WHERE " (or-clause "item$content_key" 10))] (ckeys clustered-10)))}
 
      {:id :content-key-spread-in-100
+      :expected-rows (count spread-100)
       :f #(xt/q % (into [(str "SELECT _id FROM items WHERE item$content_key IN " (?s 100))] (ckeys spread-100)))}
      {:id :content-key-clustered-in-100
+      :expected-rows (count clustered-100)
       :f #(xt/q % (into [(str "SELECT _id FROM items WHERE item$content_key IN " (?s 100))] (ckeys clustered-100)))}
 
      {:id :content-key-spread-in-1000
+      :expected-rows (count spread-1000)
       :f #(xt/q % (into [(str "SELECT _id FROM items WHERE item$content_key IN " (?s 1000))] (ckeys spread-1000)))}
      {:id :content-key-clustered-in-1000
+      :expected-rows (count clustered-1000)
       :f #(xt/q % (into [(str "SELECT _id FROM items WHERE item$content_key IN " (?s 1000))] (ckeys clustered-1000)))}]))
 
 (defn scan-items-filter-queries
@@ -160,23 +179,41 @@
      {:id :doc-type-not-null
       :f #(xt/q % ["SELECT _id FROM items WHERE item$doc_type IS NOT NULL"])}]))
 
-(defn- profile-data [pstats]
+(defn- profile-data [pstats row-counts]
   (let [rows (for [[id {:keys [n min p50 p90 p95 p99 max mean mad sum]}]
                    (get pstats :stats {})]
-               {:id id :n n :min min :p50 p50 :p90 p90 :p95 p95 :p99 p99
+               {:id id :n n :rows (get row-counts id)
+                :min min :p50 p50 :p90 p90 :p95 p95 :p99 p99
                 :max max :mean mean :mad mad :sum sum})]
     (sort-by :sum > rows)))
 
+(defn- check-row-counts!
+  "Runs each query once and returns its row count by id, throwing where that contradicts `:expected-rows`.
+   Doubles as the JIT warm-up, and MUST stay outside `tufte/profiled` so that neither the count nor the check lands in a measurement."
+  [conn suite]
+  (into {} (for [{:keys [id f expected-rows]} suite]
+             (let [n (count (f conn))]
+               (when (and expected-rows (not= expected-rows n))
+                 (throw (err/fault ::unexpected-row-count
+                                   (format "%s matched %d rows, expected %d — it is not querying what its id says, so timing it would measure the wrong thing" id n expected-rows)
+                                   {:query id, :expected expected-rows, :actual n})))
+               [id n]))))
+
 (defn- profile [node iterations suite]
   (with-open [conn (get-conn node)]
-    (let [_warmup (doseq [{:keys [f]} suite] (f conn))
+    (let [row-counts (check-row-counts! conn suite)
           [_ pstats] (tufte/profiled
                       {}
                       (doseq [{:keys [id f]} suite
                               _ (range iterations)]
                         (p id (f conn))))]
-      {:profile (profile-data @pstats)
-       :formatted (tufte/format-pstats pstats)})))
+      {:profile (profile-data @pstats row-counts)
+       ;; tufte owns the stats table and can't carry a rows column, so the counts follow it —
+       ;; the log is where a human reads this stage, and a count nobody sees checks nothing
+       :formatted (str (tufte/format-pstats pstats)
+                       \newline
+                       "rows  " (str/join "  " (for [{:keys [id]} suite]
+                                                 (str id "=" (get row-counts id)))))})))
 
 (defmethod b/cli-flags :scan-perf [_]
   [["-n" "--n-items N_ITEMS" "Number of items to generate"
