@@ -26,7 +26,7 @@
            (org.apache.arrow.vector.types.pojo Field)
            (org.apache.commons.codec.binary Hex)
            (xtdb.tx TxOp$PatchDocs TxOp$PutDocs)
-           (xtdb.antlr Sql$DirectlyExecutableStatementContext Sql$DynamicParameterContext Sql$GroupByClauseContext Sql$HavingClauseContext Sql$JoinSpecificationContext Sql$JoinTypeContext Sql$ObjectNameAndValueContext Sql$OrderByClauseContext Sql$QualifiedRenameColumnContext Sql$QueryBodyTermContext Sql$QuerySpecificationContext Sql$QueryTailContext Sql$RenameColumnContext Sql$SearchedWhenClauseContext Sql$SelectClauseContext Sql$SetClauseContext Sql$SimpleWhenClauseContext Sql$SortSpecificationContext Sql$SortSpecificationListContext Sql$WhenOperandContext Sql$WhereClauseContext Sql$WithTimeZoneContext SqlLexer SqlVisitor)
+           (xtdb.antlr Sql$DirectlyExecutableStatementContext Sql$DynamicParameterContext Sql$GroupByClauseContext Sql$HavingClauseContext Sql$JoinSpecificationContext Sql$JoinTypeContext Sql$ObjectKeyAndValueContext Sql$OrderByClauseContext Sql$QualifiedRenameColumnContext Sql$QueryBodyTermContext Sql$QuerySpecificationContext Sql$QueryTailContext Sql$RenameColumnContext Sql$SearchedWhenClauseContext Sql$SelectClauseContext Sql$SetClauseContext Sql$SimpleWhenClauseContext Sql$SortSpecificationContext Sql$SortSpecificationListContext Sql$WhenOperandContext Sql$WhereClauseContext Sql$WithTimeZoneContext SqlLexer SqlVisitor)
            (xtdb.arrow RelationReader VectorReader)
            (xtdb.query ParsedStatement$Dml SqlParser SqlPlanner)
            xtdb.api.TableRef
@@ -59,8 +59,8 @@
                      (visitAsClause [this ctx] (-> (.columnLabel ctx) (.accept this)))
 
                      (visitColumnLabel [this ctx]
-                       (if-let [id (.identifier ctx)]
-                         (.accept id this)
+                       (if-let [cn (.columnName ctx)]
+                         (.accept cn this)
                          (symbol (util/str->normal-form-str (.getText ctx)))))
 
                      (visitTargetTable [this ctx]
@@ -70,7 +70,11 @@
                            tn)))
 
                      (visitTableAlias [this ctx] (-> (.correlationName ctx) (.accept this)))
-                     (visitColumnName [this ctx] (-> (.identifier ctx) (.accept this)))
+
+                     (visitObjectName [this ctx]
+                       (if-let [id (.identifier ctx)]
+                         (.accept id this)
+                         (symbol (util/str->normal-form-str (.getText ctx)))))
 
                      (visitRegularIdentifier [_ ctx] (symbol (util/str->normal-form-str (.getText ctx))))
 
@@ -683,7 +687,7 @@
 (defrecord TableRefVisitor [env scope left-scope]
   SqlVisitor
   (visitBaseTable [{{:keys [!id-count table-chains table-info ctes default-db] :as env} :env} ctx]
-    (let [table-chain (mapv identifier-sym (.identifier (.fromTableRef ctx)))
+    (let [table-chain (mapv identifier-sym (.objectName (.fromTableRef ctx)))
           table-alias (or (identifier-sym (.tableAlias ctx)) (peek table-chain))
           unique-table-alias (symbol (str table-alias "." (swap! !id-count inc)))
           cols (some-> (.tableProjection ctx) (->table-projection))]
@@ -893,17 +897,17 @@
                                                                                (->projected-col-expr col-idx expr)))]))
 
                                                                       (visitQualifiedAsterisk [_ ctx]
-                                                                        (let [[table-name schema-name] (rseq (mapv identifier-sym (.identifier (.identifierChain ctx))))]
+                                                                        (let [[table-name schema-name] (rseq (mapv identifier-sym (.objectName (.identifierChain ctx))))]
                                                                           (when schema-name
                                                                             (throw (UnsupportedOperationException. "schema not supported")))
 
                                                                           (let [excludes (when-let [exclude-ctx (.excludeClause ctx)]
-                                                                                           (into #{} (map identifier-sym) (.identifier exclude-ctx)))]
+                                                                                           (into #{} (map identifier-sym) (.columnName exclude-ctx)))]
 
                                                                             (if-let [table-cols (not-empty (find-cols scope [nil table-name] excludes))]
                                                                               (let [renames (->> (for [^Sql$QualifiedRenameColumnContext rename-pair (some-> (.qualifiedRenameClause ctx)
                                                                                                                                                              (.qualifiedRenameColumn))]
-                                                                                                   (let [sym (find-col scope [(identifier-sym (.identifier rename-pair)) table-name])
+                                                                                                   (let [sym (find-col scope [(identifier-sym (.columnName rename-pair)) table-name])
                                                                                                          out-col-name (.columnLabel (.asClause rename-pair))]
                                                                                                      (MapEntry/create sym (->col-sym (identifier-sym out-col-name)))))
                                                                                                  (into {}))]
@@ -919,7 +923,7 @@
       {:projected-cols (vec (concat (when-let [star-ctx (.selectListAsterisk sl-ctx)]
                                       (let [renames (->> (for [^Sql$RenameColumnContext rename-pair (some-> (.renameClause star-ctx)
                                                                                                             (.renameColumn))]
-                                                           (let [chain (rseq (mapv identifier-sym (.identifier (.identifierChain (.columnReference rename-pair)))))
+                                                           (let [chain (rseq (mapv identifier-sym (.objectName (.identifierChain (.columnReference rename-pair)))))
                                                                  out-col-name (.columnLabel (.asClause rename-pair))
                                                                  sym (find-col scope chain)]
 
@@ -928,7 +932,7 @@
 
                                             excludes (set/union (into #{} (map (comp symbol name :col-sym)) explicitly-projected-cols)
                                                                 (when-let [exclude-ctx (.excludeClause star-ctx)]
-                                                                  (into #{} (map identifier-sym) (.identifier exclude-ctx))))]
+                                                                  (into #{} (map identifier-sym) (.columnName exclude-ctx))))]
 
                                         (->> (find-cols scope nil excludes)
                                              (map-indexed (fn [col-idx sym]
@@ -1346,7 +1350,7 @@
   (visitColumnExpr [this ctx] (-> (.columnReference ctx) (.accept this)))
 
   (visitColumnReference [{{:keys [!id-count]} :env :keys [^Set !ob-col-refs ^Set !unresolved-cr]} ctx]
-    (let [chain (rseq (mapv identifier-sym (.identifier (.identifierChain ctx))))
+    (let [chain (rseq (mapv identifier-sym (.objectName (.identifierChain ctx))))
           matches (find-cols scope chain)]
       (when-let [sym (case (count matches)
                        0 (if (= chain '(user))
@@ -1882,8 +1886,8 @@
   (visitObjectExpr [this ctx] (.accept (.objectConstructor ctx) this))
 
   (visitObjectConstructor [this ctx]
-    (->> (for [^Sql$ObjectNameAndValueContext kv (.objectNameAndValue ctx)]
-           (MapEntry/create (keyword (identifier-sym (.objectName kv)))
+    (->> (for [^Sql$ObjectKeyAndValueContext kv (.objectKeyAndValue ctx)]
+           (MapEntry/create (keyword (identifier-sym (.objectKey kv)))
                             (-> (.expr kv) (.accept this))))
          (into {})))
 
@@ -2514,11 +2518,11 @@
                                                                   (emit-param (dec (parse-long (subs (.getText ctx) 1)))))
 
                                                                 (visitObjectRecord [this ctx]
-                                                                  (->> (.objectNameAndValue (.objectConstructor ctx))
+                                                                  (->> (.objectKeyAndValue (.objectConstructor ctx))
                                                                        (into #{} (map (partial accept-visitor this)))))
 
-                                                                (visitObjectNameAndValue [_ ctx]
-                                                                  (identifier-sym (.objectName ctx))))))
+                                                                (visitObjectKeyAndValue [_ ctx]
+                                                                  (identifier-sym (.objectKey ctx))))))
                                              (distinct))))))
 
           col-keys (mapv keyword col-syms)

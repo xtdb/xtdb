@@ -34,8 +34,8 @@ directlyExecutableStatement
 
     | ASSERT condition=expr (',' message=characterString)? #AssertStatement
 
-    | PREPARE statementName=identifier AS directlyExecutableStatement #PrepareStatement
-    | EXECUTE statementName=identifier executeArgs #ExecuteStatement
+    | PREPARE statementName=objectName AS directlyExecutableStatement #PrepareStatement
+    | EXECUTE statementName=objectName executeArgs #ExecuteStatement
 
     | COPY targetTable FROM STDIN opts=copyOpts # CopyInStmt
     | (START TRANSACTION | BEGIN TRANSACTION?) transactionCharacteristics? # StartTransactionStatement
@@ -43,7 +43,7 @@ directlyExecutableStatement
     | COMMIT (SYNC | ASYNC)? # CommitStatement
     | ROLLBACK # RollbackStatement
     | SET SESSION CHARACTERISTICS AS sessionCharacteristic (',' sessionCharacteristic)* # SetSessionCharacteristicsStatement
-    | SET ROLE ( identifier | NONE ) # SetRoleStatement
+    | SET ROLE ( roleName=objectName | NONE ) # SetRoleStatement
     | SET SESSION? ('TIME' 'ZONE' | 'TIMEZONE') zone=expr # SetTimeZoneStatement
     | SET AWAIT_TOKEN ( TO | '=' ) awaitToken=expr # SetAwaitTokenStatement
     | SET SESSION? identifier ( TO | '=' ) literal # SetSessionVariableStatement
@@ -52,16 +52,16 @@ directlyExecutableStatement
     | SHOW AWAIT_TOKEN # ShowAwaitTokenStatement
     | SHOW SNAPSHOT_TOKEN # ShowSnapshotTokenStatement
     | SHOW CLOCK_TIME # ShowClockTimeStatement
-    | ATTACH DATABASE dbName=identifier (WITH configYaml=characterString)? # AttachDatabaseStatement
-    | DETACH DATABASE dbName=identifier # DetachDatabaseStatement
+    | ATTACH DATABASE dbName=objectName (WITH configYaml=characterString)? # AttachDatabaseStatement
+    | DETACH DATABASE dbName=objectName # DetachDatabaseStatement
 
-    | GRANT roleName=identifier TO userName=identifier # GrantRoleStatement
-    | REVOKE roleName=identifier FROM userName=identifier # RevokeRoleStatement
+    | GRANT roleName=objectName TO userName=objectName # GrantRoleStatement
+    | REVOKE roleName=objectName FROM userName=objectName # RevokeRoleStatement
 
     | CREATE (OR ALTER)? TABLE targetTable ('(' columnNameList ')')? # CreateTableStatement
     ;
 
-targetTable : (schemaName=identifier '.')? tableName=identifier ;
+targetTable : (schemaName=objectName '.')? tableName=objectName ;
 
 executeArgs : ('(' expr (',' expr)* ')')? ;
 
@@ -134,37 +134,64 @@ singleDatetimeField : nonSecondPrimaryDatetimeField | 'SECOND' ( '(' intervalFra
 
 /// §5.4 Identifiers
 
-identifierChain : identifier ( '.' identifier )* ;
+identifierChain : objectName ( '.' objectName )* ;
 
 identifier
-    : (REGULAR_IDENTIFIER
-        | 'START' | 'END'
-        | 'COMMITTED' | 'UNCOMMITTED'
-        | 'TIMEZONE'
-        | 'VERSION'
-        | 'SYSTEM_TIME' | 'VALID_TIME'
-        | 'SELECT' | 'INSERT' | 'UPDATE' | 'DELETE' | 'ERASE'
-        | 'SETTING'
-        | 'ROLE'
-        | 'USER' | 'PASSWORD'
-        | 'VARBINARY' | 'BYTEA'
-        | 'URI' | 'OID'
-        | 'COPY' | 'FORMAT'
-        | 'ATTACH' | 'DETACH' | 'DATABASE' | 'LEVEL'
-        | 'FILTER'
-        | 'TABLE'
-        | METADATA
-        | SYNC
-        | setFunctionType )
-        # RegularIdentifier
+    : (REGULAR_IDENTIFIER | unreservedKeyword) # RegularIdentifier
     | DELIMITED_IDENTIFIER # DelimitedIdentifier
     ;
 
-columnName : identifier ;
+// Keywords admitted wherever an identifier can appear, the function-name and field-access positions
+// included, which is what makes this the narrower of the two tiers.
+//
+// A word is only eligible if every position the grammar uses it in is reached via a preceding fixed
+// keyword. ANTLR resolves a genuine overlap by alternative order, silently, so an ineligible word
+// changes what a query means rather than failing to parse. A word that opens a construct of its own
+// in expression position therefore belongs in `objectName` instead.
+//
+// xtdb.sql.identifier-test pins this set against the grammar in both directions.
+unreservedKeyword
+    : START | END
+    | COMMITTED | UNCOMMITTED
+    | TIMEZONE
+    | VERSION
+    | SYSTEM_TIME | VALID_TIME
+    | SELECT | INSERT | UPDATE | DELETE | ERASE
+    | SETTING
+    | ROLE
+    | USER | PASSWORD
+    | VARBINARY | BYTEA
+    | URI | OID
+    | COPY | FORMAT
+    | ATTACH | DETACH | DATABASE | LEVEL
+    | FILTER
+    | TABLE
+    | METADATA
+    | SYNC
+    | setFunctionType
+    | primaryDatetimeField
+    | pgExtractField
+    | rankFunctionType
+    | AT | BETWEEN | BY | CURRENT | FIRST | LAST | NEXT | OF | POSITION
+    ;
+
+// A name, in a position where nothing but a name can appear.
+//
+// On top of `identifier` this admits the words that open a construct of their own in expression
+// position, and so can't be reached from there: `PERIOD(a, b)` is the tstzRangeConstructor,
+// `VALUES ROW(1, 2)` a two-column row, `INTERVAL '3' DAY` an interval literal, and every type name
+// below is the leading token of a `dataType` alternative. PostgreSQL draws this same line and calls
+// the tier col_name_keyword.
+objectName
+    : identifier
+    | BIGINT | BOOLEAN | CHAR | DATE | DEC | DECIMAL | DOUBLE | DURATION | FLOAT | INT | INTEGER
+    | INTERVAL | KEYWORD | NUMERIC | OBJECT | PERIOD | PRECISION | REAL | RECORD | REGCLASS
+    | REGPROC | ROW | SMALLINT | TEXT | TIME | TIMESTAMP | TIMESTAMPTZ | TSTZRANGE | UUID | VARCHAR
+    ;
 
 columnLabel
-    : identifier
-    | 'CURRENT_USER'
+    : columnName=objectName
+    | CURRENT_USER
     ;
 
 // §6 Scalar Expressions
@@ -209,7 +236,7 @@ withOrWithoutTimeZone
 
 maximumCardinality : UNSIGNED_INTEGER ;
 
-fieldDefinition : fieldName=identifier dataType ;
+fieldDefinition : fieldName=objectName dataType ;
 
 /// §6.3 <value expression primary>
 
@@ -267,7 +294,7 @@ exprPrimary
     : subquery # ScalarSubqueryExpr
     | '(' expr ')' #WrappedExpr
     | literal # LiteralExpr
-    | exprPrimary '.' fieldName=identifier #FieldAccess
+    | exprPrimary '.' fieldName=objectName #FieldAccess
     | exprPrimary '[' expr ']' #ArrayAccess
     | exprPrimary '::' dataType #PostgresCastExpr
     | exprPrimary '||' exprPrimary #ConcatExpr
@@ -294,28 +321,28 @@ exprPrimary
 
     | 'EXISTS' subquery # ExistsPredicate
 
-    | (identifier '.')? 'HAS_ANY_COLUMN_PRIVILEGE' '('
+    | (schemaName=objectName '.')? 'HAS_ANY_COLUMN_PRIVILEGE' '('
         ( userString=expr ',' )?
         tableString=expr ','
         privilegeString=expr
       ')' # HasAnyColumnPrivilegePredicate
 
-    | (identifier '.')? 'HAS_TABLE_PRIVILEGE' '('
+    | (schemaName=objectName '.')? 'HAS_TABLE_PRIVILEGE' '('
         ( userString=expr ',' )?
         tableString=expr ','
         privilegeString=expr
       ')' # HasTablePrivilegePredicate
 
-    | (identifier '.')? 'HAS_SCHEMA_PRIVILEGE' '('
+    | (schemaName=objectName '.')? 'HAS_SCHEMA_PRIVILEGE' '('
         ( userString=expr ',' )?
         schemaString=expr ','
         privilegeString=expr
       ')' # HasSchemaPrivilegePredicate
 
-    | (schemaName=identifier '.')? 'VERSION' '(' ')' #PostgresVersionFunction
+    | (schemaName=objectName '.')? 'VERSION' '(' ')' #PostgresVersionFunction
 
-    | (identifier '.')? 'PG_GET_USERBYID' '(' relOwner=columnReference ')' # PostgresGetUserByIdFunction
-    | (identifier '.')? 'PG_TABLE_IS_VISIBLE' '(' columnOid=columnReference ')' # PostgresTableIsVisibleFunction
+    | (schemaName=objectName '.')? 'PG_GET_USERBYID' '(' relOwner=columnReference ')' # PostgresGetUserByIdFunction
+    | (schemaName=objectName '.')? 'PG_TABLE_IS_VISIBLE' '(' columnOid=columnReference ')' # PostgresTableIsVisibleFunction
 
     // numeric value functions
     | 'POSITION' '(' expr 'IN' expr ( 'USING' charLengthUnits )? ')' # PositionFunction
@@ -351,13 +378,13 @@ exprPrimary
     | 'REPLACE' '(' source=expr ',' pattern=expr ',' replacement=expr ')' # ReplaceFunction
     | 'REGEXP_REPLACE' '(' source=expr ',' pattern=characterString ',' replacement=characterString (',' start=integerLiteral ( ',' n=integerLiteral )? )? (',' flags=characterString)? ')' # RegexpReplaceFunction
 
-    | (identifier '.')? 'CURRENT_USER' # CurrentUserFunction
-    | (identifier '.')? 'CURRENT_SCHEMA' ('(' ')')? # CurrentSchemaFunction
-    | (identifier '.')? 'CURRENT_SCHEMAS' '(' expr ')' # CurrentSchemasFunction
-    | (identifier '.')? 'CURRENT_CATALOG' ('(' ')')? # CurrentCatalogFunction
-    | (identifier '.')? 'PG_GET_EXPR' ('(' expr ',' expr (',' expr)? ')')? # PgGetExprFunction
-    | (identifier '.')? '_PG_EXPANDARRAY' ('(' expr ')')? # PgExpandArrayFunction
-    | (identifier '.')? 'PG_GET_INDEXDEF' '(' expr (',' expr ',' expr)? ')' # PgGetIndexdefFunction
+    | (schemaName=objectName '.')? 'CURRENT_USER' # CurrentUserFunction
+    | (schemaName=objectName '.')? 'CURRENT_SCHEMA' ('(' ')')? # CurrentSchemaFunction
+    | (schemaName=objectName '.')? 'CURRENT_SCHEMAS' '(' expr ')' # CurrentSchemasFunction
+    | (schemaName=objectName '.')? 'CURRENT_CATALOG' ('(' ')')? # CurrentCatalogFunction
+    | (schemaName=objectName '.')? 'PG_GET_EXPR' ('(' expr ',' expr (',' expr)? ')')? # PgGetExprFunction
+    | (schemaName=objectName '.')? '_PG_EXPANDARRAY' ('(' expr ')')? # PgExpandArrayFunction
+    | (schemaName=objectName '.')? 'PG_GET_INDEXDEF' '(' expr (',' expr ',' expr)? ')' # PgGetIndexdefFunction
     | PG_SLEEP '(' sleepSeconds=expr ')' # PgSleepFunction
     | PG_SLEEP_FOR '(' sleepPeriod=expr ')' # PgSleepForFunction
 
@@ -387,11 +414,11 @@ booleanValue : 'TRUE' | 'FALSE' | 'UNKNOWN' ;
 // spec addition: objectConstructor
 
 objectConstructor
-    : ('RECORD' | 'OBJECT') '(' (objectNameAndValue (',' objectNameAndValue)*)? ')'
-    | '{' (objectNameAndValue (',' objectNameAndValue)*)? '}'
+    : ('RECORD' | 'OBJECT') '(' (objectKeyAndValue (',' objectKeyAndValue)*)? ')'
+    | '{' (objectKeyAndValue (',' objectKeyAndValue)*)? '}'
     ;
 
-objectNameAndValue : objectName=identifier ':' expr ;
+objectKeyAndValue : objectKey=objectName ':' expr ;
 
 parameterSpecification
     : '?' #DynamicParameter
@@ -407,7 +434,7 @@ columnReference : identifierChain ;
 
 /// generate_series function
 
-generateSeries : (identifier '.')? fn=(GENERATE_SERIES | RANGE) '(' seriesStart=expr ',' seriesEnd=expr (',' seriesStep=expr)? ')' ;
+generateSeries : (schemaName=objectName '.')? fn=(GENERATE_SERIES | RANGE) '(' seriesStart=expr ',' seriesEnd=expr (',' seriesStep=expr)? ')' ;
 
 /// §6.10 <window function>
 
@@ -444,7 +471,7 @@ fromFirstOrLast
     | 'FROM' 'LAST' # FromLast
     ;
 
-windowNameOrSpecification : windowName=identifier | windowSpecification ;
+windowNameOrSpecification : windowName=objectName | windowSpecification ;
 
 /// §6.11 <nested window function>
 
@@ -552,6 +579,9 @@ tableReference
 
 withOrdinality : 'WITH' 'ORDINALITY' ;
 
+// `identifier`, not `objectName`, because the `AS` is optional: `FROM foo bar` reaches the name with
+// no preceding fixed keyword, which is the eligibility rule `unreservedKeyword` states. The DML
+// correlation names are optional-`AS` too, and narrow for the same reason.
 tableAlias : 'AS'? correlationName=identifier ;
 tableProjection : '(' columnNameList ')' ;
 
@@ -573,9 +603,9 @@ tableTimePeriodSpecification
     | 'FROM' from=expr 'TO' to=expr # TableFromTo
     ;
 
-fromTableRef : ((identifier '.')? identifier '.')? identifier ;
+fromTableRef : ((objectName '.')? objectName '.')? objectName ;
 
-columnNameList : columnName (',' columnName)* ;
+columnNameList : columnName+=objectName (',' columnName+=objectName)* ;
 
 /// §7.7 <joined table>
 
@@ -609,11 +639,11 @@ havingClause : 'HAVING' searchCondition ;
 windowClause : 'WINDOW' windowDefinitionList ;
 windowDefinitionList : windowDefinition (',' windowDefinition)* ;
 windowDefinition : newWindowName 'AS' windowSpecification ;
-newWindowName : windowName=identifier ;
+newWindowName : windowName=objectName ;
 
 windowSpecification : '(' windowSpecificationDetails ')' ;
 
-windowSpecificationDetails : existingWindowName=identifier? windowPartitionClause? windowOrderClause? windowFrameClause? ;
+windowSpecificationDetails : existingWindowName=objectName? windowPartitionClause? windowOrderClause? windowFrameClause? ;
 
 windowPartitionClause : 'PARTITION' 'BY' windowPartitionColumnReferenceList ;
 windowPartitionColumnReferenceList : columnReference (',' columnReference)* ;
@@ -654,11 +684,11 @@ qualifiedRenameClause
     | 'RENAME' '(' qualifiedRenameColumn (',' qualifiedRenameColumn )* ')'
     ;
 
-qualifiedRenameColumn : identifier asClause ;
+qualifiedRenameColumn : columnName=objectName asClause ;
 
 excludeClause
-    : 'EXCLUDE' identifier
-    | 'EXCLUDE' '(' identifier (',' identifier )* ')'
+    : 'EXCLUDE' columnName+=objectName
+    | 'EXCLUDE' '(' columnName+=objectName (',' columnName+=objectName )* ')'
     ;
 
 derivedColumn : expr asClause? ;
@@ -669,7 +699,7 @@ asClause : 'AS'? columnLabel ;
 queryExpression : withClause? queryExpressionNoWith ;
 queryExpressionNoWith : queryExpressionBody orderByClause? offsetAndLimit?  ;
 withClause : 'WITH' RECURSIVE? withListElement (',' withListElement)* ;
-withListElement : MATERIALIZED? queryName=identifier ('(' columnNameList ')')? 'AS' subquery ;
+withListElement : MATERIALIZED? queryName=objectName ('(' columnNameList ')')? 'AS' subquery ;
 
 queryExpressionBody
     : queryTerm # QueryBodyTerm
@@ -823,7 +853,7 @@ setClauseList : setClause (',' setClause)* ;
 setClause : setTarget '=' updateSource=expr ;
 
 // TODO SQL:2011 supports updating keys within a struct here
-setTarget : columnName ;
+setTarget : columnName=objectName ;
 
 /// §17.3 <transaction characteristics>
 

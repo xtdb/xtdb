@@ -86,6 +86,9 @@ private fun identStr(ctx: Sql.IdentifierContext): String = when (ctx) {
     else -> normalForm(ctx.text)
 }
 
+private fun identStr(ctx: Sql.ObjectNameContext): String =
+    ctx.identifier()?.let(::identStr) ?: normalForm(ctx.text)
+
 // session parameter / variable names are lower-cased rather than normal-formed — mirrors pgwire's session-param-name.
 private fun sessionParamName(ctx: Sql.IdentifierContext): String = when (ctx) {
     is Sql.DelimitedIdentifierContext -> ctx.text.substring(1, ctx.text.length - 1)
@@ -170,7 +173,7 @@ private class ParsedStatementVisitor : SqlBaseVisitor<ParsedStatement>() {
 
     override fun visitCreateTableStatement(ctx: Sql.CreateTableStatementContext): ParsedStatement {
         val tt = ctx.targetTable()
-        val cols = ctx.columnNameList()?.columnName()?.map { identStr(it.identifier()) } ?: emptyList()
+        val cols = ctx.columnNameList()?.columnName?.map(::identStr) ?: emptyList()
         return Dml.CreateTable(ctx, tt.schemaName?.let(::identStr), identStr(tt.tableName), cols)
     }
 
