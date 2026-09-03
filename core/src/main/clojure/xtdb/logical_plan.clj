@@ -1258,10 +1258,19 @@
     [:apply opts i
      [:project project-opts dependent-relation]]
     ;;=>
-    (let [{:keys [mode]} opts
+    (let [{:keys [mode mark-join-projection]} opts
           {:keys [projections]} project-opts]
-      (when (and (contains? #{:semi-join :anti-join} mode)
-                 (every? symbol? projections))
+      (when (or (and (contains? #{:semi-join :anti-join} mode)
+                     (every? symbol? projections))
+
+                ;; `EXISTS (SELECT 1 ...)` projects a constant, which discards the correlated column
+                ;; and strands the select below it where the mark-join rules can't reach - and a
+                ;; mark on the constant true reads nothing from the dependent side, so the
+                ;; projection can go. Restricted to constants: dropping a rename moves other plans
+                ;; to a worse fixpoint, and an IN marks on a dependent column it would strand.
+                (and (= mode :mark-join)
+                     (every? true? (vals mark-join-projection))
+                     (every? #(and (map? %) (not (symbol? (val (first %))))) projections)))
         [:apply (->apply-opts opts) i dependent-relation]))
 
     [:semi-join join-opts i
