@@ -186,7 +186,7 @@ private fun AdminClient.warnIfTruncatable(topic: String, replicas: Int) {
         } catch (e: InterruptedException) {
             throw e
         } catch (e: Exception) {
-            LOG.warn(e, "could not read $topic's configuration to check XTDB's durability requirements")
+            LOG.warn("could not read $topic's configuration to check XTDB's durability requirements: ${e.message}")
             null
         } ?: return
 
