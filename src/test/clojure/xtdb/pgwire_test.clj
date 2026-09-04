@@ -257,28 +257,20 @@
         (is (= false (.next rs)))))))
 
 (t/deftest prepared-stmt-sees-new-cols-4570
-  (with-open [conn (jdbc-conn {"prepareThreshold" 1})]
-    ;; my_col is declared (untyped) up front - #4467 means a query can't reference an undeclared
-    ;; column - and a re-planned prepared statement picks up its values as they're inserted
-    (jdbc/execute! conn ["CREATE TABLE docs (_id, my_col)"])
+  ;; -1 server-prepares from the first execution, so the second reuses its plan across the schema
+  ;; change - at the default threshold both executions re-parse and the test passes without ever
+  ;; exercising a stale plan.
+  (with-open [conn (jdbc-conn {"prepareThreshold" -1})]
     (jdbc/execute! conn ["INSERT INTO docs RECORDS {_id: 1}"])
 
-    (t/is (= [{:_id 1, :my_col nil}]
-             (jdbc/execute! conn ["SELECT _id, my_col FROM docs"])))
-
-    (with-open [stmt (.prepareStatement conn "FROM docs SELECT my_col ORDER BY _id")
-                star-stmt (.prepareStatement conn "FROM docs ORDER BY _id")]
-      (with-open [rs (.executeQuery stmt)
-                  rs-star (.executeQuery star-stmt)]
-        (t/is (= [{:my_col nil}] (resultset-seq rs)))
-        (t/is (= [{:_id 1, :my_col nil}] (resultset-seq rs-star))))
+    (with-open [stmt (.prepareStatement conn "SELECT * FROM docs ORDER BY _id")]
+      (with-open [rs (.executeQuery stmt)]
+        (t/is (= [{:_id 1}] (resultset-seq rs))))
 
       (jdbc/execute! conn ["INSERT INTO docs RECORDS {_id: 2, my_col: 'foo'}"])
 
-      (with-open [rs (.executeQuery stmt)
-                  rs-star (.executeQuery star-stmt)]
-        (t/is (= [{:my_col nil} {:my_col "foo"}] (resultset-seq rs)))
-       (t/is (= [{:_id 1, :my_col nil} {:_id 2, :my_col "foo"}] (resultset-seq rs-star)))))))
+      (with-open [rs (.executeQuery stmt)]
+        (t/is (= [{:_id 1, :my_col nil} {:_id 2, :my_col "foo"}] (resultset-seq rs)))))))
 
 (deftest parameterized-query-test
   (with-open [conn (jdbc-conn)

@@ -784,6 +784,19 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
               (with-open [cursor (.openQuery stmt)]
                 (t/is (= res (tu/<-cursor cursor)))))
 
+            (t/testing "a column that didn't exist when the query was prepared"
+              (xt/execute-tx conn [[:put-docs :bar {:xt/id 1}]])
+
+              (with-open [bar-stmt (.prepareStatement ^Xtdb$Connection conn "SELECT * FROM bar ORDER BY _id")]
+                (with-open [cursor (.openQuery bar-stmt)]
+                  (t/is (= [[{:xt/id 1}]] (tu/<-cursor cursor))))
+
+                (xt/execute-tx conn [[:put-docs :bar {:xt/id 2, :my-col "foo"}]])
+
+                (with-open [cursor (.openQuery bar-stmt)]
+                  (t/is (= [[{:xt/id 1} {:xt/id 2, :my-col "foo"}]]
+                           (tu/<-cursor cursor))))))
+
             (t/testing "a -> union, but prepared query is still fine outside of pgwire"
               (xt/execute-tx conn [[:put-docs :foo {:xt/id 3 :a 1 :b 4}]])
 
