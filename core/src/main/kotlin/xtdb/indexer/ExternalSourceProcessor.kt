@@ -107,7 +107,10 @@ internal class ExternalSourceProcessor(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
-            if (!e.isShutdownSignal) watchers.notifyError(e)
+            // A supersession reaches here raw, where every other term-teardown cause is re-cast by
+            // `asCancellation` and caught above: it says this node has resigned, not that the database
+            // has failed, so it is a shutdown signal in everything but type.
+            if (!e.isShutdownSignal && e !is LeaderSupersededException) watchers.notifyError(e)
         }
     }
 

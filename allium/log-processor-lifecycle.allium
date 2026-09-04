@@ -193,6 +193,10 @@ contract SubscriptionListener {
         -- leader's unconfirmed writes are discarded (a lower-term record read back is
         -- dropped). See live-index.allium, applyRecord.
 
+    @invariant StandingDownLeavesTheDatabaseReadable
+        -- A node that stands down for a higher term leaves its database queryable on that node.
+        --   The end of a term reaches everything it was driving, the external source included, each of which reports a role that has changed rather than a database that has failed.
+
     @invariant FollowerIsSoleReplicaConsumer
         -- A follower is the sole replica-log consumer for its node; the leader
         -- consumes the source log and writes the replica log.

@@ -32,6 +32,7 @@ import xtdb.indexer.BlockUploader
 import xtdb.indexer.CrashLogger
 import xtdb.indexer.LeaderDriver
 import xtdb.indexer.LeaderLogProcessor
+import xtdb.indexer.LeaderSupersededException
 import xtdb.indexer.LiveIndex
 import xtdb.indexer.RealLeaderDriver
 import xtdb.indexer.ReplicaApply
@@ -339,6 +340,44 @@ class ExternalSourceTest {
             "the fire-and-forget caller sees the original failure cause"
         )
         assertNotNull(watchers.exception, "watchers should also be in failed state")
+    }
+
+    @Test
+    fun `a superseded term stands the source down without failing the database`() = runTest {
+        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
+
+        val caught = CompletableDeferred<Throwable>()
+        val source = object : ExternalSource {
+            override suspend fun onPartitionAssigned(
+                partition: Int, afterToken: ExternalSourceToken?, txIndexer: TxIndexer
+            ) {
+                try {
+                    while (true) {
+                        txIndexer.submitTx(null) { TxResult.Committed() }
+                        delay(10.milliseconds)
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Throwable) {
+                    caught.complete(e)
+                    throw e
+                }
+            }
+
+            override fun close() {}
+        }
+
+        leaderProc(replicaLog = replicaLog, watchers = watchers, extSource = source)
+
+        replicaLog.appendMessage(ReplicaMessage.NoOp(termId = 1))
+
+        val caughtError = caught.await()
+        assertInstanceOf(
+            LeaderSupersededException::class.java, caughtError,
+            "the source is told the term was superseded, not merely that it was cancelled"
+        )
+        assertNull(watchers.exception, "a resignation leaves the database queryable")
     }
 
     @Test
