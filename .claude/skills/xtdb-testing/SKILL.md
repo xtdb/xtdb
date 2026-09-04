@@ -17,7 +17,7 @@ Interpret MUST, MUST NOT, SHOULD, SHOULD NOT, MAY per RFC 2119.
 3. You MUST tell `gradle-tests`, in every invocation, not to modify any source file.
 4. A test that fails after your change is a test *you* broke — see [When a test fails](#when-a-test-fails).
 5. You MUST stop a run the moment you know you'll re-run it, rather than letting it finish — see [A run you already know you'll redo is waste](#a-run-you-already-know-youll-redo-is-waste).
-6. You MUST name the tree in every invocation, and check the tree the agent reports back — see [Name the tree; the agent cannot infer it](#name-the-tree-the-agent-cannot-infer-it).
+6. You MUST check the tree the agent reports back, and MUST NOT tell it which tree to run in — see [Check the tree it reports; never name one](#check-the-tree-it-reports-never-name-one).
 
 The rest of this document is the mechanics behind those six.
 
@@ -53,18 +53,19 @@ Use the `gradle-tests` agent via the Task tool for *all* test runs, Clojure incl
   Combine every namespace you want covered into a single invocation and let the agent choose how to run them; Gradle parallelises internally.
 - You SHOULD run the relevant tests proactively after a code change rather than waiting to be asked.
 
-## Name the tree; the agent cannot infer it
+## Check the tree it reports; never name one
 
 A `gradle-tests` agent inherits your working directory, and the Task tool has no parameter that pins it.
 Worktrees here live under `.claude/worktrees/` — *inside* the main checkout — so a run that ends up in the wrong one returns a plausible green rather than an error.
-From `gradle-tests` 0.4.0 the agent carries its own half: it prunes the nested worktrees out of its search for result files, reports its toplevel in the status header, and stops if that toplevel is not the path you named.
+From `gradle-tests` 0.4.1 the agent prunes those nested worktrees out of its search for result files, and reports the toplevel it ran in at the head of its report.
 
-Two obligations remain yours, because only the caller can discharge them.
-
-- **You MUST give the absolute path of the tree in every invocation.**
-  Only you know which tree is under test; the agent has its working directory and whatever you tell it.
-- **You MUST check the toplevel it reports against the tree you asked for.**
+- **You MUST NOT put a tree path in the invocation.**
+  A path in the prompt reads as a destination, not as an assertion to be checked: the agent `cd`s to it and builds there, so a wrong path *moves* the run instead of failing.
+  Left alone, the inherited working directory is the tree you are working in by construction, which is the one guarantee here that cannot be talked out of.
+  A path with a module name on the tail — `…/xtdb/core` — is worse still, because it also reads as a hint about *what* to run.
+- **You MUST check the toplevel it reports against the tree you are working in.**
   The commit it reports does not identify a tree: sibling worktrees branched off the same point commonly sit on the same sha, so a report headed with the right commit can still describe the wrong checkout.
+  This check is yours alone. The agent has no working equivalent, so a report that names the wrong tree will arrive looking exactly like one that names the right tree.
 
 ## A run you already know you'll redo is waste
 
