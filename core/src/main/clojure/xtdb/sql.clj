@@ -26,9 +26,10 @@
            (org.apache.arrow.vector.types.pojo Field)
            (org.apache.commons.codec.binary Hex)
            (xtdb.tx TxOp$PatchDocs TxOp$PutDocs)
-           (xtdb.antlr Sql$DirectlyExecutableStatementContext Sql$DynamicParameterContext Sql$GroupByClauseContext Sql$HavingClauseContext Sql$JoinSpecificationContext Sql$JoinTypeContext Sql$ObjectNameAndValueContext Sql$OrderByClauseContext Sql$QualifiedRenameColumnContext Sql$QueryBodyTermContext Sql$QuerySpecificationContext Sql$QueryTailContext Sql$RenameColumnContext Sql$SearchedWhenClauseContext Sql$SelectClauseContext Sql$SetClauseContext Sql$SimpleWhenClauseContext Sql$SortSpecificationContext Sql$SortSpecificationListContext Sql$WhenOperandContext Sql$WhereClauseContext Sql$WithTimeZoneContext SqlLexer SqlVisitor)
+           (xtdb.antlr Sql$DirectlyExecutableStatementContext Sql$DynamicParameterContext Sql$XtqlQueryContext Sql$GroupByClauseContext Sql$HavingClauseContext Sql$JoinSpecificationContext Sql$JoinTypeContext Sql$ObjectNameAndValueContext Sql$OrderByClauseContext Sql$QualifiedRenameColumnContext Sql$QueryBodyTermContext Sql$QuerySpecificationContext Sql$QueryTailContext Sql$RenameColumnContext Sql$SearchedWhenClauseContext Sql$SelectClauseContext Sql$SetClauseContext Sql$SimpleWhenClauseContext Sql$SortSpecificationContext Sql$SortSpecificationListContext Sql$WhenOperandContext Sql$WhereClauseContext Sql$WithTimeZoneContext SqlLexer SqlVisitor)
            (xtdb.arrow RelationReader VectorReader)
            (xtdb.query ParsedStatement$Dml SqlParser SqlPlanner)
+           (xtdb.xtql QueryWithParams)
            xtdb.api.TableRef
            xtdb.util.StringUtil))
 
@@ -2892,12 +2893,25 @@
                         (mapv #(->col-sym (str unique-table-alias) (str %)))))))
 
   (visitXtqlQuery [_ ctx]
-    (let [{:keys [ra-plan]} (-> (edn/read-string {:readers *data-readers*}
-                                                 (.accept (.xtqlQuery ctx) string-literal-visitor))
-                                (xtql/parse-query env)
-                                (xtql.plan/compile-query {:table-info (:table-info env)}))]
+    (let [param-idxs (if-let [xtql-params (.xtqlParams ctx)]
+                       (mapv (fn [^ParserRuleContext param-ctx]
+                               (long (.accept param-ctx (->param-idx-visitor env))))
+                             (.parameterSpecification xtql-params))
+                       (.get ^Map (:dynamic-param-idxs env) ctx))
 
-      (->QueryExpr ra-plan (mapv symbol (lp/relation-columns ra-plan)))))
+          parsed (-> (edn/read-string {:readers *data-readers*}
+                                      (.accept (.xtqlQuery ctx) string-literal-visitor))
+                     (xtql/parse-query (assoc env :param-idxs param-idxs)))]
+
+      ;; the placeholders are never planned as expressions, so this is the only place the statement's
+      ;; param count hears about them - and only once the query has turned out to be a fn that takes
+      ;; them, since otherwise nothing consumes the arguments they stand for.
+      (when (instance? QueryWithParams parsed)
+        (doseq [param-idx param-idxs]
+          (swap! (:!param-count env) max (inc (long param-idx)))))
+
+      (let [{:keys [ra-plan]} (xtql.plan/compile-query parsed {:table-info (:table-info env)})]
+        (->QueryExpr ra-plan (mapv symbol (lp/relation-columns ra-plan))))))
 
   (visitSubquery [this ctx] (-> (.queryExpression ctx) (.accept this)))
 
@@ -3393,15 +3407,50 @@
   (doseq [warning @!warnings]
     (log/debug (error-string warning))))
 
+(defn- xtql-arg-count
+  "How many arguments an inline XTQL query consumes, where its top-level form is a fn.
+
+  A string that doesn't read counts zero, leaving the error for `visitXtqlQuery` to raise where it
+  has the reader's context."
+  [^Sql$XtqlQueryContext ctx]
+  (or (try
+        (-> (edn/read-string {:readers *data-readers*}
+                             (.accept (.xtqlQuery ctx) string-literal-visitor))
+            (xtql/fn-arity))
+        (catch Exception _))
+      0))
+
 (defn- ->dynamic-param-idxs
-  "Maps each `?` in the tree to its ordinal among the tree's `?`s, in source order."
+  "Maps each node that consumes positional arguments to the indices it takes, in source order.
+
+  A `?` takes one, keyed to the index itself. An inline XTQL query written without `xtqlParams` takes
+  one per param of its top-level fn, keyed to the vector of them: those params are what the arguments
+  bind to, and there is no placeholder standing in for each. Numbering them here rather than counting
+  from zero within the query is what stops them colliding with the statement's own `?`s."
   ^Map [^ParseTree tree]
-  (let [idxs (IdentityHashMap.)]
-    (letfn [(walk! [^ParseTree node]
-              (if (instance? Sql$DynamicParameterContext node)
-                (.put idxs node (.size idxs))
-                (dotimes [child-idx (.getChildCount node)]
-                  (walk! (.getChild node child-idx)))))]
+  (let [idxs (IdentityHashMap.)
+        !next-idx (int-array 1)]
+    (letfn [(claim! [node arg-count]
+              (let [idx (aget !next-idx 0)]
+                (aset !next-idx 0 (+ idx (int arg-count)))
+                idx))
+
+            (walk-children! [^ParseTree node]
+              (dotimes [child-idx (.getChildCount node)]
+                (walk! (.getChild node child-idx))))
+
+            (walk! [^ParseTree node]
+              (condp instance? node
+                Sql$DynamicParameterContext (.put idxs node (claim! node 1))
+
+                Sql$XtqlQueryContext (let [^Sql$XtqlQueryContext xtql-ctx node]
+                                       (if (.xtqlParams xtql-ctx)
+                                         (walk-children! node)
+                                         (let [arg-count (xtql-arg-count xtql-ctx)
+                                               base (claim! node arg-count)]
+                                           (.put idxs node (vec (range base (+ base arg-count)))))))
+
+                (walk-children! node)))]
       (walk! tree))
     idxs))
 

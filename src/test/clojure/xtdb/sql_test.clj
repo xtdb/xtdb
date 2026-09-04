@@ -3283,7 +3283,67 @@ UNION ALL
       (t/is (= {:xt/id 2, :y "baz"}
                (jdbc/execute-one! conn [(format "XTQL ($$ %s $$, ?)" (pr-str '#(from :bar [{:xt/id %} *]))) 2]
                                   {:builder-fn xt-jdbc/builder-fn}))
-            "XTQL params through PGJDBC"))))
+            "XTQL params through PGJDBC")))
+
+  (t/testing "fn params take their index from the placeholder that supplies them, 5995"
+    (t/is (= [{:xt/id 2, :y "baz", :x "x"}]
+             (xt/q tu/*node* [(format "SELECT ? AS x, t.* FROM (XTQL ($$ %s $$, ?)) t"
+                                      (pr-str '#(from :bar [{:xt/id %} *])))
+                              "x" 2]))
+          "a placeholder ahead of the XTQL clause")
+
+    (t/is (= [{:xt/id 2, :y "baz", :x "x"}]
+             (xt/q tu/*node* [(format "SELECT ? AS x, t.* FROM (XTQL ($$ %s $$, ?, ?)) t"
+                                      (pr-str '#(from :bar [{:xt/id %1, :y %2} *])))
+                              "x" 2 "baz"]))
+          "several fn params")
+
+    (t/is (= [{:xt/id 2, :y "baz", :x "x"}]
+             (xt/q tu/*node* [(format "SELECT $1 AS x, t.* FROM (XTQL ($$ %s $$, $2)) t"
+                                      (pr-str '#(from :bar [{:xt/id %} *])))
+                              "x" 2]))
+          "numbered placeholders")
+
+    (t/is (anomalous? [:incorrect :xtql/fn-arity-error
+                       "XTQL fn expects 1 argument(s), got 2"]
+                      (xt/q tu/*node* [(format "XTQL ($$ %s $$, ?, ?)" (pr-str '#(from :bar [{:xt/id %} *])))
+                                       2 3]))
+          "more placeholders than the fn takes"))
+
+  (t/testing "written without `xtqlParams`, a fn's params are numbered from where the query sits"
+    (t/is (= [{:xt/id 2, :y "baz", :x "x"}]
+             (xt/q tu/*node* [(format "SELECT ? AS x, t.* FROM (XTQL $$ %s $$) t"
+                                      (pr-str '#(from :bar [{:xt/id %} *])))
+                              "x" 2]))
+          "a placeholder ahead of the XTQL clause")
+
+    (t/is (= [{:xt/id 2, :y "baz", :x "x"}]
+             (xt/q tu/*node* [(format "FROM (XTQL $$ %s $$) t SELECT *, ? AS x"
+                                      (pr-str '#(from :bar [{:xt/id %} *])))
+                              2 "x"]))
+          "a placeholder after it")
+
+    (t/is (= [{:xt/id 2, :y "baz", :x "x"}]
+             (xt/q tu/*node* [(format "SELECT ? AS x, t.* FROM (XTQL $$ %s $$) t"
+                                      (pr-str '#(from :bar [{:xt/id %1, :y %2} *])))
+                              "x" 2 "baz"]))
+          "several fn params"))
+
+  (t/testing "a statement's param count covers the placeholders the fn consumes, and only those"
+    (letfn [(param-count [sql]
+              (:param-count (meta (sql/plan sql {:table-info {#xt/table bar #{"_id" "y"}}}))))]
+
+      (t/is (= 1 (param-count (format "XTQL ($$ %s $$, ?)" (pr-str '#(from :bar [{:xt/id %} *]))))))
+
+      (t/is (= 1 (param-count (format "XTQL $$ %s $$" (pr-str '#(from :bar [{:xt/id %} *])))))
+            "a fn's params count even where no placeholder stands in for them")
+
+      (t/is (= 2 (param-count (format "SELECT ? AS x, t.* FROM (XTQL $$ %s $$) t"
+                                      (pr-str '#(from :bar [{:xt/id %} *])))))
+            "and they take a slot of their own rather than sharing the statement's")
+
+      (t/is (= 0 (param-count "XTQL ($$(from :bar [*])$$, ?)"))
+            "a query that is not a fn consumes no arguments"))))
 
 (t/deftest use-parent-left-scope-in-nested-join-table-4131
   (t/is (=plan-file
