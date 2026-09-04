@@ -2,6 +2,7 @@
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [xtdb.basis :as basis]
+            [xtdb.error :as err]
             [xtdb.expression :as expr]
             [xtdb.expression.metadata :as expr.meta]
             [xtdb.information-schema :as info-schema]
@@ -30,7 +31,7 @@
            (xtdb.database PartitionStorage)
            (xtdb.metadata MetadataPredicate PageMetadata)
            (xtdb.operator.scan MultiIidSelector ScanCursor ScanMetrics SingleIidSelector)
-           xtdb.query.IQuerySource$QueryCatalog
+           (xtdb.query IQuerySource$QueryCatalog IQuerySource$QueryDatabase)
            (xtdb.segment BufferPoolSegment MergePlanner)
            xtdb.api.TableRef
            (xtdb.trie Bucketer)
@@ -50,7 +51,15 @@
                        :opt-un [::lp/for-valid-time ::lp/for-system-time ::lp/clamp-valid-time?])))
 
 (definterface IScanEmitter
-  (emitScan [^xtdb.query.IQuerySource$QueryCatalog db-cat scan-expr scan-vec-types param-types]))
+  ;; `dbs` is the operation's resolved databases; `db-cat` is still needed at cursor time, because
+  ;; `pg_database`, `pg_roles` and `pg_auth_members` are answered from the catalog rather than from
+  ;; the databases this query happens to reach.
+  (emitScan [^xtdb.query.IQuerySource$QueryCatalog db-cat dbs scan-expr scan-vec-types param-types]))
+
+(defn- db-or-throw [dbs db-name]
+  (or (get dbs db-name)
+      (throw (err/incorrect :xtdb/unknown-db (format "Unknown database: %s" db-name)
+                            {:db-name db-name}))))
 
 (defn ->scan-cols [{:keys [opts]}]
   (let [{:keys [db-name table columns]} opts]
@@ -245,7 +254,7 @@
               (or (types/temporal-vec-types col-name)
                   (-> (info-schema/derived-table table)
                       (get (symbol col-name)))
-                  (let [^DatabaseSnapshot db-snap (get snaps db-name)
+                  (let [^DatabaseSnapshot db-snap (db-or-throw snaps db-name)
                         ;; TODO (#5835) join across every partition's snapshot;
                         ;; for now we only allow single-partition databases.
                         ^Snapshot snap (first (.getPartitions db-snap))]
@@ -255,12 +264,13 @@
 
 (defn ->scan-emitter [info-schema]
   (reify IScanEmitter
-    (emitScan [_ db-cat {:keys [opts]} scan-vec-types param-types]
+    (emitScan [_ db-cat emit-dbs {:keys [opts]} scan-vec-types param-types]
       (let [{:keys [db-name ^TableRef table columns] :as scan-opts} opts
-            db (.databaseOrNull db-cat db-name)
-            storage (.getStorage db)
-            state (.getQueryState db)
-            table-catalog (.getTableCatalog state)
+            ;; emit-time only, for the planner's row-count stat. An emitted query outlives the
+            ;; operation that emitted it, and the emit cache carries no database identity — so a
+            ;; database closed over here can be one detached since.
+            ^IQuerySource$QueryDatabase emit-db (db-or-throw emit-dbs db-name)
+            table-catalog (.getTableCatalog (.getQueryState emit-db))
             col-names (->> columns
                            (into #{} (map (fn [[col-type arg]]
                                             (case col-type
@@ -304,8 +314,11 @@
 
          :vec-types (->> vec-types (into {} (keep (fn [[k v]] (when v [k v])))))
          :stats {:row-count row-count}
-         :->cursor (fn [{:keys [allocator, query-source, snaps, snapshot-token, schema, args pushdown-blooms pushdown-iids explain-analyze? tracer query-span] :as opts}]
-                     (let [^DatabaseSnapshot db-snapshot (get snaps db-name)
+         :->cursor (fn [{:keys [allocator, query-source, dbs, snaps, snapshot-token, schema, args
+                                pushdown-blooms pushdown-iids explain-analyze? tracer query-span] :as opts}]
+                     (let [^IQuerySource$QueryDatabase db (db-or-throw dbs db-name)
+                           storage (.getStorage db)
+                           ^DatabaseSnapshot db-snapshot (db-or-throw snaps db-name)
                            ;; TODO (#5835) walk every partition's Snapshot and UNION at scan,
                            ;; instead of picking the only partition.
                            ^Snapshot snapshot (first (.getPartitions db-snapshot))
@@ -382,6 +395,6 @@
                                                            (format "query.cursor.scan.%s" (.getTableName table))
                                                            trace-attrs)))))))}))))
 
-(defmethod lp/emit-expr :scan [scan-expr {:keys [^IScanEmitter scan-emitter db-cat scan-vec-types, param-types]}]
+(defmethod lp/emit-expr :scan [scan-expr {:keys [^IScanEmitter scan-emitter db-cat dbs scan-vec-types, param-types]}]
   (assert db-cat)
-  (.emitScan scan-emitter db-cat scan-expr scan-vec-types param-types))
+  (.emitScan scan-emitter db-cat dbs scan-expr scan-vec-types param-types))

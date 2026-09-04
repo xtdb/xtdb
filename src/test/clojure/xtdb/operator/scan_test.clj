@@ -3,7 +3,10 @@
             [xtdb.api :as xt]
             [xtdb.basis :as basis]
             [xtdb.compactor :as c]
+            [xtdb.db-catalog :as db]
+            xtdb.error
             [xtdb.expression :as expr]
+            [xtdb.logical-plan :as lp]
             [xtdb.node :as xtn]
             [xtdb.operator.scan :as scan]
             [xtdb.test-util :as tu]
@@ -955,3 +958,15 @@
                 "an explicit for-system-time keeps its own lower bound")
           (t/is (= (inc basis-μs) (.getUpper st))
                 "and is still capped by the basis"))))))
+
+(deftest scanning-a-database-that-didnt-resolve-raises-rather-than-npeing
+  (t/is (anomalous? [:incorrect :xtdb/unknown-db #"Unknown database: gone"]
+                    (scan/scan-vec-types {} [["gone" #xt/table docs '_id]]))
+        "the plan names a database the snapshots lack")
+
+  (t/is (anomalous? [:incorrect :xtdb/unknown-db #"Unknown database: gone"]
+                    (lp/emit-expr '{:op :scan, :opts {:db-name "gone", :table #xt/table docs, :columns [[:column _id]]}}
+                                  {:scan-emitter (:scan-emitter (.getQuerySource (util/node-base tu/*node*)))
+                                   :db-cat (db/<-node tu/*node*)
+                                   :dbs {}}))
+        "the plan names a database the resolved set lacks"))
