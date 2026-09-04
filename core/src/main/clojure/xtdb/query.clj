@@ -354,21 +354,22 @@
               (open-snaps [dbs min-basis]
                 (into {} (.openSnapshots db-cat dbs min-basis)))
 
-              ;; `{[db-name table-ref] {:cols #{…}, :oid n}}` — the oid read from the same snapshot as
-              ;; the columns, so `::regclass` and the planner can't disagree about which tables exist.
-              (->table-info [dbs min-basis]
-                (->> dbs
-                     (into {} (mapcat (fn [[db-name db]]
-                                        (util/with-open [^DatabaseSnapshot snap (.openSnapshot db (get min-basis db-name))]
-                                          (let [oids (.tableOids snap)]
-                                            (->> (.tableInfo snap)
-                                                 (map (fn [[table-ref cols]]
-                                                        [[db-name table-ref] {:cols (set cols), :oid (get oids table-ref)}]))))))))))
+              ;; `{[db-name table-ref] {:cols #{…}, :oid n}}`, projected from the snapshots the operation
+              ;; is already holding — so the schema a query is planned against, the oids `::regclass`
+              ;; resolves through, and the rows the scan reads all come from one snapshot per database.
+              (->table-info [snaps]
+                (->> snaps
+                     (into {} (mapcat (fn [[db-name ^DatabaseSnapshot snap]]
+                                        (let [oids (.tableOids snap)]
+                                          (->> (.tableInfo snap)
+                                               (map (fn [[table-ref cols]]
+                                                      [[db-name table-ref] {:cols (set cols), :oid (get oids table-ref)}])))))))))
 
               (plan-query* [table-info]
                 (-plan-query this parsed-query query-opts (update-vals table-info :cols)))]
 
-        (let [!table-info (atom (->table-info (resolve-dbs) prepare-min-basis))]
+        (let [!table-info (atom (util/with-open [snaps (open-snaps (resolve-dbs) prepare-min-basis)]
+                                  (->table-info snaps)))]
 
           (reify PreparedQuery
             (getParamCount [_] (:param-count (plan-query* @!table-info)))
@@ -411,7 +412,7 @@
                                                                       (RootAllocator.))
                                          snaps (open-snaps dbs min-basis)]
                 (let [query-opts (-> query-opts (assoc :default-tz default-tz))
-                      table-info (reset! !table-info (->table-info dbs min-basis))
+                      table-info (reset! !table-info (->table-info snaps))
                       planned-query (plan-query* table-info)
 
                       {:keys [vec-types ->cursor] :as emitted-query} (emit-query planned-query scan-emitter db-cat dbs snaps (->arg-types args) query-opts)
