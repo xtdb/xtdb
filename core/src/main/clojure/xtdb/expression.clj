@@ -443,7 +443,6 @@
     (continue-read-union f (set (.getLegs vec-type)) reader-sym args)))
 
 (def ^:dynamic ^String *snapshot-token* nil)
-(def ^:dynamic ^String *await-token* nil)
 (def ^:dynamic ^java.time.InstantSource *clock* (InstantSource/system))
 (defn current-time ^java.time.Instant [] (.instant *clock*))
 (def ^:dynamic ^java.time.ZoneId *default-tz* (ZoneId/systemDefault))
