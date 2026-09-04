@@ -17,8 +17,9 @@ Interpret MUST, MUST NOT, SHOULD, SHOULD NOT, MAY per RFC 2119.
 3. You MUST tell `gradle-tests`, in every invocation, not to modify any source file.
 4. A test that fails after your change is a test *you* broke — see [When a test fails](#when-a-test-fails).
 5. You MUST stop a run the moment you know you'll re-run it, rather than letting it finish — see [A run you already know you'll redo is waste](#a-run-you-already-know-youll-redo-is-waste).
+6. You MUST name the tree in every invocation, and check the tree the agent reports back — see [Name the tree; the agent cannot infer it](#name-the-tree-the-agent-cannot-infer-it).
 
-The rest of this document is the mechanics behind those four.
+The rest of this document is the mechanics behind those six.
 
 ## A comment-only change needs a compile, not a test run
 
@@ -51,6 +52,19 @@ Use the `gradle-tests` agent via the Task tool for *all* test runs, Clojure incl
 - You MUST NOT launch more than one `gradle-tests` agent concurrently.
   Combine every namespace you want covered into a single invocation and let the agent choose how to run them; Gradle parallelises internally.
 - You SHOULD run the relevant tests proactively after a code change rather than waiting to be asked.
+
+## Name the tree; the agent cannot infer it
+
+A `gradle-tests` agent inherits your working directory, and the Task tool has no parameter that pins it.
+Worktrees here live under `.claude/worktrees/` — *inside* the main checkout — so a run that ends up in the wrong one returns a plausible green rather than an error.
+From `gradle-tests` 0.4.0 the agent carries its own half: it prunes the nested worktrees out of its search for result files, reports its toplevel in the status header, and stops if that toplevel is not the path you named.
+
+Two obligations remain yours, because only the caller can discharge them.
+
+- **You MUST give the absolute path of the tree in every invocation.**
+  Only you know which tree is under test; the agent has its working directory and whatever you tell it.
+- **You MUST check the toplevel it reports against the tree you asked for.**
+  The commit it reports does not identify a tree: sibling worktrees branched off the same point commonly sit on the same sha, so a report headed with the right commit can still describe the wrong checkout.
 
 ## A run you already know you'll redo is waste
 
