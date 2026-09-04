@@ -583,7 +583,7 @@ class Database(
         override val databaseNames: Collection<DatabaseName>
         override fun databaseOrNull(dbName: DatabaseName): Database?
 
-        fun databaseOrThrow(dbName: DatabaseName): Database =
+        override fun databaseOrThrow(dbName: DatabaseName): Database =
             databaseOrNull(dbName)
                 ?: throw Incorrect("Unknown database: $dbName", "xtdb/unknown-db", mapOf("db-name" to dbName))
 

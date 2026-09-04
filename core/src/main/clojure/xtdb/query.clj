@@ -39,7 +39,7 @@
            io.micrometer.core.instrument.Counter
            java.lang.AutoCloseable
            (java.time Duration InstantSource)
-           (java.util HashMap LinkedHashMap Map)
+           (java.util LinkedHashMap Map)
            [java.util.concurrent.atomic AtomicBoolean]
            (org.antlr.v4.runtime.misc Interval)
            (org.apache.arrow.memory BufferAllocator RootAllocator)
@@ -349,19 +349,7 @@
       ;; min-basis is {db-name [system-time per partition]} — the caller's already-awaited read basis, so the
       ;; live index can hand back its cached snapshot when it's fresh enough. nil = "don't care" (schema/prepare).
       (letfn [(open-snaps [min-basis]
-                ;; TODO this opens up a snapshot for *every* db in the catalog
-                ;; when people have 'proper' multi-tenancy, this will be a problem
-                ;; thankfully we can probably figure out what databases may be relevant to the query at parse-time
-                (util/with-close-on-catch [!snaps (HashMap.)]
-                  ;; `getDatabaseNames` and `databaseOrNull` are separate reads, so a concurrent
-                  ;; DETACH can drop a database between them — skip it, as Database.Catalog's own
-                  ;; iterators do. We open a snapshot for every attached database, so a query that
-                  ;; never mentions the detached one would otherwise die on its NPE.
-                  (doseq [db-name (.getDatabaseNames db-cat)
-                          :let [db (.databaseOrNull db-cat db-name)]
-                          :when db]
-                    (.put !snaps db-name (.openSnapshot db (get min-basis db-name))))
-                  (into {} !snaps)))
+                (into {} (.openSnapshots db-cat min-basis)))
 
               ;; `{[db-name table-ref] {:cols #{…}, :oid n}}` — the oid read from the same snapshot as
               ;; the columns, so `::regclass` and the planner can't disagree about which tables exist.
