@@ -269,7 +269,7 @@ Default toward show over ask when you're confident — don't manufacture review 
 For show and ask changes, run a code-review pass over the diff before raising the commit or PR — the `/code-review` skill, or a code-review agent (e.g. `feature-dev:code-reviewer`).
 Ship changes don't need it.
 Whether the findings block the commit/PR or are merely noted is a judgement call on their severity and the cost to address: fix what's cheap and clearly right, and raise the rest rather than sitting on it.
-Since show and ask normally go through plan mode, this review MUST appear as an explicit step in the plan, ahead of the commit/PR step (alongside the chalk and chill steps).
+Since show and ask normally go through plan mode, this review MUST appear as an explicit step in the plan, ahead of the commit/PR step — which is itself a `chalk:commit`/`chalk:pr` step — and alongside the chill step.
 
 The review MUST cover the diff's comments as well as its code, against the `chalk:code-comments` skill (see <<_comments,Comments>>), and MUST report a failing comment as a deletion rather than a rewrite.
 Deleting one costs nothing at review time and never happens afterwards.

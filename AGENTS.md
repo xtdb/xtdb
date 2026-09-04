@@ -51,7 +51,6 @@ Where the spec and the code disagree, say so rather than silently picking one: s
 Specs live in two directories, `allium/` and `dev/doc/` — glob `**/*.allium` rather than assuming a single location.
 Use the `allium:tend` skill to edit a spec and `allium:weed` to check a spec against the code.
 
-You MUST also load `chalk:allium-voice` before writing or editing any spec prose — `allium:tend` does not load it for you, so the caller has to.
 A spec states the aim, and what it does not state, it excludes: an obligation named after what it is not, or prose arguing for this design over the one that was rejected, is misfiled.
 That commentary belongs in the commit body and the PR, which are read once around the change; a spec is read long after, by someone who doesn't care what it might have been.
 
@@ -82,7 +81,7 @@ That commentary belongs in the commit body and the PR, which are read once aroun
   All tests pass on `main`, so a failure is yours — see [Running tests](#running-tests) for how to handle one.
 * There MUST NOT be any reflection or boxed math warnings.
 * For show/ask changes, you MUST run a code-review pass over the diff before raising the commit/PR — see the code-review note under `== Git` in @dev/CODING.adoc (ship changes are exempt).
-  That pass MUST cover the diff's comments against `chalk:code-comments`, and any spec prose against `chalk:allium-voice`, not only its code.
+  That pass MUST cover the diff's comments against `chalk:code-comments`, and any spec prose against the spec-voice rules in [Allium specs](#allium-specs), not only its code.
 * Verify: all changes committed AND pushed
 * Hand off: provide context for next session
 
@@ -144,5 +143,5 @@ Ship/show/ask and the code-review pass live in @dev/CODING.adoc; commit messages
 
 Before you open an issue or PR, add a card to the board, set a milestone or a label, or pick up a card, you MUST invoke the `xtdb-github` skill.
 
-It is the single home for the GitHub conventions in this repo — what goes on the board and what inherits it through an issue, sub-issue parenting, the two tests a milestone has to pass, the label conventions, the assign-and-set-`Status` move when you pick a card up, the cached project and field IDs, and how to drive all of it through chalk.
+It is the single home for the GitHub conventions in this repo — what goes on the board and what inherits it through an issue, sub-issue parenting, the two tests a milestone has to pass, the label conventions, what to read and which edits to make when you pick a card up, the cached project and field IDs, and how to drive all of it through chalk.
 Do not reconstruct any of it from memory, and do not guess an ID.
