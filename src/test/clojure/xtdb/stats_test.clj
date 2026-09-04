@@ -6,14 +6,15 @@
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
             [xtdb.types :as types]
-            [xtdb.util :as util]))
+            [xtdb.util :as util])
+  (:import (xtdb.query IQuerySource$QueryCatalog)))
 
 (t/use-fixtures :each tu/with-allocator)
 
 (deftest test-scan
   (with-open [node (xtn/start-node (assoc tu/*node-opts* :indexer {:rows-per-block 2}))]
     (let [scan-emitter (:scan-emitter (.getQuerySource (util/node-base node)))
-          db-cat (db/<-node node)]
+          ^IQuerySource$QueryCatalog db-cat (db/<-node node)]
       (xt/submit-tx node [[:put-docs :foo {:xt/id "foo1"}]
                           [:put-docs :bar {:xt/id "bar1"}]])
 
@@ -27,17 +28,17 @@
       ;; nothing finishes the block holding the last tx's rows, since that's triggered by later indexing
       (tu/flush-block! node)
 
-      (t/is (= {:row-count 3}
-               (:stats (lp/emit-expr '{:op :scan, :opts {:db-name "xtdb", :table #xt/table foo, :columns [[:column id]]}}
-                                     {:scan-fields {['foo 'id] #xt/field {"id" :utf8}},
-                                      :scan-emitter scan-emitter
-                                      :db-cat db-cat}))))
+      (let [emit-opts {:scan-emitter scan-emitter
+                       :db-cat db-cat
+                       :dbs (into {} (.resolveDbs db-cat))}]
 
-      (t/is (= {:row-count 2}
-               (:stats (lp/emit-expr '{:op :scan, :opts {:db-name "xtdb", :table #xt/table bar, :columns [[:column id]]}}
-                                     {:scan-fields {['bar 'id] #xt/field {"id" :utf8}},
-                                      :scan-emitter scan-emitter
-                                      :db-cat db-cat})))))))
+        (t/is (= {:row-count 3}
+                 (:stats (lp/emit-expr '{:op :scan, :opts {:db-name "xtdb", :table #xt/table foo, :columns [[:column id]]}}
+                                       emit-opts))))
+
+        (t/is (= {:row-count 2}
+                 (:stats (lp/emit-expr '{:op :scan, :opts {:db-name "xtdb", :table #xt/table bar, :columns [[:column id]]}}
+                                       emit-opts))))))))
 
 (deftest test-project
   (t/is (= {:row-count 5}
