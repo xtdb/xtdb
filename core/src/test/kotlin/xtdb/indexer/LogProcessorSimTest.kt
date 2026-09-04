@@ -19,6 +19,7 @@ import xtdb.SimulationTestUtils.Companion.createTrieCatalog
 import xtdb.api.IndexerConfig
 import xtdb.api.Xtdb
 import xtdb.api.log.*
+import xtdb.api.log.ReplicaMessage.NoOp
 import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
 import xtdb.database.DatabaseLogs
@@ -27,7 +28,6 @@ import xtdb.database.PartitionStorage
 import xtdb.api.tx.ExternalSource
 import xtdb.api.tx.ExternalSourceToken
 import xtdb.api.error.Incorrect
-import xtdb.indexer.SimLog.Companion.launchSimLog
 import xtdb.api.tx.TxIndexer.TxResult
 import xtdb.storage.MemoryStorage
 import xtdb.api.TableRef
@@ -176,6 +176,9 @@ class LogProcessorSimTest : SimulationTestBase() {
                 scope = scope,
                 flushTimeout = indexerConfig.flushDuration,
                 gcDispatcher = dispatcher,
+                // A real `onTimeout` would schedule on kotlinx's own timer thread, which
+                // DeterministicDispatcher checks against — a real clock firing into a seeded harness.
+                electionDriver = NoAssertElectionDriver,
             ).also { logProcessor = it }
 
         override fun close() {
@@ -218,8 +221,22 @@ class LogProcessorSimTest : SimulationTestBase() {
         }
     }
 
+    /**
+     * The replica records every reader applies — the raw log minus what the term fence discards.
+     *
+     * A superseded leader learns it has lost only by reading the winning claim back, so it goes on
+     * appending behind that claim; those records reach the log and every reader folds them out again.
+     * The invariants below are about what was applied, so they fold the same way.
+     */
+    private fun appliedMessages(): List<ReplicaMessage> =
+        TermFence(LeaderTerm.NONE).let { fence ->
+            replicaLog.topic
+                .filter { fence.admit(it.message.termId) != TermFence.Admission.FENCED }
+                .map { it.message }
+        }
+
     private fun abortedTxIds(): Set<MessageId> =
-        replicaLog.topic.map { it.message }
+        appliedMessages()
             .filterIsInstance<ReplicaMessage.ResolvedTx>()
             .filter { !it.committed }
             .map { it.txId }
@@ -258,7 +275,7 @@ class LogProcessorSimTest : SimulationTestBase() {
     }
 
     private fun replicaTxIds(): List<MessageId> =
-        replicaLog.topic.map { it.message }
+        appliedMessages()
             .filterIsInstance<ReplicaMessage.ResolvedTx>()
             .map { it.txId }
 
@@ -285,7 +302,7 @@ class LogProcessorSimTest : SimulationTestBase() {
     }
 
     @RepeatableSimulationTest
-    fun `single node processes txs and flush-blocks with rebalances`() =
+    fun `single node processes txs and flush-blocks across leadership churn`() =
         runTest(timeout = 5.seconds) {
             val rowsPerBlock = rand.nextLong(15, 25)
             val totalActions = rand.nextInt(50, 100)
@@ -297,21 +314,29 @@ class LogProcessorSimTest : SimulationTestBase() {
             MemoryStorage(allocator, epoch = 0).use { bp ->
                 SimNode("test-db", bp, IndexerConfig(rowsPerBlock = rowsPerBlock), simExtSource).use { node ->
                     launch(dispatcher) {
-                        launchSimLog(srcLog)
-                        launchSimLog(replicaLog)
 
-                        launch { srcLog.openGroupSubscription(node.openLogProcessor(this)) }
+                        val logProc = node.openLogProcessor(this)
 
                         launch {
                             repeat(srcLogEventCount) {
                                 yield()
                                 if (rand.nextInt(100) < 50) {
-                                    srcLog.rebalanceTrigger.send(Unit)
+                                    // A rival claims one term above whatever this node has seen, which
+                                    // supersedes it; reporting the tip then lets it claim its way back.
+                                    replicaLog.appendMessage(NoOp(termId = logProc.termFence.highestSeen + 1))
+                                    replicaLog.reportTip()
                                 } else {
                                     srcLog.appendMessage(SourceMessage.FlushBlock(null))
                                 }
                             }
+
+                            // One report is one election timeout, so the drain needs its own supply of
+                            // them: the rivals above never lead, and this node wins its leadership back
+                            // only on a poll that came back empty. Safe to run flat out because there is
+                            // one node — the incumbent ignores a report, and nobody else can claim.
+                            val elections = launch { while (true) { replicaLog.reportTip(); yield() } }
                             simExtSource.awaitQuiescence()
+                            elections.cancel()
 
                             replicaLog.awaitAllDelivered()
                             awaitIdle()
@@ -324,7 +349,7 @@ class LogProcessorSimTest : SimulationTestBase() {
                         "all actions should appear on the replica"
                     )
 
-                    val replicaMessages = replicaLog.topic.map { it.message }
+                    val replicaMessages = appliedMessages()
                     assertBlockBoundariesMatchUploads(replicaMessages)
 
                     val expectedBlockIndex =
@@ -368,12 +393,10 @@ class LogProcessorSimTest : SimulationTestBase() {
                     SimNode("test-db", bp, indexerConfig, simExtSource).use { followerA ->
                         SimNode("test-db", bp, indexerConfig, simExtSource).use { followerB ->
                             launch(dispatcher) {
-                                launchSimLog(srcLog)
-                                launchSimLog(replicaLog)
 
-                                launch { srcLog.openGroupSubscription(leader.openLogProcessor(this)) }
-                                launch { srcLog.openGroupSubscription(followerA.openLogProcessor(this)) }
-                                launch { srcLog.openGroupSubscription(followerB.openLogProcessor(this)) }
+                                leader.openLogProcessor(this)
+                                followerA.openLogProcessor(this)
+                                followerB.openLogProcessor(this)
 
                                 launch {
                                     repeat(srcLogEventCount) {
@@ -385,7 +408,7 @@ class LogProcessorSimTest : SimulationTestBase() {
 
                                     // Anchor the per-node `latestTxId` to the latest replica tx so the
                                     // convergence assertions below see consistent state across nodes.
-                                    val lastReplicaTxId = replicaLog.topic.map { it.message }
+                                    val lastReplicaTxId = appliedMessages()
                                         .filterIsInstance<ReplicaMessage.ResolvedTx>()
                                         .maxOfOrNull { it.txId }
                                     if (lastReplicaTxId != null) {
@@ -404,7 +427,7 @@ class LogProcessorSimTest : SimulationTestBase() {
                                 "all actions should appear on the replica"
                             )
 
-                            val replicaMessages = replicaLog.topic.map { it.message }
+                            val replicaMessages = appliedMessages()
                             assertBlockBoundariesMatchUploads(replicaMessages)
 
                             val nodes = listOf(leader, followerA, followerB)
@@ -464,17 +487,17 @@ class LogProcessorSimTest : SimulationTestBase() {
                 SimNode("test-db", bp, indexerConfig, simExtSource).use { nodeA ->
                     SimNode("test-db", bp, indexerConfig, simExtSource).use { nodeB ->
                         launch(dispatcher) {
-                            launchSimLog(srcLog)
-                            launchSimLog(replicaLog)
 
-                            launch { srcLog.openGroupSubscription(nodeA.openLogProcessor(this)) }
-                            launch { srcLog.openGroupSubscription(nodeB.openLogProcessor(this)) }
+                            nodeA.openLogProcessor(this)
+                            nodeB.openLogProcessor(this)
 
                             launch {
                                 repeat(srcLogEventCount) {
                                     yield()
                                     if (rand.nextInt(100) < 50) {
-                                        srcLog.rebalanceTrigger.send(Unit)
+                                        // Whichever follower is caught up sees the tip and claims, which
+                                        // supersedes the incumbent — leadership moves without a coordinator.
+                                        replicaLog.reportTip()
                                     } else {
                                         srcLog.appendMessage(SourceMessage.FlushBlock(null))
                                     }
@@ -484,7 +507,7 @@ class LogProcessorSimTest : SimulationTestBase() {
 
                                 // Anchor the per-node `latestTxId` to the latest replica tx so the
                                 // convergence assertions below see consistent state across nodes.
-                                val lastReplicaTxId = replicaLog.topic.map { it.message }
+                                val lastReplicaTxId = appliedMessages()
                                     .filterIsInstance<ReplicaMessage.ResolvedTx>()
                                     .maxOfOrNull { it.txId }
                                 if (lastReplicaTxId != null) {
@@ -502,7 +525,7 @@ class LogProcessorSimTest : SimulationTestBase() {
                             "all actions should appear on the replica"
                         )
 
-                        val replicaMessages = replicaLog.topic.map { it.message }
+                        val replicaMessages = appliedMessages()
                         assertBlockBoundariesMatchUploads(replicaMessages)
 
                         val expectedBlockIndex = replicaMessages

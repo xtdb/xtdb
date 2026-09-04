@@ -19,12 +19,12 @@
 --     remain valid until their last holder releases them
 --
 -- Pipelining (leader only) — resolve / append / consume-back / apply:
---   On a leader the pipeline has four coroutines, all children of the leader term
---   (see log-processor-lifecycle.allium). The KEY property is Raft's ReadIndex: a
---   leader applies its OWN writes to the durable live tables only once it has read
---   them BACK off its own replica log, at its own term. That consume-back is the
---   fence — it replaces the Kafka transactional producer that used to fence at
---   commit (#5817). The four coroutines:
+--   On a leader the pipeline has four stages: three children of the leader term, and the
+--   partition's replica-log reader, which outlives it (see log-processor-lifecycle.allium).
+--   The KEY property is Raft's ReadIndex: a leader applies its OWN writes to the durable
+--   live tables only once it has read them BACK off its own replica log, at its own term.
+--   That consume-back is the fence — it replaces the Kafka transactional producer that
+--   used to fence at commit (#5817). The four stages:
 --
 --     1. RESOLVER (the persister's select loop, see db.allium). Consumes the source
 --        log / ext-source txs / GC tasks. As each tx resolves, it STAGES the tx onto
@@ -47,19 +47,18 @@
 --        propagates and tears the term down. The pump only BORROWS a tx to serialize
 --        it; the resolver owns and frees it.
 --
---     3. CONSUME PUMP. Tails the leader's OWN replica log from the transition replay
---        target (a separate consumer from the source-log group subscription that
---        drives leader election, so it doesn't interfere with it) and posts each
---        record onto a bounded consume-back channel.
+--     3. The PARTITION'S REPLICA-LOG READER — NOT the term's. One per partition, it hands
+--        each record to whichever role is live, over the consume-back channel. It outlives
+--        every term, so a term ending surrenders no position.
 --
 --     4. The RESOLVER's select loop also SERVICES the consume-back channel — this is
 --        the APPLY / ReadIndex step. Applying a record (see ApplyRecord):
---          - FENCE BY TERM. A record whose term is GREATER than the leader's own term
---            means a newer leader has superseded us → the leader RESIGNS (its
---            unconfirmed writes are never acknowledged; the transport re-follows on
---            the next rebalance). A record with a LOWER term is discarded (still
---            advancing the consume cursor). An EQUAL-term record is our own — terms
---            are unique per leader.
+--          - FENCE BY TERM, against the leader's own term:
+--              - GREATER: a newer leader has superseded us, so we RESIGN. Our unconfirmed
+--                writes are never acknowledged, and the partition's reader re-opens a
+--                follower when it finds the term over.
+--              - LOWER: discarded, still advancing the consume cursor.
+--              - EQUAL: our own — terms are unique per leader.
 --          - For our own ResolvedTx: import from the QUEUE HEAD (we still hold its
 --            relations, so no re-materialisation), advancing the durable basis
 --            (LiveIndex.latest_completed_tx) and the consume cursor, notifying
@@ -686,8 +685,8 @@ rule AbortTransaction {
 ------------------------------------------------------------
 -- Rules: Consume-back / apply (ReadIndex — where a tx becomes durable)
 --
--- The RESOLVER's select loop services the consume-back channel the consume pump
--- feeds. This is Raft's ReadIndex: the leader applies its own writes only after
+-- The RESOLVER's select loop services the consume-back channel the partition's
+-- replica-log reader feeds. This is Raft's ReadIndex: the leader applies its own writes only after
 -- reading them back off its own replica log, at its own term. The term on read-back
 -- is the fence (see ApplyRecord); it replaces the Kafka transactional producer that
 -- used to fence at commit (#5817).
@@ -697,10 +696,10 @@ rule ApplyRecord {
     -- Apply one record read back off the leader's OWN replica log. Fences by TERM:
     --   - term GREATER than ours: a newer leader has superseded us → RESIGN. Modelled
     --     as LeaderSuperseded; the leader term fails (its unconfirmed staged txs are
-    --     failed by the fail-pending leg, see FailPendingHandles), and the transport
-    --     re-follows on the next rebalance. This is EXPECTED — not a query-facing fault,
-    --     so it does NOT poison the watchers.
-    --   - term LOWER than ours: shouldn't appear past our replay target; discarded
+    --     failed by the fail-pending leg, see FailPendingHandles), and the partition's
+    --     reader re-opens a follower when it finds the term over. This is EXPECTED — not
+    --     a query-facing fault, so it does NOT poison the watchers.
+    --   - term LOWER than ours: already fenced by the partition's reader; discarded
     --     defensively, still advancing the consume cursor (RecordDiscarded).
     --   - term EQUAL to ours (the common case; terms are unique per leader, so an
     --     equal-term record IS our own): dispatched to ApplyResolvedTx (for a tx) or

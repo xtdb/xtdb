@@ -2,7 +2,6 @@
 
 package xtdb.api.log
 
-import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.runBlocking
@@ -62,11 +61,11 @@ interface Log<M> : AutoCloseable {
             internal fun fromProto(config: DatabaseConfig): Factory =
                 when (config.logCase) {
                     IN_MEMORY_LOG -> config.inMemoryLog.let {
-                        inMemoryLog.epoch(it.epoch).termEpoch(it.termEpoch)
+                        inMemoryLog.epoch(it.epoch)
                     }
 
                     LOCAL_LOG -> config.localLog.let {
-                        localLog(it.path.asPath).epoch(it.epoch).termEpoch(it.termEpoch)
+                        localLog(it.path.asPath).epoch(it.epoch)
                     }
 
                     OTHER_LOG -> config.otherLog.let {
@@ -87,7 +86,13 @@ interface Log<M> : AutoCloseable {
     interface Tail<out M> {
         /**
          * Waits up to [timeout] for at least one record, then returns it and any records already available.
-         * Returns empty only when no record becomes available before [timeout].
+         * Returns empty only when this tail has reached the partition's tip and nothing arrived before [timeout].
+         *
+         * An empty return is therefore a claim about position rather than about quiet. `EmptyPollMeansTheTipWasReached`
+         * (allium/log-processor-lifecycle.allium) makes that a safety requirement: leadership is claimed on this
+         * observation, so an implementation MUST NOT report empty for any other reason — not on a fetch failure, a
+         * dropped subscription, or a timer of its own. A tail that can no longer read has to throw, because a reader
+         * that has stopped reading must not be able to conclude that nobody has written.
          *
          * A [timeout] of zero or less returns what is already buffered without waiting, and
          * [Duration.INFINITE] waits until a record arrives or the caller is cancelled.
@@ -162,24 +167,6 @@ interface Log<M> : AutoCloseable {
     ): Unit = withTail(partition, afterMsgId) { tail ->
         while (currentCoroutineContext().isActive) processor.processRecords(tail.poll(pollTimeout))
     }
-
-    suspend fun openGroupSubscription(listener: SubscriptionListener<M>)
-
-    /**
-     * The transport's handle on one partition's leader election. See allium/log-processor-lifecycle.allium.
-     *
-     * [transitionToLeader] runs the whole follower→leader transition on the listener's *own* scope and
-     * returns its [Deferred], so the unbounded catch-up runs off the transport's thread and the handle is
-     * torn down by that scope's cancellation on shutdown. The transport joins or cancels it, and a
-     * transition it no longer wants — revoked, reassigned — is one whose [TailSpec] it discards rather than
-     * feeds; [demoteLeader] then tears the leader down.
-     */
-    interface SubscriptionListener<M> {
-        fun transitionToLeader(partition: Int, termId: Long): Deferred<TailSpec<M>>
-        suspend fun demoteLeader(partition: Int)
-    }
-
-    data class TailSpec<M>(val afterMsgId: MessageId, val processor: RecordProcessor<M>)
 
     class Record<out M>(
         val epoch: Int,

@@ -126,7 +126,7 @@ class LeaderDriverSimTest : SimulationTestBase() {
             )
         )
 
-        private val replicaAppender = ReplicaLogAppender(driver)
+        private val replicaAppender = ReplicaLogAppender(driver, termId, NoAssertElectionDriver)
 
         val proc = LeaderLogProcessor(
             allocator, nodeBase, partitionStorage, CrashLogger(allocator, bufferPool, "sim-$name"),
@@ -146,9 +146,6 @@ class LeaderDriverSimTest : SimulationTestBase() {
 
         init {
             scope.launch {
-                launch { proc.gc.runGc() }
-                proc.extSrcProc?.let { extSrcProc -> launch { extSrcProc.run() } }
-
                 val reader = launch {
                     // From the claim record rather than the start of the log: a sim leader begins with empty
                     // catalogs and never replays, so anything before its claim is not its to apply.
@@ -158,7 +155,10 @@ class LeaderDriverSimTest : SimulationTestBase() {
                 }
 
                 try {
-                    runLeaderTerm("test-db", watchers, proc, replicaMsgs, replicaAppender)
+                    runLeaderTerm(
+                        "test-db", watchers, proc, replicaMsgs, replicaAppender,
+                        partitionStorage.sourceLog, resumeAfterMsgId = -1
+                    )
                 } finally {
                     reader.cancel()
                 }

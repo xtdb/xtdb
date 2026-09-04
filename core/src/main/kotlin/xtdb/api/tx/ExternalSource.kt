@@ -27,7 +27,7 @@ typealias ExternalSourceToken = ByteArray
  * node that indexes nothing, or holds the database read-only, can never lead and so opens no source at all.
  *
  * That instance spans every leader term the node serves, so [onPartitionAssigned] may be called repeatedly
- * (sequentially, never concurrently). State belonging to one assignment therefore MUST live inside that
+ * (sequentially, never concurrently). State belonging to one term therefore MUST live inside that
  * call, not in a field: the upstream connection is torn down on cancellation and there is no [close] in
  * between to reset anything.
  *
@@ -41,7 +41,7 @@ typealias ExternalSourceToken = ByteArray
 interface ExternalSource : AutoCloseable {
 
     /**
-     * Called when [partition] is assigned to this node, to run the source's poll loop.
+     * Called when a leader term for [partition] begins on this node, to run the source's poll loop.
      *
      * Resume from just after [afterToken] - the token of the last tx already indexed for this partition, or
      * null to start from the beginning - submitting each upstream event via [txIndexer].

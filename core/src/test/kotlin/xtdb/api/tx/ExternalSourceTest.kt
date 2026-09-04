@@ -36,6 +36,7 @@ import xtdb.indexer.LeaderSupersededException
 import xtdb.indexer.LiveIndex
 import xtdb.indexer.RealLeaderDriver
 import xtdb.indexer.ReplicaApply
+import xtdb.indexer.NoAssertElectionDriver
 import xtdb.indexer.ReplicaLogAppender
 import xtdb.indexer.applyAndAwait
 import xtdb.indexer.runLeaderTerm
@@ -128,7 +129,7 @@ class ExternalSourceTest {
         )
 
         val crashLogger = mockk<CrashLogger>(relaxed = true)
-        val replicaAppender = ReplicaLogAppender(driver)
+        val replicaAppender = ReplicaLogAppender(driver, leaderTerm = 0, NoAssertElectionDriver)
 
         return LeaderLogProcessor(
             allocator, nodeBase, partitionStorage, crashLogger,
@@ -139,10 +140,11 @@ class ExternalSourceTest {
         ).also { proc ->
             leadersToClose += proc
             val replicaMsgs = Channel<ReplicaApply>()
-            backgroundScope.launch {
-                launch { proc.gc.runGc() }
-                proc.extSrcProc?.let { extSrcProc -> launch { extSrcProc.run() } }
+            // A sibling of the term, as `cutOverToLeader` launches it: a term that ends hands its cause
+            // to the source through the task channel, which a source cancelled with the term never reads.
+            backgroundScope.launch { proc.extSrcProc?.run() }
 
+            backgroundScope.launch {
                 val reader = launch {
                     partitionStorage.replicaLog.tailAll(-1) { records ->
                         records.forEach { replicaMsgs.applyAndAwait(it) }
@@ -150,7 +152,10 @@ class ExternalSourceTest {
                 }
 
                 try {
-                    runLeaderTerm("test", watchers, proc, replicaMsgs, replicaAppender)
+                    runLeaderTerm(
+                        "test", watchers, proc, replicaMsgs, replicaAppender,
+                        partitionStorage.sourceLog, resumeAfterMsgId = -1
+                    )
                 } finally {
                     reader.cancel()
                 }

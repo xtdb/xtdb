@@ -2,7 +2,9 @@ package xtdb.indexer
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.selects.select
 import xtdb.api.log.ReplicaMessage
+import xtdb.api.log.ReplicaMessage.NoOp
 
 /**
  * One item queued for append to the replica log.
@@ -29,9 +31,13 @@ internal class ControlItem(private val message: ReplicaMessage) : AppendItem {
  * in that order.
  *
  * Appending is its own coroutine so that the serialization and the log round-trip stay off the term's work
- * loop — which is what releases the transport's poll thread at "resolved" rather than at "durable" (#5741).
+ * loop — which is what releases the source-log tail at "resolved" rather than at "durable" (#5741).
  */
-internal class ReplicaLogAppender(private val driver: LeaderDriver) {
+internal class ReplicaLogAppender(
+    private val driver: LeaderDriver,
+    private val leaderTerm: Long,
+    private val electionDriver: ElectionDriver,
+) {
 
     // Unbounded: the term queues here from the same coroutine that services its consume-back, so a bounded
     // channel could block that send — and consume-back is what makes the progress the send would be
@@ -45,9 +51,23 @@ internal class ReplicaLogAppender(private val driver: LeaderDriver) {
      *
      * Plain, non-transactional appends: the sole fence on a zombie leader is the term its records carry,
      * checked when it reads them back — a higher term means it has been superseded, and it resigns (#5817).
+     *
+     * A biased `select`, so the assertion arms only once the queue has nothing ready — a leader with
+     * traffic is asserting itself implicitly, and the timeout restarts on every iteration the queue wins.
      */
     suspend fun run() {
-        for (item in queue) driver.appendToReplica(item.toReplicaMessage())
+        while (true) {
+            val item = select<AppendItem?> {
+                queue.onReceiveCatching { res ->
+                    res.exceptionOrNull()?.let { throw it }
+                    res.getOrNull()
+                }
+
+                electionDriver.run { onAssertTimeout { ControlItem(NoOp(termId = leaderTerm)) } }
+            } ?: break
+
+            driver.appendToReplica(item.toReplicaMessage())
+        }
     }
 
     /**

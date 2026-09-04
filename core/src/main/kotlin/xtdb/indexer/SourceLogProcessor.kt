@@ -28,19 +28,15 @@ import java.time.Duration
 
 private val LOG = SourceLogProcessor::class.logger
 
-/** One poll batch inbound from the transport, plus the handle its submitter awaits. */
+/** One poll batch inbound from the source log, plus the handle its submitter awaits. */
 internal class SourceBatch(val records: List<Log.Record<SourceMessage>>) {
     val onComplete = CompletableDeferred<Unit>()
 
     /**
      * Fail the awaiting submitter, because the term is going away without finishing this batch.
      *
-     * Always a cancellation, whatever the term's cause. The transport's poll thread awaits this inside
-     * `processRecords`, and anything other than a CancellationException escaping there unwinds
-     * `openGroupSubscription` into the Database scope's `CoroutineExceptionHandler` — which calls
-     * `watchers.notifyError`, so a *clean* resignation would end up poisoning queries and evicting the
-     * shared consumer. The term's real fault, if any, is already on the watchers; we keep it as this
-     * cancellation's cause for the logs. See #5817.
+     * Always a `CancellationException`, whatever [cause] is — a term ending is never itself a fault, and a
+     * real one has already reached the watchers. [cause] is kept as the cancellation's own cause, for logs.
      */
     fun abandon(cause: Throwable?) = onComplete.cancel(cause.asCancellation())
 }
@@ -53,7 +49,7 @@ internal class SourceBatch(val records: List<Log.Record<SourceMessage>>) {
  * down are the three ends of a single pipe, and keeping them together is what stops them drifting.
  */
 internal class SourceBatches {
-    // capacity 1: the poll thread can deposit one batch ahead and read the next while the persister
+    // capacity 1: the tail can deposit one batch ahead and read the next while the persister
     // works, bounding lookahead to ~2 batches. Backpressure falls out of a full channel suspending
     // the send.
     private val ch = Channel<SourceBatch>(capacity = 1, onUndeliveredElement = { it.abandon(null) })
@@ -69,14 +65,13 @@ internal class SourceBatches {
      * Term teardown: no batch will be processed after this, and a later [submit] throws.
      *
      * Fails everyone still waiting — senders via the close cause, and whatever is still queued via
-     * [SourceBatch.abandon]. Miss the queued ones and the symptom is a hang on the transport's poll
-     * thread, which is also the sole servicer of the transport's unregister, so it wedges the whole
-     * subscription teardown (#5711 / #5817).
+     * [SourceBatch.abandon]. Miss the queued ones and the symptom is a hang on the tail that feeds this
+     * pipe, so the term's own teardown never completes (#5711 / #5817).
      *
      * Close and drain, in that order: `close` alone doesn't visit buffered elements (only `cancel` does),
      * so a queued batch's submitter would wait forever; and closing first means no send can slip into a
      * buffer we've already drained. The close cause must be a cancellation too — it is what a later `send`
-     * throws, and the poll thread sends here. Only safe on the persister's exit path: it is the sole
+     * throws, and the tail sends here. Only safe on the persister's exit path: it is the sole
      * receiver, so nothing competes with these `tryReceive`s.
      */
     fun shutdown(cause: Throwable?) {
@@ -104,8 +99,8 @@ private inline fun runTaskGuarded(
     }
 
 /**
- * The source log's side of a leader term: the flush timer, the batches the transport hands over, and what
- * each record in one resolves to.
+ * The source log's side of a leader term: the flush timer, the batches the term's tail hands over, and
+ * what each record in one resolves to.
  *
  * A batch is processed a record at a time and stops where a record cuts a block, because nothing may
  * interleave between a boundary and its upload. Both [appendTx] and [cutBlock] report a cut back, so the
@@ -139,7 +134,7 @@ internal class SourceLogProcessor(
     private val blockFlusher = BlockFlusher(flushTimeout, tableCatalog)
 
     // A source batch paused mid-way by a block cut: the task, and where to pick it up again. At most one —
-    // the poll thread awaits each batch before sending the next, so only one is ever in flight; a nullable
+    // the tail awaits each batch before sending the next, so only one is ever in flight; a nullable
     // field makes that structural. Holds the *task*, so its failure policy stays the task's own.
     private class PausedBatch(val task: SourceBatch, val nextIdx: Int)
 
@@ -312,16 +307,16 @@ internal class SourceLogProcessor(
             driver.requestFlushBlock(tableCatalog.currentBlockIndex ?: -1)
     }
 
-    /** The transport's edge: hand a poll batch over and await its resolution. */
+    /** The source-log tail's edge: hand a poll batch over and await its resolution. */
     override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
         maybeFlushBlock()
 
         // Await the batch through the persister rather than firing and returning:
         //  - the persister resolves + hands off to the append pump on its own thread (heavy work off the
-        //    poll thread);
+        //    tail);
         //  - blocking here until the batch is resolved keeps the poll loop and the persister roughly in
         //    step (channel cap 1 → ~2 batches of lookahead);
-        //  - so a rebalance/transition under runBlocking doesn't pile up behind unbounded resolution (#5741).
+        //  - so a term's teardown never has to wait behind unbounded resolution (#5741).
         if (records.isNotEmpty()) sourceBatches.submit(records).await()
     }
 
@@ -329,7 +324,7 @@ internal class SourceLogProcessor(
      * Fail everyone still waiting on the source log: whatever a block cut stashed, and the pipe itself.
      *
      * The pipe's own shutdown owns the must-be-a-cancellation rule ([SourceBatch.abandon]), because the
-     * transport's poll thread both awaits and sends there.
+     * source-log tail both awaits and sends there.
      */
     fun shutdown(cause: Throwable) {
         pausedBatch?.task?.abandon(cause)

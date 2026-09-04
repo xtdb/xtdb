@@ -203,7 +203,7 @@ internal class SourceLogProcessorTest : LeaderTermTest() {
     }
 
     @Test
-    fun `block finishing writes BlockBoundary + BlockUploaded to replica log`() = runTest {
+    fun `block finishing writes BlockBoundary, BlockUploaded and TriesAdded to replica log`() = runTest {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val finishedBlock = LiveTable.FinishedBlock(
             vecTypes = emptyMap(),
@@ -236,7 +236,7 @@ internal class SourceLogProcessorTest : LeaderTermTest() {
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
 
         val termScope = backgroundScope + SupervisorJob(backgroundScope.coroutineContext.job)
-        val replicaAppender = ReplicaLogAppender(driver)
+        val replicaAppender = ReplicaLogAppender(driver, leaderTerm = 0, NoAssertElectionDriver)
         val lp = termScope.startTerm(
             partitionStorage, replicaAppender, watchers,
             LeaderLogProcessor(
@@ -260,9 +260,11 @@ internal class SourceLogProcessorTest : LeaderTermTest() {
 
         delay(200)
 
-        assertEquals(2, replicaMessages.size, "expected 2 replica messages, got: $replicaMessages")
+        assertEquals(3, replicaMessages.size, "expected 3 replica messages, got: $replicaMessages")
         assertTrue(replicaMessages[0] is ReplicaMessage.BlockBoundary)
         assertTrue(replicaMessages[1] is ReplicaMessage.BlockUploaded)
+        // The upload publishes its tries on the SOURCE log, which the term's own tail reads back.
+        assertTrue(replicaMessages[2] is ReplicaMessage.TriesAdded)
 
         val boundary = replicaMessages[0] as ReplicaMessage.BlockBoundary
         assertEquals(0, boundary.blockIndex)
@@ -296,7 +298,7 @@ internal class SourceLogProcessorTest : LeaderTermTest() {
         val driver = RealLeaderDriver(partitionStorage, partitionState, blockUploader)
 
         val termScope = backgroundScope + SupervisorJob(backgroundScope.coroutineContext.job)
-        val replicaAppender = ReplicaLogAppender(driver)
+        val replicaAppender = ReplicaLogAppender(driver, leaderTerm = 0, NoAssertElectionDriver)
         val lp = termScope.startTerm(
             partitionStorage, replicaAppender, watchers,
             LeaderLogProcessor(
