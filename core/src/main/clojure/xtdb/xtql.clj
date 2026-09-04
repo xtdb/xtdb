@@ -17,6 +17,16 @@
 
 (defn- query-type? [q] (seq? q))
 
+(defn fn-arity
+  "The number of arguments `query` takes, where its top-level form is a fn; nil otherwise."
+  [query]
+  (when (query-type? query)
+    (let [[op params] query]
+      (when (and (contains? '#{fn fn*} op)
+                 (vector? params)
+                 (every? symbol? params))
+        (count params)))))
+
 (defmulti parse-query
   #_{:clj-kondo/ignore [:unused-binding]}
   (fn [query env]
@@ -273,20 +283,28 @@
 (defn- unparse-arg-binding [{:keys [expr]}]
   (unparse expr))
 
-(defmethod parse-query 'fn* [[_fn params body] {:keys [!param-count subq?] :as env}]
+(defmethod parse-query 'fn* [[_fn params body] {:keys [param-idxs subq?] :as env}]
   (when-not (and (vector? params)
                  (every? symbol? params))
     (throw (err/incorrect :xtql/malformed-fn-params "Malformed fn params" {:params params})))
 
+  (when (and param-idxs (not subq?) (not= (count params) (count param-idxs)))
+    (throw (err/incorrect :xtql/fn-arity-error
+                          (format "XTQL fn expects %d argument(s), got %d" (count params) (count param-idxs))
+                          {:params params, :arg-count (count param-idxs)})))
+
+  ;; `param-idxs` says where each param's argument sits in the args relation, and belongs to this fn
+  ;; alone - a nested fn's params are the apply's, so it is dissoc'd rather than inherited.
+  ;; It is absent only for `XTQL $$…$$`, which carries no placeholders to take indices from.
   (let [env (-> env
+                (dissoc :param-idxs)
                 (update :params (fnil into {})
-                        (cond
-                          subq? (map (fn [sym]
-                                       [sym (symbol (str "?_sq_" sym))]))
-                          !param-count (map (fn [sym]
-                                              [sym (symbol (str "?_" (dec (swap! !param-count inc))))]))
-                          :else (map-indexed (fn [idx sym]
-                                               [sym (symbol (str "?_" idx))])))
+                        (if subq?
+                          (map (fn [sym]
+                                 [sym (symbol (str "?_sq_" sym))]))
+                          (let [param-idxs (or param-idxs (range (count params)))]
+                            (map-indexed (fn [idx sym]
+                                           [sym (symbol (str "?_" (nth param-idxs idx)))]))))
                         params))]
     (->QueryWithParams params (parse-query body env))))
 
