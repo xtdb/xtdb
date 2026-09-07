@@ -3,10 +3,10 @@ antlr = "4.13.2"
 arrow = "19.0.0"
 arrow-adbc = "0.23.0"
 aws-sdk = "2.51.3"
-azure = "1.13.1"
+azure = "1.18.6"
 azure-storage = "12.33.3"
 clojure = "1.12.0"
-exposed = "1.4.0"
+exposed = "1.5.0"
 google-cloud-storage = "2.60.0"
 guava = "33.4.7-jre"
 confluent = "7.8.0"
@@ -49,7 +49,7 @@ netty-common = { group = "io.netty", name = "netty-common", version.ref = "netty
 roaring-bitmap = { group = "org.roaringbitmap", name = "RoaringBitmap", version = "1.6.14" }
 hppc = { group = "com.carrotsearch", name = "hppc", version = "0.11.1" }
 caffeine = { group = "com.github.ben-manes.caffeine", name = "caffeine", version = "3.2.3" }
-commons-codec = { group = "commons-codec", name = "commons-codec", version = "1.21.0" }
+commons-codec = { group = "commons-codec", name = "commons-codec", version = "1.22.1" }
 bouncycastle = { group = "org.bouncycastle", name = "bcprov-jdk18on", version = "1.84" }
 
 antlr = { group = "org.antlr", name = "antlr4", version.ref = "antlr" }
