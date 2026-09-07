@@ -49,7 +49,7 @@ netty-common = { group = "io.netty", name = "netty-common", version.ref = "netty
 roaring-bitmap = { group = "org.roaringbitmap", name = "RoaringBitmap", version = "1.6.14" }
 hppc = { group = "com.carrotsearch", name = "hppc", version = "0.11.1" }
 caffeine = { group = "com.github.ben-manes.caffeine", name = "caffeine", version = "3.2.3" }
-commons-codec = { group = "commons-codec", name = "commons-codec", version = "1.21.0" }
+commons-codec = { group = "commons-codec", name = "commons-codec", version = "1.22.1" }
 bouncycastle = { group = "org.bouncycastle", name = "bcprov-jdk18on", version = "1.84" }
 
 antlr = { group = "org.antlr", name = "antlr4", version.ref = "antlr" }
