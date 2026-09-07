@@ -2,7 +2,6 @@ package xtdb.indexer
 
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.verify
 import kotlinx.coroutines.*
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterEach
@@ -27,6 +26,7 @@ import xtdb.database.DatabaseLogs
 import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
 import xtdb.storage.BufferPool
+import xtdb.util.closeAll
 import java.time.Instant
 import java.time.InstantSource
 import java.util.concurrent.TimeUnit
@@ -37,6 +37,10 @@ class LogProcessorTest {
     private lateinit var nodeBase: NodeBase
     private lateinit var allocator: BufferAllocator
 
+    // Each test cancel-and-joins its own scope and closes its processor, so everything here is
+    // quiescent by teardown — and freed before `allocator`, which the live indexes are children of.
+    private val partitionStates = mutableListOf<PartitionState>()
+
     @BeforeEach
     fun setUp() {
         nodeBase = openBase(openMeterRegistry = false)
@@ -45,6 +49,7 @@ class LogProcessorTest {
 
     @AfterEach
     fun tearDown() {
+        partitionStates.closeAll()
         allocator.close()
         nodeBase.close()
     }
@@ -52,16 +57,15 @@ class LogProcessorTest {
     private fun mockBufferPool(epoch: Int = 0) =
         mockk<BufferPool>(relaxed = true) { every { this@mockk.epoch } returns epoch }
 
-    private fun newPartitionState(
-        liveIndex: LiveIndex = mockk(relaxed = true),
-        boundaryTermId: Long? = null,
-    ) = PartitionState(
-        boundaryTermId
+    private fun newPartitionState(boundaryTermId: Long? = null): PartitionState {
+        val tableCatalog = boundaryTermId
             ?.let { TableCatalog(mockBufferPool(), block { blockIndex = 0; termId = it }) }
-            ?: TableCatalog(mockBufferPool()),
-        createTrieCatalog(),
-        liveIndex
-    )
+            ?: TableCatalog(mockBufferPool())
+        val trieCatalog = createTrieCatalog()
+
+        return PartitionState(tableCatalog, trieCatalog, LiveIndex.open(allocator, tableCatalog, trieCatalog))
+            .also { partitionStates += it }
+    }
 
     private fun logProcessor(
         partitionStorage: PartitionStorage,
@@ -162,8 +166,7 @@ class LogProcessorTest {
         val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0, termEpoch = 1)
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val bufferPool = mockBufferPool()
-        val liveIndex = mockk<LiveIndex>(relaxed = true) { every { latestCompletedTx } returns null }
-        val partitionState = newPartitionState(liveIndex = liveIndex)
+        val partitionState = newPartitionState()
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
         val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", mockk(relaxed = true), null, null, backgroundScope)
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
@@ -178,7 +181,10 @@ class LogProcessorTest {
 
         // term 1.1 outranks 0.9, so the transition goes through and replays the log
         watchers.awaitTx(1)
-        verify { liveIndex.commitTx(any(), any()) }
+        assertEquals(
+            1L, partitionState.liveIndex.latestCompletedTx?.txId,
+            "the replayed tx is committed into the live index"
+        )
 
         scope.coroutineContext.job.cancelAndJoin()
         logProc.close()
@@ -191,10 +197,7 @@ class LogProcessorTest {
         val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0)
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val bufferPool = mockBufferPool()
-        val liveIndex = mockk<LiveIndex>(relaxed = true) {
-            every { latestCompletedTx } returns null
-        }
-        val partitionState = newPartitionState(liveIndex = liveIndex)
+        val partitionState = newPartitionState()
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
         val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", mockk(relaxed = true), null, null, backgroundScope)
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
@@ -210,7 +213,10 @@ class LogProcessorTest {
         // wait for the follower→leader transition to complete (runs on Dispatchers.Default)
         watchers.awaitTx(1)
 
-        verify { liveIndex.commitTx(any(), any()) }
+        assertEquals(
+            1L, partitionState.liveIndex.latestCompletedTx?.txId,
+            "the replayed tx is committed into the live index"
+        )
 
         // Teardown: cancel+join the scope reaps the subscription and the live term, then free it.
         scope.coroutineContext.job.cancelAndJoin()
@@ -224,10 +230,7 @@ class LogProcessorTest {
         val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 1)
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 1)
         val bufferPool = mockBufferPool(epoch = 1)
-        val liveIndex = mockk<LiveIndex>(relaxed = true) {
-            every { latestCompletedTx } returns null
-        }
-        val partitionState = newPartitionState(liveIndex = liveIndex)
+        val partitionState = newPartitionState()
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
         val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", mockk(relaxed = true), null, null, backgroundScope)
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
@@ -242,7 +245,10 @@ class LogProcessorTest {
 
         watchers.awaitTx(1)
 
-        verify { liveIndex.commitTx(any(), any()) }
+        assertEquals(
+            1L, partitionState.liveIndex.latestCompletedTx?.txId,
+            "the replayed tx is committed into the live index"
+        )
 
         // Teardown: cancel+join the scope reaps the subscription and the live term, then free it.
         scope.coroutineContext.job.cancelAndJoin()

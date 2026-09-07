@@ -44,6 +44,7 @@ internal class LeaderLogProcessor(
     partitionState: PartitionState,
     private val dbName: DatabaseName,
     private val driver: LeaderDriver,
+    private val blockCutter: BlockCutter,
     private val watchers: Watchers,
 
     private val replicaAppender: ReplicaLogAppender,
@@ -65,7 +66,6 @@ internal class LeaderLogProcessor(
     }
 
     private val partition = partitionStorage.partition
-    private val liveIndex = partitionState.liveIndex
 
     private val tableCatalog = partitionState.tableCatalog
 
@@ -79,49 +79,6 @@ internal class LeaderLogProcessor(
             resolvedSrcMsgId = watchers.latestSourceMsgId, resolvedExtToken = watchers.externalSourceToken,
             instantSource
         )
-
-    /**
-     * Where this term is in the block it is filling: `Filling` → `Cut` → `Uploading` → `Filling`.
-     *
-     * Resolution is armed only in [Filling], so no tx can interleave between a boundary and its upload —
-     * which keeps the follower's bounded pending-block buffer empty. That is also why the row gauge is
-     * [Filling]'s alone: outside it, nothing can move the gauge.
-     */
-    private sealed interface BlockState
-
-    /**
-     * Accumulating rows towards the cut, [rows] of them so far.
-     *
-     * The boundary is cut off this rather than `liveIndex.isFull()`, which lags — it reflects only APPLIED
-     * (consume-back) txs. Seeded from the rows already applied into the open block, because a new leader
-     * inherits a partially-filled block from replay and must cut it where the old leader would have, or
-     * block sizes drift across restarts (the #5817 stop/start off-by-one).
-     */
-    private class Filling(val rows: Long) : BlockState
-
-    /** The boundary is queued for append, and has not been read back yet. */
-    private data object Cut : BlockState
-
-    /** The boundary has been applied and the upload is in flight. */
-    private class Uploading(val pendingBlock: PendingBlock) : BlockState
-
-    private var blockState: BlockState = Filling(liveIndex.blockRowCount)
-
-    /**
-     * The block this term would have to hand on, were it demoted right now.
-     *
-     * Read from the transport's serialization point rather than from the work loop, and after this term has
-     * been cancelled and closed — so it must not touch anything allocator-backed.
-     */
-    val pendingBlock: PendingBlock?
-        get() = when (val state = blockState) {
-            is Filling, Cut -> null
-            is Uploading -> state.pendingBlock
-        }
-
-    // From the live index, not the node config: the two agree in production, but they are one value and the
-    // live index is what owns the block being filled.
-    private val rowsPerBlock = liveIndex.rowsPerBlock
 
     val gc = GarbageCollector(
         nodeBase, partitionStorage, partitionState, dbName, leaderTerm, replicaAppender, gcDispatcher
@@ -195,12 +152,7 @@ internal class LeaderLogProcessor(
             is ReplicaMessage.TriesAdded -> watchers.notifyApplied(record.msgId, msg.sourceMsgId)
 
             is BlockBoundary -> {
-                blockState = Uploading(PendingBlock(record.msgId, msg))
-                // liveIndex now holds exactly this block's txs (by log order); snapshot, upload the files,
-                // append BlockUploaded and roll the index — all inside uploadBlock.
-                driver.uploadBlock(record.msgId, leaderTerm, msg)
-                // Straight after the upload, so a demote landing here hands on nothing: the block is done.
-                blockState = Filling(0)
+                blockCutter.upload(record.msgId, msg)
 
                 // the block's covered source position, as the follower does
                 watchers.notifyApplied(record.msgId, msg.latestProcessedMsgId)
@@ -254,45 +206,25 @@ internal class LeaderLogProcessor(
 
     // ---- resolution ----
 
-    // Cut a block: inject the boundary (in resolution order, so it lands after this block's txs and before
-    // the next block's) and pause resolution until it is read back and uploaded.
-    private suspend fun cutBlock(latestProcessedMsgId: MessageId) {
-        val boundary = BlockBoundary(
-            (tableCatalog.currentBlockIndex ?: -1) + 1, latestProcessedMsgId, txResolver.resolvedExtToken,
-            termId = leaderTerm
-        )
-        replicaAppender.append(ControlItem(boundary))
-        blockState = Cut
-    }
+    private suspend fun cutBlock(latestProcessedMsgId: MessageId) =
+        blockCutter.cut(latestProcessedMsgId, txResolver.resolvedExtToken)
 
-    // Hand a freshly-resolved tx to the append pump, cutting a block if this tx filled one — which the
-    // caller is told about, because a source batch mid-flight has to stop where that happens.
+    // Hand a freshly-resolved tx to the append pump, answering whether it filled the block — which the
+    // caller needs, because a source batch mid-flight has to stop where that happens.
     private suspend fun appendTx(resolvedTx: ResolvedTx): Boolean {
-        val rows = when (val state = blockState) {
-            is Filling -> state.rows + resolvedTx.allTables.sumOf { it.relation.rowCount.toLong() }
-            // Only reachable from clauses this term arms in Filling alone, so getting here means the
-            // arm-set and this state have come apart — and the gauge it would feed no longer exists.
-            Cut, is Uploading -> error("[$dbName] tx resolved during a block cut")
-        }
+        blockCutter.addRows(resolvedTx.allTables.sumOf { it.relation.rowCount.toLong() })
 
         replicaAppender.append(TxItem(resolvedTx, leaderTerm))
 
-        if (rows < rowsPerBlock) {
-            blockState = Filling(rows)
-            return false
-        }
-
-        cutBlock(txResolver.resolvedSrcMsgId)
-        return true
+        return blockCutter.isFull
     }
 
-    /**
-     * Whether this term will take resolution work right now.
-     *
-     * False for the length of a block cut, so nothing interleaves between the boundary and its upload —
-     * which is what keeps the follower's bounded pending-block buffer empty.
-     */
-    val acceptingResolution get() = blockState is Filling
+    val acceptingResolution get() = blockCutter.acceptingResolution
+
+    val blockFilled get() = blockCutter.isFull
+
+    /** Cut the block this term has filled, sealing it at the resolve side's current watermarks. */
+    suspend fun cutFilledBlock() = cutBlock(txResolver.resolvedSrcMsgId)
 
     /**
      * Fail everything staged on this term, because it has ended with [cause].

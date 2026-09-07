@@ -73,8 +73,16 @@ class BlockUploader(
         }
     }
 
+    /**
+     * Snapshot the live index into block files, append [boundary]'s matching `BlockUploaded`, and roll the
+     * index. Returns the `BlockUploaded`'s replica-log position.
+     *
+     * [uploadingTermId] is not always [boundary]'s: a transition finishes the previous leader's pending
+     * block, and the `BlockUploaded` must carry the new term, or followers that have already advanced
+     * would fence it and never complete the block.
+     */
     suspend fun uploadBlock(
-        boundaryReplicaMsgId: MessageId, termId: Long,
+        boundaryReplicaMsgId: MessageId, uploadingTermId: Long,
         boundary: BlockBoundary,
     ): MessageId {
         val latestProcessedMsgId = boundary.latestProcessedMsgId
@@ -128,7 +136,7 @@ class BlockUploader(
         val block = tableCatalog.buildBlock(
             blockIdx, liveIndex.latestCompletedTx, latestProcessedMsgId,
             boundaryReplicaMsgId, entries.values, secondaryDatabasesForBlock,
-            externalSourceToken, termId
+            externalSourceToken, uploadingTermId
         )
 
         bufferPool.putObject(TableCatalog.blockFilePath(blockIdx), ByteBuffer.wrap(block.toByteArray()))
@@ -141,7 +149,7 @@ class BlockUploader(
                 Storage.VERSION, bufferPool.epoch,
                 blockIdx, latestProcessedMsgId,
                 addedTries, externalSourceToken,
-                termId = termId,
+                termId = uploadingTermId,
             )
         ).msgId
 
