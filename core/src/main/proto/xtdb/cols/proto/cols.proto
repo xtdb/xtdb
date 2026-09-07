@@ -5,6 +5,7 @@ package xtdb.cols.proto;
 option java_multiple_files = true;
 
 message Struct {
+  // keyed by slug, as TableBlock.columns is
   map<string, ColumnMeta> children = 1;
 }
 
@@ -123,5 +124,11 @@ message VecType {
 message ColumnMeta {
   VecType type = 1;
   bytes hll = 2;
+  // this position's place among its siblings, in the order they were first seen. Append-only and never
+  // reused, so it stays dense — a top-level column's is what pg_attribute reports as its attnum.
+  int32 ordinal = 3;
+  // the name a user sees. Absent on a block written before the two were distinguishable, where the key
+  // it is held under is also its name. See #4038.
+  string name = 4;
 }
 

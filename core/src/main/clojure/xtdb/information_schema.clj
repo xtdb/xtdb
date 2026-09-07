@@ -41,24 +41,47 @@
 (defn- map->vec-types [m]
   (update-vals m types/->type))
 
-(defn schema-info->col-rows [schema-info]
+;; the order `SELECT *` reads in, so the columns a user asked for come before the ones we added
+(def ^:private leading-cols
+  ["_id" "_valid_from" "_valid_to" "_system_from" "_system_to"])
+
+(defn- ->attnums
+  "attnum by column name: the leading columns in their fixed order, then everything the catalog recorded,
+   in the order it first saw it.
+
+   Both groups are append-only, so a new column lands last and moves nothing. A column the catalog has not
+   recorded gets no attnum from here."
+  [col-names ordinals]
+  (let [leading (filterv (set col-names) leading-cols)]
+    (into {}
+          (map-indexed (fn [idx col-name] [col-name (inc idx)]))
+          (concat leading
+                  (->> (sort-by val ordinals)
+                       (map key)
+                       (remove (set leading)))))))
+
+(defn schema-info->col-rows [schema-info col-ordinals]
   (for [[^TableRef table cols] schema-info
-        :let [cols (into (when-not (and (contains? #{"pg_catalog" "information_schema" "xt"} (.getSchemaName table))
-                                        (not= 'xt/txs (table/ref->schema+table table)))
-                           (-> '{"_valid_from" :instant
-                                 "_valid_to" [:? :instant]
-                                 "_system_from" :instant
-                                 "_system_to" [:? :instant]}
-                               map->vec-types))
-                         cols)
+        :let [temporal-cols (when-not (and (contains? #{"pg_catalog" "information_schema" "xt"} (.getSchemaName table))
+                                           (not= 'xt/txs (table/ref->schema+table table)))
+                              (-> '{"_valid_from" :instant
+                                    "_valid_to" [:? :instant]
+                                    "_system_from" :instant
+                                    "_system_to" [:? :instant]}
+                                  map->vec-types))
+              cols (into temporal-cols cols)
               {xt-cols true, user-cols false} (group-by (comp #(str/starts-with? % "_") key) cols)
               cols (concat (sort-by key xt-cols)
-                           (sort-by key user-cols))]
+                           (sort-by key user-cols))
+
+              attnums (->attnums (map key cols) (get col-ordinals table))]
         [idx col] (map-indexed #(vector %1 %2) cols)
         :let [name (key col)
               vec-type (val col)]]
 
-    {:idx (inc idx) ;; no guarantee of stability of idx for a given col
+    ;; the meta tables are synthesised from a literal and no catalog records them, so they fall back to
+    ;; their position in this listing
+    {:idx (or (attnums name) (inc idx))
      :table table
      :name name
      :vec-type vec-type}))
@@ -547,14 +570,16 @@
             ;; entry seqs, and only the outer map has to be Clojure for `merge` to take a `conj`.
             schema-info (delay (-> (into {} (.getAllColumnTypes ^Snapshot snap))
                                    (merge meta-table-schemas)
-                                   (update-keys table/->ref)))]
+                                   (update-keys table/->ref)))
+
+            col-ordinals (delay (into {} (.getAllColumnOrdinals ^Snapshot snap)))]
 
         (util/with-close-on-catch [out-rel (Relation. ^BufferAllocator allocator
                                                       ^Map (update-keys derived-table-schema str))]
 
           (.writeRows out-rel (->> (case (table/ref->schema+table table)
                                      information_schema/tables (tables db-name table-refs)
-                                     information_schema/columns (columns db-name (schema-info->col-rows @schema-info))
+                                     information_schema/columns (columns db-name (schema-info->col-rows @schema-info @col-ordinals))
                                      information_schema/schemata (schemas db-name)
                                      information_schema/table_constraints nil
                                      information_schema/key_column_usage nil
@@ -565,7 +590,7 @@
                                      pg_catalog/pg_description nil
                                      pg_catalog/pg_views nil
                                      pg_catalog/pg_matviews nil
-                                     pg_catalog/pg_attribute (pg-attribute oid-by-table (schema-info->col-rows @schema-info))
+                                     pg_catalog/pg_attribute (pg-attribute oid-by-table (schema-info->col-rows @schema-info @col-ordinals))
                                      pg_catalog/pg_namespace (pg-namespace)
                                      pg_catalog/pg_proc (pg-proc)
                                      pg_catalog/pg_database (pg-database (.getDatabaseNames db-cat))

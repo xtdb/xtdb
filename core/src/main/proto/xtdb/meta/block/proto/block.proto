@@ -30,6 +30,8 @@ message TableBlock {
     // See #4038.
     map<string, bytes> column_name_to_hll = 4;
     repeated Partition partitions = 5;
+    // keyed by slug — the Arrow field name a column's data is written under, which is fixed for the
+    // column's lifetime where its name is not.
     map<string, xtdb.cols.proto.ColumnMeta> columns = 6;
 }
 

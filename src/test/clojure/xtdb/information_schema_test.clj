@@ -114,25 +114,25 @@
 
   (let [{beanie "beanie", baseball "baseball", txs "txs"} (->table-oids)]
     (t/is (= (set (for [[attrelid attname attnum atttypeid attlen] [[beanie "_id" 1 11111 -1]
-                                                                  [beanie "_system_from" 2 1184 8]
-                                                                  [beanie "_system_to" 3 1184 8]
-                                                                  [beanie "_valid_from" 4 1184 8]
-                                                                  [beanie "_valid_to" 5 1184 8]
+                                                                  [beanie "_valid_from" 2 1184 8]
+                                                                  [beanie "_valid_to" 3 1184 8]
+                                                                  [beanie "_system_from" 4 1184 8]
+                                                                  [beanie "_system_to" 5 1184 8]
                                                                   [beanie "col1" 6 114 -1]
 
                                                                   [baseball "_id" 1 11111 -1]
-                                                                  [baseball "_system_from" 2 1184 8]
-                                                                  [baseball "_system_to" 3 1184 8]
-                                                                  [baseball "_valid_from" 4 1184 8]
-                                                                  [baseball "_valid_to" 5 1184 8]
+                                                                  [baseball "_valid_from" 2 1184 8]
+                                                                  [baseball "_valid_to" 3 1184 8]
+                                                                  [baseball "_system_from" 4 1184 8]
+                                                                  [baseball "_system_to" 5 1184 8]
                                                                   [baseball "col1" 6 20 8]
                                                                   [baseball "col2" 7 20 8]
 
                                                                   [txs "_id" 1 20 8]
-                                                                  [txs "_system_from" 2 1184 8]
-                                                                  [txs "_system_to" 3 1184 8]
-                                                                  [txs "_valid_from" 4 1184 8]
-                                                                  [txs "_valid_to" 5 1184 8]
+                                                                  [txs "_valid_from" 2 1184 8]
+                                                                  [txs "_valid_to" 3 1184 8]
+                                                                  [txs "_system_from" 4 1184 8]
+                                                                  [txs "_system_to" 5 1184 8]
                                                                   [txs "committed" 6 16 1]
                                                                   [txs "error" 7 16384 -1]
                                                                   [txs "system_time" 8 1184 8]]]
@@ -153,6 +153,31 @@
                        FROM pg_catalog.pg_attribute
                        WHERE attname IN ('_id', '_valid_from', '_valid_to', '_system_from', '_system_to',
                                          'col1', 'col2', 'error', 'system_time', 'committed')"))))))
+
+(deftest test-attnum-survives-a-later-column
+  (letfn [(attnums []
+            (into {} (map (juxt :attname :attnum))
+                  (xt/q tu/*node*
+                        "SELECT attname, attnum FROM pg_catalog.pg_attribute
+                         WHERE attrelid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'docs')")))]
+
+    (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1, :b 1}]])
+    (tu/flush-block! tu/*node*)
+
+    (t/is (= {"_id" 1, "_valid_from" 2, "_valid_to" 3, "_system_from" 4, "_system_to" 5, "b" 6}
+             (attnums)))
+
+    (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 2, :a 1, :b 2}]])
+
+    (t/is (= {"_id" 1, "_valid_from" 2, "_valid_to" 3, "_system_from" 4, "_system_to" 5, "b" 6, "a" 7}
+             (attnums))
+          "`a` sorts ahead of `b` and takes the next attnum regardless")
+
+    (tu/flush-block! tu/*node*)
+
+    (t/is (= {"_id" 1, "_valid_from" 2, "_valid_to" 3, "_system_from" 4, "_system_to" 5, "b" 6, "a" 7}
+             (attnums))
+          "and keeps it once a block records it")))
 
 (deftest test-pg-tables
   (xt/submit-tx tu/*node* test-data)

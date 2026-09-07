@@ -249,6 +249,101 @@ private fun VecType.asType(): ColumnMeta.Type = when (typeCase) {
 }
 
 /**
+ * The type this node and its children describe.
+ *
+ * Reassembled on demand rather than held: the two are the same information, so storing both makes a
+ * descendant's type something a parent has to be kept in step with.
+ */
+val ColumnMeta.Type.vectorType: VectorType
+    get() = when (this) {
+        ColumnMeta.Type.Nothing -> VectorType.Nothing
+        ColumnMeta.Type.Null -> VectorType.Null
+        is ColumnMeta.Type.Scalar -> VectorType.Scalar(arrowType)
+        is ColumnMeta.Type.Listy -> VectorType.Listy(arrowType, el.type.vectorType)
+        is ColumnMeta.Type.Struct -> VectorType.Struct(children.mapValues { it.value.type.vectorType })
+        is ColumnMeta.Type.Maybe -> VectorType.maybe(mono.vectorType)
+        is ColumnMeta.Type.Poly -> VectorType.fromLegs(legs.map { it.vectorType })
+    }
+
+/**
+ * An ordinal for each of [this], taken from [prev] where it holds one and appended after the highest it
+ * holds where it doesn't.
+ *
+ * New names are numbered in name order rather than iteration order: every node folds the same blocks and
+ * has to reach the same numbering, and a map has no order of its own to inherit.
+ */
+internal fun Iterable<FieldName>.ordinalsFrom(prev: Map<FieldName, Int>): Map<FieldName, Int> {
+    var next = prev.values.maxOrNull()?.plus(1) ?: 0
+
+    return sorted().associateWith { prev[it] ?: next++ }
+}
+
+internal fun Map<FieldName, ColumnMeta>.withOrdinalsFrom(
+    prev: Map<FieldName, ColumnMeta>
+): Map<FieldName, ColumnMeta> {
+    val ordinals = keys.ordinalsFrom(prev.mapValues { it.value.ordinal })
+
+    return ordinals.mapValues { (name, ordinal) ->
+        val col = getValue(name)
+        col.copy(ordinal = ordinal, type = col.type.withOrdinalsFrom(prev[name]?.type))
+    }
+}
+
+private fun ColumnMeta.Type.Mono.withOrdinalsFrom(prev: ColumnMeta.Type.Mono?): ColumnMeta.Type.Mono = when (this) {
+    is ColumnMeta.Type.Struct ->
+        ColumnMeta.Type.Struct(children.withOrdinalsFrom((prev as? ColumnMeta.Type.Struct)?.children.orEmpty()))
+
+    is ColumnMeta.Type.Listy -> {
+        val prevEl = (prev as? ColumnMeta.Type.Listy)?.el
+        ColumnMeta.Type.Listy(arrowType, el.copy(type = el.type.withOrdinalsFrom(prevEl?.type)))
+    }
+
+    else -> this
+}
+
+/**
+ * The legs [this] holds, whatever it wrapped them in.
+ *
+ * Matching the wrapper instead — a previous [ColumnMeta.Type.Maybe] against this one — loses every ordinal
+ * beneath a leg on the merge that widens it, which is the merge a column meets the first time a block
+ * doesn't write it.
+ */
+private val ColumnMeta.Type?.legsByName: Map<String, ColumnMeta.Type.Mono>
+    get() = when (this) {
+        is ColumnMeta.Type.Mono -> mapOf(legName to this)
+        is ColumnMeta.Type.Maybe -> mapOf(mono.legName to mono)
+        is ColumnMeta.Type.Poly -> legs.associateBy { it.legName }
+        else -> emptyMap()
+    }
+
+private fun ColumnMeta.Type.withOrdinalsFrom(prev: ColumnMeta.Type?): ColumnMeta.Type {
+    val prevLegs = prev.legsByName
+
+    return when (this) {
+        ColumnMeta.Type.Nothing -> this
+        is ColumnMeta.Type.Mono -> withOrdinalsFrom(prevLegs[legName])
+        is ColumnMeta.Type.Maybe -> ColumnMeta.Type.Maybe(mono.withOrdinalsFrom(prevLegs[mono.legName]))
+
+        is ColumnMeta.Type.Poly ->
+            ColumnMeta.Type.Poly(legs.mapTo(mutableSetOf()) { it.withOrdinalsFrom(prevLegs[it.legName]) })
+    }
+}
+
+private fun VectorType.Mono.asColType(): ColumnMeta.Type.Mono = when (this) {
+    VectorType.Null -> ColumnMeta.Type.Null
+    is VectorType.Scalar -> ColumnMeta.Type.Scalar(arrowType)
+    is VectorType.Listy -> ColumnMeta.Type.Listy(arrowType, ColumnMeta.of(elsName(arrowType), elType))
+    is VectorType.Struct -> ColumnMeta.Type.Struct(children.mapValues { (n, t) -> ColumnMeta.of(n, t) })
+}
+
+private fun VectorType.asColType(): ColumnMeta.Type = when (this) {
+    VectorType.Nothing -> ColumnMeta.Type.Nothing
+    is VectorType.Mono -> asColType()
+    is VectorType.Maybe -> ColumnMeta.Type.Maybe(mono.asColType())
+    is VectorType.Poly -> ColumnMeta.Type.Poly(legs.mapTo(mutableSetOf()) { it.asColType() })
+}
+
+/**
  * What the catalog knows about one position in a table's type tree: a top-level column, a nested struct
  * key, or a list's element type.
  *
@@ -261,12 +356,24 @@ private fun VecType.asType(): ColumnMeta.Type = when (typeCase) {
  * The consequence worth knowing at a call site: widening a type moves no nodes. `a: i64` becoming
  * `a: i64 | text` re-shapes `a`'s [type] and leaves everything else on the node where it was.
  *
- * @param name mirrors the key this node is held under, so that a node can be passed around on its own.
- *   A list's element takes the name its parent's arrow type fixes.
+ * @param slug the Arrow field name this position's data is written under, and the key it is held under —
+ *   mirrored onto the node so that one can be passed around on its own. Fixed for the position's
+ *   lifetime: changing it orphans everything already written under it. A list's element takes the slug
+ *   its parent's arrow type fixes.
+ * @param name the name a user sees, which a rename changes and [slug] does not. The two are the same
+ *   string until there is a rename to tell them apart.
+ * @param ordinal this position's place among its siblings, in the order they were first seen — dense,
+ *   append-only, and never reused, so it does not move when a sibling is added.
  * @param hll the distinct-value estimate accumulated for this position, or null where none has been
  *   computed.
  */
-data class ColumnMeta(val name: FieldName, val type: Type, val hll: HLL?) {
+data class ColumnMeta(
+    val slug: FieldName,
+    val name: FieldName,
+    val ordinal: Int,
+    val type: Type,
+    val hll: HLL?
+) {
 
     sealed interface Type {
 
@@ -293,12 +400,33 @@ data class ColumnMeta(val name: FieldName, val type: Type, val hll: HLL?) {
     fun toProto(): ColumnMetaProto =
         ColumnMetaProto.newBuilder()
             .setType(type.toProto())
+            .setOrdinal(ordinal)
+            .setName(name)
             .also { b -> hll?.let { b.hll = ByteString.copyFrom(it.duplicate()) } }
             .build()
 
     companion object {
+        /**
+         * A node for [type] at a position called [name], and one for each position beneath it.
+         *
+         * The slug is the name: a column arrives as a key in the put struct and its data is written under
+         * that key, so there is nothing to normalise, unlike a table's.
+         *
+         * Every node takes ordinal 0: a tree built without one to compare against has no first-seen order
+         * to recover, so ordinals are settled by [withOrdinalsFrom] against the tree this one folds into.
+         */
         @JvmStatic
-        fun fromProto(name: FieldName, proto: ColumnMetaProto) =
-            ColumnMeta(name, proto.type.asType(), proto.hll.takeIf { proto.hasHll() }?.let { toHLL(it.toByteArray()) })
+        @JvmOverloads
+        fun of(name: FieldName, type: VectorType, hll: HLL? = null) =
+            ColumnMeta(name, name, 0, type.asColType(), hll)
+
+        /** A node held under [slug], taking [slug] as its name where the block predates the two being distinct. */
+        @JvmStatic
+        fun fromProto(slug: FieldName, proto: ColumnMetaProto) =
+            ColumnMeta(
+                slug, proto.name.takeIf { proto.hasName() } ?: slug,
+                proto.ordinal, proto.type.asType(),
+                proto.hll.takeIf { proto.hasHll() }?.let { toHLL(it.toByteArray()) }
+            )
     }
 }
