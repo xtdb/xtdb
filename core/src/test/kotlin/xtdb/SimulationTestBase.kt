@@ -22,8 +22,13 @@ private val ExtensionContext.explicitSeed get() = requiredTestMethod.getAnnotati
 @ExtendWith(RepeatableSimulationTest.InvocationContextProvider::class)
 annotation class RepeatableSimulationTest(val iterations: Int = -1) {
 
-    object InvocationContext : TestTemplateInvocationContext {
-        override fun getDisplayName(invocationIndex: Int) = "[iteration $invocationIndex]"
+    /**
+     * Carries the method name as well as the iteration, because this display name is the only thing the
+     * JUnit XML records for an invocation: a failure reported as `[iteration 42]` alone names no method,
+     * and a CI run of a class with several of these gives no way to work out which one broke.
+     */
+    class InvocationContext(private val methodName: String) : TestTemplateInvocationContext {
+        override fun getDisplayName(invocationIndex: Int) = "$methodName [iteration $invocationIndex]"
     }
 
     class InvocationContextProvider : TestTemplateInvocationContextProvider {
@@ -38,7 +43,8 @@ annotation class RepeatableSimulationTest(val iterations: Int = -1) {
 
         override fun provideTestTemplateInvocationContexts(ctx: ExtensionContext): Stream<TestTemplateInvocationContext> {
             val iterations = ctx.explicitIterations ?: if (ctx.explicitSeed != null) 1 else DEFAULT_ITERATIONS
-            return List<TestTemplateInvocationContext>(iterations) { InvocationContext }.stream()
+            val invocationCtx = InvocationContext(ctx.requiredTestMethod.name)
+            return List<TestTemplateInvocationContext>(iterations) { invocationCtx }.stream()
         }
     }
 }
