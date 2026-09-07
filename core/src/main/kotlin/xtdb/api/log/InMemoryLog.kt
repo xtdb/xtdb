@@ -129,7 +129,10 @@ class InMemoryLog<M> @JvmOverloads constructor(
                     val first = if (timeout <= Duration.ZERO) {
                         committed.tryReceive().getOrNull()
                     } else {
-                        withTimeoutOrNull(timeout) { committed.receive() }
+                        select {
+                            committed.onReceive { it }
+                            onTimeout(timeout) { null }
+                        }
                     } ?: return emptyList()
 
                     return buildList {
@@ -137,7 +140,7 @@ class InMemoryLog<M> @JvmOverloads constructor(
                         while (true) add(committed.tryReceive().getOrNull() ?: break)
                     }.also { records ->
                         check(records.first().logOffset == latestCompletedOffset + 1) {
-                            "InMemoryLog replay buffer rolled past offset ${latestCompletedOffset + 1}"
+                            "InMemoryLog tail expected offset ${latestCompletedOffset + 1}, got ${records.first().logOffset}"
                         }
                         latestCompletedOffset = records.last().logOffset
                     }
