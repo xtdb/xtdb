@@ -540,12 +540,23 @@ class Database(
                     .joinAll()
             }
 
-            private suspend fun Catalog.syncAll0() = coroutineScope {
-                databaseNames
-                    .mapNotNull { databaseOrNull(it) }
-                    .filter { it.isIndexing }
-                    .map { db -> launch { db.sync() } }
-                    .joinAll()
+            // Syncing a database is what replays the attaches on its log, so the node's set grows underneath
+            // this — and a database that joins part-way through is the one a caller is most likely waiting
+            // for. Repeat until a pass finds nothing new; syncAll's timeout bounds a log that keeps attaching.
+            private suspend fun Catalog.syncAll0() {
+                val seen = mutableSetOf<DatabaseName>()
+
+                while (true) {
+                    val fresh = databaseNames.filterNot { it in seen }
+                    if (fresh.isEmpty()) return
+                    seen += fresh
+
+                    coroutineScope {
+                        fresh.mapNotNull { databaseOrNull(it) }
+                            .filter { it.isIndexing }
+                            .forEach { db -> launch { db.sync() } }
+                    }
+                }
             }
 
             @JvmField
