@@ -15,13 +15,13 @@ import xtdb.types.MessageId
  * The leader term's observable external effects, behind one seam.
  *
  * These are driven from the log processor's work loop, and reach the outside world only through
- * here. That makes a leader simulable: a mock driver can stall an upload or fail an append, neither
- * of which the real logs express in memory.
+ * here — so a test can stall an upload or fail an append, neither of which the real logs express in
+ * memory.
  *
  * Deliberately narrow. In-memory state mutations that happen to sit on the leader's path —
  * `trieCatalog`, `dbCatalog`, `watchers`, the GC signals — stay on the processor, as do reads of
- * in-memory state (`liveIndex.isFull()`, `tableCatalog.currentBlockIndex`). A mock holds real state
- * objects, so those reads stay consistent with what the driver has applied.
+ * in-memory state (`liveIndex.isFull()`, `tableCatalog.currentBlockIndex`). A wrapper holds real
+ * state objects, so those reads stay consistent with what the driver has applied.
  */
 internal interface LeaderDriver {
 

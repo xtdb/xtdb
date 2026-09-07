@@ -176,7 +176,6 @@ The classes concerned:
 - `core/src/test/kotlin/xtdb/NodeSimulationTest.kt`
 - `core/src/test/kotlin/xtdb/cache/CacheSimulationTest.kt`
 - `core/src/test/kotlin/xtdb/compactor/CompactorSimulationTest.kt`
-- `core/src/test/kotlin/xtdb/indexer/LeaderDriverSimTest.kt`
 - `core/src/test/kotlin/xtdb/indexer/LogProcessorSimTest.kt`
 - `modules/postgres-source/src/test/kotlin/xtdb/postgres/PostgresSourceSimulationTest.kt`
 - `modules/postgres-source/src/test/kotlin/xtdb/postgres/PostgresSourceTypesPropertyTest.kt`
