@@ -103,21 +103,9 @@ internal class LeaderLogProcessor(
     private data object Cut : BlockState
 
     /** The boundary has been applied and the upload is in flight. */
-    private class Uploading(val pendingBlock: PendingBlock) : BlockState
+    private data object Uploading : BlockState
 
     private var blockState: BlockState = Filling(liveIndex.blockRowCount)
-
-    /**
-     * The block this term would have to hand on, were it demoted right now.
-     *
-     * Read from the transport's serialization point rather than from the work loop, and after this term has
-     * been cancelled and closed — so it must not touch anything allocator-backed.
-     */
-    val pendingBlock: PendingBlock?
-        get() = when (val state = blockState) {
-            is Filling, Cut -> null
-            is Uploading -> state.pendingBlock
-        }
 
     // From the live index, not the node config: the two agree in production, but they are one value and the
     // live index is what owns the block being filled.
@@ -195,7 +183,7 @@ internal class LeaderLogProcessor(
             is ReplicaMessage.TriesAdded -> watchers.notifyApplied(record.msgId, msg.sourceMsgId)
 
             is BlockBoundary -> {
-                blockState = Uploading(PendingBlock(record.msgId, msg))
+                blockState = Uploading
                 // liveIndex now holds exactly this block's txs (by log order); snapshot, upload the files,
                 // append BlockUploaded and roll the index — all inside uploadBlock.
                 driver.uploadBlock(record.msgId, leaderTerm, msg)
@@ -272,7 +260,7 @@ internal class LeaderLogProcessor(
             is Filling -> state.rows + resolvedTx.allTables.sumOf { it.relation.rowCount.toLong() }
             // Only reachable from clauses this term arms in Filling alone, so getting here means the
             // arm-set and this state have come apart — and the gauge it would feed no longer exists.
-            Cut, is Uploading -> error("[$dbName] tx resolved during a block cut")
+            Cut, Uploading -> error("[$dbName] tx resolved during a block cut")
         }
 
         replicaAppender.append(TxItem(resolvedTx, leaderTerm))

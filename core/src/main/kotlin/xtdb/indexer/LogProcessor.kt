@@ -398,11 +398,9 @@ class LogProcessor(
         }
 
         LOG.info("[$dbName] demote — tearing down leader, re-opening follower")
-        // Cancel first: `pendingBlock` stays readable after the cancel/close — it isn't allocator-backed
-        // — so we free the old term before reading it to seed the follower.
         leader.job.cancelAndJoin()
         leader.proc.close()
-        state = openFollower(leader.proc.pendingBlock)
+        state = openFollower()
     }
 
     override fun close() = state.proc.close()

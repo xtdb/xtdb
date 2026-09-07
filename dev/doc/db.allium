@@ -225,8 +225,6 @@ variant Leader : LogProcessor {
     -- interleaves between the boundary and its upload, keeping the follower's bounded
     -- pending-block buffer empty. See live-index.allium "Block cut".
     block_in_progress: Boolean
-
-    pending_block: PendingBlock?  -- set between BlockBoundary and BlockUploaded during the upload
 }
 
 variant Follower : LogProcessor {
@@ -429,16 +427,13 @@ value TableEntry {
 
 value PendingBlock {
     -- Captures the state between BlockBoundary and BlockUploaded.
-    -- In the follower: also buffers subsequent replica messages, up to
-    -- max_buffered_records — overflow is a fault (xtdb.indexer/follower-buffer-overflow),
-    -- which the leader's block-cut pause is what keeps unreachable.
-    -- In the leader: set during the upload, cleared after it completes.
-    -- Passed from leader to follower on revocation, and from follower to
-    -- transition processor on assignment.
+    -- Held by the follower, which also buffers subsequent replica messages, up to max_buffered_records.
+    -- Overflow is a fault (xtdb.indexer/follower-buffer-overflow) that the leader's block-cut pause keeps unreachable.
+    -- Passed from follower to transition processor on assignment.
     -- See: indexer/PendingBlock.kt
     boundary_msg_id: MessageId
     boundary_message: BlockBoundaryMessage
-    buffered_records: List<ReplicaMessage>   -- follower only; leader creates with no buffer
+    buffered_records: List<ReplicaMessage>
     max_buffered_records: Integer
 }
 
@@ -825,13 +820,11 @@ rule TransitionToFollower {
         if tx_resolver != null:
             CloseResolver(tx_resolver)
 
-        -- The leader's pending_block is passed to the new follower. If the leader was
-        -- mid-upload when revoked (between BlockBoundary and BlockUploaded), the follower
-        -- picks up the pending state. The watermark fields stay readable after the close —
-        -- they are not allocator-backed.
+        -- The new follower carries no pending block.
+        -- Cancelling the leader leaves the boundary's apply incomplete, so that record is offered again and the follower opens the block itself.
+        -- The watermark fields stay readable after the close — they are not allocator-backed.
         log_processor.mode = Follower.created(
             latest_replica_msg_id: log_processor.latest_replica_msg_id,
-            pending_block: log_processor.pending_block,
             max_leader_term: table_catalog.boundary_term_id
         )
 }
