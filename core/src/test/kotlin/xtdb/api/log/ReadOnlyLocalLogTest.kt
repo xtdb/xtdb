@@ -22,6 +22,9 @@ class ReadOnlyLocalLogTest {
 
     private fun txMessage(id: Byte) = SourceMessage.LegacyTx(byteArrayOf(-1, id))
 
+    // header byte 2 is the retired flush-block message, which SourceMessage.parse decodes to null
+    private fun retiredMessage() = SourceMessage.LegacyTx(byteArrayOf(2))
+
     @Test
     fun `tailAll observes external writes at N=1`(): Unit = runBlocking {
         observesExternalWrites(partitions = 1)
@@ -46,6 +49,24 @@ class ReadOnlyLocalLogTest {
                     writer.appendMessage(txMessage(2))
                     assertEquals(1, tail.poll(3.seconds).size)
                     assertTrue(tail.poll(Duration.ZERO).isEmpty())
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `a record the codec no longer decodes is skipped, and later records still read`(): Unit = runBlocking {
+        val factory = LocalLog.Factory(tempDir.resolve("retired-log"))
+
+        factory.openSourceLog(emptyMap()).use { writer ->
+            writer.appendMessage(retiredMessage())
+            writer.appendMessage(txMessage(1))
+
+            factory.openReadOnlySourceLog(emptyMap()).use { reader ->
+                reader.withTail(0, -1L) { tail ->
+                    val records = tail.poll(Duration.ZERO)
+                    assertEquals(1, records.size)
+                    assertArrayEquals(byteArrayOf(-1, 1), (records.single().message as SourceMessage.LegacyTx).payload)
                 }
             }
         }

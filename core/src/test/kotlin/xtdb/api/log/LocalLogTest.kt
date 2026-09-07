@@ -59,6 +59,9 @@ class LocalLogTest {
 
     private fun txMessage(id: Byte) = SourceMessage.LegacyTx(byteArrayOf(-1, id))
 
+    // header byte 2 is the retired flush-block message, which SourceMessage.parse decodes to null
+    private fun retiredMessage() = SourceMessage.LegacyTx(byteArrayOf(2))
+
     @Test
     fun `readLastMessage returns null when log is empty`() {
         val log = LocalLog.Factory(tempDir.resolve("log")).openSourceLog(emptyMap())
@@ -170,6 +173,22 @@ class LocalLogTest {
             log.withTail(0, -1L) { tail ->
                 assertEquals(2, tail.poll(Duration.ZERO).size)
                 assertTrue(tail.poll(Duration.ZERO).isEmpty())
+            }
+        }
+    }
+
+    @Test
+    fun `a record the codec no longer decodes is skipped, and later records still read`() = runTest {
+        val log = LocalLog.Factory(tempDir.resolve("retired-log")).openSourceLog(emptyMap())
+
+        log.use {
+            log.appendMessage(retiredMessage())
+            log.appendMessage(txMessage(1))
+
+            log.withTail(0, -1L) { tail ->
+                val records = tail.poll(Duration.ZERO)
+                assertEquals(1, records.size)
+                assertArrayEquals(byteArrayOf(-1, 1), (records.single().message as SourceMessage.LegacyTx).payload)
             }
         }
     }

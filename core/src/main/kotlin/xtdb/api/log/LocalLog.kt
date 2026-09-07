@@ -106,12 +106,13 @@ class LocalLog<M> @JvmOverloads constructor(
         check(headerBuf.get() == RECORD_SEPARATOR) { "log file corrupted at $pos - expected record separator" }
         val size = headerBuf.getInt()
 
-        val message =
-            codec.decode(ByteBuffer.allocate(size).also { read(it); it.flip() }.array())
-                ?: return null
+        val message = codec.decode(ByteBuffer.allocate(size).also { read(it); it.flip() }.array())
 
-        return Record(epoch, pos, fromMicros(headerBuf.getLong()), message)
-            .also { position(pos + messageSizeBytes(size)) }
+        // The reads stop before the record's trailing offset, so seek past it explicitly - and
+        // unconditionally, so that a null decode (a retired message type) still lands on the next record.
+        position(pos + messageSizeBytes(size))
+
+        return message?.let { Record(epoch, pos, fromMicros(headerBuf.getLong()), it) }
     }
 
     internal data class NewMessage<M>(
