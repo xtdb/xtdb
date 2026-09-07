@@ -85,7 +85,11 @@ internal suspend fun runLeaderTerm(
         coroutineScope {
             launch(CoroutineName("$dbName-replica-appender")) { appender.run() }
 
-            while (true)
+            while (true) {
+                // Ahead of the arming below, not after it: a filled block must admit nothing else, and
+                // the GC clause would otherwise slip a TriesDeleted in ahead of the boundary.
+                if (term.blockFilled) term.cutFilledBlock()
+
                 selectUnbiased {
                     replicaMsgs.onReceive { pending ->
                         try {
@@ -117,6 +121,7 @@ internal suspend fun runLeaderTerm(
                         term.gc.run { armSelect() }
                     }
                 }
+            }
         }
     } catch (t: Throwable) {
         when {
@@ -321,11 +326,14 @@ class LogProcessor(
                         following.proc.close()
                     }
 
-                    val driver = RealLeaderDriver(partitionStorage, partitionState, blockUploader)
+                    val driver = RealLeaderDriver(partitionStorage, partitionState)
                     val replicaAppender = ReplicaLogAppender(driver)
+                    val blockCutter =
+                        BlockCutter(partitionState, dbName, termId, replicaAppender, blockUploader)
 
                     val proc = LeaderLogProcessor(
-                        allocator, base, partitionStorage, crashLogger, partitionState, dbName, driver, watchers,
+                        allocator, base, partitionStorage, crashLogger, partitionState, dbName, driver,
+                        blockCutter, watchers,
                         replicaAppender,
                         externalSource,
                         skipTxs, dbCatalog,
@@ -334,7 +342,7 @@ class LogProcessor(
                         gcDispatcher = gcDispatcher,
                     )
 
-                    pendingBlock?.let { proc.applyPendingBlock(it) }
+                    pendingBlock?.let { proc.applyPendingBlock(blockCutter, it) }
 
                     LOG.debug("[${dbName}] transition: building leader processor")
                     val resumeAfterMsgId = watchers.latestSourceMsgId
@@ -370,10 +378,14 @@ class LogProcessor(
         }
     }
 
-    private suspend fun LeaderLogProcessor.applyPendingBlock(pendingBlock: PendingBlock) {
+    private suspend fun LeaderLogProcessor.applyPendingBlock(
+        blockCutter: BlockCutter, pendingBlock: PendingBlock,
+    ) {
         var oldTerm = pendingBlock.boundaryMessage.termId
         LOG.debug("[${dbName}] transition: finishing pending block b${pendingBlock.blockIdx} with ${pendingBlock.bufferedRecords.size} buffered records")
-        blockUploader.uploadBlock(pendingBlock.boundaryMsgId, leaderTerm, pendingBlock.boundaryMessage)
+        // Through the cutter, not the uploader: closing a block is what resets the row gauge, and this
+        // block was cut before the gauge was seeded from a live index that still held it.
+        blockCutter.upload(pendingBlock.boundaryMsgId, pendingBlock.boundaryMessage)
         LOG.debug("[${dbName}] transition: replaying ${pendingBlock.bufferedRecords.size} buffered records")
 
         pendingBlock.bufferedRecords.forEach {

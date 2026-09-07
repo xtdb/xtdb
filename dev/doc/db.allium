@@ -196,7 +196,7 @@ variant Leader : LogProcessor {
     -- messages and external-source txs, appends them (plain, term-stamped), reads them
     -- back and applies them. Also owns block finishing via BlockUploader, and the trie
     -- and block garbage collectors.
-    -- See: indexer/LeaderLogProcessor.kt, indexer/LeaderDriver.kt
+    -- See: indexer/LeaderLogProcessor.kt, indexer/BlockCutter.kt, indexer/LeaderDriver.kt
     --
     -- A promotion's pending block is finished through this processor, before it reads its first source message.
     --   - The boundary the outgoing leader cut is uploaded under the INCOMING term — see BlockUploader.

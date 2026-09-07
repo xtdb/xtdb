@@ -30,6 +30,7 @@ import xtdb.api.IndexerConfig
 import xtdb.api.error.Incorrect
 import xtdb.indexer.BlockUploader
 import xtdb.indexer.CrashLogger
+import xtdb.indexer.BlockCutter
 import xtdb.indexer.LeaderDriver
 import xtdb.indexer.LeaderLogProcessor
 import xtdb.indexer.LeaderSupersededException
@@ -121,18 +122,15 @@ class ExternalSourceTest {
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
         val compactor = mockk<Compactor.ForDatabase>(relaxed = true)
         val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", compactor, null, null, backgroundScope)
-        val driver = wrapDriver(
-            RealLeaderDriver(
-                partitionStorage, partitionState, blockUploader
-            )
-        )
+        val driver = wrapDriver(RealLeaderDriver(partitionStorage, partitionState))
 
         val crashLogger = mockk<CrashLogger>(relaxed = true)
         val replicaAppender = ReplicaLogAppender(driver)
+        val blockCutter = BlockCutter(partitionState, "test", 0, replicaAppender, blockUploader)
 
         return LeaderLogProcessor(
             allocator, nodeBase, partitionStorage, crashLogger,
-            partitionState, "test", driver, watchers, replicaAppender,
+            partitionState, "test", driver, blockCutter, watchers, replicaAppender,
             extSource,
             skipTxs = emptySet(), dbCatalog = null,
             flushTimeout = IndexerConfig().flushDuration,

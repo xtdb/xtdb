@@ -4,7 +4,6 @@ import xtdb.api.TableRef
 import xtdb.api.TransactionKey
 import xtdb.api.log.Log
 import xtdb.api.log.ReplicaMessage
-import xtdb.api.log.ReplicaMessage.BlockBoundary
 import xtdb.api.log.SourceMessage
 import xtdb.arrow.RelationReader
 import xtdb.database.PartitionState
@@ -12,16 +11,16 @@ import xtdb.database.PartitionStorage
 import xtdb.types.MessageId
 
 /**
- * The leader term's observable external effects, behind one seam.
- *
- * These are driven from the log processor's work loop, and reach the outside world only through
- * here — so a test can stall an upload or fail an append, neither of which the real logs express in
- * memory.
+ * The leader term's log appends and live-index writes, behind one seam — so a test can fail or stall one,
+ * which the real in-memory logs never do.
  *
  * Deliberately narrow. In-memory state mutations that happen to sit on the leader's path —
  * `trieCatalog`, `dbCatalog`, `watchers`, the GC signals — stay on the processor, as do reads of
  * in-memory state (`liveIndex.isFull()`, `tableCatalog.currentBlockIndex`). A wrapper holds real
  * state objects, so those reads stay consistent with what the driver has applied.
+ *
+ * The block upload is deliberately not here either: it is [BlockCutter]'s, through [BlockUploader], and it
+ * reaches both logs and object storage of its own accord.
  */
 internal interface LeaderDriver {
 
@@ -37,16 +36,6 @@ internal interface LeaderDriver {
     /** Commit a resolved tx's writes into the durable live index. */
     suspend fun applyTx(txKey: TransactionKey, tables: Map<TableRef, RelationReader>)
 
-    /**
-     * Snapshot the live index into block files, append the [BlockBoundary]'s matching `BlockUploaded`,
-     * and roll the index. Returns the `BlockUploaded`'s replica-log position.
-     *
-     * [termId] is the *appending* term, which is not always [boundary]'s: a transition finishes the
-     * previous leader's pending block, and the `BlockUploaded` must carry the new term or followers
-     * that have already advanced would fence it and never complete the block.
-     */
-    suspend fun uploadBlock(boundaryMsgId: MessageId, termId: Long, boundary: BlockBoundary): MessageId
-
     /** Ask the source log to cut a block, on the flush-timeout path. Returns the message's position. */
     suspend fun requestFlushBlock(expectedBlockIdx: Long): MessageId
 }
@@ -54,7 +43,6 @@ internal interface LeaderDriver {
 internal class RealLeaderDriver(
     partitionStorage: PartitionStorage,
     partitionState: PartitionState,
-    private val blockUploader: BlockUploader,
 ) : LeaderDriver {
 
     private val sourceLog = partitionStorage.sourceLog
@@ -66,9 +54,6 @@ internal class RealLeaderDriver(
 
     override suspend fun applyTx(txKey: TransactionKey, tables: Map<TableRef, RelationReader>) =
         liveIndex.commitTx(txKey, tables)
-
-    override suspend fun uploadBlock(boundaryMsgId: MessageId, termId: Long, boundary: BlockBoundary): MessageId =
-        blockUploader.uploadBlock(boundaryMsgId, termId, boundary)
 
     override suspend fun requestFlushBlock(expectedBlockIdx: Long): MessageId =
         sourceLog.appendMessage(SourceMessage.FlushBlock(expectedBlockIdx)).msgId

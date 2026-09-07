@@ -158,8 +158,8 @@ internal abstract class LeaderTermTest {
         compactor: Compactor.ForDatabase = mockk(relaxed = true),
         watchers: Watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1),
         // These tests submit through the processor rather than driving an adapter, so the source only has
-        // to exist for the processor to.
-        extSource: ExternalSource = mockk(relaxed = true),
+        // to exist for the processor to. Null names a database without one.
+        extSource: ExternalSource? = mockk(relaxed = true),
         skipTxs: Set<MessageId> = emptySet(),
         leaderTerm: Long = 1,
         // A leader may only hold one if it is the primary's, so supplying one names this database 'xtdb'.
@@ -176,17 +176,18 @@ internal abstract class LeaderTermTest {
                 partitionStorage, partitionState, "xtdb", compactor, null, null,
                 backgroundScope, uploadDispatcher
             )
-        val driver = wrapDriver(RealLeaderDriver(partitionStorage, partitionState, blockUploader))
+        val driver = wrapDriver(RealLeaderDriver(partitionStorage, partitionState))
 
         val termScope = backgroundScope + termJob
         val replicaAppender = ReplicaLogAppender(driver)
+        val blockCutter = BlockCutter(partitionState, dbName, leaderTerm, replicaAppender, blockUploader)
 
         return termScope.startTerm(
             partitionStorage, replicaAppender, watchers,
             LeaderLogProcessor(
                 allocator, nodeBase, partitionStorage, mockk(relaxed = true),
                 partitionState, dbName,
-                driver, watchers, replicaAppender, extSource,
+                driver, blockCutter, watchers, replicaAppender, extSource,
                 skipTxs = skipTxs, dbCatalog = dbCatalog,
                 leaderTerm = leaderTerm,
                 flushTimeout = IndexerConfig().flushDuration,
@@ -214,12 +215,13 @@ internal abstract class LeaderTermTest {
             partitionStorage, partitionState, "xtdb", mockk(relaxed = true), null, null,
             backgroundScope, StandardTestDispatcher(testScheduler)
         )
-        val leaderDriver = driver(RealLeaderDriver(partitionStorage, partitionState, blockUploader))
+        val leaderDriver = driver(RealLeaderDriver(partitionStorage, partitionState))
         val appender = ReplicaLogAppender(leaderDriver)
+        val blockCutter = BlockCutter(partitionState, "test", 1, appender, blockUploader)
 
         val proc = LeaderLogProcessor(
             allocator, nodeBase, partitionStorage, mockk(relaxed = true),
-            partitionState, "test", leaderDriver, watchers, appender,
+            partitionState, "test", leaderDriver, blockCutter, watchers, appender,
             extSource,
             skipTxs = emptySet(), dbCatalog = null,
             leaderTerm = 1,
