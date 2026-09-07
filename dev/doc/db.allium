@@ -175,6 +175,11 @@ entity LogProcessor {
     --   resolve-side one, ahead of it, on the Leader variant. Two watermarks that lead
     --   and lag each other are two fields, not one.
     --
+    -- max_leader_term: the READ-SIDE TERM FENCE — the highest leader term seen so far.
+    --   A record BELOW it was written by a superseded leader and is discarded (see the Fencing section).
+    --   Seeded from the persisted block boundary (table_catalog.boundary_term_id) so it survives restart.
+    --   Scoped to the partition for its whole life rather than to a role — log-processor-lifecycle.allium's LeaderTerm carries why.
+    --
     -- Transitions are driven by the transport's group subscription:
     --   transitionToLeader → TransitionToLeader (off the serialization point)
     --   demoteLeader       → TransitionToFollower (at the serialization point)
@@ -183,6 +188,7 @@ entity LogProcessor {
     -- For local log, the single node is always immediately assigned.
     mode: Leader | Follower
     latest_replica_msg_id: MessageId
+    max_leader_term: Integer
 }
 
 variant Leader : LogProcessor {
@@ -235,12 +241,6 @@ variant Follower : LogProcessor {
     -- errors, so a transition's catch-up await advances even on failure.
     -- See: indexer/FollowerLogProcessor.kt
     pending_block: PendingBlock?
-
-    -- READ-SIDE TERM FENCE: the highest leader term seen so far, seeded from the last
-    -- persisted block boundary (table_catalog.boundary_term_id) so it survives restart.
-    -- A record BELOW this was written by a superseded leader and is discarded. See the
-    -- Fencing section.
-    max_leader_term: Integer
 }
 
 entity TxResolver {
@@ -280,7 +280,7 @@ entity TableCatalog {
     -- Derived
     current_block_index: latest_block?.block_index
     boundary_replica_msg_id: latest_block?.boundary_replica_msg_id
-    -- Seeds a follower's max_leader_term, which is what makes the fence survive restart.
+    -- Seeds the log processor's max_leader_term, which is what makes the fence survive restart.
     boundary_term_id: latest_block?.term_id ?? 0
 }
 
@@ -324,7 +324,7 @@ entity BlockUploader {
     --      table catalog knows — not only the tables from step 1. Block GC's per-table
     --      sweep depends on this (block-gc.allium, EveryTableBlockAtCurrentIndex)
     --   4. Builds and persists the block file — carrying termId, which is what seeds a
-    --      restarted follower's fence
+    --      restarted log processor's fence
     --   5. Refreshes the table catalog, then appends BlockUploaded to the replica log
     --      (a PLAIN, term-stamped append — there is no producer)
     --   6. Calls liveIndex.nextBlock()
@@ -407,10 +407,8 @@ value Block {
     latest_processed_msg_id: MessageId         -- source log
     boundary_replica_msg_id: MessageId?        -- replica log; msg id of the BlockBoundary message
     external_source_token: ExternalSourceToken?  -- last token seen by the external source at block time
-    -- The term that APPENDED this block's BlockUploaded. Persisting it is what makes the
-    -- read-side fence survive a restart: a follower seeds max_leader_term from here, so a
-    -- leader claiming a regressed election counter is refused rather than silently ignored
-    -- (see log-processor-lifecycle.allium step 2a).
+    -- The term that APPENDED this block's BlockUploaded.
+    -- Persisting it is what makes the read-side fence survive a restart: the log processor seeds max_leader_term from here, so a leader claiming a regressed election counter is refused rather than silently ignored (see log-processor-lifecycle.allium step 2a).
     term_id: Integer
     -- Every table this block covers, and where each one's files live. See contract TableEntries.
     tables: List<TableEntry>
@@ -662,14 +660,12 @@ config {
 -- over (epoch, election), and every comparison site stays a Long.
 --
 -- The fence bites in two places:
---   - The LEADER, on CONSUME-BACK (Raft's ReadIndex): it applies and acknowledges a write
---     only once it has read that write back at its OWN term. A HIGHER term read back means
---     a newer leader has superseded it, so it RESIGNS without acknowledging its
---     outstanding writes; a LOWER term is discarded, still advancing the consume position.
---   - A FOLLOWER, on read: a record below the highest term it has seen is DISCARDED, its
---     consume position still advancing (so a transition catch-up can never hang on a
---     fenced no-op). Its high-water term is seeded from the last persisted block, so the
---     fence survives restart.
+--   - The partition's REPLICA TAIL, on READ, over every record whatever role is live: a record below the highest term the tail has seen is DISCARDED.
+--     One at or above it folds the highest-seen term upward and is dispatched to the live role.
+--     A discarded record still advances the consume position, so a transition catch-up can never hang on a fenced no-op.
+--     That high-water term is seeded from the last persisted block, so the fence survives restart.
+--   - The LEADER, on CONSUME-BACK (Raft's ReadIndex), additionally over what the tail dispatches to it and against its OWN term: it applies and acknowledges a write only once it has read that write back at that term.
+--     A HIGHER term read back means a newer leader has superseded it, so it RESIGNS without acknowledging its outstanding writes; a LOWER term is discarded, still advancing the consume position.
 --
 -- Two nodes may therefore briefly both believe themselves leader and both APPEND. Only
 -- the newer term's writes are ever confirmed, and the older leader's are discarded, which
@@ -748,7 +744,7 @@ rule TransitionToLeader {
         log_processor.awaitReplicaMsgId(replay_target)
 
         -- Refuse a term the replica log has already moved past. Our own claim has just
-        -- been read back, so the follower's max term is expected to BE this term; a higher
+        -- been read back, so the log processor's max term is expected to BE this term; a higher
         -- one is another leader's, and leading under a fenced term would index nothing.
         -- Fails with xtdb/leader-term-fenced, naming the epoch to raise. Checked here —
         -- after the catch-up, before the follower is stopped — so a refusal takes the
@@ -824,8 +820,7 @@ rule TransitionToFollower {
         -- Cancelling the leader leaves the boundary's apply incomplete, so that record is offered again and the follower opens the block itself.
         -- The watermark fields stay readable after the close — they are not allocator-backed.
         log_processor.mode = Follower.created(
-            latest_replica_msg_id: log_processor.latest_replica_msg_id,
-            max_leader_term: table_catalog.boundary_term_id
+            latest_replica_msg_id: log_processor.latest_replica_msg_id
         )
 }
 
@@ -1305,11 +1300,8 @@ rule ExternalSourceIndexesTx {
 ---- Rules: Replica Message Handling
 
 -- A follower and the transition processor both apply already-durable messages, so they
--- import straight into the durable live index and advance the watchers as they go. Both
--- run two checks before dispatch:
---   1. The TERM FENCE (see Fencing): a record below the highest term seen is discarded,
---      its consume position still advancing.
---   2. STALENESS (see Staleness): a message whose effect is already applied is skipped.
+-- import straight into the durable live index and advance the watchers as they go.
+-- The TERM FENCE (see Fencing) has already run on the tail that dispatched the record, so the only check left to either of them is STALENESS (see Staleness): a message whose effect is already applied is skipped.
 --
 -- In the follower, staleness is checked OUTSIDE the pending block guard: if in pending
 -- mode, the pending block handler runs first (buffers, or matches BlockUploaded). Only
@@ -1322,12 +1314,11 @@ rule ExternalSourceIndexesTx {
 --    buffer it (overflowing the cap is a fault). Return in either case.
 -- 2. Staleness check: if the message is stale, skip. Otherwise processRecord.
 
-rule FollowerFencesRecord {
-    -- The read-side fence. Term 0 is never fenced, so a not-yet-upgraded leader's writes
-    -- still apply during a mixed-version window. A discarded record still advances the
-    -- consume position, so a transition's catch-up await can't hang on it.
+rule LogProcessorFencesRecord {
+    -- The read-side fence, applied to every record read whatever role is live.
+    -- Term 0 is never fenced, so a not-yet-upgraded leader's writes still apply during a mixed-version window.
+    -- A discarded record still advances the consume position, so a transition's catch-up await can't hang on it.
     when: ReplicaMessageReceived(record)
-    requires: log_processor.mode = Follower
 
     ensures:
         if record.term_id != 0 and record.term_id < log_processor.max_leader_term:
@@ -1663,7 +1654,7 @@ deferred CloseResolver               -- phase 2 of the leader's two-phase close 
                                      -- buffers of any un-applied staged tx; demotion is exactly this
                                      -- teardown, with no separate runtime drop.
                                      -- See: live-index.allium CloseResolver
-deferred CheckTermUnfenced           -- follower.checkTermUnfenced(term): refuse a claimed leader term the
+deferred CheckTermUnfenced           -- log_processor.checkTermUnfenced(term): refuse a claimed leader term the
                                      -- replica log has already moved past, naming the term epoch to raise
                                      -- (xtdb/leader-term-fenced). Refusing costs liveness only, never
                                      -- safety. See: log-processor-lifecycle.allium step 2a
