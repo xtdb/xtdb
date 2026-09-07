@@ -561,7 +561,7 @@
   (reify xtdb.trie.TrieCatalog$Factory
     (open [_ buffer-pool block-cat]
       (log/debug "starting trie catalog...")
-      (let [table->table-block (table-cat/load-tables-to-metadata buffer-pool block-cat)
+      (let [table->table-block (table-cat/load-table-partitions buffer-pool block-cat)
             cat (TrieCatalog. (load-tries table->table-block *file-size-target*) *file-size-target*)]
         (log/debug "trie catalog started")
         cat))))

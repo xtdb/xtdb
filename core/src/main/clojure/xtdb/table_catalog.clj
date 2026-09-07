@@ -1,6 +1,5 @@
 (ns xtdb.table-catalog
   (:require [xtdb.trie :as trie]
-            [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.time :as time])
   (:import (clojure.lang MapEntry)
@@ -60,38 +59,31 @@
        (map (fn [[partition trie-details]]
               (->partition (assoc partition :tries trie-details))))))
 
-(defn old-table-block->new-table-block [^TableBlock table-block]
-  (-> (doto (TableBlock/newBuilder)
-        (.setArrowSchema (.getArrowSchema table-block))
-        (.setRowCount (.getRowCount table-block))
-        (.putAllColumnNameToHll (.getColumnNameToHllMap table-block))
-        (.addAllPartitions (trie-details->partitions (.getTriesList table-block))))
-      (.build)))
+(defn table-block->partitions [^TableBlock table-block]
+  (into [] (map <-partition)
+        (if (old-table-block? table-block)
+          (trie-details->partitions (.getTriesList table-block))
+          (.getPartitionsList table-block))))
 
-(defn <-table-block [table-block]
-  (let [^TableBlock table-block (cond-> table-block
-                                  (old-table-block? table-block) old-table-block->new-table-block)
-        schema (Schema/deserializeMessage (ByteBuffer/wrap (.toByteArray (.getArrowSchema table-block))))]
+(defn <-table-block [^TableBlock table-block]
+  (let [schema (Schema/deserializeMessage (ByteBuffer/wrap (.toByteArray (.getArrowSchema table-block))))]
     {:row-count (.getRowCount table-block)
      :fields (->> (for [^Field field (.getFields schema)]
                     (MapEntry/create (.getName field) field))
                   (into {}))
      :hlls (-> (.getColumnNameToHllMap table-block)
                (update-vals #(-> (.toByteArray ^ByteString %) HyperLogLog/toHLL)))
-     :partitions (into [] (map <-partition) (.getPartitionsList table-block))}))
+     :partitions (table-block->partitions table-block)}))
 
-(defn load-tables-to-metadata ^java.util.Map [^BufferPool buffer-pool, ^TableCatalog table-cat]
+(defn load-table-partitions ^java.util.Map [^BufferPool buffer-pool, ^TableCatalog table-cat]
   (when-let [block-idx (.getCurrentBlockIndex table-cat)]
     ;; recorded, not all: a table allocated but not yet written has no block file to read
     (let [entries (.getRecordedEntries (.snap table-cat))]
       (->> (for [^TableEntry entry entries
-                 :let [table (.getTable entry)
-                       table-block-path (->table-block-metadata-obj-key (.getTablePath (.getSlug entry)) block-idx)
-                       {:keys [fields] :as tb} (-> (.getByteArray buffer-pool table-block-path)
-                                                   (TableBlock/parseFrom)
-                                                   (<-table-block))]]
-             (MapEntry/create table (-> tb
-                                        (assoc :vec-types (update-vals fields types/->type))
-                                        (dissoc :fields))))
+                 :let [table-block-path (->table-block-metadata-obj-key (.getTablePath (.getSlug entry)) block-idx)]]
+             (MapEntry/create (.getTable entry)
+                              {:partitions (-> (.getByteArray buffer-pool table-block-path)
+                                               (TableBlock/parseFrom)
+                                               (table-block->partitions))}))
            (into {})))))
 
