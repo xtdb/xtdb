@@ -58,6 +58,13 @@ class PgTypesTest {
     }
 
     @Test
+    fun `a quoted NULL beside a bare one keeps its quoting to itself`() {
+        assertEquals(listOf("x", null, "NULL"), parsePgArray("""{x,NULL,"NULL"}"""))
+        assertEquals(listOf("NULL", null), parsePgArray("""{"NULL",NULL}"""))
+        assertEquals(listOf("hello world", "plain"), parsePgArray("""{"hello world",plain}"""))
+    }
+
+    @Test
     fun `unquoted elements are trimmed`() {
         assertEquals(listOf("4", null, "6"), parsePgArray("{ 4 , NULL , 6 }"))
         assertEquals(listOf(" a "), parsePgArray("""{" a "}"""))
