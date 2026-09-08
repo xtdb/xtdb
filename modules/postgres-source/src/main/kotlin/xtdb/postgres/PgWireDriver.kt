@@ -45,8 +45,12 @@ private val IDLE_POLL_PAUSE = 50.milliseconds
  * the same OID dispatch pgwire uses for client input. Unknown OIDs fall back
  * to the raw string.
  */
-private fun coerceText(text: String, typeOid: Int): Any? =
-    PgType.fromOid(typeOid)?.readText(text.toByteArray()) ?: text
+private fun coerceText(text: String, typeOid: Int): Any? {
+    // only an unknown OID falls back; a type that reads the value as null keeps that null
+    val pgType = PgType.fromOid(typeOid) ?: return text
+
+    return pgType.readText(text.toByteArray())
+}
 
 private const val SQLSTATE_DUPLICATE_OBJECT = "42710"
 

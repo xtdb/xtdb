@@ -1801,4 +1801,38 @@ class PostgresSourceIntegrationTest {
             assertEquals(listOf(null), xtArray(node, "SELECT nums FROM public.pg_null_array WHERE _id = 3"))
         }
     }
+
+    @Test
+    fun `a jsonb column holding JSON null mirrors as null and leaves ingestion running`() = runTest(timeout = 120.seconds) {
+        val pubName = "test_pub_${UUID.randomUUID().toString().replace("-", "_")}"
+        val sourceTopic = "test-topic-${UUID.randomUUID()}"
+
+        pgExecute(
+            "CREATE TABLE pg_json_null (_id INT PRIMARY KEY, payload JSONB)",
+            """INSERT INTO pg_json_null VALUES (1, '{"k": 1}'::JSONB)""",
+            "INSERT INTO pg_json_null VALUES (2, 'null'::JSONB)",
+            "INSERT INTO pg_json_null VALUES (3, NULL)",
+            "CREATE PUBLICATION $pubName FOR TABLE pg_json_null",
+        )
+
+        openNode(sourceTopic).use { node ->
+            attachPostgresSource(node, publicationName = pubName)
+
+            eventually(60.seconds) {
+                assertEquals(3, xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_json_null").size, "all snapshot rows ingested")
+            }
+
+            assertNull(xtQueryDb(node, "cdc", "SELECT payload FROM public.pg_json_null WHERE _id = 2").single()["payload"])
+            assertNull(xtQueryDb(node, "cdc", "SELECT payload FROM public.pg_json_null WHERE _id = 3").single()["payload"])
+            assertNotNull(xtQueryDb(node, "cdc", "SELECT payload FROM public.pg_json_null WHERE _id = 1").single()["payload"])
+
+            pgExecute("INSERT INTO pg_json_null VALUES (4, 'null'::JSONB)")
+
+            eventually(30.seconds) {
+                assertTrue(xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_json_null WHERE _id = 4").isNotEmpty(), "streamed row ingested")
+            }
+
+            assertNull(xtQueryDb(node, "cdc", "SELECT payload FROM public.pg_json_null WHERE _id = 4").single()["payload"])
+        }
+    }
 }

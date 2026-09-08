@@ -2,13 +2,16 @@ package xtdb.pgwire
 
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
 
 class PgTypesTest {
 
     private companion object {
+        const val JSON_OID = 114
         const val INT4_ARRAY_OID = 1007
         const val TEXT_ARRAY_OID = 1009
         const val INT8_ARRAY_OID = 1016
+        const val JSONB_OID = 3802
     }
 
     @Test
@@ -85,5 +88,17 @@ class PgTypesTest {
         assertEquals(listOf(4L, null, 6L), readText(INT8_ARRAY_OID, "{4,NULL,6}"))
         assertEquals(listOf(4, null, 6), readText(INT4_ARRAY_OID, "{4,NULL,6}"))
         assertEquals(listOf("a", null), readText(TEXT_ARRAY_OID, "{a,NULL}"))
+    }
+
+    @Test
+    fun `a top-level JSON null reads as null`() {
+        assertNull(readText(JSONB_OID, "null"))
+        assertNull(readText(JSON_OID, "null"))
+    }
+
+    @Test
+    fun `a JSON null under a key reads as a null value under that key`() {
+        assertEquals(mapOf("a" to null, "b" to 1L), readText(JSONB_OID, """{"a": null, "b": 1}"""))
+        assertEquals(listOf(1L, null), readText(JSONB_OID, "[1, null]"))
     }
 }

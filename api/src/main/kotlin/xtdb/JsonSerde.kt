@@ -4,6 +4,7 @@ package xtdb
 
 import clojure.lang.*
 import kotlinx.serialization.*
+import kotlinx.serialization.builtins.nullable
 import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
@@ -164,9 +165,9 @@ private fun decodeError(value: String, cause: Throwable) =
 /**
  * @suppress
  */
-fun decode(value: String): Any {
+fun decode(value: String): Any? {
     try {
-        return JSON_SERDE.decodeFromString(value)
+        return JSON_SERDE.decodeFromString(AnySerde.nullable, value)
     } catch (e: SerializationException) {
         throw decodeError(value, e)
     }
@@ -190,9 +191,9 @@ fun <T : Any> decode(value: String, clazz: Class<T>): Any {
  */
 @Suppress("unused")
 @OptIn(ExperimentalSerializationApi::class)
-fun decode(inputStream: InputStream): Any {
+fun decode(inputStream: InputStream): Any? {
     try {
-        return JSON_SERDE.decodeFromStream(inputStream)
+        return JSON_SERDE.decodeFromStream(AnySerde.nullable, inputStream)
     } catch (e: SerializationException) {
         inputStream.reset()
         throw decodeError(inputStream.bufferedReader().use { it.readText() }, e)

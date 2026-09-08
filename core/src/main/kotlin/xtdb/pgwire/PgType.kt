@@ -757,9 +757,9 @@ sealed class PgType(
         typsend = "json_send",
         typreceive = "json_recv",
     ) {
-        override fun readBinary(data: ByteArray): Any = jsonDecode(ByteArrayInputStream(data))
+        override fun readBinary(data: ByteArray): Any? = jsonDecode(ByteArrayInputStream(data))
 
-        override fun readText(data: ByteArray): Any = jsonDecode(ByteArrayInputStream(data))
+        override fun readText(data: ByteArray): Any? = jsonDecode(ByteArrayInputStream(data))
 
         override fun writeBinary(env: PgSessionEnv, rdr: VectorReader, idx: Int) =
             jsonEncode(rdr.getObject(idx)!!).toByteArray()
@@ -776,9 +776,9 @@ sealed class PgType(
         typsend = "json_send",
         typreceive = "json_recv",
     ) {
-        override fun readBinary(data: ByteArray): Any = jsonDecode(ByteArrayInputStream(data))
+        override fun readBinary(data: ByteArray): Any? = jsonDecode(ByteArrayInputStream(data))
 
-        override fun readText(data: ByteArray): Any = jsonDecode(ByteArrayInputStream(data))
+        override fun readText(data: ByteArray): Any? = jsonDecode(ByteArrayInputStream(data))
 
         override fun writeBinary(env: PgSessionEnv, rdr: VectorReader, idx: Int) =
             encodeJsonLd(rdr.getObject(idx)!!).toByteArray()
@@ -795,9 +795,9 @@ sealed class PgType(
         typsend = "jsonb_send",
         typreceive = "jsonb_recv",
     ) {
-        override fun readBinary(data: ByteArray): Any = jsonDecode(ByteArrayInputStream(data))
+        override fun readBinary(data: ByteArray): Any? = jsonDecode(ByteArrayInputStream(data))
 
-        override fun readText(data: ByteArray): Any = jsonDecode(ByteArrayInputStream(data))
+        override fun readText(data: ByteArray): Any? = jsonDecode(ByteArrayInputStream(data))
     }
 
     data object Transit : PgType(
