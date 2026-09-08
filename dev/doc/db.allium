@@ -1384,6 +1384,10 @@ surface QueryAccess {
         -- A snapshot sees a consistent point-in-time view.
         -- It includes every transaction up to the durable head — those the leader has read BACK off its own replica log and applied.
         -- Resolved-but-not-yet-applied transactions are NOT visible, and neither are the writes of a leader a newer term superseded.
+
+    @guarantee ExecutionReadsOneSnapshot
+        -- A single query execution opens one snapshot of this database and derives from it every answer it gives about this database: the schema it resolves names against, the oids `::regclass` resolves through, and the rows it reads.
+        -- An execution spanning several databases holds one such snapshot per database.
 }
 
 ---- Deferred Specifications
