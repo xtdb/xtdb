@@ -35,6 +35,36 @@ fun utf8(s: Any): ByteArray = s.toString().toByteArray(StandardCharsets.UTF_8)
 fun escapePgArrayElement(s: String): String =
     "\"${s.replace("\\", "\\\\").replace("\"", "\\\"")}\""
 
+/**
+ * Splits a Postgres array literal — `{a,"b,c"}` — into its element texts, unescaping quoted
+ * elements. Multi-dimensional literals aren't supported.
+ *
+ * @return the elements in order; empty for `{}` and for an empty string.
+ */
+fun parsePgArray(text: String): List<String> {
+    val s = text.trim()
+    if (s.isEmpty() || s == "{}") return emptyList()
+
+    val elems = mutableListOf<String>()
+    val elem = StringBuilder()
+    var inQuotes = false
+    var i = 1
+
+    // the bound stops short of the closing brace, so the final element is added after the loop
+    while (i < s.length - 1) {
+        when (val c = s[i]) {
+            '\\' -> elem.append(s[++i])
+            '"' -> inQuotes = !inQuotes
+            ',' -> if (inQuotes) elem.append(c) else { elems.add(elem.toString()); elem.setLength(0) }
+            else -> elem.append(c)
+        }
+        i++
+    }
+    elems.add(elem.toString())
+
+    return elems
+}
+
 // Date/time formatters
 
 @JvmField

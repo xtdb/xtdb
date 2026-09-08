@@ -547,11 +547,7 @@ sealed class PgType(
 
         override fun readBinary(data: ByteArray): List<Long> = readBinaryIntArray(data)
 
-        override fun readText(data: ByteArray): List<Int> {
-            val s = readUtf8(data).trim()
-            if (s.isEmpty() || s == "{}") return emptyList()
-            return s.substring(1, s.length - 1).split(",").map { it.toInt() }
-        }
+        override fun readText(data: ByteArray): List<Int> = parsePgArray(readUtf8(data)).map { it.toInt() }
 
         override fun writeBinary(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray {
             val list = rdr.getObject(idx) as List<*>
@@ -590,11 +586,7 @@ sealed class PgType(
 
         override fun readBinary(data: ByteArray): List<Long> = readBinaryIntArray(data)
 
-        override fun readText(data: ByteArray): List<Long> {
-            val s = readUtf8(data).trim()
-            if (s.isEmpty() || s == "{}") return emptyList()
-            return s.substring(1, s.length - 1).split(",").map { it.toLong() }
-        }
+        override fun readText(data: ByteArray): List<Long> = parsePgArray(readUtf8(data)).map { it.toLong() }
 
         override fun writeBinary(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray {
             val list = rdr.getObject(idx) as List<*>
@@ -631,11 +623,7 @@ sealed class PgType(
     ) {
         override fun readBinary(data: ByteArray): List<String> = readBinaryTextArray(data)
 
-        override fun readText(data: ByteArray): List<String> {
-            val s = readUtf8(data).trim()
-            if (s.isEmpty() || s == "{}") return emptyList()
-            return s.substring(1, s.length - 1).split(",")
-        }
+        override fun readText(data: ByteArray): List<String> = parsePgArray(readUtf8(data))
 
         override fun writeBinary(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray {
             val list = rdr.getObject(idx) as List<*>

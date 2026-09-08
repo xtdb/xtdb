@@ -198,6 +198,12 @@ class PostgresSourceIntegrationTest {
         }
     }
 
+    /** Reads a single-column, single-row array result off the cdc db as a list — pgjdbc hands
+     * array columns back as [java.sql.Array], which doesn't compare against a Kotlin list. */
+    private fun xtArray(node: Xtdb, sql: String, dbName: String = "cdc"): List<Any?> =
+        (xtQueryDb(node, dbName, sql).single().values.single() as java.sql.Array)
+            .let { (it.array as Array<*>).toList() }
+
     private fun assertPrimaryDbHealthy(node: Xtdb) {
         val id = UUID.randomUUID().toString()
         node.createConnectionBuilder().database("xtdb").build().use { conn ->
@@ -1720,6 +1726,43 @@ class PostgresSourceIntegrationTest {
 
             assertTrue(java.time.Duration.between(committedAround, sysFrom).seconds >= 1,
                 "snapshot _system_from ($sysFrom) should be the XTDB-assigned time, well after the PG commit (~$committedAround)")
+        }
+    }
+
+    @Test
+    fun `TEXT array elements survive commas and quotes across snapshot and streaming`() = runTest(timeout = 120.seconds) {
+        val pubName = "test_pub_${UUID.randomUUID().toString().replace("-", "_")}"
+        val sourceTopic = "test-topic-${UUID.randomUUID()}"
+
+        pgExecute(
+            "CREATE TABLE pg_text_array (_id INT PRIMARY KEY, vals TEXT[])",
+            """INSERT INTO pg_text_array VALUES (1, ARRAY['a,b', 'c', 'say "hi"', 'back\slash', '{braced}', ''])""",
+            "CREATE PUBLICATION $pubName FOR TABLE pg_text_array",
+        )
+
+        openNode(sourceTopic).use { node ->
+            attachPostgresSource(node, publicationName = pubName)
+
+            eventually(60.seconds) {
+                assertTrue(xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_text_array WHERE _id = 1").isNotEmpty(), "snapshot row ingested")
+            }
+
+            assertEquals(
+                listOf("a,b", "c", """say "hi"""", """back\slash""", "{braced}", ""),
+                xtArray(node, "SELECT vals FROM public.pg_text_array WHERE _id = 1"),
+            )
+
+            pgExecute("""INSERT INTO pg_text_array VALUES (2, ARRAY['d,e', 'NULL'])""")
+
+            eventually(30.seconds) {
+                assertTrue(xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_text_array WHERE _id = 2").isNotEmpty(), "streamed row ingested")
+            }
+
+            // 'NULL' arrives quoted, so it stays the four-character string rather than a null element
+            assertEquals(
+                listOf("d,e", "NULL"),
+                xtArray(node, "SELECT vals FROM public.pg_text_array WHERE _id = 2"),
+            )
         }
     }
 }
