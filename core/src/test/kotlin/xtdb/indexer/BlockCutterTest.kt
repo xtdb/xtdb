@@ -46,7 +46,7 @@ internal class BlockCutterTest : LeaderTermTest() {
         )
         val tableRef = fromSchemaAndTable("public/foo")
 
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
         val lp = leaderProc(
             StandardTestDispatcher(testScheduler),
             replicaLog = replicaLog,
@@ -85,7 +85,7 @@ internal class BlockCutterTest : LeaderTermTest() {
     @Test
     fun `block boundaries carry the latest external-source token, not the last tx's`() = runTest(timeout = 5.seconds) {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         val lp = leaderProc(
             StandardTestDispatcher(testScheduler),

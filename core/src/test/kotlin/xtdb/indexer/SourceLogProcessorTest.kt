@@ -40,7 +40,7 @@ internal class SourceLogProcessorTest : LeaderTermTest() {
         val appendStarted = CompletableDeferred<Unit>()
         // Refuses nothing, so a refusal here can only have come from the resolver's own queued dbOps.
         val dbCatalog = RecordingDbCatalog()
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         val lp = leaderProc(
             StandardTestDispatcher(testScheduler),
@@ -75,7 +75,7 @@ internal class SourceLogProcessorTest : LeaderTermTest() {
         val gate = CompletableDeferred<Unit>()
         val appendStarted = CompletableDeferred<Unit>()
         val dbCatalog = RecordingDbCatalog()
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         val lp = leaderProc(
             StandardTestDispatcher(testScheduler),
@@ -109,7 +109,7 @@ internal class SourceLogProcessorTest : LeaderTermTest() {
         val gate = CompletableDeferred<Unit>()
         val appendStarted = CompletableDeferred<Unit>()
         val dbCatalog = RecordingDbCatalog()
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         val lp = leaderProc(
             StandardTestDispatcher(testScheduler),
@@ -139,7 +139,7 @@ internal class SourceLogProcessorTest : LeaderTermTest() {
     fun `TriesAdded forwarded to replica log`() = runTest {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val trieCatalog = createTrieCatalog()
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
         val lp = leaderProc(
             StandardTestDispatcher(testScheduler),
             replicaLog = replicaLog, trieCatalog = trieCatalog, watchers = watchers
@@ -172,7 +172,7 @@ internal class SourceLogProcessorTest : LeaderTermTest() {
     @Test
     fun `FlushBlock ignored when CAS does not match`() = runTest {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
         val lp = leaderProc(StandardTestDispatcher(testScheduler), replicaLog = replicaLog, watchers = watchers)
 
         lp.srcLogProc.processRecords(listOf(

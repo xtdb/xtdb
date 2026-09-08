@@ -16,7 +16,7 @@ class WatchersTest {
 
     @Test
     fun `test awaitTx ready already`() = runTest(timeout = 1.seconds) {
-        val watchers = Watchers(latestTxId = 3, latestSourceMsgId = 3, latestReplicaMsgId = -1)
+        val watchers = Watchers(latestTxId = 3, latestSourceMsgId = 3)
         val job = async { watchers.awaitTx(2) }
         while (!job.isCompleted) yield()
         assertNull(job.await())
@@ -24,13 +24,13 @@ class WatchersTest {
 
     @Test
     fun `test awaitTx waits`() = runTest(timeout = 1.seconds) {
-        val watchers = Watchers(latestTxId = 3, latestSourceMsgId = 3, latestReplicaMsgId = -1)
+        val watchers = Watchers(latestTxId = 3, latestSourceMsgId = 3)
         assertThrows<TimeoutCancellationException> { withTimeout(500) { watchers.awaitTx(4) } }
     }
 
     @Test
     fun `an applied tx resumes tx watchers`() = runTest(timeout = 1.seconds) {
-        val watchers = Watchers(latestTxId = 3, latestSourceMsgId = 3, latestReplicaMsgId = -1)
+        val watchers = Watchers(latestTxId = 3, latestSourceMsgId = 3)
         val await5 = async { watchers.awaitTx(5) }
         val await4 = async { watchers.awaitTx(4) }
 
@@ -38,13 +38,13 @@ class WatchersTest {
         assertThrows<TimeoutCancellationException> { withTimeout(50) { await4.await() } }
 
         val res4 = TransactionResult.Committed(TransactionKey(4, Instant.parse("2021-01-01T00:00:00Z")))
-        watchers.notifyApplied(null, 4, res4)
+        watchers.notifyApplied(4, res4)
 
         assertThrows<TimeoutCancellationException> { withTimeout(50) { await5.await() } }
         assertEquals(res4, await4.await())
 
         val res5 = TransactionResult.Aborted(TransactionKey(5, Instant.parse("2021-01-02T00:00:00Z")), Exception("test"))
-        watchers.notifyApplied(null, 5, res5)
+        watchers.notifyApplied(5, res5)
 
         assertEquals(res5, await5.await())
     }
@@ -57,26 +57,26 @@ class WatchersTest {
         // watermark. Watchers must accept an incoming ResolvedTx whose txId == seedTxId+1 even
         // though srcMsgId is well below it; pre-fix, Database.open seeded `latestTxId` from
         // `sourceMsgId` and the next ResolvedTx tripped the `txId > latestTxId` invariant.
-        val watchers = Watchers(latestTxId = 5, latestSourceMsgId = 100, latestReplicaMsgId = -1)
+        val watchers = Watchers(latestTxId = 5, latestSourceMsgId = 100)
 
         val tx6 = TransactionResult.Committed(TransactionKey(6, Instant.parse("2026-05-01T00:00:00Z")))
         // ext-source path: srcMsgId stays at the prior latestSourceMsgId.
-        watchers.notifyApplied(null, watchers.latestSourceMsgId, tx6)
+        watchers.notifyApplied(watchers.latestSourceMsgId, tx6)
 
         assertEquals(tx6, watchers.awaitTx(6))
     }
 
     @Test
     fun `an advance without a tx moves only the source watermark`() = runTest(timeout = 1.seconds) {
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         val awaitSource1 = async { watchers.awaitSource(5) }
-        watchers.notifyApplied(null, 5)
+        watchers.notifyApplied(5)
         awaitSource1.await()
         assertThrows<TimeoutCancellationException> { withTimeout(50) { watchers.awaitTx(5) } }
 
         val awaitSource2 = async { watchers.awaitSource(8) }
-        watchers.notifyApplied(null, 8)
+        watchers.notifyApplied(8)
         awaitSource2.await()
         assertThrows<TimeoutCancellationException> { withTimeout(50) { watchers.awaitTx(8) } }
     }
@@ -84,7 +84,7 @@ class WatchersTest {
     @Test
     fun `handles ingestion stopped`() = runTest(timeout = 1.seconds) {
         supervisorScope {
-            val watchers = Watchers(latestTxId = 3, latestSourceMsgId = 3, latestReplicaMsgId = -1)
+            val watchers = Watchers(latestTxId = 3, latestSourceMsgId = 3)
             val awaitTx = async { watchers.awaitTx(4) }
             val awaitSource = async { watchers.awaitSource(4) }
 

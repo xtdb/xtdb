@@ -39,7 +39,7 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
         val gate = CompletableDeferred<Unit>()
         val appendStarted = CompletableDeferred<Unit>()
         val dbCatalog = RecordingDbCatalog()
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         val lp = leaderProc(
             StandardTestDispatcher(testScheduler),
@@ -75,7 +75,7 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
 
     @Test
     fun `an interrupt on the append path leaves the database queryable`() = runTest {
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         val (proc, appender) = unstartedTerm(watchers, driver = { inner ->
             object : LeaderDriver by inner {
@@ -98,7 +98,7 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
 
     @Test
     fun `an interrupt in the external source leaves the database queryable`() = runTest {
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
         val extSource = mockk<ExternalSource>(relaxed = true) {
             coEvery { onPartitionAssigned(any(), any(), any()) } throws InterruptedException("interrupted")
         }
@@ -114,7 +114,7 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
 
     @Test
     fun `an ext-source tx applied from the record alone does not advance the source watermark`() = runTest {
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
         val (proc, _) = unstartedTerm(watchers, extSource = mockk(relaxed = true))
 
         // Not in the resolver's queue, so it is re-materialised from the record — the path a promotion's
@@ -137,7 +137,7 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
     @Test
     fun `a slow append does not stall resolution`() = runTest(timeout = 5.seconds) {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         val gate = CompletableDeferred<Unit>()
         val appendStarted = CompletableDeferred<Unit>()
@@ -173,7 +173,7 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
     @Test
     fun `executeTx returns only once its tx is durable`() = runTest(timeout = 5.seconds) {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         val gate = CompletableDeferred<Unit>()
         val appendStarted = CompletableDeferred<Unit>()
@@ -199,7 +199,7 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
     @Test
     fun `closing the leader term fails an awaiting executeTx rather than hanging`() = runTest(timeout = 5.seconds) {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         // Gate that is never opened — the append will stall indefinitely unless the term is cancelled.
         val gate = CompletableDeferred<Unit>()
@@ -264,7 +264,7 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
     fun `closing the leader term fails a buffered, never-received source-log batch`() = runTest(timeout = 5.seconds) {
         val writerEntered = CompletableDeferred<Unit>()
         val writerGate = CompletableDeferred<Unit>()
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         val termJob = SupervisorJob(backgroundScope.coroutineContext.job)
         val lp = leaderProc(StandardTestDispatcher(testScheduler), watchers = watchers, termJob = termJob)
@@ -315,7 +315,7 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
     @Test
     fun `a higher-term record read back resigns the leader`() = runTest(timeout = 5.seconds) {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         // Gate our own append so this leader's tx never lands: the only record on the log will be the
         // higher-term one injected below, so consume-back reaches it. Term fencing on read-back is the sole
@@ -363,7 +363,7 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
     @Test
     fun `resigning cancels in-flight source batches rather than surfacing the supersession`() = runTest(timeout = 5.seconds) {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         // Never opened. The BlockBoundary's append hangs here, so the cut never reads back and resolution
         // stays paused — which is what makes this deterministic: batch #1 parks as `pausedBatch` and batch #2

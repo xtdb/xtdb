@@ -18,8 +18,7 @@
 -- from replica processing.
 -- A single Watchers instance tracks both txId and sourceMsgId for client correlation,
 -- plus the latest ExternalSourceToken for external-source databases.
--- Follower→leader transition sync uses a separate MutableStateFlow on the FollowerProcessor,
--- not Watchers (see FollowerProcessor.awaitReplicaMsgId).
+-- Follower→leader transition sync uses a separate MutableStateFlow on the LogProcessor, not Watchers (see LogProcessor.awaitReplicaMsg).
 -- The compactor writes L1+ to the source log; the leader forwards to replica.
 --
 -- Leader pipelining — resolve / append / consume-back / apply.
@@ -165,10 +164,11 @@ entity LogProcessor {
     -- Implements Log.SubscriptionListener (transitionToLeader/demoteLeader drive
     -- transitions). Starts in follower mode. Always in exactly one mode.
     --
-    -- latest_replica_msg_id: the replica-log position this processor has reached — on a
-    --   leader, the CONSUME-BACK position (how far it has read its own writes back); on
-    --   a follower, its tail position. It seeds the next mode on every handover, which
-    --   is why every mode tracks it.
+    -- latest_replica_msg_id: the position the partition's single replica tail has reached — the last record it finished with, applied or discarded.
+    --   The tail is its sole writer and advances it once per record, so the position spans both modes rather than being tracked by each.
+    --   A role that ends mid-apply therefore leaves it where it was, and that record is offered again to whatever replaces the role.
+    --   Seeded at open from table_catalog.boundary_replica_msg_id, and lives for the partition's whole life.
+    --   The tail is launched once and nothing restarts it, so once it stops the partition consumes no further replica records for the life of the process, and awaitReplicaMsg refuses rather than answers (see TransitionToLeader).
     --
     -- The SOURCE-log watermark is deliberately NOT here. The durable one lives on
     --   Watchers (advanced on apply, by every mode); the leader additionally keeps a
@@ -200,7 +200,7 @@ variant Leader : LogProcessor {
     --
     -- A promotion's pending block is finished through this processor, before it reads its first source message.
     --   - The boundary the outgoing leader cut is uploaded under the INCOMING term — see BlockUploader.
-    --   - The follower's buffered records then replay in log order, a record whose term is below the highest the replay has reached advancing the watermark alone.
+    --   - The follower's buffered records then replay in log order; one whose term is below the highest the replay has reached is dropped, as the fence drops one live.
     --
     -- external_source is present iff the database has one configured; it makes this
     -- leader external-source-fed rather than client-driven (see the header).
@@ -237,8 +237,6 @@ variant Follower : LogProcessor {
     -- Subscribes to the replica log and is the SOLE replica-log consumer for its node.
     -- Feeds the shared live_index from replica messages, all of which are already durable.
     -- Exposes pending_block state for handoff during leader transition.
-    -- awaitReplicaMsgId uses a MutableStateFlow updated after every record, including
-    -- errors, so a transition's catch-up await advances even on failure.
     -- See: indexer/FollowerLogProcessor.kt
     pending_block: PendingBlock?
 }
@@ -614,7 +612,7 @@ variant NoOpMessage : ReplicaMessage {
     --   1. The transition's replay target. The new leader appends a NoOp stamped with its
     --      new term to learn a known, CONSUMER-DELIVERABLE position — the log's
     --      latest-submitted offset won't do, because it can include positions a consumer
-    --      never delivers. The follower's awaitReplicaMsgId then waits for it, and the
+    --      never delivers. The transition's awaitReplicaMsg then waits for it, and the
     --      leader's consume pump tails from it.
     --   2. Carrying the leader's source watermark forward when no other record would (a
     --      FlushBlock whose CAS fails and so finishes no block) — see #5680.
@@ -688,7 +686,7 @@ config {
 --   1. The last persisted block (from the table catalog)
 --   2. The follower's in-memory state (which has been processing replica messages)
 --
--- The NoOp + awaitReplicaMsgId sequence ensures the follower has fully caught up before
+-- The NoOp + awaitReplicaMsg sequence ensures the follower has fully caught up before
 -- its state is captured and it is shut down: the follower is the sole replica-log consumer
 -- and the leader consumes the source log instead, so records in [follower-pos,
 -- replay_target) would otherwise be silently skipped.
@@ -727,10 +725,10 @@ rule TransitionToLeader {
         let replay_target = NoOpMessage.created(term_id: term, src_msg_id: null)
                                 appended to database.replica_log
 
-        -- Wait for the follower to process all replica messages up to the NoOp. Uses
-        -- FollowerProcessor.awaitReplicaMsgId (a MutableStateFlow), NOT Watchers; it
-        -- advances even on error.
-        log_processor.awaitReplicaMsgId(replay_target)
+        -- Wait for the partition's replica tail to finish with the NoOp. Uses LogProcessor.awaitReplicaMsg (a MutableStateFlow), NOT Watchers.
+        -- Where the tail has stopped, the await FAILS with the tail's cause, the NoOp already passed or not.
+        -- A term whose replica log nothing is reading would never read its own writes back, so a promotion behind a stopped tail is refused here.
+        log_processor.awaitReplicaMsg(replay_target)
 
         -- Refuse a term the replica log has already moved past. Our own claim has just
         -- been read back, so the log processor's max term is expected to BE this term; a higher
@@ -754,7 +752,6 @@ rule TransitionToLeader {
             -- The database's own source, borrowed for the length of this term, so this leader is CDC-fed iff the database is.
             external_source: database.external_source,
             leader_term: term,
-            latest_replica_msg_id: replay_target,
             last_resolved_src_msg_id: watchers.latest_source_msg_id,
             last_resolved_ext_token: watchers.external_source_token,
             rows_since_block: live_index.block_row_count,
@@ -807,10 +804,8 @@ rule TransitionToFollower {
 
         -- The new follower carries no pending block.
         -- Cancelling the leader leaves the boundary's apply incomplete, so that record is offered again and the follower opens the block itself.
-        -- The watermark fields stay readable after the close — they are not allocator-backed.
-        log_processor.mode = Follower.created(
-            latest_replica_msg_id: log_processor.latest_replica_msg_id
-        )
+        -- It continues from the partition's replica position rather than being seeded with one: the tail spans the mode change.
+        log_processor.mode = Follower.created()
 }
 
 ---- Rules: Transaction Submission
@@ -1069,9 +1064,8 @@ rule AppendReplicaMessage {
 -- durability handle completes: confirmed durably replicated AND confirmed unfenced.
 
 rule LeaderAppliesRecord {
-    -- Apply one record read back off our own replica log, fenced by TERM. Consumption
-    -- advances in all three branches — discarding suppresses application, not consumption,
-    -- so a catch-up can never hang on a fenced record.
+    -- Apply one record read back off our own replica log, fenced by TERM.
+    -- Discarding suppresses application, not consumption: the tail advances past a discarded record all the same, so a catch-up can never hang on a fenced one (see LogProcessorFencesRecord).
     when: ReplicaMessageReceived(record)
     requires: log_processor.mode = Leader
 
@@ -1089,12 +1083,10 @@ rule LeaderAppliesRecord {
         else if record.term_id != 0 and record.term_id < log_processor.leader_term:
             -- Shouldn't appear past our replay target; discard defensively.
             RecordDiscarded(resolver: tx_resolver)
-            log_processor.latest_replica_msg_id = record.msg_id
         else:
             -- Equal term (the common case): terms are unique per leader, so this record is
             -- our own.
             ApplyOwnRecord(record)
-            log_processor.latest_replica_msg_id = record.msg_id
 }
 
 rule LeaderAppliesOwnTx {
@@ -1303,8 +1295,8 @@ rule LogProcessorFencesRecord {
             log_processor.max_leader_term = max(log_processor.max_leader_term, record.term_id)
             HandleReplicaMessage(record)
 
-        -- Advanced after every record, discarded or not, and on error too — this is what
-        -- awaitReplicaMsgId waits on.
+        -- One advance per record, discarded or not, once the fence or the live role has finished with it — this is what awaitReplicaMsg waits on.
+        -- A faulting apply does not advance it: it ends the tail.
         log_processor.latest_replica_msg_id = record.msg_id
 }
 

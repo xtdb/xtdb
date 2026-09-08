@@ -156,7 +156,7 @@ internal abstract class LeaderTermTest {
         liveIndex: LiveIndex = liveIndexMock(),
         trieCatalog: TrieCatalog = createTrieCatalog(),
         compactor: Compactor.ForDatabase = mockk(relaxed = true),
-        watchers: Watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1),
+        watchers: Watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1),
         // These tests submit through the processor rather than driving an adapter, so the source only has
         // to exist for the processor to. Null names a database without one.
         extSource: ExternalSource? = mockk(relaxed = true),

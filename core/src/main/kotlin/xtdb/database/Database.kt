@@ -300,7 +300,6 @@ class Database(
             val watchers = Watchers(
                 latestTxId = txId,
                 latestSourceMsgId = sourceMsgId,
-                latestReplicaMsgId = tableCatalog.boundaryReplicaMsgId ?: -1,
                 externalSourceToken = tableCatalog.externalSourceToken,
             )
 

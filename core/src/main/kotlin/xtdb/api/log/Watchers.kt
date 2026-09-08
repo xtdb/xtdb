@@ -14,21 +14,18 @@ private val LOG = Watchers::class.logger
 class Watchers(
     latestTxId: TxId,
     latestSourceMsgId: MessageId,
-    latestReplicaMsgId: MessageId,
     externalSourceToken: ExternalSourceToken? = null,
 ) {
 
     private sealed interface State {
         val latestSourceMsgId: MessageId
         val latestTxId: TxId
-        val latestReplicaMsgId: MessageId
         val externalSourceToken: ExternalSourceToken?
     }
 
     private data class Active(
         override val latestSourceMsgId: MessageId,
         override val latestTxId: TxId,
-        override val latestReplicaMsgId: MessageId,
         val latestTxResult: TransactionResult?,
         override val externalSourceToken: ExternalSourceToken? = null,
     ) : State
@@ -36,13 +33,12 @@ class Watchers(
     private data class Failed(
         override val latestSourceMsgId: MessageId,
         override val latestTxId: TxId,
-        override val latestReplicaMsgId: MessageId,
         override val externalSourceToken: ExternalSourceToken?,
         val exception: IngestionStoppedException,
     ) : State
 
     private val state =
-        MutableStateFlow<State>(Active(latestSourceMsgId, latestTxId, latestReplicaMsgId, null, externalSourceToken))
+        MutableStateFlow<State>(Active(latestSourceMsgId, latestTxId, null, externalSourceToken))
 
     private fun State.activeOrThrow(): Active = when (this) {
         is Active -> this
@@ -62,7 +58,6 @@ class Watchers(
 
     val latestSourceMsgId: MessageId get() = state.value.latestSourceMsgId
     val latestTxId: TxId get() = state.value.latestTxId
-    val latestReplicaMsgId: MessageId get() = state.value.latestReplicaMsgId
     val externalSourceToken: ExternalSourceToken? get() = state.value.externalSourceToken
 
     val exception
@@ -75,19 +70,10 @@ class Watchers(
 
     /**
      * One replica record applied, moving every watermark its contents imply in one update — so nothing
-     * observes a transaction committed at a consume position that has not reached the record carrying it.
-     *
-     * [replicaMsgId] is null where the caller has no consume position of its own: a record held during a
-     * block and replayed once the block lands, whose position was counted when it was first read, or a
-     * term replaying what the outgoing follower had already read.
-     *
-     * The position is unchecked where the source watermark is checked: it regresses when a term opens at
-     * its replay target, below where the outgoing follower had read. The records in between are the
-     * superseded leader's, fenced by our own claim sitting before them, so re-reading applies nothing.
+     * observes a transaction committed at a source position that has not reached the record carrying it.
      */
     fun notifyApplied(
-        replicaMsgId: MessageId?,
-        srcMsgId: MessageId? = null,
+        srcMsgId: MessageId?,
         txResult: TransactionResult? = null,
         extSourceToken: ExternalSourceToken? = null,
     ) {
@@ -104,7 +90,6 @@ class Watchers(
             it.copy(
                 latestSourceMsgId = srcMsgId ?: it.latestSourceMsgId,
                 latestTxId = txId ?: it.latestTxId,
-                latestReplicaMsgId = replicaMsgId ?: it.latestReplicaMsgId,
                 latestTxResult = txResult ?: it.latestTxResult,
                 externalSourceToken = extSourceToken ?: it.externalSourceToken,
             )
@@ -117,15 +102,10 @@ class Watchers(
             Failed(
                 latestSourceMsgId = it.latestSourceMsgId,
                 latestTxId = it.latestTxId,
-                latestReplicaMsgId = it.latestReplicaMsgId,
                 externalSourceToken = it.externalSourceToken,
                 exception = exception as? IngestionStoppedException ?: IngestionStoppedException(null, exception),
             )
         }
-    }
-
-    suspend fun awaitReplicaMsg(msgId: MessageId) {
-        activeState.first { it.latestReplicaMsgId >= msgId }
     }
 
     suspend fun awaitTx(txId: TxId) =

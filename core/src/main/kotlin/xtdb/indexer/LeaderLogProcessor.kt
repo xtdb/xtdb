@@ -96,7 +96,7 @@ internal class LeaderLogProcessor(
             ExternalSourceProcessor(source, partition, tableCatalog, watchers, txResolver) { appendTx(it) }
         }
 
-    private suspend fun applyResolvedTx(record: Log.Record<ReplicaMessage>, msg: ReplicaMessage.ResolvedTx) {
+    private suspend fun applyResolvedTx(msg: ReplicaMessage.ResolvedTx) {
         val txKey = TransactionKey(msg.txId, msg.systemTime)
 
         msg.loadTableData(al).useAll { tables -> driver.applyTx(txKey, tables) }
@@ -109,16 +109,14 @@ internal class LeaderLogProcessor(
         val effectiveSrcMsgId = msg.srcMsgId
             ?: if (extSrcProc != null) watchers.latestSourceMsgId else msg.txId
 
-        watchers.notifyApplied(
-            record.msgId, srcMsgId = effectiveSrcMsgId, result, msg.externalSourceToken
-        )
+        watchers.notifyApplied(effectiveSrcMsgId, result, msg.externalSourceToken)
     }
 
-    private suspend fun applyResolvedTx(record: Log.Record<ReplicaMessage>, tx: ResolvedTx) {
+    private suspend fun applyResolvedTx(tx: ResolvedTx) {
         try {
             driver.applyTx(tx.txKey, tx.allTables.associate { it.ref to it.relation })
 
-            watchers.notifyApplied(record.msgId, tx.srcMsgId, tx.txResult, tx.externalSourceToken)
+            watchers.notifyApplied(tx.srcMsgId, tx.txResult, tx.externalSourceToken)
 
             tx.pending?.complete(tx.txResult)
         } catch (e: Throwable) {
@@ -141,21 +139,21 @@ internal class LeaderLogProcessor(
 
                 txResolver.removeHead(msg.txId).use { tx ->
                     if (tx != null) {
-                        applyResolvedTx(record, tx)
+                        applyResolvedTx(tx)
                     } else {
-                        applyResolvedTx(record, msg)
+                        applyResolvedTx(msg)
                     }
                 }
             }
 
             // Catalog already updated on the resolve side; here we only advance the source watermark.
-            is ReplicaMessage.TriesAdded -> watchers.notifyApplied(record.msgId, msg.sourceMsgId)
+            is ReplicaMessage.TriesAdded -> watchers.notifyApplied(msg.sourceMsgId)
 
             is BlockBoundary -> {
                 blockCutter.upload(record.msgId, msg)
 
                 // the block's covered source position, as the follower does
-                watchers.notifyApplied(record.msgId, msg.latestProcessedMsgId)
+                watchers.notifyApplied(msg.latestProcessedMsgId)
 
                 gc.signal()
 
@@ -164,12 +162,12 @@ internal class LeaderLogProcessor(
 
             // Our own BlockUploaded, read back after uploadBlock already rolled the index — nothing to do
             // but advance the watermark.
-            is ReplicaMessage.BlockUploaded -> watchers.notifyApplied(record.msgId, msg.latestProcessedMsgId)
+            is ReplicaMessage.BlockUploaded -> watchers.notifyApplied(msg.latestProcessedMsgId)
 
-            is ReplicaMessage.NoOp -> watchers.notifyApplied(record.msgId, msg.srcMsgId)
+            is ReplicaMessage.NoOp -> watchers.notifyApplied(msg.srcMsgId)
 
             // Catalog already updated on the resolve side (see GarbageCollector.handleTask); nothing to do.
-            is ReplicaMessage.TriesDeleted -> watchers.notifyApplied(record.msgId)
+            is ReplicaMessage.TriesDeleted -> {}
         }
     }
 

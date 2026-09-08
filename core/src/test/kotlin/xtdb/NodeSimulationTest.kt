@@ -122,7 +122,7 @@ class NodeSimulationTest : SimulationTestBase() {
             val partitionStorage = PartitionStorage(DatabaseLogs(null, null), sharedBufferPool, null)
             val partitionState = PartitionState(tableCatalog, trieCatalog, null)
             val compactorScope = CoroutineScope(dispatcher)
-            val compactorForDb = compactor.openForDatabase(compactorScope, allocator, partitionStorage, partitionState, Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1))
+            val compactorForDb = compactor.openForDatabase(compactorScope, allocator, partitionStorage, partitionState, Watchers(latestTxId = -1, latestSourceMsgId = -1))
             val gcScope = CoroutineScope(dispatcher)
             val garbageCollector = TrieGarbageCollector(
                 sharedBufferPool, partitionState, "xtdb",

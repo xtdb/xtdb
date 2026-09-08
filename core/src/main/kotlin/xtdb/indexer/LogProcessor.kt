@@ -99,11 +99,9 @@ internal suspend fun runLeaderTerm(
                             if (termId > term.leaderTerm)
                                 throw LeaderSupersededException("[$dbName] superseded: read term $termId > our term ${term.leaderTerm} at ${record.msgId}")
 
-                            // Below our term should not appear past our replay target; discard defensively, still advancing.
-
+                            // Below our term should not appear past our replay target; discard defensively.
                             if (termId != 0L && termId < term.leaderTerm) {
                                 LOG.debug { "[$dbName] leader: discarding stale-term record ${record.msgId} (term $termId < ${term.leaderTerm})" }
-                                watchers.notifyApplied(replicaMsgId = record.msgId)
                             } else {
                                 term.applyReplicaMessage(record)
                             }
@@ -162,6 +160,36 @@ class LogProcessor(
 
     val termFence = TermFence(dbName, partitionState.tableCatalogOrNull?.boundaryTermId ?: LeaderTerm.NONE)
 
+    private sealed interface TailPos {
+        /** The last record the tail finished with, applied or discarded. */
+        val msgId: MessageId
+    }
+
+    private class Reading(override val msgId: MessageId) : TailPos
+
+    /**
+     * Terminal rather than merely current: the tail is launched once in `init` and nothing restarts it,
+     * so this partition consumes no further replica records for the life of the process.
+     */
+    private class Stopped(override val msgId: MessageId, val cause: Throwable) : TailPos
+
+    // Written by the tail coroutine alone; a flow because a promotion waits here for its own claim to be
+    // read back — see `claimLeadership`.
+    private val tailPos: MutableStateFlow<TailPos> =
+        MutableStateFlow(Reading(partitionState.tableCatalogOrNull?.boundaryReplicaMsgId ?: -1))
+
+    /**
+     * Suspend until the replica tail has finished with [msgId], whether it was applied or discarded.
+     *
+     * Throws once the tail is [Stopped], wherever it got to — the caller is asking in order to go on and
+     * lead, and a term whose replica log nothing is reading would never read its own writes back. So the
+     * answer is refused rather than given, even where the tail passed [msgId] before it stopped.
+     */
+    internal suspend fun awaitReplicaMsg(msgId: MessageId) {
+        val pos = tailPos.first { it is Stopped || it.msgId >= msgId }
+        if (pos is Stopped) throw pos.cause
+    }
+
     // The role state machine — see allium/log-processor-lifecycle.allium.
     // Written by the transition coroutine and by demoteLeader; they don't race, because a revoke
     // cancel-and-joins the transition before demoteLeader reads it.
@@ -198,47 +226,56 @@ class LogProcessor(
     private fun roleScope(job: Job) = scope + job
 
     private suspend fun tailReplica() = coroutineScope {
+        var stopCause: Throwable? = null
+
         try {
-            replicaLog.tailAll(watchers.latestReplicaMsgId) { recs ->
+            replicaLog.tailAll(tailPos.value.msgId) { recs ->
                 recs.forEach { record ->
                     // Folded outside the retry below, so a record offered again is not folded twice.
-                    if (!termFence.admit(record.message.termId)) {
-                        // Fenced: a higher-term leader has superseded this message's writer. Discard it,
-                        // but still advance the consume position — discard suppresses application, not
-                        // consumption — so a transition catch-up can't hang on a fenced no-op.
+                    if (termFence.admit(record.message.termId)) {
+                        // A role ending cancels the handle mid-record, so the record is offered again to
+                        // whatever replaces that role.
+                        while (true) {
+                            this@coroutineScope.ensureActive()
+                            val role = state
+
+                            try {
+                                role.handleReplicaMessage(record)
+                                break
+                            } catch (_: CancellationException) {
+                                stateFlow.first { it !== role }
+                            } catch (e: Throwable) {
+                                LOG.error(
+                                    e,
+                                    "[$dbName] failed to process replica record ${record.msgId} (${record.message::class.simpleName})"
+                                )
+                                throw e
+                            }
+                        }
+                    } else {
+                        // Discard suppresses application, not consumption: the position below advances
+                        // anyway, so a transition catch-up can't hang on a fenced no-op.
                         LOG.debug {
                             "[$dbName] discarding fenced record ${record.msgId} " +
                                     "(term ${LeaderTerm.format(record.message.termId)} < " +
                                     "${LeaderTerm.format(termFence.highestSeen)})"
                         }
-                        watchers.notifyApplied(record.msgId)
-                        return@forEach
                     }
 
-                    // A role ending cancels the handle mid-record, leaving the record unapplied and its
-                    // position unadvanced — so it is offered again to whatever replaces that role.
-                    while (true) {
-                        this@coroutineScope.ensureActive()
-                        val role = state
-
-                        try {
-                            role.handleReplicaMessage(record)
-                            break
-                        } catch (_: CancellationException) {
-                            stateFlow.first { it !== role }
-                        } catch (e: Throwable) {
-                            LOG.error(
-                                e,
-                                "[$dbName] failed to process replica record ${record.msgId} (${record.message::class.simpleName})"
-                            )
-                            throw e
-                        }
-                    }
+                    // Above the apply, this would advance past a record a role cancellation left
+                    // unapplied, and that record would be skipped for good.
+                    tailPos.value = Reading(record.msgId)
                 }
             }
         } catch (e: Throwable) {
+            stopCause = e
             if (!e.isShutdownSignal) watchers.notifyError(e)
             throw e
+        } finally {
+            // Every way out of the tail is terminal, the clean ones included: `tailAll` returns rather
+            // than throws when cancellation lands on its `isActive` check instead of inside a poll.
+            tailPos.value =
+                Stopped(tailPos.value.msgId, stopCause ?: CancellationException("[$dbName] replica tail stopped"))
         }
     }
 
@@ -248,7 +285,7 @@ class LogProcessor(
                 append("[$dbName] starting follower: ")
                 append("pending block: ${pendingBlock != null}, ")
                 append("src: ${watchers.latestSourceMsgId}, ")
-                append("replica: ${watchers.latestReplicaMsgId}")
+                append("replica: ${tailPos.value.msgId}")
             }
         }
 
@@ -287,7 +324,7 @@ class LogProcessor(
         // now — the term on read-back is the fence, replacing the transactional producer (#5817).
         val replayTarget = replicaLog.appendMessage(NoOp(termId = termId)).msgId
         LOG.debug("[${dbName}] transition: awaiting replica catch-up to $replayTarget")
-        watchers.awaitReplicaMsg(replayTarget)
+        awaitReplicaMsg(replayTarget)
         LOG.debug("[${dbName}] transition: replica caught up to $replayTarget")
 
         // Our own claim is now read back, so the follower's max term is the log's — anything above
@@ -390,12 +427,10 @@ class LogProcessor(
 
         pendingBlock.bufferedRecords.forEach {
             val msgTermId = it.message.termId
-            if (msgTermId >= oldTerm) {
-                oldTerm = msgTermId
-                applyReplicaMessage(it)
-            } else {
-                watchers.notifyApplied(replicaMsgId = it.msgId)
-            }
+            // A superseded leader's record — dropped, as the fence drops one live.
+            if (msgTermId < oldTerm) return@forEach
+            oldTerm = msgTermId
+            applyReplicaMessage(it)
         }
     }
 

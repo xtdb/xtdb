@@ -305,6 +305,7 @@ rule TransitionToLeader {
         -- replica-log consumer; the leader consumes the source log instead, so any
         -- replica records in [follower-pos, replay_target) would be silently
         -- skipped if we switched to leader without draining them first.
+        -- Fails with the partition's replica read's own cause where that read has stopped, the target already reached or not: a leader published behind a stopped read would never read its own writes back.
         FollowerCaughtUp(follower_term: listener.follower_term, target: target)
 
         -- Step 2a: refuse the claim if the replica log has already moved past the
