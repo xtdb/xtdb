@@ -30,7 +30,7 @@
            (xtdb.database PartitionStorage)
            (xtdb.metadata MetadataPredicate PageMetadata)
            (xtdb.operator.scan MultiIidSelector ScanCursor ScanMetrics SingleIidSelector)
-           (xtdb.query IQuerySource$QueryCatalog IQuerySource$QueryDatabase)
+           (xtdb.query IQuerySource$QueryDatabase)
            (xtdb.segment BufferPoolSegment MergePlanner)
            xtdb.api.TableRef
            (xtdb.trie Bucketer)
@@ -50,10 +50,7 @@
                        :opt-un [::lp/for-valid-time ::lp/for-system-time ::lp/clamp-valid-time?])))
 
 (definterface IScanEmitter
-  ;; `dbs` is the operation's resolved databases; `db-cat` is still needed at cursor time, because
-  ;; `pg_database`, `pg_roles` and `pg_auth_members` are answered from the catalog rather than from
-  ;; the databases this query happens to reach.
-  (emitScan [^xtdb.query.IQuerySource$QueryCatalog db-cat dbs scan-expr scan-vec-types param-types]))
+  (emitScan [dbs scan-expr scan-vec-types param-types]))
 
 (defn- db-or-throw [dbs db-name]
   (or (get dbs db-name)
@@ -263,7 +260,7 @@
 
 (defn ->scan-emitter [info-schema]
   (reify IScanEmitter
-    (emitScan [_ db-cat emit-dbs {:keys [opts]} scan-vec-types param-types]
+    (emitScan [_ emit-dbs {:keys [opts]} scan-vec-types param-types]
       (let [{:keys [db-name ^TableRef table columns] :as scan-opts} opts
             ;; emit-time only, for the planner's row-count stat. An emitted query outlives the
             ;; operation that emitted it, and the emit cache carries no database identity — so a
@@ -313,7 +310,7 @@
 
          :vec-types (->> vec-types (into {} (keep (fn [[k v]] (when v [k v])))))
          :stats {:row-count row-count}
-         :->cursor (fn [{:keys [allocator, query-source, dbs, snaps, system-time-basis, schema, args
+         :->cursor (fn [{:keys [allocator, query-source, db-cat, dbs, snaps, system-time-basis, schema, args
                                 pushdown-blooms pushdown-iids explain-analyze? tracer query-span] :as opts}]
                      (let [^IQuerySource$QueryDatabase db (db-or-throw dbs db-name)
                            storage (.getStorage db)
@@ -394,6 +391,5 @@
                                                            (format "query.cursor.scan.%s" (.getTableName table))
                                                            trace-attrs)))))))}))))
 
-(defmethod lp/emit-expr :scan [scan-expr {:keys [^IScanEmitter scan-emitter db-cat dbs scan-vec-types, param-types]}]
-  (assert db-cat)
-  (.emitScan scan-emitter db-cat dbs scan-expr scan-vec-types param-types))
+(defmethod lp/emit-expr :scan [scan-expr {:keys [^IScanEmitter scan-emitter dbs scan-vec-types, param-types]}]
+  (.emitScan scan-emitter dbs scan-expr scan-vec-types param-types))

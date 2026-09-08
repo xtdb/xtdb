@@ -3,7 +3,6 @@
             [xtdb.api :as xt]
             [xtdb.basis :as basis]
             [xtdb.compactor :as c]
-            [xtdb.db-catalog :as db]
             xtdb.error
             [xtdb.expression :as expr]
             [xtdb.logical-plan :as lp]
@@ -967,6 +966,5 @@
   (t/is (anomalous? [:incorrect :xtdb/unknown-db #"Unknown database: gone"]
                     (lp/emit-expr '{:op :scan, :opts {:db-name "gone", :table #xt/table docs, :columns [[:column _id]]}}
                                   {:scan-emitter (:scan-emitter (.getQuerySource (util/node-base tu/*node*)))
-                                   :db-cat (db/<-node tu/*node*)
                                    :dbs {}}))
         "the plan names a database the resolved set lacks"))

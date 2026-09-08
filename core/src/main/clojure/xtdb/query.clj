@@ -184,7 +184,7 @@
     conformed-plan))
 
 (defn- emit-query [{:keys [conformed-plan scan-cols col-names ^Cache emit-cache, explain-analyze?]},
-                   scan-emitter, db-cat, dbs, snaps
+                   scan-emitter, dbs, snaps
                    param-types, {:keys [default-tz]}]
   (.get emit-cache {:scan-vec-types (scan/scan-vec-types snaps scan-cols)
 
@@ -203,7 +203,6 @@
                               {:scan-vec-types scan-vec-types
                                :default-tz default-tz
                                :param-types param-types
-                               :db-cat db-cat
                                :dbs dbs
                                :scan-emitter scan-emitter})
                 (update :vec-types (fn [vts]
@@ -381,7 +380,7 @@
               (let [planned-query (plan-query* @!table-info)
                     dbs (resolve-dbs)]
                 (util/with-open [snaps (open-snaps dbs prepare-min-basis)]
-                  (let [emitted-query (emit-query planned-query scan-emitter db-cat dbs snaps
+                  (let [emitted-query (emit-query planned-query scan-emitter dbs snaps
                                                   (->> param-fields
                                                        (into {} (map (fn [^Field f]
                                                                        [(symbol (.getName f)) (types/->type f)]))))
@@ -415,7 +414,7 @@
                       table-info (reset! !table-info (->table-info snaps))
                       planned-query (plan-query* table-info)
 
-                      {:keys [vec-types ->cursor] :as emitted-query} (emit-query planned-query scan-emitter db-cat dbs snaps (->arg-types args) query-opts)
+                      {:keys [vec-types ->cursor] :as emitted-query} (emit-query planned-query scan-emitter dbs snaps (->arg-types args) query-opts)
                       current-time (or (some-> (or (:current-time planned-query) (.getCurrentTime opts))
                                                (expr->value {:args args})
                                                (time/->instant {:default-tz default-tz}))
@@ -460,6 +459,7 @@
                         (let [result-types (->result-types (:ordered-outer-projection planned-query) vec-types)
                               cursor (-> (->cursor {:allocator allocator,
                                                     :query-source this
+                                                    :db-cat db-cat
                                                     :dbs dbs
                                                     :snaps snaps
                                                     :system-time-basis system-time-basis

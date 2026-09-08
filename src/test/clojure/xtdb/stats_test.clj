@@ -29,7 +29,6 @@
       (tu/flush-block! node)
 
       (let [emit-opts {:scan-emitter scan-emitter
-                       :db-cat db-cat
                        :dbs (into {} (.resolveDbs db-cat))}]
 
         (t/is (= {:row-count 3}
