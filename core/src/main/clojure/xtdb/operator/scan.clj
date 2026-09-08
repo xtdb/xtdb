@@ -1,7 +1,6 @@
 (ns xtdb.operator.scan
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
-            [xtdb.basis :as basis]
             [xtdb.error :as err]
             [xtdb.expression :as expr]
             [xtdb.expression.metadata :as expr.meta]
@@ -314,7 +313,7 @@
 
          :vec-types (->> vec-types (into {} (keep (fn [[k v]] (when v [k v])))))
          :stats {:row-count row-count}
-         :->cursor (fn [{:keys [allocator, query-source, dbs, snaps, snapshot-token, schema, args
+         :->cursor (fn [{:keys [allocator, query-source, dbs, snaps, system-time-basis, schema, args
                                 pushdown-blooms pushdown-iids explain-analyze? tracer query-span] :as opts}]
                      (let [^IQuerySource$QueryDatabase db (db-or-throw dbs db-name)
                            storage (.getStorage db)
@@ -364,12 +363,12 @@
                                ^ScanMetrics metrics (ScanMetrics. db-name
                                                                   (str (.getSchemaName table) "." (.getTableName table)))
 
-                               ;; TODO (#5835) each partition takes its own basis slot. Wrong rather
-                               ;; than absent at N>1: every partition would apply partition 0's
-                               ;; temporal bound, so the scan returns wrong rows rather than failing.
+                               ;; TODO (#5835) partition 0's slot for every partition. Wrong rather than
+                               ;; absent at N>1: each would apply partition 0's temporal bound, so the
+                               ;; scan returns wrong rows rather than failing. `system-time-basis` is
+                               ;; already indexed by partition — the walk over partitions is what's missing.
                                temporal-bounds (->temporal-bounds allocator args scan-opts
-                                                                  (-> (basis/<-time-basis-str snapshot-token)
-                                                                      (get-in [db-name 0])))
+                                                                  (get-in system-time-basis [db-name 0]))
 
                                trace? (or explain-analyze? (and tracer query-span))
                                trace-attrs (when trace?

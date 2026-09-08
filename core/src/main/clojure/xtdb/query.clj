@@ -420,6 +420,18 @@
                                                (expr->value {:args args})
                                                (time/->instant {:default-tz default-tz}))
                                        (expr/current-time))
+                      ;; the system-time each partition is read at, per database. `SETTING SNAPSHOT_TOKEN`
+                      ;; names it directly and `SNAPSHOT_TIME` caps it, so it can sit below the `min-basis`
+                      ;; the snapshots were opened at: the floor picks the snapshot, this picks what's
+                      ;; visible within it.
+                      system-time-basis (cond-> (or (some-> (:snapshot-token planned-query (.getSnapshotToken opts))
+                                                            (expr->value {:args args})
+                                                            (basis/<-time-basis-str)
+                                                            (doto (validate-basis-not-before snaps)))
+
+                                                    (default-basis snaps))
+                                          (.getSnapshotTime opts) (basis/cap-basis (time/->instant (.getSnapshotTime opts))))
+
                       tracer (.getTracer opts)
                       query-span (when tracer
                                    (metrics/start-span tracer "xtdb.query" {:attributes {:query.text query-text}}))
@@ -435,15 +447,9 @@
                     (binding [expr/*clock* (InstantSource/fixed current-time)
                               expr/*default-tz* default-tz
 
-                              ;; both snapshot-token and snapshot-time form upper bounds - the result is the intersection of the two
-                              expr/*snapshot-token* (some-> (cond-> (or (some-> (:snapshot-token planned-query (.getSnapshotToken opts))
-                                                                                (expr->value {:args args})
-                                                                                (basis/<-time-basis-str)
-                                                                                (doto (validate-basis-not-before snaps)))
-
-                                                                        (default-basis snaps))
-                                                              (.getSnapshotTime opts) (basis/cap-basis (time/->instant (.getSnapshotTime opts))))
-                                                            (basis/->time-basis-str))]
+                              ;; the string is the SQL `SNAPSHOT_TOKEN` function's return value, and the
+                              ;; only reason it's still encoded — operators take the map.
+                              expr/*snapshot-token* (some-> system-time-basis (basis/->time-basis-str))]
 
                       (if (:explain? planned-query)
                         (let [explain-plan (->explain-plan emitted-query)]
@@ -456,10 +462,9 @@
                                                     :query-source this
                                                     :dbs dbs
                                                     :snaps snaps
-                                                    :snapshot-token expr/*snapshot-token*
+                                                    :system-time-basis system-time-basis
                                                     :current-time current-time
                                                     :args args, :schema table-info
-                                                    :default-tz default-tz
                                                     :explain-analyze? (:explain-analyze? planned-query)
                                                     :tracer tracer
                                                     :query-span query-span})
