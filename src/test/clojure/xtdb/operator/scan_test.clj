@@ -3,6 +3,7 @@
             [xtdb.api :as xt]
             [xtdb.basis :as basis]
             [xtdb.compactor :as c]
+            [xtdb.expression :as expr]
             [xtdb.node :as xtn]
             [xtdb.operator.scan :as scan]
             [xtdb.test-util :as tu]
@@ -11,7 +12,8 @@
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
-  (:import java.util.Arrays
+  (:import java.time.InstantSource
+           java.util.Arrays
            java.util.Date
            java.util.SortedSet
            xtdb.arrow.RelationReader
@@ -923,3 +925,33 @@
                                (frequencies
                                 (xt/q n2 [q from-date to-date from-date to-date idx]
                                       {:default-tz #xt/zone "UTC"})))))))))))))))
+
+(deftest temporal-bounds-apply-the-basis-to-both-system-time-bounds
+  (let [now #xt/instant "2020-01-01T00:00:00Z"
+        now-μs (time/instant->micros now)
+        bounds (fn [scan-opts basis]
+                 (binding [expr/*clock* (InstantSource/fixed now)
+                           expr/*default-tz* #xt/zone "Asia/Bangkok"]
+                   (scan/->temporal-bounds tu/*allocator* vw/empty-args scan-opts basis)))]
+
+    (let [vt (.getValidTime (bounds {:for-valid-time [:at [:now]]} nil))]
+      (t/is (= now-μs (.getLower vt)) ":now resolves against the query's clock")
+      (t/is (.isPoint vt) "an `at` is a single chronon"))
+
+    (let [vt (.getValidTime (bounds {:for-valid-time [:at [:literal #xt/date "2019-06-01"]]} nil))]
+      (t/is (= (time/instant->micros #xt/instant "2019-05-31T17:00:00Z") (.getLower vt))
+            "a date literal resolves at the query's default-tz, not UTC"))
+
+    (t/testing "the system-time basis"
+      (let [basis #xt/instant "2019-06-01T00:00:00Z"
+            basis-μs (time/instant->micros basis)]
+
+        (let [st (.getSystemTime (bounds {} basis))]
+          (t/is (= [basis-μs (inc basis-μs)] [(.getLower st) (.getUpper st)])
+                "with no explicit for-system-time it reads as of the basis, both bounds"))
+
+        (let [st (.getSystemTime (bounds {:for-system-time [:all-time]} basis))]
+          (t/is (= Long/MIN_VALUE (.getLower st))
+                "an explicit for-system-time keeps its own lower bound")
+          (t/is (= (inc basis-μs) (.getUpper st))
+                "and is still capped by the basis"))))))
