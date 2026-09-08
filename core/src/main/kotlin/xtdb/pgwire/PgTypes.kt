@@ -36,31 +36,43 @@ fun escapePgArrayElement(s: String): String =
     "\"${s.replace("\\", "\\\\").replace("\"", "\\\"")}\""
 
 /**
- * Splits a Postgres array literal — `{a,"b,c"}` — into its element texts, unescaping quoted
- * elements. Multi-dimensional literals aren't supported.
+ * Splits a Postgres array literal — `{a,"b,c",NULL}` — into its element texts, unescaping quoted
+ * elements and trimming unquoted ones. Multi-dimensional literals aren't supported.
  *
- * @return the elements in order; empty for `{}` and for an empty string.
+ * @return the elements in order, null for an unquoted `NULL`; empty for `{}` and for an empty string.
  */
-fun parsePgArray(text: String): List<String> {
+fun parsePgArray(text: String): List<String?> {
     val s = text.trim()
     if (s.isEmpty() || s == "{}") return emptyList()
 
-    val elems = mutableListOf<String>()
+    val elems = mutableListOf<String?>()
     val elem = StringBuilder()
+    var quotedOrEscaped = false
     var inQuotes = false
     var i = 1
+
+    fun endElement() {
+        val raw = elem.toString()
+
+        // an element that would otherwise read as the null sentinel is quoted by `array_out`, so
+        // only a bare NULL is null
+        elems.add(if (quotedOrEscaped) raw else raw.trim().takeUnless { it.equals("NULL", ignoreCase = true) })
+
+        elem.setLength(0)
+        quotedOrEscaped = false
+    }
 
     // the bound stops short of the closing brace, so the final element is added after the loop
     while (i < s.length - 1) {
         when (val c = s[i]) {
-            '\\' -> elem.append(s[++i])
-            '"' -> inQuotes = !inQuotes
-            ',' -> if (inQuotes) elem.append(c) else { elems.add(elem.toString()); elem.setLength(0) }
+            '\\' -> { elem.append(s[++i]); quotedOrEscaped = true }
+            '"' -> { inQuotes = !inQuotes; quotedOrEscaped = true }
+            ',' -> if (inQuotes) elem.append(c) else endElement()
             else -> elem.append(c)
         }
         i++
     }
-    elems.add(elem.toString())
+    endElement()
 
     return elems
 }

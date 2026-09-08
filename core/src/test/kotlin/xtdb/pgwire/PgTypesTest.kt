@@ -42,6 +42,25 @@ class PgTypesTest {
     }
 
     @Test
+    fun `a bare NULL is a null element`() {
+        assertEquals(listOf("4", null, "6"), parsePgArray("{4,NULL,6}"))
+        assertEquals(listOf(null), parsePgArray("{NULL}"))
+        assertEquals(listOf(null, null), parsePgArray("{NULL,null}"))
+    }
+
+    @Test
+    fun `a quoted or escaped NULL is the string`() {
+        assertEquals(listOf("NULL"), parsePgArray("""{"NULL"}"""))
+        assertEquals(listOf("NULL"), parsePgArray("""{\NULL}"""))
+    }
+
+    @Test
+    fun `unquoted elements are trimmed`() {
+        assertEquals(listOf("4", null, "6"), parsePgArray("{ 4 , NULL , 6 }"))
+        assertEquals(listOf(" a "), parsePgArray("""{" a "}"""))
+    }
+
+    @Test
     fun `escapePgArrayElement round-trips through parsePgArray`() {
         val elems = listOf("""a,b""", """c""", """say "hi"""", """back\slash""", "")
 
@@ -59,5 +78,12 @@ class PgTypesTest {
     fun `int arrays read from their text literal`() {
         assertEquals(listOf(4L, 6L), readText(INT8_ARRAY_OID, "{4,6}"))
         assertEquals(listOf(4, 6), readText(INT4_ARRAY_OID, "{4,6}"))
+    }
+
+    @Test
+    fun `a null element reads as null rather than throwing`() {
+        assertEquals(listOf(4L, null, 6L), readText(INT8_ARRAY_OID, "{4,NULL,6}"))
+        assertEquals(listOf(4, null, 6), readText(INT4_ARRAY_OID, "{4,NULL,6}"))
+        assertEquals(listOf("a", null), readText(TEXT_ARRAY_OID, "{a,NULL}"))
     }
 }

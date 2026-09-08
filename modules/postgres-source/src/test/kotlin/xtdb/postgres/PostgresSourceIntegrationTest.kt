@@ -201,8 +201,10 @@ class PostgresSourceIntegrationTest {
     /** Reads a single-column, single-row array result off the cdc db as a list — pgjdbc hands
      * array columns back as [java.sql.Array], which doesn't compare against a Kotlin list. */
     private fun xtArray(node: Xtdb, sql: String, dbName: String = "cdc"): List<Any?> =
-        (xtQueryDb(node, dbName, sql).single().values.single() as java.sql.Array)
-            .let { (it.array as Array<*>).toList() }
+        when (val v = xtQueryDb(node, dbName, sql).single().values.single()) {
+            is java.sql.Array -> (v.array as Array<*>).toList()
+            else -> fail("expected an array column, got ${v?.javaClass?.name}: $v")
+        }
 
     private fun assertPrimaryDbHealthy(node: Xtdb) {
         val id = UUID.randomUUID().toString()
@@ -1763,6 +1765,40 @@ class PostgresSourceIntegrationTest {
                 listOf("d,e", "NULL"),
                 xtArray(node, "SELECT vals FROM public.pg_text_array WHERE _id = 2"),
             )
+        }
+    }
+
+    @Test
+    fun `a null array element mirrors as null and leaves ingestion running`() = runTest(timeout = 120.seconds) {
+        val pubName = "test_pub_${UUID.randomUUID().toString().replace("-", "_")}"
+        val sourceTopic = "test-topic-${UUID.randomUUID()}"
+
+        pgExecute(
+            "CREATE TABLE pg_null_array (_id INT PRIMARY KEY, nums BIGINT[], words TEXT[])",
+            "INSERT INTO pg_null_array VALUES (1, ARRAY[7, 8], ARRAY['x'])",
+            "INSERT INTO pg_null_array VALUES (2, ARRAY[4, NULL, 6]::BIGINT[], ARRAY['a', NULL]::TEXT[])",
+            "CREATE PUBLICATION $pubName FOR TABLE pg_null_array",
+        )
+
+        openNode(sourceTopic).use { node ->
+            attachPostgresSource(node, publicationName = pubName)
+
+            eventually(60.seconds) {
+                assertEquals(2, xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_null_array").size, "both snapshot rows ingested")
+            }
+
+            assertEquals(listOf(4L, null, 6L), xtArray(node, "SELECT nums FROM public.pg_null_array WHERE _id = 2"))
+            assertEquals(listOf("a", null), xtArray(node, "SELECT words FROM public.pg_null_array WHERE _id = 2"))
+
+            assertEquals(listOf(7L, 8L), xtArray(node, "SELECT nums FROM public.pg_null_array WHERE _id = 1"))
+
+            pgExecute("INSERT INTO pg_null_array VALUES (3, ARRAY[NULL]::BIGINT[], NULL)")
+
+            eventually(30.seconds) {
+                assertTrue(xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_null_array WHERE _id = 3").isNotEmpty(), "streamed row ingested")
+            }
+
+            assertEquals(listOf(null), xtArray(node, "SELECT nums FROM public.pg_null_array WHERE _id = 3"))
         }
     }
 }
