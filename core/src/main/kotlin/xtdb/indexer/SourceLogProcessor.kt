@@ -266,15 +266,6 @@ internal class SourceLogProcessor(
                 txResolver.advanceSrcMsgId(msgId)
                 false
             }
-
-            // TODO this one's going after 2.2
-            is SourceMessage.BlockUploaded -> {
-                watchers.notifyApplied(null, msgId)
-                // Keep the resolve-side watermark in step with the one we just advanced, or a following
-                // block cut would carry a lower latestProcessedMsgId and regress it on apply.
-                txResolver.advanceSrcMsgId(msgId)
-                false
-            }
         }
     }
 

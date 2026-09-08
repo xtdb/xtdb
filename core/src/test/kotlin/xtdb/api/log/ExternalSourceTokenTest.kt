@@ -48,17 +48,6 @@ class ExternalSourceTokenTest {
     }
 
     @Test
-    fun `SourceMessage BlockUploaded round-trips external source token`() {
-        val uploaded = SourceMessage.BlockUploaded(1, 0, 1, 100, emptyList(), testToken)
-        val encoded = uploaded.encode()
-        val decoded = SourceMessage.decode(encoded)
-
-        assertInstanceOf(SourceMessage.BlockUploaded::class.java, decoded)
-        decoded as SourceMessage.BlockUploaded
-        assertArrayEquals(testToken, decoded.externalSourceToken)
-    }
-
-    @Test
     fun `Block proto round-trips external source token`() {
         val tableCatalog = TableCatalog(mockk<BufferPool>(relaxed = true))
 

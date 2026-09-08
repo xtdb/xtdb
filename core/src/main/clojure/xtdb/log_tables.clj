@@ -13,7 +13,7 @@
            (xtdb.api.log Log Log$Record SourceMessage SourceMessage$Tx
                          SourceMessage$FlushBlock SourceMessage$TriesAdded
                          SourceMessage$AttachDatabase SourceMessage$DetachDatabase
-                         SourceMessage$BlockUploaded SourceMessage$LegacyTx
+                         SourceMessage$LegacyTx
                          ReplicaMessage ReplicaMessage$ResolvedTx
                          ReplicaMessage$TriesAdded ReplicaMessage$BlockBoundary
                          ReplicaMessage$BlockUploaded ReplicaMessage$NoOp)
@@ -49,7 +49,6 @@
     SourceMessage$TriesAdded "tries-added"
     SourceMessage$AttachDatabase "attach-database"
     SourceMessage$DetachDatabase "detach-database"
-    SourceMessage$BlockUploaded "block-uploaded"
     SourceMessage$LegacyTx "legacy-tx"
     "unknown"))
 
@@ -90,15 +89,6 @@
      SourceMessage$DetachDatabase
      {:type :detach-database
       :db-name (.getDbName ^SourceMessage$DetachDatabase msg)}
-
-     SourceMessage$BlockUploaded
-     (let [^SourceMessage$BlockUploaded m msg]
-       {:type :block-uploaded
-        :block-index (.getBlockIndex m)
-        :latest-processed-msg-id (.getLatestProcessedMsgId m)
-        :storage-version (.getStorageVersion m)
-        :storage-epoch (.getStorageEpoch m)
-        :tries (trie-details->edn (.getTries m))})
 
      SourceMessage$LegacyTx
      {:type :legacy-tx}

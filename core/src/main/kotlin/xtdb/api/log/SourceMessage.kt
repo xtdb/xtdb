@@ -4,11 +4,9 @@ import com.google.protobuf.ByteString
 import xtdb.api.tx.ExternalSourceToken
 import xtdb.database.Database
 import xtdb.database.DatabaseName
-import xtdb.types.MessageId
 import xtdb.log.proto.SourceLogMessage
 import xtdb.log.proto.TrieDetails
 import xtdb.log.proto.attachDatabase
-import xtdb.log.proto.blockUploaded
 import xtdb.log.proto.detachDatabase
 import xtdb.log.proto.flushBlock
 import xtdb.log.proto.sourceLogMessage
@@ -82,13 +80,6 @@ sealed interface SourceMessage {
                             }
 
                             SourceLogMessage.MessageCase.DETACH_DATABASE -> DetachDatabase(msg.detachDatabase.dbName)
-
-                            SourceLogMessage.MessageCase.BLOCK_UPLOADED -> msg.blockUploaded.let {
-                                BlockUploaded(
-                                    it.storageVersion, it.storageEpoch, it.blockIndex, it.latestProcessedMsgId, it.triesList,
-                                    it.externalSourceToken.takeIf { _ -> it.hasExternalSourceToken() }?.toByteArray()
-                                )
-                            }
 
                             SourceLogMessage.MessageCase.TX -> msg.tx.let {
                                 Tx(
@@ -177,24 +168,6 @@ sealed interface SourceMessage {
         override fun toLogMessage() = sourceLogMessage {
             detachDatabase = detachDatabase {
                 this.dbName = this@DetachDatabase.dbName
-            }
-        }
-    }
-
-    data class BlockUploaded(
-        val storageVersion: Int, val storageEpoch: StorageEpoch,
-        val blockIndex: BlockIndex, val latestProcessedMsgId: MessageId,
-        val tries: List<TrieDetails>,
-        val externalSourceToken: ExternalSourceToken? = null
-    ) : ProtobufMessage() {
-        override fun toLogMessage() = sourceLogMessage {
-            blockUploaded = blockUploaded {
-                this.storageVersion = this@BlockUploaded.storageVersion
-                this.storageEpoch = this@BlockUploaded.storageEpoch
-                this.blockIndex = this@BlockUploaded.blockIndex
-                this.latestProcessedMsgId = this@BlockUploaded.latestProcessedMsgId
-                tries.addAll(this@BlockUploaded.tries)
-                this@BlockUploaded.externalSourceToken?.let { this.externalSourceToken = ByteString.copyFrom(it) }
             }
         }
     }

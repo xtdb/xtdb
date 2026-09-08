@@ -462,13 +462,13 @@ variant Detach : DbOp {
 
 -- Messages on the source log. Written by clients, the leader (FlushBlock),
 -- and the block upload / compactor (TriesAdded).
--- See: log/proto/log.proto (LogMessage oneof), api/log/SourceMessage.kt
+-- See: log/proto/log.proto (SourceLogMessage oneof), api/log/SourceMessage.kt
 
 entity SourceMessage {
     msg_id: MessageId
     log_timestamp: Timestamp
     kind: TxMessage | LegacyTxMessage | FlushBlockMessage | TriesAddedMessage
-         | BlockUploadedMessage | AttachDbMessage | DetachDbMessage
+         | AttachDbMessage | DetachDbMessage
 }
 
 variant TxMessage : SourceMessage {
@@ -501,17 +501,6 @@ variant TriesAddedMessage : SourceMessage {
     -- See: log/proto/log.proto (TriesAdded)
     storage_version: Integer
     storage_epoch: Integer
-    tries: List<trie_cat/TrieDetails>
-}
-
-variant BlockUploadedMessage : SourceMessage {
-    -- Legacy variant: no current path emits this. The leader ignores it
-    -- (notifies watchers only) and it will be removed after 2.2.
-    -- See: log/proto/log.proto (BlockUploaded)
-    storage_version: Integer
-    storage_epoch: Integer
-    block_index: Integer
-    latest_processed_msg_id: MessageId
     tries: List<trie_cat/TrieDetails>
 }
 
@@ -1045,19 +1034,6 @@ rule LeaderProcessesTriesAdded {
 --   - its TriesDeletedMessage leaves via the append pump like any other, and is skipped on
 --     the leader's own consume-back — the catalog was already mutated on the resolve side.
 
-rule LeaderProcessesBlockUploaded {
-    -- Legacy variant: no current path emits BlockUploaded on the source log. The leader
-    -- ignores it, advancing the watermarks directly — including the resolve-side one, or a
-    -- following block cut would carry a lower latest_processed_msg_id and regress
-    -- notifyMsg on apply.
-    when: SourceBlockUploadedMessageReceived(msg)
-    requires: log_processor.mode = Leader
-
-    ensures:
-        watchers.notifyMsg(msg.msg_id)
-        log_processor.last_resolved_src_msg_id = msg.msg_id
-}
-
 ---- Rules: Leader Mode — append pump
 
 rule AppendReplicaMessage {
@@ -1234,7 +1210,7 @@ rule LeaderFlushTimeout {
 
 -- An external-source leader does NOT take transactions from the source log. The external
 -- source is handed a TxIndexer callback on partition assignment and feeds transactions in
--- directly. Flush/tries/block-uploaded coordination still uses the source log, so the
+-- directly. Flush/tries coordination still uses the source log, so the
 -- leader also reads it — but TxMessage / AttachDatabase / DetachDatabase MUST NOT appear
 -- there, rejected at submit time (ClientSubmitsTransactionToExternalSourceDb).
 --
