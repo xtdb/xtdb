@@ -1803,6 +1803,50 @@ class PostgresSourceIntegrationTest {
     }
 
     @Test
+    fun `a jsonb integer beyond int64 mirrors exactly alongside one that fits`() = runTest(timeout = 120.seconds) {
+        val pubName = "test_pub_${UUID.randomUUID().toString().replace("-", "_")}"
+        val sourceTopic = "test-topic-${UUID.randomUUID()}"
+
+        pgExecute(
+            "CREATE TABLE pg_json_bigint (_id INT PRIMARY KEY, payload JSONB)",
+            """INSERT INTO pg_json_bigint VALUES (1, '{"n": 9223372036854775807}'::JSONB)""",
+            """INSERT INTO pg_json_bigint VALUES (2, '{"n": 18446744073709551615}'::JSONB)""",
+            """INSERT INTO pg_json_bigint VALUES (3, '{"n": 18446744073709551623}'::JSONB)""",
+            "CREATE PUBLICATION $pubName FOR TABLE pg_json_bigint",
+        )
+
+        openNode(sourceTopic).use { node ->
+            attachPostgresSource(node, publicationName = pubName)
+
+            eventually(60.seconds) {
+                assertEquals(3, xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_json_bigint").size, "all snapshot rows ingested")
+            }
+
+            fun n(id: Int) =
+                xtQueryDb(node, "cdc", "SELECT payload->'n' AS n FROM public.pg_json_bigint WHERE _id = $id")
+                    .single()["n"].toString()
+
+            assertEquals("9223372036854775807", n(1))
+            assertEquals("18446744073709551615", n(2))
+            assertEquals("18446744073709551623", n(3))
+
+            pgExecute("""INSERT INTO pg_json_bigint VALUES (4, '{"n": -18446744073709551623}'::JSONB)""")
+
+            eventually(30.seconds) {
+                assertTrue(xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_json_bigint WHERE _id = 4").isNotEmpty(), "streamed row ingested")
+            }
+
+            assertEquals("-18446744073709551623", n(4))
+
+            assertEquals(
+                listOf("9223372036854775807", "18446744073709551615", "18446744073709551623", "-18446744073709551623"),
+                xtQueryDb(node, "cdc", "SELECT _id, payload->'n' AS n FROM public.pg_json_bigint ORDER BY _id")
+                    .map { it["n"].toString() },
+            )
+        }
+    }
+
+    @Test
     fun `a jsonb column holding JSON null mirrors as null and leaves ingestion running`() = runTest(timeout = 120.seconds) {
         val pubName = "test_pub_${UUID.randomUUID().toString().replace("-", "_")}"
         val sourceTopic = "test-topic-${UUID.randomUUID()}"

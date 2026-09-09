@@ -21,6 +21,7 @@ import xtdb.api.error.NotFound.Companion.NOT_FOUND
 import xtdb.api.error.Unavailable.Companion.UNAVAILABLE
 import xtdb.api.error.Unsupported.Companion.UNSUPPORTED
 import java.math.BigDecimal
+import java.math.BigInteger
 import java.time.*
 import java.util.*
 import org.apache.arrow.vector.types.pojo.Field
@@ -54,8 +55,26 @@ object AnyJsonLdSerde : KSerializer<Any> {
 
     private fun JsonElement.asString() = (this as? JsonPrimitive)?.takeIf { it.isString }?.content
     private fun JsonElement.asStringOrThrow() = asString() ?: throw jsonIAEwithMessage("@value must be string!", this)
-    private fun JsonElement.asLong() = (this as? JsonPrimitive)?.longOrNull
+    // `longOrNull` wraps an over-range integer rather than rejecting it, so 2^64+7 reads back as 7
+    // Kotlin/kotlinx.serialization#3267
+    private fun JsonElement.asLong() = (this as? JsonPrimitive)?.content?.toLongOrNull()
     private fun JsonElement.asDouble() = (this as? JsonPrimitive)?.doubleOrNull
+
+    private val LONG_RANGE = BigInteger.valueOf(Long.MIN_VALUE)..BigInteger.valueOf(Long.MAX_VALUE)
+
+    // the widest decimal we store is 64 digits, a 256-bit Arrow decimal
+    private const val MAX_DECIMAL_PRECISION = 64
+
+    private fun JsonPrimitive.asNumber(): Any {
+        // the asymmetry with an integer literal is deliberate: nothing distinguishes a measurement, which wants
+        // this double - a CPU usage, say - from money, which wants a big decimal, and money rarely reaches jsonb
+        val int = content.toBigIntegerOrNull()
+            ?: return content.toDoubleOrNull() ?: throw jsonIAE("unknown-json-primitive", this)
+
+        if (int in LONG_RANGE) return int.toLong()
+
+        return BigDecimal(int).takeIf { it.precision() <= MAX_DECIMAL_PRECISION } ?: int.toDouble()
+    }
 
     private fun toThrowable(type: String, obj: JsonObject): Throwable {
         val errorMessage = obj["xtdb.error/message"]?.asString()
@@ -153,10 +172,11 @@ object AnyJsonLdSerde : KSerializer<Any> {
             }
         }
 
-        is JsonNull -> null
-
-        is JsonPrimitive -> if (isString) content else booleanOrNull ?: longOrNull ?: doubleOrNull
-        ?: throw jsonIAE("unknown-json-primitive", this)
+        is JsonPrimitive -> when {
+            this is JsonNull -> null
+            isString -> content
+            else -> booleanOrNull ?: asNumber()
+        }
     }
 
     fun Any?.toJsonLdElement(type: String) = mapOf("@type" to type, "@value" to toString()).toJsonLdElement()

@@ -6,6 +6,7 @@ import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import xtdb.arrow.VectorType
 import xtdb.api.error.Incorrect
 import xtdb.api.error.Unsupported
@@ -45,6 +46,13 @@ class JsonLdSerdeTest {
         assertEquals(42.0, JSON_LD_SERDE.decodeFromString<Any>("{ \"@type\": \"xt:double\", \"@value\": 42 }"))
         assertEquals(42.0, JSON_LD_SERDE.decodeFromString<Any>("{ \"@type\": \"xt:double\", \"@value\": 42.0 }"))
         assertEquals(42.0, JSON_LD_SERDE.decodeFromString<Any>("{ \"@type\": \"xt:double\", \"@value\": \"42.0\" }"))
+    }
+
+    @Test
+    fun `an over-range xt-long is rejected rather than wrapped`() {
+        assertThrows<Incorrect> {
+            JSON_LD_SERDE.decodeFromString<Any>("""{ "@type": "xt:long", "@value": 18446744073709551623 }""")
+        }
     }
 
     @Test

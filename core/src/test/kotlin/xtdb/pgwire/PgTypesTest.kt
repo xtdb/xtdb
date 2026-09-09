@@ -3,6 +3,7 @@ package xtdb.pgwire
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
+import java.math.BigDecimal
 
 class PgTypesTest {
 
@@ -101,6 +102,13 @@ class PgTypesTest {
     fun `a top-level JSON null reads as null`() {
         assertNull(readText(JSONB_OID, "null"))
         assertNull(readText(JSON_OID, "null"))
+    }
+
+    @Test
+    fun `a jsonb integer beyond int64 reads exactly rather than wrapping`() {
+        assertEquals(mapOf("n" to BigDecimal("18446744073709551623")), readText(JSONB_OID, """{"n": 18446744073709551623}"""))
+        assertEquals(mapOf("n" to BigDecimal("18446744073709551615")), readText(JSONB_OID, """{"n": 18446744073709551615}"""))
+        assertEquals(mapOf("n" to 9223372036854775807L), readText(JSONB_OID, """{"n": 9223372036854775807}"""))
     }
 
     @Test

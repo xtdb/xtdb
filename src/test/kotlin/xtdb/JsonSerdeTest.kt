@@ -51,6 +51,31 @@ class JsonSerdeTest {
     }
 
     @Test
+    fun `decodes an integer beyond int64 exactly`() {
+        assertEquals(9223372036854775807L, decode("9223372036854775807"))
+
+        assertEquals(BigDecimal("9223372036854775808"), decode("9223372036854775808"))
+        assertEquals(BigDecimal("18446744073709551615"), decode("18446744073709551615"))
+        assertEquals(BigDecimal("18446744073709551623"), decode("18446744073709551623"))
+        assertEquals(BigDecimal("-18446744073709551623"), decode("-18446744073709551623"))
+
+        assertEquals(mapOf("n" to BigDecimal("18446744073709551623")), decode("""{"n": 18446744073709551623}"""))
+    }
+
+    @Test
+    fun `an integer too wide for a decimal keeps its double approximation`() {
+        assertEquals(BigDecimal("9".repeat(64)), decode("9".repeat(64)))
+
+        assertEquals(1.0E64, decode("1" + "0".repeat(64)))
+    }
+
+    @Test
+    fun `a non-integral number stays a double`() {
+        assertEquals(1.5, decode("1.5"))
+        assertEquals(1.0E30, decode("1e30"))
+    }
+
+    @Test
     fun `encodes date as instant string`() {
         val instant = Instant.parse("2023-01-01T12:34:56.789Z")
         val date = Date.from(instant)
