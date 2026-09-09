@@ -158,7 +158,7 @@ sealed interface ReplicaMessage {
 
     data class TriesAdded(
         val storageVersion: Int, val storageEpoch: StorageEpoch, val tries: List<TrieDetails>,
-        val sourceMsgId: MessageId = 0,
+        val sourceMsgId: MessageId,
         override val termId: Long,
     ) : ProtobufMessage() {
         override fun toLogMessage() = replicaLogMessage {
