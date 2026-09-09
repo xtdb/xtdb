@@ -41,13 +41,15 @@ class JsonSerdeTest {
     }
 
     @Test
-    fun `encodes big-decimals as strings`() {
-        val json = JSON_SERDE.encodeToString<Any>(BigDecimal("1.0010"))
-        assertEquals("\"1.0010\"", json)
+    fun `encodes big-decimals as numbers, keeping every digit`() {
+        assertEquals("1.0010", JSON_SERDE.encodeToString<Any>(BigDecimal("1.0010")))
 
-        assertEquals("\"1.0010000000000000000\"", JSON_SERDE.encodeToString<Any>(BigDecimal("1.0010000000000000000")))
-        assertEquals("\"1001000000000000000000023421.21923989823429893842\"",
+        assertEquals("1.0010000000000000000", JSON_SERDE.encodeToString<Any>(BigDecimal("1.0010000000000000000")))
+        assertEquals("1001000000000000000000023421.21923989823429893842",
             JSON_SERDE.encodeToString<Any>(BigDecimal("1001000000000000000000023421.21923989823429893842")))
+
+        assertEquals("""{"n":18446744073709551623}""",
+            JSON_SERDE.encodeToString<Any>(mapOf("n" to BigDecimal("18446744073709551623"))))
     }
 
     @Test

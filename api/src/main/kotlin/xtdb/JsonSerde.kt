@@ -49,7 +49,9 @@ object AnySerde : KSerializer<Any> {
     private fun Any?.toJsonElement(): JsonElement = when (this) {
         null -> JsonNull
         is String -> JsonPrimitive(this)
-        is BigDecimal -> JsonPrimitive(toString())
+        // `JsonPrimitive` re-parses the digits on the way out, and a decimal that fits neither Long nor ULong
+        // lands on `encodeDouble` - an unquoted literal is emitted exactly as written
+        is BigDecimal -> JsonUnquotedLiteral(toString())
         is Number -> JsonPrimitive(this)
         is Boolean -> JsonPrimitive(this)
         is Map<*, *> -> JsonObject(map { (k, v) ->
