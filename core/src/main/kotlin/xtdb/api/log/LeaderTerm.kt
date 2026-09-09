@@ -29,13 +29,6 @@ object LeaderTerm {
     private const val ELECTION_LIMIT = 1L shl 48
     private const val ELECTION_MASK = ELECTION_LIMIT - 1
 
-    /**
-     * The unset term, and the bottom of the ordering: carried by a record written before terms
-     * existed. Never fenced, so a mixed-version window doesn't discard a not-yet-upgraded leader's
-     * writes — proto3's scalar default yields this for those records for free.
-     */
-    const val NONE = 0L
-
     @JvmStatic
     fun of(termEpoch: Int, election: Long): Long {
         require(termEpoch in 0 until EPOCH_LIMIT) { "Term epoch ($termEpoch) outside [0, $EPOCH_LIMIT)" }

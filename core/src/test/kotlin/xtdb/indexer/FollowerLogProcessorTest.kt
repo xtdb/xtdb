@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import xtdb.SimulationTestUtils.Companion.createTrieCatalog
+import xtdb.api.log.LeaderTerm
 import xtdb.api.log.Log
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.Watchers
@@ -30,6 +31,10 @@ import java.time.Instant
 
 private fun FollowerLogProcessor.processRecords(records: List<Log.Record<ReplicaMessage>>) =
     records.forEach { handleRecord(it) }
+
+// The fence is the log processor's, so a bare follower never compares terms — these records only need
+// one that is a term.
+private val TERM = LeaderTerm.of(0, 1)
 
 class FollowerLogProcessorTest {
 
@@ -89,10 +94,10 @@ class FollowerLogProcessorTest {
         val proc = makeProcessor(maxBufferedRecords = 2)
 
         val records = listOf(
-            record(0, ReplicaMessage.BlockBoundary(0, 0)),
-            record(1, ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap())),
-            record(2, ReplicaMessage.ResolvedTx(2, Instant.now(), true, null, emptyMap())),
-            record(3, ReplicaMessage.ResolvedTx(3, Instant.now(), true, null, emptyMap())),
+            record(0, ReplicaMessage.BlockBoundary(0, 0, termId = TERM)),
+            record(1, ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap(), termId = TERM)),
+            record(2, ReplicaMessage.ResolvedTx(2, Instant.now(), true, null, emptyMap(), termId = TERM)),
+            record(3, ReplicaMessage.ResolvedTx(3, Instant.now(), true, null, emptyMap(), termId = TERM)),
         )
 
         assertThrows<Fault> { proc.processRecords(records) }    }
@@ -102,9 +107,9 @@ class FollowerLogProcessorTest {
         watchers = Watchers(latestTxId = 42, latestSourceMsgId = 42)
         val proc = makeProcessor()
 
-        val tx40 = ReplicaMessage.ResolvedTx(40, Instant.now(), true, null, emptyMap(), srcMsgId = 40)
-        val tx42 = ReplicaMessage.ResolvedTx(42, Instant.now(), true, null, emptyMap(), srcMsgId = 42)
-        val tx43 = ReplicaMessage.ResolvedTx(43, Instant.now(), true, null, emptyMap(), srcMsgId = 43)
+        val tx40 = ReplicaMessage.ResolvedTx(40, Instant.now(), true, null, emptyMap(), srcMsgId = 40, termId = TERM)
+        val tx42 = ReplicaMessage.ResolvedTx(42, Instant.now(), true, null, emptyMap(), srcMsgId = 42, termId = TERM)
+        val tx43 = ReplicaMessage.ResolvedTx(43, Instant.now(), true, null, emptyMap(), srcMsgId = 43, termId = TERM)
 
         proc.processRecords(listOf(record(0, tx40), record(1, tx42), record(2, tx43)))
 
@@ -125,12 +130,12 @@ class FollowerLogProcessorTest {
         val proc = makeProcessor()
 
         val staleRecords = listOf(
-            record(0, ReplicaMessage.ResolvedTx(500, Instant.now(), true, null, emptyMap(), srcMsgId = 500)),
-            record(1, ReplicaMessage.TriesAdded(1, 1, emptyList(), sourceMsgId = 600)),
-            record(2, ReplicaMessage.BlockBoundary(1, 700)),
-            record(3, ReplicaMessage.BlockUploaded(1, 1, 1, 800, emptyList())),
+            record(0, ReplicaMessage.ResolvedTx(500, Instant.now(), true, null, emptyMap(), srcMsgId = 500, termId = TERM)),
+            record(1, ReplicaMessage.TriesAdded(1, 1, emptyList(), sourceMsgId = 600, termId = TERM)),
+            record(2, ReplicaMessage.BlockBoundary(1, 700, termId = TERM)),
+            record(3, ReplicaMessage.BlockUploaded(1, 1, 1, 800, emptyList(), termId = TERM)),
             // at the boundary — should also be skipped
-            record(4, ReplicaMessage.ResolvedTx(1000, Instant.now(), true, null, emptyMap(), srcMsgId = 1000)),
+            record(4, ReplicaMessage.ResolvedTx(1000, Instant.now(), true, null, emptyMap(), srcMsgId = 1000, termId = TERM)),
         )
 
         proc.processRecords(staleRecords)
@@ -153,9 +158,9 @@ class FollowerLogProcessorTest {
 
         val txId = 100L
         proc.processRecords(listOf(
-            record(0, ReplicaMessage.ResolvedTx(txId, Instant.now(), true, null, emptyMap())),
-            record(1, ReplicaMessage.BlockBoundary(0, txId)),
-            record(2, ReplicaMessage.BlockUploaded(Storage.VERSION, 1, 0, txId, emptyList())),
+            record(0, ReplicaMessage.ResolvedTx(txId, Instant.now(), true, null, emptyMap(), termId = TERM)),
+            record(1, ReplicaMessage.BlockBoundary(0, txId, termId = TERM)),
+            record(2, ReplicaMessage.BlockUploaded(Storage.VERSION, 1, 0, txId, emptyList(), termId = TERM)),
         ))
 
         assertEquals(0L, tableCatalog.currentBlockIndex,
@@ -167,11 +172,11 @@ class FollowerLogProcessorTest {
         watchers = Watchers(latestTxId = 1000, latestSourceMsgId = 1000)
         val proc = makeProcessor()
 
-        val tx1001 = ReplicaMessage.ResolvedTx(1001, Instant.now(), true, null, emptyMap(), srcMsgId = 1001)
+        val tx1001 = ReplicaMessage.ResolvedTx(1001, Instant.now(), true, null, emptyMap(), srcMsgId = 1001, termId = TERM)
 
         proc.processRecords(listOf(
             // stale
-            record(0, ReplicaMessage.TriesAdded(1, 1, emptyList(), sourceMsgId = 500)),
+            record(0, ReplicaMessage.TriesAdded(1, 1, emptyList(), sourceMsgId = 500, termId = TERM)),
             // current
             record(1, tx1001),
         ))
@@ -190,11 +195,11 @@ class FollowerLogProcessorTest {
         val blockProto = block { blockIndex = 0 }.toByteArray()
         every { bufferPool.getByteArray(TableCatalog.blockFilePath(0)) } returns blockProto
 
-        val extTx = ReplicaMessage.ResolvedTx(0, Instant.now(), true, null, emptyMap(), srcMsgId = null)
+        val extTx = ReplicaMessage.ResolvedTx(0, Instant.now(), true, null, emptyMap(), srcMsgId = null, termId = TERM)
         proc.processRecords(listOf(
             record(0, extTx),
-            record(1, ReplicaMessage.BlockBoundary(0, -1)),
-            record(2, ReplicaMessage.BlockUploaded(Storage.VERSION, 1, 0, -1, emptyList())),
+            record(1, ReplicaMessage.BlockBoundary(0, -1, termId = TERM)),
+            record(2, ReplicaMessage.BlockUploaded(Storage.VERSION, 1, 0, -1, emptyList(), termId = TERM)),
         ))
 
         verify { liveIndex.commitTx(match { it.txId == extTx.txId }, any()) }
@@ -207,9 +212,9 @@ class FollowerLogProcessorTest {
     fun `mixed ext-source and source-log ResolvedTxs advance the right watermarks`() = runTest {
         val proc = makeProcessor(hasExternalSource = true)
 
-        val ext0 = ReplicaMessage.ResolvedTx(0, Instant.now(), true, null, emptyMap(), srcMsgId = null)
-        val src1 = ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap(), srcMsgId = 1)
-        val ext2 = ReplicaMessage.ResolvedTx(2, Instant.now(), true, null, emptyMap(), srcMsgId = null)
+        val ext0 = ReplicaMessage.ResolvedTx(0, Instant.now(), true, null, emptyMap(), srcMsgId = null, termId = TERM)
+        val src1 = ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap(), srcMsgId = 1, termId = TERM)
+        val ext2 = ReplicaMessage.ResolvedTx(2, Instant.now(), true, null, emptyMap(), srcMsgId = null, termId = TERM)
 
         proc.processRecords(listOf(record(0, ext0), record(1, src1), record(2, ext2)))
 
@@ -229,10 +234,10 @@ class FollowerLogProcessorTest {
         every { bufferPool.getByteArray(TableCatalog.blockFilePath(0)) } returns blockProto
 
         proc.processRecords(listOf(
-            record(0, ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap())),
-            record(1, ReplicaMessage.ResolvedTx(2, Instant.now(), true, null, emptyMap())),
-            record(2, ReplicaMessage.BlockBoundary(0, 2)),
-            record(3, ReplicaMessage.BlockUploaded(Storage.VERSION, 1, 0, 2, emptyList())),
+            record(0, ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap(), termId = TERM)),
+            record(1, ReplicaMessage.ResolvedTx(2, Instant.now(), true, null, emptyMap(), termId = TERM)),
+            record(2, ReplicaMessage.BlockBoundary(0, 2, termId = TERM)),
+            record(3, ReplicaMessage.BlockUploaded(Storage.VERSION, 1, 0, 2, emptyList(), termId = TERM)),
         ))
 
         fun timerCount(msgType: String) = registry.find("xtdb.replica.process.timer")
@@ -263,11 +268,11 @@ class FollowerLogProcessorTest {
         every { bufferPool.getByteArray(TableCatalog.blockFilePath(0)) } returns blockProto
 
         proc.processRecords(listOf(
-            record(0, ReplicaMessage.BlockBoundary(0, 0)),
+            record(0, ReplicaMessage.BlockBoundary(0, 0, termId = TERM)),
             // these get buffered while we wait for BlockUploaded
-            record(1, ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap())),
-            record(2, ReplicaMessage.ResolvedTx(2, Instant.now(), true, null, emptyMap())),
-            record(3, ReplicaMessage.BlockUploaded(Storage.VERSION, 1, 0, 0, emptyList())),
+            record(1, ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap(), termId = TERM)),
+            record(2, ReplicaMessage.ResolvedTx(2, Instant.now(), true, null, emptyMap(), termId = TERM)),
+            record(3, ReplicaMessage.BlockUploaded(Storage.VERSION, 1, 0, 0, emptyList(), termId = TERM)),
         ))
 
         val bufferedRecords = registry.find("xtdb.replica.block.buffered.records").tag("db", "test").summary()

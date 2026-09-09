@@ -10,10 +10,11 @@ import xtdb.storage.BufferPool
 class ExternalSourceTokenTest {
 
     private val testToken: ByteArray = "kafka-offset:42".toByteArray()
+    private val term = LeaderTerm.of(0, 1)
 
     @Test
     fun `BlockBoundary round-trips external source token`() {
-        val boundary = ReplicaMessage.BlockBoundary(1, 100, testToken)
+        val boundary = ReplicaMessage.BlockBoundary(1, 100, testToken, termId = term)
         val encoded = boundary.encode()
         val decoded = ReplicaMessage.decode(encoded)
 
@@ -27,7 +28,7 @@ class ExternalSourceTokenTest {
 
     @Test
     fun `BlockBoundary round-trips without token`() {
-        val boundary = ReplicaMessage.BlockBoundary(1, 100)
+        val boundary = ReplicaMessage.BlockBoundary(1, 100, termId = term)
         val encoded = boundary.encode()
         val decoded = ReplicaMessage.decode(encoded) as ReplicaMessage.BlockBoundary
 
@@ -38,7 +39,7 @@ class ExternalSourceTokenTest {
 
     @Test
     fun `ReplicaMessage BlockUploaded round-trips external source token`() {
-        val uploaded = ReplicaMessage.BlockUploaded(1, 0, 1, 100, emptyList(), testToken)
+        val uploaded = ReplicaMessage.BlockUploaded(1, 0, 1, 100, emptyList(), testToken, termId = term)
         val encoded = uploaded.encode()
         val decoded = ReplicaMessage.decode(encoded)
 
@@ -58,7 +59,8 @@ class ExternalSourceTokenTest {
             boundaryReplicaMsgId = null,
             tables = emptySet(),
             secondaryDatabases = null,
-            externalSourceToken = testToken
+            externalSourceToken = testToken,
+            termId = term
         )
 
         val parsed = Block.parseFrom(block.toByteArray())
@@ -79,7 +81,8 @@ class ExternalSourceTokenTest {
             boundaryReplicaMsgId = null,
             tables = emptySet(),
             secondaryDatabases = null,
-            externalSourceToken = testToken
+            externalSourceToken = testToken,
+            termId = term
         )
         tableCatalog.refresh(block)
 
@@ -96,7 +99,8 @@ class ExternalSourceTokenTest {
             latestProcessedMsgId = 100,
             boundaryReplicaMsgId = null,
             tables = emptySet(),
-            secondaryDatabases = null
+            secondaryDatabases = null,
+            termId = term
         )
         tableCatalog.refresh(block)
 

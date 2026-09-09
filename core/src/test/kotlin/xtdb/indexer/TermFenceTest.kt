@@ -30,15 +30,13 @@ class TermFenceTest {
     }
 
     @Test
-    fun `the unset term is never fenced and never counts`() {
-        val fence = TermFence(dbName, LeaderTerm.of(0, 7))
+    fun `term zero is ordered like any other, so a real term fences it`() {
+        val fence = TermFence(dbName, 0)
 
-        assertTrue(fence.admit(LeaderTerm.NONE), "a record from before terms existed is still applied")
-        assertEquals(LeaderTerm.of(0, 7), fence.highestSeen)
+        assertTrue(fence.admit(0), "a record written before terms existed has nothing above it yet")
+        assertTrue(fence.admit(LeaderTerm.of(0, 1)))
 
-        val fresh = TermFence(dbName, LeaderTerm.NONE)
-        assertTrue(fresh.admit(LeaderTerm.NONE))
-        assertEquals(LeaderTerm.NONE, fresh.highestSeen)
+        assertFalse(fence.admit(0))
     }
 
     @Test

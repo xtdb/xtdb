@@ -38,7 +38,7 @@ class InMemoryLogTest {
 
             runBlocking(dispatcher) {
                 withTimeout(5.seconds) {
-                    log.appendMessage(ReplicaMessage.NoOp())
+                    log.appendMessage(ReplicaMessage.NoOp(termId = LeaderTerm.of(0, 1)))
                 }
             }
 

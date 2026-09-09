@@ -217,7 +217,8 @@ class KafkaClusterTest {
             storageEpoch = 0,
             blockIndex = 42,
             latestProcessedMsgId = 100,
-            tries = tries
+            tries = tries,
+            termId = LeaderTerm.of(0, 1)
         ).also {
             val encodedSize = it.encode().size
             assert(encodedSize > 1024 * 1024) { "Expected >1MB, got $encodedSize bytes" }

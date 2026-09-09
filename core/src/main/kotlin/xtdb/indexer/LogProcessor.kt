@@ -100,7 +100,7 @@ internal suspend fun runLeaderTerm(
                                 throw LeaderSupersededException("[$dbName] superseded: read term $termId > our term ${term.leaderTerm} at ${record.msgId}")
 
                             // Below our term should not appear past our replay target; discard defensively.
-                            if (termId != 0L && termId < term.leaderTerm) {
+                            if (termId < term.leaderTerm) {
                                 LOG.debug { "[$dbName] leader: discarding stale-term record ${record.msgId} (term $termId < ${term.leaderTerm})" }
                             } else {
                                 term.applyReplicaMessage(record)
@@ -158,7 +158,7 @@ class LogProcessor(
     private val replicaLog = partitionStorage.replicaLog
     private val hasExternalSource = externalSource != null
 
-    val termFence = TermFence(dbName, partitionState.tableCatalogOrNull?.boundaryTermId ?: LeaderTerm.NONE)
+    val termFence = TermFence(dbName, partitionState.tableCatalogOrNull?.boundaryTermId ?: 0)
 
     private sealed interface TailPos {
         /** The last record the tail finished with, applied or discarded. */

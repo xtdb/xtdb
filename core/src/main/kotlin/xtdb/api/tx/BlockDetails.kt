@@ -18,7 +18,7 @@ data class BlockDetails(
     val latestCompletedTx: TransactionKey?,
     val latestProcessedMsgId: MessageId?,
     val boundaryReplicaMsgId: MessageId?,
-    // the leader term that produced this block's boundary; NONE for blocks written before
+    // the leader term that produced this block's boundary; 0 for blocks written before
     // term-fencing (see #5817)
     val termId: Long,
     val externalSourceToken: ExternalSourceToken?,

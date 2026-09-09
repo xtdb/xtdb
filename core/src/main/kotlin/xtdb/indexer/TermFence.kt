@@ -28,13 +28,8 @@ class TermFence(private val dbName: DatabaseName, seed: Long) {
      * Deciding and folding in are one operation because the verdict is against the highest term seen
      * *strictly before* this record: a caller that folded first would have nothing left to compare
      * against.
-     *
-     * [LeaderTerm.NONE] is never fenced, so a not-yet-upgraded leader's writes are still applied during
-     * a mixed-version window; only stamped terms fence each other.
      */
     fun admit(term: Long): Boolean {
-        if (term == LeaderTerm.NONE) return true
-
         val seenBefore = highestSeen
         if (term < seenBefore) return false
 

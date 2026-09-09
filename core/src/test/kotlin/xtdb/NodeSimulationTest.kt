@@ -184,7 +184,8 @@ class NodeSimulationTest : SimulationTestBase() {
                 latestProcessedMsgId = blockIndex,
                 boundaryReplicaMsgId = null,
                 tables = tableCatalog.resolveTables(listOf(table)),
-                secondaryDatabases = null
+                secondaryDatabases = null,
+                termId = 0
             )
             sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
             tableCatalog.refresh(block)
@@ -242,7 +243,8 @@ class NodeSimulationTest : SimulationTestBase() {
                 latestProcessedMsgId = blockIndex,
                 boundaryReplicaMsgId = null,
                 tables = tableCatalog.resolveTables(listOf(table)),
-                secondaryDatabases = null
+                secondaryDatabases = null,
+                termId = 0
             )
             sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
             tableCatalog.refresh(block)
@@ -319,7 +321,8 @@ class NodeSimulationTest : SimulationTestBase() {
                 latestProcessedMsgId = blockIndex,
                 boundaryReplicaMsgId = null,
                 tables = tableCatalog.resolveTables(listOf(table)),
-                secondaryDatabases = null
+                secondaryDatabases = null,
+                termId = 0
             )
             sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
             tableCatalog.refresh(block)
@@ -390,7 +393,8 @@ class NodeSimulationTest : SimulationTestBase() {
                     latestProcessedMsgId = blockIndex,
                     boundaryReplicaMsgId = null,
                     tables = db.tableCatalog.resolveTables(listOf(table)),
-                    secondaryDatabases = null
+                    secondaryDatabases = null,
+                    termId = 0
                 )
                 sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
                 db.tableCatalog.refresh(block)
@@ -462,7 +466,8 @@ class NodeSimulationTest : SimulationTestBase() {
                     latestProcessedMsgId = blockIndex,
                     boundaryReplicaMsgId = null,
                     tables = db.tableCatalog.resolveTables(listOf(table)),
-                    secondaryDatabases = null
+                    secondaryDatabases = null,
+                    termId = 0
                 )
                 sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
                 db.tableCatalog.refresh(block)
@@ -557,7 +562,8 @@ class NodeSimulationTest : SimulationTestBase() {
                 latestProcessedMsgId = blockIndex,
                 boundaryReplicaMsgId = null,
                 tables = tableCatalog.resolveTables(listOf(table)),
-                secondaryDatabases = null
+                secondaryDatabases = null,
+                termId = 0
             )
             sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
             tableCatalog.refresh(block)
@@ -608,7 +614,8 @@ class NodeSimulationTest : SimulationTestBase() {
                     latestProcessedMsgId = blockIndex,
                     boundaryReplicaMsgId = null,
                     tables = db.tableCatalog.resolveTables(listOf(table)),
-                    secondaryDatabases = null
+                    secondaryDatabases = null,
+                    termId = 0
                 )
                 sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
                 db.tableCatalog.refresh(block)
@@ -698,7 +705,8 @@ class NodeSimulationTest : SimulationTestBase() {
                     latestProcessedMsgId = blockIndex,
                     boundaryReplicaMsgId = null,
                     tables = db.tableCatalog.resolveTables(listOf(table)),
-                    secondaryDatabases = null
+                    secondaryDatabases = null,
+                    termId = 0
                 )
                 sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
                 db.tableCatalog.refresh(block)

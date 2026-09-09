@@ -127,7 +127,7 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
         proc.applyReplicaMessage(
             Log.Record(
                 0, 0, Instant.now(),
-                ReplicaMessage.ResolvedTx(0, Instant.now(), true, null, emptyMap(), srcMsgId = null)
+                ReplicaMessage.ResolvedTx(0, Instant.now(), true, null, emptyMap(), srcMsgId = null, termId = 1)
             )
         )
 

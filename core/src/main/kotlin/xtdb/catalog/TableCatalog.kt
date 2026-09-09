@@ -11,7 +11,6 @@ import kotlinx.coroutines.flow.updateAndGet
 import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.api.TableRef
 import xtdb.api.TransactionKey
-import xtdb.api.log.LeaderTerm
 import xtdb.api.storage.ObjectStore
 import xtdb.api.tx.BlockDetails
 import xtdb.api.tx.ExternalSourceToken
@@ -190,7 +189,7 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
 
     // the leader term that produced the latest block's boundary; a follower seeds its read-side term
     // fence from here. Default 0 (plain scalar) for blocks written before term-fencing. See #5817.
-    val boundaryTermId: Long get() = snap().block?.termId ?: LeaderTerm.NONE
+    val boundaryTermId: Long get() = snap().block?.termId ?: 0
 
     val externalSourceToken: ExternalSourceToken? get() = snap().block?.externalSourceToken
 
@@ -300,7 +299,7 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
         tables: Collection<TableEntry>,
         secondaryDatabases: Map<String, DatabaseConfig>?,
         externalSourceToken: ExternalSourceToken? = null,
-        termId: Long = LeaderTerm.NONE,
+        termId: Long,
     ): Block {
         val currentBlockIndex = this.currentBlockIndex
         check(currentBlockIndex == null || currentBlockIndex < blockIndex) {

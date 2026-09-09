@@ -29,7 +29,6 @@ class LeaderTermTest {
         // the whole point: a reset election counter still outranks the terms it restarted below
         assertTrue(LeaderTerm.of(1, 1) > LeaderTerm.of(0, (1L shl 48) - 1))
         assertTrue(LeaderTerm.of(0, 9) > LeaderTerm.of(0, 8))
-        assertTrue(LeaderTerm.of(0, 1) > LeaderTerm.NONE)
     }
 
     @Test

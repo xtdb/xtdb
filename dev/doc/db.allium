@@ -658,9 +658,6 @@ config {
 -- the newer term's writes are ever confirmed, and the older leader's are discarded, which
 -- is the property that matters — not single-writer-at-the-log.
 --
--- Term 0 (unset) is never fenced, so a mixed-version window doesn't discard a
--- not-yet-upgraded leader's writes.
---
 -- The SOURCE log is not fenced. Stale messages from a previous leader (FlushBlock) or the
 -- compactor (TriesAdded) may appear after a transition. This is safe because:
 --   - FlushBlock is a CAS on expected_block_idx; stale flushes fail the check.
@@ -1080,7 +1077,7 @@ rule LeaderAppliesRecord {
             -- or a routine leadership handover would surface to queries as a failed
             -- database (see ProcessingErrorHaltsNode).
             LeaderSuperseded(resolver: tx_resolver)
-        else if record.term_id != 0 and record.term_id < log_processor.leader_term:
+        else if record.term_id < log_processor.leader_term:
             -- Shouldn't appear past our replay target; discard defensively.
             RecordDiscarded(resolver: tx_resolver)
         else:
@@ -1284,12 +1281,11 @@ rule ExternalSourceIndexesTx {
 
 rule LogProcessorFencesRecord {
     -- The read-side fence, applied to every record read whatever role is live.
-    -- Term 0 is never fenced, so a not-yet-upgraded leader's writes still apply during a mixed-version window.
     -- A discarded record still advances the consume position, so a transition's catch-up await can't hang on it.
     when: ReplicaMessageReceived(record)
 
     ensures:
-        if record.term_id != 0 and record.term_id < log_processor.max_leader_term:
+        if record.term_id < log_processor.max_leader_term:
             RecordDiscarded(record)
         else:
             log_processor.max_leader_term = max(log_processor.max_leader_term, record.term_id)

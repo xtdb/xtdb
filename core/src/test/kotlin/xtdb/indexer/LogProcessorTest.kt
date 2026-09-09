@@ -172,7 +172,11 @@ class LogProcessorTest {
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         replicaLog.appendMessage(ReplicaMessage.NoOp(termId = LeaderTerm.of(0, 9)))
-        replicaLog.appendMessage(ReplicaMessage.ResolvedTx(1, java.time.Instant.now(), true, null, emptyMap()))
+        replicaLog.appendMessage(
+            ReplicaMessage.ResolvedTx(
+                1, java.time.Instant.now(), true, null, emptyMap(), termId = LeaderTerm.of(0, 9)
+            )
+        )
 
         val scope = CoroutineScope(SupervisorJob())
         val logProc = logProcessor(partitionStorage, partitionState, watchers, blockUploader, scope)
@@ -203,7 +207,11 @@ class LogProcessorTest {
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         // Pre-populate the replica log with a transaction
-        replicaLog.appendMessage(ReplicaMessage.ResolvedTx(1, java.time.Instant.now(), true, null, emptyMap()))
+        replicaLog.appendMessage(
+            ReplicaMessage.ResolvedTx(
+                1, java.time.Instant.now(), true, null, emptyMap(), termId = LeaderTerm.of(0, 1)
+            )
+        )
 
         val scope = CoroutineScope(SupervisorJob())
         val logProc = logProcessor(partitionStorage, partitionState, watchers, blockUploader, scope)
@@ -236,7 +244,11 @@ class LogProcessorTest {
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         // Pre-populate the replica log
-        replicaLog.appendMessage(ReplicaMessage.ResolvedTx(1, java.time.Instant.now(), true, null, emptyMap()))
+        replicaLog.appendMessage(
+            ReplicaMessage.ResolvedTx(
+                1, java.time.Instant.now(), true, null, emptyMap(), termId = LeaderTerm.of(0, 1)
+            )
+        )
 
         val scope = CoroutineScope(SupervisorJob())
         val logProc = logProcessor(partitionStorage, partitionState, watchers, blockUploader, scope)

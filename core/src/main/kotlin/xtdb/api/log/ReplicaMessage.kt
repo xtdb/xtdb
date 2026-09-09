@@ -28,7 +28,8 @@ import java.time.Instant
 
 sealed interface ReplicaMessage {
 
-    // The leader term that produced this message (0 if unset). Set by the creator; used for read-side fencing. See #5817.
+    // The leader term that produced this message; used for read-side fencing. 0 only on a record written
+    // before terms existed, where proto3's scalar default supplies it. See #5817.
     val termId: Long
 
     fun encode(): ByteArray
@@ -126,7 +127,7 @@ sealed interface ReplicaMessage {
         // their `latestSourceMsgId` in step between block boundaries). Null only on legacy records
         // written before this field existed (see #5586).
         val srcMsgId: MessageId? = null,
-        override val termId: Long = 0,
+        override val termId: Long,
     ) : ProtobufMessage() {
         override fun toLogMessage() = replicaLogMessage {
             resolvedTx = resolvedTx {
@@ -158,7 +159,7 @@ sealed interface ReplicaMessage {
     data class TriesAdded(
         val storageVersion: Int, val storageEpoch: StorageEpoch, val tries: List<TrieDetails>,
         val sourceMsgId: MessageId = 0,
-        override val termId: Long = 0,
+        override val termId: Long,
     ) : ProtobufMessage() {
         override fun toLogMessage() = replicaLogMessage {
             triesAdded = triesAdded {
@@ -173,7 +174,7 @@ sealed interface ReplicaMessage {
     data class BlockBoundary(
         val blockIndex: BlockIndex, val latestProcessedMsgId: MessageId,
         val externalSourceToken: ExternalSourceToken? = null,
-        override val termId: Long = 0,
+        override val termId: Long,
     ) : ProtobufMessage() {
         override fun toLogMessage() = replicaLogMessage {
             blockBoundary = blockBoundary {
@@ -189,7 +190,7 @@ sealed interface ReplicaMessage {
         val blockIndex: BlockIndex, val latestProcessedMsgId: MessageId,
         val tries: List<TrieDetails>,
         val externalSourceToken: ExternalSourceToken? = null,
-        override val termId: Long = 0,
+        override val termId: Long,
     ) : ProtobufMessage() {
         override fun toLogMessage() = replicaLogMessage {
             blockUploaded = blockUploaded {
@@ -206,7 +207,7 @@ sealed interface ReplicaMessage {
     // `srcMsgId` carries the leader's source-log watermark when no other record propagates it
     // (a FlushBlock that finishes no block); followers advance `latestSourceMsgId` on it. Null
     // when used purely as a transition replay-target marker.
-    data class NoOp(val srcMsgId: MessageId? = null, override val termId: Long = 0) : ProtobufMessage() {
+    data class NoOp(val srcMsgId: MessageId? = null, override val termId: Long) : ProtobufMessage() {
         override fun toLogMessage() = replicaLogMessage {
             noOp = noOp { this@NoOp.srcMsgId?.let { srcMsgId = it } }
         }
@@ -215,7 +216,7 @@ sealed interface ReplicaMessage {
     data class TriesDeleted(
         val tableName: String,
         val trieKeys: Set<TrieKey>,
-        override val termId: Long = 0,
+        override val termId: Long,
     ) : ProtobufMessage() {
         override fun toLogMessage() = replicaLogMessage {
             triesDeleted = triesDeleted {
