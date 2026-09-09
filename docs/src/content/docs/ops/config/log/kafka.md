@@ -5,6 +5,25 @@ title: Kafka
 <details>
 <summary>Changelog (last updated v2.2)</summary>
 
+v2.2: `groupId` and `termEpoch` removed
+
+: A database elects its leader in its own replica topic, so nothing outside that topic takes part and there is no consumer group to name or to version.
+
+  Previously `groupId` named the consumer group whose partition assignment chose the leader, and `termEpoch` let an operator declare that the group had been recreated — the group's generation was the fencing term, and it restarts at 1 whenever the coordinator drops the group.
+  A term is now claimed from the replica log itself, so it is monotone by construction and there is nothing for an epoch to override.
+
+  Upgrading: remove `groupId` from any `!Kafka` cluster config and `termEpoch` from any `!Kafka` log config — an unrecognised key fails config parsing rather than being ignored.
+  Deployments sharing a Kafka cluster are separated by topic name; see [Sharing a Kafka cluster across deployments](#sharing-a-kafka-cluster-across-deployments).
+
+v2.2: `pollDuration` removed from the cluster config
+
+: Each log subscription sets its own polling cadence, so there is no cluster-wide setting to override.
+
+  Previously `pollDuration` bounded how long a consumer blocked waiting for records, for every subscription on the cluster alike.
+  How long a consumer is prepared to wait before concluding it has reached the log's tip is a property of what that consumer is doing with the log, not of the cluster it reads from, so it moved to the subscription.
+
+  Upgrading: remove `pollDuration` from any `!Kafka` cluster config — an unrecognised key fails config parsing rather than being ignored.
+
 v2.2: single-writer support — two topics per database
 
 : [Single-writer indexing](/about/dbs-in-xtdb#database-architecture) requires two Kafka topics per database: a **source log** for client writes and a **replica log** for the indexing leader's resolved output.
@@ -55,7 +74,8 @@ v2.1: multi-database support
 </details>
 
 [Apache Kafka](https://kafka.apache.org/) can be used as XTDB's message log.
-Each database uses two Kafka topics — a **source log** for client writes and a **replica log** for the indexing leader's resolved output — plus Kafka's consumer-group protocol to elect the leader for that database automatically.
+Each database uses two Kafka topics — a **source log** for client writes and a **replica log** for the indexing leader's resolved output.
+That database's leader is elected in its own replica topic, so nothing outside those two topics takes part.
 See ['Database architecture'](/about/dbs-in-xtdb#database-architecture) for the concepts; this page covers how to set Kafka up to back them.
 
 ## Setup
@@ -83,7 +103,7 @@ The one setting it verifies on a topic that already exists is the partition coun
 
 | Setting | Scope | Set by | Value |
 | --- | --- | --- | --- |
-| partition count | topic | XTDB on create, **verified** on an existing topic | Exactly `1`. A single partition is what makes the log strictly ordered and lets leader election assign it to one consumer at a time. |
+| partition count | topic | XTDB on create, **verified** on an existing topic | Exactly `1`. A single partition is what makes the log strictly ordered. |
 | `message.timestamp.type` | topic | XTDB on create, **not** verified afterwards | `LogAppendTime`, so a record's timestamp is when the broker appended it rather than when a producer sent it. Set it yourself on a pre-created topic. |
 | replication factor | topic | XTDB creates with `1` | Pre-create the topic with `3` or more for production — auto-create is unreplicated. |
 | `min.insync.replicas` | topic | You | `> 1`, to make writes quorum-acknowledged. XTDB warns on startup if a topic with more than one replica leaves this at `1`, since `acks=all` then means only the partition leader. |
@@ -92,7 +112,8 @@ The one setting it verifies on a topic that already exists is the partition coun
 | `max.message.bytes` | topic | You | The 1MB default is fit for purpose unless your transactions are larger. |
 | `cleanup.policy` | topic | You | Leave at the default `delete` — XTDB never reads compacted messages. |
 
-XTDB also sets its own producer and consumer properties — idempotent, `acks=all` writes, `read_committed` reads, `auto.offset.reset=none`, cooperative sticky assignment, and offset commits that keep the leader-election group alive.
+XTDB also sets its own producer and consumer properties — idempotent, `acks=all` writes, `read_committed` reads, and `auto.offset.reset=none`.
+Consumers assign their partitions directly and commit no offsets: a reader resumes from what it has applied, not from a position held by the broker.
 `propertiesMap` and `propertiesFile` can override these, but they are chosen deliberately and overriding them can break leader election.
 
 `acks` is the exception: XTDB applies `acks=all` last, so an entry in `propertiesMap` or `propertiesFile` is logged as disregarded rather than honoured.
@@ -116,6 +137,7 @@ remotes:
     # (Can be set as an !Env value)
     bootstrapServers: "localhost:9092"
 
+    # -- optional
     # Path to a Java properties file containing Kafka connection properties,
     # supplied directly to the Kafka client.
     # (Can be set as an !Env value)

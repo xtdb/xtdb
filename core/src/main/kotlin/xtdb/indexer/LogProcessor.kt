@@ -206,7 +206,7 @@ class LogProcessor(
             return
         }
 
-        LOG.debug("[$dbName] claiming leadership at term ${LeaderTerm.format(termId)}")
+        LOG.debug("[$dbName] claiming leadership at term $termId")
     }
 
     private suspend fun handleRecord(record: Log.Record<ReplicaMessage>) {
@@ -314,7 +314,7 @@ class LogProcessor(
 
     /** Runs inline on the reader, so a rival's claim cannot land between reading our own back and leading. */
     private suspend fun cutOverToLeader(following: Following, termId: Long) {
-        LOG.info("[$dbName] claim at term ${LeaderTerm.format(termId)} conferred leadership")
+        LOG.info("[$dbName] claim at term $termId conferred leadership")
 
         var pendingBlock: PendingBlock? = null
 
