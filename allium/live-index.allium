@@ -19,7 +19,8 @@
 --        The transaction is not yet visible to external queries.
 --     2. APPEND. The staged transaction is written to the replica log, STAMPED with the leader's term.
 --        Control messages — block boundaries, term claims, tries added and deleted — are appended the same way, and stamped the same way.
---     3. READ BACK. The leader reads its own replica log from the position its promotion claimed.
+--     3. READ BACK. The node's own read of the replica log delivers each record to whichever role is live, so on a leader it is that leader reading its own writes back.
+--        The read belongs to the node rather than to the term, so a term ending surrenders no position.
 --     4. APPLY. Each record has met the term fence on the way in, so what reaches the term is its own to apply (see ApplyRecord).
 --        Applying the leader's own transaction imports it from the QUEUE HEAD, which still holds its rows, so nothing is re-read from the replica record — that record's job was to confirm durability and term.
 --        THIS is where a committed transaction becomes queryable, and where an external caller's durability handle completes.
@@ -483,8 +484,9 @@ rule AbortTransaction {
 
 rule ApplyRecord {
     -- Apply one record read back off the leader's OWN replica log.
-    -- The record is this term's own: terms are unique per leader, and the fence has settled the record's term before the term is offered it, discarding anything the log has moved past and ending this term on anything above it.
+    -- The record is this term's own: the fence has settled the record's term before the term is offered it, discarding anything the log has moved past and ending this term on anything above it.
     -- So the apply holds no term comparison of its own.
+    -- The exception is a rival's losing claim, which carries this same term because two nodes may claim one term and only the first to land leads — a bare no-op, which applies nothing.
     --
     -- A record ABOVE this term has superseded it, and the term ends there rather than here — EXPECTED, so it does not poison the watchers, and every transaction still staged on it fails its handle (see ResolverEnds).
     --

@@ -445,8 +445,17 @@
             (xt-log/await-node node3 second-half-await-token (Duration/ofSeconds 15))
             (t/is (= second-half-tx-id (-> (tu/latest-completed-txs node3) (get-in ["xtdb" 0 :tx-id]))))
 
-            (Thread/sleep 250); wait for the block to finish writing to disk
-            ;; we don't have an accessible hook for this, beyond awaiting the tx
+            ;; The last block's boundary was cut but not produced before node2 closed, so node3 produces it —
+            ;; and a node reopened on a persisted directory has to win an election first, which on a local log
+            ;; takes up to a second. Awaiting the tx does not cover that: a follower applies it too.
+            (let [blocks #(->> (.listAllObjects bp)
+                               (map (comp str :key os/<-StoredObject))
+                               (filter (fn [k] (re-matches #"blocks/b\p{XDigit}+\.binpb" k)))
+                               count)
+                  deadline (+ (System/currentTimeMillis) 10000)]
+              (while (and (< (blocks) 11) (< (System/currentTimeMillis) deadline))
+                (Thread/sleep 50)))
+
             (let [objs (mapv (comp str :key os/<-StoredObject) (.listAllObjects bp))]
               (t/is (= 11 (count (filter #(re-matches #"blocks/b\p{XDigit}+\.binpb" %) objs))))
               (t/is (= 4 (count (filter #(re-matches #"tables/public\$device_info/(.+?)/l00-.+.arrow" %) objs))))
@@ -485,7 +494,9 @@
 
     (with-open [node2 (tu/->local-node (assoc node-opts :buffers-dir "objects-1"))]
       (let [tc2 (.getTableCatalog (db/primary-db node2))]
-        (xt-log/sync-node node2 (Duration/ofMillis 200))
+        ;; the reopened node has a persisted block, so it can't claim on sight — it waits out an
+        ;; election before it can resolve the source log's tail, which on a local log is under a second
+        (xt-log/sync-node node2 (Duration/ofSeconds 2))
 
         ;; this one comes out with union with type-ids null vs union with type-ids [].
         ;; very annoying.
