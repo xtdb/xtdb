@@ -78,8 +78,8 @@ class BlockUploader(
      * index. Returns the `BlockUploaded`'s replica-log position.
      *
      * [uploadingTermId] is not always [boundary]'s: a transition finishes the previous leader's pending
-     * block, and the `BlockUploaded` must carry the new term, or followers that have already advanced
-     * would fence it and never complete the block.
+     * block, and the `BlockUploaded` carries the term of whoever appends it, because a leader confirms a
+     * write only on reading it back at its own term.
      */
     suspend fun uploadBlock(
         boundaryReplicaMsgId: MessageId, uploadingTermId: Long,

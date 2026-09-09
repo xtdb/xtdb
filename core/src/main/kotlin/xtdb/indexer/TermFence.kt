@@ -13,8 +13,10 @@ import xtdb.api.log.LeaderTerm
  * seeded afresh from the persisted block boundary would forget every term written since the last
  * block flush — so the same term could be admitted twice, once either side of a demote.
  *
- * Threading: [admit] is called only from the partition's single replica-log reader, while [highestSeen]
- * is read from the transition coroutine, hence the volatile.
+ * Threading: [admit] is called by whichever role the partition's single replica-log reader is dispatching
+ * to, one record at a time, and by the transition while both roles are down — so there is one writer at
+ * any moment, though not one for the fence's whole life. [highestSeen] is read from the transition
+ * coroutine, hence the volatile.
  */
 class TermFence(private val dbName: DatabaseName, seed: Long) {
 

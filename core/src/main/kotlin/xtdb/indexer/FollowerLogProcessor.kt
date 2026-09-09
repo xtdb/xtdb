@@ -37,6 +37,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
     private val watchers: Watchers,
     private val dbCatalog: Database.Catalog?,
     pendingBlock: PendingBlock?,
+    private val termFence: TermFence,
     private val hasExternalSource: Boolean,
     private val meterRegistry: MeterRegistry? = null,
     private val maxBufferedRecords: Int = 1024,
@@ -183,44 +184,63 @@ class FollowerLogProcessor @JvmOverloads constructor(
 
     }
 
+    private fun ReplicaMessage.BlockUploaded.closes(pending: PendingBlock) =
+        blockIndex == pending.blockIdx && storageVersion == Storage.VERSION && storageEpoch == bufferPool.epoch
+
     fun handleRecord(record: Log.Record<ReplicaMessage>) {
         val msg = record.message
         LOG.trace { "[$dbName] follower: message ${record.msgId} (${msg::class.simpleName})" }
 
-        pendingBlock?.let { pendingBlock ->
-            val pendingBlockIdx = pendingBlock.blockIdx
-            if (msg is ReplicaMessage.BlockUploaded
-                && msg.blockIndex == pendingBlockIdx
-                && msg.storageVersion == Storage.VERSION
-                && msg.storageEpoch == bufferPool.epoch
-            ) {
-                LOG.debug("[$dbName] block uploaded b${msg.blockIndex.asLexHex}: source=${msg.latestProcessedMsgId}, replica=${record.msgId} (${pendingBlock.bufferedRecords.size} buffered)")
-                val bufferedRecords = blockUploadedTimer.timed {
-                    val block = parseFrom(bufferPool.getByteArray(blockFilePath(pendingBlockIdx)))
-
-                    addTries(msg.tries, record.logTimestamp)
-                    tableCatalog.refresh(block, liveIndex.blockMetadata())
-                    liveIndex.nextBlock()
-                    compactor.signalBlock()
-
-                    val bufferedRecords = pendingBlock.bufferedRecords
-                    bufferedRecordsSummary?.record(bufferedRecords.size.toDouble())
-                    blockBufferTimer?.let { blockBufferStartSample?.stop(it) }
-                    blockBufferStartSample = null
-                    this.pendingBlock = null
-                    bufferedRecords
-                }
-
-                bufferedRecords.forEach { held -> handleRecord(held) }
-            } else {
-                LOG.trace { "[$dbName] follower: buffering message ${record.msgId} (${msg::class.simpleName}) during pending block b${pendingBlockIdx} (${pendingBlock.bufferedRecords.size + 1} buffered)" }
-                pendingBlock += record
+        pendingBlock?.let { pending ->
+            // Held, not fenced: a record behind an open block has not been acted on yet, so the fence
+            // hears about it when it drains. Folding it here would move the high-water past the term
+            // that cut this block, and the upload closing it — written by that same term — would then
+            // be fenced away, leaving the block open for good.
+            if (msg is ReplicaMessage.BlockUploaded && msg.closes(pending)) closeBlock(pending, record, msg)
+            else {
+                LOG.trace { "[$dbName] follower: buffering message ${record.msgId} (${msg::class.simpleName}) during pending block b${pending.blockIdx} (${pending.bufferedRecords.size + 1} buffered)" }
+                pending += record
             }
 
             return
         }
 
+        if (!termFence.admit(msg.termId)) {
+            LOG.debug {
+                "[$dbName] follower: discarding fenced record ${record.msgId} " +
+                        "(term ${LeaderTerm.format(msg.termId)} < ${LeaderTerm.format(termFence.highestSeen)})"
+            }
+            return
+        }
+
         if (!msg.stale) processRecord(record)
+    }
+
+    private fun closeBlock(
+        pending: PendingBlock, record: Log.Record<ReplicaMessage>, msg: ReplicaMessage.BlockUploaded,
+    ) {
+        LOG.debug("[$dbName] block uploaded b${msg.blockIndex.asLexHex}: source=${msg.latestProcessedMsgId}, replica=${record.msgId} (${pending.bufferedRecords.size} buffered)")
+
+        val bufferedRecords = blockUploadedTimer.timed {
+            val block = parseFrom(bufferPool.getByteArray(blockFilePath(pending.blockIdx)))
+
+            addTries(msg.tries, record.logTimestamp)
+            tableCatalog.refresh(block, liveIndex.blockMetadata())
+            liveIndex.nextBlock()
+            compactor.signalBlock()
+
+            val bufferedRecords = pending.bufferedRecords
+            bufferedRecordsSummary?.record(bufferedRecords.size.toDouble())
+            blockBufferTimer?.let { blockBufferStartSample?.stop(it) }
+            blockBufferStartSample = null
+            pendingBlock = null
+            bufferedRecords
+        }
+
+        // The closer goes round again behind what it was holding, so each term folds at its own position
+        // in the log — the held records first, then this one, where it sat. Second time round it applies
+        // nothing: it is either fenced by what the drain has just folded, or stale by block index.
+        (bufferedRecords + record).forEach { held -> handleRecord(held) }
     }
 
     override fun close() {

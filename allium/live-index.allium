@@ -57,9 +57,9 @@
 --          - FENCE BY TERM. A record whose term is GREATER than the leader's own term
 --            means a newer leader has superseded us → the leader RESIGNS (its
 --            unconfirmed writes are never acknowledged; the transport re-follows on
---            the next rebalance). A record with a LOWER term is discarded (still
---            advancing the consume cursor). An EQUAL-term record is our own — terms
---            are unique per leader.
+--            the next rebalance).
+--            Anything else the leader folds into the partition's high-water term as it acts on it, discarding what the fence refuses (still advancing the consume cursor).
+--            An EQUAL-term record is our own — terms are unique per leader.
 --          - For our own ResolvedTx: import from the QUEUE HEAD (we still hold its
 --            relations, so no re-materialisation), advancing the durable basis
 --            (LiveIndex.latest_completed_tx) and the consume cursor, notifying
@@ -700,11 +700,17 @@ rule ApplyRecord {
     --     failed by the fail-pending leg, see FailPendingHandles), and the transport
     --     re-follows on the next rebalance. This is EXPECTED — not a query-facing fault,
     --     so it does NOT poison the watchers.
-    --   - term LOWER than ours: shouldn't appear past our replay target; discarded
-    --     defensively, still advancing the consume cursor (RecordDiscarded).
+    --   - term below the partition's HIGH-WATER: the fence refuses it, and it is discarded, still
+    --     advancing the consume cursor (RecordDiscarded). Folding and testing happen here, where
+    --     the leader acts on the record; our own claim folded before the term opened, so the
+    --     high-water is our own term throughout and what the fence refuses sits below it.
     --   - term EQUAL to ours (the common case; terms are unique per leader, so an
     --     equal-term record IS our own): dispatched to ApplyResolvedTx (for a tx) or
     --     the block-upload path (for a BlockBoundary), etc.
+    --
+    -- The high-water itself is db.allium's to hold and to fold (LogProcessor.max_leader_term,
+    -- LeaderAppliesRecord), because it spans the partition rather than the leader's own term.
+    -- This rule names our_term, which the high-water equals for the length of a confirmed term.
     when: ApplyRecord(resolver, record_term, our_term)
 
     ensures:

@@ -141,7 +141,7 @@ internal abstract class LeaderTermTest {
                 }
 
                 try {
-                    runLeaderTerm("test", watchers, proc, replicaMsgs, replicaAppender)
+                    runLeaderTerm("test", watchers, proc, replicaMsgs, replicaAppender, TermFence("test", 0))
                 } finally {
                     reader.cancel()
                 }

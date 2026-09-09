@@ -80,6 +80,7 @@ internal suspend fun runLeaderTerm(
     term: LeaderLogProcessor,
     replicaMsgs: ReceiveChannel<ReplicaApply>,
     appender: ReplicaLogAppender,
+    termFence: TermFence,
 ) {
     try {
         coroutineScope {
@@ -99,9 +100,12 @@ internal suspend fun runLeaderTerm(
                             if (termId > term.leaderTerm)
                                 throw LeaderSupersededException("[$dbName] superseded: read term $termId > our term ${term.leaderTerm} at ${record.msgId}")
 
-                            // Below our term should not appear past our replay target; discard defensively.
-                            if (termId < term.leaderTerm) {
-                                LOG.debug { "[$dbName] leader: discarding stale-term record ${record.msgId} (term $termId < ${term.leaderTerm})" }
+                            // Our own claim folded before this term opened, so the fence's high-water is
+                            // our term and anything it refuses is below ours — which shouldn't appear
+                            // past our replay target anyway. The fold has to happen here whatever the
+                            // verdict, or the high-water would stand still for the length of the term.
+                            if (!termFence.admit(termId)) {
+                                LOG.debug { "[$dbName] leader: discarding fenced record ${record.msgId} (term $termId < ${term.leaderTerm})" }
                             } else {
                                 term.applyReplicaMessage(record)
                             }
@@ -231,39 +235,30 @@ class LogProcessor(
         try {
             replicaLog.tailAll(tailPos.value.msgId) { recs ->
                 recs.forEach { record ->
-                    // Folded outside the retry below, so a record offered again is not folded twice.
-                    if (termFence.admit(record.message.termId)) {
-                        // A role ending cancels the handle mid-record, so the record is offered again to
-                        // whatever replaces that role.
-                        while (true) {
-                            this@coroutineScope.ensureActive()
-                            val role = state
+                    // A role ending cancels the handle mid-record, so the record is offered again to
+                    // whatever replaces that role.
+                    while (true) {
+                        this@coroutineScope.ensureActive()
+                        val role = state
 
-                            try {
-                                role.handleReplicaMessage(record)
-                                break
-                            } catch (_: CancellationException) {
-                                stateFlow.first { it !== role }
-                            } catch (e: Throwable) {
-                                LOG.error(
-                                    e,
-                                    "[$dbName] failed to process replica record ${record.msgId} (${record.message::class.simpleName})"
-                                )
-                                throw e
-                            }
-                        }
-                    } else {
-                        // Discard suppresses application, not consumption: the position below advances
-                        // anyway, so a transition catch-up can't hang on a fenced no-op.
-                        LOG.debug {
-                            "[$dbName] discarding fenced record ${record.msgId} " +
-                                    "(term ${LeaderTerm.format(record.message.termId)} < " +
-                                    "${LeaderTerm.format(termFence.highestSeen)})"
+                        try {
+                            role.handleReplicaMessage(record)
+                            break
+                        } catch (_: CancellationException) {
+                            stateFlow.first { it !== role }
+                        } catch (e: Throwable) {
+                            LOG.error(
+                                e,
+                                "[$dbName] failed to process replica record ${record.msgId} (${record.message::class.simpleName})"
+                            )
+                            throw e
                         }
                     }
 
                     // Above the apply, this would advance past a record a role cancellation left
-                    // unapplied, and that record would be skipped for good.
+                    // unapplied, and that record would be skipped for good. A record the live role
+                    // fenced or held advances it all the same, so a transition's catch-up can't hang
+                    // waiting for one to be applied.
                     tailPos.value = Reading(record.msgId)
                 }
             }
@@ -291,7 +286,7 @@ class LogProcessor(
 
         val proc = FollowerLogProcessor(
             allocator, partitionStorage.bufferPool, partitionState, dbName, compactor, watchers,
-            dbCatalog, pendingBlock,
+            dbCatalog, pendingBlock, termFence,
             hasExternalSource = hasExternalSource,
             meterRegistry = base.meterRegistry,
         )
@@ -348,7 +343,7 @@ class LogProcessor(
             try {
                 claimLeadership(termId)
 
-                val pendingBlock = following.proc.pendingBlock
+                var pendingBlock: PendingBlock? = null
 
                 // The point of no return. Once the follower is stopped, `state` references a dead term until
                 // Leading is published, so any early exit — a revoke cancelling us mid-cutover — has to
@@ -356,12 +351,20 @@ class LogProcessor(
                 // rather than flag-guarded: reaching the catch below *is* "the follower was stopped".
                 try {
                     LOG.debug("[${dbName}] transition: closing follower")
-                    // Guards the release alone: the follower's allocator must close cleanly once teardown has
-                    // begun, whatever the cancellation. Bounded — its coroutines only unwind.
+                    // A cancellation landing inside the join would close the allocator with the follower's
+                    // coroutines still unwinding, and Arrow won't close a parent allocator while a child
+                    // buffer is live. Bounded — those coroutines only unwind.
                     withContext(NonCancellable) {
                         following.job.cancelAndJoin()
                         following.proc.close()
+
+                        // Read after the join, not before it: the follower goes on applying records until
+                        // then, and one of them may be the upload that closes this very block. Taking the
+                        // block while it can still be closed underneath us finishes it a second time.
+                        pendingBlock = following.proc.pendingBlock
                     }
+
+                    checkNotSuperseded(termId, pendingBlock)
 
                     val driver = RealLeaderDriver(partitionStorage, partitionState)
                     val replicaAppender = ReplicaLogAppender(driver)
@@ -379,7 +382,21 @@ class LogProcessor(
                         gcDispatcher = gcDispatcher,
                     )
 
-                    pendingBlock?.let { proc.applyPendingBlock(blockCutter, it) }
+                    pendingBlock?.let { pending ->
+                        LOG.debug("[${dbName}] transition: finishing pending block b${pending.blockIdx} with ${pending.bufferedRecords.size} held records")
+
+                        // Through the cutter, not the uploader: closing a block is what resets the row
+                        // gauge, and this block was cut before the gauge was seeded from a live index that
+                        // still held it.
+                        blockCutter.upload(pending.boundaryMsgId, pending.boundaryMessage)
+
+                        // The block is closed on this node from here — catalog refreshed, live index
+                        // rolled — so a failure below must not hand it to a re-opened follower, which
+                        // would match the upload we have just appended and close it a second time.
+                        pendingBlock = null
+
+                        proc.replayHeldRecords(pending)
+                    }
 
                     LOG.debug("[${dbName}] transition: building leader processor")
                     val resumeAfterMsgId = watchers.latestSourceMsgId
@@ -393,7 +410,7 @@ class LogProcessor(
                         launch { proc.gc.runGc() }
                         proc.extSrcProc?.let { extSrcProc -> launch { extSrcProc.run() } }
 
-                        runLeaderTerm(dbName, watchers, proc, replicaMsgs, replicaAppender)
+                        runLeaderTerm(dbName, watchers, proc, replicaMsgs, replicaAppender, termFence)
                     }
 
                     val leading = Leading(proc, roleScope(termJob), replicaMsgs).also { state = it }
@@ -405,32 +422,53 @@ class LogProcessor(
                     throw e
                 }
             } catch (e: Throwable) {
-                // Cutover already restored a live `state` if it had to; here we only report.
-                if (!e.isShutdownSignal) {
-                    LOG.error(e, "[${dbName}] transition: failed to prepare leader")
-                    watchers.notifyError(e)
+                // Cutover already restored a live `state` if it had to; here we only report. A
+                // supersession is reported the way a term reports its own — this node is merely not the
+                // leader, and poisoning the watchers over it would leave a healthy database unqueryable.
+                when {
+                    e is LeaderSupersededException -> LOG.info("[$dbName] transition: ${e.message}")
+
+                    !e.isShutdownSignal -> {
+                        LOG.error(e, "[${dbName}] transition: failed to prepare leader")
+                        watchers.notifyError(e)
+                    }
                 }
                 throw e
             }
         }
     }
 
-    private suspend fun LeaderLogProcessor.applyPendingBlock(
-        blockCutter: BlockCutter, pendingBlock: PendingBlock,
-    ) {
-        var oldTerm = pendingBlock.boundaryMessage.termId
-        LOG.debug("[${dbName}] transition: finishing pending block b${pendingBlock.blockIdx} with ${pendingBlock.bufferedRecords.size} buffered records")
-        // Through the cutter, not the uploader: closing a block is what resets the row gauge, and this
-        // block was cut before the gauge was seeded from a live index that still held it.
-        blockCutter.upload(pendingBlock.boundaryMsgId, pendingBlock.boundaryMessage)
-        LOG.debug("[${dbName}] transition: replaying ${pendingBlock.bufferedRecords.size} buffered records")
+    /**
+     * Refuse a cutover the log has already moved past, before it builds or appends anything.
+     *
+     * The claim's own unfenced check goes stale: it runs while the follower is still live, and the
+     * follower folds until the join. So the fence is asked again here — and asked, separately, of the
+     * records the follower was holding, which have not met it at all.
+     */
+    private fun checkNotSuperseded(termId: Long, pendingBlock: PendingBlock?) {
+        val seen = termFence.highestSeen
+        if (seen > termId)
+            throw LeaderSupersededException(
+                "[$dbName] superseded before cutover: log at ${LeaderTerm.format(seen)} " +
+                        "> our term ${LeaderTerm.format(termId)}"
+            )
 
-        pendingBlock.bufferedRecords.forEach {
-            val msgTermId = it.message.termId
-            // A superseded leader's record — dropped, as the fence drops one live.
-            if (msgTermId < oldTerm) return@forEach
-            oldTerm = msgTermId
-            applyReplicaMessage(it)
+        pendingBlock?.bufferedRecords?.forEach { held ->
+            val heldTerm = held.message.termId
+            if (heldTerm > termId)
+                throw LeaderSupersededException(
+                    "[$dbName] superseded before cutover: held term ${LeaderTerm.format(heldTerm)} " +
+                            "> our term ${LeaderTerm.format(termId)} at ${held.msgId}"
+                )
+        }
+    }
+
+    /** Fold and apply what the follower was holding behind its block, in the order the log had it. */
+    private suspend fun LeaderLogProcessor.replayHeldRecords(pendingBlock: PendingBlock) {
+        LOG.debug("[${dbName}] transition: replaying ${pendingBlock.bufferedRecords.size} held records")
+
+        pendingBlock.bufferedRecords.forEach { held ->
+            if (termFence.admit(held.message.termId)) applyReplicaMessage(held)
         }
     }
 

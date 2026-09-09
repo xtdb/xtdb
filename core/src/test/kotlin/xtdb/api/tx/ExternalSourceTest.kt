@@ -38,6 +38,7 @@ import xtdb.indexer.LiveIndex
 import xtdb.indexer.RealLeaderDriver
 import xtdb.indexer.ReplicaApply
 import xtdb.indexer.ReplicaLogAppender
+import xtdb.indexer.TermFence
 import xtdb.indexer.applyAndAwait
 import xtdb.indexer.runLeaderTerm
 import xtdb.storage.MemoryStorage
@@ -148,7 +149,7 @@ class ExternalSourceTest {
                 }
 
                 try {
-                    runLeaderTerm("test", watchers, proc, replicaMsgs, replicaAppender)
+                    runLeaderTerm("test", watchers, proc, replicaMsgs, replicaAppender, TermFence("test", 0))
                 } finally {
                     reader.cancel()
                 }

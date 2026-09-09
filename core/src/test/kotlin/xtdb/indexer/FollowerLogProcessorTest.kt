@@ -32,8 +32,8 @@ import java.time.Instant
 private fun FollowerLogProcessor.processRecords(records: List<Log.Record<ReplicaMessage>>) =
     records.forEach { handleRecord(it) }
 
-// The fence is the log processor's, so a bare follower never compares terms — these records only need
-// one that is a term.
+// The term most of these records carry. The fence starts at 0, so it admits them all, and only the
+// tests that name a second term are saying anything about fencing.
 private val TERM = LeaderTerm.of(0, 1)
 
 class FollowerLogProcessorTest {
@@ -48,6 +48,7 @@ class FollowerLogProcessorTest {
     private lateinit var tableCatalog: TableCatalog
     private lateinit var trieCatalog: TrieCatalog
     private lateinit var partitionState: PartitionState
+    private lateinit var termFence: TermFence
 
     // runTest cancels and joins backgroundScope before tearDown, so the followers are quiescent here
     // and freed before `allocator` closes.
@@ -63,6 +64,7 @@ class FollowerLogProcessorTest {
         trieCatalog = createTrieCatalog()
         partitionState = PartitionState(tableCatalog, trieCatalog, liveIndex)
         watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+        termFence = TermFence(dbName, 0)
 
         every { bufferPool.epoch } returns 1
     }
@@ -80,7 +82,7 @@ class FollowerLogProcessorTest {
     ) =
         FollowerLogProcessor(
             allocator, bufferPool, partitionState, dbName, compactor,
-            watchers, null, null,
+            watchers, null, null, termFence,
             hasExternalSource = hasExternalSource,
             meterRegistry = meterRegistry,
             maxBufferedRecords = maxBufferedRecords,
@@ -101,6 +103,31 @@ class FollowerLogProcessorTest {
         )
 
         assertThrows<Fault> { proc.processRecords(records) }    }
+
+    @Test
+    fun `a held record meets the fence when it drains, and the upload that closes the block never does`() =
+        runTest {
+            val proc = makeProcessor()
+
+            every { bufferPool.getByteArray(TableCatalog.blockFilePath(0)) } returns block { blockIndex = 0 }.toByteArray()
+
+            val claimant = LeaderTerm.of(0, 2)
+            val fromNewTerm = ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap(), srcMsgId = 1, termId = claimant)
+            val superseded = ReplicaMessage.ResolvedTx(2, Instant.now(), true, null, emptyMap(), srcMsgId = 2, termId = TERM)
+
+            proc.processRecords(listOf(
+                record(0, ReplicaMessage.BlockBoundary(0, 0, termId = TERM)),
+                record(1, fromNewTerm),
+                record(2, superseded),
+                // written by the term that cut the boundary, which `fromNewTerm` has superseded
+                record(3, ReplicaMessage.BlockUploaded(Storage.VERSION, 1, 0, 0, emptyList(), termId = TERM)),
+            ))
+
+            assertEquals(0L, tableCatalog.currentBlockIndex, "the block closed, so the follower stopped buffering")
+            verify { liveIndex.commitTx(match { it.txId == fromNewTerm.txId }, any()) }
+            verify(exactly = 0) { liveIndex.commitTx(match { it.txId == superseded.txId }, any()) }
+            assertEquals(claimant, termFence.highestSeen, "the drain folded what it was holding")
+        }
 
     @Test
     fun `ResolvedTx skips already-applied transactions`() = runTest {

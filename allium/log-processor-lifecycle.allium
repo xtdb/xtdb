@@ -336,11 +336,23 @@ rule TransitionToLeader {
         -- Step 3: stop the follower (cancel + close its term).
         FollowerStopped(follower_term: listener.follower_term)
 
+        -- Step 3a: ask again whether the claim still stands, before anything is built or appended.
+        -- Step 2a's answer goes stale: it is given while the follower is still live, and the follower advances the highest term seen until it stops.
+        -- The records the follower was holding are asked too, having been held rather than acted on and so counting towards that highest term at no point.
+        -- Either above this transition's term refuses the claim, as step 2a does, and takes the same failure path.
+        ClaimStillUnfenced(follower_term: listener.follower_term, term: term)
+
         -- Step 4: finish any dangling block.
-        -- If the follower was mid-block (an old leader died before uploading it), the incoming leader uploads the block and replays its buffered records, with leader-upload semantics.
+        -- If the follower was mid-block (an old leader died before uploading it), the incoming leader uploads the block and then replays the records the follower was holding, with leader-upload semantics.
         -- Requires the follower stopped (step 3) so it cannot double-process.
         if listener.follower_term.mid_block:
-            DanglingBlockFinished(follower_term: listener.follower_term)
+            DanglingBlockUploaded(follower_term: listener.follower_term)
+
+            -- The block is finished on this node once the upload lands, so the transition stops carrying it here, between the upload and the replay.
+            -- The failure path below re-opens a follower from what the transition is carrying, and one still holding this block would match the upload just appended and finish the same block a second time.
+            listener.follower_term.mid_block = false
+
+            HeldRecordsReplayed(follower_term: listener.follower_term)
 
         -- Step 5: build the leader term, carrying the fencing term, and publish it as the role.
         -- Replica records reach it from the Listener's read, continuing from where the follower left off.
@@ -421,10 +433,12 @@ rule RecoverFollowerOnTransitionCancelled {
 
     ensures:
         -- Re-open a live follower seeded from the (now stale) follower position, so
-        -- the role is backed by a live replica consumer again.
+        -- the role is backed by a live replica consumer again. It carries the dangling block
+        -- forward while that block is still unfinished — up to step 4's upload and not past it,
+        -- which is what step 4 clears the flag between the upload and the replay for.
         listener.follower_term = FollowerTerm.created(
             replica_pos: listener.follower_term.replica_pos,
-            mid_block: false
+            mid_block: listener.follower_term.mid_block
         )
         listener.state = following
 }
