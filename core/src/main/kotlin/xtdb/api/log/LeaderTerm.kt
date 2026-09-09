@@ -4,23 +4,13 @@ package xtdb.api.log
  * A leader term orders the leaders of a database's replica log, so that a superseded leader's writes
  * are discarded on the read side (#5817).
  *
- * The election counter in the low bits comes from the transport's leader election — a Kafka
- * consumer-group `generationId`, or an in-process counter for the local logs — so it orders elections
- * *within* one incarnation of that election mechanism, but does not survive the mechanism being reset.
- * On Kafka that means the consumer group being deleted and recreated, which committed offsets hold off
- * for `offsets.retention.minutes` past the group emptying but do not prevent (#5904); the local logs'
- * counter dies with the process. The epoch is the operator's declaration that such a reset has
- * happened.
+ * A term is claimed one above the highest a node has read from that same log, so the ordering is the
+ * log's own and depends on nothing outside it.
  *
- * It has to be *declared* rather than derived from the log. The leader this fence exists to stop is
- * precisely one that can still reach the log while being out of touch with whatever elects leaders —
- * so it can still read. An epoch taken from the log (its end offset, the persisted boundary term, the
- * block index) would let that leader observe the progress of the leader which legitimately superseded
- * it and thereby claim a *higher* term, inverting the fence.
- *
- * Packed like a [xtdb.types.MessageId] and for the same reason: with the epoch in the top bits, plain
- * numeric ordering is already lexicographic over (epoch, election), so every comparison site — the
- * follower's fence, the persisted block boundary, the proto field — stays a `Long`.
+ * Packed like a [xtdb.types.MessageId]: with an epoch in the top bits, plain numeric ordering is already
+ * lexicographic over (epoch, election), so every comparison site — the fence, the persisted block
+ * boundary, the proto field — stays a `Long`. Adding one to a packed term raises the counter alone, so a
+ * boundary persisted under an earlier epoch still orders below everything claimed after it.
  */
 object LeaderTerm {
     // 15 bits, not 16: the epoch's top bit is the packed term's sign bit, and a negative term would

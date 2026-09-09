@@ -128,6 +128,11 @@ internal abstract class LeaderTermTest {
         proc.also {
             leadersToClose += it
             val replicaMsgs = Channel<ReplicaApply>()
+
+            // A sibling of the term, as `cutOverToLeader` launches it: a term that ends hands its cause
+            // to the source through the task channel, which a source cancelled with the term never reads.
+            launch { proc.extSrcProc?.run() }
+
             launch {
                 val reader = launch {
                     partitionStorage.replicaLog.tailAll(-1) { records ->
@@ -136,7 +141,7 @@ internal abstract class LeaderTermTest {
                 }
 
                 try {
-                    proc.runTerm(replicaMsgs)
+                    proc.runTerm(replicaMsgs, afterSourceMessageId = -1)
                 } finally {
                     reader.cancel()
                 }
@@ -182,7 +187,7 @@ internal abstract class LeaderTermTest {
             LeaderLogProcessor(
                 allocator, nodeBase, partitionStorage, mockk(relaxed = true),
                 partitionState, dbName,
-                driver, blockCutter, watchers, replicaAppender, TermFence(dbName, 0), extSource,
+                driver, blockCutter, watchers, replicaAppender, TermFence(0), extSource,
                 skipTxs = skipTxs, dbCatalog = dbCatalog,
                 leaderTerm = leaderTerm,
                 flushTimeout = IndexerConfig().flushDuration,
@@ -217,7 +222,7 @@ internal abstract class LeaderTermTest {
 
         val proc = LeaderLogProcessor(
             allocator, nodeBase, partitionStorage, mockk(relaxed = true),
-            partitionState, "test", logsDriver, blockCutter, watchers, appender, TermFence("test", 0),
+            partitionState, "test", logsDriver, blockCutter, watchers, appender, TermFence(0),
             extSource,
             skipTxs = emptySet(), dbCatalog = null,
             leaderTerm = 1,

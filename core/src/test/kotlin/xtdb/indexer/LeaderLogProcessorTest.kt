@@ -94,7 +94,7 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
         appender.append(ControlItem(ReplicaMessage.NoOp(termId = 1)))
 
         // returns once the pump's failure has ended the term
-        proc.runTerm(Channel())
+        proc.runTerm(Channel(), afterSourceMessageId = -1)
 
         assertNull(
             watchers.exception,
@@ -440,7 +440,7 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
         )
 
         // ...and it must fail as CANCELLATION. The transport treats anything else as a poll-loop failure and
-        // unwinds openGroupSubscription into the Database scope's handler, which poisons the watchers — so a
+        // fails the term job into the Database scope's handler, which poisons the watchers — so a
         // benign teardown would present as a terminal query failure. See SourceBatch.abandon.
         assertTrue(e is CancellationException, "the poll thread must see cancellation, got: $e")
         assertNull(watchers.exception, "a benign term close must not poison the watchers")
@@ -532,7 +532,7 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
         replicaLog.appendMessage(ReplicaMessage.NoOp(termId = 2))
 
         // Both must fail as CANCELLATION, not with the LeaderSupersededException. The poll thread awaits
-        // these, and a non-cancellation escaping processRecords unwinds openGroupSubscription into the
+        // these, and a non-cancellation escaping processRecords fails the term job into the
         // Database scope's CoroutineExceptionHandler → notifyError, so a clean resignation would present to
         // queries as a terminal failure. See SourceBatch.abandon.
         for ((name, handle) in listOf("paused" to paused, "buffered" to buffered))

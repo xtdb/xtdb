@@ -8,7 +8,7 @@ title: Kafka
 v2.2: single-writer support — two topics per database
 
 : [Single-writer indexing](/about/dbs-in-xtdb#database-architecture) requires two Kafka topics per database: a **source log** for client writes and a **replica log** for the indexing leader's resolved output.
-  XTDB uses Kafka's consumer-group rebalance protocol to elect the leader for each database, and fences split-brain writes to the replica log by term — see ['Leader election and fencing'](#leader-election-and-fencing) below.
+  Each database elects its own leader in its replica topic, and fences split-brain writes to that topic by term — see ['Leader election and fencing'](#leader-election-and-fencing) below.
 
   Previously, a database used a single Kafka topic, and every indexer node consumed it independently.
   With single-writer, only the elected leader consumes the source topic; followers tail the replica topic instead.
@@ -16,7 +16,6 @@ v2.2: single-writer support — two topics per database
   Upgrading:
 
   - The replica topic defaults to `${topic}-replica` and auto-creates when `autoCreateTopic` is enabled, so existing deployments need no configuration changes to pick it up.
-  - If multiple XTDB deployments share a Kafka cluster, give each a distinct `groupId` on its `!Kafka` cluster config — otherwise their consumer groups collide and leadership is assigned across deployment boundaries.
   - ACL-restricted topics need `Describe` / `Read` / `Write` on both the source and replica topics.
 
 v2.2: `logClusters` renamed to `remotes`
@@ -92,7 +91,6 @@ The one setting it verifies on a topic that already exists is the partition coun
 | `retention.ms` | topic | You | Messages need not live on the log permanently. The default of 1 day suits most deployments; 1 week is a reasonable starting point where extra caution against data loss is wanted. |
 | `max.message.bytes` | topic | You | The 1MB default is fit for purpose unless your transactions are larger. |
 | `cleanup.policy` | topic | You | Leave at the default `delete` — XTDB never reads compacted messages. |
-| `offsets.retention.minutes` | **broker, cluster-wide** | You | Governs how long the leader-election consumer group survives with every XTDB node down, after which `termEpoch` has to be raised — see ['Recreating the consumer group'](#recreating-the-consumer-group-v22). Seven days by default. This is not a per-topic setting, it applies to every consumer group on the cluster, and managed Kafka services often fix it. |
 
 XTDB also sets its own producer and consumer properties — idempotent, `acks=all` writes, `read_committed` reads, `auto.offset.reset=none`, cooperative sticky assignment, and offset commits that keep the leader-election group alive.
 `propertiesMap` and `propertiesFile` can override these, but they are chosen deliberately and overriding them can break leader election.
@@ -126,10 +124,6 @@ remotes:
     # A map of Kafka connection properties, supplied directly to the Kafka client.
     # propertiesMap:
 
-    # Consumer-group ID used for per-database leader election (v2.2+).
-    # Defaults to "xtdb" — set a distinct value per deployment when multiple XTDB
-    # deployments share a Kafka cluster, so their consumer groups don't collide.
-    # groupId: "xtdb"
 
 ## For the database, we then create a log using the Kafka cluster we just defined:
 
@@ -156,10 +150,6 @@ log: !Kafka
   # Whether or not to automatically create the topics, if they do not already exist.
   # Applies to both the source and replica topics.
   # autoCreateTopic: true
-
-  # Declares that the consumer group backing leader election has been recreated (v2.2+).
-  # Raise it — never lower it — when that happens; see 'Recreating the consumer group' below.
-  # termEpoch: 0
 ```
 
 ### SASL Authenticated Kafka Example
@@ -192,66 +182,36 @@ The `KAFKA_SASL_JAAS_CONFIG` environment variable will likely contain a string s
 ## Leader election and fencing
 
 The ['Database architecture'](/about/dbs-in-xtdb#database-architecture) page describes XTDB's single-writer indexing model in terms of properties — exactly one leader per database, automatic failover, followers as hot standbys.
-This section describes how the Kafka module actually enforces those properties.
+This section describes how those properties are enforced.
 
-### Leader election via consumer groups
+### Election runs in the replica log
 
-Every XTDB node running the Kafka log subscribes to each database's source topic via a shared Kafka consumer group (`groupId`, defaulting to `"xtdb"`).
-Kafka's rebalance protocol then assigns each topic's single partition to exactly one consumer across the group — that consumer is the leader for that database.
-When a leader node stops (crash, network partition, long GC pause) or a new node joins the group, Kafka triggers a rebalance and the assignment moves.
+Each database's replica topic is a durable total order that every node reads, so leadership is settled in the topic itself rather than by anything outside it.
 
-Because all databases on a node share one consumer group via a single underlying consumer, Kafka's `CooperativeStickyAssignor` distributes leaderships evenly across the cluster — e.g. with three nodes serving three databases, each node ends up leader for one database and follower for the other two.
+A node claims leadership by appending a no-op stamped one **term** above the highest it has read.
+That claim confers leadership if, and only if, nothing at or above its term precedes it in the topic — so the claim's position in the log *is* the election result, and every node computes the same answer from the same prefix.
+There is no coordinator, no vote, and nothing for an operator to configure.
+
+A node claims when a poll of the replica topic comes back empty, meaning it looked and found the topic at its tip.
+Timeouts are randomised, so two nodes that start claiming together rarely collide, and a claim that loses costs one wasted record.
+
+Because each database elects independently, leaderships are no longer spread evenly across the cluster: one node may lead several databases while another leads none.
 
 ### Fencing by term
 
-Each leader stamps every record it writes to the replica log with a **term** — the generation number Kafka assigns its consumer-group membership, which strictly increases each time the assignment moves.
-A leader applies and acknowledges a write only once it has read that write *back* from the replica log at its own term, with no higher-term record ahead of it.
+A leader applies and acknowledges a write only once it has read that write *back* from the replica topic at its own term, with no higher-term record ahead of it.
 
-If a rebalance has meanwhile moved leadership on, the incoming leader writes at a higher term.
-The outgoing leader reads that higher-term record back, recognises it has been superseded, and resigns — its own unconfirmed writes are never acknowledged.
+When leadership moves, the incoming leader writes at a higher term.
+The outgoing leader reads that higher-term record back, recognises it has been superseded, and stands down — its own unconfirmed writes are never acknowledged.
 Followers apply the highest term they have seen and discard lower-term records.
-So at most one leader's writes are ever confirmed for a given database, even across an unclean handover — without relying on Kafka transactions.
+So at most one leader's writes are ever confirmed for a given database, even across an unclean handover, and without relying on Kafka transactions.
 
-### Recreating the consumer group (v2.2+)
-
-A term is not that generation number alone: it pairs it with a `termEpoch`, which orders one incarnation of the consumer group against the next.
-The generation orders elections *within* one incarnation; the epoch is what survives the group being recreated.
-
-`generationId` restarts at 1 whenever the group is recreated, below the terms already on the replica log.
-The broker deletes a consumer group once it has no members left and its committed offsets have expired, so how long a group survives with every XTDB node down is governed by the broker's `offsets.retention.minutes` — seven days by default.
-This turns on *members*, not traffic: a cluster that is up with no writes flowing keeps its group indefinitely, however long it idles.
-
-`offsets.retention.minutes` is a broker setting rather than a topic one, so raising it for longer planned outages affects every consumer group on the cluster — and managed Kafka services often fix it.
-Raise `termEpoch` on the log config whenever the group is recreated anyway — an outage past the retention period, a `groupId` change, or a group you delete deliberately:
-
-``` yaml
-log: !Kafka
-  cluster: kafkaCluster
-  topic: "xtdb-log"
-  termEpoch: 1
-```
-
-A node whose term is already fenced refuses to lead rather than indexing into a log every reader ignores, and its error names the current epoch:
-
-```
-leader term 0.1 is already fenced by 0.9 on the replica log — the leader-election
-counter has regressed (a recreated Kafka consumer group, or a restarted local log),
-so bump the log's termEpoch above 0
-```
-
-Raise `termEpoch`, never lower it: a lower value puts the new leader back below the terms on the log.
+Terms come from the replica topic itself, which is the same durable record every reader is fenced against, so there is nothing to reset and nothing to keep in step with it.
 
 ### Sharing a Kafka cluster across deployments
 
-Leader election runs through a Kafka consumer group (`groupId`, defaulting to `"xtdb"`).
-If you run multiple XTDB deployments against the same Kafka cluster (e.g. staging + prod, or multiple tenants), give each a distinct `groupId` — otherwise they join the same group and Kafka assigns their topics' partitions across both deployments' nodes.
-
-``` yaml
-remotes:
-  kafkaCluster: !Kafka
-    bootstrapServers: "localhost:9092"
-    groupId: "prod"
-```
+Nothing outside a database's own topics takes part in electing its leader, so two XTDB deployments sharing a Kafka cluster are isolated by their topic names alone.
+Give each deployment its own topics — and, if you want the separation enforced, its own ACLs.
 
 ## Kafka Log Durability
 

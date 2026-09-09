@@ -14,7 +14,6 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import xtdb.SimulationTestUtils.Companion.createTrieCatalog
-import xtdb.api.log.LeaderTerm
 import xtdb.api.log.Log
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.Watchers
@@ -34,7 +33,7 @@ private fun FollowerLogProcessor.processRecords(records: List<Log.Record<Replica
 
 // The term most of these records carry. The fence starts at 0, so it admits them all, and only the
 // tests that name a second term are saying anything about fencing.
-private val TERM = LeaderTerm.of(0, 1)
+private const val TERM = 1L
 
 class FollowerLogProcessorTest {
 
@@ -64,7 +63,7 @@ class FollowerLogProcessorTest {
         trieCatalog = createTrieCatalog()
         partitionState = PartitionState(tableCatalog, trieCatalog, liveIndex)
         watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
-        termFence = TermFence(dbName, 0)
+        termFence = TermFence(0)
 
         every { bufferPool.epoch } returns 1
     }
@@ -106,28 +105,20 @@ class FollowerLogProcessorTest {
         assertThrows<Fault> { proc.processRecords(records) }    }
 
     @Test
-    fun `a held record meets the fence when it drains, and the upload that closes the block never does`() =
+    fun `the records a block was holding apply when it closes`() =
         runTest {
             val proc = makeProcessor()
 
             every { bufferPool.getByteArray(TableCatalog.blockFilePath(0)) } returns block { blockIndex = 0 }.toByteArray()
 
-            val claimant = LeaderTerm.of(0, 2)
-            val fromNewTerm = ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap(), srcMsgId = 1, termId = claimant)
-            val superseded = ReplicaMessage.ResolvedTx(2, Instant.now(), true, null, emptyMap(), srcMsgId = 2, termId = TERM)
-
             proc.processRecords(listOf(
                 record(0, ReplicaMessage.BlockBoundary(0, 0, termId = TERM)),
-                record(1, fromNewTerm),
-                record(2, superseded),
-                // written by the term that cut the boundary, which `fromNewTerm` has superseded
-                record(3, ReplicaMessage.BlockUploaded(Storage.VERSION, 1, 0, 0, emptyList(), termId = TERM)),
+                record(1, ReplicaMessage.ResolvedTx(7, Instant.now(), true, null, emptyMap(), srcMsgId = 1, termId = TERM)),
+                record(2, ReplicaMessage.BlockUploaded(Storage.VERSION, 1, 0, 0, emptyList(), termId = TERM)),
             ))
 
             assertEquals(0L, tableCatalog.currentBlockIndex, "the block closed, so the follower stopped buffering")
-            verify { liveIndex.commitTx(match { it.txId == fromNewTerm.txId }, any()) }
-            verify(exactly = 0) { liveIndex.commitTx(match { it.txId == superseded.txId }, any()) }
-            assertEquals(claimant, termFence.highestSeen, "the drain folded what it was holding")
+            assertEquals(7L, watchers.latestTxId, "and the record it was holding applied behind it")
         }
 
     @Test

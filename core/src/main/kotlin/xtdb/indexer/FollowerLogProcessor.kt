@@ -184,10 +184,6 @@ class FollowerLogProcessor @JvmOverloads constructor(
         LOG.trace { "[$dbName] follower: message ${record.msgId} (${msg::class.simpleName})" }
 
         pendingBlock?.let { pending ->
-            // Held, not fenced: a record behind an open block has not been acted on yet, so the fence
-            // hears about it when it drains. Folding it here would move the high-water past the term
-            // that cut this block, and the upload closing it — written by that same term — would then
-            // be fenced away, leaving the block open for good.
             if (msg is ReplicaMessage.BlockUploaded && msg.closes(pending)) closeBlock(pending, record, msg)
             else {
                 LOG.trace { "[$dbName] follower: buffering message ${record.msgId} (${msg::class.simpleName}) during pending block b${pending.blockIdx} (${pending.bufferedRecords.size + 1} buffered)" }
@@ -197,10 +193,10 @@ class FollowerLogProcessor @JvmOverloads constructor(
             return
         }
 
-        if (!termFence.admit(msg.termId)) {
+        if (msg is ReplicaMessage.BlockUploaded && !termFence.permits(msg.termId)) {
             LOG.debug {
-                "[$dbName] follower: discarding fenced record ${record.msgId} " +
-                        "(term ${LeaderTerm.format(msg.termId)} < ${LeaderTerm.format(termFence.highestSeen)})"
+                "[$dbName] follower: discarding fenced upload ${record.msgId} " +
+                        "(term ${msg.termId} < ${termFence.highestSeen})"
             }
             return
         }
@@ -219,8 +215,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
             partitionState.adoptBlock(block, msg.tries, record.logTimestamp)
             compactor.signalBlock()
 
-            // Ahead of the drain below, whose records carry later source positions — behind it, this one
-            // would go backwards and trip the watchers' monotonicity check.
+            // Ahead of the drain below, whose records carry later source positions — behind it, this one would go backwards and trip the watchers' monotonicity check.
             watchers.notifyApplied(msg.latestProcessedMsgId)
 
             val bufferedRecords = pending.bufferedRecords
@@ -231,10 +226,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
             bufferedRecords
         }
 
-        // The closer goes round again behind what it was holding, so each term folds at its own position
-        // in the log — the held records first, then this one, where it sat. Second time round it applies
-        // nothing: it is either fenced by what the drain has just folded, or stale by block index.
-        (bufferedRecords + record).forEach { held -> handleRecord(held) }
+        bufferedRecords.forEach { held -> handleRecord(held) }
     }
 
     override fun close() {

@@ -12,25 +12,28 @@
 -- Source and replica are always separate logs (invariant, not just convention).
 -- A LogProcessor owns the indexing pipeline lifecycle per database.
 -- Compactor is a peer at db-system level, not a child of the processor.
--- Leader/follower transitions driven by Kafka consumer group rebalancing (or local log startup).
+-- Leader/follower transitions driven by the processor's own reading of the replica log.
 -- A single LiveIndex sits outside the processor as shared state.
 -- Leader mode feeds it from its own replica-log CONSUME-BACK; follower mode feeds it
 -- from replica processing.
 -- A single Watchers instance tracks both txId and sourceMsgId for client correlation,
 -- plus the latest ExternalSourceToken for external-source databases.
--- Follower→leader transition sync uses a separate MutableStateFlow on the LogProcessor, not Watchers (see LogProcessor.awaitReplicaMsg).
 -- The compactor writes L1+ to the source log; the leader forwards to replica.
 --
 -- Leader pipelining — resolve / append / consume-back / apply.
 --   The leader applies its OWN writes only once it has read them BACK off its own
 --   replica log at its own TERM (Raft's ReadIndex): that consume-back IS the fence.
---   Four coroutines, all children of the leader term — the RESOLVER (a select loop over
---   the source log, external-source txs and GC tasks), the APPEND PUMP (serialise, then
---   a plain term-stamped append), the CONSUME PUMP (tail our own replica log from the
---   transition replay target), and the resolver's own APPLY arm (servicing the
---   consume-back channel, so a tx cannot interleave a partial state).
+--   The term IS the RESOLVER: a select loop over the source log, external-source txs and
+--   GC tasks, plus an APPLY arm servicing the consume-back channel, so a tx cannot
+--   interleave a partial state. It starts three children:
+--     - APPEND PUMP: serialise, then a plain term-stamped append.
+--     - GC.
+--     - SOURCE-log tail.
+--   Reading the REPLICA log is not the term's. One reader per partition does it, and
+--   hands each record to whichever role is live. It outlives every term, so a term
+--   ending surrenders no position.
 --   Mechanism, ownership and the durability-handle failure legs: live-index.allium.
---   Role lifecycle, the term and its epoch: log-processor-lifecycle.allium.
+--   Role lifecycle and the term: log-processor-lifecycle.allium.
 --
 -- Two heads, two homes — callers choose:
 --   RESOLVED head (TxResolver.latest_completed_tx): the highest tx resolved, and so
@@ -160,8 +163,7 @@ entity Database {
 entity LogProcessor {
     -- See: indexer/LogProcessor.kt
     -- Owns the indexing pipeline lifecycle for a database.
-    -- Implements Log.SubscriptionListener (transitionToLeader/demoteLeader drive
-    -- transitions). Starts in follower mode. Always in exactly one mode.
+    -- Starts in follower mode. Always in exactly one mode.
     --
     -- latest_replica_msg_id: the position the partition's single replica tail has reached — the last record it finished with, applied or discarded.
     --   The tail is its sole writer and advances it once per record, so the position spans both modes rather than being tracked by each.
@@ -185,14 +187,22 @@ entity LogProcessor {
     --   A block produced and not adopted MUST be handed to the role that replaces the one holding it (see TransitionToLeader, TransitionToFollower).
     --   The adopt is what moves this node's catalog past the block, so the confirmation does not read as stale; dropped, it reaches a role with no block to match and stops the partition's tail.
     --
-    -- Transitions are driven by the transport's group subscription:
-    --   transitionToLeader → TransitionToLeader (off the serialization point)
-    --   demoteLeader       → TransitionToFollower (at the serialization point)
+    -- Transitions are driven by the processor's own replica-log reader:
+    --   a claim of its own read back, having conferred -> TransitionToLeader
+    --   its leader term ending -> TransitionToFollower
     -- log-processor-lifecycle.allium owns the role state machine; `mode` here is the
     -- coarser view db.allium's rules need.
-    -- For local log, the single node is always immediately assigned.
     mode: Leader | Follower
     latest_replica_msg_id: MessageId
+
+    -- READ-SIDE TERM FENCE: the highest leader term seen so far, seeded from the last
+    -- persisted block boundary (table_catalog.boundary_term_id) so it survives restart.
+    -- A record BELOW this was written by a superseded leader and is discarded. See the
+    -- Fencing section.
+    --
+    -- Scoped to the partition, not to a mode, and folded before the record reaches either.
+    -- Re-seeded at each handover it would forget the terms written since the last flush,
+    -- and admit the same term twice.
     max_leader_term: Integer
     pending_block: PendingBlock?
 }
@@ -212,8 +222,7 @@ variant Leader : LogProcessor {
     -- leader external-source-fed rather than client-driven (see the header).
     external_source: ExternalSource?
 
-    -- This leader's fencing term: the transport's leader-election counter packed under an
-    -- operator-declared epoch (see log-processor-lifecycle.allium, api/log/LeaderTerm.kt).
+    -- This leader's fencing term, claimed one above the highest it had read from the replica log (see log-processor-lifecycle.allium).
     -- Stamped onto every replica record this term writes, and checked on consume-back.
     leader_term: Integer
 
@@ -243,7 +252,7 @@ variant Leader : LogProcessor {
 }
 
 variant Follower : LogProcessor {
-    -- Subscribes to the replica log and is the SOLE replica-log consumer for its node.
+    -- Applies the replica-log records the partition's reader hands it — that reader is the node's sole replica-log consumer, whichever role is live.
     -- Feeds the shared live_index from replica messages, all of which are already durable.
     -- See: indexer/FollowerLogProcessor.kt
 }
@@ -288,7 +297,7 @@ entity TableCatalog {
     -- Derived
     current_block_index: latest_block?.block_index
     boundary_replica_msg_id: latest_block?.boundary_replica_msg_id
-    -- Seeds the log processor's max_leader_term, which is what makes the fence survive restart.
+    -- Seeds a follower's max_leader_term, which is what makes the fence survive restart.
     boundary_term_id: latest_block?.term_id ?? 0
 }
 
@@ -298,7 +307,7 @@ entity Watchers {
     -- resume token for external-source databases. These are the DURABLE watermarks:
     -- every mode advances them only once a message has been applied.
     -- Clients call awaitTx(txId) to wait for a transaction result.
-    -- A promotion calls awaitSource(srcMsgId) to wait for source processing.
+    -- A cut-over reads latestSourceMsgId for its source tail's resume point, and waits on nothing: it applied its own claim before judging it.
     --
     -- notifyTx(result, srcMsgId, externalSourceToken): advances txId and
     --   sourceMsgId; if the token is non-null it overrides the tracked token
@@ -446,7 +455,9 @@ value Block {
     boundary_replica_msg_id: MessageId?        -- replica log; msg id of the BlockBoundary message
     external_source_token: ExternalSourceToken?  -- last token seen by the external source at block time
     -- The term that APPENDED this block's BlockUploaded.
-    -- Persisting it is what makes the read-side fence survive a restart: the log processor seeds max_leader_term from here, so a leader claiming a regressed election counter is refused rather than silently ignored (see log-processor-lifecycle.allium step 2a).
+    -- Persisting it is what makes the read-side fence survive a restart: a starting node
+    -- seeds max_leader_term from here, so its claims rise above every term written before
+    -- the last block (see log-processor-lifecycle.allium, ClaimsRiseAboveWhatWasRead).
     term_id: Integer
     -- Every table this block covers, and where each one's files live. See contract TableEntries.
     tables: List<TableEntry>
@@ -650,16 +661,18 @@ variant TriesDeletedMessage : ReplicaMessage {
 }
 
 variant NoOpMessage : ReplicaMessage {
-    -- No-operation message, used for two things:
-    --   1. The transition's replay target. The new leader appends a NoOp stamped with its
-    --      new term to learn a known, CONSUMER-DELIVERABLE position — the log's
-    --      latest-submitted offset won't do, because it can include positions a consumer
-    --      never delivers. The transition's awaitReplicaMsg then waits for it, and the
-    --      leader's consume pump tails from it.
+    -- No-operation message, used for three things:
+    --   1. A leadership claim, stamped one term above the highest the claimant has read.
+    --      It confers leadership iff nothing at or above its term precedes it, and the
+    --      claimant learns that by reading its own record back — so the claim's position
+    --      is the election result, and where the new leader reads on from.
     --   2. Carrying the leader's source watermark forward when no other record would (a
     --      FlushBlock whose CAS fails and so finishes no block) — see #5680.
+    --   3. A leader asserting it is still there, at its own term, once the append queue
+    --      has been idle for the assert interval — so only the quiet leaders write one.
+    --      See log-processor-lifecycle.allium, LiveLeadershipIsVisibleOnTheLog.
     -- See: api/log/ReplicaMessage.kt (NoOp)
-    src_msg_id: MessageId?   -- null when used purely as a replay-target marker
+    src_msg_id: MessageId?   -- null on a claim
 }
 
 ---- Config
@@ -673,20 +686,17 @@ config {
 
 ---- Rules: Coordinator Transitions
 
--- The transport's group subscription drives transitions. Launching the transition runs
--- off the transport's serialization point; committing the leader and demoting run on it.
--- log-processor-lifecycle.allium owns that split and the committed-role state machine.
+-- The partition's replica-log reader drives transitions: it cuts over on reading back a claim of its own that conferred, and re-opens a follower on finding the term over.
+-- log-processor-lifecycle.allium owns the election and the role state machine.
 
 -- == Fencing ==
 --
 -- There is at most one CONFIRMED leader per database, enforced by a TERM on the read
 -- side. There is no producer and no write-time fence.
 --
--- Every replica record carries the term of the leader that created it. The term pairs an
--- operator-declared epoch with the transport's own election counter (Kafka's
--- consumer-group generationId, an in-process counter for the local logs), packed so the
--- epoch dominates the ordering — so plain numeric comparison is already lexicographic
--- over (epoch, election), and every comparison site stays a Long.
+-- Every replica record carries the term of the leader that created it. A term is taken
+-- from the replica log itself: a node claims one above the highest it has read, so the
+-- terms come from the same durable record every reader is fenced against.
 --
 -- The fence is applied by whichever ROLE is live, as it acts on the record: a record below the highest term seen so far is DISCARDED, and one at or above it folds that high-water upward and is acted on.
 -- The partition's replica tail reads each record, hands it to the live role and awaits it, so the fence has a single caller at any moment.
@@ -705,7 +715,6 @@ config {
 --
 -- The LEADER additionally tests against its OWN term on CONSUME-BACK (Raft's ReadIndex): it applies and acknowledges a write only once it has read that write back at that term.
 -- A HIGHER term read back means a newer leader has superseded it, so it RESIGNS without acknowledging its outstanding writes.
---
 -- Two nodes may therefore briefly both believe themselves leader and both APPEND. Only
 -- the newer term's writes are ever confirmed, and the older leader's are discarded, which
 -- is the property that matters — not single-writer-at-the-log.
@@ -722,8 +731,7 @@ config {
 -- next leader re-reads it from the source log and re-resolves it. What teardown MUST do
 -- instead is fail everything awaiting the term — every staged external-source tx's
 -- durability handle, the paused source batch, and whatever is still queued — because the
--- symptom of missing one is a HANG, and for a source batch that hang is on the transport's
--- poll thread, which is also the sole servicer of unregister (#5711 / #5817).
+-- symptom of missing one is a HANG, and for a source batch that hang is on the tail that feeds the term (#5711 / #5817).
 --
 -- So the live index still reflects a complete prefix of the replica log: it is only ever
 -- advanced by APPLY, one whole tx at a time, and an abandoned tx is one that was never
@@ -735,10 +743,7 @@ config {
 --   1. The last persisted block (from the table catalog)
 --   2. The follower's in-memory state (which has been processing replica messages)
 --
--- The NoOp + awaitReplicaMsg sequence ensures the follower has fully caught up before
--- its state is captured and it is shut down: the follower is the sole replica-log consumer
--- and the leader consumes the source log instead, so records in [follower-pos,
--- replay_target) would otherwise be silently skipped.
+-- The follower is fully caught up by construction when its state is captured: the claim is read and applied in its own position by the same reader, so nothing below the claim can still be outstanding.
 -- If the follower had a pending block (saw BlockBoundary but not BlockUploaded), the new
 -- leader produces the block via its BlockCutter — under its OWN term — before its term is published, and adopts it once that term's consume pump reads an upload of it back.
 -- That upload is this term's own, or the outgoing leader's where that term got one away before it ended: both confirm the same block, so the adopt takes whichever arrives first.
@@ -776,37 +781,20 @@ config {
 -- A second upload of that index — two terms can produce one block — reaches the comparison with no block in flight, and is stale by it, on the leader (LeaderSkipsAdoptedBlockUpload) as on the follower.
 
 rule TransitionToLeader {
-    -- db.allium's view of the transition: what it means for THIS database's pipeline.
-    -- log-processor-lifecycle.allium owns the five steps, the off-serialization-point
-    -- split and the cancellation-recovery path; don't duplicate them here.
-    when: TransitionToLeaderRequested(database, term)
+    -- db.allium's view of the cut-over: what it means for THIS database's pipeline.
+    -- log-processor-lifecycle.allium owns the claim, its adjudication and the recovery path; don't duplicate them here.
+    when: ClaimConferredLeadership(database, claim_pos, term)
     requires: log_processor.mode = Follower
 
     ensures:
-        -- Append a NoOp STAMPED WITH THE NEW TERM to learn a known, consumer-deliverable
-        -- replay target. A plain append — there is no producer to open, and nothing is
-        -- fenced at write time.
-        let replay_target = NoOpMessage.created(term_id: term, src_msg_id: null)
-                                appended to database.replica_log
-
-        -- Wait for the partition's replica tail to finish with the NoOp. Uses LogProcessor.awaitReplicaMsg (a MutableStateFlow), NOT Watchers.
-        -- Where the tail has stopped, the await FAILS with the tail's cause, the NoOp already passed or not.
-        -- A term whose replica log nothing is reading would never read its own writes back, so a promotion behind a stopped tail is refused here.
-        log_processor.awaitReplicaMsg(replay_target)
-
-        -- Refuse a term the replica log has already moved past. Our own claim has just
-        -- been read back, so the log processor's max term is expected to BE this term; a higher
-        -- one is another leader's, and leading under a fenced term would index nothing.
-        -- Fails with xtdb/leader-term-fenced, naming the epoch to raise. Checked here —
-        -- after the catch-up, before the follower is stopped — so a refusal takes the
-        -- existing recovery path with the follower still alive.
-        CheckTermUnfenced(log_processor, term)
+        -- The claim was applied like any other record before it conferred, so there is nothing left to catch up to and no term to refuse.
+        -- A claim carries a term above everything this node has read, and a claim that anything at or above its term precedes confers nothing.
 
         -- Close the follower system. No further processing after this point.
         log_processor.close()
 
         -- Capture the follower's pending block state (if it saw BlockBoundary
-        -- but not BlockUploaded before the replay target).
+        -- but not BlockUploaded before the cut-over).
         -- The read follows the close: the follower goes on applying records until then, and one of them may be the upload that closes this very block.
         let pending_block = log_processor.pending_block
 
@@ -819,7 +807,7 @@ rule TransitionToLeader {
             LeaderSuperseded(resolver: tx_resolver)
 
         -- Switch to leader mode.
-        -- It resumes the SOURCE log from the durable watermark (which the replay below advances), and its consume pump tails the REPLICA log from the replay target.
+        -- It resumes the SOURCE log from the durable watermark (which the replay below advances), and reads the REPLICA log back from its claim.
         -- Its resolver is seeded at the durable head, and its block gauge from the rows already in the open block, so it cuts this block where the previous leader would have.
         log_processor.mode = Leader.created(
             -- The database's own source, borrowed for the length of this term, so this leader is CDC-fed iff the database is.
@@ -844,7 +832,7 @@ rule TransitionToLeader {
         if pending_block != null:
             log_processor.block_cutter.upload(pending_block)
 
-        log_processor.start(after_source: watchers.latest_source_msg_id, after_replica: replay_target)
+        log_processor.start(after_source: watchers.latest_source_msg_id, after_replica: claim_pos)
 
     @guidance
         -- ReplayEquivalence: the live index state after transition is identical
@@ -852,12 +840,12 @@ rule TransitionToLeader {
 }
 
 rule TransitionToFollower {
-    when: DemoteLeader(database)
+    when: LeaderTermEnded(database)
     requires: log_processor.mode = Leader
 
     ensures:
         -- Two-phase close. Phase 1: cancelAndJoin the leader's job tree (resolver +
-        -- append pump + consume pump + GCs) so nothing live still touches the resolver.
+        -- append pump + source-log tail + GCs) so nothing live still touches the resolver.
         -- On the resolver's exit it FAILS every pending durability handle before the
         -- channels close, so no executeTx caller waits forever (live-index
         -- FailPendingHandles).
@@ -873,7 +861,7 @@ rule TransitionToFollower {
             CloseResolver(tx_resolver)
 
         -- A block this term produced and has not adopted is carried to the new follower, which closes it on the same message this term was waiting for.
-        -- It is read after the join, as a promotion reads the follower's: the term goes on applying records until then, and one of them may be the upload that closes this very block.
+        -- It is read once the term's job has completed, as a cut-over reads the follower's: the term goes on applying records until then, and one of them may be the upload that closes this very block.
         -- Cancelling the leader mid-boundary leaves no block here at all: that record's apply is incomplete, so it is offered again and the follower opens the block itself, as on any other boundary.
         -- The follower continues from the partition's replica position rather than being seeded with one: the tail spans the mode change.
         log_processor.mode = Follower.created()
@@ -929,8 +917,7 @@ rule ClientSubmitsTransactionToExternalSourceDb {
 --
 -- At the start of each source batch the leader checks the block flush timeout
 -- (BlockFlusher). A batch that a block cut pauses part-way is STASHED and resumed after
--- the upload, completing its handle only once fully drained — so the transport's poll
--- thread stays in step with resolution.
+-- the upload, completing its handle only once fully drained — so the source-log tail stays in step with resolution.
 
 rule LeaderProcessesTx {
     -- Covers TxMessage and LegacyTxMessage alike: they differ only in how the payload
@@ -1113,11 +1100,9 @@ rule AppendReplicaMessage {
 
 ---- Rules: Leader Mode — consume-back / apply (ReadIndex)
 
--- The consume pump tails the leader's OWN replica log from the transition replay target —
--- a separate consumer from the source-log group subscription that drives leader election,
--- so it doesn't interfere with it — and posts each record onto a bounded channel that the
--- resolver's select loop services. Because resolution and apply share one coroutine, a tx
--- cannot interleave a partial state.
+-- The partition's replica-log reader hands each record to whichever role is live, so on a leader it is the leader reading its own writes back.
+-- Records reach the term over a bounded channel that the resolver's select loop services.
+-- Because resolution and apply share one coroutine, a tx cannot interleave a partial state.
 --
 -- This is where a committed tx becomes queryable and where an external-source caller's
 -- durability handle completes: confirmed durably replicated AND confirmed unfenced.
@@ -1133,7 +1118,7 @@ rule LeaderAppliesRecord {
             -- A newer leader has superseded us. RESIGN: the term fails without
             -- acknowledging its outstanding writes, its teardown fails everything awaiting
             -- it (see Transition Safety and live-index.allium FailPendingHandles), and the
-            -- transport re-follows on the next rebalance.
+            -- reader re-opens a follower when it finds the term over.
             --
             -- A clean resignation, NOT an ingestion fault: it must not poison the watchers,
             -- or a routine leadership handover would surface to queries as a failed
@@ -1152,8 +1137,16 @@ rule LeaderAppliesRecord {
                     log_processor.pending_block.buffered_records.append(record)
         else if record.term_id < log_processor.max_leader_term:
             -- The fence, applied here because this is where the leader acts on the record.
-            -- Our own claim folded before the term opened, so the high-water is this leader's own
-            -- term throughout, and what the fence refuses is what sits below it.
+            -- Against the high-water, which a term can open below.
+            -- A claim is a record, so a follower holding an open block buffers it rather than folding it, and a promotion out of that state opens with the fence still at the boundary's term.
+            -- The drain at the adopt walks it up to the claim that won, and every record it drains sits below this term.
+            RecordDiscarded(resolver: tx_resolver)
+        else if record.kind = BlockUploadedMessage
+                and record.block_index <= table_catalog.current_block_index:
+            -- A second upload of a block this node has already adopted.
+            -- A boundary is a record, so a term inheriting one produces the same block as the term that cut it, and the log then carries an upload from each.
+            -- Stale by block index, as on a follower (see Staleness), and folded like anything else the fence admits.
+            log_processor.max_leader_term = max(log_processor.max_leader_term, record.term_id)
             RecordDiscarded(resolver: tx_resolver)
         else:
             -- Equal term (the common case): terms are unique per leader, so this record is
@@ -1409,8 +1402,8 @@ rule LogProcessorDispatchesRecord {
     ensures:
         HandleReplicaMessage(record)
 
-        -- One advance per record, whatever the live role did with it — this is what awaitReplicaMsg waits on.
-        -- A record the role fenced or held advances it all the same, so a transition's catch-up await can't hang on one.
+        -- One advance per record, whatever the live role did with it — a role change continues from it.
+        -- A record the role fenced or held advances it all the same, so nothing reading the position can stall on one.
         -- A faulting apply does not advance it: it ends the tail.
         log_processor.latest_replica_msg_id = record.msg_id
 }
@@ -1610,8 +1603,9 @@ rule ProcessingErrorHaltsNode {
     -- all subsequent awaitTx/awaitSource calls throw.
     --
     -- A SUPERSESSION is not one of these, and neither is a cancellation or an interrupt:
-    -- see LeaderSuperseded. Poisoning the watchers on a routine leadership handover would
-    -- surface it to queries as a failed database and evict the shared consumer.
+    -- see LeaderSuperseded. Failed is absorbing, so poisoning the watchers on a routine
+    -- leadership handover would leave a database that is still fully readable answering
+    -- every query with a fault, for as long as the process lives.
     when: ProcessingError(msg_id, error)
 
     ensures:
@@ -1771,7 +1765,3 @@ deferred CloseResolver               -- phase 2 of the leader's two-phase close 
                                      -- buffers of any un-applied staged tx; demotion is exactly this
                                      -- teardown, with no separate runtime drop.
                                      -- See: live-index.allium CloseResolver
-deferred CheckTermUnfenced           -- log_processor.checkTermUnfenced(term): refuse a claimed leader term the
-                                     -- replica log has already moved past, naming the term epoch to raise
-                                     -- (xtdb/leader-term-fenced). Refusing costs liveness only, never
-                                     -- safety. See: log-processor-lifecycle.allium step 2a

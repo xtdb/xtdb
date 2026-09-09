@@ -8,6 +8,8 @@ import kotlinx.coroutines.test.runTest
 import org.apache.arrow.memory.BufferAllocator
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Tag
@@ -19,6 +21,7 @@ import xtdb.SimulationTestUtils.Companion.createTrieCatalog
 import xtdb.api.IndexerConfig
 import xtdb.api.Xtdb
 import xtdb.api.log.*
+import xtdb.api.log.ReplicaMessage.NoOp
 import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
 import xtdb.database.DatabaseLogs
@@ -27,7 +30,6 @@ import xtdb.database.PartitionStorage
 import xtdb.api.tx.ExternalSource
 import xtdb.api.tx.ExternalSourceToken
 import xtdb.api.error.Incorrect
-import xtdb.indexer.SimLog.Companion.launchSimLog
 import xtdb.api.tx.TxIndexer.TxResult
 import xtdb.storage.MemoryStorage
 import xtdb.api.TableRef
@@ -39,9 +41,23 @@ import java.nio.ByteBuffer
 import java.util.*
 import kotlin.time.Duration.Companion.seconds
 import xtdb.api.tx.TxIndexer
+import xtdb.types.LogOffset
 import xtdb.types.MessageId
 
 private val LOG = LogProcessorSimTest::class.logger
+
+/**
+ * One node's handle on the replica log, recording where its own appends landed.
+ *
+ * The log is a single object every node shares, so a record on it carries no author — and who wrote
+ * what is the whole subject of the election properties below.
+ */
+private class NodeReplicaLog(private val log: Log<ReplicaMessage>) : Log<ReplicaMessage> by log {
+    val appendedOffsets = mutableSetOf<LogOffset>()
+
+    override suspend fun appendMessage(message: ReplicaMessage, partition: Int) =
+        log.appendMessage(message, partition).also { appendedOffsets += it.logOffset }
+}
 
 @Tag("property")
 class LogProcessorSimTest : SimulationTestBase() {
@@ -150,6 +166,7 @@ class LogProcessorSimTest : SimulationTestBase() {
         val bp: MemoryStorage,
         private val indexerConfig: IndexerConfig,
         private val simExtSource: SimExtSource,
+        private val readOnly: Boolean = false,
     ) : AutoCloseable {
 
         val tableCatalog = TableCatalog(bp)
@@ -161,10 +178,13 @@ class LogProcessorSimTest : SimulationTestBase() {
 
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
             .also { simExtSource.watch(it) }
-        val partitionStorage = PartitionStorage(DatabaseLogs(srcLog, replicaLog), bp, null)
+        val nodeReplicaLog = NodeReplicaLog(replicaLog)
+        val partitionStorage = PartitionStorage(DatabaseLogs(srcLog, nodeReplicaLog), bp, null)
         val crashLogger = CrashLogger(allocator, bp, "sim-node")
 
         private var logProcessor: LogProcessor? = null
+
+        val isLeader get() = logProcessor?.isLeader ?: false
 
         fun openLogProcessor(scope: CoroutineScope) =
             LogProcessor(
@@ -177,6 +197,7 @@ class LogProcessorSimTest : SimulationTestBase() {
                 ioDispatcher = dispatcher,
                 // A real `onTimeout` would schedule on kotlinx's own timer thread, which DeterministicDispatcher checks against — a real clock firing into a seeded harness.
                 electionDriver = NoAssertElectionDriver,
+                readOnly = readOnly,
             ).also { logProcessor = it }
 
         override fun close() {
@@ -219,8 +240,22 @@ class LogProcessorSimTest : SimulationTestBase() {
         }
     }
 
+    /**
+     * The replica records every reader applies — the raw log minus what the term fence discards.
+     *
+     * A superseded leader learns it has lost only by reading the winning claim back, so it goes on
+     * appending behind that claim; those records reach the log and every reader folds them out again.
+     * The invariants below are about what was applied, so they fold the same way.
+     */
+    private fun appliedMessages(): List<ReplicaMessage> =
+        TermFence(0).let { fence ->
+            replicaLog.topic
+                .filter { fence.admit(it.message.termId) != TermFence.Admission.FENCED }
+                .map { it.message }
+        }
+
     private fun abortedTxIds(): Set<MessageId> =
-        replicaLog.topic.map { it.message }
+        appliedMessages()
             .filterIsInstance<ReplicaMessage.ResolvedTx>()
             .filter { !it.committed }
             .map { it.txId }
@@ -259,7 +294,7 @@ class LogProcessorSimTest : SimulationTestBase() {
     }
 
     private fun replicaTxIds(): List<MessageId> =
-        replicaLog.topic.map { it.message }
+        appliedMessages()
             .filterIsInstance<ReplicaMessage.ResolvedTx>()
             .map { it.txId }
 
@@ -288,7 +323,7 @@ class LogProcessorSimTest : SimulationTestBase() {
     }
 
     @RepeatableSimulationTest
-    fun `single node processes txs and flush-blocks with rebalances`() =
+    fun `single node processes txs and flush-blocks across leadership churn`() =
         runTest(timeout = 5.seconds) {
             val rowsPerBlock = rand.nextLong(15, 25)
             val totalActions = rand.nextInt(50, 100)
@@ -300,21 +335,25 @@ class LogProcessorSimTest : SimulationTestBase() {
             MemoryStorage(allocator, epoch = 0).use { bp ->
                 SimNode("test-db", bp, IndexerConfig(rowsPerBlock = rowsPerBlock), simExtSource).use { node ->
                     launch(dispatcher) {
-                        launchSimLog(srcLog)
-                        launchSimLog(replicaLog)
 
-                        launch { srcLog.openGroupSubscription(node.openLogProcessor(this)) }
+                        val logProc = node.openLogProcessor(this)
 
                         launch {
                             repeat(srcLogEventCount) {
                                 yield()
                                 if (rand.nextInt(100) < 50) {
-                                    srcLog.rebalanceTrigger.send(Unit)
+                                    // A rival claims one term above whatever this node has seen, which supersedes it; reporting the tip then lets it claim its way back.
+                                    replicaLog.appendMessage(NoOp(termId = logProc.termFence.highestSeen + 1))
+                                    replicaLog.reportTip()
                                 } else {
                                     srcLog.appendMessage(SourceMessage.FlushBlock(null))
                                 }
                             }
+
+                            // One report is one election timeout, and this node only wins its leadership back on a poll that came back empty, so the drain needs its own supply.
+                            val elections = launch { while (true) { replicaLog.reportTip(); yield() } }
                             simExtSource.awaitQuiescence()
+                            elections.cancel()
 
                             replicaLog.awaitAllDelivered()
                             awaitIdle()
@@ -327,7 +366,7 @@ class LogProcessorSimTest : SimulationTestBase() {
                         "all actions should appear on the replica"
                     )
 
-                    val replicaMessages = replicaLog.topic.map { it.message }
+                    val replicaMessages = appliedMessages()
                     assertBlockBoundariesMatchUploads(replicaMessages)
 
                     val expectedBlockIndex =
@@ -371,12 +410,10 @@ class LogProcessorSimTest : SimulationTestBase() {
                     SimNode("test-db", bp, indexerConfig, simExtSource).use { followerA ->
                         SimNode("test-db", bp, indexerConfig, simExtSource).use { followerB ->
                             launch(dispatcher) {
-                                launchSimLog(srcLog)
-                                launchSimLog(replicaLog)
 
-                                launch { srcLog.openGroupSubscription(leader.openLogProcessor(this)) }
-                                launch { srcLog.openGroupSubscription(followerA.openLogProcessor(this)) }
-                                launch { srcLog.openGroupSubscription(followerB.openLogProcessor(this)) }
+                                leader.openLogProcessor(this)
+                                followerA.openLogProcessor(this)
+                                followerB.openLogProcessor(this)
 
                                 launch {
                                     repeat(srcLogEventCount) {
@@ -386,9 +423,8 @@ class LogProcessorSimTest : SimulationTestBase() {
                                     simExtSource.awaitQuiescence()
                                     replicaLog.awaitAllDelivered()
 
-                                    // Anchor the per-node `latestTxId` to the latest replica tx so the
-                                    // convergence assertions below see consistent state across nodes.
-                                    val lastReplicaTxId = replicaLog.topic.map { it.message }
+                                    // Anchor the per-node `latestTxId` to the latest replica tx so the convergence assertions below see consistent state across nodes.
+                                    val lastReplicaTxId = appliedMessages()
                                         .filterIsInstance<ReplicaMessage.ResolvedTx>()
                                         .maxOfOrNull { it.txId }
                                     if (lastReplicaTxId != null) {
@@ -407,7 +443,7 @@ class LogProcessorSimTest : SimulationTestBase() {
                                 "all actions should appear on the replica"
                             )
 
-                            val replicaMessages = replicaLog.topic.map { it.message }
+                            val replicaMessages = appliedMessages()
                             assertBlockBoundariesMatchUploads(replicaMessages)
 
                             val nodes = listOf(leader, followerA, followerB)
@@ -467,17 +503,16 @@ class LogProcessorSimTest : SimulationTestBase() {
                 SimNode("test-db", bp, indexerConfig, simExtSource).use { nodeA ->
                     SimNode("test-db", bp, indexerConfig, simExtSource).use { nodeB ->
                         launch(dispatcher) {
-                            launchSimLog(srcLog)
-                            launchSimLog(replicaLog)
 
-                            launch { srcLog.openGroupSubscription(nodeA.openLogProcessor(this)) }
-                            launch { srcLog.openGroupSubscription(nodeB.openLogProcessor(this)) }
+                            nodeA.openLogProcessor(this)
+                            nodeB.openLogProcessor(this)
 
                             launch {
                                 repeat(srcLogEventCount) {
                                     yield()
                                     if (rand.nextInt(100) < 50) {
-                                        srcLog.rebalanceTrigger.send(Unit)
+                                        // Whichever follower is caught up sees the tip and claims, which supersedes the incumbent — leadership moves without a coordinator.
+                                        replicaLog.reportTip()
                                     } else {
                                         srcLog.appendMessage(SourceMessage.FlushBlock(null))
                                     }
@@ -485,9 +520,8 @@ class LogProcessorSimTest : SimulationTestBase() {
                                 simExtSource.awaitQuiescence()
                                 replicaLog.awaitAllDelivered()
 
-                                // Anchor the per-node `latestTxId` to the latest replica tx so the
-                                // convergence assertions below see consistent state across nodes.
-                                val lastReplicaTxId = replicaLog.topic.map { it.message }
+                                // Anchor the per-node `latestTxId` to the latest replica tx so the convergence assertions below see consistent state across nodes.
+                                val lastReplicaTxId = appliedMessages()
                                     .filterIsInstance<ReplicaMessage.ResolvedTx>()
                                     .maxOfOrNull { it.txId }
                                 if (lastReplicaTxId != null) {
@@ -505,7 +539,7 @@ class LogProcessorSimTest : SimulationTestBase() {
                             "all actions should appear on the replica"
                         )
 
-                        val replicaMessages = replicaLog.topic.map { it.message }
+                        val replicaMessages = appliedMessages()
                         assertBlockBoundariesMatchUploads(replicaMessages)
 
                         val expectedBlockIndex = replicaMessages
@@ -540,6 +574,261 @@ class LogProcessorSimTest : SimulationTestBase() {
 
                         assertSnapshotHasNoAbortedRows(nodeA)
                         assertSnapshotHasNoAbortedRows(nodeB)
+                    }
+                }
+            }
+        }
+
+    /**
+     * A term ending is a role change rather than a fault, so churn poisons no node's watchers
+     * (StandingDownLeavesTheDatabaseReadable).
+     */
+    private fun assertNoNodeFailed(nodes: List<SimNode>) {
+        for ((idx, node) in nodes.withIndex())
+            assertNull(node.watchers.exception, "node $idx's watchers were poisoned (seed=$currentSeed)")
+    }
+
+    /**
+     * Only a leader writes anything but a claim, so every non-`NoOp` record stamped with one term came
+     * from one node (ExactlyOneConfirmedLeaderPerDatabase).
+     *
+     * `NoOp` is excluded because a claim is one, and two nodes claiming at the same term is exactly what
+     * the log is there to settle: both records land, and position decides which of them confers.
+     */
+    private fun assertOneWriterPerTerm(nodes: List<SimNode>) {
+        val writersByTerm = mutableMapOf<Long, MutableSet<Int>>()
+
+        for (record in replicaLog.topic) {
+            if (record.message is NoOp) continue
+            val writer = nodes.indexOfFirst { record.logOffset in it.nodeReplicaLog.appendedOffsets }
+            if (writer >= 0) writersByTerm.getOrPut(record.message.termId) { mutableSetOf() } += writer
+        }
+
+        for ((termId, writers) in writersByTerm)
+            assertEquals(
+                1, writers.size,
+                "term $termId carries records from more than one node: $writers (seed=$currentSeed)"
+            )
+    }
+
+    private suspend fun List<SimNode>.awaitTx(txId: MessageId?) {
+        if (txId != null) forEach { it.watchers.awaitTx(txId) }
+    }
+
+    /**
+     * How many of these nodes are leading, and MUST be called while the simulation is still up.
+     *
+     * The driver coroutine cancels the scope every term runs in as it completes, so a node sampled after
+     * the join reports itself as not leading whatever it was doing a moment earlier.
+     */
+    private fun List<SimNode>.leaderCount() = count { it.isLeader }
+
+    /**
+     * Two leaders uploading the same block index is fine, the upload being deterministic from the
+     * boundary. Two disagreeing about *which* cut block N is is not: they would write the same
+     * object-store paths from two different snapshots. The boundary's position isn't on the
+     * `BlockUploaded`, but its watermark came from it, so two watermarks under one index are two boundaries.
+     */
+    private fun assertBlockCutsAgree() {
+        val uploads = replicaLog.topic.map { it.message }.filterIsInstance<ReplicaMessage.BlockUploaded>()
+
+        for ((blockIndex, watermarks) in uploads.groupBy({ it.blockIndex }, { it.latestProcessedMsgId }))
+            assertEquals(
+                1, watermarks.distinct().size,
+                "block b$blockIndex was uploaded for more than one boundary: " +
+                        "${watermarks.distinct()} (seed=$currentSeed)"
+            )
+    }
+
+    private fun assertNodesConverged(nodes: List<SimNode>) {
+        val expected = nodes.first()
+
+        for ((idx, node) in nodes.withIndex()) {
+            assertEquals(
+                expected.tableCatalog.currentBlockIndex, node.tableCatalog.currentBlockIndex,
+                "node $idx disagrees on the current block index (seed=$currentSeed)"
+            )
+            assertEquals(
+                expected.tableCatalog.latestProcessedMsgId, node.tableCatalog.latestProcessedMsgId,
+                "node $idx disagrees on latestProcessedMsgId (seed=$currentSeed)"
+            )
+            assertEquals(
+                expected.liveIndex.latestCompletedTx, node.liveIndex.latestCompletedTx,
+                "node $idx disagrees on the live index's latestCompletedTx (seed=$currentSeed)"
+            )
+        }
+    }
+
+    private fun lastAppliedTxId(): MessageId? =
+        appliedMessages().filterIsInstance<ReplicaMessage.ResolvedTx>().maxOfOrNull { it.txId }
+
+    @RepeatableSimulationTest
+    fun `leadership churn leaves one leader, and each term one writer`() =
+        runTest(timeout = 5.seconds) {
+            val indexerConfig = IndexerConfig(rowsPerBlock = rand.nextLong(15, 25))
+            val totalActions = rand.nextInt(30, 60)
+            val simExtSource = SimExtSource(buildActions(rand, totalActions))
+            val srcLogEventCount = rand.nextInt(20, 40)
+
+            MemoryStorage(allocator, epoch = 0).use { bp ->
+                SimNode("test-db", bp, indexerConfig, simExtSource).use { nodeA ->
+                    SimNode("test-db", bp, indexerConfig, simExtSource).use { nodeB ->
+                        SimNode("test-db", bp, indexerConfig, simExtSource).use { nodeC ->
+                            val nodes = listOf(nodeA, nodeB, nodeC)
+                            var leadersAtQuiescence = -1
+
+                            launch(dispatcher) {
+                                nodes.forEach { it.openLogProcessor(this) }
+
+                                launch {
+                                    // Three nodes rather than two so that a reported tip usually finds more than one follower caught up, which is what puts two claims at the same term on the log for position to settle.
+                                    repeat(srcLogEventCount) { event ->
+                                        yield()
+                                        val tip = rand.nextInt(100) < 50
+                                        // The first event always reports the tip, so a run whose draws
+                                        // never do still gives the followers one chance to claim.
+                                        if (event == 0 || tip) replicaLog.reportTip()
+                                        else srcLog.appendMessage(SourceMessage.FlushBlock(null))
+                                    }
+
+                                    simExtSource.awaitQuiescence()
+                                    replicaLog.awaitAllDelivered()
+                                    nodes.awaitTx(lastAppliedTxId())
+                                    awaitIdle()
+
+                                    leadersAtQuiescence = nodes.leaderCount()
+                                }.invokeOnCompletion { cancel() }
+                            }.join()
+
+                            assertReplicaTxInvariants()
+                            assertEquals(
+                                totalActions, replicaTxIds().size,
+                                "all actions should appear on the replica"
+                            )
+
+                            assertOneWriterPerTerm(nodes)
+                            assertNoNodeFailed(nodes)
+                            assertNodesConverged(nodes)
+                            assertBlockCutsAgree()
+
+                            assertEquals(
+                                1, leadersAtQuiescence,
+                                "churn should settle on exactly one leader (seed=$currentSeed)"
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+    @RepeatableSimulationTest
+    fun `a read-only node follows the churn and writes nothing`() =
+        runTest(timeout = 5.seconds) {
+            val indexerConfig = IndexerConfig(rowsPerBlock = rand.nextLong(15, 25))
+            val totalActions = rand.nextInt(30, 60)
+            val simExtSource = SimExtSource(buildActions(rand, totalActions))
+            val srcLogEventCount = rand.nextInt(20, 40)
+
+            MemoryStorage(allocator, epoch = 0).use { bp ->
+                SimNode("test-db", bp, indexerConfig, simExtSource).use { nodeA ->
+                    SimNode("test-db", bp, indexerConfig, simExtSource).use { nodeB ->
+                        SimNode("test-db", bp, indexerConfig, simExtSource, readOnly = true).use { readOnly ->
+                            val nodes = listOf(nodeA, nodeB, readOnly)
+                            var readOnlyLed = false
+
+                            launch(dispatcher) {
+                                nodes.forEach { it.openLogProcessor(this) }
+
+                                launch {
+                                    repeat(srcLogEventCount) {
+                                        yield()
+                                        // Sampled every step, not once at the end: a term it should never
+                                        // have held could begin and be superseded between two of these.
+                                        readOnlyLed = readOnlyLed || readOnly.isLeader
+                                        if (rand.nextInt(100) < 50) replicaLog.reportTip()
+                                        else srcLog.appendMessage(SourceMessage.FlushBlock(null))
+                                    }
+
+                                    simExtSource.awaitQuiescence()
+                                    replicaLog.awaitAllDelivered()
+                                    nodes.awaitTx(lastAppliedTxId())
+                                    awaitIdle()
+
+                                    readOnlyLed = readOnlyLed || readOnly.isLeader
+                                }.invokeOnCompletion { cancel() }
+                            }.join()
+
+                            assertFalse(
+                                readOnlyLed,
+                                "a read-only node must never lead (seed=$currentSeed)"
+                            )
+                            assertEquals(
+                                emptySet<LogOffset>(), readOnly.nodeReplicaLog.appendedOffsets,
+                                "a read-only node must put nothing on the replica log (seed=$currentSeed)"
+                            )
+
+                            assertNodesConverged(nodes)
+                            assertNoNodeFailed(nodes)
+                            assertSnapshotHasNoAbortedRows(readOnly)
+                        }
+                    }
+                }
+            }
+        }
+
+    @RepeatableSimulationTest
+    fun `a node joining a live database catches up without unseating its leader`() =
+        runTest(timeout = 5.seconds) {
+            val indexerConfig = IndexerConfig(rowsPerBlock = rand.nextLong(15, 25))
+            val totalActions = rand.nextInt(30, 60)
+            val simExtSource = SimExtSource(buildActions(rand, totalActions))
+            val srcLogEventCount = rand.nextInt(5, 15)
+
+            MemoryStorage(allocator, epoch = 0).use { bp ->
+                SimNode("test-db", bp, indexerConfig, simExtSource).use { incumbent ->
+                    SimNode("test-db", bp, indexerConfig, simExtSource).use { joiner ->
+                        val nodes = listOf(incumbent, joiner)
+                        var leadersAtQuiescence = -1
+                        var joinerLed = false
+
+                        launch(dispatcher) {
+                            val nodeScope = this
+                            incumbent.openLogProcessor(nodeScope)
+
+                            launch {
+                                repeat(srcLogEventCount) {
+                                    yield()
+                                    srcLog.appendMessage(SourceMessage.FlushBlock(null))
+                                }
+
+                                simExtSource.awaitQuiescence()
+                                replicaLog.awaitAllDelivered()
+                                awaitIdle()
+
+                                joiner.openLogProcessor(nodeScope)
+
+                                nodes.awaitTx(lastAppliedTxId())
+                                replicaLog.awaitAllDelivered()
+                                awaitIdle()
+
+                                leadersAtQuiescence = nodes.leaderCount()
+                                joinerLed = joiner.isLeader
+                            }.invokeOnCompletion { cancel() }
+                        }.join()
+
+                        assertFalse(
+                            joinerLed,
+                            "a claim behind a term already on the log confers nothing (seed=$currentSeed)"
+                        )
+                        assertEquals(
+                            1, leadersAtQuiescence,
+                            "a node joining must not unseat the leader (seed=$currentSeed)"
+                        )
+
+                        assertReplicaTxInvariants()
+                        assertNodesConverged(nodes)
+                        assertNoNodeFailed(nodes)
+                        assertSnapshotHasNoAbortedRows(joiner)
                     }
                 }
             }

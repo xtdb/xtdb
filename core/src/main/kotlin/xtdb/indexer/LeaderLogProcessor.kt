@@ -38,7 +38,7 @@ import java.time.InstantSource
 /**
  * A higher-term record read back on our own replica log: a newer leader has superseded us. Thrown from
  * the apply loop to fail the term cleanly (not a query-facing fault, so it doesn't poison the watchers);
- * the transport re-follows on the next rebalance. See #5817.
+ * the partition's reader re-opens a follower when it finds the term over. See #5817.
  */
 internal class LeaderSupersededException(message: String) : RuntimeException(message)
 
@@ -72,6 +72,7 @@ internal class LeaderLogProcessor(
     }
 
     private val partition = partitionStorage.partition
+    private val sourceLog = partitionStorage.sourceLog
 
     private val bufferPool = partitionStorage.bufferPool
     private val tableCatalog = partitionState.tableCatalog
@@ -194,12 +195,8 @@ internal class LeaderLogProcessor(
             return
         }
 
-        // Our own claim folded before this term opened, so the fence's high-water is
-        // our term and anything it refuses is below ours — which shouldn't appear
-        // past our replay target anyway. The fold has to happen here whatever the
-        // verdict, or the high-water would stand still for the length of the term.
-        if (!termFence.admit(msgTermId)) {
-            LOG.debug { "[$dbName] leader: discarding fenced record ${record.msgId} (term $msgTermId < $leaderTerm)" }
+        if (record.message is ReplicaMessage.BlockUploaded && !termFence.permits(msgTermId)) {
+            LOG.debug { "[$dbName] leader: discarding fenced upload ${record.msgId} (term $msgTermId)" }
         } else {
             when (val msg = record.message) {
                 is ReplicaMessage.ResolvedTx -> {
@@ -283,13 +280,14 @@ internal class LeaderLogProcessor(
      * reach the watchers: `Failed` is absorbing, and poisoning them over a resignation would leave a
      * healthy database unqueryable until the process restarts (#5817).
      */
-    suspend fun runTerm(replicaMsgs: ReceiveChannel<ReplicaApply>) {
+    suspend fun runTerm(replicaMsgs: ReceiveChannel<ReplicaApply>, afterSourceMessageId: MessageId) {
         try {
             coroutineScope {
                 launch { gc.runGc() }
-                extSrcProc?.let { extSrcProc -> launch { extSrcProc.run() } }
-
                 launch(CoroutineName("$dbName-replica-appender")) { replicaAppender.run() }
+                launch(CoroutineName("$dbName-source-tail")) { sourceLog.tailAll(afterSourceMessageId, srcLogProc) }
+
+                extSrcProc?.let { extSrcProc -> launch(CoroutineName("$dbName-ext-source")) { extSrcProc.run() } }
 
                 while (true) {
                     // Ahead of the arming below, not after it: a filled block must admit nothing else, and
