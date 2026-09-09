@@ -1,20 +1,12 @@
 package xtdb.indexer
 
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.selects.SelectBuilder
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import xtdb.api.log.ReplicaMessage.NoOp
 
 class ReplicaLogAppenderTest {
-
-    private class TriggeredElectionDriver : ElectionDriver {
-        val trigger = Channel<Unit>()
-
-        override fun <R> SelectBuilder<R>.onAssertTimeout(body: suspend () -> R) = trigger.onReceive { body() }
-    }
 
     @Test
     fun `an idle leader asserts, stamped with its own term`() = runTest {

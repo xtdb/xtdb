@@ -84,9 +84,8 @@ Each database has two logs (separate Kafka topics, single-partition each):
   It carries already-resolved transactions (with tx-ids, system-times, and tries ready to be included in a block), plus block boundaries and trie-added notifications.
   Only the current leader writes to it.
 
-All indexer nodes in the cluster join a consumer group on the source log.
-Whichever node gets assigned the partition becomes the *leader* for that database; the others are *followers*.
-Kafka's consumer-group rebalance protocol drives the handover when a leader dies or a new node joins.
+Exactly one indexer node is the *leader* for a database; the others are *followers*.
+Leadership is settled in the replica log itself — see <<_leader_election_and_handover>>.
 
 The leader consumes each `SourceMessage`, evaluates the transaction if required, indexes it into its live index, and appends the resulting `ReplicaMessage` to the replica log.
 It also uploads blocks of transactions (~100k rows) as files to the object store — these block files form the lowest level (L0) of the LSM tree.
@@ -123,18 +122,21 @@ This is a lifecycle in itself 😃
 
 (see `xtdb.indexer.LogProcessor`, `xtdb.api.log.Watchers`)
 
-Leadership is elected via Kafka consumer-group rebalancing — the standard Kafka protocol, no XTDB-level machinery on top.
-Every indexer subscribes to the source-log topic; whichever node gets assigned the partition is the leader.
-When the current leader stops heartbeating (crash, network partition, long GC pause) or a new node joins, Kafka triggers a rebalance and the partition assignment moves.
+Leadership is settled in the replica log, which is already a durable total order that every node reads — so there is no coordinator, no vote, and nothing outside the log to keep in step with it.
+
+A node claims by appending a no-op stamped one *term* above the highest it has read.
+The claim confers leadership iff nothing at or above its term precedes it: the claim's *position* is the election result, and every node computes the same answer from the same prefix.
+A node claims when a poll of the replica log comes back empty — its own observation that it looked and found the log at its tip, which a node that has stopped reading cannot manufacture.
+Timeouts are randomised; a claim that loses costs one wasted record.
 
 Leaders are *fenced* by term (a Raft-ReadIndex-style check), not by Kafka transactions.
-Each record a leader writes to the replica log is stamped with its *term* — the Kafka consumer-group generation, which strictly increases every rebalance.
+Each record a leader writes to the replica log is stamped with its term.
 A leader applies and acknowledges a write only after it has read that write back from the replica log at its own term, with no higher-term record ahead of it; a superseded leader reads a higher-term record back, recognises it, and resigns without acknowledging its unconfirmed writes.
 So at most one leader's writes are ever confirmed for a database, without relying on Kafka's transactional producer.
 
 === Three LogProcessor states
 
-`xtdb.indexer.LogProcessor` is a small state machine, driven by the transport through two `Log.SubscriptionListener` operations — `transitionToLeader`, `demoteLeader`:
+`xtdb.indexer.LogProcessor` is a small state machine, driven by its own replica-log reader — it cuts over when it reads back a claim of its own that conferred, and re-opens a follower when the leader term ends itself:
 
 Follower (`FollowerLogProcessor`)::
 The default state for a node that isn't currently leader.
@@ -142,7 +144,7 @@ Tails the replica log and applies each `ReplicaMessage` to its live index.
 It does not consume the source log at all.
 
 Leader (`LeaderLogProcessor`)::
-Consumes the source log via the consumer-group subscription, resolves each transaction, appends the resulting `ReplicaMessage` to the replica log, and indexes it once it reads that message back at its own term.
+Consumes the source log — a tail of its own, living and dying with the term — resolves each transaction, appends the resulting `ReplicaMessage` to the replica log, and indexes it once it reads that message back at its own term.
 Only the leader writes L0 files to the object store.
 
 Transition::
@@ -160,7 +162,7 @@ Clients' `awaitTx` / `awaitSource` calls suspend on it.
 Once poisoned, every call raises the stored `IngestionStoppedException` — no further progress is observable on this node.
 
 Poisoning happens when the node reaches an unrecoverable state.
-The important case is failure *during* follower→leader transition: if we've started writing to the replica log but can't finish the handover, the node's in-memory state may have diverged from what's been durably committed.
+The important case is failure *during* the cut-over to leader: if we've started writing to the replica log but can't finish the handover, the node's in-memory state may have diverged from what's been durably committed.
 Rather than continue with divergent state, we poison the watchers and let the node be restarted — it rebuilds its live index from the latest persisted block and catches up from the replica log.
 
 == External-source databases

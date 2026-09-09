@@ -213,8 +213,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
             partitionState.adoptBlock(block, msg.tries, record.logTimestamp)
             compactor.signalBlock()
 
-            // Ahead of the drain below, whose records carry later source positions — behind it, this one
-            // would go backwards and trip the watchers' monotonicity check.
+            // Ahead of the drain below, whose records carry later source positions — behind it, this one would go backwards and trip the watchers' monotonicity check.
             watchers.notifyApplied(msg.latestProcessedMsgId)
 
             val bufferedRecords = pending.bufferedRecords

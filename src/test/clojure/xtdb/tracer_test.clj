@@ -2,9 +2,11 @@
   (:require [clojure.string :as string]
             [clojure.test :as t]
             [xtdb.api :as xt]
+            [xtdb.log :as xt-log]
             [xtdb.node :as xtn]
             [xtdb.pgwire-test :as pgw-test])
-  (:import (io.opentelemetry.api.common Attributes AttributeKey)
+  (:import (java.time Duration)
+           (io.opentelemetry.api.common Attributes AttributeKey)
            (io.opentelemetry.sdk.common CompletableResultCode)
            (io.opentelemetry.sdk.trace.data SpanData)
            (io.opentelemetry.sdk.trace.export SimpleSpanProcessor SpanExporter)))
@@ -168,8 +170,9 @@
         (xt/submit-tx node [[:delete-docs :users 1]])
         (xt/submit-tx node [[:erase-docs :users 1]])
 
-        ;; Give spans a moment to be exported
-        (Thread/sleep 100)
+        ;; A transaction span closes when the leader resolves the transaction, so wait for the
+        ;; transactions rather than for a fixed interval - the node has an election to win first.
+        (xt-log/sync-node node (Duration/ofSeconds 5))
 
         (let [span-tree (build-span-tree @!spans)
               tx-spans (filter #(= (:name %) "xtdb.transaction") span-tree)

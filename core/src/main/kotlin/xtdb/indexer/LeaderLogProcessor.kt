@@ -56,6 +56,7 @@ internal class LeaderLogProcessor(
     }
 
     private val partition = partitionStorage.partition
+    private val sourceLog = partitionStorage.sourceLog
 
     private val bufferPool = partitionStorage.bufferPool
     private val tableCatalog = partitionState.tableCatalog
@@ -216,13 +217,14 @@ internal class LeaderLogProcessor(
      * A resignation is not among those faults: it arrives as a cancellation of this term's job, from the
      * replica tail that read the superseding record.
      */
-    suspend fun runTerm(replicaMsgs: ReceiveChannel<ReplicaApply>) {
+    suspend fun runTerm(replicaMsgs: ReceiveChannel<ReplicaApply>, afterSourceMessageId: MessageId) {
         coroutineScope {
             try {
                 launch { gc.runGc() }
-                extSrcProc?.let { extSrcProc -> launch { extSrcProc.run() } }
-
                 launch(CoroutineName("$dbName-replica-appender")) { replicaAppender.run() }
+                launch(CoroutineName("$dbName-source-tail")) { sourceLog.tailAll(afterSourceMessageId, srcLogProc) }
+
+                extSrcProc?.let { extSrcProc -> launch(CoroutineName("$dbName-ext-source")) { extSrcProc.run() } }
 
                 while (true) {
                     // Ahead of the arming below, not after it: a filled block must admit nothing else, and
