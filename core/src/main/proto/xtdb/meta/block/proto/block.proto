@@ -4,6 +4,7 @@ package xtdb.block.proto;
 
 import "xtdb/log/proto/log.proto";
 import "xtdb/database/proto/db.proto";
+import "xtdb/cols/proto/cols.proto";
 
 option java_multiple_files = true;
 
@@ -20,12 +21,18 @@ message Partition {
 }
 
 message TableBlock {
+    // Superseded by `columns`, and still written for readers that predate it. See #4038.
     bytes arrow_schema = 1;
     int64 row_count = 2;
     // deprecated, use partitions. See #4960
     repeated xtdb.log.proto.TrieDetails tries = 3;
+    // Superseded by the per-column `hll` on `columns`, and still written for readers that predate it.
+    // See #4038.
     map<string, bytes> column_name_to_hll = 4;
     repeated Partition partitions = 5;
+    // keyed by slug — the Arrow field name a column's data is written under, which is fixed for the
+    // column's lifetime where its name is not.
+    map<string, xtdb.cols.proto.ColumnMeta> columns = 6;
 }
 
 message TxKey {

@@ -11,13 +11,13 @@
 
     (t/is (= [{:column-name "_id", :udt-schema "pg_catalog", :udt-name "int8",
                :ordinal-position 1, :is-nullable "NO", :is-identity "NO"}
-              {:column-name "_system_from", :udt-schema "pg_catalog", :udt-name "timestamptz",
-               :ordinal-position 2, :is-nullable "NO", :is-identity "NO"}
-              {:column-name "_system_to", :udt-schema "pg_catalog", :udt-name "timestamptz",
-               :ordinal-position 3, :is-nullable "YES", :is-identity "NO"}
               {:column-name "_valid_from", :udt-schema "pg_catalog", :udt-name "timestamptz",
-               :ordinal-position 4, :is-nullable "NO", :is-identity "NO"}
+               :ordinal-position 2, :is-nullable "NO", :is-identity "NO"}
               {:column-name "_valid_to", :udt-schema "pg_catalog", :udt-name "timestamptz",
+               :ordinal-position 3, :is-nullable "YES", :is-identity "NO"}
+              {:column-name "_system_from", :udt-schema "pg_catalog", :udt-name "timestamptz",
+               :ordinal-position 4, :is-nullable "NO", :is-identity "NO"}
+              {:column-name "_system_to", :udt-schema "pg_catalog", :udt-name "timestamptz",
                :ordinal-position 5, :is-nullable "YES", :is-identity "NO"}
               {:column-name "age", :udt-schema "pg_catalog", :udt-name "int8",
                :ordinal-position 6, :is-nullable "NO", :is-identity "NO"}

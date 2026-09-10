@@ -8,6 +8,7 @@ import xtdb.catalog.TableCatalog
 import xtdb.indexer.LiveTable.Companion.logRelTypes
 import xtdb.api.TableRef
 import xtdb.table.Oid
+import xtdb.table.ordinalsFrom
 import xtdb.trie.ColumnName
 import xtdb.trie.TrieCatalog
 import xtdb.util.closeAll
@@ -94,6 +95,21 @@ class Snapshot(
 
     val allColumnTypes: Map<TableRef, Map<ColumnName, VectorType>> by lazy {
         tableInfo.keys.associateWith { columnTypes(it) }
+    }
+
+    /**
+     * The position each of [table]'s columns reports as — the recorded half joined with the live half,
+     * over the same enumeration [columnTypes] types.
+     *
+     * A column no block records yet is numbered by the rule the next block will number it by, so its
+     * position doesn't move as it becomes historical. It can still move before then: a sibling arriving
+     * ahead of it in name order displaces it, and only a flush settles that.
+     */
+    fun columnOrdinals(table: TableRef): Map<ColumnName, Int> =
+        tableInfo[table].orEmpty().ordinalsFrom(tableCatSnap.columnOrdinals(table))
+
+    val allColumnOrdinals: Map<TableRef, Map<ColumnName, Int>> by lazy {
+        tableInfo.keys.associateWith { columnOrdinals(it) }
     }
 
     private val refCount = AtomicInteger(1)

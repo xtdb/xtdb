@@ -26,8 +26,11 @@ import xtdb.block.proto.txKey
 import xtdb.database.proto.DatabaseConfig
 import xtdb.indexer.LiveTable
 import xtdb.storage.BufferPool
+import xtdb.table.ColumnMeta
 import xtdb.table.TableEntry
 import xtdb.table.TableSlug
+import xtdb.table.vectorType
+import xtdb.table.withOrdinalsFrom
 import xtdb.table.fromSchemaAndTable
 import xtdb.time.InstantUtil.asMicros
 import xtdb.time.microsAsInstant
@@ -85,12 +88,26 @@ private fun <T, R> StateFlow<T>.mapState(f: (T) -> R): StateFlow<R> = object : S
 class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = null) {
 
     internal data class TableMeta(
-        val vecTypes: Map<ColumnName, VectorType>,
-        val rowCount: Long,
-        val hlls: Map<ColumnName, HLL>
+        val columns: Map<ColumnName, ColumnMeta>,
+        val rowCount: Long
     ) {
+        val vecTypes: Map<ColumnName, VectorType> by lazy { columns.mapValues { it.value.type.vectorType } }
+
+        val hlls: Map<ColumnName, HLL> by lazy {
+            buildMap { for ((name, col) in columns) col.hll?.let { put(name, it) } }
+        }
+
         /** @see xtdb.indexer.TableSnapshot.contributedType — the historical side of the same memo. */
         val absentContribution by lazy { VectorType.absentContribution(vecTypes) }
+
+        companion object {
+            fun of(vecTypes: Map<ColumnName, VectorType>, rowCount: Long, hlls: Map<ColumnName, HLL>) =
+                TableMeta(
+                    vecTypes.mapValues { (name, type) -> ColumnMeta.of(name, type, hlls[name]) }
+                        .withOrdinalsFrom(emptyMap()),
+                    rowCount
+                )
+        }
     }
 
     /**
@@ -121,6 +138,10 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
             get() = tables.mapValues { (_, meta) -> meta.vecTypes }
 
         fun rowCount(table: TableRef): Long? = tables[table]?.rowCount
+
+        /** The ordinal each of [table]'s columns was recorded under, empty for a table no block records. */
+        fun columnOrdinals(table: TableRef): Map<ColumnName, Int> =
+            tables[table]?.columns.orEmpty().mapValues { it.value.ordinal }
 
         /** The historical half's contribution — an unknown table has written nothing. */
         fun contributedType(table: TableRef, col: ColumnName): VectorType =
@@ -234,7 +255,7 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
      * sets their types (`Nothing ⊔ X = X`). No-op if the table was already loaded from storage.
      */
     fun seedTable(table: TableRef, colNames: List<ColumnName>) {
-        val meta = TableMeta(colNames.associateWith { VectorType.Nothing }, 0, emptyMap())
+        val meta = TableMeta.of(colNames.associateWith { VectorType.Nothing }, 0, emptyMap())
 
         _state.update { cur ->
             cur.copy(tables = if (cur.tables.containsKey(table)) cur.tables else cur.tables + (table to meta))
@@ -261,7 +282,7 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
      * A re-delivered block leaves the block half alone but still folds the metadata.
      */
     fun refresh(block: Block?, metadata: Map<TableRef, LiveTable.BlockMetadata> = emptyMap()) {
-        val delta = metadata.mapValues { (_, bm) -> TableMeta(bm.vecTypes, bm.rowCount.toLong(), bm.hllDeltas) }
+        val delta = metadata.mapValues { (_, bm) -> TableMeta.of(bm.vecTypes, bm.rowCount.toLong(), bm.hllDeltas) }
 
         _state.update { cur ->
             val newBlock =
@@ -282,13 +303,11 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
         tableMetadata: Map<TableRef, LiveTable.FinishedBlock>,
         tablePartitions: Map<TableRef, List<Partition>>
     ): Map<TableRef, TableBlock> {
-        val delta = tableMetadata.mapValues { (_, fb) -> TableMeta(fb.vecTypes, fb.rowCount.toLong(), fb.hllDeltas) }
+        val delta = tableMetadata.mapValues { (_, fb) -> TableMeta.of(fb.vecTypes, fb.rowCount.toLong(), fb.hllDeltas) }
 
         return _state.updateAndGet { it.copy(tables = it.tables.foldIn(delta)) }
             .tables
-            .mapValues { (table, meta) ->
-                buildTableBlock(meta.vecTypes, meta.rowCount, tablePartitions[table].orEmpty(), meta.hlls)
-            }
+            .mapValues { (table, meta) -> buildTableBlock(meta, tablePartitions[table].orEmpty()) }
     }
 
     fun buildBlock(
@@ -352,14 +371,24 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
             allBlockFiles.toList().dropLast(maxOf(0, distance - 1)).lastOrNull()?.key
                 ?.let { blockKey -> Block.parseFrom(getByteArray(blockKey)) }
 
+        /**
+         * A block recording no columns predates the tree, so its schema and hlls are read instead — the
+         * new field being empty is what dates it, as `partitions` did before it (#4960).
+         */
         private fun parseTableBlock(tableBlock: TableBlock) =
-            TableMeta(
-                tableBlock.arrowSchema.toByteArray()
-                    .let { ByteBuffer.wrap(it).deserializeMessageAsSchemaInterruptibly() }
-                    .fields.associate { field -> field.name to field.asType },
-                tableBlock.rowCount,
-                tableBlock.columnNameToHllMap.mapValues { (_, bs) -> toHLL(bs.toByteArray()) }
-            )
+            if (tableBlock.columnsCount > 0)
+                TableMeta(
+                    tableBlock.columnsMap.mapValues { (slug, col) -> ColumnMeta.fromProto(slug, col) },
+                    tableBlock.rowCount
+                )
+            else
+                TableMeta.of(
+                    tableBlock.arrowSchema.toByteArray()
+                        .let { ByteBuffer.wrap(it).deserializeMessageAsSchemaInterruptibly() }
+                        .fields.associate { field -> field.name to field.asType },
+                    tableBlock.rowCount,
+                    tableBlock.columnNameToHllMap.mapValues { (_, bs) -> toHLL(bs.toByteArray()) }
+                )
 
         internal fun loadTablesFromStorage(
             bufferPool: BufferPool, entries: List<TableEntry>, blockIndex: BlockIndex
@@ -419,30 +448,34 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
             }
 
         internal fun mergeTables(old: TableMeta?, delta: TableMeta?): TableMeta {
-            if (old == null && delta == null) return TableMeta(emptyMap(), 0, emptyMap())
+            if (old == null && delta == null) return TableMeta(emptyMap(), 0)
             if (old == null) return delta!!
             if (delta == null) return old
-            return TableMeta(
+
+            // the merge stays on the types, and the tree is rebuilt from its result: identity is not in
+            // the lattice, so widening a column cannot disturb what the catalog knows about it
+            val merged = TableMeta.of(
                 vecTypes = mergeVecTypes(old.vecTypes, delta.vecTypes),
                 rowCount = old.rowCount + delta.rowCount,
                 hlls = mergeHlls(old.hlls, delta.hlls)
             )
+
+            return merged.copy(columns = merged.columns.withOrdinalsFrom(old.columns))
         }
 
-        internal fun buildTableBlock(
-            vecTypes: Map<ColumnName, VectorType>,
-            rowCount: Long,
-            partitions: List<Partition>,
-            hlls: Map<ColumnName, HLL>
-        ): TableBlock {
-            val schema = Schema(vecTypes.map { (colName, vecType) -> field(colName, vecType) })
+        internal fun buildTableBlock(meta: TableMeta, partitions: List<Partition>): TableBlock {
+            val schema = Schema(meta.vecTypes.map { (colName, vecType) -> field(colName, vecType) })
 
             return TableBlock.newBuilder()
                 .apply {
+                    // the schema and the hll map are what a reader predating the tree finds the columns by,
+                    // so they keep being written until a release can assume every node reads `columns`
                     this.arrowSchema = ByteString.copyFrom(schema.serializeAsMessageInterruptibly())
-                    this.rowCount = rowCount
-                    putAllColumnNameToHll(hlls.mapValues { (_, hll) -> ByteString.copyFrom(hll.duplicate()) })
+                    putAllColumnNameToHll(meta.hlls.mapValues { (_, hll) -> ByteString.copyFrom(hll.duplicate()) })
+
+                    this.rowCount = meta.rowCount
                     addAllPartitions(partitions)
+                    putAllColumns(meta.columns.mapValues { it.value.toProto() })
                 }
                 .build()
         }

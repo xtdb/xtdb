@@ -1,0 +1,134 @@
+edition = "2023";
+
+package xtdb.cols.proto;
+
+option java_multiple_files = true;
+
+message Struct {
+  // keyed by slug, as TableBlock.columns is
+  map<string, ColumnMeta> children = 1;
+}
+
+// The types that take an element and no parameters of their own: list, set and tstz-range.
+message Listy {
+  ColumnMeta el = 1;
+}
+
+message FixedSizeList {
+  int32 size = 1;
+  ColumnMeta el = 2;
+}
+
+message MapType {
+  bool keys_sorted = 1;
+  ColumnMeta el = 2;
+}
+
+message Maybe {
+  VecType mono = 1;
+}
+
+message Poly {
+  // ordered by leg name, so the same type yields the same bytes whichever node wrote it
+  repeated VecType legs = 1;
+}
+
+enum TimeUnit {
+  SECOND = 0;
+  MILLI = 1;
+  MICRO = 2;
+  NANO = 3;
+}
+
+message Decimal {
+  int32 precision = 1;
+  int32 scale = 2;
+  int32 bit_width = 3;
+}
+
+message Timestamp {
+  TimeUnit unit = 1;
+  // absent for a local timestamp, present for a zoned one
+  string timezone = 2;
+}
+
+message Time {
+  TimeUnit unit = 1;
+  int32 bit_width = 2;
+}
+
+message Date {
+  enum Unit {
+    DAY = 0;
+    MILLI = 1;
+  }
+
+  Unit unit = 1;
+}
+
+message Interval {
+  enum Unit {
+    YEAR_MONTH = 0;
+    DAY_TIME = 1;
+    MONTH_DAY_NANO = 2;
+    MONTH_DAY_MICRO = 3;
+  }
+
+  Unit unit = 1;
+}
+
+message VecType {
+  enum Simple {
+    NOTHING = 0;
+    NULL = 1;
+    BOOL = 2;
+    I8 = 3;
+    I16 = 4;
+    I32 = 5;
+    I64 = 6;
+    F32 = 7;
+    F64 = 8;
+    UTF8 = 9;
+    VAR_BINARY = 10;
+    KEYWORD = 11;
+    TRANSIT = 12;
+    URI = 13;
+    UUID = 14;
+    OID = 15;
+    REG_CLASS = 16;
+    REG_PROC = 17;
+  }
+
+  oneof type {
+    Simple simple = 1;
+    int32 fixed_size_binary = 2;
+    Decimal decimal = 3;
+    Timestamp timestamp = 4;
+    Date date = 5;
+    Time time = 6;
+    TimeUnit duration = 7;
+    Interval interval = 8;
+
+    Listy list = 9;
+    Listy set = 10;
+    Listy tstz_range = 11;
+    FixedSizeList fixed_size_list = 12;
+    MapType map = 13;
+
+    Struct struct = 14;
+    Maybe maybe = 15;
+    Poly poly = 16;
+  }
+}
+
+message ColumnMeta {
+  VecType type = 1;
+  bytes hll = 2;
+  // this position's place among its siblings, in the order they were first seen. Append-only and never
+  // reused, so it stays dense — a top-level column's is what pg_attribute reports as its attnum.
+  int32 ordinal = 3;
+  // the name a user sees. Absent on a block written before the two were distinguishable, where the key
+  // it is held under is also its name. See #4038.
+  string name = 4;
+}
+
