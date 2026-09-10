@@ -85,10 +85,16 @@
 --   it reflects only consumed-back txs). When the gauge crosses rows_per_block the
 --   resolver injects a BlockBoundary (in resolution order, so it lands after this
 --   block's txs and before the next block's) and PAUSES resolution — the source-log,
---   ext-source and GC select arms are EXCLUDED — until the boundary is read back and its
---   block uploaded. This pause keeps the follower's bounded pending-block buffer from
---   overflowing (no tx interleaves between the boundary and its upload). The pause is
---   deliberately the status quo; block double-buffering is separate future work (#4495).
+--   ext-source and GC select arms are EXCLUDED — until the block's own BlockUploaded is
+--   read back and the block adopted.
+--   The pause carries two obligations.
+--   It keeps the follower's bounded pending-block buffer from overflowing, no tx
+--   interleaving between the boundary and its upload.
+--   And it keeps anything from applying between FinishBlock and NextBlock, where the live
+--   tables have been written to block storage and are about to be cleared — rows applied
+--   there would be written nowhere.
+--   The pause is deliberately the status quo; block double-buffering is separate future
+--   work (#4495).
 --
 --   Two heads, two homes — callers choose:
 --     - the RESOLVED head, TxResolver.latest_completed_tx: the highest tx RESOLVED (and
@@ -936,9 +942,9 @@ rule FinishBlock {
     -- read back, resumes any resolution paused by CutBlock). Rows remain in memory
     -- until NextBlock.
     --
-    -- Because resolution paused at the boundary and stays paused until this upload,
-    -- nothing was staged-and-applied between the boundary and here — a durable L0 block
-    -- never contains rows from a later block.
+    -- Because resolution paused at the boundary and stays paused until this upload is read
+    -- back, nothing was staged-and-applied between the boundary and here — a durable L0
+    -- block never contains rows from a later block.
     when: FinishBlock(index, block_idx)
 
     -- Writes current (durable) live table contents to block storage.

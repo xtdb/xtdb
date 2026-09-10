@@ -81,8 +81,8 @@ class Watchers(
 
         state.updateIfActive {
             if (txId != null) check(txId > it.latestTxId) { "txId $txId <= latestTxId ${it.latestTxId}" }
-            // >= not >: BlockBoundary can carry the same source msgId as the preceding ResolvedTx
-            // when the block was triggered by isFull() (no FlushBlock in between)
+            // >= not >: the BlockUploaded closing a block can carry the same source msgId as the
+            // preceding ResolvedTx, when the block was cut by the row gauge with no FlushBlock in between
             if (srcMsgId != null) check(srcMsgId >= it.latestSourceMsgId) {
                 "srcMsgId $srcMsgId < latestSourceMsgId ${it.latestSourceMsgId}"
             }

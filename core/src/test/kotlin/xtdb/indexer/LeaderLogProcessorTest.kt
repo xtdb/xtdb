@@ -21,6 +21,7 @@ import xtdb.api.log.Log
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.SourceMessage
 import xtdb.api.log.Watchers
+import xtdb.api.storage.Storage
 import xtdb.database.Database
 import java.time.Instant
 import java.time.InstantSource
@@ -130,6 +131,59 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
         )
 
         assertEquals(-1L, watchers.latestSourceMsgId)
+    }
+
+    private fun record(msgId: Long, msg: ReplicaMessage) = Log.Record(0, msgId, Instant.now(), msg)
+
+    private fun uploaded(blockIdx: Long, latestProcessedMsgId: Long) =
+        ReplicaMessage.BlockUploaded(
+            Storage.VERSION, 0, blockIdx, latestProcessedMsgId, emptyList(), termId = 1
+        )
+
+    @Test
+    fun `a block is held from its boundary until its own upload reads back`() = runTest(timeout = 5.seconds) {
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+        val (proc, _, partitionState) = unstartedTerm(watchers)
+
+        proc.applyReplicaMessage(record(0, ReplicaMessage.BlockBoundary(0, 5, termId = 1)))
+
+        assertNotNull(
+            proc.pendingBlock,
+            "the block file has landed and the upload is appended, but this node has not adopted it"
+        )
+        assertNull(
+            partitionState.tableCatalog.currentBlockIndex,
+            "so the catalog has not moved past the block, which is what keeps it re-producible"
+        )
+
+        proc.applyReplicaMessage(record(1, uploaded(blockIdx = 0, latestProcessedMsgId = 5)))
+
+        assertNull(proc.pendingBlock)
+        assertEquals(0L, partitionState.tableCatalog.currentBlockIndex)
+    }
+
+    @Test
+    fun `a record arriving behind an open block applies once the block closes`() = runTest(timeout = 5.seconds) {
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+        val (proc, _, _) = unstartedTerm(watchers)
+
+        proc.applyReplicaMessage(record(0, ReplicaMessage.BlockBoundary(0, 5, termId = 1)))
+
+        proc.applyReplicaMessage(
+            record(
+                1,
+                ReplicaMessage.ResolvedTx(7, Instant.now(), true, null, emptyMap(), srcMsgId = 6, termId = 1)
+            )
+        )
+
+        assertEquals(
+            -1L, watchers.latestTxId,
+            "held: its rows belong to the block opening behind this one, and the live index is still on the one already snapshotted"
+        )
+
+        proc.applyReplicaMessage(record(2, uploaded(blockIdx = 0, latestProcessedMsgId = 5)))
+
+        assertEquals(7L, watchers.latestTxId, "and applied on the drain, behind the close")
     }
 
     @Test

@@ -164,9 +164,8 @@ rule LeaderClosesTrieGc {
 
 -- Two channels feed the loop, each playing a different role:
 --
---   `signal()`:           fire-and-forget. Used by the leader once a block
---                         upload completes (db.allium:
---                         LeaderUploadsBlockOnBoundary). The channel is
+--   `signal()`:           fire-and-forget. Used by the leader once it has adopted
+--                         a block (db.allium: LeaderAdoptsOwnBlock). The channel is
 --                         conflated, so a burst of block boundaries coalesces
 --                         into one upcoming cycle. Tx processing never blocks on
 --                         GC progress — the first cycle after a long disabled
@@ -195,8 +194,7 @@ rule LeaderFinishBlockSignalsTrieGc {
     -- and only enqueues: it cannot re-enter the persister, so it cannot deadlock
     -- against the cycle it is scheduling.
     --
-    -- Chains from db.allium's LeaderUploadsBlockOnBoundary, i.e. once the upload
-    -- has completed — not when the boundary was cut.
+    -- Chains from db.allium's LeaderAdoptsOwnBlock, i.e. once the leader has read its own upload back and moved onto the next block — not when the boundary was cut.
     when: TrieGcSignalled()
     requires: trie_gc.enabled
     requires: trie_gc.is_running

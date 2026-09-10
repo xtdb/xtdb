@@ -354,19 +354,15 @@ class LogProcessor(
                     )
 
                     pendingBlock?.let { pending ->
-                        LOG.debug("[${dbName}] transition: finishing pending block b${pending.blockIdx} with ${pending.bufferedRecords.size} held records")
+                        LOG.debug("[${dbName}] transition: producing pending block b${pending.blockIdx} with ${pending.bufferedRecords.size} held records")
 
-                        // Through the cutter, not the uploader: closing a block is what resets the row
-                        // gauge, and this block was cut before the gauge was seeded from a live index that
-                        // still held it.
-                        blockCutter.upload(pending.boundaryMsgId, pending.boundaryMessage)
-
-                        // The block is closed on this node from here — catalog refreshed, live index
-                        // rolled — so a failure below must not hand it to a re-opened follower, which
-                        // would match the upload we have just appended and close it a second time.
-                        pendingBlock = null
-
-                        proc.replayHeldRecords(pending)
+                        // Produced here, but closed — and its held records applied — only once the term
+                        // below reads this upload back. So the block stays held throughout, and a failure
+                        // in between hands it to a re-opened follower that closes it on the same message.
+                        // The held records cannot apply any earlier than that: their rows belong to the
+                        // block this one is about to open, and the live index has already snapshotted the
+                        // one it is still on.
+                        blockCutter.upload(pending)
                     }
 
                     val resumeAfterMsgId = watchers.latestSourceMsgId
@@ -427,15 +423,6 @@ class LogProcessor(
         }
     }
 
-    /** Fold and apply what the follower was holding behind its block, in the order the log had it. */
-    private suspend fun LeaderLogProcessor.replayHeldRecords(pendingBlock: PendingBlock) {
-        LOG.debug("[${dbName}] transition: replaying ${pendingBlock.bufferedRecords.size} held records")
-
-        pendingBlock.bufferedRecords.forEach { held ->
-            if (termFence.admit(held.message.termId)) applyReplicaMessage(held)
-        }
-    }
-
     override suspend fun demoteLeader(partition: Int) {
         val leader = when (val s = state) {
             is Following -> {
@@ -448,8 +435,13 @@ class LogProcessor(
 
         LOG.info("[$dbName] demote — tearing down leader, re-opening follower")
         leader.job.cancelAndJoin()
+
+        // After the join, as the promotion reads the follower's: the term applies until then, and one of
+        // those applies may be the adopt that closes this block.
+        val pendingBlock = leader.proc.pendingBlock
+
         leader.proc.close()
-        state = openFollower()
+        state = openFollower(pendingBlock)
     }
 
     override fun close() = state.close()

@@ -167,7 +167,6 @@ class FollowerLogProcessor @JvmOverloads constructor(
             is ReplicaMessage.BlockBoundary -> blockBoundaryTimer.timed {
                 pendingBlock = PendingBlock(record.msgId, msg, maxBufferedRecords)
                 LOG.debug("[$dbName] block boundary b${msg.blockIndex.asLexHex}: source=${msg.latestProcessedMsgId}, replica=${record.msgId} — waiting for BlockUploaded...")
-                watchers.notifyApplied(msg.latestProcessedMsgId)
                 blockBufferStartSample = meterRegistry?.let { Timer.start(it) }
             }
 
@@ -228,6 +227,10 @@ class FollowerLogProcessor @JvmOverloads constructor(
             tableCatalog.refresh(block, liveIndex.blockMetadata())
             liveIndex.nextBlock()
             compactor.signalBlock()
+
+            // Ahead of the drain below, whose records carry later source positions — behind it, this one
+            // would go backwards and trip the watchers' monotonicity check.
+            watchers.notifyApplied(msg.latestProcessedMsgId)
 
             val bufferedRecords = pending.bufferedRecords
             bufferedRecordsSummary?.record(bufferedRecords.size.toDouble())
