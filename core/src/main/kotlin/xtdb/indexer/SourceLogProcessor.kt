@@ -1,6 +1,5 @@
 package xtdb.indexer
 
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.selects.SelectBuilder
@@ -14,7 +13,6 @@ import xtdb.api.log.Log
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.ReplicaMessage.TriesAdded
 import xtdb.api.log.SourceMessage
-import xtdb.api.log.Watchers
 import xtdb.api.storage.Storage
 import xtdb.database.Database
 import xtdb.database.PartitionState
@@ -108,26 +106,16 @@ private inline fun runTaskGuarded(
  * each record in one resolves to.
  *
  * A batch is processed a record at a time and stops where a record cuts a block, because nothing may
- * interleave between a boundary and its upload. Both [appendTx] and [cutBlock] report a cut back, so the
- * pause is this processor's own state rather than a read of the term's.
+ * interleave between a boundary and its upload.
  */
 internal class SourceLogProcessor(
-    private val driver: LeaderDriver,
+    partitionStorage: PartitionStorage, partitionState: PartitionState,
+    private val dbCatalog: Database.Catalog?, private val dbName: DatabaseName, private val leaderTerm: Long,
+    private val logsDriver: LogProcessor.LogsDriver,
     private val txResolver: TxResolver,
-    partitionStorage: PartitionStorage,
-    partitionState: PartitionState,
-    private val watchers: Watchers,
-    private val dbCatalog: Database.Catalog?,
-    private val dbName: DatabaseName,
-    private val leaderTerm: Long,
+    private val blockCutter: BlockCutter,
     private val replicaAppender: ReplicaLogAppender,
     flushTimeout: Duration,
-
-    /** Stage a resolved tx for append, answering whether it filled the block. */
-    private val appendTx: suspend (ResolvedTx) -> Boolean,
-
-    /** Inject a block boundary covering the source log up to [MessageId], pausing resolution behind it. */
-    private val cutBlock: suspend (MessageId) -> Unit,
 ) : Log.RecordProcessor<SourceMessage> {
 
     private val sourceBatches = SourceBatches()
@@ -175,8 +163,21 @@ internal class SourceLogProcessor(
             }
         }
 
-    // Resolve one source-log record, answering whether it cut a block.
-    private suspend fun handleRecord(record: Log.Record<SourceMessage>): Boolean {
+    private suspend fun appendTx(resolvedTx: ResolvedTx): Boolean {
+        blockCutter.addRows(resolvedTx)
+
+        replicaAppender.append(TxItem(resolvedTx, leaderTerm))
+
+        return blockCutter.isFull
+    }
+
+    /**
+     * Resolve one source-log record, answering whether it cut a block.
+     *
+     * Everything the resolve side decides about a record is decided here, so this is the seam a test
+     * drives — [processRecords] adds only the batch pipe, which no caller but the transport needs.
+     */
+    suspend fun handleRecord(record: Log.Record<SourceMessage>): Boolean {
         val msgId = record.msgId
         val msg = record.message
         LOG.trace { "[$dbName] leader: message $msgId (${msg::class.simpleName})" }
@@ -190,7 +191,7 @@ internal class SourceLogProcessor(
                 val expectedBlockIdx = msg.expectedBlockIdx
                 val cut = expectedBlockIdx != null && expectedBlockIdx == (tableCatalog.currentBlockIndex ?: -1L)
 
-                if (cut) cutBlock(msgId)
+                if (cut) blockCutter.cut(msgId, txResolver.resolvedExtToken)
                 // see #5680
                 else replicaAppender.append(ControlItem(ReplicaMessage.NoOp(srcMsgId = msgId, termId = leaderTerm)))
 
@@ -300,7 +301,7 @@ internal class SourceLogProcessor(
 
     private suspend fun maybeFlushBlock() {
         if (blockFlusher.checkBlockTimeout(tableCatalog))
-            driver.requestFlushBlock(tableCatalog.currentBlockIndex ?: -1)
+            logsDriver.requestFlushBlock(tableCatalog.currentBlockIndex ?: -1)
     }
 
     /** The transport's edge: hand a poll batch over and await its resolution. */

@@ -113,7 +113,7 @@ Inject the collaborator; don't reach for a `Factory`::
 +
 A factory earns its keep only when instances must be created per-something at runtime, by code that doesn't have the dependencies to hand.
 `Compactor.Driver.Factory` qualifies — `Compactor.Impl.openForDatabase` creates one driver per database.
-`LeaderLogProcessor` doesn't: its driver has a single construction site, `LogProcessor.openLeader`, which already holds `partitionStorage`, `partitionState` and `blockUploader`, so it takes a `LeaderDriver` as a constructor parameter instead.
+`LogProcessor.LogsDriver` doesn't: it is stateless and one per partition, and `LogProcessor`'s own constructor already holds the `partitionStorage` it reads, so it is a constructor parameter defaulting to `RealLogsDriver(partitionStorage)`.
 +
 Before writing `interface Factory`, look at every call site of the thing being constructed.
 One site that already has the arguments means a plain constructor parameter — and direct injection shrinks the consumer as well, because the collaborator absorbs the parameters the consumer only held in order to pass them along.

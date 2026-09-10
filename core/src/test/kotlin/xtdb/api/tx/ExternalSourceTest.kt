@@ -6,77 +6,47 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
-import org.apache.arrow.memory.RootAllocator
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import xtdb.NodeBase
-import xtdb.NodeBase.Companion.openBase
 import xtdb.SimulationTestUtils.Companion.createTrieCatalog
 import xtdb.api.log.*
-import xtdb.catalog.TableCatalog
+import xtdb.api.error.Incorrect
 import xtdb.api.tx.TxIndexer.TxResult
-import xtdb.compactor.Compactor
+import xtdb.catalog.TableCatalog
 import xtdb.database.Database
 import xtdb.database.DatabaseLogs
 import xtdb.database.DatabasePartition
 import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
-import xtdb.api.IndexerConfig
-import xtdb.api.error.Incorrect
-import xtdb.indexer.BlockUploader
-import xtdb.indexer.CrashLogger
-import xtdb.indexer.BlockCutter
-import xtdb.indexer.LeaderDriver
-import xtdb.indexer.LeaderLogProcessor
-import xtdb.indexer.LeaderSupersededException
+import xtdb.indexer.LeaderTermTest
 import xtdb.indexer.LiveIndex
-import xtdb.indexer.RealLeaderDriver
-import xtdb.indexer.ReplicaApply
-import xtdb.indexer.ReplicaLogAppender
-import xtdb.indexer.TermFence
-import xtdb.indexer.applyAndAwait
-import xtdb.indexer.runLeaderTerm
+import xtdb.indexer.LogProcessor.LogsDriver
 import xtdb.storage.MemoryStorage
 import xtdb.tx.TxOpts
-import xtdb.util.closeAll
-import java.time.Instant
 import java.time.InstantSource
 import java.time.ZoneId
 import kotlin.time.Duration.Companion.milliseconds
 
-class ExternalSourceTest {
+internal class ExternalSourceTest : LeaderTermTest() {
 
-    private lateinit var allocator: RootAllocator
-    private lateinit var nodeBase: NodeBase
     private lateinit var bufferPool: MemoryStorage
     private lateinit var liveIndex: LiveIndex
 
-    // runTest cancels and joins backgroundScope before tearDown, so the leaders are quiescent here.
-    private val leadersToClose = mutableListOf<AutoCloseable>()
-
     @BeforeEach
-    fun setUp() {
-        allocator = RootAllocator()
-        nodeBase = openBase()
+    fun openRealIndex() {
         bufferPool = MemoryStorage(allocator, 0)
-
-        val tableCatalog = TableCatalog(bufferPool)
-        val trieCatalog = createTrieCatalog()
-        liveIndex = LiveIndex.open(allocator, tableCatalog, trieCatalog)
+        liveIndex = LiveIndex.open(allocator, TableCatalog(bufferPool), createTrieCatalog())
     }
 
     @AfterEach
-    fun tearDown() {
-        leadersToClose.closeAll()
+    fun closeRealIndex() {
         liveIndex.close()
         bufferPool.close()
-        nodeBase.close()
-        allocator.close()
     }
 
     /**
@@ -92,9 +62,7 @@ class ExternalSourceTest {
     ) : ExternalSource {
 
         override suspend fun onPartitionAssigned(
-            partition: Int,
-            afterToken: ExternalSourceToken?,
-            txIndexer: TxIndexer
+            partition: Int, afterToken: ExternalSourceToken?, txIndexer: TxIndexer
         ) {
             for (token in channel) {
                 txIndexer.index(token)
@@ -102,84 +70,63 @@ class ExternalSourceTest {
         }
 
         override fun close() {
-            channel.close()
         }
     }
 
-    // The leader is launched into `backgroundScope`, which runTest cancels and joins at end of test;
-    // tearDown then frees the leader's allocator.
-    private fun TestScope.leaderProc(
-        sourceLog: InMemoryLog<SourceMessage> = InMemoryLog(InstantSource.system(), 0),
-        replicaLog: InMemoryLog<ReplicaMessage> = InMemoryLog(InstantSource.system(), 0),
-        liveIndex: LiveIndex = this@ExternalSourceTest.liveIndex,
-        watchers: Watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1),
-        extSource: ExternalSource = InMemoryExternalSource(),
-        afterToken: ExternalSourceToken? = null,
-        wrapDriver: (LeaderDriver) -> LeaderDriver = { it },
-    ): LeaderLogProcessor {
-        val tableCatalog = TableCatalog(bufferPool)
-        val trieCatalog = createTrieCatalog()
-        val partitionState = PartitionState(tableCatalog, trieCatalog, liveIndex)
-        val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
-        val compactor = mockk<Compactor.ForDatabase>(relaxed = true)
-        val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", compactor, null, null, backgroundScope)
-        val driver = wrapDriver(RealLeaderDriver(partitionStorage, partitionState))
+    private class ExtTerm(val watchers: Watchers, private val replicaLog: InMemoryLog<ReplicaMessage>) {
 
-        val crashLogger = mockk<CrashLogger>(relaxed = true)
-        val replicaAppender = ReplicaLogAppender(driver)
-        val blockCutter = BlockCutter(partitionState, "test", 0, replicaAppender, blockUploader)
+        fun resolvedTxs() =
+            replicaLog.readRecords(0, 0, replicaLog.latestSubmittedMsgId() + 1)
+                .mapNotNull { it.message as? ReplicaMessage.ResolvedTx }.toList()
 
-        return LeaderLogProcessor(
-            allocator, nodeBase, partitionStorage, crashLogger,
-            partitionState, "test", driver, blockCutter, watchers, replicaAppender,
-            extSource,
-            skipTxs = emptySet(), dbCatalog = null,
-            flushTimeout = IndexerConfig().flushDuration,
-        ).also { proc ->
-            leadersToClose += proc
-            val replicaMsgs = Channel<ReplicaApply>()
-            backgroundScope.launch {
-                launch { proc.gc.runGc() }
-                proc.extSrcProc?.let { extSrcProc -> launch { extSrcProc.run() } }
+        /** Supersede the term, by putting a higher term on the log for it to read back. */
+        suspend fun supersede() = replicaLog.appendMessage(ReplicaMessage.NoOp(termId = 2))
 
-                val reader = launch {
-                    partitionStorage.replicaLog.tailAll(-1) { records ->
-                        records.forEach { replicaMsgs.applyAndAwait(it) }
-                    }
-                }
-
+        /**
+         * Await the term's failure. `awaitTx` returns when a tx applies and throws when the database
+         * fails, so it is a handle on a term that is going to die — where reading [Watchers.exception]
+         * needs a sleep first.
+         */
+        suspend fun awaitFailure(): Throwable {
+            val failure =
                 try {
-                    runLeaderTerm("test", watchers, proc, replicaMsgs, replicaAppender, TermFence("test", 0))
-                } finally {
-                    reader.cancel()
+                    watchers.awaitTx(0)
+                    null
+                } catch (e: Throwable) {
+                    e
                 }
-            }
+
+            return failure ?: fail("the term applied a tx rather than failing")
         }
+    }
+
+    private fun TestScope.extTerm(
+        extSource: ExternalSource,
+        liveIndex: LiveIndex = this@ExternalSourceTest.liveIndex,
+        wrapDriver: (LogsDriver) -> LogsDriver = { it },
+    ): ExtTerm {
+        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+
+        leaderProc(
+            StandardTestDispatcher(testScheduler),
+            replicaLog = replicaLog, bufferPool = bufferPool, liveIndex = liveIndex,
+            watchers = watchers, extSource = extSource, wrapDriver = wrapDriver,
+        )
+
+        return ExtTerm(watchers, replicaLog)
     }
 
     @Test
     fun `execute appends ResolvedTx to replica log`() = runTest {
-        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val extSource = InMemoryExternalSource()
-
-        leaderProc(replicaLog = replicaLog, extSource = extSource)
+        val term = extTerm(extSource)
 
         extSource.channel.send(null)
-        delay(500.milliseconds)
+        term.watchers.awaitTx(0)
 
-        assertTrue(replicaLog.latestSubmittedOffset() >= 0, "replica log should have received a message")
-
-        val replicaMessages = mutableListOf<ReplicaMessage>()
-        backgroundScope.launch {
-            replicaLog.tailAll(0, -1) { records ->
-                replicaMessages.addAll(records.map { it.message })
-            }
-        }
-        delay(200.milliseconds)
-
-        assertEquals(1, replicaMessages.size)
-        val resolved = replicaMessages[0] as ReplicaMessage.ResolvedTx
-        assertEquals(true, resolved.committed)
+        val resolved = term.resolvedTxs().single()
+        assertTrue(resolved.committed)
         assertEquals(0L, resolved.txId)
         assertEquals(
             -1L, resolved.srcMsgId,
@@ -189,70 +136,35 @@ class ExternalSourceTest {
 
     @Test
     fun `successive external events appear in the replica log with monotonic txIds`() = runTest {
-        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val extSource = InMemoryExternalSource()
-
-        leaderProc(replicaLog = replicaLog, extSource = extSource)
+        val term = extTerm(extSource)
 
         extSource.channel.send(null)
         extSource.channel.send(null)
-        delay(500.milliseconds)
+        term.watchers.awaitTx(1)
 
-        val resolvedTxs = mutableListOf<ReplicaMessage.ResolvedTx>()
-        backgroundScope.launch {
-            replicaLog.tailAll(0, -1) { records ->
-                records.forEach { (it.message as? ReplicaMessage.ResolvedTx)?.let(resolvedTxs::add) }
-            }
-        }
-        delay(200.milliseconds)
-
+        val resolvedTxs = term.resolvedTxs()
         assertEquals(listOf(0L, 1L), resolvedTxs.map { it.txId })
         assertTrue(resolvedTxs.all { it.committed }, "both txs should be committed")
     }
 
     @Test
-    fun `processRecords flows source records through the leader processor`() = runTest {
-        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
-        val lp = leaderProc(replicaLog = replicaLog)
-
-        val now = Instant.now()
-
-        lp.srcLogProc.processRecords(
-            listOf(
-                Log.Record(0, 0, now, SourceMessage.FlushBlock(-1))
-            )
-        )
-
-        delay(500.milliseconds)
-
-        assertTrue(replicaLog.latestSubmittedOffset() >= 0, "source records should flow through to the leader")
-    }
-
-    @Test
     fun `execute threads resumeToken to watchers`() = runTest {
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
         val extSource = InMemoryExternalSource()
-        leaderProc(watchers = watchers, extSource = extSource)
+        val term = extTerm(extSource)
 
         val token = "kafka-offset:42".toByteArray()
         extSource.channel.send(token)
+        term.watchers.awaitTx(0)
 
-        delay(500.milliseconds)
-
-        val watcherToken = watchers.externalSourceToken
-        assertNotNull(watcherToken)
-        assertArrayEquals(token, watcherToken)
+        assertArrayEquals(token, term.watchers.externalSourceToken)
     }
 
     @Test
     fun `error in external source propagates to watchers`() = runTest {
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
-
         val failingSource = object : ExternalSource {
             override suspend fun onPartitionAssigned(
-                partition: Int,
-                afterToken: ExternalSourceToken?,
-                txIndexer: TxIndexer
+                partition: Int, afterToken: ExternalSourceToken?, txIndexer: TxIndexer
             ) {
                 throw RuntimeException("source poll failed")
             }
@@ -260,93 +172,44 @@ class ExternalSourceTest {
             override fun close() {}
         }
 
-        leaderProc(watchers = watchers, extSource = failingSource)
-        delay(500.milliseconds)
-        assertNotNull(watchers.exception, "watchers should be in failed state")
+        val failure = extTerm(failingSource).awaitFailure()
+        assertTrue(
+            failure.message?.contains("source poll failed") == true,
+            "the source's own failure reaches the watchers: $failure"
+        )
     }
 
     @Test
     fun `fault in the commit pipeline tips watchers into Failed`() = runTest {
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
-        val liveIndex = mockk<LiveIndex>(relaxed = true) {
-            every { commitTx(any(), any()) } throws RuntimeException("commit pipeline fault")
-        }
-
         val extSource = InMemoryExternalSource()
-        leaderProc(watchers = watchers, liveIndex = liveIndex, extSource = extSource)
+        val term = extTerm(extSource, liveIndex = faultingLiveIndex())
 
         extSource.channel.send(null)
-        delay(500.milliseconds)
-        assertNotNull(watchers.exception, "watchers should be in failed state")
+
+        val failure = term.awaitFailure()
+        assertTrue(
+            failure.message?.contains("commit pipeline fault") == true,
+            "an apply fault fails the database rather than only the tx: $failure"
+        )
     }
 
     @Test
     fun `submit applies txs fire-and-forget with monotonic txIds`() = runTest {
-        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val extSource = InMemoryExternalSource(index = { submitTx(it) { TxResult.Committed() } })
-
-        leaderProc(replicaLog = replicaLog, extSource = extSource)
+        val term = extTerm(extSource)
 
         extSource.channel.send(null)
         extSource.channel.send(null)
-        delay(500.milliseconds)
+        term.watchers.awaitTx(1)
 
-        val resolvedTxs = mutableListOf<ReplicaMessage.ResolvedTx>()
-        backgroundScope.launch {
-            replicaLog.tailAll(0, -1) { records ->
-                records.forEach { (it.message as? ReplicaMessage.ResolvedTx)?.let(resolvedTxs::add) }
-            }
-        }
-        delay(200.milliseconds)
-
+        val resolvedTxs = term.resolvedTxs()
         assertEquals(listOf(0L, 1L), resolvedTxs.map { it.txId })
         assertTrue(resolvedTxs.all { it.committed }, "both fire-and-forget txs should commit")
     }
 
     @Test
-    fun `submit surfaces an unrecoverable failure to the caller on a later submit`() = runTest {
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
-        val liveIndex = mockk<LiveIndex>(relaxed = true) {
-            every { commitTx(any(), any()) } throws RuntimeException("commit pipeline fault")
-        }
-
-        val caught = CompletableDeferred<Throwable>()
-        val failingSource = object : ExternalSource {
-            override suspend fun onPartitionAssigned(
-                partition: Int, afterToken: ExternalSourceToken?, txIndexer: TxIndexer
-            ) {
-                try {
-                    while (true) {
-                        txIndexer.submitTx(null) { TxResult.Committed() }
-                        delay(10.milliseconds)
-                    }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Throwable) {
-                    caught.complete(e)
-                    throw e
-                }
-            }
-
-            override fun close() {}
-        }
-
-        leaderProc(watchers = watchers, liveIndex = liveIndex, extSource = failingSource)
-
-        val caughtError = caught.await()
-        assertEquals(
-            "commit pipeline fault", caughtError.message,
-            "the fire-and-forget caller sees the original failure cause"
-        )
-        assertNotNull(watchers.exception, "watchers should also be in failed state")
-    }
-
-    @Test
     fun `a superseded term stands the source down without failing the database`() = runTest {
-        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
-
-        val caught = CompletableDeferred<Throwable>()
+        val stoodDown = CompletableDeferred<Unit>()
         val source = object : ExternalSource {
             override suspend fun onPartitionAssigned(
                 partition: Int, afterToken: ExternalSourceToken?, txIndexer: TxIndexer
@@ -356,35 +219,23 @@ class ExternalSourceTest {
                         txIndexer.submitTx(null) { TxResult.Committed() }
                         delay(10.milliseconds)
                     }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Throwable) {
-                    caught.complete(e)
-                    throw e
+                } finally {
+                    stoodDown.complete(Unit)
                 }
             }
 
             override fun close() {}
         }
 
-        leaderProc(replicaLog = replicaLog, watchers = watchers, extSource = source)
+        val term = extTerm(source)
+        term.supersede()
 
-        replicaLog.appendMessage(ReplicaMessage.NoOp(termId = 1))
-
-        val caughtError = caught.await()
-        assertInstanceOf(
-            LeaderSupersededException::class.java, caughtError,
-            "the source is told the term was superseded, not merely that it was cancelled"
-        )
-        assertNull(watchers.exception, "a resignation leaves the database queryable")
+        stoodDown.await()
+        assertNull(term.watchers.exception, "a resignation leaves the database queryable")
     }
 
     @Test
     fun `executeTx throws when the drain faults, rather than hanging`() = runTest {
-        val liveIndex = mockk<LiveIndex>(relaxed = true) {
-            every { commitTx(any(), any()) } throws RuntimeException("commit pipeline fault")
-        }
-
         val thrown = CompletableDeferred<Throwable>()
         val extSource = object : ExternalSource {
             override suspend fun onPartitionAssigned(
@@ -402,7 +253,7 @@ class ExternalSourceTest {
             override fun close() {}
         }
 
-        leaderProc(liveIndex = liveIndex, extSource = extSource)
+        extTerm(extSource, liveIndex = faultingLiveIndex())
 
         val e = thrown.await()
         assertEquals(
@@ -412,40 +263,24 @@ class ExternalSourceTest {
     }
 
     @Test
-    fun `a replica-log append fault in the background append surfaces through executeTx`() = runTest {
-        val failingDriver = { inner: LeaderDriver ->
-            object : LeaderDriver by inner {
+    fun `a replica-log append fault fails the term rather than wedging it`() = runTest {
+        val failingDriver = { inner: LogsDriver ->
+            object : LogsDriver by inner {
                 override suspend fun appendToReplica(msg: ReplicaMessage): Log.MessageMetadata =
                     throw RuntimeException("replica-log append fault")
             }
         }
 
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
-        val thrown = CompletableDeferred<Throwable>()
-        val extSource = object : ExternalSource {
-            override suspend fun onPartitionAssigned(
-                partition: Int, afterToken: ExternalSourceToken?, txIndexer: TxIndexer
-            ) {
-                try {
-                    txIndexer.executeTx(null) { TxResult.Committed() }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Throwable) {
-                    thrown.complete(e)
-                }
-            }
+        val extSource = InMemoryExternalSource()
+        val term = extTerm(extSource, wrapDriver = failingDriver)
 
-            override fun close() {}
-        }
+        extSource.channel.send(null)
 
-        leaderProc(watchers = watchers, extSource = extSource, wrapDriver = failingDriver)
-
-        val e = thrown.await()
-        assertEquals(
-            "replica-log append fault", e.message,
-            "executeTx surfaces the background append's fault via its durability handle"
+        val failure = term.awaitFailure()
+        assertTrue(
+            failure.message?.contains("replica-log append fault") == true,
+            "the append fault fails the term, rather than leaving it wedged: $failure"
         )
-        assertNotNull(watchers.exception, "the fault reaches watchers: the term is failed, not silently wedged")
     }
 
     @Test
@@ -473,5 +308,9 @@ class ExternalSourceTest {
             db.submitTxBlocking(emptyList(), TxOpts(defaultTz = ZoneId.of("UTC")))
         }
         assertTrue(ex.message!!.contains("external source"), "message mentions external source")
+    }
+
+    private fun faultingLiveIndex() = mockk<LiveIndex>(relaxed = true) {
+        every { commitTx(any(), any()) } throws RuntimeException("commit pipeline fault")
     }
 }

@@ -258,7 +258,7 @@ contract BlockGcLeaderOnly {
         -- Every table in table_catalog.all_tables has a per-table block file
         -- at table_catalog.current_block_index. The block upload writes one
         -- per known table rather than only for the tables that took rows in
-        -- that block (db.allium, uploadBlock step 3), so a table's newest
+        -- that block (db.allium, upload step 3), so a table's newest
         -- per-table block file never lags the database's current index.
         --
         -- DeleteGarbageRule's threshold is absolute, so without this a table

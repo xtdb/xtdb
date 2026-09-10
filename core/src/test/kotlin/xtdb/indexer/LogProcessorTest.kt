@@ -73,11 +73,10 @@ class LogProcessorTest {
         partitionStorage: PartitionStorage,
         partitionState: PartitionState,
         watchers: Watchers,
-        blockUploader: BlockUploader,
         scope: CoroutineScope,
     ) = LogProcessor(
         allocator, nodeBase, mockk(relaxed = true),
-        partitionStorage, partitionState, "test-db", watchers, blockUploader,
+        partitionStorage, partitionState, "test-db", watchers,
         mockk<Compactor.ForDatabase>(relaxed = true), dbCatalog = null,
         externalSource = null,
         scope = scope,
@@ -91,11 +90,10 @@ class LogProcessorTest {
         val bufferPool = mockBufferPool()
         val partitionState = newPartitionState()
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
-        val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", mockk(relaxed = true), null, null, backgroundScope)
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         val scope = CoroutineScope(SupervisorJob())
-        val logProc = logProcessor(partitionStorage, partitionState, watchers, blockUploader, scope)
+        val logProc = logProcessor(partitionStorage, partitionState, watchers, scope)
 
         scope.launch { sourceLog.openGroupSubscription(logProc) }
 
@@ -113,11 +111,10 @@ class LogProcessorTest {
         val bufferPool = mockBufferPool(epoch = 1)
         val partitionState = newPartitionState()
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
-        val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", mockk(relaxed = true), null, null, backgroundScope)
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         val scope = CoroutineScope(SupervisorJob())
-        val logProc = logProcessor(partitionStorage, partitionState, watchers, blockUploader, scope)
+        val logProc = logProcessor(partitionStorage, partitionState, watchers, scope)
 
         scope.launch { sourceLog.openGroupSubscription(logProc) }
 
@@ -140,14 +137,13 @@ class LogProcessorTest {
         val bufferPool = mockBufferPool()
         val partitionState = newPartitionState()
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
-        val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", mockk(relaxed = true), null, null, backgroundScope)
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         // a previous incarnation of the counter reached 9
         replicaLog.appendMessage(ReplicaMessage.NoOp(termId = LeaderTerm.of(0, 9)))
 
         val scope = CoroutineScope(SupervisorJob())
-        val logProc = logProcessor(partitionStorage, partitionState, watchers, blockUploader, scope)
+        val logProc = logProcessor(partitionStorage, partitionState, watchers, scope)
 
         // ...so the fresh counter's first term, 0.1, is one every reader would discard
         val subscription = scope.async { sourceLog.openGroupSubscription(logProc) }
@@ -170,7 +166,6 @@ class LogProcessorTest {
         val bufferPool = mockBufferPool()
         val partitionState = newPartitionState()
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
-        val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", mockk(relaxed = true), null, null, backgroundScope)
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         replicaLog.appendMessage(ReplicaMessage.NoOp(termId = LeaderTerm.of(0, 9)))
@@ -181,7 +176,7 @@ class LogProcessorTest {
         )
 
         val scope = CoroutineScope(SupervisorJob())
-        val logProc = logProcessor(partitionStorage, partitionState, watchers, blockUploader, scope)
+        val logProc = logProcessor(partitionStorage, partitionState, watchers, scope)
 
         scope.launch { sourceLog.openGroupSubscription(logProc) }
 
@@ -205,7 +200,6 @@ class LogProcessorTest {
         val bufferPool = mockBufferPool()
         val partitionState = newPartitionState()
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
-        val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", mockk(relaxed = true), null, null, backgroundScope)
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         // Pre-populate the replica log with a transaction
@@ -216,7 +210,7 @@ class LogProcessorTest {
         )
 
         val scope = CoroutineScope(SupervisorJob())
-        val logProc = logProcessor(partitionStorage, partitionState, watchers, blockUploader, scope)
+        val logProc = logProcessor(partitionStorage, partitionState, watchers, scope)
 
         scope.launch { sourceLog.openGroupSubscription(logProc) }
 
@@ -242,7 +236,6 @@ class LogProcessorTest {
         val bufferPool = mockBufferPool(epoch = 1)
         val partitionState = newPartitionState()
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
-        val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", mockk(relaxed = true), null, null, backgroundScope)
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         // Pre-populate the replica log
@@ -253,7 +246,7 @@ class LogProcessorTest {
         )
 
         val scope = CoroutineScope(SupervisorJob())
-        val logProc = logProcessor(partitionStorage, partitionState, watchers, blockUploader, scope)
+        val logProc = logProcessor(partitionStorage, partitionState, watchers, scope)
 
         scope.launch { sourceLog.openGroupSubscription(logProc) }
 
@@ -278,11 +271,10 @@ class LogProcessorTest {
         val bufferPool = mockBufferPool()
         val partitionState = newPartitionState()
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
-        val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", mockk(relaxed = true), null, null, backgroundScope)
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         val scope = CoroutineScope(SupervisorJob())
-        val logProc = logProcessor(partitionStorage, partitionState, watchers, blockUploader, scope)
+        val logProc = logProcessor(partitionStorage, partitionState, watchers, scope)
 
         val highTerm = LeaderTerm.of(0, 9)
         logProc.transitionToLeader(0, highTerm).await()
@@ -314,11 +306,10 @@ class LogProcessorTest {
         // local log's process restarting — while the last block was cut at 9
         val partitionState = newPartitionState(boundaryTermId = LeaderTerm.of(0, 9))
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
-        val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", mockk(relaxed = true), null, null, backgroundScope)
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         val scope = CoroutineScope(SupervisorJob())
-        val logProc = logProcessor(partitionStorage, partitionState, watchers, blockUploader, scope)
+        val logProc = logProcessor(partitionStorage, partitionState, watchers, scope)
 
         assertThrows<Conflict> { logProc.termFence.checkUnfenced(LeaderTerm.of(0, 1)) }
         assertDoesNotThrow("bumping the term epoch clears the regression") {
@@ -338,11 +329,10 @@ class LogProcessorTest {
         val bufferPool = mockBufferPool()
         val partitionState = newPartitionState()
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
-        val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", mockk(relaxed = true), null, null, backgroundScope)
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         val scope = CoroutineScope(SupervisorJob())
-        val logProc = logProcessor(partitionStorage, partitionState, watchers, blockUploader, scope)
+        val logProc = logProcessor(partitionStorage, partitionState, watchers, scope)
 
         val leader = replicaLog.appendMessage(
             ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap(), srcMsgId = 1, termId = LeaderTerm.of(0, 2))
@@ -370,13 +360,12 @@ class LogProcessorTest {
         val bufferPool = mockBufferPool()
         val partitionState = newPartitionState()
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
-        val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", mockk(relaxed = true), null, null, backgroundScope)
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         every { bufferPool.getByteArray(TableCatalog.blockFilePath(0)) } returns block { blockIndex = 0 }.toByteArray()
 
         val scope = CoroutineScope(SupervisorJob())
-        val logProc = logProcessor(partitionStorage, partitionState, watchers, blockUploader, scope)
+        val logProc = logProcessor(partitionStorage, partitionState, watchers, scope)
 
         val cutter = LeaderTerm.of(0, 4)
         replicaLog.appendMessage(ReplicaMessage.BlockBoundary(0, 0, termId = cutter))
@@ -411,11 +400,10 @@ class LogProcessorTest {
         val bufferPool = mockBufferPool()
         val partitionState = newPartitionState()
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
-        val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", mockk(relaxed = true), null, null, backgroundScope)
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         val scope = CoroutineScope(SupervisorJob())
-        val logProc = logProcessor(partitionStorage, partitionState, watchers, blockUploader, scope)
+        val logProc = logProcessor(partitionStorage, partitionState, watchers, scope)
 
         // the leader that cut b0 died before uploading it, so the follower is still holding the block —
         // and the tx behind it, unfolded. That tx carries the boundary's own source position: the block
@@ -454,11 +442,10 @@ class LogProcessorTest {
         val bufferPool = mockBufferPool()
         val partitionState = newPartitionState()
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
-        val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", mockk(relaxed = true), null, null, backgroundScope)
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         val scope = CoroutineScope(SupervisorJob())
-        val logProc = logProcessor(partitionStorage, partitionState, watchers, blockUploader, scope)
+        val logProc = logProcessor(partitionStorage, partitionState, watchers, scope)
 
         // b0 stays open, so everything after it is held and the fence stays at the boundary's term —
         // which is what lets the claim below pass its own unfenced check
@@ -491,13 +478,12 @@ class LogProcessorTest {
         val bufferPool = mockBufferPool()
         val partitionState = newPartitionState()
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
-        val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", mockk(relaxed = true), null, null, backgroundScope)
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         // The database scope carries a handler in production; without one here the tail's rethrow reaches
         // runTest's uncaught-exception collector and fails the test from outside its assertions.
         val scope = CoroutineScope(SupervisorJob() + CoroutineExceptionHandler { _, _ -> })
-        val logProc = logProcessor(partitionStorage, partitionState, watchers, blockUploader, scope)
+        val logProc = logProcessor(partitionStorage, partitionState, watchers, scope)
 
         replicaLog.appendMessage(
             ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap(), srcMsgId = 10, termId = LeaderTerm.of(0, 1))
@@ -529,11 +515,10 @@ class LogProcessorTest {
         val bufferPool = mockBufferPool()
         val partitionState = newPartitionState()
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
-        val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", mockk(relaxed = true), null, null, backgroundScope)
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         val scope = CoroutineScope(SupervisorJob())
-        val logProc = logProcessor(partitionStorage, partitionState, watchers, blockUploader, scope)
+        val logProc = logProcessor(partitionStorage, partitionState, watchers, scope)
 
         logProc.termFence.admit(LeaderTerm.of(0, 9))
 

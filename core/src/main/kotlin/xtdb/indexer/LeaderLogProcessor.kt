@@ -1,8 +1,12 @@
 package xtdb.indexer
 
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.ReceiveChannel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.selects.selectUnbiased
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.NodeBase
 import xtdb.api.DatabaseName
@@ -22,12 +26,11 @@ import xtdb.database.PartitionStorage
 import xtdb.types.MessageId
 import xtdb.util.debug
 import xtdb.util.error
+import xtdb.util.info
 import xtdb.util.logger
 import xtdb.util.useAll
 import java.time.Duration
 import java.time.InstantSource
-
-private val LOG = LeaderLogProcessor::class.logger
 
 /**
  * A higher-term record read back on our own replica log: a newer leader has superseded us. Thrown from
@@ -36,6 +39,8 @@ private val LOG = LeaderLogProcessor::class.logger
  */
 internal class LeaderSupersededException(message: String) : RuntimeException(message)
 
+private val LOG = LeaderLogProcessor::class.logger
+
 internal class LeaderLogProcessor(
     private val al: BufferAllocator,
     nodeBase: NodeBase,
@@ -43,31 +48,30 @@ internal class LeaderLogProcessor(
     crashLogger: CrashLogger,
     partitionState: PartitionState,
     private val dbName: DatabaseName,
-    private val driver: LeaderDriver,
+    logsDriver: LogProcessor.LogsDriver,
     private val blockCutter: BlockCutter,
     private val watchers: Watchers,
 
     private val replicaAppender: ReplicaLogAppender,
+    private val termFence: TermFence,
 
     extSource: ExternalSource?,
     skipTxs: Set<MessageId>,
     private val dbCatalog: Database.Catalog?,
-    val leaderTerm: Long = 0,
+    private val leaderTerm: Long = 0,
     instantSource: InstantSource = InstantSource.system(),
     flushTimeout: Duration,
-    // Base for the GCs' delete fan-out; defaults to IO in prod, sims inject the seeded dispatcher.
-    gcDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : AutoCloseable {
 
     init {
-        require((dbCatalog != null) == (dbName == "xtdb")) {
-            "dbCatalog must be provided iff database is 'xtdb'"
-        }
+        check((dbCatalog != null) == (dbName == "xtdb")) { "dbCatalog must be provided iff database is 'xtdb'" }
     }
 
     private val partition = partitionStorage.partition
 
     private val tableCatalog = partitionState.tableCatalog
+    private val liveIndex = partitionState.liveIndex
 
     // Resolves each source-log / attach-detach / ext-source tx and holds it — with every other
     // resolved-but-not-yet-applied tx — until we've read it back off our own replica log and committed it
@@ -81,25 +85,26 @@ internal class LeaderLogProcessor(
         )
 
     val gc = GarbageCollector(
-        nodeBase, partitionStorage, partitionState, dbName, leaderTerm, replicaAppender, gcDispatcher
+        nodeBase, partitionStorage, partitionState, dbName, leaderTerm, replicaAppender, ioDispatcher
     )
 
     val srcLogProc = SourceLogProcessor(
-        driver, txResolver, partitionStorage, partitionState, watchers, dbCatalog, dbName, leaderTerm,
-        replicaAppender, flushTimeout, ::appendTx, ::cutBlock
+        partitionStorage, partitionState, dbCatalog, dbName,
+        leaderTerm, logsDriver, txResolver, blockCutter, replicaAppender, flushTimeout
     )
 
-    // An ext-source tx that fills a block cuts it like any other, but there is no batch mid-flight to
-    // stop, so the processor is handed the append alone.
     val extSrcProc =
         extSource?.let { source ->
-            ExternalSourceProcessor(source, partition, tableCatalog, watchers, txResolver) { appendTx(it) }
+            ExternalSourceProcessor(
+                source, tableCatalog, watchers, txResolver, blockCutter, replicaAppender,
+                partition = partition, leaderTerm = leaderTerm
+            )
         }
 
-    private suspend fun applyResolvedTx(msg: ReplicaMessage.ResolvedTx) {
+    private fun applyResolvedTx(msg: ReplicaMessage.ResolvedTx) {
         val txKey = TransactionKey(msg.txId, msg.systemTime)
 
-        msg.loadTableData(al).useAll { tables -> driver.applyTx(txKey, tables) }
+        msg.loadTableData(al).useAll { tables -> liveIndex.commitTx(txKey, tables) }
 
         val result =
             if (msg.committed) TransactionResult.Committed(txKey)
@@ -112,9 +117,9 @@ internal class LeaderLogProcessor(
         watchers.notifyApplied(effectiveSrcMsgId, result, msg.externalSourceToken)
     }
 
-    private suspend fun applyResolvedTx(tx: ResolvedTx) {
+    private fun applyResolvedTx(tx: ResolvedTx) {
         try {
-            driver.applyTx(tx.txKey, tx.allTables.associate { it.ref to it.relation })
+            liveIndex.commitTx(tx.txKey, tx.allTables.associate { it.ref to it.relation })
 
             watchers.notifyApplied(tx.srcMsgId, tx.txResult, tx.externalSourceToken)
 
@@ -124,50 +129,6 @@ internal class LeaderLogProcessor(
             // only thing that will ever fail its handle.
             tx.pending?.completeExceptionally(e)
             throw e
-        }
-    }
-
-    suspend fun applyReplicaMessage(record: Log.Record<ReplicaMessage>) {
-        val msg = record.message
-
-        when (msg) {
-            is ReplicaMessage.ResolvedTx -> {
-                // Ahead of the tx itself, so a caller that submitted an attach can use the database as
-                // soon as its transaction returns — and once, whichever way the tx below is applied.
-                // Nothing to guard on `committed`: a refused dbOp resolves to an abort carrying no dbOp.
-                applyDbOp(msg.dbOp)
-
-                txResolver.removeHead(msg.txId).use { tx ->
-                    if (tx != null) {
-                        applyResolvedTx(tx)
-                    } else {
-                        applyResolvedTx(msg)
-                    }
-                }
-            }
-
-            // Catalog already updated on the resolve side; here we only advance the source watermark.
-            is ReplicaMessage.TriesAdded -> watchers.notifyApplied(msg.sourceMsgId)
-
-            is BlockBoundary -> {
-                blockCutter.upload(record.msgId, msg)
-
-                // the block's covered source position, as the follower does
-                watchers.notifyApplied(msg.latestProcessedMsgId)
-
-                gc.signal()
-
-                srcLogProc.blockUploaded()
-            }
-
-            // Our own BlockUploaded, read back after uploadBlock already rolled the index — nothing to do
-            // but advance the watermark.
-            is ReplicaMessage.BlockUploaded -> watchers.notifyApplied(msg.latestProcessedMsgId)
-
-            is ReplicaMessage.NoOp -> watchers.notifyApplied(msg.srcMsgId)
-
-            // Catalog already updated on the resolve side (see GarbageCollector.handleTask); nothing to do.
-            is ReplicaMessage.TriesDeleted -> {}
         }
     }
 
@@ -202,52 +163,127 @@ internal class LeaderLogProcessor(
         }
     }
 
-    // ---- resolution ----
+    suspend fun applyReplicaMessage(record: Log.Record<ReplicaMessage>) {
+        val msgTermId = record.message.termId
 
-    private suspend fun cutBlock(latestProcessedMsgId: MessageId) =
-        blockCutter.cut(latestProcessedMsgId, txResolver.resolvedExtToken)
+        if (msgTermId > leaderTerm)
+            throw LeaderSupersededException("[$dbName] superseded: read term $msgTermId > our term $leaderTerm at ${record.msgId}")
 
-    // Hand a freshly-resolved tx to the append pump, answering whether it filled the block — which the
-    // caller needs, because a source batch mid-flight has to stop where that happens.
-    private suspend fun appendTx(resolvedTx: ResolvedTx): Boolean {
-        blockCutter.addRows(resolvedTx.allTables.sumOf { it.relation.rowCount.toLong() })
+        // Our own claim folded before this term opened, so the fence's high-water is
+        // our term and anything it refuses is below ours — which shouldn't appear
+        // past our replay target anyway. The fold has to happen here whatever the
+        // verdict, or the high-water would stand still for the length of the term.
+        if (!termFence.admit(msgTermId)) {
+            LOG.debug { "[$dbName] leader: discarding fenced record ${record.msgId} (term $msgTermId < $leaderTerm)" }
+        } else {
+            when (val msg = record.message) {
+                is ReplicaMessage.ResolvedTx -> {
+                    // Ahead of the tx itself, so a caller that submitted an attach can use the database as
+                    // soon as its transaction returns — and once, whichever way the tx below is applied.
+                    // Nothing to guard on `committed`: a refused dbOp resolves to an abort carrying no dbOp.
+                    applyDbOp(msg.dbOp)
 
-        replicaAppender.append(TxItem(resolvedTx, leaderTerm))
+                    txResolver.removeHead(msg.txId).use { tx ->
+                        if (tx != null) {
+                            applyResolvedTx(tx)
+                        } else {
+                            applyResolvedTx(msg)
+                        }
+                    }
+                }
 
-        return blockCutter.isFull
+                // Catalog already updated on the resolve side; here we only advance the source watermark.
+                is ReplicaMessage.TriesAdded -> watchers.notifyApplied(msg.sourceMsgId)
+
+                is BlockBoundary -> {
+                    blockCutter.upload(record.msgId, msg)
+
+                    // the block's covered source position, as the follower does
+                    watchers.notifyApplied(msg.latestProcessedMsgId)
+
+                    gc.signal()
+
+                    srcLogProc.blockUploaded()
+                }
+
+                // Our own BlockUploaded, read back after uploadBlock already rolled the index — nothing to do
+                // but advance the watermark.
+                is ReplicaMessage.BlockUploaded -> watchers.notifyApplied(msg.latestProcessedMsgId)
+
+                is ReplicaMessage.NoOp -> watchers.notifyApplied(msg.srcMsgId)
+
+                // Catalog already updated on the resolve side (see GarbageCollector.handleTask); nothing to do.
+                is ReplicaMessage.TriesDeleted -> {}
+            }
+        }
     }
 
-    val acceptingResolution get() = blockCutter.acceptingResolution
-
-    val blockFilled get() = blockCutter.isFull
-
-    /** Cut the block this term has filled, sealing it at the resolve side's current watermarks. */
-    suspend fun cutFilledBlock() = cutBlock(txResolver.resolvedSrcMsgId)
+    // ---- resolution ----
 
     /**
-     * Fail everything staged on this term, because it has ended with [cause].
+     * Run the term until it ends, then fail everything staged on it.
      *
-     * Nothing may be left awaiting the term once it has gone: whatever is staged, paused, or still queued
-     * gets failed here. Each task's own `abandon` picks the failure *kind*, so this is a flat sweep with no
-     * per-caller special-casing.
-     *
-     * Miss anything and the symptom is a hang, not an error — and for a source-log batch that hang is on
-     * the transport's poll thread (inside `processRecords`), which is also the sole servicer of the
-     * transport's unregister. So it wedges the whole subscription teardown and blows
-     * `DatabaseCatalog.close`'s bound (#5711 / #5817).
+     * A supersession is not a fault — it says this node is merely no longer the leader — so it MUST NOT
+     * reach the watchers: `Failed` is absorbing, and poisoning them over a resignation would leave a
+     * healthy database unqueryable until the process restarts (#5817).
      */
-    fun shutdown(cause: Throwable) {
-        txResolver.failPending(cause)
-        srcLogProc.shutdown(cause)
-        extSrcProc?.shutdown(cause)
-        gc.shutdown(cause)
+    suspend fun runTerm(replicaMsgs: ReceiveChannel<ReplicaApply>) {
+        try {
+            coroutineScope {
+                launch { gc.runGc() }
+                extSrcProc?.let { extSrcProc -> launch { extSrcProc.run() } }
 
-        replicaAppender.shutdown(cause)
+                launch(CoroutineName("$dbName-replica-appender")) { replicaAppender.run() }
+
+                while (true) {
+                    // Ahead of the arming below, not after it: a filled block must admit nothing else, and
+                    // the GC clause would otherwise slip a TriesDeleted in ahead of the boundary.
+                    if (blockCutter.isFull)
+                        blockCutter.cut(txResolver.resolvedSrcMsgId, txResolver.resolvedExtToken)
+
+                    selectUnbiased {
+                        replicaMsgs.onReceive { pending ->
+                            try {
+                                applyReplicaMessage(pending.record)
+                                pending.applied.complete(Unit)
+                            } catch (t: Throwable) {
+                                pending.applied.completeExceptionally(t.asCancellation())
+                                throw t
+                            }
+                        }
+
+                        if (blockCutter.acceptingResolution) {
+                            srcLogProc.run { armSelect() }
+                            extSrcProc?.run { armSelect() }
+                            gc.run { armSelect() }
+                        }
+                    }
+                }
+            }
+
+        } catch (t: Throwable) {
+            when {
+                t is LeaderSupersededException -> {
+                    LOG.info("[$dbName] ${t.message}")
+                }
+
+                !t.isShutdownSignal -> {
+                    LOG.error(t) { "[$dbName] leader term failed" }
+                    watchers.notifyError(t)
+                }
+            }
+
+            // A flat sweep rather than per-caller handling: nothing may be left awaiting a term that has gone,
+            // and the symptom of missing one is a hang, not an error (#5711 / #5817).
+            txResolver.failPending(t)
+            srcLogProc.shutdown(t)
+            extSrcProc?.shutdown(t)
+            gc.shutdown(t)
+            replicaAppender.shutdown(t)
+        }
     }
 
     override fun close() {
-        // Frees every resolved-but-not-applied tx — safe only once the term's job has been joined, so the
-        // persister and the pumps are gone.
         txResolver.close()
     }
 }

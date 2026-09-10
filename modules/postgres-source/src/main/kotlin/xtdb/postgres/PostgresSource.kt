@@ -290,8 +290,9 @@ class PostgresSource(
                     }.toByteArray()
 
                     // Fire-and-forget: batches pipeline through the indexer, and the snapshot-complete marker
-                    // below is an in-order durability barrier for all of them. A batch ingest failure surfaces
-                    // on a later submit or on the marker's `executeTx`, aborting the snapshot.
+                    // below is an in-order durability barrier for all of them. Discarding the handle is safe
+                    // because a batch ingest failure fails the leader term, which stands this source down —
+                    // so the snapshot aborts whether or not anything was awaiting that batch.
                     txIndexer.submitTx(token) { openTx ->
                         // snapshot has no upstream commit time — use the tx's system-time
                         val snapshotTx = PostgresDriver.Transaction(snapshot.slotLsn, openTx.txKey.systemTime, batch)

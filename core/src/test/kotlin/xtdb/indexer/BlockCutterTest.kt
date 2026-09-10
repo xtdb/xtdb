@@ -1,131 +1,222 @@
+@file:OptIn(xtdb.InternalApi::class)
+
 package xtdb.indexer
 
-import io.mockk.coEvery
-import io.mockk.every
 import io.mockk.mockk
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import org.apache.arrow.memory.RootAllocator
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
+import xtdb.NodeBase
+import xtdb.NodeBase.Companion.openBase
+import xtdb.SimulationTestUtils.Companion.createTrieCatalog
+import xtdb.api.IndexerConfig
+import xtdb.api.TableRef
+import xtdb.api.TransactionKey
 import xtdb.api.log.InMemoryLog
-import xtdb.api.log.Log
+import xtdb.api.log.ReplicaMessage.BlockBoundary
+import xtdb.api.log.ReplicaMessage.BlockUploaded
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.SourceMessage
-import xtdb.api.log.Watchers
-import xtdb.api.tx.TxIndexer
-import xtdb.log.proto.trieMetadata
-import xtdb.table.fromSchemaAndTable
+import xtdb.api.tx.OpenTx
+import xtdb.catalog.TableCatalog
+import xtdb.database.DatabaseLogs
+import xtdb.database.PartitionState
+import xtdb.database.PartitionStorage
+import xtdb.storage.MemoryStorage
+import xtdb.trie.Trie
+import xtdb.util.closeAll
 import java.time.Instant
 import java.time.InstantSource
-import java.time.ZoneId
-import kotlin.time.Duration.Companion.seconds
+import java.util.UUID
+import java.util.concurrent.atomic.AtomicLong
 
 /**
- * The leader's block cycle: what the boundary it cuts carries, and what reaches the replica log by the
- * time the block is closed.
- *
- * Driven through a running term, because the cycle spans the resolve side and the consume-back — the
- * boundary is appended by one and the upload is triggered by the other reading it.
+ * The leader's block cycle: what the boundary a cut emits carries, what the upload behind it writes, and
+ * what the cutter will take in between.
  */
-internal class BlockCutterTest : LeaderTermTest() {
+@OptIn(ExperimentalCoroutinesApi::class)
+internal class BlockCutterTest {
 
-    @Test
-    fun `block finishing writes BlockBoundary + BlockUploaded to replica log`() = runTest {
-        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
-        val finishedBlock = LiveTable.FinishedBlock(
-            vecTypes = emptyMap(),
-            rowCount = 10,
-            hllDeltas = emptyMap(),
-            writtenTrie = LiveTable.FinishedBlock.WrittenTrie(
-                trieKey = "test-trie",
-                dataFileSize = 42,
-                trieMetadata = trieMetadata {}
-            )
+    private val table = TableRef("public", "docs")
+
+    private lateinit var allocator: RootAllocator
+    private lateinit var nodeBase: NodeBase
+    private val toClose = mutableListOf<AutoCloseable>()
+
+    @BeforeEach
+    fun setUp() {
+        allocator = RootAllocator()
+        nodeBase = openBase(openMeterRegistry = false)
+    }
+
+    @AfterEach
+    fun tearDown() {
+        toClose.closeAll()
+        nodeBase.close()
+        allocator.close()
+    }
+
+    /**
+     * A real live index, storage and catalogs behind the cutter, so an upload writes the tries and block
+     * files it would in production and the row gauge counts rows that were actually applied.
+     *
+     * The cutter is built by [cutter] rather than here, because it seeds its gauge from the live index at
+     * construction — a test of that seeding has to apply its rows first.
+     */
+    private inner class Term(
+        blockThreshold: Long,
+        private val ioDispatcher: CoroutineDispatcher,
+    ) : AutoCloseable {
+        private val bufferPool = MemoryStorage(allocator, epoch = 0)
+        private val tableCatalog = TableCatalog(bufferPool)
+        private val trieCatalog = createTrieCatalog()
+
+        val liveIndex = LiveIndex.open(
+            allocator, tableCatalog, trieCatalog,
+            IndexerConfig().rowsPerBlock(blockThreshold), ioDispatcher
         )
-        val tableRef = fromSchemaAndTable("public/foo")
 
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
-        val lp = leaderProc(
-            StandardTestDispatcher(testScheduler),
-            replicaLog = replicaLog,
-            liveIndex = liveIndexMock {
-                coEvery { finishBlock(any(), any()) } returns mapOf(tableRef to finishedBlock)
-                every { latestCompletedTx } returns null
-            },
-            watchers = watchers,
-            extSource = null,
+        private val partitionState = PartitionState(tableCatalog, trieCatalog, liveIndex)
+        private val partitionStorage = PartitionStorage(
+            DatabaseLogs(
+                InMemoryLog<SourceMessage>(InstantSource.system(), 0),
+                InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
+            ),
+            bufferPool, null
         )
 
-        lp.srcLogProc.processRecords(listOf(
-            Log.Record(0, 0, Instant.now(), SourceMessage.FlushBlock(-1))
-        ))
-        watchers.awaitSource(0)
+        private val driver = RecordingLogsDriver()
+        val appender = ReplicaLogAppender(driver)
 
-        val replicaMessages = mutableListOf<ReplicaMessage>()
-        backgroundScope.launch {
-            replicaLog.tailAll(0, -1) { records -> replicaMessages.addAll(records.map { it.message }) }
+        val appended get() = driver.appended.toList()
+
+        /** Apply a tx of [rows] rows into the open block, as the consume-back does. */
+        fun applyRows(txId: Long, rows: Int) {
+            OpenTx(
+                allocator, nodeBase, partitionStorage, partitionState, "test",
+                TransactionKey(txId, Instant.EPOCH), null
+            ).use { tx ->
+                repeat(rows) {
+                    tx.table(table).apply {
+                        writeId(UUID.randomUUID())
+                        writeValidTimeMicros(0, 0)
+                        putDocWriter.endStruct()
+                        endPut()
+                    }
+                }
+                tx.writeTxRow(null, null)
+                liveIndex.commitTx(tx.txKey, tx.tables.associate { (ref, t) -> ref to t.txRelation })
+            }
         }
 
-        delay(200)
+        fun cutter(scope: CoroutineScope) =
+            BlockCutter(
+                partitionStorage, partitionState, "test", leaderTerm = 1, replicaAppender = appender,
+                logsDriver = driver, compactor = mockk(relaxed = true), dbCatalog = null,
+                meterRegistry = null, lastUploadEpochSeconds = AtomicLong(0), scope = scope,
+                ioDispatcher = ioDispatcher
+            )
 
-        assertEquals(2, replicaMessages.size, "expected 2 replica messages, got: $replicaMessages")
-        assertTrue(replicaMessages[0] is ReplicaMessage.BlockBoundary)
-        assertTrue(replicaMessages[1] is ReplicaMessage.BlockUploaded)
+        override fun close() {
+            partitionState.close()
+            bufferPool.close()
+        }
+    }
 
-        val boundary = replicaMessages[0] as ReplicaMessage.BlockBoundary
-        assertEquals(0, boundary.blockIndex)
+    /**
+     * Both messages of a block cut reach the same driver, so it holds the whole of what the cycle emits —
+     * but by different routes, which is why only one of them needs the scheduler. The boundary is queued
+     * on the pump, which appends from its own coroutine, so it lands on the next `runCurrent`; the upload
+     * is appended on the caller's, so it is there the moment [BlockCutter.upload] returns.
+     */
+    private fun TestScope.term(blockThreshold: Long = IndexerConfig().rowsPerBlock) =
+        Term(blockThreshold, StandardTestDispatcher(testScheduler))
+            .also {
+                toClose += it
+                backgroundScope.launch { it.appender.run() }
+            }
 
-        val uploaded = replicaMessages[1] as ReplicaMessage.BlockUploaded
+    @Test
+    fun `a cut emits the boundary, and the upload behind it the matching BlockUploaded`() = runTest {
+        val term = term()
+        val cutter = term.cutter(backgroundScope)
+        val token = byteArrayOf(1, 2, 3)
+
+        term.applyRows(txId = 0, rows = 1)
+
+        cutter.cut(latestProcessedMsgId = 7, extToken = token)
+        runCurrent()
+
+        val boundary = assertInstanceOf(BlockBoundary::class.java, term.appended.single())
+        assertEquals(0, boundary.blockIndex, "the first block a database cuts is block 0")
+        assertEquals(7, boundary.latestProcessedMsgId)
+        assertArrayEquals(token, boundary.externalSourceToken)
+
+        cutter.upload(boundaryMsgId = 0, boundary = boundary)
+        runCurrent()
+
+        val uploaded = assertInstanceOf(BlockUploaded::class.java, term.appended.last())
         assertEquals(0, uploaded.blockIndex)
-        assertTrue(uploaded.tries.isNotEmpty(), "BlockUploaded should contain trie details")
+        assertEquals(7, uploaded.latestProcessedMsgId)
+        assertArrayEquals(token, uploaded.externalSourceToken)
+        assertEquals(
+            listOf(Trie.l0Key(0).toString()),
+            uploaded.tries.filter { it.tableName == "public/docs" }.map { it.trieKey },
+            "the L0 this block wrote for our table, so a follower can pick it up"
+        )
     }
 
     @Test
-    fun `block boundaries carry the latest external-source token, not the last tx's`() = runTest(timeout = 5.seconds) {
-        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+    fun `nothing resolves between a cut and its upload`() = runTest {
+        val term = term()
+        val cutter = term.cutter(backgroundScope)
 
-        val lp = leaderProc(
-            StandardTestDispatcher(testScheduler),
-            replicaLog = replicaLog,
-            liveIndex = liveIndexMock {
-                coEvery { finishBlock(any(), any()) } returns emptyMap()
-                every { latestCompletedTx } returns null
-            },
-            watchers = watchers,
-            extSource = mockk(relaxed = true),
-            skipTxs = setOf(10),
-        )
+        assertTrue(cutter.acceptingResolution)
 
-        val token = byteArrayOf(1, 2, 3)
+        cutter.cut(latestProcessedMsgId = 0, extToken = null)
+        runCurrent()
 
-        // The ext-source tx carries the CDC resume token; awaiting its durability (txId 0) pins the
-        // ordering — it resolves and applies before the token-less source-log tx that follows.
-        lp.extSrcProc!!.submitTx(token) { TxIndexer.TxResult.Committed() }
-        watchers.awaitTx(0)
+        assertFalse(cutter.acceptingResolution, "resolution is refused for the length of the cut")
+        assertThrows<IllegalStateException> { cutter.addRows(1) }
 
-        // A token-less source-log tx (msgId 10; skipTxs covers it, so no Arrow payload needed, and its
-        // txId must exceed the ext tx's for watchers' monotonicity). It resolves behind the ext tx.
-        lp.srcLogProc.processRecords(listOf(
-            Log.Record(0, 10, Instant.now(), SourceMessage.Tx(ByteArray(0), null, ZoneId.of("UTC"), null, null))
-        ))
+        cutter.upload(0, term.appended.single() as BlockBoundary)
+        assertTrue(cutter.acceptingResolution, "the upload re-opens the block behind it")
+    }
 
-        // Force the cut with a FlushBlock: the block's last tx is the token-less source-log tx, so the
-        // boundary must carry the earlier ext tx's token (the last non-null token seen), not a null one.
-        lp.srcLogProc.processRecords(listOf(
-            Log.Record(0, 11, Instant.now(), SourceMessage.FlushBlock(-1))
-        ))
-        watchers.awaitSource(11)
+    @Test
+    fun `an empty block is never full, whatever the threshold`() = runTest {
+        val cutter = term(blockThreshold = 0).cutter(backgroundScope)
 
-        val boundaries = replicaLog.readRecords(0, 0, replicaLog.latestSubmittedMsgId() + 1)
-            .mapNotNull { it.message as? ReplicaMessage.BlockBoundary }.toList()
+        assertFalse(cutter.isFull, "cutting an empty block would live-lock the term")
 
-        assertEquals(1, boundaries.size, "exactly one BlockBoundary should be written")
-        assertArrayEquals(
-            token, boundaries.single().externalSourceToken,
-            "BlockBoundary must carry the ext-source tx's token, not the source-log tx's null token"
-        )
+        cutter.addRows(1)
+        assertTrue(cutter.isFull)
+    }
+
+    @Test
+    fun `a block inherited part-filled is full where the previous leader would have cut it`() = runTest {
+        val term = term(blockThreshold = 10)
+
+        // The rows a previous leader had already applied into the open block, which replay leaves behind.
+        // Eight puts, because the tx's own row in `xt$txs` counts towards the block like any other.
+        term.applyRows(txId = 0, rows = 8)
+        assertEquals(9, term.liveIndex.blockRowCount, "one short of the threshold")
+
+        val cutter = term.cutter(backgroundScope)
+        assertFalse(cutter.isFull)
+
+        cutter.addRows(1)
+        assertTrue(cutter.isFull, "the gauge is seeded from the rows already in the open block")
     }
 }

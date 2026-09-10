@@ -286,7 +286,7 @@ class LiveIndexTest {
     }
 
     /**
-     * Stops between `BlockUploader`'s two steps — `trieCatalog.addTries` has run, `tableCatalog.finishBlock`
+     * Stops between `BlockCutter`'s two steps — `trieCatalog.addTries` has run, `tableCatalog.finishBlock`
      * deliberately has not. The L0's rows are scannable by then and the catalog can't yet type them, which
      * leaves the live table as the only source that can. See #5873.
      */
@@ -350,7 +350,7 @@ class LiveIndexTest {
         }
     }
 
-    // #5525 — between BlockUploader's addTries(L0_N) and nextBlock, the live-table for block N still
+    // #5525 — between BlockCutter's addTries(L0_N) and nextBlock, the live-table for block N still
     // holds the rows the L0 trie now does. A snapshot opened in that window must not double-count:
     // the live-table is filtered, leaving L0 as the sole source of N's rows.
     @Test
@@ -371,7 +371,7 @@ class LiveIndexTest {
                     assertEquals(-1L, snap.trieCatSnap.l0MaxBlockIdx(table), "no L0 published yet")
                 }
 
-                // drive the BlockUploader flow up to (but not including) nextBlock
+                // drive the BlockCutter flow up to (but not including) nextBlock
                 for ((t, fb) in runBlocking { db.liveIndex.finishBlock(db.bp, 0L) }) {
                     val writtenTrie = fb.writtenTrie ?: continue
                     val trieDetails = TrieDetails.newBuilder()

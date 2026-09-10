@@ -77,7 +77,6 @@ given {
     live_index: LiveIndex              -- shared across leader/follower modes
     watchers: Watchers                 -- single instance: correlates source msg_ids and tx_ids with client futures
     table_catalog: TableCatalog
-    block_uploader: BlockUploader      -- shared by leader, transition processor
     compactor: Compactor.ForDatabase   -- peer of log_processor at db-system level
     storage_format: StorageFormat      -- this node's current storage/buffer_pool format
 }
@@ -195,12 +194,12 @@ entity LogProcessor {
 variant Leader : LogProcessor {
     -- The sole writer of this database's replica log for its term. Resolves source-log
     -- messages and external-source txs, appends them (plain, term-stamped), reads them
-    -- back and applies them. Also owns block finishing via BlockUploader, and the trie
+    -- back and applies them. Also owns block finishing via its BlockCutter, and the trie
     -- and block garbage collectors.
-    -- See: indexer/LeaderLogProcessor.kt, indexer/BlockCutter.kt, indexer/LeaderDriver.kt
+    -- See: indexer/LeaderLogProcessor.kt, indexer/BlockCutter.kt
     --
     -- A promotion's pending block is finished through this processor, before it reads its first source message.
-    --   - The boundary the outgoing leader cut is uploaded under the INCOMING term — see BlockUploader.
+    --   - The boundary the outgoing leader cut is uploaded under the INCOMING term — see BlockCutter.
     --   - The block is released once the upload returns, and the records the follower was holding replay behind it: each folds at its own position in the log and is applied where the fence admits it.
     --
     -- external_source is present iff the database has one configured; it makes this
@@ -232,6 +231,10 @@ variant Leader : LogProcessor {
     -- interleaves between the boundary and its upload, keeping the follower's bounded
     -- pending-block buffer empty. See live-index.allium "Block cut".
     block_in_progress: Boolean
+
+    -- This term's block cutter, constructed at promotion. The same one closes the block the
+    -- promotion inherited and every block this term goes on to fill.
+    block_cutter: BlockCutter
 }
 
 variant Follower : LogProcessor {
@@ -311,10 +314,15 @@ entity Watchers {
     --   ResolvedTx when the block was triggered by the row gauge (no FlushBlock in between).
 }
 
-entity BlockUploader {
-    -- The leader's, for finishing its own blocks and for completing the one a promotion inherited.
+entity BlockCutter {
+    -- One per leader term: it fills a block, cuts it and uploads it — this term's own blocks, and the one a promotion inherited.
     --
-    -- uploadBlock(boundaryMsgId, termId, boundaryMessage):
+    -- Owns the block cycle, Filling → Cut → Uploading → Filling.
+    -- Filling carries the rows resolved into the open block, seeded at promotion from the rows already applied into it, so a term that inherits a partially-filled block cuts it where the previous leader would have.
+    -- Resolution is armed only while Filling, so nothing is resolved between a boundary and its upload.
+    -- Leader.rows_since_block and Leader.block_in_progress are the coarser view this spec's rules take of that cycle.
+    --
+    -- upload(boundaryMsgId, boundaryMessage):
     --   1. Finishes live index block (liveIndex.finishBlock), yielding L0 tries — one per
     --      table that took rows in this block, and none at all for a table that took none.
     --      A block cut with no transactions in it therefore writes no tries whatsoever
@@ -322,21 +330,23 @@ entity BlockUploader {
     --   3. Finishes table catalog, uploads one per-table block file for EVERY table the
     --      table catalog knows — not only the tables from step 1. Block GC's per-table
     --      sweep depends on this (block-gc.allium, EveryTableBlockAtCurrentIndex)
-    --   4. Builds and persists the block file — carrying termId, which is what seeds a
+    --   4. Builds and persists the block file — carrying this term, which is what seeds a
     --      restarted log processor's fence
-    --   5. Refreshes the table catalog, then appends BlockUploaded to the replica log
-    --      (a PLAIN, term-stamped append — there is no producer)
+    --   5. Refreshes the table catalog, then appends BlockUploaded to the replica log and awaits it.
+    --      BlockUploaded is durable before step 6 rolls the live index
     --   6. Calls liveIndex.nextBlock()
     --   7. Off this coroutine, and in this order: posts the L0 tries to the SOURCE log as
-    --      TriesAdded, then compactor.signalBlock(). Off-coroutine because uploadBlock runs
+    --      TriesAdded, then compactor.signalBlock(). Off-coroutine because the upload runs
     --      on the source log's sole consumer, so appending inline self-deadlocks when the
     --      source-log buffer saturates at a boundary.
-    --   Returns the replica msg_id of the BlockUploaded message.
     --
-    -- termId is the APPENDING term, which is not always the boundary's: a transition finishes the previous leader's pending block.
+    -- The uploading term is this cutter's own, which is not always the boundary's: a promotion finishes the previous leader's pending block.
     -- The BlockUploaded carries the term of whoever appends it, because a leader confirms a write only on reading it back at its own term.
     --
-    -- See: indexer/BlockUploader.kt
+    -- The upload timer and the last-upload-time gauge are the DATABASE's, registered once on the log processor, and report across every term.
+    -- Each term's cutter is handed the gauge's backing state, because a Micrometer gauge keeps the state object it was registered with.
+    --
+    -- See: indexer/BlockCutter.kt
 }
 
 entity BlockFlusher {
@@ -696,7 +706,7 @@ config {
 -- and the leader consumes the source log instead, so records in [follower-pos,
 -- replay_target) would otherwise be silently skipped.
 -- If the follower had a pending block (saw BlockBoundary but not BlockUploaded), the new
--- leader finishes the block via BlockUploader — under its OWN term — before starting
+-- leader finishes the block via its BlockCutter — under its OWN term — before starting
 -- source log consumption.
 
 -- == Staleness ==
@@ -769,7 +779,8 @@ rule TransitionToLeader {
             last_resolved_ext_token: watchers.external_source_token,
             rows_since_block: live_index.block_row_count,
             block_in_progress: false,
-            pending_block: null
+            pending_block: null,
+            block_cutter: BlockCutter.created()
         )
         TxResolver.created(
             latest_completed_tx: live_index.latest_completed_tx
@@ -777,15 +788,14 @@ rule TransitionToLeader {
 
         -- The new leader finishes the block the outgoing one left behind, before it reads a source message.
         --   - The block's data is already in the live index (applied before BlockBoundary), but the block file was never persisted.
-        --   - The BlockUploaded is appended under the INCOMING term, because a leader confirms a write only on reading it back at its own term (see BlockUploader).
+        --   - The BlockUploaded is appended under the INCOMING term, because a leader confirms a write only on reading it back at its own term (see BlockCutter).
         --   - The upload and the replay are separate steps, with the block released between them.
         --     Once the upload returns, this node's catalog is refreshed and its live index rolled, so the block is closed here and the transition stops carrying it.
         --     A failure during the replay therefore re-opens a follower holding no block; one still holding it would match the BlockUploaded just appended and close the same block a second time.
         --   - The replay is where the held records meet the fence: each folds at its own position in the log and is applied where the fence admits it, through this same leader, which uploads on a BlockBoundary among them rather than entering the follower's pending mode.
         if pending_block != null:
-            block_uploader.uploadBlock(
+            log_processor.block_cutter.upload(
                 pending_block.boundary_msg_id,
-                term,
                 pending_block.boundary_message
             )
             log_processor.pending_block = null
@@ -1154,7 +1164,7 @@ rule LeaderUploadsBlockOnBoundary {
     -- pause buys: nothing was resolved-and-applied between the boundary and here, so a
     -- durable L0 block never contains rows from a later block.
     --
-    -- uploadBlock snapshots the index, uploads the files, appends BlockUploaded and rolls
+    -- The cutter snapshots the index, uploads the files, appends BlockUploaded and rolls
     -- the index. Then the GCs are signalled (a block boundary is the only moment new
     -- garbage can appear) and resolution RESUMES, picking up any stashed source batch.
     when: ApplyOwnRecord(record)
@@ -1165,12 +1175,12 @@ rule LeaderUploadsBlockOnBoundary {
             boundary_msg_id: record.msg_id,
             boundary_message: record
         )
-        block_uploader.uploadBlock(record.msg_id, log_processor.leader_term, record)
+        log_processor.block_cutter.upload(record.msg_id, record)
         log_processor.pending_block = null
 
-        -- uploadBlock has returned, so this block's files are in object storage. Announcing
+        -- The upload has returned, so this block's files are in object storage. Announcing
         -- that as its own event is what lets an external source confirm its upstream
-        -- position without reaching into the uploader.
+        -- position without reaching into the cutter.
         BlockBecameDurable(database, record.external_source_token)
 
         watchers.notifyMsg(record.latest_processed_msg_id)
@@ -1186,7 +1196,7 @@ rule LeaderAppliesOwnControlRecord {
     -- The leader's remaining own records need no work on apply — only the durable
     -- watermark advance, which is exactly what makes it lag resolution.
     --   TriesAdded / TriesDeleted: the trie catalog was already mutated on the resolve side.
-    --   BlockUploaded: our own, read back after uploadBlock already rolled the index.
+    --   BlockUploaded: our own, read back after the cutter's upload already rolled the index.
     --   NoOp: advances the watermark iff it carries one (a replay-target marker doesn't).
     when: ApplyOwnRecord(record)
     requires: record.kind in {TriesAddedMessage, TriesDeletedMessage, BlockUploadedMessage, NoOpMessage}
