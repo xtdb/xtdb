@@ -1627,6 +1627,10 @@ surface QueryAccess {
         -- It includes all transactions up to latest_completed_tx — those the leader has
         -- read BACK off its own replica log and applied. Resolved-but-not-yet-applied txs
         -- are NOT visible, and neither are the writes of a leader a newer term superseded.
+
+    @guarantee ExecutionReadsOneSnapshot
+        -- A single query execution opens one snapshot of this database and derives from it every answer it gives about this database: the table schema its plan is built against, the oids `::regclass` resolves through, and the rows its scans read.
+        -- An execution spanning several databases holds one such snapshot per database.
 }
 
 ---- Deferred Specifications

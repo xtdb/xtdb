@@ -39,7 +39,7 @@
            io.micrometer.core.instrument.Counter
            java.lang.AutoCloseable
            (java.time Duration InstantSource)
-           (java.util HashMap LinkedHashMap Map)
+           (java.util LinkedHashMap Map)
            [java.util.concurrent.atomic AtomicBoolean]
            (org.antlr.v4.runtime.misc Interval)
            (org.apache.arrow.memory BufferAllocator RootAllocator)
@@ -52,7 +52,7 @@
            (xtdb.indexer DatabaseSnapshot Snapshot)
            xtdb.NodeBase
            xtdb.operator.scan.IScanEmitter
-           (xtdb.query IQuerySource IQuerySource$Factory ParsedStatement PreparedQuery SqlStatement$Assert SqlStatement$CreateTable SqlStatement$Delete SqlStatement$Erase SqlStatement$GrantRole SqlStatement$Patch SqlStatement$Put SqlStatement$RevokeRole)
+           (xtdb.query IQuerySource IQuerySource$Factory IQuerySource$QueryDatabase ParsedStatement PreparedQuery SqlStatement$Assert SqlStatement$CreateTable SqlStatement$Delete SqlStatement$Erase SqlStatement$GrantRole SqlStatement$Patch SqlStatement$Put SqlStatement$RevokeRole)
            xtdb.util.RefCounter))
 
 (defn- wrap-result-types [^ICursor cursor, result-types]
@@ -184,14 +184,14 @@
     conformed-plan))
 
 (defn- emit-query [{:keys [conformed-plan scan-cols col-names ^Cache emit-cache, explain-analyze?]},
-                   scan-emitter, db-cat, snaps
+                   scan-emitter, dbs, snaps
                    param-types, {:keys [default-tz]}]
   (.get emit-cache {:scan-vec-types (scan/scan-vec-types snaps scan-cols)
 
                     ;; this one is just to reset the cache for up-to-date stats
                     ;; probably over-zealous
-                    :last-known-blocks (->> (for [db-name (.getDatabaseNames db-cat)]
-                                              [db-name (some-> (.databaseOrNull db-cat db-name) .getQueryState .getTableCatalog .getCurrentBlockIndex)]))
+                    :last-known-blocks (->> (for [[db-name ^IQuerySource$QueryDatabase db] dbs]
+                                              [db-name (-> db .getQueryState .getTableCatalog .getCurrentBlockIndex)]))
 
                     :default-tz default-tz
                     :param-types param-types
@@ -203,7 +203,7 @@
                               {:scan-vec-types scan-vec-types
                                :default-tz default-tz
                                :param-types param-types
-                               :db-cat db-cat
+                               :dbs dbs
                                :scan-emitter scan-emitter})
                 (update :vec-types (fn [vts]
                                      (->result-types col-names vts))))))))
@@ -348,39 +348,27 @@
                                                                      :tx-scoped? (.getTxScoped db-cat)))]
       ;; min-basis is {db-name [system-time per partition]} — the caller's already-awaited read basis, so the
       ;; live index can hand back its cached snapshot when it's fresh enough. nil = "don't care" (schema/prepare).
-      (letfn [(open-snaps [min-basis]
-                ;; TODO this opens up a snapshot for *every* db in the catalog
-                ;; when people have 'proper' multi-tenancy, this will be a problem
-                ;; thankfully we can probably figure out what databases may be relevant to the query at parse-time
-                (util/with-close-on-catch [!snaps (HashMap.)]
-                  ;; `getDatabaseNames` and `databaseOrNull` are separate reads, so a concurrent
-                  ;; DETACH can drop a database between them — skip it, as Database.Catalog's own
-                  ;; iterators do. We open a snapshot for every attached database, so a query that
-                  ;; never mentions the detached one would otherwise die on its NPE.
-                  (doseq [db-name (.getDatabaseNames db-cat)
-                          :let [db (.databaseOrNull db-cat db-name)]
-                          :when db]
-                    (.put !snaps db-name (.openSnapshot db (get min-basis db-name))))
-                  (into {} !snaps)))
+      (letfn [(resolve-dbs [] (into {} (.resolveDbs db-cat)))
 
-              ;; `{[db-name table-ref] {:cols #{…}, :oid n}}` — the oid read from the same snapshot as
-              ;; the columns, so `::regclass` and the planner can't disagree about which tables exist.
-              (->table-info [min-basis]
-                ;; TODO this, too, gets the schema for *every* db in the catalog
-                (->> (.getDatabaseNames db-cat)
-                     (into {} (mapcat (fn [db-name]
-                                        ;; same detach race as open-snaps above
-                                        (when-let [db (.databaseOrNull db-cat db-name)]
-                                          (util/with-open [^DatabaseSnapshot snap (.openSnapshot db (get min-basis db-name))]
-                                            (let [oids (.tableOids snap)]
-                                              (->> (.tableInfo snap)
-                                                   (map (fn [[table-ref cols]]
-                                                          [[db-name table-ref] {:cols (set cols), :oid (get oids table-ref)}])))))))))))
+              (open-snaps [dbs min-basis]
+                (into {} (.openSnapshots db-cat dbs min-basis)))
+
+              ;; `{[db-name table-ref] {:cols #{…}, :oid n}}`, projected from the snapshots the operation
+              ;; is already holding — so the schema a query is planned against, the oids `::regclass`
+              ;; resolves through, and the rows the scan reads all come from one snapshot per database.
+              (->table-info [snaps]
+                (->> snaps
+                     (into {} (mapcat (fn [[db-name ^DatabaseSnapshot snap]]
+                                        (let [oids (.tableOids snap)]
+                                          (->> (.tableInfo snap)
+                                               (map (fn [[table-ref cols]]
+                                                      [[db-name table-ref] {:cols (set cols), :oid (get oids table-ref)}])))))))))
 
               (plan-query* [table-info]
                 (-plan-query this parsed-query query-opts (update-vals table-info :cols)))]
 
-        (let [!table-info (atom (->table-info prepare-min-basis))]
+        (let [!table-info (atom (util/with-open [snaps (open-snaps (resolve-dbs) prepare-min-basis)]
+                                  (->table-info snaps)))]
 
           (reify PreparedQuery
             (getParamCount [_] (:param-count (plan-query* @!table-info)))
@@ -389,9 +377,10 @@
             (getParsed [_] stmt)
 
             (getColumnFields [_ param-fields]
-              (let [planned-query (plan-query* @!table-info)]
-                (util/with-open [snaps (open-snaps prepare-min-basis)]
-                  (let [emitted-query (emit-query planned-query scan-emitter db-cat snaps
+              (let [planned-query (plan-query* @!table-info)
+                    dbs (resolve-dbs)]
+                (util/with-open [snaps (open-snaps dbs prepare-min-basis)]
+                  (let [emitted-query (emit-query planned-query scan-emitter dbs snaps
                                                   (->> param-fields
                                                        (into {} (map (fn [^Field f]
                                                                        [(symbol (.getName f)) (types/->type f)]))))
@@ -412,23 +401,36 @@
                     ;; schema consistent with the data it'll read. This same token, decoded and (below) capped by
                     ;; any SETTING/SNAPSHOT_TIME, is the effective read basis; capping only lowers the bound, so
                     ;; gating on the resolved token stays safe.
-                    min-basis (some-> (.getSnapshotToken opts) basis/<-time-basis-str)]
+                    min-basis (some-> (.getSnapshotToken opts) basis/<-time-basis-str)
+                    dbs (resolve-dbs)]
               ;; we own the args from here: closed on any failure below, else handed to the cursor (which
               ;; closes them on close). the caller must not close them itself.
               (util/with-close-on-catch [^RelationReader args (or args vw/empty-args)
                                          ^BufferAllocator allocator (if allocator
                                                                       (util/->child-allocator allocator "BoundQuery/openCursor")
                                                                       (RootAllocator.))
-                                         snaps (open-snaps min-basis)]
+                                         snaps (open-snaps dbs min-basis)]
                 (let [query-opts (-> query-opts (assoc :default-tz default-tz))
-                      table-info (reset! !table-info (->table-info min-basis))
+                      table-info (reset! !table-info (->table-info snaps))
                       planned-query (plan-query* table-info)
 
-                      {:keys [vec-types ->cursor] :as emitted-query} (emit-query planned-query scan-emitter db-cat snaps (->arg-types args) query-opts)
+                      {:keys [vec-types ->cursor] :as emitted-query} (emit-query planned-query scan-emitter dbs snaps (->arg-types args) query-opts)
                       current-time (or (some-> (or (:current-time planned-query) (.getCurrentTime opts))
                                                (expr->value {:args args})
                                                (time/->instant {:default-tz default-tz}))
                                        (expr/current-time))
+                      ;; the system-time each partition is read at, per database. `SETTING SNAPSHOT_TOKEN`
+                      ;; names it directly and `SNAPSHOT_TIME` caps it, so it can sit below the `min-basis`
+                      ;; the snapshots were opened at: the floor picks the snapshot, this picks what's
+                      ;; visible within it.
+                      system-time-basis (cond-> (or (some-> (:snapshot-token planned-query (.getSnapshotToken opts))
+                                                            (expr->value {:args args})
+                                                            (basis/<-time-basis-str)
+                                                            (doto (validate-basis-not-before snaps)))
+
+                                                    (default-basis snaps))
+                                          (.getSnapshotTime opts) (basis/cap-basis (time/->instant (.getSnapshotTime opts))))
+
                       tracer (.getTracer opts)
                       query-span (when tracer
                                    (metrics/start-span tracer "xtdb.query" {:attributes {:query.text query-text}}))
@@ -444,15 +446,9 @@
                     (binding [expr/*clock* (InstantSource/fixed current-time)
                               expr/*default-tz* default-tz
 
-                              ;; both snapshot-token and snapshot-time form upper bounds - the result is the intersection of the two
-                              expr/*snapshot-token* (some-> (cond-> (or (some-> (:snapshot-token planned-query (.getSnapshotToken opts))
-                                                                                (expr->value {:args args})
-                                                                                (basis/<-time-basis-str)
-                                                                                (doto (validate-basis-not-before snaps)))
-
-                                                                        (default-basis snaps))
-                                                              (.getSnapshotTime opts) (basis/cap-basis (time/->instant (.getSnapshotTime opts))))
-                                                            (basis/->time-basis-str))]
+                              ;; the string is the SQL `SNAPSHOT_TOKEN` function's return value, and the
+                              ;; only reason it's still encoded — operators take the map.
+                              expr/*snapshot-token* (some-> system-time-basis (basis/->time-basis-str))]
 
                       (if (:explain? planned-query)
                         (let [explain-plan (->explain-plan emitted-query)]
@@ -463,11 +459,12 @@
                         (let [result-types (->result-types (:ordered-outer-projection planned-query) vec-types)
                               cursor (-> (->cursor {:allocator allocator,
                                                     :query-source this
+                                                    :db-cat db-cat
+                                                    :dbs dbs
                                                     :snaps snaps
-                                                    :snapshot-token expr/*snapshot-token*
+                                                    :system-time-basis system-time-basis
                                                     :current-time current-time
                                                     :args args, :schema table-info
-                                                    :default-tz default-tz
                                                     :explain-analyze? (:explain-analyze? planned-query)
                                                     :tracer tracer
                                                     :query-span query-span})
@@ -511,7 +508,7 @@
 
   (preparePatchDocsQuery [this table valid-from valid-to db-cat opts]
     (let [default-db (.getDefaultDb opts)
-          table-info (-> (util/with-open [^DatabaseSnapshot snap (.openSnapshot (.databaseOrNull db-cat default-db) nil)]
+          table-info (-> (util/with-open [^DatabaseSnapshot snap (.openSnapshot (.databaseOrThrow db-cat default-db) nil)]
                            (.tableInfo snap))
                          (sql/xform-table-info [default-db] default-db))
           plan (-> (sql/plan-patch {:table-info table-info}
