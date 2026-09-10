@@ -3,11 +3,9 @@ package xtdb.indexer
 import io.micrometer.core.instrument.Gauge
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.channels.SendChannel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.selects.selectUnbiased
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.NodeBase
 import xtdb.api.DatabaseName
@@ -50,7 +48,7 @@ internal fun Throwable?.asCancellation(): CancellationException =
  * A replica record handed to a leader term, carrying the handle its sender waits on.
  *
  * Application runs on the term's coroutine rather than the tail's because it shares the term's block
- * state, live index and tx resolver with the clauses [runLeaderTerm] arms — concurrently, a tx could
+ * state, live index and tx resolver with the clauses [LeaderLogProcessor.runTerm] arms — concurrently, a tx could
  * resolve during a block cut, which the term treats as unreachable.
  */
 internal class ReplicaApply(val record: Log.Record<ReplicaMessage>) {
@@ -63,84 +61,6 @@ internal class ReplicaApply(val record: Log.Record<ReplicaMessage>) {
  */
 internal suspend fun SendChannel<ReplicaApply>.applyAndAwait(record: Log.Record<ReplicaMessage>) =
     ReplicaApply(record).also { send(it) }.applied.await()
-
-/**
- * Run a leader term until it ends, then fail everything staged on it.
- *
- * The term's work and its append pump are structured together, so whichever fails first cancels the other
- * and arrives here as the cause. Cancelling the caller is what ends a term that hasn't failed.
- *
- * Which failures reach the watchers is decided here rather than in the term, because the term is not the
- * thing that knows a resignation from a fault: a supersession means this node is merely no longer the
- * leader, and poisoning the watchers over it would leave a healthy database unqueryable (#5817).
- */
-internal suspend fun runLeaderTerm(
-    dbName: DatabaseName,
-    watchers: Watchers,
-    term: LeaderLogProcessor,
-    replicaMsgs: ReceiveChannel<ReplicaApply>,
-    appender: ReplicaLogAppender,
-    blockCutter: BlockCutter,
-    termFence: TermFence,
-) {
-    try {
-        coroutineScope {
-            launch(CoroutineName("$dbName-replica-appender")) { appender.run() }
-
-            while (true) {
-                // Ahead of the arming below, not after it: a filled block must admit nothing else, and
-                // the GC clause would otherwise slip a TriesDeleted in ahead of the boundary.
-                if (blockCutter.isFull) term.cutFilledBlock()
-
-                selectUnbiased {
-                    replicaMsgs.onReceive { pending ->
-                        try {
-                            val record = pending.record
-                            val termId = record.message.termId
-
-                            if (termId > term.leaderTerm)
-                                throw LeaderSupersededException("[$dbName] superseded: read term $termId > our term ${term.leaderTerm} at ${record.msgId}")
-
-                            // Our own claim folded before this term opened, so the fence's high-water is
-                            // our term and anything it refuses is below ours — which shouldn't appear
-                            // past our replay target anyway. The fold has to happen here whatever the
-                            // verdict, or the high-water would stand still for the length of the term.
-                            if (!termFence.admit(termId)) {
-                                LOG.debug { "[$dbName] leader: discarding fenced record ${record.msgId} (term $termId < ${term.leaderTerm})" }
-                            } else {
-                                term.applyReplicaMessage(record)
-                            }
-
-                            pending.applied.complete(Unit)
-                        } catch (t: Throwable) {
-                            pending.applied.completeExceptionally(t.asCancellation())
-                            throw t
-                        }
-                    }
-
-                    if (blockCutter.acceptingResolution) {
-                        term.srcLogProc.run { armSelect() }
-                        term.extSrcProc?.run { armSelect() }
-                        term.gc.run { armSelect() }
-                    }
-                }
-            }
-        }
-    } catch (t: Throwable) {
-        when {
-            t is LeaderSupersededException -> {
-                LOG.info("[$dbName] ${t.message}")
-            }
-
-            !t.isShutdownSignal -> {
-                LOG.error(t) { "[$dbName] leader term failed" }
-                watchers.notifyError(t)
-            }
-        }
-
-        term.shutdown(t)
-    }
-}
 
 class LogProcessor(
     private val allocator: BufferAllocator,
@@ -219,9 +139,7 @@ class LogProcessor(
     // The role state machine — see allium/log-processor-lifecycle.allium.
     // Written by the transition coroutine and by demoteLeader; they don't race, because a revoke
     // cancel-and-joins the transition before demoteLeader reads it.
-    private sealed interface State {
-        val proc: AutoCloseable
-
+    private sealed interface State: AutoCloseable {
         val scope: CoroutineScope
 
         val job get() = scope.coroutineContext.job
@@ -229,20 +147,26 @@ class LogProcessor(
         suspend fun handleReplicaMessage(record: Log.Record<ReplicaMessage>)
     }
 
-    private class Following(override val proc: FollowerLogProcessor, override val scope: CoroutineScope) : State {
+    private class Following(val proc: FollowerLogProcessor, override val scope: CoroutineScope) : State {
         override suspend fun handleReplicaMessage(record: Log.Record<ReplicaMessage>) {
             scope.async { proc.handleRecord(record) }.await()
         }
+
+        override fun close() = proc.close()
     }
 
     private class Leading(
-        override val proc: LeaderLogProcessor,
+        val proc: LeaderLogProcessor,
         override val scope: CoroutineScope,
         private val replicaMsgs: SendChannel<ReplicaApply>,
     ) : State {
         override suspend fun handleReplicaMessage(record: Log.Record<ReplicaMessage>) {
             scope.async { replicaMsgs.applyAndAwait(record) }.await()
         }
+
+        fun awaitNoGarbageBlocking() = proc.gc.awaitNoGarbageBlocking()
+
+        override fun close() = proc.close()
     }
 
     // A role's scope is the database's, with a job of its own so that stopping the role leaves the
@@ -377,25 +301,31 @@ class LogProcessor(
                     // coroutines still unwinding, and Arrow won't close a parent allocator while a child
                     // buffer is live. Bounded — those coroutines only unwind.
                     withContext(NonCancellable) {
-                        following.job.cancelAndJoin()
-                        following.proc.close()
+                        @Suppress("ConvertTryFinallyToUseCall")
+                        try {
+                            following.job.cancelAndJoin()
 
-                        // Read after the join, not before it: the follower goes on applying records until
-                        // then, and one of them may be the upload that closes this very block. Taking the
-                        // block while it can still be closed underneath us finishes it a second time.
-                        pendingBlock = following.proc.pendingBlock
+                            // Read after the join, not before it: the follower goes on applying records
+                            // until then, and one of them may be the upload that closes this very block.
+                            // Taking the block while it can still be closed underneath us finishes it a
+                            // second time.
+                            pendingBlock = following.proc.pendingBlock
+                        } finally {
+                            following.close()
+                        }
                     }
 
                     checkNotSuperseded(termId, pendingBlock)
 
                     val replicaAppender = ReplicaLogAppender(logsDriver)
+
                     val blockCutter =
                         BlockCutter(partitionState, dbName, termId, replicaAppender, blockUploader)
 
                     val proc = LeaderLogProcessor(
                         allocator, base, partitionStorage, crashLogger, partitionState, dbName, logsDriver,
                         blockCutter, watchers,
-                        replicaAppender,
+                        replicaAppender, termFence,
                         externalSource,
                         skipTxs, dbCatalog,
                         leaderTerm = termId,
@@ -419,25 +349,18 @@ class LogProcessor(
                         proc.replayHeldRecords(pending)
                     }
 
-                    LOG.debug("[${dbName}] transition: building leader processor")
                     val resumeAfterMsgId = watchers.latestSourceMsgId
 
                     // The handover from the partition's tail. Unbuffered: the tail waits on each record's
                     // own handle, so a buffer would only let it read ahead of a term about to end.
                     val replicaMsgs = Channel<ReplicaApply>()
 
-                    // The GCs and the external source are the term's to stop, so `shutdown` reaches them.
-                    val termJob = scope.launch {
-                        launch { proc.gc.runGc() }
-                        proc.extSrcProc?.let { extSrcProc -> launch { extSrcProc.run() } }
+                    val termJob = scope.launch { proc.runTerm(replicaMsgs) }
 
-                        runLeaderTerm(dbName, watchers, proc, replicaMsgs, replicaAppender, blockCutter, termFence)
-                    }
-
-                    val leading = Leading(proc, roleScope(termJob), replicaMsgs).also { state = it }
+                    state = Leading(proc, roleScope(termJob), replicaMsgs)
 
                     LOG.info("[${dbName}] leader startup complete, resuming after $resumeAfterMsgId")
-                    TailSpec(resumeAfterMsgId, leading.proc.srcLogProc)
+                    TailSpec(resumeAfterMsgId, proc.srcLogProc)
                 } catch (e: Throwable) {
                     state = openFollower(pendingBlock)
                     throw e
@@ -509,12 +432,12 @@ class LogProcessor(
         state = openFollower()
     }
 
-    override fun close() = state.proc.close()
+    override fun close() = state.close()
 
     /**
      * Run one cycle of every garbage collector owned by the leader (block + trie) and wait for
      * both. No-op unless leading — GC only runs on the leader. Bypasses the collectors'
      * `enabled` flag (which gates the auto-signal from the block-boundary path, not direct calls).
      */
-    fun awaitNoGarbageBlocking() = (state as? Leading)?.proc?.gc?.awaitNoGarbageBlocking()
+    fun awaitNoGarbageBlocking() = (state as? Leading)?.awaitNoGarbageBlocking()
 }

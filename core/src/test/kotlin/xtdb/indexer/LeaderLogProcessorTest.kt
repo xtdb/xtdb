@@ -75,7 +75,7 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
     fun `an interrupt on the append path leaves the database queryable`() = runTest {
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
-        val (proc, appender, blockCutter) = unstartedTerm(watchers, driver = { inner ->
+        val (proc, appender) = unstartedTerm(watchers, driver = { inner ->
             object : LogsDriver by inner {
                 // LocalStorage converts a ClosedByInterruptException into this on both its write paths
                 override suspend fun appendToReplica(msg: ReplicaMessage): Log.MessageMetadata =
@@ -86,7 +86,7 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
         appender.append(ControlItem(ReplicaMessage.NoOp(termId = 1)))
 
         // returns once the pump's failure has ended the term
-        runLeaderTerm("test", watchers, proc, Channel(), appender, blockCutter, TermFence("test", 0))
+        proc.runTerm(Channel())
 
         assertNull(
             watchers.exception,

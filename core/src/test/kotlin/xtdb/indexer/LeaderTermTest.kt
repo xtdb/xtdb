@@ -123,20 +123,11 @@ internal abstract class LeaderTermTest {
      * The reader stands in for the partition's tail, which in production outlives the term — so it is the
      * term ending that has to stop it here.
      */
-    protected fun CoroutineScope.startTerm(
-        partitionStorage: PartitionStorage,
-        replicaAppender: ReplicaLogAppender,
-        blockCutter: BlockCutter,
-        watchers: Watchers,
-        proc: LeaderLogProcessor,
-    ) =
+    protected fun CoroutineScope.startTerm(partitionStorage: PartitionStorage, proc: LeaderLogProcessor) =
         proc.also {
             leadersToClose += it
             val replicaMsgs = Channel<ReplicaApply>()
             launch {
-                launch { proc.gc.runGc() }
-                proc.extSrcProc?.let { extSrcProc -> launch { extSrcProc.run() } }
-
                 val reader = launch {
                     partitionStorage.replicaLog.tailAll(-1) { records ->
                         records.forEach { replicaMsgs.applyAndAwait(it) }
@@ -144,15 +135,7 @@ internal abstract class LeaderTermTest {
                 }
 
                 try {
-                    runLeaderTerm(
-                        "test",
-                        watchers,
-                        proc,
-                        replicaMsgs,
-                        replicaAppender,
-                        blockCutter,
-                        TermFence("test", 0)
-                    )
+                    proc.runTerm(replicaMsgs)
                 } finally {
                     reader.cancel()
                 }
@@ -184,7 +167,7 @@ internal abstract class LeaderTermTest {
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
         val blockUploader =
             BlockUploader(
-                partitionStorage, partitionState, "xtdb", compactor, null, null,
+                partitionStorage, partitionState, dbName, compactor, null, null,
                 backgroundScope, uploadDispatcher
             )
         val driver = wrapDriver(RealLogsDriver(partitionStorage))
@@ -194,11 +177,11 @@ internal abstract class LeaderTermTest {
         val blockCutter = BlockCutter(partitionState, dbName, leaderTerm, replicaAppender, blockUploader)
 
         return termScope.startTerm(
-            partitionStorage, replicaAppender, blockCutter, watchers,
+            partitionStorage,
             LeaderLogProcessor(
                 allocator, nodeBase, partitionStorage, mockk(relaxed = true),
                 partitionState, dbName,
-                driver, blockCutter, watchers, replicaAppender, extSource,
+                driver, blockCutter, watchers, replicaAppender, TermFence(dbName, 0), extSource,
                 skipTxs = skipTxs, dbCatalog = dbCatalog,
                 leaderTerm = leaderTerm,
                 flushTimeout = IndexerConfig().flushDuration,
@@ -207,7 +190,7 @@ internal abstract class LeaderTermTest {
     }
 
     /**
-     * A term wired up but not started, so a test can drive [runLeaderTerm] or one of its components
+     * A term wired up but not started, so a test can drive [LeaderLogProcessor.runTerm] or one of its components
      * directly and have it return. [leaderProc] launches the term into a scope instead, where the only
      * handle on its completion is scheduler advancement.
      */
@@ -232,19 +215,15 @@ internal abstract class LeaderTermTest {
 
         val proc = LeaderLogProcessor(
             allocator, nodeBase, partitionStorage, mockk(relaxed = true),
-            partitionState, "test", logsDriver, blockCutter, watchers, appender,
+            partitionState, "test", logsDriver, blockCutter, watchers, appender, TermFence("test", 0),
             extSource,
             skipTxs = emptySet(), dbCatalog = null,
             leaderTerm = 1,
             flushTimeout = IndexerConfig().flushDuration,
         )
         leadersToClose += proc
-        return UnstartedTerm(proc, appender, blockCutter)
+        return UnstartedTerm(proc, appender)
     }
 
-    protected data class UnstartedTerm(
-        val proc: LeaderLogProcessor,
-        val appender: ReplicaLogAppender,
-        val blockCutter: BlockCutter,
-    )
+    protected data class UnstartedTerm(val proc: LeaderLogProcessor, val appender: ReplicaLogAppender)
 }
