@@ -197,6 +197,24 @@ internal class SourceLogProcessorTest : LeaderTermTest() {
     }
 
     @Test
+    fun `FlushBlock cuts a block when its CAS matches`() = runTest {
+        val rs = resolveSide()
+
+        // -1 is the CAS for 'no block cut yet', which is where a fresh database starts.
+        rs.srcLogProc.handleRecord(record(0, SourceMessage.FlushBlock(-1)))
+        runCurrent()
+
+        assertEquals(
+            listOf(0L),
+            rs.appended.filterIsInstance<ReplicaMessage.BlockBoundary>().map { it.blockIndex }
+        )
+        assertEquals(
+            emptyList<Long>(), rs.appended.filterIsInstance<ReplicaMessage.NoOp>().map { it.srcMsgId },
+            "the boundary carries the position, so there is nothing for a NoOp to advance"
+        )
+    }
+
+    @Test
     fun `a FlushBlock cut carries the latest external-source token, not the last tx's`() =
         runTest(timeout = 5.seconds) {
             val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
