@@ -126,6 +126,7 @@ internal abstract class LeaderTermTest {
     protected fun CoroutineScope.startTerm(
         partitionStorage: PartitionStorage,
         replicaAppender: ReplicaLogAppender,
+        blockCutter: BlockCutter,
         watchers: Watchers,
         proc: LeaderLogProcessor,
     ) =
@@ -143,7 +144,15 @@ internal abstract class LeaderTermTest {
                 }
 
                 try {
-                    runLeaderTerm("test", watchers, proc, replicaMsgs, replicaAppender, TermFence("test", 0))
+                    runLeaderTerm(
+                        "test",
+                        watchers,
+                        proc,
+                        replicaMsgs,
+                        replicaAppender,
+                        blockCutter,
+                        TermFence("test", 0)
+                    )
                 } finally {
                     reader.cancel()
                 }
@@ -185,7 +194,7 @@ internal abstract class LeaderTermTest {
         val blockCutter = BlockCutter(partitionState, dbName, leaderTerm, replicaAppender, blockUploader)
 
         return termScope.startTerm(
-            partitionStorage, replicaAppender, watchers,
+            partitionStorage, replicaAppender, blockCutter, watchers,
             LeaderLogProcessor(
                 allocator, nodeBase, partitionStorage, mockk(relaxed = true),
                 partitionState, dbName,
@@ -206,7 +215,7 @@ internal abstract class LeaderTermTest {
         watchers: Watchers,
         driver: (LogsDriver) -> LogsDriver = { it },
         extSource: ExternalSource? = null,
-    ): Pair<LeaderLogProcessor, ReplicaLogAppender> {
+    ): UnstartedTerm {
         val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0)
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val bufferPool = mockk<BufferPool>(relaxed = true) { every { epoch } returns 0 }
@@ -230,6 +239,12 @@ internal abstract class LeaderTermTest {
             flushTimeout = IndexerConfig().flushDuration,
         )
         leadersToClose += proc
-        return proc to appender
+        return UnstartedTerm(proc, appender, blockCutter)
     }
+
+    protected data class UnstartedTerm(
+        val proc: LeaderLogProcessor,
+        val appender: ReplicaLogAppender,
+        val blockCutter: BlockCutter,
+    )
 }

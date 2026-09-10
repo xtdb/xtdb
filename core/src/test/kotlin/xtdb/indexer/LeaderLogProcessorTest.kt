@@ -1,18 +1,15 @@
 package xtdb.indexer
 
 import io.mockk.coEvery
-import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.plus
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.*
@@ -32,7 +29,6 @@ import kotlin.time.Duration.Companion.seconds
 import xtdb.api.tx.ExternalSource
 import xtdb.api.tx.TxIndexer
 import xtdb.indexer.LogProcessor.LogsDriver
-import xtdb.indexer.LogProcessor.RealLogsDriver
 
 internal class LeaderLogProcessorTest : LeaderTermTest() {
 
@@ -79,7 +75,7 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
     fun `an interrupt on the append path leaves the database queryable`() = runTest {
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
-        val (proc, appender) = unstartedTerm(watchers, driver = { inner ->
+        val (proc, appender, blockCutter) = unstartedTerm(watchers, driver = { inner ->
             object : LogsDriver by inner {
                 // LocalStorage converts a ClosedByInterruptException into this on both its write paths
                 override suspend fun appendToReplica(msg: ReplicaMessage): Log.MessageMetadata =
@@ -90,7 +86,7 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
         appender.append(ControlItem(ReplicaMessage.NoOp(termId = 1)))
 
         // returns once the pump's failure has ended the term
-        runLeaderTerm("test", watchers, proc, Channel(), appender, TermFence("test", 0))
+        runLeaderTerm("test", watchers, proc, Channel(), appender, blockCutter, TermFence("test", 0))
 
         assertNull(
             watchers.exception,
@@ -105,7 +101,7 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
             coEvery { onPartitionAssigned(any(), any(), any()) } throws InterruptedException("interrupted")
         }
 
-        val (proc, _) = unstartedTerm(watchers, extSource = extSource)
+        val proc = unstartedTerm(watchers, extSource = extSource).proc
         proc.extSrcProc!!.run()
 
         assertNull(
@@ -117,7 +113,7 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
     @Test
     fun `an ext-source tx applied from the record alone does not advance the source watermark`() = runTest {
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
-        val (proc, _) = unstartedTerm(watchers, extSource = mockk(relaxed = true))
+        val proc = unstartedTerm(watchers, extSource = mockk(relaxed = true)).proc
 
         // Not in the resolver's queue, so it is re-materialised from the record — the path a promotion's
         // replay takes for every record the follower buffered.

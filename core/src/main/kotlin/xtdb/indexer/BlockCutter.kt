@@ -77,6 +77,10 @@ internal class BlockCutter(
         }
     }
 
+    fun addRows(resolvedTx: ResolvedTx) {
+        addRows(resolvedTx.allTables.sumOf { it.relation.rowCount.toLong() })
+    }
+
     /**
      * Cut the block: inject a boundary covering the source log up to [latestProcessedMsgId] and the
      * external source up to [extToken], and pause resolution until that boundary has been read back and

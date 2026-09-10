@@ -114,7 +114,6 @@ class ExternalSourceTest {
         liveIndex: LiveIndex = this@ExternalSourceTest.liveIndex,
         watchers: Watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1),
         extSource: ExternalSource = InMemoryExternalSource(),
-        afterToken: ExternalSourceToken? = null,
         wrapDriver: (LogsDriver) -> LogsDriver = { it },
     ): LeaderLogProcessor {
         val tableCatalog = TableCatalog(bufferPool)
@@ -149,7 +148,15 @@ class ExternalSourceTest {
                 }
 
                 try {
-                    runLeaderTerm("test", watchers, proc, replicaMsgs, replicaAppender, TermFence("test", 0))
+                    runLeaderTerm(
+                        "test",
+                        watchers,
+                        proc,
+                        replicaMsgs,
+                        replicaAppender,
+                        blockCutter,
+                        TermFence("test", 0)
+                    )
                 } finally {
                     reader.cancel()
                 }

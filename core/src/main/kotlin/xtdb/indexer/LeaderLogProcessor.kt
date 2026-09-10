@@ -19,7 +19,6 @@ import xtdb.database.Database
 import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
 import xtdb.types.MessageId
-import xtdb.util.logger
 import xtdb.util.useAll
 import java.time.Duration
 import java.time.InstantSource
@@ -81,15 +80,16 @@ internal class LeaderLogProcessor(
     )
 
     val srcLogProc = SourceLogProcessor(
-        logsDriver, txResolver, partitionStorage, partitionState, watchers, dbCatalog, dbName, leaderTerm,
-        replicaAppender, flushTimeout, ::appendTx, ::cutBlock
+        partitionStorage, partitionState, dbCatalog, dbName,
+        leaderTerm, logsDriver, txResolver, blockCutter, replicaAppender, flushTimeout
     )
 
-    // An ext-source tx that fills a block cuts it like any other, but there is no batch mid-flight to
-    // stop, so the processor is handed the append alone.
     val extSrcProc =
         extSource?.let { source ->
-            ExternalSourceProcessor(source, partition, tableCatalog, watchers, txResolver) { appendTx(it) }
+            ExternalSourceProcessor(
+                source, tableCatalog, watchers, txResolver, blockCutter, replicaAppender,
+                partition = partition, leaderTerm = leaderTerm
+            )
         }
 
     private fun applyResolvedTx(msg: ReplicaMessage.ResolvedTx) {
@@ -202,20 +202,6 @@ internal class LeaderLogProcessor(
 
     private suspend fun cutBlock(latestProcessedMsgId: MessageId) =
         blockCutter.cut(latestProcessedMsgId, txResolver.resolvedExtToken)
-
-    // Hand a freshly-resolved tx to the append pump, answering whether it filled the block — which the
-    // caller needs, because a source batch mid-flight has to stop where that happens.
-    private suspend fun appendTx(resolvedTx: ResolvedTx): Boolean {
-        blockCutter.addRows(resolvedTx.allTables.sumOf { it.relation.rowCount.toLong() })
-
-        replicaAppender.append(TxItem(resolvedTx, leaderTerm))
-
-        return blockCutter.isFull
-    }
-
-    val acceptingResolution get() = blockCutter.acceptingResolution
-
-    val blockFilled get() = blockCutter.isFull
 
     /** Cut the block this term has filled, sealing it at the resolve side's current watermarks. */
     suspend fun cutFilledBlock() = cutBlock(txResolver.resolvedSrcMsgId)

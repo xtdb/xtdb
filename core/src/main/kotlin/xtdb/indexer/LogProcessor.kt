@@ -80,6 +80,7 @@ internal suspend fun runLeaderTerm(
     term: LeaderLogProcessor,
     replicaMsgs: ReceiveChannel<ReplicaApply>,
     appender: ReplicaLogAppender,
+    blockCutter: BlockCutter,
     termFence: TermFence,
 ) {
     try {
@@ -89,7 +90,7 @@ internal suspend fun runLeaderTerm(
             while (true) {
                 // Ahead of the arming below, not after it: a filled block must admit nothing else, and
                 // the GC clause would otherwise slip a TriesDeleted in ahead of the boundary.
-                if (term.blockFilled) term.cutFilledBlock()
+                if (blockCutter.isFull) term.cutFilledBlock()
 
                 selectUnbiased {
                     replicaMsgs.onReceive { pending ->
@@ -117,7 +118,7 @@ internal suspend fun runLeaderTerm(
                         }
                     }
 
-                    if (term.acceptingResolution) {
+                    if (blockCutter.acceptingResolution) {
                         term.srcLogProc.run { armSelect() }
                         term.extSrcProc?.run { armSelect() }
                         term.gc.run { armSelect() }
@@ -430,7 +431,7 @@ class LogProcessor(
                         launch { proc.gc.runGc() }
                         proc.extSrcProc?.let { extSrcProc -> launch { extSrcProc.run() } }
 
-                        runLeaderTerm(dbName, watchers, proc, replicaMsgs, replicaAppender, termFence)
+                        runLeaderTerm(dbName, watchers, proc, replicaMsgs, replicaAppender, blockCutter, termFence)
                     }
 
                     val leading = Leading(proc, roleScope(termJob), replicaMsgs).also { state = it }

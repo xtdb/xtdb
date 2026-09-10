@@ -19,19 +19,21 @@ import java.time.Instant
  * The external source's side of a leader term: the adapter, the queue its transactions arrive on, and the
  * [TxIndexer] it submits them through.
  *
- * Appending stays with the term, via [appendTx] — the row gauge it feeds and the block boundary it may cut
- * are shared with the source log, and ordering between the two is what the term is for.
+ * The row gauge it feeds and the boundary that gauge may cut are shared with the source log, so ordering
+ * between the two is the term's select rather than anything arranged here.
  *
  * [extSource] is borrowed, not owned — it is one-per-database and outlives every term, so nothing here
  * closes it.
  */
 internal class ExternalSourceProcessor(
     private val extSource: ExternalSource,
-    private val partition: Int,
     private val tableCatalog: TableCatalog,
     private val watchers: Watchers,
     private val txResolver: TxResolver,
-    private val appendTx: suspend (ResolvedTx) -> Unit,
+    private val blockCutter: BlockCutter,
+    private val replicaAppender: ReplicaLogAppender,
+    private val partition: Int,
+    private val leaderTerm: Long
 ) : TxIndexer {
 
     override val latestBlock get() = tableCatalog.latestBlock
@@ -62,9 +64,19 @@ internal class ExternalSourceProcessor(
         onUndeliveredElement = { it.abandon(CancellationException("leader term closed")) }
     )
 
+    private suspend fun appendTx(resolvedTx: ResolvedTx): Boolean {
+        blockCutter.addRows(resolvedTx)
+
+        replicaAppender.append(TxItem(resolvedTx, leaderTerm))
+
+        return blockCutter.isFull
+    }
+
     fun SelectBuilder<Unit>.armSelect() {
         tasks.onReceive { task ->
             try {
+                // Verdict discarded: a tx that fills the block cuts it like any other, but there is no
+                // batch mid-flight to stop here, so the term's loop cuts it on its next pass.
                 appendTx(txResolver.indexTx(task.msg))
                 task.onComplete.complete(Unit)
             } catch (e: CancellationException) {
