@@ -19,10 +19,12 @@ import xtdb.api.log.Log
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.ReplicaMessage.BlockBoundary
 import xtdb.api.log.Watchers
+import xtdb.api.storage.Storage
 import xtdb.api.tx.ExternalSource
 import xtdb.database.Database
 import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
+import xtdb.table.fromSchemaAndTable
 import xtdb.types.MessageId
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.debug
@@ -71,7 +73,9 @@ internal class LeaderLogProcessor(
 
     private val partition = partitionStorage.partition
 
+    private val bufferPool = partitionStorage.bufferPool
     private val tableCatalog = partitionState.tableCatalog
+    private val trieCatalog = partitionState.trieCatalog
     private val liveIndex = partitionState.liveIndex
 
     // Resolves each source-log / attach-detach / ext-source tx and holds it — with every other
@@ -90,7 +94,7 @@ internal class LeaderLogProcessor(
     )
 
     val srcLogProc = SourceLogProcessor(
-        partitionStorage, partitionState, dbCatalog, dbName,
+        partitionState, dbCatalog, dbName,
         leaderTerm, logsDriver, txResolver, blockCutter, replicaAppender, flushTimeout
     )
 
@@ -213,8 +217,17 @@ internal class LeaderLogProcessor(
                     }
                 }
 
-                // Catalog already updated on the resolve side; here we only advance the source watermark.
-                is ReplicaMessage.TriesAdded -> watchers.notifyApplied(msg.sourceMsgId)
+                is ReplicaMessage.TriesAdded -> {
+                    if (msg.storageVersion == Storage.VERSION && msg.storageEpoch == bufferPool.epoch)
+                        msg.tries.groupBy { it.tableName }.forEach { (tableName, tries) ->
+                            trieCatalog.addTries(fromSchemaAndTable(tableName), tries, record.logTimestamp)
+                        }
+
+                    // Below the guard, not above it: the compactor awaits this watermark and then
+                    // recalculates jobs off the catalog, so notifying first would have it re-select the
+                    // job it has just published.
+                    watchers.notifyApplied(msg.sourceMsgId)
+                }
 
                 is BlockBoundary -> {
                     // Produce only: the catalog refresh, the index roll, the source watermark and the
@@ -237,8 +250,7 @@ internal class LeaderLogProcessor(
 
                 is ReplicaMessage.NoOp -> watchers.notifyApplied(msg.srcMsgId)
 
-                // Catalog already updated on the resolve side (see GarbageCollector.handleTask); nothing to do.
-                is ReplicaMessage.TriesDeleted -> {}
+                is ReplicaMessage.TriesDeleted -> gc.triesDeleted(msg)
             }
         }
     }

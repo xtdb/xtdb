@@ -7,14 +7,17 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import xtdb.api.DatabaseName
+import xtdb.api.TableRef
 import xtdb.api.TransactionResult
 import xtdb.api.log.InMemoryLog
 import xtdb.api.log.Log
@@ -23,6 +26,10 @@ import xtdb.api.log.SourceMessage
 import xtdb.api.log.Watchers
 import xtdb.api.storage.Storage
 import xtdb.database.Database
+import xtdb.log.proto.TrieDetails
+import xtdb.log.proto.trieMetadata
+import xtdb.table.fromSchemaAndTable
+import xtdb.trie.Trie
 import java.time.Instant
 import java.time.InstantSource
 import java.time.ZoneId
@@ -184,6 +191,81 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
         proc.applyReplicaMessage(record(2, uploaded(blockIdx = 0, latestProcessedMsgId = 5)))
 
         assertEquals(7L, watchers.latestTxId, "and applied on the drain, behind the close")
+    }
+
+    @Test
+    fun `tries reach the catalog when their own record reads back`() = runTest(timeout = 5.seconds) {
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+        val (proc, _, partitionState) = unstartedTerm(watchers)
+
+        // the catalog silently drops a trie whose key it can't parse, so this has to be a real one
+        val trieKey = Trie.l0Key(0).toString()
+        val tries = listOf(
+            TrieDetails.newBuilder()
+                .setTableName("public/foo")
+                .setTrieKey(trieKey)
+                .setDataFileSize(100)
+                .setTrieMetadata(trieMetadata {})
+                .build()
+        )
+
+        proc.applyReplicaMessage(
+            record(0, ReplicaMessage.TriesAdded(Storage.VERSION, 0, tries, sourceMsgId = 3, termId = 1))
+        )
+
+        assertEquals(
+            listOf(trieKey), partitionState.trieCatalog.listAllTrieKeys(fromSchemaAndTable("public/foo"))
+        )
+        assertEquals(3L, watchers.latestSourceMsgId)
+    }
+
+    // Inert, because these two are about when the commit returns rather than about what it removes: a
+    // `deleteTries` for a shard the catalog doesn't hold trips its own spec assertion.
+    private fun TestScope.gcTerm(gate: CompletableDeferred<Unit>, appendStarted: CompletableDeferred<Unit>, termJob: Job) =
+        leaderProc(
+            StandardTestDispatcher(testScheduler), trieCatalog = mockk(relaxed = true),
+            wrapDriver = { gatedDriver(it, gate, appendStarted) }, termJob = termJob,
+        )
+
+    @Test
+    fun `a GC commit returns only once its own record reads back`() = runTest(timeout = 5.seconds) {
+        val gate = CompletableDeferred<Unit>()
+        val appendStarted = CompletableDeferred<Unit>()
+        val lp = gcTerm(gate, appendStarted, SupervisorJob(backgroundScope.coroutineContext.job))
+
+        val commit = backgroundScope.async { lp.gc.commitTriesDeleted(TableRef("public", "foo"), setOf("l01-rc-b00")) }
+
+        appendStarted.await()
+        testScheduler.advanceUntilIdle()
+
+        assertFalse(
+            commit.isCompleted,
+            "the GC has already deleted the files, so it must not go on against a catalog that still lists them"
+        )
+
+        // a hang here fires runTest's timeout — that is the assertion
+        gate.complete(Unit)
+        commit.await()
+    }
+
+    @Test
+    fun `closing the leader term fails an awaiting GC commit rather than hanging`() = runTest(timeout = 5.seconds) {
+        // Never opened, so the record never reads back and the commit is past the channel the exit drains:
+        // only the in-flight sweep can free it.
+        val gate = CompletableDeferred<Unit>()
+        val appendStarted = CompletableDeferred<Unit>()
+
+        val termJob = SupervisorJob(backgroundScope.coroutineContext.job)
+        val lp = gcTerm(gate, appendStarted, termJob)
+
+        val commit = backgroundScope.async { lp.gc.commitTriesDeleted(TableRef("public", "foo"), setOf("l01-rc-b00")) }
+
+        appendStarted.await()
+        testScheduler.advanceUntilIdle()
+
+        termJob.cancelAndJoin()
+
+        assertTrue(runCatching { commit.await() }.isFailure, "the in-flight commit must fail, not hang")
     }
 
     @Test

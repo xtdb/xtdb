@@ -19,7 +19,8 @@
 --
 -- See:
 --   garbage_collector/TrieGarbageCollector.kt
---   indexer/LeaderLogProcessor.kt (commitTriesDeleted callback, finishBlock signal)
+--   indexer/GarbageCollector.kt (commitTriesDeleted, triesDeleted)
+--   indexer/LeaderLogProcessor.kt (TriesDeleted apply, block-adopt signal)
 --   indexer/FollowerLogProcessor.kt (TriesDeleted replay)
 --   api/log/ReplicaMessage.kt (TriesDeleted)
 --   api/GarbageCollectorConfig.kt
@@ -145,6 +146,8 @@ rule LeaderClosesTrieGc {
     -- Cancels the GC loop. Any in-flight cycle is cancelled; pending awaiters
     -- have their deferreds cancelled (their awaitNoGarbage call throws
     -- CancellationException).
+    --
+    -- A chunk whose `TriesDeleted` this term appended but has not yet read back fails with the term, as does one still queued behind it: nothing may be left awaiting a term that has gone, and the symptom of missing one is a hang rather than an error (db.allium: Transition Safety).
     --
     -- Fires when the log processor leaves a leader mode for Follower (revoke)
     -- or Transition (intermediate state during handoff).
@@ -281,8 +284,8 @@ rule GarbageCollectTable {
     -- then process them in chunks. Within a chunk, the order is mandatory:
     --
     --   (1) DELETE every (data, meta) file in object store.
-    --   (2) AND THEN atomically publish `TriesDeleted` to the replica log AND
-    --       remove the keys from the trie catalog.
+    --   (2) AND THEN publish `TriesDeleted` to the replica log, on which every node —
+    --       this one included — removes the keys from its trie catalog.
     --
     -- The reverse order would leave followers (and the leader's own catalog)
     -- thinking the deleted files were still live — unsafe if a query tried to
@@ -330,40 +333,28 @@ rule DeleteAndCommitChunkRule {
 }
 
 rule CommitTriesDeletedRule {
-    -- The ordering obligation, and why it needs no lock. The catalog mutation
-    -- and the replica-log append are ONE task on the leader's persister
-    -- coroutine — the GC hands `commitTriesDeleted` to that coroutine and awaits
-    -- it, rather than applying either half itself. So the pair is serialised
-    -- against every other resolve-side effect by confinement, not by a mutex.
+    -- The append is one task on the leader's persister coroutine: the GC hands `commitTriesDeleted` to that coroutine and awaits it, rather than appending itself.
     --
-    -- What that has to rule out is a table-block file disagreeing with the
-    -- replica log it claims to snapshot:
+    -- What the await has to rule out is a table-block file disagreeing with the replica log it claims to snapshot:
     --
     --   1. `TriesDeleted(G)` is appended at replica position N.
-    --   2. A block boundary is cut, and its upload writes table-block files
-    --      snapshotting the current catalog, at replica position M > N.
-    --   3. If the catalog still contained G at step 2, that file records
-    --      "catalog includes G" while the log already says G is gone.
+    --   2. A block boundary at replica position M > N produces a block, whose upload writes table-block files snapshotting the current catalog.
+    --   3. If the catalog still contained G at step 2, that file records "catalog includes G" while the log already says G is gone.
     --
-    -- A cold start hydrating from M would then see G in its catalog, pointing at
-    -- object-store files already deleted. Two properties close it:
-    --   - the catalog removal happens FIRST, on the resolve side, before the
-    --     `TriesDeleted` is even queued for append — so any boundary appended
-    --     afterwards is already downstream of the removal;
-    --   - the block-cut PAUSE excludes the GC arm from the persister's select
-    --     while a block is in progress, so no `TriesDeleted` can be resolved
-    --     between a boundary and its upload.
+    -- A cold start hydrating from M would then see G in its catalog, pointing at object-store files already deleted.
+    -- Log order closes it: both the removal and the block that snapshots it are applied on read-back, at N and at M respectively, so a snapshot is downstream of every removal appended ahead of it.
     --
-    -- See: indexer/LeaderLogProcessor.kt (handleTriesDeleted, and the gcCh arm
-    -- of persisterLoop), db.allium LeaderCommitsTriesDeleted.
+    -- See: indexer/GarbageCollector.kt (commitTriesDeleted, triesDeleted), db.allium LeaderAppliesOwnTriesDeleted.
     when: CommitTriesDeleted(table, trie_keys)
 
     ensures:
-        trie_cat/trie_catalog.deleteTries(table, trie_keys)
         TriesDeletedMessage.created(
             table_name: table.schema_and_table,
             trie_keys: trie_keys
         )
+
+        -- Applied on the leader's read-back of that record, where this await ends — so the catalog no longer lists the keys by the time the chunk returns.
+        trie_cat/trie_catalog.deleteTries(table, trie_keys)
 }
 
 ------------------------------------------------------------
@@ -393,27 +384,17 @@ rule FollowerReplaysTriesDeleted {
 ------------------------------------------------------------
 
 contract TrieGcDualWriteAtomicity {
-    -- Obligations on the LeaderLogProcessor that hosts the trie GC's
-    -- commitTriesDeleted callback. These can't be expressed as
-    -- single-snapshot invariants over entity state — they are about the
-    -- ordering of replica-log appends and catalog mutations across
-    -- coroutines. See the long comment on rule CommitTriesDeletedRule.
+    -- Obligations on the leader that appends the trie GC's `TriesDeleted` and applies the removal it carries.
+    -- These can't be expressed as single-snapshot invariants over entity state — they are about the ordering of replica-log appends and catalog mutations across coroutines.
+    -- See the long comment on rule CommitTriesDeletedRule.
 
     @invariant DualWriteOrdering
-        -- For each (trie catalog deleteTries, TriesDeleted append) pair, no
-        -- block upload — which persists a table-block snapshot of the catalog —
-        -- may observe a catalog state the replica log has already moved past.
-        -- Enforced by confinement rather than a lock: both halves are one task
-        -- on the leader's persister coroutine, the removal precedes the append,
-        -- and the block-cut pause keeps the GC arm out of the select while a
-        -- block is in progress.
+        -- For each (TriesDeleted append, trie catalog deleteTries) pair, no block upload — which persists a table-block snapshot of the catalog — may observe a catalog state the replica log has already moved past.
+        -- Held by log order: the removal is applied on the read-back of the record that publishes it, and a block is produced on the read-back of a boundary behind that record, so every snapshot follows every removal the log already carries.
 
     @invariant DeleteBeforeCommit
-        -- Within one (table, chunk) atomic step: every (data, meta) DELETE
-        -- must succeed before the corresponding `TriesDeleted` is appended
-        -- to the replica log and the keys are removed from the trie catalog.
-        -- Reversing this order would leave followers thinking deleted files
-        -- are still live.
+        -- Within one (table, chunk) atomic step: every (data, meta) DELETE must succeed before the corresponding `TriesDeleted` is appended to the replica log, and so before the removal that record's read-back applies.
+        -- Reversing this order would leave followers thinking deleted files are still live.
 
     @invariant LeaderOnly
         -- TrieGarbageCollector instances exist only inside a LeaderSystem;
@@ -480,4 +461,4 @@ surface TrieGcAdmin {
 -- Open Questions
 ------------------------------------------------------------
 
-open question "First-cycle contention for the persister: when an operator first flips `enabled = true` on a database that's been running without GC for months, the backlog can be enormous, and each chunk's `commitTriesDeleted` is one awaited task on the leader's persister coroutine, competing with source batches for select turns. Per chunk the persister only does a catalog set-removal and an unbounded-channel send — the log append itself is asynchronous on the append pump — so each turn is short. What is not bounded is the NUMBER of turns, nor the burst of TriesDeleted the append pump then carries ahead of tx records. Worth measuring, and considering an explicit bound on chunks per cycle or a yield between chunks."
+open question "First-cycle contention for the persister: when an operator first flips `enabled = true` on a database that's been running without GC for months, the backlog can be enormous, and each chunk takes two turns on the leader's persister coroutine — one to append its `TriesDeleted`, one to apply the removal on reading it back — competing with source batches for select turns. Both turns are short: an unbounded-channel send on the first, a catalog set-removal on the second, the log append itself being asynchronous on the append pump. What is not bounded is the NUMBER of chunks, nor the burst of TriesDeleted the append pump then carries ahead of tx records; and a chunk completes only after a full replica-log round trip, so a cycle's cost tracks that latency as well as the backlog. Worth measuring, and considering an explicit bound on chunks per cycle or a yield between chunks."

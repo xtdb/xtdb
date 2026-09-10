@@ -1041,25 +1041,13 @@ rule LeaderProcessesFlushBlock {
 }
 
 rule LeaderProcessesTriesAdded {
-    -- L0 from the block upload, L1+ from the compactor. The leader needs these in its own
-    -- trie catalog for correct partition info at block time, and forwards them to the
-    -- replica log for followers.
-    --
-    -- The catalog mutation is EAGER, on the resolve side, rather than deferred to the
-    -- leader's own consume-back: callers read the catalog synchronously (the compactor and
-    -- GC do), and it stays a projection of the fenced log anyway, because the block-cut
-    -- pause serialises trie mutations against boundaries — so no block snapshot straddles
-    -- an add. Skipped on the leader's own consume-back; the follower applies it there.
+    -- L0 from the block upload, L1+ from the compactor, forwarded to the replica log — where every node applies it to its own trie catalog, this one included (LeaderAppliesOwnTriesAdded).
     when: SourceTriesAddedMessageReceived(msg)
     requires: log_processor.mode = Leader
 
     ensures:
-        if msg.storage_version = storage_format.storage_version
-           and msg.storage_epoch = storage_format.storage_epoch:
-            trie_cat/trie_catalog.addTries(msg.tries, msg.log_timestamp)
-
-        -- Forward regardless of storage version: the follower applies the same guard, and
-        -- the message still has to carry the source watermark forward.
+        -- Forwarded whatever its storage version: every node guards the add itself, and the message is
+        -- also what carries the source watermark forward.
         AppendReplicaMessage(TriesAddedMessage.created(
             storage_version: msg.storage_version,
             storage_epoch: msg.storage_epoch,
@@ -1072,14 +1060,14 @@ rule LeaderProcessesTriesAdded {
 
 -- The trie GC's publish step is a THIRD resolve-side arm, alongside the source log and the
 -- external source: the GC hands `commitTriesDeleted` to the persister and awaits it, rather
--- than touching the catalog or the log itself. gc.allium owns that rule
--- (CommitTriesDeletedRule), including why the catalog removal and the replica-log append
--- need no lock. Two facts belong here, being properties of this pipeline rather than of the
--- GC:
+-- than appending itself. gc.allium owns that rule (CommitTriesDeletedRule), including the
+-- ordering the append and the removal it publishes have to keep. Two facts belong here, being
+-- properties of this pipeline rather than of the GC:
 --   - the GC arm is EXCLUDED from the select while block_in_progress, so a TriesDeleted can
---     never be resolved between a boundary and its upload;
---   - its TriesDeletedMessage leaves via the append pump like any other, and is skipped on
---     the leader's own consume-back — the catalog was already mutated on the resolve side.
+--     never be appended between a boundary and its upload;
+--   - its TriesDeletedMessage leaves via the append pump like any other, and the removal it
+--     carries is applied on the leader's own consume-back (LeaderAppliesOwnTriesDeleted),
+--     which is where the chunk awaiting it is released.
 
 ---- Rules: Leader Mode — append pump
 
@@ -1249,18 +1237,39 @@ rule LeaderSkipsAdoptedBlockUpload {
     requires: record.block_index <= (table_catalog.current_block_index ?? -1)
 }
 
-rule LeaderAppliesOwnControlRecord {
-    -- The leader's remaining own records need no work on apply — only the durable
-    -- watermark advance, which is exactly what makes it lag resolution.
-    --   TriesAdded / TriesDeleted: the trie catalog was already mutated on the resolve side.
-    --   NoOp: advances the watermark iff it carries one (a replay-target marker doesn't).
+rule LeaderAppliesOwnTriesAdded {
+    -- The leader reads its own forwarded TriesAdded back and registers the tries in its trie catalog, under the same storage guard every node applies and off the REPLICA record's log timestamp.
+    -- By log order the add lands ahead of any boundary appended behind it, so the table-block files a block upload writes snapshot a catalog carrying every add the log holds ahead of that boundary.
+    -- The watermark advance follows the add: the compactor awaits that watermark and then recalculates its jobs off the catalog, so notifying ahead of it would have the compactor re-select the job it has just published.
     when: ApplyOwnRecord(record)
-    requires: record.kind in {TriesAddedMessage, TriesDeletedMessage, NoOpMessage}
+    requires: record.kind = TriesAddedMessage
 
     ensures:
-        if record.kind = TriesAddedMessage:
-            watchers.notifyMsg(record.source_msg_id)
-        if record.kind = NoOpMessage and record.src_msg_id != null:
+        if record.storage_version = storage_format.storage_version
+           and record.storage_epoch = storage_format.storage_epoch:
+            trie_cat/trie_catalog.addTries(record.tries, record.log_timestamp)
+
+        watchers.notifyMsg(record.source_msg_id)
+}
+
+rule LeaderAppliesOwnTriesDeleted {
+    -- The leader reads its own TriesDeleted back and drops the keys from its trie catalog, taking them from the RECORD, so it applies exactly what every other node applies.
+    -- The chunk awaiting the append is released here, so gc.allium's CommitTriesDeleted returns with the catalog already past the keys whose files it has deleted.
+    -- The record confirms the OLDEST chunk still outstanding: every TriesDeleted a leader reads back is its own term's append — a higher term supersedes it and a lower one is fenced — and the log hands its own appends back in order.
+    when: ApplyOwnRecord(record)
+    requires: record.kind = TriesDeletedMessage
+
+    ensures:
+        trie_cat/trie_catalog.deleteTries(record.table_name, record.trie_keys)
+}
+
+rule LeaderAppliesOwnNoOp {
+    -- Nothing to apply but the durable watermark, which is exactly what makes it lag resolution — and only where the NoOp carries one, a replay-target marker having none.
+    when: ApplyOwnRecord(record)
+    requires: record.kind = NoOpMessage
+
+    ensures:
+        if record.src_msg_id != null:
             watchers.notifyMsg(record.src_msg_id)
 }
 
