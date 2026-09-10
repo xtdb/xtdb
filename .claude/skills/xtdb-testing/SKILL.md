@@ -196,9 +196,14 @@ Budget for compilation and reporting overhead as well as the tests themselves.
   The root project has no `src/main/clojure` at all, so `:compileClojure` has nothing to compile and goes green without loading a line.
   `:compileTestClojure` and `:compileTestFixturesClojure` AOT-compile every test and fixture namespace — no `--tests` filter applies — which loads everything those namespaces require, module Clojure included, so a namespace that no longer loads fails there.
   Module `main` Clojure is not AOT-compiled and nothing checks it in its own right; a test namespace requiring it is what catches it.
-- **A green run does not prove absence of reflection.**
-  The Gradle build never sets `*warn-on-reflection*` — only the dev REPL does, via `src/dev/clojure/user.clj`.
-  If reflection is the question, answer it in the REPL; don't add type hints speculatively on a reviewer's say-so.
+- **A green run does not prove absence of reflection or boxed math.**
+  `test` never sets `*warn-on-reflection*`, and `*unchecked-math*` reaches only the files that `set!` it themselves.
+  `./gradlew codegen-report` (~90s, reports and always exits 0) covers the code the expression engine generates at runtime — the per-row path, which no load-time check can see, because a template compiles cleanly whatever the form it emits compiles to.
+  **Discard its stdout and read the file** — the console copy is preceded by several thousand lines of node logs, and `build/codegen-report.txt` is the whole report including any namespace that failed to load or died part-way:
+  ```
+  ./gradlew -q codegen-report > /dev/null 2>&1; cat build/codegen-report.txt
+  ```
+  **Its coverage is the coverage of the tests it runs**: silence about an emitter branch you have just added means no test reached it, not that it is clean. Exercising the new branch is a precondition of checking it, not a follow-up.
 
 ## When a test fails
 

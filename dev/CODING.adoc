@@ -187,7 +187,8 @@ A *resolved* Java instance-method call already carries its declared return type,
 So `(with-open [conn (.connect node db-name)] (.submitTx conn ops opts))` needs no `^Xtdb$Connection`: `.connect` resolves off a typed `node` with return type `Xtdb$Connection`, `conn` is tagged from that, and `.submitTx`/`.close` resolve off `conn`.
 +
 Where you're unsure whether an expression reflects, verify rather than pre-empting.
-The dev REPL sets `*warn-on-reflection*` (`src/dev/clojure/user.clj`); the Gradle build does not, so a green test run proves nothing either way.
+`./gradlew test` never sets `*warn-on-reflection*`, so a green run proves nothing either way.
+The dev REPL sets it (`src/dev/clojure/user.clj`), and `./gradlew codegen-report` covers the code the expression engine generates at runtime, which neither of the other two can reach.
 
 Use `.getX`, not `.x`, for Kotlin `val` properties::
 +

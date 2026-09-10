@@ -960,6 +960,16 @@ tasks.register<JavaExec>("readBlockFile") {
         args(project.property("file") as? String ?: error("file property must be a string"))
 }
 
+tasks.register<JavaExec>("codegen-report") {
+    description = "Reports reflection and boxed-math warnings in EE-generated code"
+    dependsOn(":xtdb-core:compileClojure", ":xtdb-core:compileKotlin")
+
+    classpath = sourceSets.dev.get().runtimeClasspath
+    mainClass.set("clojure.main")
+    jvmArgs(defaultJvmArgs + sixGBJvmArgs)
+    args("-m", "xtdb.codegen-report")
+}
+
 tasks.register("printClasspath") {
     description = "Prints the dev classpath for clojure-lsp integration"
     doLast {
