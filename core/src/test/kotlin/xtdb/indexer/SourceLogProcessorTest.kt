@@ -1,5 +1,8 @@
 package xtdb.indexer
 
+import io.mockk.coEvery
+import io.mockk.every
+import io.mockk.mockk
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -14,6 +17,7 @@ import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.SourceMessage
 import xtdb.api.log.Watchers
 import xtdb.api.storage.Storage
+import xtdb.api.tx.TxIndexer
 import xtdb.database.Database
 import xtdb.log.proto.TrieDetails
 import xtdb.log.proto.trieMetadata
@@ -21,6 +25,7 @@ import xtdb.table.fromSchemaAndTable
 import xtdb.trie.Trie
 import java.time.Instant
 import java.time.InstantSource
+import java.time.ZoneId
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -157,9 +162,11 @@ internal class SourceLogProcessorTest : LeaderTermTest() {
                 .build()
         )
 
-        lp.srcLogProc.processRecords(listOf(
-            Log.Record(0, 0, Instant.now(), SourceMessage.TriesAdded(Storage.VERSION, 0, tries))
-        ))
+        lp.srcLogProc.processRecords(
+            listOf(
+                Log.Record(0, 0, Instant.now(), SourceMessage.TriesAdded(Storage.VERSION, 0, tries))
+            )
+        )
         watchers.awaitSource(0)
 
         assertEquals(
@@ -175,9 +182,11 @@ internal class SourceLogProcessorTest : LeaderTermTest() {
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
         val lp = leaderProc(StandardTestDispatcher(testScheduler), replicaLog = replicaLog, watchers = watchers)
 
-        lp.srcLogProc.processRecords(listOf(
-            Log.Record(0, 0, Instant.now(), SourceMessage.FlushBlock(5))
-        ))
+        lp.srcLogProc.processRecords(
+            listOf(
+                Log.Record(0, 0, Instant.now(), SourceMessage.FlushBlock(5))
+            )
+        )
         watchers.awaitSource(0)
 
         val boundaries = replicaLog.readRecords(0, 0, replicaLog.latestSubmittedMsgId() + 1)
@@ -185,4 +194,53 @@ internal class SourceLogProcessorTest : LeaderTermTest() {
 
         assertEquals(emptyList<ReplicaMessage.BlockBoundary>(), boundaries)
     }
+
+    @Test
+    fun `a FlushBlock cut carries the latest external-source token, not the last tx's`() =
+        runTest(timeout = 5.seconds) {
+            val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
+            val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+
+            val lp = leaderProc(
+                StandardTestDispatcher(testScheduler),
+                replicaLog = replicaLog,
+                liveIndex = liveIndexMock {
+                    coEvery { finishBlock(any(), any()) } returns emptyMap()
+                    every { latestCompletedTx } returns null
+                },
+                watchers = watchers,
+                extSource = mockk(relaxed = true),
+                skipTxs = setOf(10),
+            )
+
+            val token = byteArrayOf(1, 2, 3)
+
+            // The ext-source tx carries the CDC resume token; awaiting its durability (txId 0) pins the
+            // ordering — it resolves and applies before the token-less source-log tx that follows.
+            lp.extSrcProc!!.submitTx(token) { TxIndexer.TxResult.Committed() }
+            watchers.awaitTx(0)
+
+            // A token-less source-log tx (msgId 10; skipTxs covers it, so no Arrow payload needed, and its
+            // txId must exceed the ext tx's for watchers' monotonicity). It resolves behind the ext tx.
+            lp.srcLogProc.processRecords(
+                listOf(
+                    Log.Record(0, 10, Instant.now(), SourceMessage.Tx(ByteArray(0), null, ZoneId.of("UTC"), null, null))
+                )
+            )
+
+            lp.srcLogProc.processRecords(
+                listOf(
+                    Log.Record(0, 11, Instant.now(), SourceMessage.FlushBlock(-1))
+                )
+            )
+            watchers.awaitSource(11)
+
+            val boundaries = replicaLog.readRecords(0, 0, replicaLog.latestSubmittedMsgId() + 1)
+                .mapNotNull { it.message as? ReplicaMessage.BlockBoundary }.toList()
+
+            assertArrayEquals(
+                token, boundaries.single().externalSourceToken,
+                "the boundary carries the last non-null token seen, not the token of the tx it follows"
+            )
+        }
 }
