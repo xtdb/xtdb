@@ -204,6 +204,8 @@ Budget for compilation and reporting overhead as well as the tests themselves.
   ./gradlew -q codegen-report > /dev/null 2>&1; cat build/codegen-report.txt
   ```
   **Its coverage is the coverage of the tests it runs**: silence about an emitter branch you have just added means no test reached it, not that it is clean. Exercising the new branch is a precondition of checking it, not a follow-up.
+  For ordinary Clojure outside the EE, `./gradlew reflection-check -Pns=xtdb.pgwire` compiles that namespace from source with the flag on and prints file and line. It warns about the whole transitive cone, so grep for your own file.
+  Between the two, don't add a type hint speculatively on a reviewer's say-so — check it.
 
 ## When a test fails
 

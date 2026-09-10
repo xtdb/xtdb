@@ -970,6 +970,23 @@ tasks.register<JavaExec>("codegen-report") {
     args("-m", "xtdb.codegen-report")
 }
 
+// the dev classpath carries Clojure as source dirs rather than AOT output, so a require here
+// actually compiles; on the test classpath it would load from `.class` and warn about nothing
+tasks.register<JavaExec>("reflection-check") {
+    description = "Compiles a namespace from source with reflection warnings on: -Pns=xtdb.pgwire"
+    dependsOn(":xtdb-core:compileClojure", ":xtdb-core:compileKotlin")
+
+    classpath = sourceSets.dev.get().runtimeClasspath
+    mainClass.set("clojure.main")
+    jvmArgs(defaultJvmArgs + sixGBJvmArgs)
+
+    doFirst {
+        val ns = project.findProperty("ns")?.toString()
+            ?: error("reflection-check needs a namespace, e.g. -Pns=xtdb.pgwire")
+        args("-e", "(set! *warn-on-reflection* true) (require '$ns)")
+    }
+}
+
 tasks.register("printClasspath") {
     description = "Prints the dev classpath for clojure-lsp integration"
     doLast {

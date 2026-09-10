@@ -188,7 +188,7 @@ So `(with-open [conn (.connect node db-name)] (.submitTx conn ops opts))` needs 
 +
 Where you're unsure whether an expression reflects, verify rather than pre-empting.
 `./gradlew test` never sets `*warn-on-reflection*`, so a green run proves nothing either way.
-The dev REPL sets it (`src/dev/clojure/user.clj`), and `./gradlew codegen-report` covers the code the expression engine generates at runtime, which neither of the other two can reach.
+`./gradlew reflection-check -Pns=xtdb.pgwire` compiles one namespace from source under the flag, and `./gradlew codegen-report` covers the code the expression engine generates at runtime, which no load-time check can reach.
 
 Use `.getX`, not `.x`, for Kotlin `val` properties::
 +
