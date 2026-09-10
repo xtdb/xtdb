@@ -52,31 +52,14 @@ internal class BlockCutterTest {
         )
     )
 
-    /**
-     * Records what the term appends instead of writing it. Both messages of a block cut reach the replica
-     * log through this driver, so this is the whole of what the cycle emits — no log, no tail, and no
-     * consume-back to wait on.
-     */
-    private class RecordingDriver : LogProcessor.LogsDriver {
-        val appended = mutableListOf<ReplicaMessage>()
-
-        override suspend fun appendToReplica(msg: ReplicaMessage): Log.MessageMetadata {
-            appended += msg
-            return Log.MessageMetadata(0, appended.size - 1L, Instant.now())
-        }
-
-        override suspend fun requestFlushBlock(expectedBlockIdx: Long) =
-            error("the cutter does not ask for a flush")
-    }
-
-    private class Fixture(val cutter: BlockCutter, private val driver: RecordingDriver) {
+    private class Fixture(val cutter: BlockCutter, private val driver: RecordingLogsDriver) {
         val appended get() = driver.appended.toList()
     }
 
     /**
      * A cutter with the real appender behind it, so a test reads what the cycle wrote rather than asking
-     * what it called. The appender writes from its own coroutine, so a queued message lands on the next
-     * `runCurrent`.
+     * what it called. Both messages of a block cut reach the same driver, so it sees the whole of what the
+     * cycle emits — and the one the appender queued lands on the next `runCurrent`.
      */
     private fun TestScope.fixture(
         blockThreshold: Long = IndexerConfig().rowsPerBlock,
@@ -100,7 +83,7 @@ internal class BlockCutterTest {
             bufferPool, null
         )
 
-        val driver = RecordingDriver()
+        val driver = RecordingLogsDriver()
         val appender = ReplicaLogAppender(driver)
         backgroundScope.launch { appender.run() }
 

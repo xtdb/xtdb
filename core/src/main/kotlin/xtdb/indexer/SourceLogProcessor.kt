@@ -171,8 +171,13 @@ internal class SourceLogProcessor(
         return blockCutter.isFull
     }
 
-    // Resolve one source-log record, answering whether it cut a block.
-    private suspend fun handleRecord(record: Log.Record<SourceMessage>): Boolean {
+    /**
+     * Resolve one source-log record, answering whether it cut a block.
+     *
+     * Everything the resolve side decides about a record is decided here, so this is the seam a test
+     * drives — [processRecords] adds only the batch pipe, which no caller but the transport needs.
+     */
+    suspend fun handleRecord(record: Log.Record<SourceMessage>): Boolean {
         val msgId = record.msgId
         val msg = record.message
         LOG.trace { "[$dbName] leader: message $msgId (${msg::class.simpleName})" }
