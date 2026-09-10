@@ -31,6 +31,8 @@ import java.time.ZoneId
 import kotlin.time.Duration.Companion.seconds
 import xtdb.api.tx.ExternalSource
 import xtdb.api.tx.TxIndexer
+import xtdb.indexer.LogProcessor.LogsDriver
+import xtdb.indexer.LogProcessor.RealLogsDriver
 
 internal class LeaderLogProcessorTest : LeaderTermTest() {
 
@@ -78,7 +80,7 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         val (proc, appender) = unstartedTerm(watchers, driver = { inner ->
-            object : LeaderDriver by inner {
+            object : LogsDriver by inner {
                 // LocalStorage converts a ClosedByInterruptException into this on both its write paths
                 override suspend fun appendToReplica(msg: ReplicaMessage): Log.MessageMetadata =
                     throw InterruptedException("interrupted writing to storage")

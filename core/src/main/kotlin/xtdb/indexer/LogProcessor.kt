@@ -157,7 +157,28 @@ class LogProcessor(
     private val skipTxs: Set<MessageId> = emptySet(),
     private val flushTimeout: Duration,
     private val gcDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val logsDriver: LogsDriver = RealLogsDriver(partitionStorage),
 ) : Log.SubscriptionListener<SourceMessage>, AutoCloseable {
+
+    /** The partition's log appends, behind one seam, so that a test can fail or stall one. */
+    interface LogsDriver {
+
+        /** Needs no atomicity across messages: a superseded leader is fenced by the term its records carry (#5817). */
+        suspend fun appendToReplica(msg: ReplicaMessage): Log.MessageMetadata
+
+        /** [expectedBlockIdx] is -1 where no block has been cut yet. */
+        suspend fun requestFlushBlock(expectedBlockIdx: Long): MessageId
+    }
+
+    class RealLogsDriver(partitionStorage: PartitionStorage) : LogsDriver {
+        private val sourceLog = partitionStorage.sourceLog
+        private val replicaLog = partitionStorage.replicaLog
+
+        override suspend fun appendToReplica(msg: ReplicaMessage) = replicaLog.appendMessage(msg)
+
+        override suspend fun requestFlushBlock(expectedBlockIdx: Long) =
+            sourceLog.appendMessage(SourceMessage.FlushBlock(expectedBlockIdx)).msgId
+    }
 
     private val replicaLog = partitionStorage.replicaLog
     private val hasExternalSource = externalSource != null
@@ -317,7 +338,7 @@ class LogProcessor(
         // Append a NoOp stamped with the new term as the replay target: the follower catches up to it
         // before we cut over, which is what proves our own claim has been read back. A plain append
         // now — the term on read-back is the fence, replacing the transactional producer (#5817).
-        val replayTarget = replicaLog.appendMessage(NoOp(termId = termId)).msgId
+        val replayTarget = logsDriver.appendToReplica(NoOp(termId = termId)).msgId
         LOG.debug("[${dbName}] transition: awaiting replica catch-up to $replayTarget")
         awaitReplicaMsg(replayTarget)
         LOG.debug("[${dbName}] transition: replica caught up to $replayTarget")
@@ -366,13 +387,12 @@ class LogProcessor(
 
                     checkNotSuperseded(termId, pendingBlock)
 
-                    val driver = RealLeaderDriver(partitionStorage, partitionState)
-                    val replicaAppender = ReplicaLogAppender(driver)
+                    val replicaAppender = ReplicaLogAppender(logsDriver)
                     val blockCutter =
                         BlockCutter(partitionState, dbName, termId, replicaAppender, blockUploader)
 
                     val proc = LeaderLogProcessor(
-                        allocator, base, partitionStorage, crashLogger, partitionState, dbName, driver,
+                        allocator, base, partitionStorage, crashLogger, partitionState, dbName, logsDriver,
                         blockCutter, watchers,
                         replicaAppender,
                         externalSource,

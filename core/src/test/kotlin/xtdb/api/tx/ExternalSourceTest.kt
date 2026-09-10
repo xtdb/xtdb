@@ -31,11 +31,11 @@ import xtdb.api.error.Incorrect
 import xtdb.indexer.BlockUploader
 import xtdb.indexer.CrashLogger
 import xtdb.indexer.BlockCutter
-import xtdb.indexer.LeaderDriver
+import xtdb.indexer.LogProcessor.LogsDriver
 import xtdb.indexer.LeaderLogProcessor
 import xtdb.indexer.LeaderSupersededException
 import xtdb.indexer.LiveIndex
-import xtdb.indexer.RealLeaderDriver
+import xtdb.indexer.LogProcessor.RealLogsDriver
 import xtdb.indexer.ReplicaApply
 import xtdb.indexer.ReplicaLogAppender
 import xtdb.indexer.TermFence
@@ -115,7 +115,7 @@ class ExternalSourceTest {
         watchers: Watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1),
         extSource: ExternalSource = InMemoryExternalSource(),
         afterToken: ExternalSourceToken? = null,
-        wrapDriver: (LeaderDriver) -> LeaderDriver = { it },
+        wrapDriver: (LogsDriver) -> LogsDriver = { it },
     ): LeaderLogProcessor {
         val tableCatalog = TableCatalog(bufferPool)
         val trieCatalog = createTrieCatalog()
@@ -123,7 +123,7 @@ class ExternalSourceTest {
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
         val compactor = mockk<Compactor.ForDatabase>(relaxed = true)
         val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", compactor, null, null, backgroundScope)
-        val driver = wrapDriver(RealLeaderDriver(partitionStorage, partitionState))
+        val driver = wrapDriver(RealLogsDriver(partitionStorage))
 
         val crashLogger = mockk<CrashLogger>(relaxed = true)
         val replicaAppender = ReplicaLogAppender(driver)
@@ -413,8 +413,8 @@ class ExternalSourceTest {
 
     @Test
     fun `a replica-log append fault in the background append surfaces through executeTx`() = runTest {
-        val failingDriver = { inner: LeaderDriver ->
-            object : LeaderDriver by inner {
+        val failingDriver = { inner: LogsDriver ->
+            object : LogsDriver by inner {
                 override suspend fun appendToReplica(msg: ReplicaMessage): Log.MessageMetadata =
                     throw RuntimeException("replica-log append fault")
             }

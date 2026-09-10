@@ -32,6 +32,8 @@ import xtdb.database.Database
 import xtdb.database.DatabaseLogs
 import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
+import xtdb.indexer.LogProcessor.LogsDriver
+import xtdb.indexer.LogProcessor.RealLogsDriver
 import xtdb.storage.BufferPool
 import xtdb.trie.TrieCatalog
 import xtdb.types.MessageId
@@ -105,8 +107,8 @@ internal abstract class LeaderTermTest {
     // the message is not on the log, so it can't be consumed back — the ReadIndex ack (and thus executeTx)
     // stays pending. Everything else, the tail included, delegates to the real driver.
     protected fun gatedDriver(
-        inner: LeaderDriver, gate: CompletableDeferred<Unit>, appendStarted: CompletableDeferred<Unit>,
-    ): LeaderDriver = object : LeaderDriver by inner {
+        inner: LogsDriver, gate: CompletableDeferred<Unit>, appendStarted: CompletableDeferred<Unit>,
+    ): LogsDriver = object : LogsDriver by inner {
         override suspend fun appendToReplica(msg: ReplicaMessage): Log.MessageMetadata {
             appendStarted.complete(Unit)
             gate.await()
@@ -164,7 +166,7 @@ internal abstract class LeaderTermTest {
         leaderTerm: Long = 1,
         // A leader may only hold one if it is the primary's, so supplying one names this database 'xtdb'.
         dbCatalog: Database.Catalog? = null,
-        wrapDriver: (LeaderDriver) -> LeaderDriver = { it },
+        wrapDriver: (LogsDriver) -> LogsDriver = { it },
         termJob: Job = SupervisorJob(backgroundScope.coroutineContext.job),
     ): LeaderLogProcessor {
         val dbName = if (dbCatalog != null) "xtdb" else "test"
@@ -176,7 +178,7 @@ internal abstract class LeaderTermTest {
                 partitionStorage, partitionState, "xtdb", compactor, null, null,
                 backgroundScope, uploadDispatcher
             )
-        val driver = wrapDriver(RealLeaderDriver(partitionStorage, partitionState))
+        val driver = wrapDriver(RealLogsDriver(partitionStorage))
 
         val termScope = backgroundScope + termJob
         val replicaAppender = ReplicaLogAppender(driver)
@@ -202,7 +204,7 @@ internal abstract class LeaderTermTest {
      */
     protected fun TestScope.unstartedTerm(
         watchers: Watchers,
-        driver: (LeaderDriver) -> LeaderDriver = { it },
+        driver: (LogsDriver) -> LogsDriver = { it },
         extSource: ExternalSource? = null,
     ): Pair<LeaderLogProcessor, ReplicaLogAppender> {
         val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0)
@@ -215,13 +217,13 @@ internal abstract class LeaderTermTest {
             partitionStorage, partitionState, "xtdb", mockk(relaxed = true), null, null,
             backgroundScope, StandardTestDispatcher(testScheduler)
         )
-        val leaderDriver = driver(RealLeaderDriver(partitionStorage, partitionState))
-        val appender = ReplicaLogAppender(leaderDriver)
+        val logsDriver = driver(RealLogsDriver(partitionStorage))
+        val appender = ReplicaLogAppender(logsDriver)
         val blockCutter = BlockCutter(partitionState, "test", 1, appender, blockUploader)
 
         val proc = LeaderLogProcessor(
             allocator, nodeBase, partitionStorage, mockk(relaxed = true),
-            partitionState, "test", leaderDriver, blockCutter, watchers, appender,
+            partitionState, "test", logsDriver, blockCutter, watchers, appender,
             extSource,
             skipTxs = emptySet(), dbCatalog = null,
             leaderTerm = 1,

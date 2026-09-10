@@ -112,7 +112,7 @@ private inline fun runTaskGuarded(
  * pause is this processor's own state rather than a read of the term's.
  */
 internal class SourceLogProcessor(
-    private val driver: LeaderDriver,
+    private val logsDriver: LogProcessor.LogsDriver,
     private val txResolver: TxResolver,
     partitionStorage: PartitionStorage,
     partitionState: PartitionState,
@@ -300,7 +300,7 @@ internal class SourceLogProcessor(
 
     private suspend fun maybeFlushBlock() {
         if (blockFlusher.checkBlockTimeout(tableCatalog))
-            driver.requestFlushBlock(tableCatalog.currentBlockIndex ?: -1)
+            logsDriver.requestFlushBlock(tableCatalog.currentBlockIndex ?: -1)
     }
 
     /** The transport's edge: hand a poll batch over and await its resolution. */

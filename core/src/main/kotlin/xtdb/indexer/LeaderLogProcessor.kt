@@ -2,7 +2,6 @@ package xtdb.indexer
 
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.channels.Channel
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.NodeBase
 import xtdb.api.DatabaseName
@@ -20,14 +19,10 @@ import xtdb.database.Database
 import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
 import xtdb.types.MessageId
-import xtdb.util.debug
-import xtdb.util.error
 import xtdb.util.logger
 import xtdb.util.useAll
 import java.time.Duration
 import java.time.InstantSource
-
-private val LOG = LeaderLogProcessor::class.logger
 
 /**
  * A higher-term record read back on our own replica log: a newer leader has superseded us. Thrown from
@@ -43,7 +38,7 @@ internal class LeaderLogProcessor(
     crashLogger: CrashLogger,
     partitionState: PartitionState,
     private val dbName: DatabaseName,
-    private val driver: LeaderDriver,
+    logsDriver: LogProcessor.LogsDriver,
     private val blockCutter: BlockCutter,
     private val watchers: Watchers,
 
@@ -68,6 +63,7 @@ internal class LeaderLogProcessor(
     private val partition = partitionStorage.partition
 
     private val tableCatalog = partitionState.tableCatalog
+    private val liveIndex = partitionState.liveIndex
 
     // Resolves each source-log / attach-detach / ext-source tx and holds it — with every other
     // resolved-but-not-yet-applied tx — until we've read it back off our own replica log and committed it
@@ -85,7 +81,7 @@ internal class LeaderLogProcessor(
     )
 
     val srcLogProc = SourceLogProcessor(
-        driver, txResolver, partitionStorage, partitionState, watchers, dbCatalog, dbName, leaderTerm,
+        logsDriver, txResolver, partitionStorage, partitionState, watchers, dbCatalog, dbName, leaderTerm,
         replicaAppender, flushTimeout, ::appendTx, ::cutBlock
     )
 
@@ -96,10 +92,10 @@ internal class LeaderLogProcessor(
             ExternalSourceProcessor(source, partition, tableCatalog, watchers, txResolver) { appendTx(it) }
         }
 
-    private suspend fun applyResolvedTx(msg: ReplicaMessage.ResolvedTx) {
+    private fun applyResolvedTx(msg: ReplicaMessage.ResolvedTx) {
         val txKey = TransactionKey(msg.txId, msg.systemTime)
 
-        msg.loadTableData(al).useAll { tables -> driver.applyTx(txKey, tables) }
+        msg.loadTableData(al).useAll { tables -> liveIndex.commitTx(txKey, tables) }
 
         val result =
             if (msg.committed) TransactionResult.Committed(txKey)
@@ -112,9 +108,9 @@ internal class LeaderLogProcessor(
         watchers.notifyApplied(effectiveSrcMsgId, result, msg.externalSourceToken)
     }
 
-    private suspend fun applyResolvedTx(tx: ResolvedTx) {
+    private fun applyResolvedTx(tx: ResolvedTx) {
         try {
-            driver.applyTx(tx.txKey, tx.allTables.associate { it.ref to it.relation })
+            liveIndex.commitTx(tx.txKey, tx.allTables.associate { it.ref to it.relation })
 
             watchers.notifyApplied(tx.srcMsgId, tx.txResult, tx.externalSourceToken)
 
