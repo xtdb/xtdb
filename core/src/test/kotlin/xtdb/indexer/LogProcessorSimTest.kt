@@ -170,12 +170,11 @@ class LogProcessorSimTest : SimulationTestBase() {
             LogProcessor(
                 allocator, nodeBase, crashLogger,
                 partitionStorage, partitionState, dbName, watchers,
-                BlockUploader(partitionStorage, partitionState, "xtdb", mockk(relaxed = true), null, null, scope, uploadDispatcher = dispatcher),
                 mockk<Compactor.ForDatabase>(relaxed = true), dbCatalog = null,
                 externalSource = simExtSource,
                 scope = scope,
                 flushTimeout = indexerConfig.flushDuration,
-                gcDispatcher = dispatcher,
+                ioDispatcher = dispatcher,
             ).also { logProcessor = it }
 
         override fun close() {

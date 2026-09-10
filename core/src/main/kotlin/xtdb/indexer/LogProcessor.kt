@@ -25,6 +25,7 @@ import xtdb.util.error
 import xtdb.util.info
 import xtdb.util.logger
 import java.time.Duration
+import java.util.concurrent.atomic.AtomicLong
 
 private val LOG = LogProcessor::class.logger
 
@@ -70,14 +71,14 @@ class LogProcessor(
     private val partitionState: PartitionState,
     private val dbName: DatabaseName,
     private val watchers: Watchers,
-    private val blockUploader: BlockUploader,
     private val compactor: Compactor.ForDatabase,
     private val dbCatalog: Database.Catalog?,
     private val externalSource: ExternalSource?,
     private val scope: CoroutineScope,
     private val skipTxs: Set<MessageId> = emptySet(),
     private val flushTimeout: Duration,
-    private val gcDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    // Injected so a simulation can seed it; each consumer caps its own fan-out off it.
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val logsDriver: LogsDriver = RealLogsDriver(partitionStorage),
 ) : Log.SubscriptionListener<SourceMessage>, AutoCloseable {
 
@@ -248,10 +249,25 @@ class LogProcessor(
             stateFlow.value = value
         }
 
+    // Held here rather than on the term's cutter, because a Micrometer gauge keeps the state object it was
+    // registered with: a per-term one would be dropped and the gauge would go on reporting the first
+    // term's last upload, which is the one thing it exists to contradict (#5867).
+    private val lastBlockUploadEpochSeconds = AtomicLong(0)
+
     init {
         base.meterRegistry?.let { reg ->
             Gauge.builder("xtdb.log.leader", this) { if (it.state is Leading) 1.0 else 0.0 }
                 .description("1 if this node is the log leader, 0 if follower")
+                .tag("db", dbName)
+                .register(reg)
+
+            // A timer records uploads that happened; this records the absence of one. An external source
+            // confirms its upstream position only as far as the last durable block, so a database whose
+            // blocks have quietly stopped landing pins the upstream's log while ingestion, queries and
+            // healthz all stay green — time-since-last-block is what makes that visible (#5867).
+            Gauge.builder("xtdb.block.last_upload_time", lastBlockUploadEpochSeconds) { it.get().toDouble() }
+                .description("epoch seconds at which this database's most recent block landed in object storage")
+                .baseUnit("seconds")
                 .tag("db", dbName)
                 .register(reg)
         }
@@ -320,7 +336,11 @@ class LogProcessor(
                     val replicaAppender = ReplicaLogAppender(logsDriver)
 
                     val blockCutter =
-                        BlockCutter(partitionState, dbName, termId, replicaAppender, blockUploader)
+                        BlockCutter(
+                            partitionStorage, partitionState, dbName, termId, replicaAppender, logsDriver,
+                            compactor, dbCatalog, base.meterRegistry, lastBlockUploadEpochSeconds, scope,
+                            ioDispatcher
+                        )
 
                     val proc = LeaderLogProcessor(
                         allocator, base, partitionStorage, crashLogger, partitionState, dbName, logsDriver,
@@ -330,7 +350,7 @@ class LogProcessor(
                         skipTxs, dbCatalog,
                         leaderTerm = termId,
                         flushTimeout = flushTimeout,
-                        gcDispatcher = gcDispatcher,
+                        ioDispatcher = ioDispatcher,
                     )
 
                     pendingBlock?.let { pending ->

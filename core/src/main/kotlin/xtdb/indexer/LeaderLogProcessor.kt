@@ -61,8 +61,7 @@ internal class LeaderLogProcessor(
     private val leaderTerm: Long = 0,
     instantSource: InstantSource = InstantSource.system(),
     flushTimeout: Duration,
-    // Base for the GCs' delete fan-out; defaults to IO in prod, sims inject the seeded dispatcher.
-    gcDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : AutoCloseable {
 
     init {
@@ -86,7 +85,7 @@ internal class LeaderLogProcessor(
         )
 
     val gc = GarbageCollector(
-        nodeBase, partitionStorage, partitionState, dbName, leaderTerm, replicaAppender, gcDispatcher
+        nodeBase, partitionStorage, partitionState, dbName, leaderTerm, replicaAppender, ioDispatcher
     )
 
     val srcLogProc = SourceLogProcessor(

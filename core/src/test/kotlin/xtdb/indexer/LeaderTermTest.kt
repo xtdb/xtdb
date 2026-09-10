@@ -39,6 +39,7 @@ import xtdb.trie.TrieCatalog
 import xtdb.types.MessageId
 import xtdb.util.closeAll
 import java.time.InstantSource
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Stands up a leader term without a transport, for tests of anything the term drives.
@@ -143,7 +144,7 @@ internal abstract class LeaderTermTest {
         }
 
     protected fun TestScope.leaderProc(
-        uploadDispatcher: CoroutineDispatcher,
+        ioDispatcher: CoroutineDispatcher,
         sourceLog: InMemoryLog<SourceMessage> = InMemoryLog(InstantSource.system(), 0),
         replicaLog: InMemoryLog<ReplicaMessage> = InMemoryLog(InstantSource.system(), 0),
         bufferPool: BufferPool = mockk(relaxed = true) { every { epoch } returns 0 },
@@ -165,16 +166,16 @@ internal abstract class LeaderTermTest {
         val tableCatalog = TableCatalog(bufferPool)
         val partitionState = PartitionState(tableCatalog, trieCatalog, liveIndex)
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
-        val blockUploader =
-            BlockUploader(
-                partitionStorage, partitionState, dbName, compactor, null, null,
-                backgroundScope, uploadDispatcher
-            )
         val driver = wrapDriver(RealLogsDriver(partitionStorage))
 
         val termScope = backgroundScope + termJob
         val replicaAppender = ReplicaLogAppender(driver)
-        val blockCutter = BlockCutter(partitionState, dbName, leaderTerm, replicaAppender, blockUploader)
+        val blockCutter =
+            BlockCutter(
+                partitionStorage, partitionState, dbName, leaderTerm, replicaAppender, driver, compactor,
+                dbCatalog = null, meterRegistry = null, lastUploadEpochSeconds = AtomicLong(0),
+                scope = backgroundScope, ioDispatcher = ioDispatcher
+            )
 
         return termScope.startTerm(
             partitionStorage,
@@ -205,13 +206,14 @@ internal abstract class LeaderTermTest {
         val partitionState =
             PartitionState(TableCatalog(bufferPool), createTrieCatalog(), liveIndexMock())
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
-        val blockUploader = BlockUploader(
-            partitionStorage, partitionState, "xtdb", mockk(relaxed = true), null, null,
-            backgroundScope, StandardTestDispatcher(testScheduler)
-        )
         val logsDriver = driver(RealLogsDriver(partitionStorage))
         val appender = ReplicaLogAppender(logsDriver)
-        val blockCutter = BlockCutter(partitionState, "test", 1, appender, blockUploader)
+        val blockCutter =
+            BlockCutter(
+                partitionStorage, partitionState, "test", 1, appender, logsDriver, mockk(relaxed = true),
+                dbCatalog = null, meterRegistry = null, lastUploadEpochSeconds = AtomicLong(0),
+                scope = backgroundScope, ioDispatcher = StandardTestDispatcher(testScheduler)
+            )
 
         val proc = LeaderLogProcessor(
             allocator, nodeBase, partitionStorage, mockk(relaxed = true),

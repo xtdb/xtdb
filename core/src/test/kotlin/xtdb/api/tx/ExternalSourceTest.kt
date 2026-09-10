@@ -28,7 +28,6 @@ import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
 import xtdb.api.IndexerConfig
 import xtdb.api.error.Incorrect
-import xtdb.indexer.BlockUploader
 import xtdb.indexer.CrashLogger
 import xtdb.indexer.BlockCutter
 import xtdb.indexer.LogProcessor.LogsDriver
@@ -45,6 +44,7 @@ import xtdb.util.closeAll
 import java.time.Instant
 import java.time.InstantSource
 import java.time.ZoneId
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.time.Duration.Companion.milliseconds
 
 class ExternalSourceTest {
@@ -118,14 +118,16 @@ class ExternalSourceTest {
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
         val compactor = mockk<Compactor.ForDatabase>(relaxed = true)
 
-        val blockUploader =
-            BlockUploader(partitionStorage, partitionState, "xtdb", compactor, null, null, backgroundScope)
-
         val driver = wrapDriver(RealLogsDriver(partitionStorage))
 
         val crashLogger = mockk<CrashLogger>(relaxed = true)
         val replicaAppender = ReplicaLogAppender(driver)
-        val blockCutter = BlockCutter(partitionState, "test", 0, replicaAppender, blockUploader)
+        val blockCutter =
+            BlockCutter(
+                partitionStorage, partitionState, "test", 0, replicaAppender, driver, compactor,
+                dbCatalog = null, meterRegistry = null, lastUploadEpochSeconds = AtomicLong(0),
+                scope = backgroundScope
+            )
 
         return LeaderLogProcessor(
             allocator, nodeBase, partitionStorage, crashLogger,
