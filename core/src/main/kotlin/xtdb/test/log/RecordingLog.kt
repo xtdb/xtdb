@@ -79,7 +79,5 @@ class RecordingLog<M>(private val instantSource: InstantSource, messages: List<M
         action: suspend (Log.Tail<M>) -> R,
     ): R = error("withTail")
 
-    override suspend fun openGroupSubscription(listener: Log.SubscriptionListener<M>): Unit = error("openGroupSubscription")
-
     override fun close() = Unit
 }

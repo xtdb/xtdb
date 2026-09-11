@@ -18,15 +18,13 @@ class LogFactoryTest {
         val restored = roundTrip(InMemoryLog.Factory()) as InMemoryLog.Factory
 
         assertEquals(0, restored.epoch)
-        assertEquals(0, restored.termEpoch)
     }
 
     @Test
-    fun `round-trips in-memory epoch and termEpoch`() {
-        val restored = roundTrip(InMemoryLog.Factory().epoch(42).termEpoch(3)) as InMemoryLog.Factory
+    fun `round-trips in-memory epoch`() {
+        val restored = roundTrip(InMemoryLog.Factory().epoch(42)) as InMemoryLog.Factory
 
         assertEquals(42, restored.epoch)
-        assertEquals(3, restored.termEpoch)
     }
 
     @Test
@@ -35,16 +33,14 @@ class LogFactoryTest {
 
         assertEquals("log".asPath, restored.path)
         assertEquals(0, restored.epoch)
-        assertEquals(0, restored.termEpoch)
     }
 
     @Test
-    fun `round-trips local epoch and termEpoch`() {
-        val original = LocalLog.Factory("log".asPath).epoch(42).termEpoch(3)
+    fun `round-trips local epoch`() {
+        val original = LocalLog.Factory("log".asPath).epoch(42)
         val restored = roundTrip(original) as LocalLog.Factory
 
         assertEquals("log".asPath, restored.path)
         assertEquals(42, restored.epoch)
-        assertEquals(3, restored.termEpoch)
     }
 }

@@ -485,7 +485,9 @@
 
     (with-open [node2 (tu/->local-node (assoc node-opts :buffers-dir "objects-1"))]
       (let [tc2 (.getTableCatalog (db/primary-db node2))]
-        (xt-log/sync-node node2 (Duration/ofMillis 200))
+        ;; the reopened node has a persisted block, so it can't claim on sight — it waits out an
+        ;; election before it can resolve the source log's tail, which on a local log is under a second
+        (xt-log/sync-node node2 (Duration/ofSeconds 2))
 
         ;; this one comes out with union with type-ids null vs union with type-ids [].
         ;; very annoying.

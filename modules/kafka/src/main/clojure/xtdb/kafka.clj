@@ -4,11 +4,10 @@
   (:import [xtdb.api.log KafkaCluster$ClusterFactory KafkaCluster$LogFactory]))
 
 (defmethod log/->log-cluster-factory ::cluster
-  [_ {:keys [bootstrap-servers properties-map properties-file group-id]}]
+  [_ {:keys [bootstrap-servers properties-map properties-file]}]
   (cond-> (KafkaCluster$ClusterFactory. bootstrap-servers)
     properties-map (.propertiesMap properties-map)
-    properties-file (.propertiesFile (util/->path properties-file))
-    group-id (.groupId group-id)))
+    properties-file (.propertiesFile (util/->path properties-file))))
 
 (defmethod log/->log-factory ::kafka [_ {:keys [cluster topic replica-cluster replica-topic epoch] :as opts}]
   (let [cluster-str (str (symbol cluster))]
