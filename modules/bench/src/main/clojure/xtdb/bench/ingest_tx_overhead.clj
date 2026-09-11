@@ -47,7 +47,7 @@
             (log/trace :done (first batch)))
 
           (with-open [rel (Relation. al)]
-            (let [id-col (.vectorFor rel "$0" #xt.arrow/type :i64 false)]
+            (let [id-col (.vectorFor rel "$1" #xt.arrow/type :i64 false)]
               (doseq [idx batch]
                 (.writeLong id-col (long idx))))
             (.setRowCount rel (count batch))
