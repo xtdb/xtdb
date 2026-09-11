@@ -323,10 +323,10 @@ class PostgresSource(
         driver.openStream(startLsn).use { stream ->
             assigned.streaming = true
 
-            // Transactions submitted to the indexer but not yet known durable, in submission (= LSN) order. We
-            // read + submit ahead of durability so back-to-back CDC txs pipeline through the double-buffered
-            // indexer; `submitTx`'s bounded hand-off buffer suspends us under backpressure, keeping this bounded.
-            val awaitingDurability = ArrayDeque<Pair<PostgresDriver.Transaction, Deferred<TransactionResult>>>()
+            // Submitted to the indexer but not yet applied, in submission (= LSN) order. We submit ahead
+            // so back-to-back CDC txs pipeline through the double-buffered indexer; `submitTx`'s bounded
+            // hand-off buffer suspends us under backpressure, keeping this bounded.
+            val awaitingApply = ArrayDeque<Pair<PostgresDriver.Transaction, Deferred<TransactionResult>>>()
 
             // Confirmation is specified in dev/doc/pgsrc.allium; the names below are its names.
 
@@ -357,8 +357,8 @@ class PostgresSource(
             // loop. `await()` rethrows an ingest failure, which unwinds past `use` — ImportFailureTearsDownStream.
             // The metrics land here so a re-delivered tx isn't counted twice.
             suspend fun drainApplied() {
-                while (awaitingDurability.firstOrNull()?.second?.isCompleted == true) {
-                    val (tx, handle) = awaitingDurability.removeFirst()
+                while (awaitingApply.firstOrNull()?.second?.isCompleted == true) {
+                    val (tx, handle) = awaitingApply.removeFirst()
                     handle.await()
                     eventsCounter?.increment(tx.ops.size.toDouble())
                     commitsCounter?.increment()
@@ -391,7 +391,7 @@ class PostgresSource(
                             indexer.indexTx(tx, openTx)
                             TxResult.Committed()
                         }
-                        awaitingDurability.addLast(tx to handle)
+                        awaitingApply.addLast(tx to handle)
                         heldLsn = tx.lsn
                     }
 
