@@ -293,7 +293,9 @@ internal class BlockCutter(
         val block = tableCatalog.buildBlock(
             blockIdx, liveIndex.latestCompletedTx, latestProcessedMsgId,
             boundaryReplicaMsgId, entries.values, secondaryDatabasesForBlock,
-            externalSourceToken, leaderTerm
+            externalSourceToken,
+            // not leaderTerm - #6059
+            boundary.termId
         )
 
         bufferPool.putObject(TableCatalog.blockFilePath(blockIdx), ByteBuffer.wrap(block.toByteArray()))
