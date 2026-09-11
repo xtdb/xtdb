@@ -238,7 +238,7 @@ class PostgresSource(
 
         val assigned = Assigned().also { assignment.set(it) }
         try {
-            when {
+            val resumeLsn = when {
                 token != null && !token.snapshotCompleted ->
                     // > The snapshot is valid until a new command is executed on this connection or the replication connection is closed
                     // https://www.postgresql.org/docs/current/protocol-replication.html#PROTOCOL-REPLICATION-CREATE-REPLICATION-SLOT
@@ -249,17 +249,17 @@ class PostgresSource(
                         "xtdb.postgres/incomplete-snapshot",
                         mapOf("db-name" to dbName, "slot-name" to slotName),
                     )
-                token != null && token.snapshotCompleted -> {
-                    LOG.info("[$dbName] Resuming streaming from LSN ${LogSequenceNumber.valueOf(token.latestCommittedLsn)}")
-                    streamChanges(txIndexer, token.latestCommittedLsn, assigned)
-                }
+                token != null -> token.latestCommittedLsn
+                    .also { LOG.info("[$dbName] Resuming streaming from LSN ${LogSequenceNumber.valueOf(it)}") }
+
                 else -> {
                     LOG.info("[$dbName] Starting initial snapshot")
-                    val slotLsn = initialSnapshot(txIndexer)
-                    LOG.info("[$dbName] Snapshot complete, switching to streaming from LSN ${LogSequenceNumber.valueOf(slotLsn)}")
-                    streamChanges(txIndexer, slotLsn, assigned)
+                    initialSnapshot(txIndexer)
+                        .also { LOG.info("[$dbName] Snapshot complete, switching to streaming from LSN ${LogSequenceNumber.valueOf(it)}") }
                 }
             }
+
+            streamChanges(txIndexer, resumeLsn, assigned)
         } catch (e: Exception) {
             if (e is PSQLException && e.isTeardownArtefact()) {
                 LOG.warn("[$dbName] Database connection failed when reading from copy (connection closed)")
