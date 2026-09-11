@@ -245,27 +245,35 @@ internal class BlockCutter(
 
         val finishedBlocks = liveIndex.finishBlock(bufferPool, blockIdx)
 
-        // A table staged with no rows has no trie — see LiveTable.FinishedBlock.writtenTrie. It still
-        // reaches the table catalog below, so its declared columns survive.
-        val addedTries =
+        // One timestamp for the whole block rather than one per table: it dates the supersession these
+        // tries cause, and they all supersede as of the same block.
+        val triesAsOf = Instant.now()
+
+        // One trie per table that took rows — `writtenTrie` is singular — and none at all for a table
+        // staged with no rows. That table still reaches the table catalog below, so its declared columns
+        // survive.
+        val addedTriesByTable =
             finishedBlocks.mapNotNull { (table, fb) ->
-                val writtenTrie = fb.writtenTrie ?: return@mapNotNull null
+                fb.writtenTrie?.let { writtenTrie ->
+                    table to TrieDetails.newBuilder()
+                        .setTableName(table.schemaAndTable)
+                        .setTrieKey(writtenTrie.trieKey)
+                        .setDataFileSize(writtenTrie.dataFileSize)
+                        .also { it.setTrieMetadata(writtenTrie.trieMetadata) }
+                        .build()
+                }
+            }.toMap()
 
-                val trieDetails = TrieDetails.newBuilder()
-                    .setTableName(table.schemaAndTable)
-                    .setTrieKey(writtenTrie.trieKey)
-                    .setDataFileSize(writtenTrie.dataFileSize)
-                    .also { it.setTrieMetadata(writtenTrie.trieMetadata) }
-                    .build()
+        val addedTries = addedTriesByTable.values.toList()
 
-                // NOTE: side-effect here.
-                trieCatalog.addTries(table, listOf(trieDetails), Instant.now())
-
-                trieDetails
-            }
-
+        // The layout these tries imply rather than the one the catalog holds: the block records the
+        // partitions as of itself, and the add below is what the catalog will agree with afterwards.
         val allTables = finishedBlocks.keys + tableCatalog.allTables
-        val tablePartitions = allTables.associateWith { trieCatalog.getPartitions(it) }
+        val tablePartitions = allTables.associateWith { table ->
+            trieCatalog.withPartitions(table, listOfNotNull(addedTriesByTable[table]), triesAsOf)
+        }
+
+        addedTriesByTable.forEach { (table, trie) -> trieCatalog.addTries(table, listOf(trie), triesAsOf) }
 
         val tableBlocks = tableCatalog.finishBlock(finishedBlocks, tablePartitions)
 

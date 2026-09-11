@@ -386,6 +386,5 @@ surface ScanOperatorAccess {
 
     exposes:
         trie_catalog.currentTries(table)    -- live tries only; see operator/scan.clj
-        trie_catalog.getPartitions(table)
 }
 

@@ -21,7 +21,14 @@ interface TrieCatalog {
     fun deleteTries(table: TableRef, garbageTrieKeys: Set<TrieKey>)
     fun listAllTrieKeys(table: TableRef) : List<TrieKey>
     fun listLiveAndNascentTrieKeys(table: TableRef) : List<TrieKey>
-    fun getPartitions(table: TableRef): List<Partition>
+
+    /**
+     * The partition layout [table] would have with [addedTries] folded in, leaving this catalog unchanged.
+     *
+     * An empty [addedTries] gives the layout as it stands, and [asOf] dates the supersession the added
+     * tries cause exactly as it does in [addTries].
+     */
+    fun withPartitions(table: TableRef, addedTries: Iterable<TrieDetails>, asOf: Instant): List<Partition>
 
     /**
      * Captures a frozen view of every table's trie state in a single shallow copy of the per-table map.
