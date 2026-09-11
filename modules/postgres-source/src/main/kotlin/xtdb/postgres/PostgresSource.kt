@@ -29,6 +29,7 @@ import xtdb.postgres.proto.postgresSourceToken
 import xtdb.postgres.PostgresSource.Assignment.Assigned
 import xtdb.postgres.PostgresSource.Assignment.Unassigned
 import xtdb.util.*
+import java.net.SocketException
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicReference
 import com.google.protobuf.Any as ProtoAny
@@ -208,6 +209,15 @@ class PostgresSource(
         }
     }
 
+    /**
+     * Whether this is our own teardown reported back at us: [closeOnCancel] force-closes the connection
+     * to unblock a parked pgjdbc read, which the read then reports as a broken socket.
+     *
+     * A genuine mid-stream death landing during a cancellation is swallowed here too.
+     */
+    private suspend fun PSQLException.isTeardownArtefact() =
+        cause is SocketException && !currentCoroutineContext().isActive
+
     override suspend fun onPartitionAssigned(
         partition: Int,
         afterToken: ExternalSourceToken?,
@@ -250,16 +260,13 @@ class PostgresSource(
                     streamChanges(txIndexer, slotLsn, assigned)
                 }
             }
-        } catch (e: PSQLException) {
-            if (e.cause is java.net.SocketException && !currentCoroutineContext().isActive) {
+        } catch (e: Exception) {
+            if (e is PSQLException && e.isTeardownArtefact()) {
                 LOG.warn("[$dbName] Database connection failed when reading from copy (connection closed)")
             } else {
                 LOG.error(e, "[$dbName] External source failed")
                 throw e
             }
-        } catch (e: Exception) {
-            LOG.error(e, "[$dbName] External source failed")
-            throw e
         } finally {
             assignment.set(Unassigned)
         }
