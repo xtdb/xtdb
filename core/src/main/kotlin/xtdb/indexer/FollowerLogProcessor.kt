@@ -15,10 +15,9 @@ import xtdb.compactor.Compactor
 import xtdb.database.Database
 import xtdb.database.PartitionState
 import xtdb.api.error.Anomaly
-import xtdb.types.LogTimestamp
-import xtdb.log.proto.TrieDetails
 import xtdb.storage.BufferPool
 import xtdb.table.fromSchemaAndTable
+import xtdb.trie.addTries
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.closeAll
 import xtdb.util.debug
@@ -94,12 +93,6 @@ class FollowerLogProcessor @JvmOverloads constructor(
 
     private val allocator = allocator.newChildAllocator("follower-log-processor", 0, Long.MAX_VALUE)
 
-    private fun addTries(tries: List<TrieDetails>, logTimestamp: LogTimestamp) {
-        tries.groupBy { it.tableName }.forEach { (tableName, tries) ->
-            trieCatalog.addTries(fromSchemaAndTable(tableName), tries, logTimestamp)
-        }
-    }
-
     private val ReplicaMessage.stale
         get() =
             when (this) {
@@ -159,7 +152,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
 
             is ReplicaMessage.TriesAdded -> triesAddedTimer.timed {
                 if (msg.storageVersion == Storage.VERSION && msg.storageEpoch == bufferPool.epoch)
-                    addTries(msg.tries, record.logTimestamp)
+                    trieCatalog.addTries(msg.tries, record.logTimestamp)
 
                 watchers.notifyApplied(msg.sourceMsgId)
             }
@@ -167,7 +160,6 @@ class FollowerLogProcessor @JvmOverloads constructor(
             is ReplicaMessage.BlockBoundary -> blockBoundaryTimer.timed {
                 pendingBlock = PendingBlock(record.msgId, msg, maxBufferedRecords)
                 LOG.debug("[$dbName] block boundary b${msg.blockIndex.asLexHex}: source=${msg.latestProcessedMsgId}, replica=${record.msgId} — waiting for BlockUploaded...")
-                watchers.notifyApplied(msg.latestProcessedMsgId)
                 blockBufferStartSample = meterRegistry?.let { Timer.start(it) }
             }
 
@@ -224,10 +216,12 @@ class FollowerLogProcessor @JvmOverloads constructor(
         val bufferedRecords = blockUploadedTimer.timed {
             val block = parseFrom(bufferPool.getByteArray(blockFilePath(pending.blockIdx)))
 
-            addTries(msg.tries, record.logTimestamp)
-            tableCatalog.refresh(block, liveIndex.blockMetadata())
-            liveIndex.nextBlock()
+            partitionState.adoptBlock(block, msg.tries, record.logTimestamp)
             compactor.signalBlock()
+
+            // Ahead of the drain below, whose records carry later source positions — behind it, this one
+            // would go backwards and trip the watchers' monotonicity check.
+            watchers.notifyApplied(msg.latestProcessedMsgId)
 
             val bufferedRecords = pending.bufferedRecords
             bufferedRecordsSummary?.record(bufferedRecords.size.toDouble())

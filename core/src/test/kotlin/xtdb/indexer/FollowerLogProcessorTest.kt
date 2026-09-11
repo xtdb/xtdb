@@ -79,10 +79,11 @@ class FollowerLogProcessorTest {
         maxBufferedRecords: Int = 1024,
         hasExternalSource: Boolean = false,
         meterRegistry: MeterRegistry? = null,
+        pendingBlock: PendingBlock? = null,
     ) =
         FollowerLogProcessor(
             allocator, bufferPool, partitionState, dbName, compactor,
-            watchers, null, null, termFence,
+            watchers, null, pendingBlock, termFence,
             hasExternalSource = hasExternalSource,
             meterRegistry = meterRegistry,
             maxBufferedRecords = maxBufferedRecords,
@@ -128,6 +129,27 @@ class FollowerLogProcessorTest {
             verify(exactly = 0) { liveIndex.commitTx(match { it.txId == superseded.txId }, any()) }
             assertEquals(claimant, termFence.highestSeen, "the drain folded what it was holding")
         }
+
+    @Test
+    fun `a block inherited from the role before it closes on that role's own upload`() = runTest {
+        every { bufferPool.getByteArray(TableCatalog.blockFilePath(0)) } returns
+                block { blockIndex = 0 }.toByteArray()
+
+        val inherited = PendingBlock(0, ReplicaMessage.BlockBoundary(0, 0, termId = TERM))
+        inherited += record(
+            1, ReplicaMessage.ResolvedTx(3, Instant.now(), true, null, emptyMap(), srcMsgId = 2, termId = TERM)
+        )
+
+        val proc = makeProcessor(pendingBlock = inherited)
+
+        proc.handleRecord(
+            record(2, ReplicaMessage.BlockUploaded(Storage.VERSION, 1, 0, 0, emptyList(), termId = TERM))
+        )
+
+        assertNull(proc.pendingBlock)
+        assertEquals(0L, tableCatalog.currentBlockIndex, "the inherited block closed on the upload it was waiting for")
+        assertEquals(3L, watchers.latestTxId, "and the record it was holding applied behind it")
+    }
 
     @Test
     fun `ResolvedTx skips already-applied transactions`() = runTest {

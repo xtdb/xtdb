@@ -5,6 +5,7 @@ import xtdb.catalog.TableCatalog
 import xtdb.log.proto.TrieDetails
 import xtdb.storage.BufferPool
 import xtdb.api.TableRef
+import xtdb.table.fromSchemaAndTable
 import java.time.Instant
 
 typealias FileSize = Long
@@ -21,7 +22,14 @@ interface TrieCatalog {
     fun deleteTries(table: TableRef, garbageTrieKeys: Set<TrieKey>)
     fun listAllTrieKeys(table: TableRef) : List<TrieKey>
     fun listLiveAndNascentTrieKeys(table: TableRef) : List<TrieKey>
-    fun getPartitions(table: TableRef): List<Partition>
+
+    /**
+     * The partition layout [table] would have with [addedTries] folded in, leaving this catalog unchanged.
+     *
+     * An empty [addedTries] gives the layout as it stands, and [asOf] dates the supersession the added
+     * tries cause exactly as it does in [addTries].
+     */
+    fun withPartitions(table: TableRef, addedTries: Iterable<TrieDetails>, asOf: Instant): List<Partition>
 
     /**
      * Captures a frozen view of every table's trie state in a single shallow copy of the per-table map.
@@ -48,3 +56,12 @@ interface TrieCatalog {
         fun open(bufferPool: BufferPool, tableCatalog: TableCatalog): TrieCatalog
     }
 }
+
+/**
+ * Adds [tries] to whichever tables they name — the shape a replica message carries them in, where the
+ * per-table [TrieCatalog.addTries] wants them already grouped.
+ */
+fun TrieCatalog.addTries(tries: Iterable<TrieDetails>, asOf: Instant) =
+    tries.groupBy { it.tableName }.forEach { (tableName, tableTries) ->
+        addTries(fromSchemaAndTable(tableName), tableTries, asOf)
+    }

@@ -275,7 +275,9 @@ class LogProcessorSimTest : SimulationTestBase() {
 
     private fun assertBlockBoundariesMatchUploads(replicaMessages: List<ReplicaMessage>) {
         val boundaries = replicaMessages.filterIsInstance<ReplicaMessage.BlockBoundary>().map { it.blockIndex }
-        val uploads = replicaMessages.filterIsInstance<ReplicaMessage.BlockUploaded>().map { it.blockIndex }
+        // Distinct because one boundary can be produced by two terms, so an index can be uploaded twice.
+        val uploads =
+            replicaMessages.filterIsInstance<ReplicaMessage.BlockUploaded>().map { it.blockIndex }.distinct()
         assertEquals(boundaries, uploads, "every BlockBoundary should have a matching BlockUploaded")
         assertEquals(
             boundaries.indices.map { it.toLong() }, boundaries,

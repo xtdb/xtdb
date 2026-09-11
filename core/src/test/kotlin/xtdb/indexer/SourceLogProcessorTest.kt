@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import xtdb.SimulationTestUtils.Companion.createTrieCatalog
 import xtdb.api.IndexerConfig
+import xtdb.api.TableRef
 import xtdb.api.log.InMemoryLog
 import xtdb.api.log.Log
 import xtdb.api.log.ReplicaMessage
@@ -29,7 +30,6 @@ import xtdb.database.PartitionStorage
 import xtdb.log.proto.TrieDetails
 import xtdb.log.proto.trieMetadata
 import xtdb.storage.BufferPool
-import xtdb.table.fromSchemaAndTable
 import xtdb.trie.Trie
 import xtdb.trie.TrieCatalog
 import xtdb.types.MessageId
@@ -106,7 +106,7 @@ internal class SourceLogProcessorTest : LeaderTermTest() {
 
         return ResolveSide(
             SourceLogProcessor(
-                partitionStorage, partitionState, dbCatalog, dbName, 1,
+                partitionState, dbCatalog, dbName, 1,
                 driver, txResolver, blockCutter, appender, IndexerConfig().flushDuration
             ),
             driver
@@ -150,7 +150,7 @@ internal class SourceLogProcessorTest : LeaderTermTest() {
     }
 
     @Test
-    fun `TriesAdded reaches the local catalog and the replica log`() = runTest {
+    fun `TriesAdded is replicated for every node to apply, this one included`() = runTest {
         val trieCatalog = createTrieCatalog()
         val rs = resolveSide(trieCatalog = trieCatalog)
 
@@ -169,13 +169,12 @@ internal class SourceLogProcessorTest : LeaderTermTest() {
         runCurrent()
 
         assertEquals(
-            listOf(trieKey), trieCatalog.listAllTrieKeys(fromSchemaAndTable("public/foo")),
-            "the resolve side updates the catalog itself, ahead of its own consume-back"
+            listOf(trieKey),
+            rs.appended.filterIsInstance<ReplicaMessage.TriesAdded>().flatMap { it.tries }.map { it.trieKey }
         )
         assertEquals(
-            listOf(trieKey),
-            rs.appended.filterIsInstance<ReplicaMessage.TriesAdded>().flatMap { it.tries }.map { it.trieKey },
-            "and replicates it for the followers"
+            emptySet<TableRef>(), trieCatalog.tables,
+            "and the catalog moves when this node reads that record back, not here"
         )
     }
 

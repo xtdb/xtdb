@@ -286,7 +286,7 @@ class LiveIndexTest {
     }
 
     /**
-     * Stops between `BlockCutter`'s two steps — `trieCatalog.addTries` has run, `tableCatalog.finishBlock`
+     * Stops between `BlockCutter`'s two adopt steps — `trieCatalog.addTries` has run, `tableCatalog.refresh`
      * deliberately has not. The L0's rows are scannable by then and the catalog can't yet type them, which
      * leaves the live table as the only source that can. See #5873.
      */

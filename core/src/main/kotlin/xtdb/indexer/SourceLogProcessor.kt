@@ -13,11 +13,8 @@ import xtdb.api.log.Log
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.ReplicaMessage.TriesAdded
 import xtdb.api.log.SourceMessage
-import xtdb.api.storage.Storage
 import xtdb.database.Database
 import xtdb.database.PartitionState
-import xtdb.database.PartitionStorage
-import xtdb.table.fromSchemaAndTable
 import xtdb.types.MessageId
 import xtdb.util.debug
 import xtdb.util.logger
@@ -109,7 +106,7 @@ private inline fun runTaskGuarded(
  * interleave between a boundary and its upload.
  */
 internal class SourceLogProcessor(
-    partitionStorage: PartitionStorage, partitionState: PartitionState,
+    partitionState: PartitionState,
     private val dbCatalog: Database.Catalog?, private val dbName: DatabaseName, private val leaderTerm: Long,
     private val logsDriver: LogProcessor.LogsDriver,
     private val txResolver: TxResolver,
@@ -120,9 +117,7 @@ internal class SourceLogProcessor(
 
     private val sourceBatches = SourceBatches()
 
-    private val bufferPool = partitionStorage.bufferPool
     private val tableCatalog = partitionState.tableCatalog
-    private val trieCatalog = partitionState.trieCatalog
 
     private val blockFlusher = BlockFlusher(flushTimeout, tableCatalog)
 
@@ -245,17 +240,8 @@ internal class SourceLogProcessor(
             }
 
             is SourceMessage.TriesAdded -> {
-                // Mutate the local trie catalog here (as the leader did pre-rewrite), then replicate for
-                // followers. Eager on the resolve side, not deferred to our own consume-back, because:
-                //  - callers see the effect promptly (the compactor/GC read the catalog synchronously);
-                //  - it stays a projection of the fenced log anyway — the block-cut pause serialises trie
-                //    mutations against boundaries, so no block snapshot straddles this add.
-                // We skip re-applying it on our own consume-back (see applyRecord); the follower applies it.
-                if (msg.storageVersion == Storage.VERSION && msg.storageEpoch == bufferPool.epoch)
-                    msg.tries.groupBy { it.tableName }.forEach { (tableName, tries) ->
-                        trieCatalog.addTries(fromSchemaAndTable(tableName), tries, record.logTimestamp)
-                    }
-
+                // Forwarded whatever its storage version: each node guards the add on the way back in,
+                // and this message is also what carries the source watermark forward.
                 replicaAppender.append(
                     ControlItem(
                         TriesAdded(

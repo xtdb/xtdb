@@ -16,6 +16,7 @@ import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
 import xtdb.garbage_collector.BlockGarbageCollector
 import xtdb.garbage_collector.TrieGarbageCollector
+import xtdb.table.fromSchemaAndTable
 import xtdb.trie.TrieKey
 
 internal class GarbageCollector(
@@ -50,23 +51,23 @@ internal class GarbageCollector(
         onUndeliveredElement = { it.abandon(CancellationException("leader term closed")) }
     )
 
+    // Tasks whose `TriesDeleted` is appended and not read back yet. Positional: the log hands them back in
+    // append order, so the head is the one that the record arriving confirms.
+    //
+    // A transient — the term's coroutine is the only thing that touches it, across the arm below,
+    // [triesDeleted] and [shutdown].
+    private val inFlight = ArrayDeque<GcTask>()
+
     fun SelectBuilder<Unit>.armSelect() {
         gcCh.onReceive { task ->
             try {
                 when (task) {
                     is GcTask.TriesDeleted -> {
-                        // Remove from the local catalog here, then replicate for followers — eager on the resolve side so
-                        // the GC's `commitTriesDeleted` await returns with the catalog already updated (its contract; the
-                        // GC has already deleted the files). Safe as a fenced-log projection for the same reason as
-                        // TriesAdded: the block-cut pause serialises this against any boundary, and gcCh is excluded while a
-                        // block is in progress. Skipped on our own consume-back (see applyRecord); the follower applies it.
-                        trieCatalog.deleteTries(task.tableName, task.trieKeys)
-
                         replicaAppender.append(
                             ControlItem(TriesDeleted(task.tableName.schemaAndTable, task.trieKeys, termId = leaderTerm))
                         )
 
-                        task.onComplete.complete(Unit)
+                        inFlight += task
                     }
                 }
             } catch (e: Throwable) {
@@ -76,19 +77,35 @@ internal class GarbageCollector(
         }
     }
 
-    private val trieGc = nodeBase.config.garbageCollector.let { cfg ->
-        // Routed through the persister rather than applied inline: the catalog removal has to be serialised
-        // against block cuts, and this await must not return until the catalog reflects it — which is the
-        // GC's contract, since it has already deleted the files. See [handleTask].
-        val commitTriesDeleted: suspend (TableRef, Set<TrieKey>) -> Unit = { tableName, trieKeys ->
-            val task = GcTask.TriesDeleted(tableName, trieKeys)
-            gcCh.send(task)
-            task.onComplete.await()
-        }
+    /**
+     * Remove [trieKeys] from the trie catalog and tell the rest of the cluster, returning once this node
+     * has applied it.
+     *
+     * Handed to the persister and awaited rather than applied here: the GC has already deleted the files,
+     * so it must not carry on against a catalog that still lists them. The await ends at the read-back
+     * rather than at the append, which is what leaves log order alone to keep the removal ahead of any
+     * block upload appended behind it — see gc.allium's DualWriteOrdering.
+     */
+    suspend fun commitTriesDeleted(tableName: TableRef, trieKeys: Set<TrieKey>) {
+        val task = GcTask.TriesDeleted(tableName, trieKeys)
+        gcCh.send(task)
+        task.onComplete.await()
+    }
 
+    fun triesDeleted(msg: TriesDeleted) {
+        val task = inFlight.removeFirstOrNull()
+            ?: error("[$dbName] TriesDeleted for '${msg.tableName}' read back with nothing in flight")
+
+        // From the record, not from `task`, so this node applies exactly what every other node applies.
+        trieCatalog.deleteTries(fromSchemaAndTable(msg.tableName), msg.trieKeys)
+
+        task.onComplete.complete(Unit)
+    }
+
+    private val trieGc = nodeBase.config.garbageCollector.let { cfg ->
         TrieGarbageCollector(
             bufferPool, partitionState, dbName,
-            commitTriesDeleted, cfg.blocksToKeep, cfg.garbageLifetime,
+            ::commitTriesDeleted, cfg.blocksToKeep, cfg.garbageLifetime,
             cfg.enabled,
             nodeBase.meterRegistry,
             dispatcher = gcDispatcher,
@@ -123,5 +140,8 @@ internal class GarbageCollector(
     fun shutdown(cause: Throwable) {
         gcCh.close(cause)
         while (true) (gcCh.tryReceive().getOrNull() ?: break).abandon(cause)
+
+        inFlight.forEach { it.abandon(cause) }
+        inFlight.clear()
     }
 }

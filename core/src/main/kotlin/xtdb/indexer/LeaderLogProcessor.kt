@@ -19,11 +19,14 @@ import xtdb.api.log.Log
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.ReplicaMessage.BlockBoundary
 import xtdb.api.log.Watchers
+import xtdb.api.storage.Storage
 import xtdb.api.tx.ExternalSource
 import xtdb.database.Database
 import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
+import xtdb.trie.addTries
 import xtdb.types.MessageId
+import xtdb.util.StringUtil.asLexHex
 import xtdb.util.debug
 import xtdb.util.error
 import xtdb.util.info
@@ -70,7 +73,9 @@ internal class LeaderLogProcessor(
 
     private val partition = partitionStorage.partition
 
+    private val bufferPool = partitionStorage.bufferPool
     private val tableCatalog = partitionState.tableCatalog
+    private val trieCatalog = partitionState.trieCatalog
     private val liveIndex = partitionState.liveIndex
 
     // Resolves each source-log / attach-detach / ext-source tx and holds it — with every other
@@ -89,7 +94,7 @@ internal class LeaderLogProcessor(
     )
 
     val srcLogProc = SourceLogProcessor(
-        partitionStorage, partitionState, dbCatalog, dbName,
+        partitionState, dbCatalog, dbName,
         leaderTerm, logsDriver, txResolver, blockCutter, replicaAppender, flushTimeout
     )
 
@@ -100,6 +105,14 @@ internal class LeaderLogProcessor(
                 partition = partition, leaderTerm = leaderTerm
             )
         }
+
+    /**
+     * The block this term has produced and not yet read back, if any.
+     *
+     * A demotion hands it to the next follower — see [BlockCutter.pendingBlock] for what goes wrong
+     * without that.
+     */
+    val pendingBlock get() = blockCutter.pendingBlock
 
     private fun applyResolvedTx(msg: ReplicaMessage.ResolvedTx) {
         val txKey = TransactionKey(msg.txId, msg.systemTime)
@@ -169,6 +182,18 @@ internal class LeaderLogProcessor(
         if (msgTermId > leaderTerm)
             throw LeaderSupersededException("[$dbName] superseded: read term $msgTermId > our term $leaderTerm at ${record.msgId}")
 
+        // Ahead of the fence, as the follower does: a record held behind an open block has not been acted
+        // on, so folding it here would move the high-water past the term that cut the boundary — and the
+        // upload closing the block, written by that same term, would then be fenced away.
+        blockCutter.pendingBlock?.let { pending ->
+            val msg = record.message
+
+            if (msg is ReplicaMessage.BlockUploaded && blockCutter.closes(msg)) closeBlock(record, msg)
+            else pending += record
+
+            return
+        }
+
         // Our own claim folded before this term opened, so the fence's high-water is
         // our term and anything it refuses is below ours — which shouldn't appear
         // past our replay target anyway. The fold has to happen here whatever the
@@ -192,30 +217,61 @@ internal class LeaderLogProcessor(
                     }
                 }
 
-                // Catalog already updated on the resolve side; here we only advance the source watermark.
-                is ReplicaMessage.TriesAdded -> watchers.notifyApplied(msg.sourceMsgId)
+                is ReplicaMessage.TriesAdded -> {
+                    if (msg.storageVersion == Storage.VERSION && msg.storageEpoch == bufferPool.epoch)
+                        trieCatalog.addTries(msg.tries, record.logTimestamp)
 
-                is BlockBoundary -> {
-                    blockCutter.upload(record.msgId, msg)
-
-                    // the block's covered source position, as the follower does
-                    watchers.notifyApplied(msg.latestProcessedMsgId)
-
-                    gc.signal()
-
-                    srcLogProc.blockUploaded()
+                    // Below the guard, not above it: the compactor awaits this watermark and then
+                    // recalculates jobs off the catalog, so notifying first would have it re-select the
+                    // job it has just published.
+                    watchers.notifyApplied(msg.sourceMsgId)
                 }
 
-                // Our own BlockUploaded, read back after uploadBlock already rolled the index — nothing to do
-                // but advance the watermark.
-                is ReplicaMessage.BlockUploaded -> watchers.notifyApplied(msg.latestProcessedMsgId)
+                is BlockBoundary -> {
+                    // Produce only: the catalog refresh, the index roll, the source watermark and the
+                    // resolution resume all wait for the `BlockUploaded` this appends to come back — see
+                    // [closeBlock].
+                    blockCutter.upload(PendingBlock(record.msgId, msg))
+                }
+
+                // Two terms can produce one block index: a promoting follower still holding the boundary
+                // produces that block itself, and `closes` matches on index, version and epoch rather
+                // than on term, so a role adopts on whichever upload reaches it first and the loser
+                // arrives here. Stale by the test every other reader applies — only an index the catalog
+                // has not reached is left unexplained.
+                is ReplicaMessage.BlockUploaded ->
+                    if (msg.blockIndex > (tableCatalog.currentBlockIndex ?: -1))
+                        error(
+                            "[$dbName] BlockUploaded b${msg.blockIndex.asLexHex} at ${record.msgId} " +
+                                    "with no block in flight"
+                        )
 
                 is ReplicaMessage.NoOp -> watchers.notifyApplied(msg.srcMsgId)
 
-                // Catalog already updated on the resolve side (see GarbageCollector.handleTask); nothing to do.
-                is ReplicaMessage.TriesDeleted -> {}
+                is ReplicaMessage.TriesDeleted -> gc.triesDeleted(msg)
             }
         }
+    }
+
+    /**
+     * Adopt the block our own upload confirms, then apply what its boundary was holding back.
+     *
+     * The drain goes back through [applyReplicaMessage] rather than applying the records directly, so a
+     * boundary among them opens the next block there and the records behind it are held again instead of
+     * being applied into a block already snapshotted.
+     */
+    private suspend fun closeBlock(
+        record: Log.Record<ReplicaMessage>, msg: ReplicaMessage.BlockUploaded,
+    ) {
+        val pending = blockCutter.closeBlock(msg, record.logTimestamp)
+
+        watchers.notifyApplied(msg.latestProcessedMsgId)
+
+        gc.signal()
+
+        srcLogProc.blockUploaded()
+
+        pending.bufferedRecords.forEach { applyReplicaMessage(it) }
     }
 
     // ---- resolution ----

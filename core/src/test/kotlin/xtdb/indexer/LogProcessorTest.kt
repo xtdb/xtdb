@@ -419,11 +419,14 @@ class LogProcessorTest {
         val incoming = LeaderTerm.of(0, 5)
         logProc.transitionToLeader(0, incoming).await()
 
+        // Ahead of the assertion below: the held tx applies behind the adopt, so this is what says the
+        // adopt has happened.
+        watchers.awaitTx(1)
+
         assertEquals(
             0L, partitionState.tableCatalog.currentBlockIndex,
             "the incoming leader finished the block its predecessor left open"
         )
-        watchers.awaitTx(1)
         assertEquals(
             incoming, logProc.termFence.highestSeen,
             "the held records folded on replay, up to this leader's own claim"

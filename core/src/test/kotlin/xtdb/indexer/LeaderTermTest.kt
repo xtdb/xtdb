@@ -224,8 +224,10 @@ internal abstract class LeaderTermTest {
             flushTimeout = IndexerConfig().flushDuration,
         )
         leadersToClose += proc
-        return UnstartedTerm(proc, appender)
+        return UnstartedTerm(proc, appender, partitionState)
     }
 
-    protected data class UnstartedTerm(val proc: LeaderLogProcessor, val appender: ReplicaLogAppender)
+    protected data class UnstartedTerm(
+        val proc: LeaderLogProcessor, val appender: ReplicaLogAppender, val partitionState: PartitionState,
+    )
 }

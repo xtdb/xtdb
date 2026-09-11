@@ -448,24 +448,42 @@
                           :nascent (into empty-trie-state-list nascent)}
                          (assoc :max-block-idx max-block-idx)))))
 
+(defn apply-added-tries
+  "Folds `added-tries` into the per-table trie-catalog value `table-cat`, returning the new one.
+
+  Pure: `table-cat` is one of the catalog's immutable per-table values, so a caller that has not gone
+  through `.compute` leaves the catalog untouched."
+  [table-cat added-tries {:keys [file-size-target as-of]}]
+  (reduce (fn [table-cat ^TrieDetails added-trie]
+            (if-let [parsed-key (trie/parse-trie-key (.getTrieKey added-trie))]
+              (apply-trie-notification table-cat
+                                       (-> parsed-key
+                                           (assoc :data-file-size (.getDataFileSize added-trie)
+                                                  ;; temporarily (remove after 2.2): clear existing IID blooms (#5355)
+                                                  :trie-metadata (-> (.getTrieMetadata added-trie) .toBuilder .clearIidBloom .build)))
+                                       {:file-size-target file-size-target, :as-of as-of})
+              table-cat))
+          (or table-cat {})
+          added-tries))
+
+(defn- ->block-partitions [table-cat]
+  (->> table-cat
+       partitions
+       (mapv (fn [partition]
+               (table-cat/->partition
+                 (update partition :tries
+                         (partial mapv trie/->table-block-trie-details)))))))
+
 (defrecord TrieCatalog [^Map !table-cats, ^long file-size-target]
   xtdb.trie.TrieCatalog
   (addTries [_ table added-tries as-of]
     (.compute !table-cats table
-              (fn [_table tries]
+              (fn [_table table-cat]
                 (log/tracef "Adding tries to table '%s': %s" table (mapv #(.getTrieKey ^TrieDetails %) added-tries))
                 (try
-                  (let [{:keys [tries] :as new-trie-cat} (reduce (fn [table-cat ^TrieDetails added-trie]
-                                                                   (if-let [parsed-key (trie/parse-trie-key (.getTrieKey added-trie))]
-                                                                     (apply-trie-notification table-cat
-                                                                                              (-> parsed-key
-                                                                                                  (assoc :data-file-size (.getDataFileSize added-trie)
-                                                                                                         ;; temporarily (remove after 2.2): clear existing IID blooms (#5355)
-                                                                                                         :trie-metadata (-> (.getTrieMetadata added-trie) .toBuilder .clearIidBloom .build)))
-                                                                                              {:file-size-target file-size-target, :as-of as-of})
-                                                                     table-cat))
-                                                                 (or tries {})
-                                                                 added-tries)]
+                  (let [{:keys [tries] :as new-trie-cat}
+                        (apply-added-tries table-cat added-tries
+                                           {:file-size-target file-size-target, :as-of as-of})]
                     (s/assert ::catalog-tries tries)
                     new-trie-cat)
                   (catch InterruptedException e (throw e))
@@ -497,13 +515,10 @@
   (listLiveAndNascentTrieKeys [this table]
     (mapv :trie-key (live-and-nascent-tries (trie-state this table))))
 
-  (getPartitions [this table]
-    (->> (trie-state this table)
-         partitions
-         (mapv (fn [partition]
-                 (table-cat/->partition
-                   (update partition :tries
-                           (partial mapv trie/->table-block-trie-details)))))))
+  (withPartitions [this table added-tries as-of]
+    (-> (apply-added-tries (trie-state this table) added-tries
+                           {:file-size-target file-size-target, :as-of as-of})
+        ->block-partitions))
 
   (snapshot [_]
     ;; Shallow copy of the CHM; per-table values are already immutable Clojure persistent maps.

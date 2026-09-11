@@ -13,12 +13,14 @@ import xtdb.api.log.ReplicaMessage.BlockUploaded
 import xtdb.api.log.SourceMessage
 import xtdb.api.storage.Storage
 import xtdb.api.tx.ExternalSourceToken
+import xtdb.block.proto.Block
 import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
 import xtdb.database.Database
 import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
 import xtdb.log.proto.TrieDetails
+import xtdb.types.LogTimestamp
 import xtdb.types.MessageId
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.debug
@@ -32,17 +34,20 @@ private val LOG = BlockCutter::class.logger
 private const val MAX_CONCURRENT_BLOCK_UPLOADS = 16
 
 /**
- * Where a leader term is in the block it is filling: [Filling] → [Cut] → [Uploading] → [Filling].
+ * Where a leader term is in the block it is filling: [Filling] → [Cut] → [Uploading] → [Filling], the
+ * last step driven by reading our own `BlockUploaded` back rather than by finishing the upload.
  *
  * Resolution is armed only in [Filling] — see [acceptingResolution] — so no tx can interleave between a
- * boundary and its upload, which is what keeps the follower's bounded pending-block buffer empty.
+ * boundary and its upload. That is what keeps the follower's bounded pending-block buffer empty, and now
+ * also what keeps anything from applying inside [Uploading], where the live index holds a block already
+ * snapshotted into L0.
  *
- * The term's coroutine is both the sole writer and the sole reader, so nothing here is published across
- * coroutines.
+ * The term's coroutine is the sole writer and, [pendingBlock] apart, the sole reader; a demotion reads
+ * that one only after joining the term, which is the edge that publishes it.
  */
 internal class BlockCutter(
     partitionStorage: PartitionStorage,
-    partitionState: PartitionState,
+    private val partitionState: PartitionState,
     private val dbName: DatabaseName,
     private val leaderTerm: Long,
     private val replicaAppender: ReplicaLogAppender,
@@ -92,10 +97,34 @@ internal class BlockCutter(
     /** The boundary is queued for append, and has not been read back yet. */
     private data object Cut : BlockState
 
-    /** The boundary has been applied and the upload is in flight. */
-    private data object Uploading : BlockState
+    /**
+     * The block's files are in storage and its `BlockUploaded` is appended, but this node has not read
+     * that message back — so its catalog and live index are still on the block.
+     *
+     * The [block] is here because the produce step is the only thing that can build it and the adopt runs
+     * a whole log round-trip later; everything else the adopt needs it takes from the record.
+     */
+    private class Uploading(val pendingBlock: PendingBlock, val block: Block) : BlockState
 
     private var blockState: BlockState = Filling(liveIndex.blockRowCount)
+
+    /**
+     * The block this term has produced and is waiting to read back, holding whatever arrived behind its
+     * boundary — null unless an upload is in flight.
+     *
+     * A demotion hands this to the next follower, which then closes the block on the same message this
+     * term was waiting for. Without the handover the block would be left open on a node with nothing to
+     * close it: the upload is not stale, because [closeBlock] is what moves the catalog past it, so it
+     * would reach the follower's `processRecord` with no block to match and stop the partition's tail.
+     */
+    val pendingBlock get() = (blockState as? Uploading)?.pendingBlock
+
+    /** Whether [msg] is the upload this term is waiting for — the follower's test, applied to our own write. */
+    fun closes(msg: BlockUploaded) =
+        (blockState as? Uploading)?.pendingBlock?.let {
+            msg.blockIndex == it.blockIdx
+                    && msg.storageVersion == Storage.VERSION && msg.storageEpoch == bufferPool.epoch
+        } == true
 
     // From the live index, not the node config: the two agree in production, but they are one value and the
     // live index is what owns the block being filled.
@@ -125,7 +154,7 @@ internal class BlockCutter(
 
             // Only reachable from clauses the term arms in Filling alone, so getting here means the
             // arm-set and this state have come apart.
-            Cut, Uploading -> error("[$dbName] tx resolved during a block cut")
+            Cut, is Uploading -> error("[$dbName] tx resolved during a block cut")
         }
     }
 
@@ -152,19 +181,61 @@ internal class BlockCutter(
     }
 
     /**
-     * Close the block that [boundary] cut, read back at [boundaryMsgId], and re-arm resolution behind it.
+     * Produce the block that [pendingBlock]'s boundary cut: snapshot the live index into block files and
+     * append the matching `BlockUploaded`.
      *
-     * The live index holds exactly this block's txs by now, in log order, so this snapshots it into block
-     * files, queues the matching `BlockUploaded` and rolls the index.
+     * The live index holds exactly this block's txs by now, in log order — which is what the block-cut
+     * pause buys. What this does *not* do is adopt the result: the catalog refresh and the index roll
+     * wait for [closeBlock], on reading that message back.
+     *
+     * Deferring them is what leaves a term dying here recoverable. Its catalog has not moved past the
+     * block, so the next leader can produce it again — where `TableCatalog.buildBlock` refuses a second
+     * attempt at an index the catalog already holds.
      */
-    suspend fun upload(boundaryMsgId: MessageId, boundary: BlockBoundary) {
-        blockState = Uploading
-        uploadBlock(boundaryMsgId, boundary)
-        // Straight after the upload, so a demote landing here hands on nothing: the block is done.
-        blockState = Filling(0)
+    suspend fun upload(pendingBlock: PendingBlock) {
+        blockState = uploadBlock(pendingBlock)
     }
 
-    private suspend fun uploadBlock(boundaryReplicaMsgId: MessageId, boundary: BlockBoundary) {
+    /**
+     * Adopt the block [msg] confirms, re-open the one behind it, and hand back what was held meanwhile.
+     *
+     * The caller applies those held records only after this returns. They belong to the block opening
+     * here, and a tx applied between `finishBlock` and `nextBlock` would land in live tables already
+     * snapshotted into L0 and about to be cleared — so the rows would be written nowhere.
+     */
+    fun closeBlock(msg: BlockUploaded, logTimestamp: LogTimestamp): PendingBlock {
+        val uploading = blockState as? Uploading
+            ?: error("[$dbName] BlockUploaded b${msg.blockIndex.asLexHex} arrived with no block in flight")
+
+        partitionState.adoptBlock(uploading.block, msg.tries, logTimestamp)
+
+        // Publish L0 tries to the source log so that all nodes — including multi-writer nodes running
+        // concurrently with a single-writer leader — see the L0 before any compaction L1C on the source
+        // log (see #5395). Once we drop support for multi-writer clusters running concurrently with
+        // single-writer, this source-log post is no longer required and can be removed.
+        //
+        // Both off the persister coroutine, in one launch: this runs on the source log's sole consumer, so
+        // appending inline self-deadlocks when the source-log buffer saturates at a block boundary — the
+        // consumer would wait on room only it can make. The launch lets the close return so the persister
+        // drains and the append's emit finds room; running signalBlock after it in the same coroutine keeps
+        // compaction's L1C strictly behind the L0 without a separate join.
+        scope.launch {
+            sourceLog.appendMessage(
+                SourceMessage.TriesAdded(Storage.VERSION, bufferPool.epoch, msg.tries)
+            )
+            compactor.signalBlock()
+        }
+
+        blockState = Filling(0)
+
+        LOG.debug("finished block: 'b${msg.blockIndex.asLexHex}'.")
+
+        return uploading.pendingBlock
+    }
+
+    private suspend fun uploadBlock(pendingBlock: PendingBlock): Uploading {
+        val boundary = pendingBlock.boundaryMessage
+        val boundaryReplicaMsgId = pendingBlock.boundaryMsgId
         val latestProcessedMsgId = boundary.latestProcessedMsgId
         val blockIdx = boundary.blockIndex
         LOG.debug("finishing block: 'b${blockIdx.asLexHex}'...")
@@ -172,29 +243,35 @@ internal class BlockCutter(
 
         val finishedBlocks = liveIndex.finishBlock(bufferPool, blockIdx)
 
-        // A table staged with no rows has no trie — see LiveTable.FinishedBlock.writtenTrie. It still
-        // reaches the table catalog below, so its declared columns survive.
-        val addedTries =
+        // One timestamp for the whole block rather than one per table: it dates the supersession these
+        // tries cause, and they all supersede as of the same block.
+        val triesAsOf = Instant.now()
+
+        // One trie per table that took rows — `writtenTrie` is singular — and none at all for a table
+        // staged with no rows. That table still reaches the table catalog below, so its declared columns
+        // survive.
+        val addedTriesByTable =
             finishedBlocks.mapNotNull { (table, fb) ->
-                val writtenTrie = fb.writtenTrie ?: return@mapNotNull null
+                fb.writtenTrie?.let { writtenTrie ->
+                    table to TrieDetails.newBuilder()
+                        .setTableName(table.schemaAndTable)
+                        .setTrieKey(writtenTrie.trieKey)
+                        .setDataFileSize(writtenTrie.dataFileSize)
+                        .also { it.setTrieMetadata(writtenTrie.trieMetadata) }
+                        .build()
+                }
+            }.toMap()
 
-                val trieDetails = TrieDetails.newBuilder()
-                    .setTableName(table.schemaAndTable)
-                    .setTrieKey(writtenTrie.trieKey)
-                    .setDataFileSize(writtenTrie.dataFileSize)
-                    .also { it.setTrieMetadata(writtenTrie.trieMetadata) }
-                    .build()
+        val addedTries = addedTriesByTable.values.toList()
 
-                // NOTE: side-effect here.
-                trieCatalog.addTries(table, listOf(trieDetails), Instant.now())
-
-                trieDetails
-            }
-
+        // The layout these tries imply rather than the one the catalog holds: the block records the
+        // partitions as of itself, and the add below is what the catalog will agree with afterwards.
         val allTables = finishedBlocks.keys + tableCatalog.allTables
-        val tablePartitions = allTables.associateWith { trieCatalog.getPartitions(it) }
+        val tablePartitions = allTables.associateWith { table ->
+            trieCatalog.withPartitions(table, listOfNotNull(addedTriesByTable[table]), triesAsOf)
+        }
 
-        val tableBlocks = tableCatalog.finishBlock(finishedBlocks, tablePartitions)
+        val tableBlocks = tableCatalog.buildTableBlocks(finishedBlocks, tablePartitions)
 
         // A table new in this block has already written its L0 trie by now, under the slug its LiveTable was
         // created with — the same one minted here, because both resolve through `State.slug`.
@@ -220,13 +297,12 @@ internal class BlockCutter(
         )
 
         bufferPool.putObject(TableCatalog.blockFilePath(blockIdx), ByteBuffer.wrap(block.toByteArray()))
-        tableCatalog.refresh(block)
         lastUploadEpochSeconds.set(Instant.now().epochSecond)
 
-        // Awaited, and not through the append pump: every follower is buffering behind the boundary until
-        // this lands, and `nextBlock` below commits this node to the block. Queued instead, a term ending
-        // in between would drop it — leaving this node past the block with nothing on the log to release
-        // the followers, and unable to re-cut it because its own catalog has moved on.
+        // Awaited, and not through the append pump: this is the message the whole cluster is waiting on
+        // to close the block, this node now included. Queued, a term ending in between would drop it —
+        // the pump's shutdown discards whatever it still holds. Awaited, a failure to append reaches the
+        // term instead, which leaves the boundary unapplied for the next role to pick up and re-produce.
         val uploadedMsgId = logsDriver.appendToReplica(
             BlockUploaded(
                 Storage.VERSION, bufferPool.epoch,
@@ -241,22 +317,7 @@ internal class BlockCutter(
         LOG.debug("block uploaded b${blockIdx.asLexHex}: source=$latestProcessedMsgId, replica=$uploadedMsgId")
 
         blockUploadTimer?.let { timer?.stop(it) }
-        liveIndex.nextBlock()
 
-        // Publish L0 tries to the source log so that all nodes — including multi-writer nodes running
-        // concurrently with a single-writer leader — see the L0 before any compaction L1C on the source
-        // log (see #5395). Once we drop support for multi-writer clusters running concurrently with
-        // single-writer, this source-log post is no longer required and can be removed.
-        //
-        // Both off the persister coroutine, in one launch: this runs on the source log's sole consumer, so
-        // appending inline self-deadlocks when the source-log buffer saturates at a block boundary — the
-        // consumer would wait on room only it can make. The launch lets the upload return so the persister
-        // drains and the append's emit finds room; running signalBlock after it in the same coroutine keeps
-        // compaction's L1C strictly behind the L0 without a separate join.
-        scope.launch {
-            sourceLog.appendMessage(SourceMessage.TriesAdded(Storage.VERSION, bufferPool.epoch, addedTries))
-            compactor.signalBlock()
-        }
-        LOG.debug("finished block: 'b${blockIdx.asLexHex}'.")
+        return Uploading(pendingBlock, block)
     }
 }

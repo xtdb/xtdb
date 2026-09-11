@@ -43,7 +43,9 @@ external entity FollowerTerm {
     -- Reading the replica log is the Listener's: one read feeds whichever role is live, a follower building state and a leader confirming its own writes alike.
     -- The position it has reached is the partition's, so a role change continues from it rather than restarting.
     replica_pos: MessageId
-    mid_block: Boolean   -- true if an old leader died before uploading its block
+
+    -- A block is in flight on this node: a boundary read but not yet confirmed, whether the block behind it is still to be produced or was produced by a term that ended before reading its own confirmation back.
+    mid_block: Boolean
 }
 
 external entity LeaderTerm {
@@ -67,6 +69,10 @@ external entity LeaderTerm {
     -- term could be admitted twice, once either side of a demote.
     term: Integer
     replay_target: MessageId
+
+    -- A block this term has produced and not yet adopted: produced in step 4, adopted on reading a confirmation of it back, which is after step 5 published this term.
+    -- A term ending in between hands it to the role that replaces it (DemoteLeader).
+    mid_block: Boolean
 }
 
 external entity RecordProcessor {
@@ -342,23 +348,22 @@ rule TransitionToLeader {
         -- Either above this transition's term refuses the claim, as step 2a does, and takes the same failure path.
         ClaimStillUnfenced(follower_term: listener.follower_term, term: term)
 
-        -- Step 4: finish any dangling block.
-        -- If the follower was mid-block (an old leader died before uploading it), the incoming leader uploads the block and then replays the records the follower was holding, with leader-upload semantics.
+        -- Step 4: produce any dangling block.
+        -- If the follower was mid-block (an old leader died before uploading it, or a term on this node produced it and never read it back), the incoming leader uploads the block's files and appends its confirmation under its own term.
         -- Requires the follower stopped (step 3) so it cannot double-process.
+        -- The block stays in flight: this term adopts it, and replays the records the follower was holding, on reading a confirmation of it back — which is after step 5, the Listener's read being what delivers it to the term. db.allium owns the adopt (LeaderAdoptsOwnBlock).
+        -- That confirmation is this term's own, or the outgoing leader's where that term got one away before it ended: both confirm the same block, and the adopt takes whichever arrives first.
+        -- So the block is carried into the leader term below, and a term that ends before adopting it hands it on again (DemoteLeader, RecoverFollowerOnTransitionCancelled).
+        --   A block produced and not adopted MUST reach the role that replaces this one: the adopt is what moves this node's catalog past the block, so the confirmation does not read as stale, and a role holding no block to match it against stops the partition's read.
         if listener.follower_term.mid_block:
-            DanglingBlockUploaded(follower_term: listener.follower_term)
-
-            -- The block is finished on this node once the upload lands, so the transition stops carrying it here, between the upload and the replay.
-            -- The failure path below re-opens a follower from what the transition is carrying, and one still holding this block would match the upload just appended and finish the same block a second time.
-            listener.follower_term.mid_block = false
-
-            HeldRecordsReplayed(follower_term: listener.follower_term)
+            DanglingBlockProduced(follower_term: listener.follower_term)
 
         -- Step 5: build the leader term, carrying the fencing term, and publish it as the role.
         -- Replica records reach it from the Listener's read, continuing from where the follower left off.
         listener.leader_term = LeaderTerm.created(
             term: term,
-            replay_target: target
+            replay_target: target,
+            mid_block: listener.follower_term.mid_block
         )
         listener.follower_term = null
         listener.state = leading
@@ -392,9 +397,11 @@ rule DemoteLeader {
         -- Re-open a follower seeded from the leader's replica position (the durable
         -- live index is untouched; see live-index.allium). RHS reads the pre-rule
         -- leader_term, captured before the field is cleared.
+        -- A block the term produced and did not adopt goes with it, so the follower closes it on a confirmation of that block, whichever term wrote it.
+        -- It is read once the term is joined, as step 4 reads the follower's: the term goes on applying records until then, and one of them may be that confirmation.
         listener.follower_term = FollowerTerm.created(
             replica_pos: listener.leader_term.replay_target,
-            mid_block: false
+            mid_block: listener.leader_term.mid_block
         )
         listener.leader_term = null
         listener.state = following
@@ -434,8 +441,7 @@ rule RecoverFollowerOnTransitionCancelled {
     ensures:
         -- Re-open a live follower seeded from the (now stale) follower position, so
         -- the role is backed by a live replica consumer again. It carries the dangling block
-        -- forward while that block is still unfinished — up to step 4's upload and not past it,
-        -- which is what step 4 clears the flag between the upload and the replay for.
+        -- forward, step 4's produce having run or not: either way the block is in flight and this node's catalog has not moved past it, so the re-opened follower is what closes it.
         listener.follower_term = FollowerTerm.created(
             replica_pos: listener.follower_term.replica_pos,
             mid_block: listener.follower_term.mid_block

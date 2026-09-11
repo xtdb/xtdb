@@ -7,7 +7,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.flow.updateAndGet
 import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.api.TableRef
 import xtdb.api.TransactionKey
@@ -278,14 +277,20 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
         }
     }
 
-    fun finishBlock(
+    /**
+     * The per-table block files for a block contributing [tableMetadata], with [tablePartitions] as their
+     * trie layout — one for every table this catalog knows, not only those in [tableMetadata].
+     *
+     * Computes the fold that block causes and installs none of it: [refresh] is what installs it, once the
+     * block is durable and adopted. The two must not both do it, because [mergeTables] sums row counts.
+     */
+    fun buildTableBlocks(
         tableMetadata: Map<TableRef, LiveTable.FinishedBlock>,
         tablePartitions: Map<TableRef, List<Partition>>
     ): Map<TableRef, TableBlock> {
         val delta = tableMetadata.mapValues { (_, fb) -> TableMeta(fb.vecTypes, fb.rowCount.toLong(), fb.hllDeltas) }
 
-        return _state.updateAndGet { it.copy(tables = it.tables.foldIn(delta)) }
-            .tables
+        return snap().tables.foldIn(delta)
             .mapValues { (table, meta) ->
                 buildTableBlock(meta.vecTypes, meta.rowCount, tablePartitions[table].orEmpty(), meta.hlls)
             }
