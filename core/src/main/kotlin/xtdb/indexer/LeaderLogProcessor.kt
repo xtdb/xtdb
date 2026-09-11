@@ -188,7 +188,7 @@ internal class LeaderLogProcessor(
         blockCutter.pendingBlock?.let { pending ->
             val msg = record.message
 
-            if (msg is ReplicaMessage.BlockUploaded && blockCutter.closes(msg)) closeBlock(msg)
+            if (msg is ReplicaMessage.BlockUploaded && blockCutter.closes(msg)) closeBlock(record, msg)
             else pending += record
 
             return
@@ -262,8 +262,10 @@ internal class LeaderLogProcessor(
      * boundary among them opens the next block there and the records behind it are held again instead of
      * being applied into a block already snapshotted.
      */
-    private suspend fun closeBlock(msg: ReplicaMessage.BlockUploaded) {
-        val pending = blockCutter.closeBlock(msg)
+    private suspend fun closeBlock(
+        record: Log.Record<ReplicaMessage>, msg: ReplicaMessage.BlockUploaded,
+    ) {
+        val pending = blockCutter.closeBlock(msg, record.logTimestamp)
 
         watchers.notifyApplied(msg.latestProcessedMsgId)
 

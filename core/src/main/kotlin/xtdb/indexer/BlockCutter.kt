@@ -20,6 +20,8 @@ import xtdb.database.Database
 import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
 import xtdb.log.proto.TrieDetails
+import xtdb.table.fromSchemaAndTable
+import xtdb.types.LogTimestamp
 import xtdb.types.MessageId
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.debug
@@ -100,12 +102,10 @@ internal class BlockCutter(
      * The block's files are in storage and its `BlockUploaded` is appended, but this node has not read
      * that message back — so its catalog and live index are still on the block.
      *
-     * Everything [closeBlock] needs is here, because the produce step is the only thing that can compute
-     * it and the close runs a whole log round-trip later.
+     * The [block] is here because the produce step is the only thing that can build it and the adopt runs
+     * a whole log round-trip later; everything else the adopt needs it takes from the record.
      */
-    private class Uploading(
-        val pendingBlock: PendingBlock, val block: Block, val addedTries: List<TrieDetails>,
-    ) : BlockState
+    private class Uploading(val pendingBlock: PendingBlock, val block: Block) : BlockState
 
     private var blockState: BlockState = Filling(liveIndex.blockRowCount)
 
@@ -204,11 +204,16 @@ internal class BlockCutter(
      * here, and a tx applied between `finishBlock` and `nextBlock` would land in live tables already
      * snapshotted into L0 and about to be cleared — so the rows would be written nowhere.
      */
-    fun closeBlock(msg: BlockUploaded): PendingBlock {
+    fun closeBlock(msg: BlockUploaded, logTimestamp: LogTimestamp): PendingBlock {
         val uploading = blockState as? Uploading
             ?: error("[$dbName] BlockUploaded b${msg.blockIndex.asLexHex} arrived with no block in flight")
 
-        tableCatalog.refresh(uploading.block)
+        msg.tries.groupBy { it.tableName }.forEach { (tableName, tries) ->
+            trieCatalog.addTries(fromSchemaAndTable(tableName), tries, logTimestamp)
+        }
+
+        // `blockMetadata()` has to be read ahead of `nextBlock()`, which clears the tables it reads.
+        tableCatalog.refresh(uploading.block, liveIndex.blockMetadata())
         liveIndex.nextBlock()
 
         // Publish L0 tries to the source log so that all nodes — including multi-writer nodes running
@@ -223,7 +228,7 @@ internal class BlockCutter(
         // compaction's L1C strictly behind the L0 without a separate join.
         scope.launch {
             sourceLog.appendMessage(
-                SourceMessage.TriesAdded(Storage.VERSION, bufferPool.epoch, uploading.addedTries)
+                SourceMessage.TriesAdded(Storage.VERSION, bufferPool.epoch, msg.tries)
             )
             compactor.signalBlock()
         }
@@ -273,9 +278,7 @@ internal class BlockCutter(
             trieCatalog.withPartitions(table, listOfNotNull(addedTriesByTable[table]), triesAsOf)
         }
 
-        addedTriesByTable.forEach { (table, trie) -> trieCatalog.addTries(table, listOf(trie), triesAsOf) }
-
-        val tableBlocks = tableCatalog.finishBlock(finishedBlocks, tablePartitions)
+        val tableBlocks = tableCatalog.buildTableBlocks(finishedBlocks, tablePartitions)
 
         // A table new in this block has already written its L0 trie by now, under the slug its LiveTable was
         // created with — the same one minted here, because both resolve through `State.slug`.
@@ -322,6 +325,6 @@ internal class BlockCutter(
 
         blockUploadTimer?.let { timer?.stop(it) }
 
-        return Uploading(pendingBlock, block, addedTries)
+        return Uploading(pendingBlock, block)
     }
 }

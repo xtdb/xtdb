@@ -80,7 +80,7 @@ internal class BlockCutterTest {
     ) : AutoCloseable {
         private val bufferPool = MemoryStorage(allocator, epoch = 0)
         val tableCatalog = TableCatalog(bufferPool)
-        private val trieCatalog = createTrieCatalog()
+        val trieCatalog = createTrieCatalog()
 
         val liveIndex = LiveIndex.open(
             allocator, tableCatalog, trieCatalog,
@@ -199,7 +199,7 @@ internal class BlockCutterTest {
         )
         assertThrows<IllegalStateException> { cutter.addRows(1) }
 
-        cutter.closeBlock(term.appended.last() as BlockUploaded)
+        cutter.closeBlock(term.appended.last() as BlockUploaded, Instant.EPOCH)
         assertTrue(cutter.acceptingResolution, "the read-back re-opens the block behind it")
     }
 
@@ -220,13 +220,40 @@ internal class BlockCutterTest {
             term.tableCatalog.currentBlockIndex,
             "the block file has landed, but this node hasn't adopted it — so the block stays re-producible"
         )
+        assertNull(term.tableCatalog.rowCount(table), "nothing folded into the table catalog either")
+        assertEquals(emptySet<TableRef>(), term.trieCatalog.tables, "nor the block's L0 tries registered")
         assertEquals(2, term.liveIndex.blockRowCount, "and the rows are still the open block's")
 
-        val held = cutter.closeBlock(term.appended.last() as BlockUploaded)
+        val held = cutter.closeBlock(term.appended.last() as BlockUploaded, Instant.EPOCH)
 
         assertEquals(0, term.tableCatalog.currentBlockIndex)
+        assertEquals(1, term.tableCatalog.rowCount(table))
+        assertEquals(listOf("l00-rc-b00"), term.trieCatalog.listAllTrieKeys(table))
         assertEquals(0, term.liveIndex.blockRowCount)
         assertTrue(held.bufferedRecords.isEmpty(), "a block this term cut itself holds nothing back")
+    }
+
+    @Test
+    fun `a block produced twice before it is adopted folds its row count once`() = runTest {
+        val term = term()
+
+        term.applyRows(txId = 0, rows = 1)
+
+        term.cutter(backgroundScope).let { dyingTerm ->
+            dyingTerm.cut(latestProcessedMsgId = 0, extToken = null)
+            runCurrent()
+            dyingTerm.upload(PendingBlock(0, term.appended.single() as BlockBoundary))
+            runCurrent()
+        }
+
+        val boundary = term.appended.first { it is BlockBoundary } as BlockBoundary
+        val nextTerm = term.cutter(backgroundScope)
+        nextTerm.upload(PendingBlock(0, boundary))
+        runCurrent()
+
+        nextTerm.closeBlock(term.appended.last { it is BlockUploaded } as BlockUploaded, Instant.EPOCH)
+
+        assertEquals(1, term.tableCatalog.rowCount(table))
     }
 
     @Test

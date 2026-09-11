@@ -140,7 +140,7 @@ class Snapshot(
             // L0's data. The watermark is monotonic, so once L0_N exists we drop the live-table-N entry
             // for good (its rows are now in L0_N).
             //
-            // Their *types* we keep. `addTries` and `tableCatalog.finishBlock` are separate steps, and
+            // Their *types* we keep. `addTries` and `tableCatalog.refresh` are separate steps, and
             // between them the L0 is readable while the catalog still holds the pre-block types — so
             // dropping the live half outright would leave nobody able to answer, declaring a narrower
             // type than the rows about to be scanned. The write path keeps both copies alive across that

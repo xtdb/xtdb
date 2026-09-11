@@ -278,6 +278,9 @@ entity TableCatalog {
     -- What one database partition knows about its tables, and the block that knowledge is
     -- current to. The two are one value, replaced wholesale, so a reader sees a block index
     -- against that block's table metadata and never against the previous block's.
+    --
+    -- A block's per-table metadata folds in exactly once, on the adopt (refresh): the fold sums row counts, so folding the same block twice double-counts it, and that count is what the per-table block file carries.
+    -- The produce computes the same fold locally to build those files (buildTableBlocks) and installs none of it.
     -- See: catalog/TableCatalog.kt, table_catalog.clj
     latest_block: Block?
     table_metadata: Map<trie_cat/TableRef, TableMetadata>
@@ -336,10 +339,12 @@ entity BlockCutter {
     --   1. Finishes live index block (liveIndex.finishBlock), yielding L0 tries — one per
     --      table that took rows in this block, and none at all for a table that took none.
     --      A block cut with no transactions in it therefore writes no tries whatsoever
-    --   2. Registers those L0 tries in the trie catalog
-    --   3. Finishes table catalog, uploads one per-table block file for EVERY table the
-    --      table catalog knows — not only the tables from step 1. Block GC's per-table
-    --      sweep depends on this (block-gc.allium, EveryTableBlockAtCurrentIndex)
+    --   2. Computes the trie layout those L0 tries imply (TrieCatalog.withPartitions),
+    --      which is what the per-table block files record and what the trie catalog will hold
+    --      once the adopt has added them
+    --   3. Builds the per-table block files (TableCatalog.buildTableBlocks) and uploads one for
+    --      EVERY table the table catalog knows — not only the tables from step 1. Block GC's
+    --      per-table sweep depends on this (block-gc.allium, EveryTableBlockAtCurrentIndex)
     --   4. Builds and persists the block file — carrying this term, which is what seeds a
     --      restarted log processor's fence — and stamps the database's last-upload time
     --   5. Appends BlockUploaded to the replica log and awaits it, directly rather than
@@ -347,17 +352,23 @@ entity BlockCutter {
     --      on, this node included, and a term ending in between drops whatever the pump
     --      still holds
     --   The block, its L0 tries and its boundary are held from here (LogProcessor.pending_block) until the adopt.
-    --   The catalog is not refreshed and the live index is not rolled here, so a term dying between the two operations leaves the block re-producible: its catalog has not moved past the block, and TableCatalog.buildBlock refuses a second attempt at an index the catalog already holds.
+    --   What is not installed here is the table catalog's metadata fold and the trie catalog's state, and the live index is not rolled, so a term dying between the two operations leaves the block re-producible: TableCatalog.buildBlock refuses a second attempt at an index the catalog already holds.
+    --   Table entries the produce DOES allocate, minting one for a table new in this block — the per-table file paths of step 3 and the block file of step 4 both record them, so they cannot wait for the adopt.
+    --   That allocation is what keeps the re-producibility above true rather than an exception to it: it is idempotent and carries no summed field, so a block produced twice mints nothing the second time and no value drifts.
     --
-    -- closeBlock(msg) — adopt the block msg confirms:
-    --   1. Refreshes the table catalog onto the block held from the produce
-    --   2. Calls liveIndex.nextBlock()
-    --   3. Off this coroutine, and in this order: posts the L0 tries to the SOURCE log as
+    -- closeBlock(msg, log_timestamp) — adopt the block msg confirms, steps 1-3 being the follower's, in the follower's order:
+    --   1. Adds msg's L0 tries to the trie catalog, as of log_timestamp
+    --   2. Refreshes the table catalog onto the block held from the produce, folding in the
+    --      live index's block metadata — which has to be read ahead of step 3, the roll that
+    --      clears the live tables it reads
+    --   3. Calls liveIndex.nextBlock()
+    --   4. Off this coroutine, and in this order: posts the L0 tries to the SOURCE log as
     --      TriesAdded, then compactor.signalBlock(). Off-coroutine because the adopt runs
     --      on the source log's sole consumer, so appending inline self-deadlocks when the
     --      source-log buffer saturates at a boundary.
+    --   The tries and the block metadata come from the same places the follower takes them; the block itself does not, because only the produce can build that object — which is why the cutter holds it from the produce to here.
     --   Hands back the records held behind the boundary, which the caller applies once this has returned.
-    --   Nothing may apply a transaction between the produce's step 1 and step 2 here: the live tables have been snapshotted into L0 and are about to be cleared, so a tx applied in between is written nowhere.
+    --   Nothing may apply a transaction between the produce's step 1 and step 3 here: the live tables have been snapshotted into L0 and are about to be cleared, so a tx applied in between is written nowhere.
     --   The pending-block guard is what holds a record arriving in that window (see LeaderAppliesRecord), and the resolution pause is what keeps the buffer holding them small.
     --
     -- closes(msg) tests msg against the block held — block index, storage version and storage epoch, and never the term — the follower's test applied to whichever upload of that block arrives.
@@ -1186,7 +1197,7 @@ rule LeaderUploadsBlockOnBoundary {
     -- The leader reads its OWN BlockBoundary back and PRODUCES the block: the cutter snapshots the index, uploads the files and appends BlockUploaded.
     -- By log order the durable live index now holds exactly this block's txs and no more — which is precisely what the block-cut pause buys: nothing was resolved-and-applied between the boundary and here, so a durable L0 block never contains rows from a later block.
     --
-    -- The block is held from here, and the adopt — the catalog refresh, the index roll, the source watermark, the GC signals and the resolution resume — waits for an upload of the block to come back (LeaderAdoptsOwnBlock).
+    -- The block is held from here, and the adopt — the trie-catalog add, the table-catalog refresh, the index roll, the source watermark, the GC signals and the resolution resume — waits for an upload of the block to come back (LeaderAdoptsOwnBlock).
     when: ApplyOwnRecord(record)
     requires: record.kind = BlockBoundaryMessage
 
@@ -1199,7 +1210,8 @@ rule LeaderUploadsBlockOnBoundary {
 }
 
 rule LeaderAdoptsOwnBlock {
-    -- The leader reads a BlockUploaded confirming the block it holds and ADOPTS that block: the catalog is refreshed onto it, the live index rolls onto the next one, and the records held behind the boundary are applied.
+    -- The leader reads a BlockUploaded confirming the block it holds and ADOPTS that block: its L0 tries go into the trie catalog, the table catalog is refreshed onto the block, the live index rolls onto the next one, and the records held behind the boundary are applied.
+    -- Those are the follower's three steps in the follower's order, the tries taken off the record — until here nothing on this node has moved past the block.
     -- The upload adopted is whichever of that block index reaches this term first, whichever term wrote it (BlockCutter.closes): both uploads confirm the same block, so adopting either is correct.
     -- The other arrives with no block in flight, and is stale there (LeaderSkipsAdoptedBlockUpload).
     -- The held records go back through the leader's own apply, so a boundary among them produces the next block there and the records behind that one are held again.
