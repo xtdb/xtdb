@@ -356,19 +356,16 @@ entity BlockCutter {
     --   Table entries the produce DOES allocate, minting one for a table new in this block — the per-table file paths of step 3 and the block file of step 4 both record them, so they cannot wait for the adopt.
     --   That allocation is what keeps the re-producibility above true rather than an exception to it: it is idempotent and carries no summed field, so a block produced twice mints nothing the second time and no value drifts.
     --
-    -- closeBlock(msg, log_timestamp) — adopt the block msg confirms, steps 1-3 being the follower's, in the follower's order:
-    --   1. Adds msg's L0 tries to the trie catalog, as of log_timestamp
-    --   2. Refreshes the table catalog onto the block held from the produce, folding in the
-    --      live index's block metadata — which has to be read ahead of step 3, the roll that
-    --      clears the live tables it reads
-    --   3. Calls liveIndex.nextBlock()
-    --   4. Off this coroutine, and in this order: posts the L0 tries to the SOURCE log as
+    -- closeBlock(msg, log_timestamp) — adopt the block msg confirms:
+    --   1. Runs the adopt (see Adopting a block), over the block held from the produce and
+    --      msg's L0 tries
+    --   2. Off this coroutine, and in this order: posts the L0 tries to the SOURCE log as
     --      TriesAdded, then compactor.signalBlock(). Off-coroutine because the adopt runs
     --      on the source log's sole consumer, so appending inline self-deadlocks when the
     --      source-log buffer saturates at a boundary.
-    --   The tries and the block metadata come from the same places the follower takes them; the block itself does not, because only the produce can build that object — which is why the cutter holds it from the produce to here.
+    --   The cutter holds the block from the produce to here because only the produce can build that object; the tries and the log timestamp it hands the adopt come off msg, as the follower's do.
     --   Hands back the records held behind the boundary, which the caller applies once this has returned.
-    --   Nothing may apply a transaction between the produce's step 1 and step 3 here: the live tables have been snapshotted into L0 and are about to be cleared, so a tx applied in between is written nowhere.
+    --   Nothing may apply a transaction between the produce's step 1 and the roll the adopt ends on: the live tables have been snapshotted into L0 and are about to be cleared, so a tx applied in between is written nowhere.
     --   The pending-block guard is what holds a record arriving in that window (see LeaderAppliesRecord), and the resolution pause is what keeps the buffer holding them small.
     --
     -- closes(msg) tests msg against the block held — block index, storage version and storage epoch, and never the term — the follower's test applied to whichever upload of that block arrives.
@@ -748,6 +745,17 @@ config {
 -- The block stays held across the cutover, and the records the follower was holding drain at the adopt.
 -- Such a term resumes the source log at the last applied transaction, so it re-reads whatever the held boundary covered: the FlushBlock that triggered the cut, and nothing at all where the row gauge cut it (there the boundary carries the preceding transaction's position).
 -- Resolution is unarmed until the adopt, so the re-offered batch waits, and by the time the FlushBlock is re-resolved the adopt has advanced the current block index, so its CAS fails and it becomes a NoOp.
+
+-- == Adopting a block ==
+--
+-- Adopting a block is ONE operation, run by whichever role holds the block.
+-- It adds the block's L0 tries to the trie catalog as of the record's log timestamp, refreshes the table catalog onto the block, folding in the live index's block metadata, and rolls the live index onto the block behind it.
+-- The metadata read precedes the roll, which clears the live tables it reads.
+-- The leader and the follower run that operation, not two matching sequences: what each supplies differently is the block itself — the leader passes the one its produce built and has held since (BlockCutter.upload), the follower one it reads back from storage off the block index the boundary carried.
+-- The tries and the log timestamp come off the record either way.
+--
+-- The block MUST be durable before it is adopted, because the adopt is what moves this node's catalog past it: a term that dies before adopting leaves the block re-producible, while a catalog past a block nobody wrote is past it for good.
+-- It MUST run exactly once per block, the table catalog's refresh summing row counts (see TableCatalog).
 
 -- == Staleness ==
 --
@@ -1210,8 +1218,8 @@ rule LeaderUploadsBlockOnBoundary {
 }
 
 rule LeaderAdoptsOwnBlock {
-    -- The leader reads a BlockUploaded confirming the block it holds and ADOPTS that block: its L0 tries go into the trie catalog, the table catalog is refreshed onto the block, the live index rolls onto the next one, and the records held behind the boundary are applied.
-    -- Those are the follower's three steps in the follower's order, the tries taken off the record — until here nothing on this node has moved past the block.
+    -- The leader reads a BlockUploaded confirming the block it holds and ADOPTS that block (see Adopting a block), then applies the records held behind the boundary.
+    -- It runs the adopt the follower runs, supplying the block its own produce built and has held since — until here nothing on this node has moved past the block.
     -- The upload adopted is whichever of that block index reaches this term first, whichever term wrote it (BlockCutter.closes): both uploads confirm the same block, so adopting either is correct.
     -- The other arrives with no block in flight, and is stale there (LeaderSkipsAdoptedBlockUpload).
     -- The held records go back through the leader's own apply, so a boundary among them produces the next block there and the records behind that one are held again.
@@ -1476,9 +1484,8 @@ rule HandleReplicaMessage {
 }
 
 rule FollowerHandlesBlockUploaded {
-    -- When the follower is in pending mode and receives the matching BlockUploaded
-    -- message, it finishes the block by reading the block file from the object store (via
-    -- buffer pool), not from the message. The BlockUploaded message is just a signal.
+    -- When the follower is in pending mode and receives the matching BlockUploaded message, it runs the adopt the leader runs (see Adopting a block), supplying a block it reads from the object store (via buffer pool).
+    -- The block does not come from the message; the BlockUploaded message is just a signal.
     -- Subscribes to the same dispatch event as HandleReplicaMessage (which has no
     -- BlockUploadedMessage branch of its own) and overrides it for the pending-block case.
     -- The block closes on the match alone, with the fence not consulted for this record here. Nothing has
@@ -1493,12 +1500,12 @@ rule FollowerHandlesBlockUploaded {
     requires: msg.storage_epoch = storage_format.storage_epoch
 
     ensures:
-        trie_cat/trie_catalog.addTries(msg.tries, msg.log_timestamp)
-
-        -- Read the block file from the object store.
+        -- The adopt, over a block read from the object store.
         let block = Block.parseFrom(buffer_pool.getByteArray(blockFilePath(msg.block_index)))
+        trie_cat/trie_catalog.addTries(msg.tries, msg.log_timestamp)
         table_catalog.refresh(block, live_index.blockMetadata())
         live_index.nextBlock()
+
         CompactorSignalled()
 
         -- The block's covered source position, ahead of the drain below: the held records carry later

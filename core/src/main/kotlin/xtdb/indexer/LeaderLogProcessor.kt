@@ -24,7 +24,7 @@ import xtdb.api.tx.ExternalSource
 import xtdb.database.Database
 import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
-import xtdb.table.fromSchemaAndTable
+import xtdb.trie.addTries
 import xtdb.types.MessageId
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.debug
@@ -219,9 +219,7 @@ internal class LeaderLogProcessor(
 
                 is ReplicaMessage.TriesAdded -> {
                     if (msg.storageVersion == Storage.VERSION && msg.storageEpoch == bufferPool.epoch)
-                        msg.tries.groupBy { it.tableName }.forEach { (tableName, tries) ->
-                            trieCatalog.addTries(fromSchemaAndTable(tableName), tries, record.logTimestamp)
-                        }
+                        trieCatalog.addTries(msg.tries, record.logTimestamp)
 
                     // Below the guard, not above it: the compactor awaits this watermark and then
                     // recalculates jobs off the catalog, so notifying first would have it re-select the

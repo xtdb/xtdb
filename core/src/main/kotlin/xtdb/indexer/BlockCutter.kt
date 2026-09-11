@@ -20,7 +20,6 @@ import xtdb.database.Database
 import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
 import xtdb.log.proto.TrieDetails
-import xtdb.table.fromSchemaAndTable
 import xtdb.types.LogTimestamp
 import xtdb.types.MessageId
 import xtdb.util.StringUtil.asLexHex
@@ -48,7 +47,7 @@ private const val MAX_CONCURRENT_BLOCK_UPLOADS = 16
  */
 internal class BlockCutter(
     partitionStorage: PartitionStorage,
-    partitionState: PartitionState,
+    private val partitionState: PartitionState,
     private val dbName: DatabaseName,
     private val leaderTerm: Long,
     private val replicaAppender: ReplicaLogAppender,
@@ -208,13 +207,7 @@ internal class BlockCutter(
         val uploading = blockState as? Uploading
             ?: error("[$dbName] BlockUploaded b${msg.blockIndex.asLexHex} arrived with no block in flight")
 
-        msg.tries.groupBy { it.tableName }.forEach { (tableName, tries) ->
-            trieCatalog.addTries(fromSchemaAndTable(tableName), tries, logTimestamp)
-        }
-
-        // `blockMetadata()` has to be read ahead of `nextBlock()`, which clears the tables it reads.
-        tableCatalog.refresh(uploading.block, liveIndex.blockMetadata())
-        liveIndex.nextBlock()
+        partitionState.adoptBlock(uploading.block, msg.tries, logTimestamp)
 
         // Publish L0 tries to the source log so that all nodes — including multi-writer nodes running
         // concurrently with a single-writer leader — see the L0 before any compaction L1C on the source

@@ -5,6 +5,7 @@ import xtdb.catalog.TableCatalog
 import xtdb.log.proto.TrieDetails
 import xtdb.storage.BufferPool
 import xtdb.api.TableRef
+import xtdb.table.fromSchemaAndTable
 import java.time.Instant
 
 typealias FileSize = Long
@@ -55,3 +56,12 @@ interface TrieCatalog {
         fun open(bufferPool: BufferPool, tableCatalog: TableCatalog): TrieCatalog
     }
 }
+
+/**
+ * Adds [tries] to whichever tables they name — the shape a replica message carries them in, where the
+ * per-table [TrieCatalog.addTries] wants them already grouped.
+ */
+fun TrieCatalog.addTries(tries: Iterable<TrieDetails>, asOf: Instant) =
+    tries.groupBy { it.tableName }.forEach { (tableName, tableTries) ->
+        addTries(fromSchemaAndTable(tableName), tableTries, asOf)
+    }
