@@ -341,6 +341,30 @@ class PostgresSource(
             // hand-off buffer suspends us under backpressure, keeping this bounded.
             val awaitingApply = ArrayDeque<Pair<PostgresDriver.Transaction, Deferred<TransactionResult>>>()
 
+            // `await()` rethrows an ingest failure — ImportFailureTearsDownStream. The metrics land here
+            // rather than at submit, so a re-delivered tx isn't counted twice.
+            suspend fun applyHead() {
+                val (tx, handle) = awaitingApply.removeFirst()
+                handle.await()
+                eventsCounter?.increment(tx.ops.size.toDouble())
+                commitsCounter?.increment()
+                assigned.lastEventEpochSeconds = tx.commitTime.epochSecond
+                commitLag?.record(
+                    (Instant.now().toEpochMilli() - tx.commitTime.toEpochMilli()) / 1000.0,
+                )
+            }
+
+            // Drains the completed prefix rather than awaiting the head, so a slow tx can't stall the poll loop.
+            suspend fun drainApplied() {
+                while (awaitingApply.firstOrNull()?.second?.isCompleted == true) applyHead()
+            }
+
+            // Drained before reopening: an ingest failure is cheap to find and fatal, where a reconnect is
+            // expensive and would be discarded along with these handles.
+            suspend fun drainToEmpty() {
+                while (awaitingApply.isNotEmpty()) applyHead()
+            }
+
             try {
                 driver.openStream(heldLsn).use { stream ->
                     assigned.streaming = true
@@ -362,22 +386,6 @@ class PostgresSource(
                         if (lsn > confirmedLsn) {
                             stream.acknowledge(lsn)
                             confirmedLsn = lsn
-                        }
-                    }
-
-                    // Drains the completed prefix rather than awaiting the head, so a slow tx can't stall the poll
-                    // loop. `await()` rethrows an ingest failure, which unwinds past `use` — ImportFailureTearsDownStream.
-                    // The metrics land here so a re-delivered tx isn't counted twice.
-                    suspend fun drainApplied() {
-                        while (awaitingApply.firstOrNull()?.second?.isCompleted == true) {
-                            val (tx, handle) = awaitingApply.removeFirst()
-                            handle.await()
-                            eventsCounter?.increment(tx.ops.size.toDouble())
-                            commitsCounter?.increment()
-                            assigned.lastEventEpochSeconds = tx.commitTime.epochSecond
-                            commitLag?.record(
-                                (Instant.now().toEpochMilli() - tx.commitTime.toEpochMilli()) / 1000.0,
-                            )
                         }
                     }
 
@@ -421,6 +429,8 @@ class PostgresSource(
                 currentCoroutineContext().ensureActive()
 
                 if (!PSQLState.isConnectionError(e.sqlState)) throw e
+
+                drainToEmpty()
 
                 LOG.warn(e, "[$dbName] Replication connection lost; reopening from LSN ${LogSequenceNumber.valueOf(heldLsn)}")
             }
