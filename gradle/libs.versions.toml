@@ -46,7 +46,7 @@ arrow-adbc-fsql = { group = "org.apache.arrow.adbc", name = "adbc-driver-flight-
 arrow-flight-sql = { group = "org.apache.arrow", name = "flight-sql", version.ref = "arrow" }
 netty-common = { group = "io.netty", name = "netty-common", version.ref = "netty" }
 
-roaring-bitmap = { group = "org.roaringbitmap", name = "RoaringBitmap", version = "1.6.14" }
+roaring-bitmap = { group = "org.roaringbitmap", name = "RoaringBitmap", version = "1.6.23" }
 hppc = { group = "com.carrotsearch", name = "hppc", version = "0.11.1" }
 caffeine = { group = "com.github.ben-manes.caffeine", name = "caffeine", version = "3.2.3" }
 commons-codec = { group = "commons-codec", name = "commons-codec", version = "1.22.1" }
