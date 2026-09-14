@@ -1,7 +1,7 @@
 version: '3'
 services:
   minio:
-    image: minio/minio
+    image: quay.io/minio/minio
     ports:
       - "9000:9000"
       - "8090:8090"
@@ -19,7 +19,7 @@ services:
 
   # a service simply to create the bucket
   minio-setup:
-    image: minio/mc
+    image: quay.io/minio/mc
     depends_on:
       minio:
         condition: service_healthy
