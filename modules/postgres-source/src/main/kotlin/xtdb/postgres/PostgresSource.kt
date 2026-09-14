@@ -406,6 +406,8 @@ class PostgresSource(
 
                     drainApplied()
                 }
+
+                throw CancellationException("[$dbName] Streaming stood down")
             } finally {
                 assigned.streaming = false
             }
