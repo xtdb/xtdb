@@ -25,9 +25,10 @@ import xtdb.postgres.proto.postgresSourceToken
 import java.io.EOFException
 import java.net.SocketException
 import java.time.Instant
+import java.time.InstantSource
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
-import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Duration.Companion.minutes
 
 /**
  * What the source does when the replication connection dies under a running stream (#5878).
@@ -38,7 +39,22 @@ import kotlin.time.Duration.Companion.seconds
  */
 class PostgresSourceReconnectTest {
 
+    // `runTest` runs on virtual time, so this costs nothing to run and only has to clear the reconnect
+    // backoff — it is here to turn a stream that is never reached into a failure rather than a hang.
+    private val BACKOFF_HEADROOM = 10.minutes
+
     private fun tx(lsn: Long) = PostgresDriver.Transaction(lsn, Instant.EPOCH, emptyList())
+
+    /** A clock the test moves by hand, so a stream's lifetime is decided rather than waited out. */
+    private class TestClock : InstantSource {
+        private var now: Instant = Instant.EPOCH
+
+        override fun instant() = now
+        fun advance(millis: Long) { now = now.plusMillis(millis) }
+    }
+
+    /** [n] streams that die the moment they are polled, without delivering anything. */
+    private fun fruitlessStreams(n: Int) = List(n) { DyingStream(ArrayDeque()) { throw connectionLost() } }
 
     /** A connection failure in the shape pgjdbc raises one: `08006` over whatever broke underneath. */
     private fun connectionLost(cause: Throwable = SocketException("Broken pipe")) =
@@ -140,7 +156,8 @@ class PostgresSourceReconnectTest {
         snapshotCompleted = true
     }.toByteArray()
 
-    private fun openSource(driver: PostgresDriver) = PostgresSource("xtdb", driver, "test_slot", DirectMirror())
+    private fun openSource(driver: PostgresDriver, instantSource: InstantSource = InstantSource.system()) =
+        PostgresSource("xtdb", driver, "test_slot", DirectMirror(), instantSource = instantSource)
 
     @Test
     fun `a mid-stream connection death resumes from the furthest LSN submitted`() = runTest {
@@ -152,7 +169,7 @@ class PostgresSourceReconnectTest {
         openSource(driver).use { source ->
             val assignment = launch { source.onPartitionAssigned(0, resumeToken, StubIndexer) }
 
-            withTimeout(30.seconds) { resumed.parked.await() }
+            withTimeout(BACKOFF_HEADROOM) { resumed.parked.await() }
             assertEquals(listOf(0L, 20L), driver.startLsns)
 
             assignment.cancelAndJoin()
@@ -182,6 +199,49 @@ class PostgresSourceReconnectTest {
 
             assertEquals("indexer exploded", thrown.message)
             assertEquals(listOf(0L), driver.startLsns, "the connection is not reopened")
+        }
+    }
+
+    @Test
+    fun `a connection that never recovers gives up rather than reconnecting forever`() = runTest {
+        val driver = RecordingDriver(ArrayDeque(fruitlessStreams(RECONNECT_MAX_ATTEMPTS + 1)))
+
+        openSource(driver).use { source ->
+            assertFailsWith<PSQLException> { source.onPartitionAssigned(0, resumeToken, StubIndexer) }
+
+            assertEquals(
+                List(RECONNECT_MAX_ATTEMPTS + 1) { 0L }, driver.startLsns,
+                "one open, then one per attempt, none of them past the resume position",
+            )
+        }
+    }
+
+    @Test
+    fun `a connection that delivers transactions starts the attempt count again`() = runTest {
+        val survivor = ParkedStream()
+
+        // more fruitless attempts in total than the bound allows, either side of one that makes progress
+        val streams =
+            fruitlessStreams(RECONNECT_MAX_ATTEMPTS - 1) +
+                DyingStream(ArrayDeque(listOf(tx(10)))) { throw connectionLost() } +
+                fruitlessStreams(RECONNECT_MAX_ATTEMPTS - 1) +
+                survivor
+
+        val driver = RecordingDriver(ArrayDeque(streams))
+
+        openSource(driver).use { source ->
+            val assignment = launch { source.onPartitionAssigned(0, resumeToken, StubIndexer) }
+
+            withTimeout(BACKOFF_HEADROOM) { survivor.parked.await() }
+
+            // Without the reset the count would reach the bound on the first fruitless attempt after the
+            // progress, so the second run of opens would stop one in rather than completing.
+            assertEquals(
+                List(RECONNECT_MAX_ATTEMPTS) { 0L } + List(RECONNECT_MAX_ATTEMPTS) { 10L }, driver.startLsns,
+                "a run of attempts at the resume position, then a whole run more at the tx that advanced it",
+            )
+
+            assignment.cancelAndJoin()
         }
     }
 
@@ -241,6 +301,35 @@ class PostgresSourceReconnectTest {
 
             assertIs<CancellationException>(outcome.await())
             assertEquals(listOf(0L), driver.startLsns, "and does not reopen")
+        }
+    }
+
+    @Test
+    fun `a connection that stays up does not accumulate attempts`() = runTest {
+        val clock = TestClock()
+        val survivor = ParkedStream()
+
+        // None of these delivers anything, so only their lifetime distinguishes them from a flap — and there
+        // are more of them than the bound allows
+        val streams = List(RECONNECT_MAX_ATTEMPTS + 1) {
+            DyingStream(ArrayDeque()) {
+                clock.advance(RECONNECT_HEALTHY_STREAM_MS)
+                throw connectionLost()
+            }
+        } + survivor
+
+        val driver = RecordingDriver(ArrayDeque(streams))
+
+        openSource(driver, clock).use { source ->
+            val assignment = launch { source.onPartitionAssigned(0, resumeToken, StubIndexer) }
+
+            withTimeout(BACKOFF_HEADROOM) { survivor.parked.await() }
+            assertEquals(
+                RECONNECT_MAX_ATTEMPTS + 2, driver.startLsns.size,
+                "one open per stream, the bound never reached",
+            )
+
+            assignment.cancelAndJoin()
         }
     }
 }

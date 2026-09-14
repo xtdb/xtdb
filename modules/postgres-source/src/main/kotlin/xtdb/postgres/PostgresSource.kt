@@ -31,7 +31,9 @@ import xtdb.postgres.PostgresSource.Assignment.Assigned
 import xtdb.postgres.PostgresSource.Assignment.Unassigned
 import xtdb.util.*
 import java.net.SocketException
+import java.time.Duration
 import java.time.Instant
+import java.time.InstantSource
 import java.util.concurrent.atomic.AtomicReference
 import com.google.protobuf.Any as ProtoAny
 
@@ -39,12 +41,20 @@ private val LOG = PostgresSource::class.logger
 
 private const val PROTO_TAG_PREFIX = "proto.xtdb.com"
 
+internal const val RECONNECT_MAX_ATTEMPTS = 7
+private const val RECONNECT_BASE_DELAY_MS = 1000L
+
+// A stream that outlived the longest backoff was a working connection rather than a flap, whether or not
+// it happened to carry anything.
+internal const val RECONNECT_HEALTHY_STREAM_MS = RECONNECT_BASE_DELAY_MS shl (RECONNECT_MAX_ATTEMPTS - 1)
+
 class PostgresSource(
     private val dbName: String,
     private val driver: PostgresDriver,
     private val slotName: String,
     private val indexer: PgIndexer,
     private val meterRegistry: MeterRegistry? = null,
+    private val instantSource: InstantSource = InstantSource.system(),
 ) : ExternalSource {
 
     private val tags = listOf(
@@ -334,8 +344,14 @@ class PostgresSource(
 
         // held_lsn — opens at startLsn per SourceOpensStream, not at nothing.
         var heldLsn = startLsn
+        var attempt = 0
 
         while (true) {
+            val attemptStartLsn = heldLsn
+
+            // null until the stream opens — an attempt that never got a connection is not a working one
+            var streamOpenedAt: Instant? = null
+
             // Submitted to the indexer but not yet applied, in submission (= LSN) order. We submit ahead
             // so back-to-back CDC txs pipeline through the double-buffered indexer; `submitTx`'s bounded
             // hand-off buffer suspends us under backpressure, keeping this bounded.
@@ -368,6 +384,7 @@ class PostgresSource(
             try {
                 driver.openStream(heldLsn).use { stream ->
                     assigned.streaming = true
+                    streamOpenedAt = instantSource.instant()
 
                     // A lower bound on slot.confirmed_lsn, per SourceConfirmsPosition's @guidance.
                     var confirmedLsn = 0L
@@ -432,7 +449,27 @@ class PostgresSource(
 
                 drainToEmpty()
 
-                LOG.warn(e, "[$dbName] Replication connection lost; reopening from LSN ${LogSequenceNumber.valueOf(heldLsn)}")
+                // Counting a run of fruitless attempts, so that a source which reconnects successfully every
+                // few hours never accumulates its way to the bound. A connection that delivered transactions
+                // worked; so did one that simply stayed up longer than we would ever wait to retry, which is
+                // what keeps a quiet upstream from looking like a flapping one.
+                val worked = heldLsn > attemptStartLsn ||
+                    streamOpenedAt?.let {
+                        Duration.between(it, instantSource.instant()).toMillis() >= RECONNECT_HEALTHY_STREAM_MS
+                    } == true
+
+                attempt = if (worked) 1 else attempt + 1
+
+                if (attempt > RECONNECT_MAX_ATTEMPTS) {
+                    LOG.error(e, "[$dbName] Replication connection lost $attempt times without progress; giving up")
+                    throw e
+                }
+
+                val baseDelay = RECONNECT_BASE_DELAY_MS shl (attempt - 1)
+                val delayMs = baseDelay + (baseDelay * 0.5 * Math.random()).toLong()
+
+                LOG.warn(e, "[$dbName] Replication connection lost (attempt $attempt/$RECONNECT_MAX_ATTEMPTS); reopening from LSN ${LogSequenceNumber.valueOf(heldLsn)} in ${delayMs}ms")
+                delay(delayMs)
             }
         }
     }
