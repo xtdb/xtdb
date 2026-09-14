@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import org.testcontainers.containers.MinIOContainer
+import org.testcontainers.utility.DockerImageName
 import software.amazon.awssdk.regions.Region.AWS_ISO_GLOBAL
 import xtdb.XtdbInternal
 import xtdb.api.Xtdb
@@ -34,7 +35,11 @@ class MinioTest : S3Test() {
 
     companion object {
         private var wasRunning = false
-        private val container = MinIOContainer("minio/minio:RELEASE.2025-09-07T16-13-09Z")
+        private val container =
+            MinIOContainer(
+                DockerImageName.parse("quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z")
+                    .asCompatibleSubstituteFor("minio/minio")
+            )
 
         @JvmStatic
         @BeforeAll

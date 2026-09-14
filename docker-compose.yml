@@ -21,7 +21,7 @@ services:
       - CLUSTER_ID=q1Sh-9_ISia_zwGINzRvyQ
 
   minio:
-    image: minio/minio:latest
+    image: quay.io/minio/minio:latest
     container_name: minio
     ports:
       - "9000:9000"
@@ -32,7 +32,7 @@ services:
     command: server /data --console-address ":9001"
 
   minio-setup:
-    image: minio/mc:latest
+    image: quay.io/minio/mc:latest
     depends_on:
       - minio
     entrypoint: >
