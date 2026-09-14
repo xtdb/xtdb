@@ -31,6 +31,7 @@ import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.config.ConfigResource
 import org.apache.kafka.common.errors.InterruptException
+import org.apache.kafka.common.errors.RecordTooLargeException
 import org.apache.kafka.common.errors.UnknownTopicOrPartitionException
 import org.apache.kafka.common.errors.WakeupException
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
@@ -602,23 +603,27 @@ class KafkaCluster(
         override fun latestSubmittedOffset(partition: Int) = latestSubmittedOffset0.get()
 
         override suspend fun appendMessage(message: M, partition: Int): Log.MessageMetadata =
-            CompletableDeferred<Log.MessageMetadata>()
-                .also { res ->
-                    producer.send(
-                        ProducerRecord(topic, null, Unit, codec.encode(message))
-                    ) { recordMetadata, e ->
-                        if (e == null) {
-                            val metadata = Log.MessageMetadata(
-                                epoch,
-                                recordMetadata.offset(),
-                                ofEpochMilli(recordMetadata.timestamp())
-                            )
-                            latestSubmittedOffset0.updateAndGet { it.coerceAtLeast(metadata.logOffset) }
-                            res.complete(metadata)
-                        } else res.completeExceptionally(e)
+            try {
+                CompletableDeferred<Log.MessageMetadata>()
+                    .also { res ->
+                        producer.send(
+                            ProducerRecord(topic, null, Unit, codec.encode(message))
+                        ) { recordMetadata, e ->
+                            if (e == null) {
+                                val metadata = Log.MessageMetadata(
+                                    epoch,
+                                    recordMetadata.offset(),
+                                    ofEpochMilli(recordMetadata.timestamp())
+                                )
+                                latestSubmittedOffset0.updateAndGet { it.coerceAtLeast(metadata.logOffset) }
+                                res.complete(metadata)
+                            } else res.completeExceptionally(e)
+                        }
                     }
-                }
-                .await()
+                    .await()
+            } catch (e: RecordTooLargeException) {
+                throw Log.MessageTooLargeException(e.message ?: "Kafka record too large", e)
+            }
 
         override fun readLastMessage(partition: Int): M? =
             kafkaConfigMap.openConsumer().use { c ->

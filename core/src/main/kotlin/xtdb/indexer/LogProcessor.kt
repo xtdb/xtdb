@@ -321,7 +321,10 @@ class LogProcessor(
                         following.proc.close()
                     }
 
-                    val driver = RealLeaderDriver(partitionStorage, partitionState, blockUploader)
+                    val driver = OffloadingLeaderDriver(
+                        RealLeaderDriver(partitionStorage, partitionState, blockUploader),
+                        partitionStorage, partitionState,
+                    )
                     val replicaAppender = ReplicaLogAppender(driver)
 
                     val proc = LeaderLogProcessor(

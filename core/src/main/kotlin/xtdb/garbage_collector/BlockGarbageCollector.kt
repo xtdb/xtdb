@@ -10,6 +10,7 @@ import kotlinx.coroutines.selects.select
 import xtdb.catalog.TableCatalog
 import xtdb.catalog.TableCatalog.Companion.allBlockFiles
 import xtdb.catalog.TableCatalog.Companion.tableBlocks
+import xtdb.api.log.ReplicaMessage.OversizedMessage
 import xtdb.storage.BufferPool
 import xtdb.api.DatabaseName
 import xtdb.util.StringUtil.fromLexHex
@@ -73,6 +74,13 @@ class BlockGarbageCollector(
             .register(it)
     }
 
+    private val offloadedPayloadDeleteTimer: Timer? = meterRegistry?.let {
+        Timer.builder("xtdb.gc.offloaded_payloads.delete.timer")
+            .publishPercentiles(0.75, 0.95, 0.99)
+            .tag("db", dbName)
+            .register(it)
+    }
+
     init {
         require(blocksToKeep >= 1) { "blocksToKeep must be >= 1, got $blocksToKeep" }
     }
@@ -131,12 +139,13 @@ class BlockGarbageCollector(
 
         val latestBlockIndex = tableCatalog.currentBlockIndex ?: return
 
-        fun Path.isGarbage(): Boolean =
-            parseBlockIndex()?.let { it != latestBlockIndex && it <= latestBlockIndex - blocksToKeep } ?: false
+        fun Long.isGarbage(): Boolean = this != latestBlockIndex && this <= latestBlockIndex - blocksToKeep
 
-        suspend fun deleteGarbage(paths: Sequence<Path>, gcTimer: Timer? = null) {
+        suspend fun deleteGarbage(
+            paths: Sequence<Path>, blockIndexOf: (Path) -> Long?, gcTimer: Timer? = null,
+        ) {
             coroutineScope {
-                paths.filter { it.isGarbage() }.forEach { path ->
+                paths.filter { blockIndexOf(it)?.isGarbage() ?: false }.forEach { path ->
                     launch(deleteDispatcher) {
                         val timer = meterRegistry?.let { Timer.start(it) }
                         bufferPool.deleteIfExists(path)
@@ -148,15 +157,30 @@ class BlockGarbageCollector(
 
         supervisorScope {
             launch(tableDispatcher) {
-                deleteGarbage(bufferPool.allBlockFiles.asSequence().map { it.key }, blockDeleteTimer)
+                deleteGarbage(
+                    bufferPool.allBlockFiles.asSequence().map { it.key },
+                    { it.parseBlockIndex() }, blockDeleteTimer,
+                )
             }
         }
 
         supervisorScope {
             for (entry in tableCatalog.snap().entries) {
                 launch(tableDispatcher) {
-                    deleteGarbage(bufferPool.tableBlocks(entry.slug).asSequence().map { it.key }, tableBlockDeleteTimer)
+                    deleteGarbage(
+                        bufferPool.tableBlocks(entry.slug).asSequence().map { it.key },
+                        { it.parseBlockIndex() }, tableBlockDeleteTimer,
+                    )
                 }
+            }
+        }
+
+        supervisorScope {
+            launch(tableDispatcher) {
+                deleteGarbage(
+                    bufferPool.listAllObjects(OversizedMessage.oversizedDir).asSequence().map { it.key },
+                    OversizedMessage::blockIndexOf, offloadedPayloadDeleteTimer,
+                )
             }
         }
     }

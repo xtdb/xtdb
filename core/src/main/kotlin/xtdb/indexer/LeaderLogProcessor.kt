@@ -66,6 +66,7 @@ internal class LeaderLogProcessor(
 
     private val partition = partitionStorage.partition
     private val liveIndex = partitionState.liveIndex
+    private val bufferPool = partitionStorage.bufferPool
 
     private val tableCatalog = partitionState.tableCatalog
 
@@ -172,7 +173,8 @@ internal class LeaderLogProcessor(
         }
     }
 
-    suspend fun applyReplicaMessage(record: Log.Record<ReplicaMessage>) {
+    suspend fun applyReplicaMessage(polled: Log.Record<ReplicaMessage>) {
+        val record = bufferPool.resolveOversized(polled)
         val msg = record.message
 
         when (msg) {
@@ -218,6 +220,10 @@ internal class LeaderLogProcessor(
 
             // Catalog already updated on the resolve side (see GarbageCollector.handleTask); nothing to do.
             is ReplicaMessage.TriesDeleted -> watchers.notifyApplied(record.msgId)
+
+            is ReplicaMessage.OversizedMessage -> error(
+                "[$dbName] OversizedMessage at ${record.msgId} reached apply unresolved (payload=${msg.path})"
+            )
         }
     }
 

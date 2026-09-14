@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
 import org.junit.jupiter.api.io.TempDir
+import xtdb.api.log.ReplicaMessage.OversizedMessage
 import xtdb.api.storage.Storage
 import xtdb.block.proto.block
 import xtdb.block.proto.txKey
@@ -23,6 +24,7 @@ import java.nio.ByteBuffer
 import java.nio.file.Path
 import java.time.Instant
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 
 @ExtendWith(AllocatorResolver::class)
 class BlockGarbageCollectorTest {
@@ -93,6 +95,39 @@ class BlockGarbageCollectorTest {
                 assertNotNull(latestBlockFile, "Expected latest block file to exist after GC, but it was deleted")
             }
 
+        }
+    }
+
+    @Test
+    fun `garbageCollectBlocks collects offloaded payloads once their block ages out`(
+        @TempDir tempDir: Path, al: BufferAllocator,
+    ) = runTest {
+        MemoryCache.Factory().open(al).use { memoryCache ->
+            Storage.local(tempDir).open(al, memoryCache, null, "xtdb").use { bufferPool ->
+                val blocksPath = "blocks".asPath
+
+                (1L..10L).forEach { index -> writeBlock(bufferPool, index, listOf("public/foo"), listOf(blocksPath)) }
+
+                fun payloadAt(blockIndex: Long) =
+                    OversizedMessage(Storage.VERSION, bufferPool.epoch, blockIndex, "payload-$blockIndex", termId = 1)
+                        .path
+                        .also { bufferPool.putObjectSync(it, ByteBuffer.wrap(byteArrayOf(1, 2, 3))) }
+
+                val aged = payloadAt(6L)
+                val kept = payloadAt(9L)
+
+                BlockGarbageCollector(
+                    bufferPool, TableCatalog(bufferPool, bufferPool.latestBlock),
+                    blocksToKeep = 3,
+                    enabled = false,
+                    dbName = "xtdb",
+                ).garbageCollectBlocks()
+
+                val remaining = bufferPool.listAllObjects(OversizedMessage.oversizedDir).map { it.key }.toSet()
+
+                assertEquals(setOf(kept), remaining, "keeps a payload whose block is still within blocksToKeep")
+                assertFalse(aged in remaining, "collects a payload whose block has aged out")
+            }
         }
     }
 
