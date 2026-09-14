@@ -260,6 +260,8 @@ class PostgresSource(
             }
 
             streamChanges(txIndexer, resumeLsn, assigned)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             if (e is PSQLException && e.isTeardownArtefact()) {
                 LOG.warn("[$dbName] Database connection failed when reading from copy (connection closed)")
