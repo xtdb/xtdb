@@ -176,7 +176,8 @@ internal class LeaderLogProcessor(
         }
     }
 
-    suspend fun applyReplicaMessage(record: Log.Record<ReplicaMessage>) {
+    suspend fun applyReplicaMessage(polled: Log.Record<ReplicaMessage>) {
+        val record = bufferPool.resolveOversized(polled)
         val msgTermId = record.message.termId
 
         if (msgTermId > leaderTerm)
@@ -249,6 +250,10 @@ internal class LeaderLogProcessor(
                 is ReplicaMessage.NoOp -> watchers.notifyApplied(msg.srcMsgId)
 
                 is ReplicaMessage.TriesDeleted -> gc.triesDeleted(msg)
+
+                is ReplicaMessage.OversizedMessage -> error(
+                    "[$dbName] OversizedMessage at ${record.msgId} reached apply unresolved (payload=${msg.path})"
+                )
             }
         }
     }

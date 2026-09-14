@@ -13,6 +13,11 @@
 -- read path. As a result this collector needs NO replica-log coordination —
 -- the leader just DELETEs its garbage and moves on.
 --
+-- Offloaded replica-message payloads (`oversized/b{idx}-{uuid}.binpb`, see db.allium's OversizedMessage) are collected by the same cycle, keyed on block index and swept by the same rule.
+-- They are the one kind here whose read path is not confined to startup: a payload is fetched while APPLYING its replica-log record, so `blocks_to_keep` doubles as the bound on how far a follower may lag before its payloads are collected under it.
+-- The block-file reasoning above therefore does NOT carry over — a delete here can break a running read path, and that is the price of having no replica-log coordination.
+-- A follower past the bound does not skip the record: the fetch throws out of the replica tail, which notifies the watchers' error state, and since that state is absorbing the database stops consuming and stays unqueryable until the process restarts.
+--
 -- Per-database, leader-only, signal-driven. Same lifecycle and trigger model
 -- as Trie GC (see gc.allium): constructed when the LeaderSystem opens,
 -- closed when it closes, signalled at every block boundary, awaitable for
@@ -211,6 +216,8 @@ rule GarbageCollectBlocks {
 
         for table in table_catalog.all_tables:
             DeleteGarbage(table_block_files(table))
+
+        DeleteGarbage(offloaded_payload_files())
 }
 
 rule DeleteGarbageRule {
@@ -321,8 +328,12 @@ surface BlockGcAdmin {
 --                                   (BlockGarbageCollector.kt)
 --   table_block_files(table)      — enumerate `tables/{table}/blocks/b*.binpb`
 --                                   (BlockGarbageCollector.kt)
+--   offloaded_payload_files()     — enumerate `oversized/b*-*.binpb`
+--                                   (BlockGarbageCollector.kt)
 --   parse_block_index(path)       — decode lex-hex block index from a path
---                                   (storage/PathTools.kt)
+--                                   (storage/PathTools.kt, and
+--                                   ReplicaMessage.OversizedMessage.blockIndexOf
+--                                   for the offloaded-payload key)
 --   require_or_fail(cond)         — assertion that throws on false
 --   ObjectStoreDelete(path)       — DELETE one key (storage/ObjectStore.kt)
 

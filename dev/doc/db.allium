@@ -574,6 +574,7 @@ entity ReplicaMessage {
 
     kind: ResolvedTxMessage | BlockBoundaryMessage | BlockUploadedMessage
          | TriesAddedMessage | TriesDeletedMessage | NoOpMessage
+         | OversizedMessage
 }
 
 variant ResolvedTxMessage : ReplicaMessage {
@@ -660,6 +661,20 @@ variant NoOpMessage : ReplicaMessage {
     --      FlushBlock whose CAS fails and so finishes no block) — see #5680.
     -- See: api/log/ReplicaMessage.kt (NoOp)
     src_msg_id: MessageId?   -- null when used purely as a replay-target marker
+}
+
+variant OversizedMessage : ReplicaMessage {
+    -- Stands in for a message the log declined for its size.
+    -- The declined message's own encoding is in the object store and this names it, so the indirection is a property of the envelope rather than of any one kind: ResolvedTx, TriesAdded and BlockUploaded are all unbounded and all offload through it.
+    -- Written by the leader only, and only on a failed append — the log is asked first and this is what happens when it says no.
+    -- term_id on the envelope is the DECLINED message's, so read-side fencing decides without fetching the payload.
+    -- Readers resolve at the log-processor's read seam, ahead of both the pending-block hold and the staleness check: an offloaded BlockUploaded closes a block, and one left unresolved would be buffered behind the block it closes.
+    -- block_index is the block the standing-in record lands in — the open one, not the last completed — because block-gc.allium collects on it.
+    -- See: indexer/OffloadedMessages.kt, api/log/ReplicaMessage.kt (OversizedMessage)
+    storage_version: Integer
+    storage_epoch: Integer
+    block_index: Integer
+    payload_id: String
 }
 
 ---- Config

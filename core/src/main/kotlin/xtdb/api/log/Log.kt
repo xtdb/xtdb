@@ -133,8 +133,12 @@ interface Log<M> : AutoCloseable {
         val msgId: MessageId get() = offsetToMsgId(epoch, logOffset)
     }
 
+    class MessageTooLargeException(message: String, cause: Throwable? = null) : RuntimeException(message, cause)
+
+    @Throws(MessageTooLargeException::class)
     suspend fun appendMessage(message: M, partition: Int = 0): MessageMetadata
 
+    @Throws(MessageTooLargeException::class)
     fun appendMessageBlocking(message: M, partition: Int = 0): MessageMetadata =
         runBlocking { appendMessage(message, partition) }
 

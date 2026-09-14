@@ -79,7 +79,8 @@ class LogProcessor(
     private val flushTimeout: Duration,
     // Injected so a simulation can seed it; each consumer caps its own fan-out off it.
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
-    private val logsDriver: LogsDriver = RealLogsDriver(partitionStorage),
+    private val logsDriver: LogsDriver =
+        OffloadingLogsDriver(RealLogsDriver(partitionStorage), partitionStorage, partitionState),
 ) : Log.SubscriptionListener<SourceMessage>, AutoCloseable {
 
     /** The partition's log appends, behind one seam, so that a test can fail or stall one. */

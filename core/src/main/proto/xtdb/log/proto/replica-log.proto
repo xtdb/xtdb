@@ -14,6 +14,7 @@ message ReplicaLogMessage {
         BlockUploaded block_uploaded = 4;
         NoOp no_op = 5;
         TriesDeleted tries_deleted = 6;
+        OversizedMessage oversized_message = 8;
     }
 
     // The leader term that produced this message, for read-side fencing: followers
@@ -54,4 +55,14 @@ message BlockBoundary {
 
 message NoOp {
     int64 src_msg_id = 1;
+}
+
+// Stands in for a message the log declined for its size: the encoded message is in the
+// object store, and this names it. The wrapped message's own term_id is carried on the
+// envelope above, so fencing reads it without fetching the payload.
+message OversizedMessage {
+    int32 storage_version = 1;
+    int32 storage_epoch = 2;
+    int64 block_index = 3;
+    string payload_id = 4;
 }

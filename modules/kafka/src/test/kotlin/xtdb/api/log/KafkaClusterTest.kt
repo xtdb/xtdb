@@ -302,19 +302,22 @@ class KafkaClusterTest {
         }
 
     @Test
-    fun `large message fails with default producer config`() = runTest(timeout = 60.seconds) {
+    fun `a message over the producer's size cap is declined as MessageTooLarge`() = runTest(timeout = 60.seconds) {
         val topicName = "test-topic-${UUID.randomUUID()}"
         val blockUploaded = largeBlockUploaded()
 
-        // Default producer max.request.size is 1MB — sending a >1MB message should fail
         KafkaCluster.ClusterFactory(container.bootstrapServers)
             .open().use { cluster ->
                 KafkaCluster.LogFactory("my-cluster", topicName)
                     .openReplicaLog(mapOf("my-cluster" to cluster))
                     .use { log ->
-                        assertThrows<RecordTooLargeException> {
+                        val e = assertThrows<Log.MessageTooLargeException> {
                             log.appendMessage(blockUploaded)
                         }
+
+                        assertInstanceOf<RecordTooLargeException>(
+                            e.cause, "keeps Kafka's own report as the cause",
+                        )
                     }
             }
     }

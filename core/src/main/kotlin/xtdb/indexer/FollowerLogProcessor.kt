@@ -103,6 +103,9 @@ class FollowerLogProcessor @JvmOverloads constructor(
                 is ReplicaMessage.NoOp -> srcMsgId != null && srcMsgId <= watchers.latestSourceMsgId
                 // `trieCatalog.deleteTries` is set-removal — idempotent — so replay is always safe.
                 is ReplicaMessage.TriesDeleted -> false
+
+                is ReplicaMessage.OversizedMessage ->
+                    error("oversized message reached the staleness check unresolved")
             }
 
     private fun processRecord(record: Log.Record<ReplicaMessage>) {
@@ -172,6 +175,10 @@ class FollowerLogProcessor @JvmOverloads constructor(
             is ReplicaMessage.TriesDeleted -> triesDeletedTimer.timed {
                 trieCatalog.deleteTries(fromSchemaAndTable(msg.tableName), msg.trieKeys)
             }
+
+            is ReplicaMessage.OversizedMessage -> error(
+                "OversizedMessage should be resolved by handleRecord, never reaching processRecord directly. msgId=${record.msgId}, payload=${msg.path}"
+            )
         }
 
     }
@@ -179,7 +186,8 @@ class FollowerLogProcessor @JvmOverloads constructor(
     private fun ReplicaMessage.BlockUploaded.closes(pending: PendingBlock) =
         blockIndex == pending.blockIdx && storageVersion == Storage.VERSION && storageEpoch == bufferPool.epoch
 
-    fun handleRecord(record: Log.Record<ReplicaMessage>) {
+    fun handleRecord(polled: Log.Record<ReplicaMessage>) {
+        val record = bufferPool.resolveOversized(polled)
         val msg = record.message
         LOG.trace { "[$dbName] follower: message ${record.msgId} (${msg::class.simpleName})" }
 

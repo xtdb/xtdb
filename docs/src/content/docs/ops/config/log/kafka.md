@@ -3,7 +3,21 @@ title: Kafka
 ---
 
 <details>
-<summary>Changelog (last updated v2.2)</summary>
+<summary>Changelog (last updated v2.3)</summary>
+
+v2.3: replica-log messages over `max.message.bytes` go to object storage
+
+: A replica-log message larger than the topic's cap is written to object storage and referenced from the log — see ['Messages larger than the topic cap'](#messages-larger-than-the-topic-cap-v23).
+
+  Previously such a message failed to append, and because the transaction behind it was already committed, indexing for that database stopped until an operator raised `max.message.bytes` and `max.request.size`.
+  Raising those is still worthwhile — the indirection costs an object-store round trip on every affected record — but it is no longer what stands between a large `UPDATE` and a stalled database.
+
+  Upgrading:
+
+  - **Upgrade every node before a message large enough to be offloaded can occur.**
+    A node older than v2.3 does not recognise the reference record and skips it, which leaves that replica silently missing the transaction.
+    In a rolling upgrade this matters only if an oversized message lands mid-roll; upgrading all nodes first removes the window.
+  - Offloaded payloads are collected on the same `blocksToKeep` horizon as block files, so a node lagging more than `blocksToKeep` blocks may fail to fetch one. Raise `blocksToKeep` if followers routinely lag that far.
 
 v2.2: single-writer support — two topics per database
 
@@ -90,7 +104,7 @@ The one setting it verifies on a topic that already exists is the partition coun
 | `min.insync.replicas` | topic | You | `> 1`, to make writes quorum-acknowledged. XTDB warns on startup if a topic with more than one replica leaves this at `1`, since `acks=all` then means only the partition leader. |
 | `unclean.leader.election.enable` | topic or broker | You | `false`, which is Kafka's own default. `true` lets an out-of-sync replica become leader and truncate records XTDB has already been told are durable. XTDB warns on startup if a topic with more than one replica permits it. |
 | `retention.ms` | topic | You | Messages need not live on the log permanently. The default of 1 day suits most deployments; 1 week is a reasonable starting point where extra caution against data loss is wanted. |
-| `max.message.bytes` | topic | You | The 1MB default is fit for purpose unless your transactions are larger. |
+| `max.message.bytes` | topic | You | The 1MB default is fit for purpose. A replica-log message over the cap is written to object storage and referenced from the log, so indexing is not bounded by it — see ['Messages larger than the topic cap'](#messages-larger-than-the-topic-cap-v23). A single client transaction larger than the cap is still rejected on the source log, so raise it if you submit transactions that big. |
 | `cleanup.policy` | topic | You | Leave at the default `delete` — XTDB never reads compacted messages. |
 | `offsets.retention.minutes` | **broker, cluster-wide** | You | Governs how long the leader-election consumer group survives with every XTDB node down, after which `termEpoch` has to be raised — see ['Recreating the consumer group'](#recreating-the-consumer-group-v22). Seven days by default. This is not a per-topic setting, it applies to every consumer group on the cluster, and managed Kafka services often fix it. |
 
@@ -99,6 +113,20 @@ XTDB also sets its own producer and consumer properties — idempotent, `acks=al
 
 `acks` is the exception: XTDB applies `acks=all` last, so an entry in `propertiesMap` or `propertiesFile` is logged as disregarded rather than honoured.
 A write acknowledged before any follower holds it can be truncated away afterwards, which would let two nodes reach different conclusions about which of them leads a database — see [Leader election and fencing](#leader-election-and-fencing).
+
+## Messages larger than the topic cap (v2.3+)
+
+A transaction's resolved output is proportional to the rows it touches rather than to the bytes the client sent, so a single `UPDATE` across a large table produces a replica-log message far larger than the statement behind it.
+A message like that can exceed `max.message.bytes` on a topic sized for ordinary traffic — and by the time it is written the transaction is already committed, so there is nobody left to reject.
+
+The indexing leader writes such a message to object storage and appends a reference to it on the replica log instead.
+Followers resolve the reference as they apply the record, so indexing is not bounded by the topic's message cap.
+
+These payloads are collected alongside block files, on the [`blocksToKeep`](/ops/config#garbage-collector) horizon.
+A follower lagging more than `blocksToKeep` blocks behind can find a payload already collected; rather than skipping the record, it stops consuming and reports the database as unhealthy until it is restarted.
+Raise `blocksToKeep` where followers routinely lag that far.
+
+The source log is not covered: a client transaction larger than the cap is rejected when it is submitted, and the `TriesAdded` records the indexer and compactor post there are subject to the cap in their own right.
 
 ## Configuration
 

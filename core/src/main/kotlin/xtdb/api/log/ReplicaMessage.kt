@@ -11,6 +11,7 @@ import xtdb.log.proto.blockBoundary
 import xtdb.log.proto.blockUploaded
 import xtdb.log.proto.detachDatabase
 import xtdb.log.proto.noOp
+import xtdb.log.proto.oversizedMessage
 import xtdb.log.proto.replicaLogMessage
 import xtdb.log.proto.resolvedTx
 import xtdb.log.proto.triesAdded
@@ -20,10 +21,14 @@ import xtdb.time.InstantUtil.asMicros
 import xtdb.time.InstantUtil.fromMicros
 import xtdb.trie.BlockIndex
 import xtdb.trie.TrieKey
+import xtdb.util.StringUtil.asLexHex
+import xtdb.util.StringUtil.fromLexHex
 import xtdb.util.TransitFormat.MSGPACK
+import xtdb.util.asPath
 import xtdb.util.readTransit
 import xtdb.util.writeTransit
 import java.nio.ByteBuffer
+import java.nio.file.Path
 import java.time.Instant
 
 sealed interface ReplicaMessage {
@@ -94,6 +99,13 @@ sealed interface ReplicaMessage {
 
                         ReplicaLogMessage.MessageCase.TRIES_DELETED -> msg.triesDeleted.let {
                             TriesDeleted(it.tableName, it.trieKeysList.toSet(), termId = msg.termId)
+                        }
+
+                        ReplicaLogMessage.MessageCase.OVERSIZED_MESSAGE -> msg.oversizedMessage.let {
+                            OversizedMessage(
+                                it.storageVersion, it.storageEpoch, it.blockIndex, it.payloadId,
+                                termId = msg.termId,
+                            )
                         }
 
                         else -> null
@@ -223,6 +235,44 @@ sealed interface ReplicaMessage {
                 tableName = this@TriesDeleted.tableName
                 trieKeys.addAll(this@TriesDeleted.trieKeys)
             }
+        }
+    }
+
+    /**
+     * Stands in for a message the log declined for its size; [path] holds that message's own encoding.
+     *
+     * [termId] is the wrapped message's, so a reader fences on this envelope without fetching the payload.
+     * [blockIndex] is the open block as the writer last saw it, rather than the last completed one, so that
+     * GC — which collects on it — errs towards keeping a payload rather than dropping one still referenced.
+     * It is read off the catalog without synchronising against the apply coroutine that advances it, so a
+     * block adopted in between leaves the payload keyed one block early; `blocksToKeep` is the margin.
+     *
+     * Writer, reader and GC all go through [path] and [blockIndexOf]; the key format lives nowhere else.
+     */
+    data class OversizedMessage(
+        val storageVersion: Int, val storageEpoch: StorageEpoch,
+        val blockIndex: BlockIndex, val payloadId: String,
+        override val termId: Long,
+    ) : ProtobufMessage() {
+        val path: Path get() = oversizedDir.resolve("b${blockIndex.asLexHex}-$payloadId.binpb")
+
+        override fun toLogMessage() = replicaLogMessage {
+            oversizedMessage = oversizedMessage {
+                this.storageVersion = this@OversizedMessage.storageVersion
+                this.storageEpoch = this@OversizedMessage.storageEpoch
+                this.blockIndex = this@OversizedMessage.blockIndex
+                this.payloadId = this@OversizedMessage.payloadId
+            }
+        }
+
+        companion object {
+            val oversizedDir = "oversized".asPath
+
+            private val PAYLOAD_KEY = Regex("b(\\p{XDigit}+)-.+\\.binpb")
+
+            /** The block [path] was written under, or null where it isn't an offloaded payload's key. */
+            fun blockIndexOf(path: Path): BlockIndex? =
+                PAYLOAD_KEY.matchEntire(path.fileName.toString())?.groups?.get(1)?.value?.fromLexHex
         }
     }
 }
