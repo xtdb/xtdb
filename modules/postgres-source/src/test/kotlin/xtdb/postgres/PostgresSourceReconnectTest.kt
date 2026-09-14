@@ -2,13 +2,19 @@ package xtdb.postgres
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
+import org.postgresql.util.PSQLException
+import org.postgresql.util.PSQLState
 import xtdb.api.TransactionKey
 import xtdb.api.TransactionResult
 import xtdb.api.tx.BlockDetails
@@ -16,16 +22,36 @@ import xtdb.api.tx.ExternalSourceToken
 import xtdb.api.tx.OpenTx
 import xtdb.api.tx.TxIndexer
 import xtdb.postgres.proto.postgresSourceToken
+import java.io.EOFException
+import java.net.SocketException
 import java.time.Instant
 import kotlin.test.assertIs
+import kotlin.time.Duration.Companion.seconds
 
 /**
- * What the source does when its poll loop ends (#5878).
+ * What the source does when the replication connection dies under a running stream (#5878).
  *
- * The stubs are this class's own: the driver records the LSN each stream was asked to resume from, and the
- * streams end on cue, so a test decides what happens at the moment the loop stops.
+ * The stubs are this class's own rather than shared with [PostgresSourceMetricsTest]: that one needs a
+ * stream which parks, this one needs streams which die on cue and a driver which records where each was
+ * asked to resume from.
  */
 class PostgresSourceReconnectTest {
+
+    private fun tx(lsn: Long) = PostgresDriver.Transaction(lsn, Instant.EPOCH, emptyList())
+
+    /** A connection failure in the shape pgjdbc raises one: `08006` over whatever broke underneath. */
+    private fun connectionLost(cause: Throwable = SocketException("Broken pipe")) =
+        PSQLException("Database connection failed when reading from copy", PSQLState.CONNECTION_FAILURE, cause)
+
+    /** Yields [txs], then dies the way a killed WAL sender does. */
+    private class DyingStream(private val txs: ArrayDeque<PostgresDriver.Transaction>, private val die: () -> Nothing) :
+        PostgresDriver.ChangeStream {
+
+        override val walEnd get() = 0L
+        override suspend fun acknowledge(lsn: Long) = Unit
+        override suspend fun poll() = txs.removeFirstOrNull() ?: die()
+        override fun close() = Unit
+    }
 
     /**
      * Cancels the assignment from inside an idle poll, and returns rather than throwing — so the poll loop
@@ -40,6 +66,21 @@ class PostgresSourceReconnectTest {
             standDown.cancel()
             return null
         }
+    }
+
+    /** Parks once it has nothing left, so a test can wait for the stream to be reached. */
+    private class ParkedStream : PostgresDriver.ChangeStream {
+        val parked = CompletableDeferred<Unit>()
+
+        override val walEnd get() = 0L
+        override suspend fun acknowledge(lsn: Long) = Unit
+
+        override suspend fun poll(): PostgresDriver.Transaction? {
+            parked.complete(Unit)
+            awaitCancellation()
+        }
+
+        override fun close() = Unit
     }
 
     /** Hands out [streams] in order, recording the LSN each was asked to resume from. */
@@ -84,6 +125,63 @@ class PostgresSourceReconnectTest {
     }.toByteArray()
 
     private fun openSource(driver: PostgresDriver) = PostgresSource("xtdb", driver, "test_slot", DirectMirror())
+
+    @Test
+    fun `a mid-stream connection death resumes from the furthest LSN submitted`() = runTest {
+        val resumed = ParkedStream()
+        val driver = RecordingDriver(
+            ArrayDeque(listOf(DyingStream(ArrayDeque(listOf(tx(10), tx(20)))) { throw connectionLost() }, resumed))
+        )
+
+        openSource(driver).use { source ->
+            val assignment = launch { source.onPartitionAssigned(0, resumeToken, StubIndexer) }
+
+            withTimeout(30.seconds) { resumed.parked.await() }
+            assertEquals(listOf(0L, 20L), driver.startLsns)
+
+            assignment.cancelAndJoin()
+        }
+    }
+
+    /**
+     * Runs an assignment whose stream cancels it from inside the poll that then fails, so the failure is
+     * classified against a coroutine already standing down. The interleaving is forced rather than raced,
+     * and the outcome is reported out through a deferred that isn't the cancelled coroutine's child.
+     */
+    private suspend fun CoroutineScope.standDownRacing(failure: () -> Nothing): Pair<Throwable?, List<Long>> {
+        val standDown = Job()
+        val outcome = CompletableDeferred<Throwable?>()
+
+        val driver = RecordingDriver(ArrayDeque(listOf(DyingStream(ArrayDeque()) { standDown.cancel(); failure() })))
+
+        openSource(driver).use { source ->
+            launch(standDown) {
+                outcome.complete(
+                    runCatching { source.onPartitionAssigned(0, resumeToken, StubIndexer) }.exceptionOrNull()
+                )
+            }
+
+            return outcome.await() to driver.startLsns
+        }
+    }
+
+    @Test
+    fun `a stand-down racing a lost connection cancels rather than returning`() = runTest {
+        val (thrown, startLsns) = standDownRacing { throw connectionLost() }
+
+        assertIs<CancellationException>(thrown)
+        assertEquals(listOf(0L), startLsns, "and does not reopen")
+    }
+
+    @Test
+    fun `a stand-down racing a lost connection cancels rather than failing the database`() = runTest {
+        // pgjdbc wraps whatever broke on the copy stream. An EOFException is an IOException but not a
+        // SocketException, so a connection failure carrying one leaves by a different path.
+        val (thrown, startLsns) = standDownRacing { throw connectionLost(EOFException("unexpected end of stream")) }
+
+        assertIs<CancellationException>(thrown)
+        assertEquals(listOf(0L), startLsns, "and does not reopen")
+    }
 
     @Test
     fun `a stand-down between polls cancels rather than reopening`() = runTest {

@@ -13,6 +13,7 @@ import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.subclass
 import org.postgresql.replication.LogSequenceNumber
 import org.postgresql.util.PSQLException
+import org.postgresql.util.PSQLState
 import xtdb.api.tx.TxIndexer
 import xtdb.api.Remote
 import xtdb.api.RemoteAlias
@@ -334,82 +335,94 @@ class PostgresSource(
         // held_lsn — opens at startLsn per SourceOpensStream, not at nothing.
         var heldLsn = startLsn
 
-        // Submitted to the indexer but not yet applied, in submission (= LSN) order. We submit ahead
-        // so back-to-back CDC txs pipeline through the double-buffered indexer; `submitTx`'s bounded
-        // hand-off buffer suspends us under backpressure, keeping this bounded.
-        val awaitingApply = ArrayDeque<Pair<PostgresDriver.Transaction, Deferred<TransactionResult>>>()
-
-        driver.openStream(heldLsn).use { stream ->
-            assigned.streaming = true
-
-            // A lower bound on slot.confirmed_lsn, per SourceConfirmsPosition's @guidance.
-            var confirmedLsn = 0L
-
-            fun durableLsn(): Long? =
-                txIndexer.latestBlock.value?.externalSourceToken
-                    ?.let { PostgresSourceToken.parseFrom(it).latestCommittedLsn }
-
-            fun confirmableLsn(): Long {
-                val durable = durableLsn()
-                return if (durable == null || durable >= heldLsn) stream.walEnd else durable
-            }
-
-            suspend fun confirm() {
-                val lsn = confirmableLsn()
-                if (lsn > confirmedLsn) {
-                    stream.acknowledge(lsn)
-                    confirmedLsn = lsn
-                }
-            }
-
-            // Drains the completed prefix rather than awaiting the head, so a slow tx can't stall the poll
-            // loop. `await()` rethrows an ingest failure, which unwinds past `use` — ImportFailureTearsDownStream.
-            // The metrics land here so a re-delivered tx isn't counted twice.
-            suspend fun drainApplied() {
-                while (awaitingApply.firstOrNull()?.second?.isCompleted == true) {
-                    val (tx, handle) = awaitingApply.removeFirst()
-                    handle.await()
-                    eventsCounter?.increment(tx.ops.size.toDouble())
-                    commitsCounter?.increment()
-                    assigned.lastEventEpochSeconds = tx.commitTime.epochSecond
-                    commitLag?.record(
-                        (Instant.now().toEpochMilli() - tx.commitTime.toEpochMilli()) / 1000.0,
-                    )
-                }
-            }
+        while (true) {
+            // Submitted to the indexer but not yet applied, in submission (= LSN) order. We submit ahead
+            // so back-to-back CDC txs pipeline through the double-buffered indexer; `submitTx`'s bounded
+            // hand-off buffer suspends us under backpressure, keeping this bounded.
+            val awaitingApply = ArrayDeque<Pair<PostgresDriver.Transaction, Deferred<TransactionResult>>>()
 
             try {
-                while (currentCoroutineContext().isActive) {
-                    // SourceConfirmsPosition. Ahead of the first poll too: per ResendsFromConfirmed the
-                    // re-delivery window is measured from the confirmed position, so the sooner the better.
-                    confirm()
+                driver.openStream(heldLsn).use { stream ->
+                    assigned.streaming = true
 
-                    // SourceReceivesTransaction.
-                    stream.poll()?.let { tx ->
-                        if (tx.lsn <= heldLsn) {
-                            LOG.debug { "[$dbName] Skipping re-delivered tx at LSN ${LogSequenceNumber.valueOf(tx.lsn)} (<= held LSN)" }
-                            return@let
-                        }
+                    // A lower bound on slot.confirmed_lsn, per SourceConfirmsPosition's @guidance.
+                    var confirmedLsn = 0L
 
-                        val token = postgresSourceToken {
-                            latestCommittedLsn = tx.lsn
-                            snapshotCompleted = true
-                        }.toByteArray()
+                    fun durableLsn(): Long? =
+                        txIndexer.latestBlock.value?.externalSourceToken
+                            ?.let { PostgresSourceToken.parseFrom(it).latestCommittedLsn }
 
-                        val handle = txIndexer.submitTx(token, systemTime = tx.commitTime) { openTx ->
-                            indexer.indexTx(tx, openTx)
-                            TxResult.Committed()
-                        }
-                        awaitingApply.addLast(tx to handle)
-                        heldLsn = tx.lsn
+                    fun confirmableLsn(): Long {
+                        val durable = durableLsn()
+                        return if (durable == null || durable >= heldLsn) stream.walEnd else durable
                     }
 
-                    drainApplied()
-                }
+                    suspend fun confirm() {
+                        val lsn = confirmableLsn()
+                        if (lsn > confirmedLsn) {
+                            stream.acknowledge(lsn)
+                            confirmedLsn = lsn
+                        }
+                    }
 
-                throw CancellationException("[$dbName] Streaming stood down")
-            } finally {
-                assigned.streaming = false
+                    // Drains the completed prefix rather than awaiting the head, so a slow tx can't stall the poll
+                    // loop. `await()` rethrows an ingest failure, which unwinds past `use` — ImportFailureTearsDownStream.
+                    // The metrics land here so a re-delivered tx isn't counted twice.
+                    suspend fun drainApplied() {
+                        while (awaitingApply.firstOrNull()?.second?.isCompleted == true) {
+                            val (tx, handle) = awaitingApply.removeFirst()
+                            handle.await()
+                            eventsCounter?.increment(tx.ops.size.toDouble())
+                            commitsCounter?.increment()
+                            assigned.lastEventEpochSeconds = tx.commitTime.epochSecond
+                            commitLag?.record(
+                                (Instant.now().toEpochMilli() - tx.commitTime.toEpochMilli()) / 1000.0,
+                            )
+                        }
+                    }
+
+                    try {
+                        while (currentCoroutineContext().isActive) {
+                            // SourceConfirmsPosition. Ahead of the first poll too: per ResendsFromConfirmed the
+                            // re-delivery window is measured from the confirmed position, so the sooner the better.
+                            confirm()
+
+                            // SourceReceivesTransaction.
+                            stream.poll()?.let { tx ->
+                                if (tx.lsn <= heldLsn) {
+                                    LOG.debug { "[$dbName] Skipping re-delivered tx at LSN ${LogSequenceNumber.valueOf(tx.lsn)} (<= held LSN)" }
+                                    return@let
+                                }
+
+                                val token = postgresSourceToken {
+                                    latestCommittedLsn = tx.lsn
+                                    snapshotCompleted = true
+                                }.toByteArray()
+
+                                val handle = txIndexer.submitTx(token, systemTime = tx.commitTime) { openTx ->
+                                    indexer.indexTx(tx, openTx)
+                                    TxResult.Committed()
+                                }
+                                awaitingApply.addLast(tx to handle)
+                                heldLsn = tx.lsn
+                            }
+
+                            drainApplied()
+                        }
+
+                        throw CancellationException("[$dbName] Streaming stood down")
+                    } finally {
+                        assigned.streaming = false
+                    }
+                }
+            } catch (e: PSQLException) {
+                // A stand-down racing the failure makes this a cancellation, whatever the exception says. Our
+                // own teardown raises connection failures of its own, and nothing below may outlive the term.
+                currentCoroutineContext().ensureActive()
+
+                if (!PSQLState.isConnectionError(e.sqlState)) throw e
+
+                LOG.warn(e, "[$dbName] Replication connection lost; reopening from LSN ${LogSequenceNumber.valueOf(heldLsn)}")
             }
         }
     }
