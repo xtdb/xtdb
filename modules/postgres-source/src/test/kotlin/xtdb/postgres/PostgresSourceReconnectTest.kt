@@ -27,6 +27,7 @@ import xtdb.postgres.proto.postgresSourceToken
 import java.io.EOFException
 import java.net.SocketException
 import java.time.Instant
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.time.Duration.Companion.seconds
 
@@ -93,7 +94,7 @@ class PostgresSourceReconnectTest {
 
         override suspend fun openStream(startLsn: Long): PostgresDriver.ChangeStream {
             startLsns += startLsn
-            return streams.removeFirst()
+            return streams.removeFirstOrNull() ?: error("opened more streams than this test provided: $startLsns")
         }
 
         override fun publicationExists() = true
@@ -120,6 +121,21 @@ class PostgresSourceReconnectTest {
         ): Deferred<TransactionResult> = CompletableDeferred(TransactionResult.Committed(txKey))
     }
 
+    /** Hands back [handle] for every submitted tx, so a test decides when — and whether — it applies. */
+    private class PendingIndexer(private val handle: Deferred<TransactionResult>) : TxIndexer {
+        override val latestBlock = MutableStateFlow<BlockDetails?>(null)
+
+        override suspend fun executeTx(
+            externalSourceToken: ExternalSourceToken?, systemTime: Instant?,
+            writer: suspend (OpenTx) -> TxIndexer.TxResult,
+        ): TransactionResult = handle.await()
+
+        override suspend fun submitTx(
+            externalSourceToken: ExternalSourceToken?, systemTime: Instant?,
+            writer: suspend (OpenTx) -> TxIndexer.TxResult,
+        ): Deferred<TransactionResult> = handle
+    }
+
     // snapshotCompleted, so the assignment resumes straight into streaming
     private val resumeToken = postgresSourceToken {
         latestCommittedLsn = 0
@@ -142,6 +158,32 @@ class PostgresSourceReconnectTest {
             assertEquals(listOf(0L, 20L), driver.startLsns)
 
             assignment.cancelAndJoin()
+        }
+    }
+
+    @Test
+    fun `an ingest failure ends the assignment rather than reconnecting`() = runTest {
+        // still pending when the connection dies, so only a drain that awaits it finds the failure
+        val handle = CompletableDeferred<TransactionResult>()
+
+        val driver = RecordingDriver(
+            ArrayDeque(
+                listOf(
+                    DyingStream(ArrayDeque(listOf(tx(10)))) {
+                        handle.completeExceptionally(IllegalStateException("indexer exploded"))
+                        throw connectionLost()
+                    }
+                )
+            )
+        )
+
+        openSource(driver).use { source ->
+            val thrown = assertFailsWith<IllegalStateException> {
+                source.onPartitionAssigned(0, resumeToken, PendingIndexer(handle))
+            }
+
+            assertEquals("indexer exploded", thrown.message)
+            assertEquals(listOf(0L), driver.startLsns, "the connection is not reopened")
         }
     }
 
