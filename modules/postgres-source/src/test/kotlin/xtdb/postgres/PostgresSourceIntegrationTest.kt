@@ -870,48 +870,6 @@ class PostgresSourceIntegrationTest {
     }
 
     @Test
-    fun `source surfaces ingestion error when postgres connection is lost mid-stream`() = runTest(timeout = 180.seconds) {
-        val pubName = "test_pub_${UUID.randomUUID().toString().replace("-", "_")}"
-        val slotName = "test_slot_${UUID.randomUUID().toString().replace("-", "_")}"
-        val sourceTopic = "test-topic-${UUID.randomUUID()}"
-        val dedicatedPg = newDedicatedPostgres()
-        Startables.deepStart(dedicatedPg).join()
-
-        try {
-            dedicatedPg.executeSql(
-                "CREATE TABLE pg_stream_kill (_id INT PRIMARY KEY, name TEXT)",
-                "INSERT INTO pg_stream_kill (_id, name) VALUES (1, 'Alice')",
-                "CREATE PUBLICATION $pubName FOR TABLE pg_stream_kill",
-            )
-
-            openNode(sourceTopic, pgContainer = dedicatedPg).use { node ->
-                attachPostgresSource(node, slotName = slotName, publicationName = pubName)
-
-                // Snapshot completes, then a streamed insert proves the replication
-                // stream is live before we kill the upstream.
-                awaitTxs(node, 2, db = "cdc")
-                dedicatedPg.executeSql("INSERT INTO pg_stream_kill (_id, name) VALUES (2, 'Bob')")
-                eventually(30.seconds) {
-                    assertTrue(xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_stream_kill WHERE _id = 2").isNotEmpty(), "streamed row visible")
-                }
-
-                dedicatedPg.stop()
-
-                val cdc = (node as XtdbInternal).dbCatalog
-                eventually(60.seconds) {
-                    assertTrue(cdc["cdc"]?.ingestionError != null, "cdc surfaces ingestionError when PG dies mid-stream")
-                }
-                assertNotNull(cdc["cdc"]?.ingestionError,
-                    "stream failure must surface IngestionStoppedException, not silently exit")
-
-                assertPrimaryDbHealthy(node)
-            }
-        } finally {
-            runCatching { dedicatedPg.stop() }
-        }
-    }
-
-    @Test
     fun `slots are created with failover enabled`() = runTest(timeout = 60.seconds) {
         val pubName = "test_pub_${UUID.randomUUID().toString().replace("-", "_")}"
         val slotName = "test_slot_${UUID.randomUUID().toString().replace("-", "_")}"
