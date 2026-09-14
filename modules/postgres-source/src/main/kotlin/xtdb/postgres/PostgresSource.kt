@@ -327,18 +327,18 @@ class PostgresSource(
     }
 
     private suspend fun streamChanges(txIndexer: TxIndexer, startLsn: Long, assigned: Assigned) {
-        driver.openStream(startLsn).use { stream ->
+        // Confirmation is specified in dev/doc/pgsrc.allium; the names below are its names.
+
+        // held_lsn — opens at startLsn per SourceOpensStream, not at nothing.
+        var heldLsn = startLsn
+
+        // Submitted to the indexer but not yet applied, in submission (= LSN) order. We submit ahead
+        // so back-to-back CDC txs pipeline through the double-buffered indexer; `submitTx`'s bounded
+        // hand-off buffer suspends us under backpressure, keeping this bounded.
+        val awaitingApply = ArrayDeque<Pair<PostgresDriver.Transaction, Deferred<TransactionResult>>>()
+
+        driver.openStream(heldLsn).use { stream ->
             assigned.streaming = true
-
-            // Submitted to the indexer but not yet applied, in submission (= LSN) order. We submit ahead
-            // so back-to-back CDC txs pipeline through the double-buffered indexer; `submitTx`'s bounded
-            // hand-off buffer suspends us under backpressure, keeping this bounded.
-            val awaitingApply = ArrayDeque<Pair<PostgresDriver.Transaction, Deferred<TransactionResult>>>()
-
-            // Confirmation is specified in dev/doc/pgsrc.allium; the names below are its names.
-
-            // held_lsn — opens at startLsn per SourceOpensStream, not at nothing.
-            var heldLsn = startLsn
 
             // A lower bound on slot.confirmed_lsn, per SourceConfirmsPosition's @guidance.
             var confirmedLsn = 0L
@@ -384,8 +384,8 @@ class PostgresSource(
 
                     // SourceReceivesTransaction.
                     stream.poll()?.let { tx ->
-                        if (tx.lsn <= startLsn) {
-                            LOG.debug { "[$dbName] Skipping re-delivered tx at LSN ${LogSequenceNumber.valueOf(tx.lsn)} (<= resume LSN)" }
+                        if (tx.lsn <= heldLsn) {
+                            LOG.debug { "[$dbName] Skipping re-delivered tx at LSN ${LogSequenceNumber.valueOf(tx.lsn)} (<= held LSN)" }
                             return@let
                         }
 
