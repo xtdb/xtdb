@@ -1,25 +1,72 @@
 ---
 name: xtdb-testing
-description: XTDB-specific rules and mechanics for running tests — delegation, the mid-run edit freeze, test tasks and filters, iteration counts, simulation-test coverage, diagnosing failures, and regenerating arrow-edn golden fixtures. Read this before running or delegating any test run in this repo.
+description: XTDB-specific rules and mechanics for running tests — running the task yourself, delegating the failure text, the mid-run edit freeze, test tasks and filters, iteration counts, simulation-test coverage, diagnosing failures, and regenerating arrow-edn golden fixtures. Read this before running or delegating any test run in this repo.
 ---
 
 # Running tests in XTDB
 
-Read this before you run a test, and before you delegate a test run to a sub-agent.
-The `gradle-tests` agent is generic — it comes from the `xtdb/claude-plugins` marketplace — so everything XTDB-specific it needs lives here, and it is the caller's job to pass it on.
+Read this before you run a test.
+
+You run the test task yourself and redirect Gradle's output to a log.
+`gradle-test-results` then reads that log and tells you what happened — delegation is for the reading, not the running.
 
 Interpret MUST, MUST NOT, SHOULD, SHOULD NOT, MAY per RFC 2119.
 
 ## The rules you MUST NOT get wrong
 
-1. You MUST NOT run tests yourself — delegate to the `gradle-tests` agent.
-2. You MUST NOT edit files the build compiles while a run in that worktree is still compiling them — see [The build phase is what is frozen](#the-build-phase-is-what-is-frozen).
-3. You MUST tell `gradle-tests`, in every invocation, not to modify any source file.
+1. You MUST run the test task yourself, redirecting its output to `build/test-run.log` — never delegate the run, and never let a test run's output into your context.
+2. You MUST hand that log to `gradle-test-results` rather than reading it yourself — see [Delegating the reading](#delegating-the-reading).
+3. You MUST NOT edit files the build compiles while your run is compiling them — see [The build phase is what is frozen](#the-build-phase-is-what-is-frozen).
 4. A test that fails after your change is a test *you* broke — see [When a test fails](#when-a-test-fails).
 5. You MUST stop a run the moment you know you'll re-run it, rather than letting it finish — see [A run you already know you'll redo is waste](#a-run-you-already-know-youll-redo-is-waste).
-6. You MUST check the tree the agent reports back, and MUST NOT tell it which tree to run in — see [Check the tree it reports; never name one](#check-the-tree-it-reports-never-name-one).
 
-The rest of this document is the mechanics behind those six.
+The rest of this document is the mechanics behind those five.
+
+## The loop
+
+Two commands, from the project root:
+
+```sh
+./gradlew :testClasses                                               # compile — see the edit freeze below
+mkdir -p build; ./gradlew :test --tests 'xtdb.api_test*' > build/test-run.log 2>&1
+```
+
+Then hand the log to `gradle-test-results`:
+
+> Read `/abs/path/to/tree/build/test-run.log` and the result files under `/abs/path/to/tree`, and report what happened.
+> `./gradlew :test --tests 'xtdb.api_test*'` exited N.
+
+- **You SHOULD run the test command with `run_in_background: true`** for anything longer than a single namespace, and get on with work the freeze doesn't cover while it runs.
+- **You MUST NOT run more than one `./gradlew` invocation at a time in a worktree** — concurrent invocations can corrupt the build cache, particularly with Kotlin.
+  Combine every namespace you want covered into a single invocation (`--tests '*foo*' --tests '*bar*'`) and let Gradle parallelise internally.
+
+### Delegating the reading
+
+`gradle-test-results` is defined in `.claude/agents/`, and holds no `./gradlew`, no `Edit` and no `Write`.
+
+**Give it the tree as an absolute path.**
+It inherits your working directory, the Task tool has no parameter that pins it, and worktrees here live under `.claude/worktrees/` — *inside* the main checkout — so an agent in the wrong tree finds a plausible set of result files rather than an error.
+
+Whether a failure it reports is yours, pre-existing or a known flake is [yours to judge](#when-a-test-fails).
+
+### Keeping the output out of your context
+
+A bare `./gradlew test` puts megabytes of task progress, stack traces and daemon chatter into your context.
+
+- You MUST NOT read the log of a run that reached the tests — not with `Read`, not with `cat`, `tail` or `grep`.
+- **A compile or configuration failure is the exception**: nothing ran, so the log is a couple of hundred lines with the error in the last thirty of them.
+  `tail -30 build/test-run.log` and fix it, rather than paying a delegation round-trip to be told what the compiler already said.
+- One path, overwritten by each run, so there is only ever one file to name and no chance of reading the last run's.
+- `build/` is gitignored, so the log never shows up in `git status`, and `clean` disposes of it.
+
+## Running the tests has no legitimate delegate
+
+- You MUST NOT use `repl-explorer` to run tests.
+  Its own workflow tells it to "modify code and reload" when a test fails, so it edits source on your behalf and reports green.
+  The `/clojure-eval` skill and `clj-nrepl-eval` remain the right tools for *exploratory* evaluation — inspecting state, trying an expression, reproducing a bug.
+  They are not the tool for "run the tests and tell me whether they pass".
+
+You SHOULD run the relevant tests proactively after a code change rather than waiting to be asked.
 
 ## A comment-only change needs a compile, not a test run
 
@@ -39,45 +86,18 @@ The carve-out is narrow, and these are the ways a "comment change" turns out not
 
 Where a diff is comments *plus* code, it is a code change — run the tests.
 
-## Delegating to `gradle-tests`
-
-Use the `gradle-tests` agent via the Task tool for *all* test runs, Clojure included.
-
-- You MUST NOT use `repl-explorer` to run tests.
-  Its own workflow tells it to "modify code and reload" when a test fails, so it edits source on your behalf and reports green.
-  The `/clojure-eval` skill and `clj-nrepl-eval` remain the right tools for *exploratory* evaluation — inspecting state, trying an expression, reproducing a bug.
-  They are not the tool for "run the tests and tell me whether they pass".
-- Every `gradle-tests` prompt MUST state explicitly that the agent is to run and report only, and MUST NOT create, edit or delete any file.
-  Its definition already says so and it holds no `Edit`/`Write` tool, but it holds `Bash`, and the definition is maintained outside this repo — say it anyway.
-- You MUST NOT launch more than one `gradle-tests` agent concurrently.
-  Combine every namespace you want covered into a single invocation and let the agent choose how to run them; Gradle parallelises internally.
-- You SHOULD run the relevant tests proactively after a code change rather than waiting to be asked.
-
-## Check the tree it reports; never name one
-
-A `gradle-tests` agent inherits your working directory, and the Task tool has no parameter that pins it.
-Worktrees here live under `.claude/worktrees/` — *inside* the main checkout — so a run that ends up in the wrong one returns a plausible green rather than an error.
-From `gradle-tests` 0.4.1 the agent prunes those nested worktrees out of its search for result files, and reports the toplevel it ran in at the head of its report.
-
-- **You MUST NOT put a tree path in the invocation.**
-  A path in the prompt reads as a destination, not as an assertion to be checked: the agent `cd`s to it and builds there, so a wrong path *moves* the run instead of failing.
-  Left alone, the inherited working directory is the tree you are working in by construction, which is the one guarantee here that cannot be talked out of.
-  A path with a module name on the tail — `…/xtdb/core` — is worse still, because it also reads as a hint about *what* to run.
-- **You MUST check the toplevel it reports against the tree you are working in.**
-  The commit it reports does not identify a tree: sibling worktrees branched off the same point commonly sit on the same sha, so a report headed with the right commit can still describe the wrong checkout.
-  This check is yours alone. The agent has no working equivalent, so a report that names the wrong tree will arrive looking exactly like one that names the right tree.
-
 ## A run you already know you'll redo is waste
 
 A run only ever describes the tree it compiled.
 So the moment you decide on a material change — a bug you spotted reviewing the diff, a fix for a failure the run has already reported, anything at all that touches a file the build reads — that run's verdict is void, and every remaining minute of it buys nothing.
 
-Stop it and re-run with the change in.
+Kill it and re-run with the change in.
 
 - You MUST NOT let a run you have already invalidated play out on the grounds that its remaining results might still be worth having.
   They are not reportable: you cannot claim a namespace passed in a tree you are about to change, and sorting the failures that survive your edit from the ones that don't costs more than the re-run.
 - Reading the diff while a run is in flight is the right use of the wait, and finding something is the expected outcome.
   A finding is a reason to stop the run — not something to sit on until it finishes.
+- The run is your own process, so stopping it is yours to do: `TaskStop` on a backgrounded run, or interrupt the foreground call.
 - Stopping the run is also what lifts the edit freeze, so the order is: stop it, confirm no test worker is still up, then edit.
 
 ## The build phase is what is frozen
@@ -86,13 +106,12 @@ The freeze is scoped to the worktree the run is compiling from, and within it to
 Recompiling under a running build produces **bogus cross-language type errors and cascading failures** that look exactly like real breakage, and chasing them costs far more than waiting did.
 If you have already edited mid-compile, discard that run's results entirely and re-run once the tree is stable — do not try to reason about which failures were real.
 
-Compilation is the part a concurrent edit corrupts, so when you already know you want to keep working, run the build phase yourself first and delegate only the execution:
+Compilation is the part a concurrent edit corrupts, so step 1 of [the loop](#the-loop) exists to get it over with while you are still waiting anyway:
 
 1. `./gradlew :testClasses`, or `:xtdb-core:testClasses` for a module run.
    That is the entire compile phase behind the root `test` task: every module's `compileKotlin` and `jar`, plus `compileTestClojure` and `compileTestFixturesClojure`, which AOT-compile the Clojure test and fixture namespaces into `build/clojure/`.
-   This is a compile, not a test run, so rule 1 does not apply and you MAY run it yourself — but the freeze does apply while it is in flight.
-2. Delegate the test run as normal.
-   Its compile tasks are up-to-date and clear in a few seconds on a warm daemon, and nothing is compiled after that.
+   Its output is small enough to read directly, so it needs no redirect and no delegate — but the freeze applies while it is in flight.
+2. The test command. Its compile tasks are up-to-date and clear in a few seconds on a warm daemon, and nothing is compiled after that.
 3. Edit from that point on.
 
 Unsplit, the freeze covers however long the run takes to build — minutes, after a Kotlin change or a cold `build/`.
@@ -125,6 +144,8 @@ Those locks block rather than fail, so a run that stalls early — typically rep
 - `./gradlew kafka-test` — tests needing Kafka; requires `docker-compose up`.
 - `./gradlew nightly-test` — the cloud-object-store tags (`s3`, `google-cloud`, `azure`).
 
+Each of those takes the same redirect: `./gradlew property-test > build/test-run.log 2>&1`.
+
 ## Module addressing
 
 Modules are named `xtdb-<directory>`, matching the Maven artifact prefix.
@@ -140,6 +161,7 @@ Modules are named `xtdb-<directory>`, matching the Maven artifact prefix.
 - `./gradlew :test --tests '*expression*'` — a wildcard.
 - `./gradlew :test --tests '**can-manually-specify-system-time-47**'` — one test.
 - Re-running the *same* `--tests` invocation is cached as UP-TO-DATE and does nothing.
+  Add `--rerun-tasks` whenever the point of the run is to re-execute — verifying an intermittent failure, or checking a regenerated fixture.
   Add `--rerun-tasks` whenever the point of the run is to re-execute — verifying an intermittent failure, or checking a regenerated fixture.
 
 ## Iteration counts
@@ -157,7 +179,7 @@ So `./gradlew property-test --tests '*SimulationTest*' -Piterations=500` runs **
 This has nothing to do with `--tests`; `-Piterations` simply does not reach the Kotlin simulations.
 To lengthen a simulation run, pass `-PsimulationIterations=N`.
 
-You MUST read the actual iteration count out of the test output before claiming a higher-iteration run was performed.
+You MUST read the actual iteration count out of the run's totals or the agent's report before claiming a higher-iteration run was performed.
 
 Two per-method overrides beat both properties:
 
