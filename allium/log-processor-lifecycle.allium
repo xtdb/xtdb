@@ -1,91 +1,61 @@
 -- allium: 3
 -- log-processor-lifecycle.allium
 --
--- Scope: the per-database leader-election lifecycle in XTDB's LogProcessor. A
---   node following a database's replica log can be promoted to LEADER (the sole
---   writer of that database's replica log) and demoted back. Promotion is a
---   multi-step transition, run OFF the transport's shared serialization point so
---   that the transport never waits on its unbounded step.
--- Includes: the Following / Leading state machine; the five steps the transition
---   runs and which one needs the live follower; the term fence that enforces one
---   CONFIRMED leader per database (a leader's writes are only ever confirmed at its
---   own term); the transport's own guarantees (modelled as an external actor).
--- Excludes: live-index internals (see live-index.allium), record processing,
---   block lifecycle, the transport wire protocol, the ExternalSource lifecycle.
+-- Scope: leader election for one database on one node.
+-- A node following a database's replica log can be promoted to LEADER — the sole writer of that log for its term — and demoted back to following.
+-- Includes: the Following/Leading state machine; the ordered steps a promotion runs and what each one buys; the term fence that keeps at most one CONFIRMED leader per database; the obligations the replica log itself has to meet for a term to mean anything.
+-- Excludes: record processing and the block lifecycle (db.allium), the live index (live-index.allium), the external source.
 --
--- Complementarity with live-index.allium:
---   live-index.allium owns "whichever LogProcessor variant owns the live index
---   drives it as a single-threaded writer", treating WHICH variant is in play as
---   a given. This spec fills that gap: how the role is selected and
---   swapped. Reference live-index where relevant; do not duplicate its internals.
---
--- The role has two writers, the transition and the demote, and they never run at
---   once: a demote joins the in-flight transition before it reads the role. See
---   SingleWriterRole (I1).
+-- live-index.allium treats WHICH role owns the live index as a given.
+-- This spec says how that role is selected and swapped, and does not restate what the roles then do with it.
 
 ------------------------------------------------------------
 -- External Entities
 ------------------------------------------------------------
 
 external entity Database {
-    -- The database whose replica log this listener follows or leads. Its lifecycle
-    -- governs the in-flight transition and the terms: tearing the database down
-    -- tears the in-flight transition and the term down (so the transport does NOT
-    -- demote on unregister).
+    -- The database whose replica log this node follows or leads.
+    -- Its lifecycle governs the terms below: tearing the database down ends whichever term is live, so an elector that releases a database need not also demote it.
     name: String
 }
 
 external entity FollowerTerm {
-    -- A live follower: consumes the replica log to build local queryable state. Its
-    -- catch-up (await up to a target msg id) is the launched transition's only
-    -- unbounded step. See: live-index.allium.
+    -- A follower: consumes the replica log to build local queryable state.
     --
-    -- Reading the replica log is the Listener's: one read feeds whichever role is live, a follower building state and a leader confirming its own writes alike.
-    -- The position it has reached is the partition's, so a role change continues from it rather than restarting.
+    -- Reading the replica log belongs to the node rather than to the term: one read feeds whichever role is live, a follower building state and a leader confirming its own writes alike.
+    -- The position that read has reached is likewise the node's, so a role change continues from it rather than restarting.
     replica_pos: MessageId
 
-    -- A block is in flight on this node: a boundary read but not yet confirmed, whether the block behind it is still to be produced or was produced by a term that ended before reading its own confirmation back.
+    -- A block is in flight on this node: a boundary read, and no confirmation of the block read back yet.
+    -- Either the block is still to be produced, or a term produced it and ended before reading its own confirmation.
     mid_block: Boolean
 }
 
 external entity LeaderTerm {
-    -- A leader: consumes the SOURCE log, resolves client txs and writes the replica
-    -- log via plain (non-transactional) appends. Built and installed by the
-    -- transition. See: live-index.allium (Leader variant).
+    -- A leader: consumes the SOURCE log, resolves client transactions, and writes the replica log.
     --
-    -- term is the leader's fencing term: the transport's consumer-group generation
-    -- (Kafka's generationId, strictly increasing per rebalance; an incrementing
-    -- counter in-mem/sim). Every replica record this leader writes is STAMPED with
-    -- this term. The fence is applied not at write time but on CONSUME-BACK: reading
-    -- back a record whose term exceeds this one means a newer leader has superseded
-    -- us, and we resign (see live-index.allium, applyRecord). So there is no
-    -- producer, no fencing token, no write-time failure -- the term stamp plus the
-    -- consume-back check is the whole fence.
+    -- term is this leader's fencing term, stamped onto every replica record the term writes.
+    -- It pairs an operator-declared epoch with the elector's own election counter, packed so that the epoch dominates the ordering.
+    -- The epoch is what keeps terms rising across a reset of the elector's counter, which is otherwise free to regress — see ClaimUnfenced.
     --
-    -- The highest term a node has seen is scoped to the partition for its whole life
-    -- rather than to a role: seeded once from the persisted boundary, and monotonic
-    -- from there. Held per role it would be reseeded from the boundary at every role
-    -- change, forgetting every term written since the last block flush -- so the same
-    -- term could be admitted twice, once either side of a demote.
+    -- The fence is applied on CONSUME-BACK rather than at write time: reading back a record whose term exceeds this one means a newer leader has superseded us, and we resign.
+    -- So there is no fencing token and no write-time failure — the term stamp plus the consume-back check is the whole fence.
+    --
+    -- The highest term this node has seen is scoped to the database for the node's whole life rather than to a role: seeded once from the persisted block boundary, and monotonic from there.
+    -- Held per role it would be reseeded from that boundary at every role change, forgetting every term written since the last block flush — so the same term could be admitted twice, once either side of a demote.
     term: Integer
+
+    -- The replica-log position this term claimed, and caught up to before taking the role.
     replay_target: MessageId
 
-    -- A block this term has produced and not yet adopted: produced in step 4, adopted on reading a confirmation of it back, which is after step 5 published this term.
-    -- A term ending in between hands it to the role that replaces it (DemoteLeader).
+    -- A block this term has produced and not yet adopted: produced during the promotion, adopted on reading a confirmation of it back.
+    -- A term ending in between hands it to the role that replaces it.
     mid_block: Boolean
 }
 
-external entity RecordProcessor {
-    -- The sink the transport feeds source-log records to, handed back by the
-    -- transition that built the leader owning it.
-}
-
 external entity ReplicaLog {
-    -- The database's replica log: the durable, totally-ordered sequence of records a
-    -- follower replays to build local state and a leader writes and reads back. It is
-    -- a party with obligations (DurableTotalOrder) rather than a participant in the
-    -- lifecycle -- who leads is the transport's decision, and the log neither knows
-    -- nor cares.
+    -- The database's replica log: the durable, totally-ordered sequence of records a follower replays to build local state, and a leader writes and reads back.
+    -- It is a party with obligations (DurableTotalOrder) rather than a participant in the lifecycle — who leads is the elector's decision, and the log neither knows nor cares.
 }
 
 ------------------------------------------------------------
@@ -93,16 +63,8 @@ external entity ReplicaLog {
 ------------------------------------------------------------
 
 value MessageId {
-    -- A replica-log message offset. Encoded here as a plain integer position.
+    -- A replica-log message position.
     offset: Integer
-}
-
-value TailSpec {
-    -- The transition's result: the source-log offset to resume from and the record
-    -- processor to feed. The transport resumes from after_msg_id and delivers
-    -- records into processor.
-    after_msg_id: MessageId
-    processor: RecordProcessor
 }
 
 ------------------------------------------------------------
@@ -110,137 +72,95 @@ value TailSpec {
 ------------------------------------------------------------
 
 contract DurableTotalOrder {
-    -- What the replica log must supply for a term to mean anything. Obligations on the
-    -- log rather than on whoever elects, so they hold however the role is decided.
+    -- What the replica log must supply for a term to mean anything.
+    -- Obligations on the log rather than on whoever elects, so they hold however the role is decided.
     --
-    -- append returns the position the record now occupies; read_after delivers the
-    -- records above a position and returns the position reached.
+    -- append returns the position the record now occupies; read_after delivers the records above a position and returns the position reached.
     append: (log: ReplicaLog, term: Integer) -> MessageId
     read_after: (log: ReplicaLog, after: MessageId) -> MessageId
 
     @invariant AppendReturnsItsOwnPosition
         -- An accepted append tells its author which position the record now occupies.
-        --   The launched transition stamps a no-op with its term and uses that record's own position as its replay target, which the follower catches up to.
-        --   Without the position coming back from the append, the transition would need a second handshake to learn where its own marker landed.
+        --   A promotion stamps a claim with its term and uses that record's own position as its replay target, which the follower catches up to.
+        --   Without the position coming back from the append, the promotion would need a second handshake to learn where its own claim landed.
 
     @invariant OneAcceptedAppendYieldsOneRecord
-        -- An accepted append puts exactly one record in the log, a refused one puts
-        -- none, and the author is told which happened.
-        --   A replay target that landed twice, or one whose outcome cannot be
-        --   established, leaves the transition catching up to a position other than the
-        --   one it stamped -- and cutting over believing it has read everything before
-        --   its own term.
+        -- An accepted append puts exactly one record in the log, a refused one puts none, and the author is told which happened.
+        --   A replay target that landed twice, or one whose outcome cannot be established, leaves the promotion catching up to a position other than the one it stamped — and taking the role believing it has read everything before its own term.
 
     @invariant OneOrderSeenByEveryReader
         -- Every reader of a log sees the same records at the same positions.
         --   The fence is nothing but readers agreeing on which term the log has reached.
-        --   Two readers disagreeing about the order could disagree about that, and a
-        --   superseded leader would go on confirming writes.
+        --   Two readers disagreeing about the order could disagree about that, and a superseded leader would go on confirming writes.
 
     @invariant DeliveryFollowsPositionOrder
-        -- A reader is delivered records in position order, and reaching a position means
-        -- having been delivered everything below it.
-        --   Independent of OneOrderSeenByEveryReader, which fixes where each record sits
-        --   rather than the order a reader meets them in. Because the fence is applied
-        --   on consume-back, a leader silently handed a gap can miss the higher-term
-        --   record that supersedes it and confirm writes every other reader discards. A
-        --   read that would skip a position has to fail rather than proceed.
+        -- A reader is delivered records in position order, and reaching a position means having been delivered everything below it.
+        --   Independent of OneOrderSeenByEveryReader, which fixes where each record sits rather than the order a reader meets them in.
+        --   Because the fence is applied on consume-back, a leader silently handed a gap can miss the higher-term record that supersedes it and confirm writes every other reader discards.
+        --   A read that would skip a position has to fail rather than proceed.
 
     @invariant AcceptedRecordsAreNeverWithdrawn
-        -- Once an append is accepted, its record is never removed, replaced or moved
-        -- while it stays above the retention boundary.
-        --   Ordinarily a durability property; here a safety one, because a term reaches
-        --   another node only as a record. Withdrawing one after that node has read it
-        --   lets the two disagree about which term the log has reached, which is the one
-        --   thing the fence cannot survive.
+        -- Once an append is accepted, its record is never removed, replaced or moved while it stays above the retention boundary.
+        --   Ordinarily a durability property; here a safety one, because a term reaches another node only as a record.
+        --   Withdrawing one after that node has read it lets the two disagree about which term the log has reached, which is the one thing the fence cannot survive.
 
     @invariant RetentionKeepsEverythingAboveTheBoundary
-        -- Records at or above the persisted boundary's position are retained; reclaiming
-        -- those below it is expected.
-        --   A term is seeded from the boundary and monotonic from there, so this is both
-        --   what lets a starting node catch up at all and what puts a floor under the
-        --   fence. Reclaiming a record that still sits above the boundary would unmoor
-        --   the highest term seen from the log it is meant to describe.
+        -- Records at or above the persisted block boundary's position are retained; reclaiming those below it is expected.
+        --   A term is seeded from that boundary and monotonic from there, so this is both what lets a starting node catch up at all and what puts a floor under the fence.
+        --   Reclaiming a record that still sits above the boundary would unmoor the highest term seen from the log it is meant to describe.
 
     @invariant DurabilityIsConfiguredNotHoped
-        -- Expected of the operator: AcceptedRecordsAreNeverWithdrawn has to hold in the
-        -- DEPLOYED configuration, and nothing in here can enforce it.
-        --   Settings that let an accepted append be lost -- acknowledging before the
-        --   record is held widely enough to survive a failure, or letting a replica that
-        --   never received it take over -- withdraw a record the log has already
-        --   promised. Where the log can report its own settings they are worth checking
-        --   as the database connects: caught at startup this is an error message, caught
-        --   later it is two nodes disagreeing about the term.
+        -- Expected of the operator: AcceptedRecordsAreNeverWithdrawn has to hold in the DEPLOYED configuration, and nothing in here can enforce it.
+        --   A log that acknowledges an append before the record is held widely enough to survive a failure, or that lets a replica which never received it take over, withdraws a record it has already promised.
+        --   Caught as the database connects this is an error message; caught later it is two nodes disagreeing about the term.
 }
 
-contract SubscriptionListener {
-    -- The obligation the LogProcessor fulfils toward the transport.
-    -- Two operations -- transition to leader, demote -- plus the ordering, fencing and atomicity properties that cannot be expressed as single-point-in-time state assertions.
-    -- The transition returns a handle the transport joins or cancels, and its TailSpec once it has one: the transition runs off the serialization point, so the transport's thread is never the one waiting.
-    -- It carries the new leader's fencing term (the transport's consumer-group generation), which the transition stamps onto every replica record it writes.
-    transition_to_leader: (listener: Listener, term: Integer) -> TailSpec
-    demote_leader: (listener: Listener) -> Listener
+contract LeaderElection {
+    -- The obligation this node fulfils toward whoever elects.
+    -- Two operations, plus the ordering, fencing and atomicity properties that cannot be expressed as single-point-in-time state assertions.
+    -- promote carries the new leader's fencing term, which the promotion stamps onto every replica record it goes on to write.
+    promote: (processor: LogProcessor, term: Integer) -> LogProcessor
+    demote: (processor: LogProcessor) -> LogProcessor
 
-    @invariant SingleWriterRole
-        -- I1. The Following/Leading state has one writer at a time.
-        --   The transition writes it, off the serialization point, and a demote writes it at the serialization point.
-        --   A demote joins the in-flight transition before it reads the state, so the two never overlap and a demote always runs against a settled role.
+    @invariant DemoteSeesASettledRole
+        -- A demote never observes a half-finished promotion: it acts on a node that is either following or leading, never mid-promotion.
+        --   A promotion is unbounded (FollowerDrainsGapBeforeLead), so a demote arriving during one has to wait for it to settle rather than interleave with it.
 
     @invariant ExactlyOneConfirmedLeaderPerDatabase
-        -- I2. At most one leader's writes are ever CONFIRMED per database, enforced
-        -- by the term fence on consume-back (Raft's ReadIndex, without Kafka
-        -- transactions). Each leader stamps its replica writes with its own term (the
-        -- consumer-group generation, strictly increasing per rebalance). A leader
-        -- confirms — and so acknowledges — a write only when it reads that write back
-        -- at its OWN term; reading back a HIGHER term means a newer leader has
-        -- superseded it, so it resigns without confirming its outstanding writes.
-        -- Two nodes may therefore briefly both believe themselves leader and both
-        -- append, but only the newer term's writes are ever confirmed, and the older
-        -- leader's unconfirmed writes are discarded (a lower-term record read back is
-        -- dropped). See live-index.allium, applyRecord.
+        -- At most one leader's writes are ever CONFIRMED per database, enforced by the term fence on consume-back — Raft's ReadIndex, with no transactional append.
+        -- Each leader stamps its replica writes with its own term.
+        -- A leader confirms — and so acknowledges — a write only when it reads that write back at its OWN term; reading back a HIGHER term means a newer leader has superseded it, so it resigns without confirming its outstanding writes.
+        -- Two nodes may therefore briefly both believe themselves leader and both append, but only the newer term's writes are ever confirmed, and the older leader's are discarded.
 
     @invariant StandingDownLeavesTheDatabaseReadable
         -- A node that stands down for a higher term leaves its database queryable on that node.
         --   The end of a term reaches everything it was driving, the external source included, each of which reports a role that has changed rather than a database that has failed.
 
     @invariant FollowerIsSoleReplicaConsumer
-        -- A follower is the sole replica-log consumer for its node; the leader
-        -- consumes the source log and writes the replica log.
+        -- A follower is the sole replica-log consumer for its node; the leader consumes the source log and writes the replica log.
 
     @invariant FollowerDrainsGapBeforeLead
-        -- I3 / the rationale for step 2. The catch-up await (step 2) is the only
-        -- step requiring the live follower and the only unbounded one. Because the
-        -- follower is the sole replica-log consumer and the leader consumes the
-        -- source log instead, any replica records in [follower-pos, replay_target)
-        -- would be silently skipped if the listener switched to leader without
-        -- draining them first. So the launched transition must await the follower
-        -- reaching replay_target BEFORE stopping it.
+        -- A promotion must await the follower reaching the replay target BEFORE stopping it.
+        --   Because the follower is the sole replica-log consumer and the leader consumes the source log instead, any replica records between the follower's position and the replay target would be silently skipped were the node to take the role without draining them first.
+        --   That drain is the promotion's only unbounded step.
 
-    @invariant LiveTermBackingRole
-        -- I4. The role is ALWAYS backed by a LIVE term -- a follower whose
-        -- replica consumer is running, or a live leader -- never a torn-down one.
-        -- This is stronger than RoleHasItsTerm (which asserts the term is
-        -- merely present): the transition stops its follower (step 3) before it
-        -- publishes the leader (step 5), so a revoke's cancel-and-join
-        -- (RevokeCancelsInFlightTransition) can land while Following holds a
-        -- torn-down follower. The failure path re-opens a live follower
-        -- (RecoverFollowerOnTransitionCancelled) so the next transition's step-2
-        -- await never hangs on a follower that can no longer advance. To keep this
-        -- robust, the follower teardown and the recovery decision are atomic with
-        -- respect to cancellation, so a cancel landing mid-teardown never leaves the
-        -- role backing a dead term.
+    @invariant RoleIsAlwaysBackedByALiveTerm
+        -- The role is ALWAYS backed by a LIVE term — a follower whose replica consumption is running, or a live leader — never one that has been stopped.
+        --   Stronger than RoleHasItsTerm, which asserts only that the term is present.
+        --   A promotion stops its follower before it publishes its leader, so a promotion that fails in between has to re-open a live follower (RecoverFollowerOnFailedPromotion); otherwise the next promotion's catch-up would wait forever on a follower that can no longer advance.
+
+    @invariant APendingBlockOutlivesTheRoleHoldingIt
+        -- A block produced and not adopted MUST reach the role that replaces the one holding it, in either direction.
+        --   The adopt is what moves this node's catalog past the block, so that a confirmation of it does not read as stale.
+        --   A role that holds no block to match a confirmation against stops the node's replica consumption, and the database with it.
 }
 
 ------------------------------------------------------------
 -- Entities
 ------------------------------------------------------------
 
-entity Listener {
-    -- The per-database SubscriptionListener state machine. This is the spec's view
-    -- of a LogProcessor's role lifecycle. Starts Following.
-    --
-    -- The role is the `state` field.
-    -- The transition writes it off the transport's serialization point and a demote writes it at that point, joining the transition first -- see SingleWriterRole (I1).
+entity LogProcessor {
+    -- One database's role on one node. Starts Following.
     database: Database
 
     -- The role.
@@ -249,204 +169,138 @@ entity Listener {
     state: following | leading
 
     transitions state {
-        following -> leading     -- the transition: built the leader term and published it
-        leading -> following     -- demote: genuine revoke
-        -- No terminal state: a listener cycles following/leading indefinitely.
+        following -> leading     -- a promotion that published its leader term
+        leading -> following     -- a demote
+        -- No terminal state: a node cycles following/leading indefinitely.
     }
 
-    -- The live follower term, present while Following. The transition reads its
-    -- catch-up target (step 2) and stops it (step 3).
+    -- The live follower term, present while Following.
+    -- A promotion reads its catch-up target and then stops it.
     follower_term: FollowerTerm when state = following
 
-    -- The live leader term, present while Leading. Produced by the transition's
-    -- five steps.
+    -- The live leader term, present while Leading. Produced by a promotion.
     leader_term: LeaderTerm when state = leading
 
-    -- Derived: this listener is the leader for its database.
+    -- Derived: this node is the leader for its database.
     is_leading: state = leading
 }
 
 ------------------------------------------------------------
--- Rules
+-- Rules: promotion
 --
--- Operations and where they run:
---   - transition to leader (TransitionToLeader): off the serialization point. Runs
---     the five steps, publishes the leader term and returns a TailSpec.
---   - demote (DemoteLeader): at the serialization point. Tears the leader term down
---     and re-opens a follower. following -> following is a no-op
---     (RevokeWhileFollowing).
+-- The steps are ordered, and the order is what each one buys:
+--   the claim has to be appended before it can be caught up to;
+--   the catch-up has to finish before the follower is stopped, or records are skipped;
+--   the fence has to be asked while the follower is alive, so a refusal can still recover;
+--   the dangling block has to be produced after the follower stops, or it is produced twice.
 ------------------------------------------------------------
 
-------------------------------------------------------------
--- Rule: transition to leader (runs off the serialization point)
---
--- The five steps, and their key property: only step 2 needs the follower alive,
--- and it is the only UNBOUNDED step -- which is why the whole transition runs off
--- the transport's serialization point.
-------------------------------------------------------------
+rule PromoteToLeader {
+    -- term is the new leader's fencing term (see LeaderTerm.term).
+    -- It is stamped onto every replica record this term writes, the claim below included, and checked on consume-back.
+    when: PromotionRequested(elector, processor, term)
 
-rule TransitionToLeader {
-    -- term is the transport's current consumer-group generation (Kafka's
-    -- generationId), the new leader's fencing term. It is stamped onto every replica
-    -- record this term writes, including the step-2 no-op, and checked on
-    -- consume-back (see ExactlyOneConfirmedLeaderPerDatabase / I2).
-    when: TransitionToLeaderRequested(transport, listener, term)
-
-    requires: listener.state = following
-    requires: listener.follower_term != null
+    requires: processor.state = following
+    requires: processor.follower_term != null
 
     ensures:
-        -- Step 1: append a no-op STAMPED WITH THE NEW TERM via a plain (non-
-        -- transactional) append, to learn a known, consumer-deliverable replay
-        -- target. A no-op is used (not the log's latest-submitted offset) because the
-        -- log's end offset can include positions a consumer never delivers -- we need
-        -- a position the follower can actually await. There is no producer to open:
-        -- the fence is the term stamp plus the consume-back check, not a producer
-        -- token (see LeaderTerm.term and I2).
-        let target = NoOpAppended(term: term)
+        -- 1. Claim the term: append a record stamped with it, to learn a known, consumer-deliverable replay target.
+        -- The log's end position will not do, because it can include positions a consumer never delivers, and the follower has to be able to await this one.
+        let target = TermClaimed(term: term)
 
-        -- Step 2: await the follower catching up to the replay target. The ONLY
-        -- step needing the follower alive and the ONLY unbounded step. Rationale
-        -- captured as FollowerDrainsGapBeforeLead (I3): the follower is the sole
-        -- replica-log consumer; the leader consumes the source log instead, so any
-        -- replica records in [follower-pos, replay_target) would be silently
-        -- skipped if we switched to leader without draining them first.
-        -- Fails with the partition's replica read's own cause where that read has stopped, the target already reached or not: a leader published behind a stopped read would never read its own writes back.
-        FollowerCaughtUp(follower_term: listener.follower_term, target: target)
+        -- 2. Await the follower catching up to the replay target.
+        -- The only step that needs the follower alive, and the only unbounded one — see FollowerDrainsGapBeforeLead.
+        -- Fails where this node's replica consumption has stopped, the target already reached or not: a leader taking the role behind a stopped read would never read its own writes back.
+        FollowerCaughtUp(follower_term: processor.follower_term, target: target)
 
-        -- Step 2a: refuse the claim if the replica log has already moved past the
-        -- term this transition is claiming. A leader term pairs an operator-declared
-        -- term_epoch with the transport's own election counter (a consumer-group
-        -- generationId, or an in-process counter for the local logs), packed so that
-        -- the epoch dominates the ordering. Step 1's no-op claim carries this
-        -- transition's term and step 2 reads it back, so by here the claimed term is
-        -- expected to BE the highest the follower has seen; a strictly higher one is
-        -- therefore another leader's, and every reader would discard what this leader
-        -- wrote -- so it must not take leadership. In practice a higher term means
-        -- the election counter regressed underneath us: the coordinator deletes a
-        -- consumer group once it is memberless and its committed offsets have expired
-        -- (offsets.retention.minutes past the group emptying), and a local log's counter
-        -- dies with its process. term_epoch is the operator-declared value that keeps
-        -- post-reset terms above pre-reset ones, and the refusal names it. Refusing
-        -- costs liveness only, never safety, so it is sound to decide from whatever
-        -- the follower happens to have read.
-        --
-        -- Ordering: after step 2, because it depends on the claim having been read
-        -- back, and before step 3, because the follower must still be alive to answer
-        -- -- failing here takes the rule's existing failure path, which re-opens a
-        -- live follower (RecoverFollowerOnTransitionCancelled), and the follower is
-        -- still alive at this point precisely because step 3 has not run yet. That is
-        -- why the check goes here rather than later.
-        ClaimedTermUnfenced(follower_term: listener.follower_term, target: target)
+        -- 3. Refuse the claim if the replica log has already moved past the term being claimed.
+        -- Step 1's claim carries this term and step 2 read it back, so by here the claimed term is expected to BE the highest the follower has seen.
+        -- A strictly higher one is therefore another leader's, every reader would discard what this leader wrote, and it must not take the role.
+        -- In practice a higher term means the elector's counter regressed underneath us — a counter that dies with the process, or an election group whose state was reclaimed — which is what the operator-declared epoch exists to keep terms rising across.
+        -- The refusal names that epoch, because raising it is the operator's remedy.
+        -- Refusing costs liveness only, never safety, so it is sound to decide from whatever the follower happens to have read.
+        ClaimUnfenced(follower_term: processor.follower_term, target: target)
 
-        -- Step 3: stop the follower (cancel + close its term).
-        FollowerStopped(follower_term: listener.follower_term)
+        -- 4. Stop the follower.
+        FollowerStopped(follower_term: processor.follower_term)
 
-        -- Step 3a: ask again whether the claim still stands, before anything is built or appended.
-        -- Step 2a's answer goes stale: it is given while the follower is still live, and the follower advances the highest term seen until it stops.
-        -- The records the follower was holding are asked too, having been held rather than acted on and so counting towards that highest term at no point.
-        -- Either above this transition's term refuses the claim, as step 2a does, and takes the same failure path.
-        ClaimStillUnfenced(follower_term: listener.follower_term, term: term)
+        -- 5. Ask again whether the claim still stands, before anything is built or appended.
+        -- Step 3's answer goes stale: it is given while the follower is still live, and the follower raises the highest term seen until it stops.
+        -- The records held behind an open block are asked too, having been held rather than acted on and so counting towards that highest term at no point.
+        -- Either above this term refuses the claim, as step 3 does, and takes the same failure path.
+        ClaimStillUnfenced(follower_term: processor.follower_term, term: term)
 
-        -- Step 4: produce any dangling block.
-        -- If the follower was mid-block (an old leader died before uploading it, or a term on this node produced it and never read it back), the incoming leader uploads the block's files and appends its confirmation under its own term.
-        -- Requires the follower stopped (step 3) so it cannot double-process.
-        -- The block stays in flight: this term adopts it, and replays the records the follower was holding, on reading a confirmation of it back — which is after step 5, the Listener's read being what delivers it to the term. db.allium owns the adopt (LeaderAdoptsOwnBlock).
+        -- 6. Produce any dangling block.
+        -- Where the follower was mid-block — an old leader died before uploading it, or a term on this node produced it and never read it back — the incoming leader uploads the block's files and appends its confirmation under its OWN term.
+        -- Requires the follower stopped (step 4), so the block cannot be produced twice.
+        -- The block stays in flight: this term adopts it, and applies the records held behind the boundary, on reading a confirmation of it back — which is after step 7, this node's replica read being what delivers it. db.allium owns the adopt.
         -- That confirmation is this term's own, or the outgoing leader's where that term got one away before it ended: both confirm the same block, and the adopt takes whichever arrives first.
-        -- So the block is carried into the leader term below, and a term that ends before adopting it hands it on again (DemoteLeader, RecoverFollowerOnTransitionCancelled).
-        --   A block produced and not adopted MUST reach the role that replaces this one: the adopt is what moves this node's catalog past the block, so the confirmation does not read as stale, and a role holding no block to match it against stops the partition's read.
-        if listener.follower_term.mid_block:
-            DanglingBlockProduced(follower_term: listener.follower_term)
+        -- So the block is carried into the leader term below, and a term that ends before adopting it hands it on again (see APendingBlockOutlivesTheRoleHoldingIt).
+        if processor.follower_term.mid_block:
+            DanglingBlockProduced(follower_term: processor.follower_term)
 
-        -- Step 5: build the leader term, carrying the fencing term, and publish it as the role.
-        -- Replica records reach it from the Listener's read, continuing from where the follower left off.
-        listener.leader_term = LeaderTerm.created(
+        -- 7. Take the role, carrying the fencing term.
+        -- Replica records reach the new term from this node's own read, continuing from where the follower left off.
+        processor.leader_term = LeaderTerm.created(
             term: term,
             replay_target: target,
-            mid_block: listener.follower_term.mid_block
+            mid_block: processor.follower_term.mid_block
         )
-        listener.follower_term = null
-        listener.state = leading
+        processor.follower_term = null
+        processor.state = leading
 
-        -- Return the TailSpec: the transport resumes the source log from just after
-        -- the replay target, feeding the leader's record processor.
-        TailSpecReturned(
-            listener: listener,
-            tail_spec: TailSpec{
-                after_msg_id: listener.leader_term.replay_target,
-                processor: RecordProcessor.created()
-            }
+        -- Source-log delivery resumes at the last applied source position, which db.allium owns.
+        SourceDeliveryResumed(processor: processor)
+}
+
+rule RecoverFollowerOnFailedPromotion {
+    -- A promotion that fails at any step leaves the node following, with a LIVE follower.
+    -- Steps 4 to 6 fail with the follower already stopped, which is the case this rule exists for: without re-opening one, the next promotion's catch-up would wait forever on a follower that can no longer advance (see RoleIsAlwaysBackedByALiveTerm).
+    when: PromotionFailed(elector, processor)
+
+    -- The promotion never reached step 7, so the role is still following.
+    requires: processor.state = following
+
+    ensures:
+        -- Seeded from the follower position reached before it was stopped.
+        -- It carries the dangling block forward, step 6's produce having run or not: either way the block is in flight and this node's catalog has not moved past it, so the re-opened follower is what closes it.
+        processor.follower_term = FollowerTerm.created(
+            replica_pos: processor.follower_term.replica_pos,
+            mid_block: processor.follower_term.mid_block
         )
+        processor.state = following
 }
 
 ------------------------------------------------------------
--- Rule: demote (serialization point)
---
--- Tears down the leader term and re-opens a follower. following -> following is a
--- no-op.
+-- Rules: demote
 ------------------------------------------------------------
 
 rule DemoteLeader {
-    -- Genuine leadership revoke while the node stays up -- NOT on shutdown, where
-    -- tearing the database down tears the term down (see NoDemoteOnShutdown).
-    when: DemoteLeaderRequested(transport, listener)
+    -- A genuine leadership revoke while the node stays up — NOT shutdown, where tearing the database down ends the term (see NoDemoteOnShutdown).
+    when: DemoteRequested(elector, processor)
 
-    requires: listener.state = leading
+    requires: processor.state = leading
 
     ensures:
-        -- Re-open a follower seeded from the leader's replica position (the durable
-        -- live index is untouched; see live-index.allium). RHS reads the pre-rule
-        -- leader_term, captured before the field is cleared.
+        -- Re-open a follower seeded from the leader's replica position. The durable live index is untouched.
         -- A block the term produced and did not adopt goes with it, so the follower closes it on a confirmation of that block, whichever term wrote it.
-        -- It is read once the term is joined, as step 4 reads the follower's: the term goes on applying records until then, and one of them may be that confirmation.
-        listener.follower_term = FollowerTerm.created(
-            replica_pos: listener.leader_term.replay_target,
-            mid_block: listener.leader_term.mid_block
+        -- It is read once the term has ended, as step 6 reads the follower's: the term goes on applying records until then, and one of them may be that confirmation.
+        processor.follower_term = FollowerTerm.created(
+            replica_pos: processor.leader_term.replay_target,
+            mid_block: processor.leader_term.mid_block
         )
-        listener.leader_term = null
-        listener.state = following
+        processor.leader_term = null
+        processor.state = following
 }
 
-rule RevokeWhileFollowing {
-    -- Demote on an already-following listener is a no-op: no leader term to tear
-    -- down.
-    when: DemoteLeaderRequested(transport, listener)
+rule DemoteWhileFollowing {
+    -- A demote on a node that is already following is a no-op: no leader term to end.
+    when: DemoteRequested(elector, processor)
 
-    requires: listener.state = following
-
-    ensures:
-        listener.state = following
-}
-
-------------------------------------------------------------
--- Rule: recover the follower when an in-flight transition is cancelled
---
--- OQ2 resolution, recovery half. The launched transition stops its follower
--- (step 3) BEFORE it commits the leader (step 5). If the revoke's cancel-and-join
--- (RevokeCancelsInFlightTransition) lands in that window, the role is
--- still `following` but its follower term has been torn down -- its replica
--- consumer is gone. The failure path re-opens a live follower so `state` never
--- holds a torn-down follower; otherwise the next transition's step-2 catch-up
--- await would wait forever on a follower that can no longer advance. See
--- LiveTermBackingRole (I4).
-------------------------------------------------------------
-
-rule RecoverFollowerOnTransitionCancelled {
-    when: TransitionCancelled(transport, listener)
-
-    -- The cancel lands while still Following (the transition never reached its
-    -- atomic step-5 result); its follower may already be torn down (step 3).
-    requires: listener.state = following
+    requires: processor.state = following
 
     ensures:
-        -- Re-open a live follower seeded from the (now stale) follower position, so
-        -- the role is backed by a live replica consumer again. It carries the dangling block
-        -- forward, step 4's produce having run or not: either way the block is in flight and this node's catalog has not moved past it, so the re-opened follower is what closes it.
-        listener.follower_term = FollowerTerm.created(
-            replica_pos: listener.follower_term.replica_pos,
-            mid_block: listener.follower_term.mid_block
-        )
-        listener.state = following
+        processor.state = following
 }
 
 ------------------------------------------------------------
@@ -454,30 +308,20 @@ rule RecoverFollowerOnTransitionCancelled {
 ------------------------------------------------------------
 
 invariant RoleHasItsTerm {
-    -- Structural counterpart of the single-writer discipline: whatever role the
-    -- listener holds, it holds the matching term. A leader has a live leader term;
-    -- a follower has a live follower term. (The single-writer property itself --
-    -- how many writers `state` has at once -- is a temporal/threading property; see
-    -- SingleWriterRole below.)
-    for listener in Listeners:
-        (listener.state = leading implies listener.leader_term != null)
-        and (listener.state = following implies listener.follower_term != null)
+    -- Whatever role the node holds, it holds the matching term.
+    -- That the term is also LIVE is RoleIsAlwaysBackedByALiveTerm, which this cannot express.
+    for processor in LogProcessors:
+        (processor.state = leading implies processor.leader_term != null)
+        and (processor.state = following implies processor.follower_term != null)
 }
-
--- The serialization, fencing and delivery-ordering properties (I1, I2, the sole-
--- consumer topology, and step 2's drain rationale) constrain WHO mutates state and
--- WHEN, a cross-node fence, and record-delivery ordering across a role switch.
--- They live as prose @invariants on the SubscriptionListener contract.
 
 ------------------------------------------------------------
 -- Actor Declarations
 ------------------------------------------------------------
 
-actor Transport {
-    -- The log's group-subscription driver (Kafka's shared consumer is one
-    -- instance). It launches the transition and demotes, and keeps its own mirror
-    -- of which partitions it leads. Modelled as the external actor that drives the
-    -- listener's role changes. Identified by the database it is driving.
+actor Elector {
+    -- Whoever decides which node leads a database: a coordinator shared between nodes, or trivially the single node itself where the log is local.
+    -- Modelled as the external actor that drives role changes. Identified by the database it is driving.
     identified_by: Database where name != ""
 }
 
@@ -485,115 +329,54 @@ actor Transport {
 -- Surfaces
 ------------------------------------------------------------
 
-surface SubscriptionListenerInterface {
-    -- The SubscriptionListener boundary: the two operations the transport calls to
-    -- drive the per-database role. Demoting runs at the transport's serialization
-    -- point; the transition runs off that point and returns a handle the transport
-    -- joins or cancels.
-    facing transport: Transport
+surface RoleTransitions {
+    -- The two operations the elector calls to drive a database's role on this node.
+    facing elector: Elector
 
-    context listener: Listener
+    context processor: LogProcessor
 
     exposes:
-        listener.state
-        listener.is_leading
+        processor.state
+        processor.is_leading
 
     provides:
-        TransitionToLeaderRequested(transport, listener, term) when listener.state = following
-        DemoteLeaderRequested(transport, listener)
-        -- The revoke's cancel-and-join of an in-flight transition, driving its
-        -- failure path (RevokeCancelsInFlightTransition). Only meaningful while the
-        -- role is still following (the transition has not published its leader).
-        TransitionCancelled(transport, listener) when listener.state = following
+        PromotionRequested(elector, processor, term) when processor.state = following
+        DemoteRequested(elector, processor)
+        -- A promotion that did not reach its final step, driving the recovery path.
+        PromotionFailed(elector, processor) when processor.state = following
 
     contracts:
-        fulfils SubscriptionListener
-
-    @guarantee DemoteAtSerializationPoint
-        -- The transport calls demote only at its serialization point, and launches
-        -- the transition off that point. So the transport's thread waits on the
-        -- transition only where it chooses to -- the cancel-and-join of a revoke.
+        fulfils LeaderElection
 
     @guarantee OneConfirmedLeaderViaTermFence
-        -- At most one leader's writes are ever confirmed per database, enforced by
-        -- the term fence on consume-back, not by this interface: each leader stamps
-        -- its replica writes with its consumer-group generation and confirms a write
-        -- only when it reads that write back at its own term. Reading back a higher
-        -- term means a newer leader has superseded it, so it resigns without
-        -- confirming its outstanding writes (see I2).
-        --   Which is why the log's own obligations are stated in this module at all:
-        --   the fence is nothing but readers agreeing on which term the log has
-        --   reached, so it holds exactly as far as DurableTotalOrder does and no
-        --   further.
+        -- At most one leader's writes are ever confirmed per database, enforced by the term fence on consume-back rather than by this interface: each leader stamps its replica writes with its term and confirms a write only when it reads that write back at its own term.
+        --   Which is why the log's own obligations are stated in this module at all: the fence is nothing but readers agreeing on which term the log has reached, so it holds exactly as far as DurableTotalOrder does and no further.
 }
 
-surface TransportGuarantees {
-    -- The transport's own little state machine. The group subscriber keeps a
-    -- mirror of which partitions it leads and guarantees the invariants below.
-    -- Modelled as a boundary the transport must honour toward the listener; it
-    -- provides no operations here (the operations are on
-    -- SubscriptionListenerInterface).
-    facing transport: Transport
+surface ElectorObligations {
+    -- What the elector must honour toward this node. It provides no operations here; those are on RoleTransitions.
+    facing elector: Elector
 
-    context listener: Listener
+    context processor: LogProcessor
 
     exposes:
-        listener.state
+        processor.state
 
-    @guarantee AtMostOneTransitionInFlight
-        -- The transport allows at most one leadership transition in flight per
-        -- partition at a time.
+    @guarantee AtMostOnePromotionInFlight
+        -- At most one promotion is in flight per database at a time.
 
-    @guarantee NoTransitionWhileLeading
-        -- The transport does not re-launch the transition for a partition it
-        -- already leads. A retained partition under cooperative rebalancing fires
-        -- no callback; the transport guards on its own "am I leading" state.
+    @guarantee NoPromotionWhileLeading
+        -- A node is not promoted for a database it already leads.
 
     @guarantee NoDemoteOnShutdown
-        -- The transport does NOT demote on unregister/shutdown. Tearing the database
-        -- down tears the term down, and because the transition runs under the same
-        -- database lifecycle, that teardown joins the in-flight transition too, not
-        -- just the terms -- so an in-flight transition needs no separate
-        -- cancellation on teardown. Demote is only for a genuine leadership revoke
-        -- while the node stays up.
+        -- Shutdown does NOT demote: tearing the database down ends whichever term is live, the promotion included, so a promotion in flight needs no separate cancellation.
+        -- Demote is only for a genuine leadership revoke while the node stays up.
 
-    @guarantee RevokeCancelsInFlightTransition
-        -- OQ2 resolution (a). On a genuine revoke (NOT unregister -- see
-        -- NoDemoteOnShutdown), the transport cancel-and-joins the in-flight
-        -- transition BEFORE demoting. This is bounded: the only unbounded step is
-        -- step 2's catch-up await, which is cancellable and unwinds promptly. So the
-        -- cancel-and-join is itself the teardown stop step, not an unbounded block on
-        -- the serialization point. After the join, the demote runs against the
-        -- settled role (Leading -> teardown, Following -> no-op).
+    @guarantee RevokeSettlesAPromotionFirst
+        -- On a genuine revoke, the elector lets an in-flight promotion settle — completing or failing — before demoting, so the demote runs against a settled role (see DemoteSeesASettledRole).
+        -- This is bounded: the only unbounded step is the catch-up, which the settle can abandon.
 
-    @guarantee TransitionIdentityDropsSupersededCompletions
-        -- OQ2 resolution (b). The transport's supersession check is the transition's
-        -- own object identity, NOT a generation token threaded through the interface.
-        -- A completion or failure posted back to the serialization point for a
-        -- superseded assignment finds the subscription's state is no longer that
-        -- transition instance and is dropped -- so its TailSpec is discarded rather
-        -- than fed, and the leader it built is torn down by the demote that
-        -- superseded it. (The leader's fencing term is a separate mechanism: it
-        -- fences a ZOMBIE leader's writes on the REPLICA LOG via consume-back, not
-        -- late completions at the serialization point. The two are orthogonal.)
+    @guarantee ASupersededPromotionTakesNoRole
+        -- A promotion whose assignment has since been superseded does not take the role, whether or not it completed.
+        -- This is separate from the term fence, which fences a superseded leader's writes on the replica log; one keeps a stale promotion from ever starting, the other keeps a stale leader's writes from being confirmed.
 }
-
-------------------------------------------------------------
--- Open Questions
-------------------------------------------------------------
-
--- (OQ1 resolved: how long a transport waits for the transition is not visible at
---  this boundary. The in-process logs await it inline and Kafka posts its
---  completion back to the poll thread; both call the one operation, and the
---  difference is the transport's own sequencing.)
-
--- (OQ2 resolved: the race between an in-flight off-serialization-point transition
---  and a revoke at the serialization point is locked. The revoke cancel-and-joins
---  the in-flight transition (RevokeCancelsInFlightTransition) -- bounded, because
---  step 2's catch-up await is cancellable, so the cancel-and-join IS the teardown
---  stop step, not an unbounded block -- and per-transition identity
---  (TransitionIdentityDropsSupersededCompletions) drops a late completion posted
---  for a superseded assignment. Both are transport-internal; the interface is
---  unchanged. The cancel can land after the transition stopped its follower but
---  before it published its leader, so the failure path re-opens a live follower
---  (LiveTermBackingRole / RecoverFollowerOnTransitionCancelled).)

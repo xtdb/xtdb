@@ -1,148 +1,62 @@
 -- allium: 3
 -- live-index.allium
 --
--- Scope: In-memory staging for transactions before block compaction
--- Includes: LiveIndex, LiveTable, row operations, transaction lifecycle, snapshot visibility
--- Excludes: Block storage, trie serialization, Arrow memory management
+-- Scope: in-memory staging of transactions before they are flushed into a block.
+-- Includes: the live index and its tables, row operations, the transaction lifecycle, and snapshot visibility.
+-- Excludes: block storage and trie serialisation (db.allium), leader election (log-processor-lifecycle.allium).
 --
 -- Concurrency model:
---   - Single-writer thread: all transaction operations (StartTransaction, LogPut,
---     CommitTransaction, AbortTransaction, FinishBlock, NextBlock) execute serially.
---     This is enforced structurally: whichever LogProcessor variant owns the live index drives mutations sequentially.
---     On a leader, that is the LeaderLogProcessor's persister coroutine, applying on consume-back — the same coroutine whether or not the database is CDC-sourced, since an external source is an optional collaborator of the leader rather than a processor of its own.
---     On a follower, the FollowerLogProcessor applying ReplicaMessages, and during promotion the incoming leader replaying the block the outgoing one left pending.
---     All variants are single-threaded writers against the live index, so the concurrency model below is the same regardless of which variant is in play.
---   - Multiple concurrent readers: snapshots can be held and read concurrently
---   - Writes don't block reads: a shared, reference-counted snapshot is a lazily-
---     advanced cache, rebuilt on read only when a reader demands a basis it does
---     not yet satisfy (gated by the reader's minimum basis); existing snapshots
---     remain valid until their last holder releases them
+--   One writer at a time. Every transaction operation below runs serially, whichever role owns the live index.
+--   Many concurrent readers. A snapshot can be held and read while writes continue.
+--   Writes never block reads: a snapshot is frozen at creation, and stays valid until its last holder releases it.
 --
--- Pipelining (leader only) — resolve / append / consume-back / apply:
---   On a leader the pipeline has four coroutines, all children of the leader term
---   (see log-processor-lifecycle.allium). The KEY property is Raft's ReadIndex: a
---   leader applies its OWN writes to the durable live tables only once it has read
---   them BACK off its own replica log, at its own term. That consume-back is the
---   fence — it replaces the Kafka transactional producer that used to fence at
---   commit (#5817). The four coroutines:
+-- Pipelining — resolve, append, read back, apply:
+--   A LEADER applies its own writes to the durable live tables only once it has read them BACK off its own replica log, at its own term.
+--   That read-back is the fence — Raft's ReadIndex. The four stages:
 --
---     1. RESOLVER (the persister's select loop, see db.allium). Consumes the source
---        log / ext-source txs / GC tasks. As each tx resolves, it STAGES the tx onto
---        its OWN FIFO — the resolver holds the queue, see TxResolver (a reference move
---        of the OpenTx's OWN relations out of the OpenTx, not a per-vector slice, which
---        cost real time per tx on the hot path) — and SENDS it to the append channel.
---        Staging advances the resolver's own RESOLVED head
---        (TxResolver.latest_completed_tx) so later txs in the same
---        stream resolve against it (read-your-writes). The tx is NOT yet visible to
---        external queries: it is staged and appended, but not yet consumed back and
---        applied to the durable index.
+--     1. RESOLVE. A transaction arriving from the source log or an external source is resolved against what the leader already holds, then STAGED onto the resolver's queue.
+--        Staging advances the resolver's RESOLVED head, so later transactions in the same stream resolve against it (read-your-writes).
+--        The transaction is not yet visible to external queries.
+--     2. APPEND. The staged transaction is written to the replica log, STAMPED with the leader's term.
+--        Control messages — block boundaries, term claims, tries added and deleted — are appended the same way, and stamped the same way.
+--     3. READ BACK. The leader reads its own replica log from the position its promotion claimed.
+--     4. APPLY. Each record read back meets the term fence, and what the fence admits is applied (see ApplyRecord).
+--        Applying the leader's own transaction imports it from the QUEUE HEAD, which still holds its rows, so nothing is re-read from the replica record — that record's job was to confirm durability and term.
+--        THIS is where a committed transaction becomes queryable, and where an external caller's durability handle completes.
 --
---     2. APPEND PUMP. Drains the append channel and, per item, SERIALIZES the tx's
---        replica message off the resolver (the costly Arrow-IPC step, kept off the
---        resolver's hot path) and APPENDS it to the replica log via a PLAIN
---        (non-transactional) append — Log.appendMessage, no producer transaction,
---        no fencing token, no initTransactions. Every appended record is STAMPED
---        with the leader's term. Control messages (block boundaries, no-ops, tries
---        added/deleted) are appended verbatim, also term-stamped. An append fault
---        propagates and tears the term down. The pump only BORROWS a tx to serialize
---        it; the resolver owns and frees it.
+--   Resolution and apply never interleave, so a transaction is never half-applied.
+--   Applying does not refresh the shared snapshot: that is a lazily-advanced cache, rebuilt on the next demanding read (see RefreshSharedSnapshot).
 --
---     3. CONSUME PUMP. Tails the leader's OWN replica log from the transition replay
---        target (a separate consumer from the source-log group subscription that
---        drives leader election, so it doesn't interfere with it) and posts each
---        record onto a bounded consume-back channel.
---
---     4. The RESOLVER's select loop also SERVICES the consume-back channel — this is
---        the APPLY / ReadIndex step. Applying a record (see ApplyRecord):
---          - FENCE BY TERM. A record whose term is GREATER than the leader's own term
---            means a newer leader has superseded us → the leader RESIGNS (its
---            unconfirmed writes are never acknowledged; the transport re-follows on
---            the next rebalance).
---            Anything else the leader folds into the partition's high-water term as it acts on it, discarding what the fence refuses (still advancing the consume cursor).
---            An EQUAL-term record is our own — terms are unique per leader.
---          - For our own ResolvedTx: import from the QUEUE HEAD (we still hold its
---            relations, so no re-materialisation), advancing the durable basis
---            (LiveIndex.latest_completed_tx) and the consume cursor, notifying
---            watchers, then free the head. THIS is where a committed tx becomes
---            queryable, and where an ext-source caller's durability handle completes.
---          - For our own BlockBoundary: trigger the block upload.
---
---   Resolution and apply share one coroutine (the select loop), so a tx cannot
---   interleave a partial state. The shared external snapshot is NOT refreshed on
---   apply: it is a lazily-advanced cache, rebuilt on the next demanding read (see
---   RefreshSharedSnapshot).
---
---   Followers and the transition processor have no resolver (hence no queue) and no
---   consume-back: the messages they import are already durable, so they advance
---   LiveIndex.latest_completed_tx directly.
+--   A FOLLOWER has no resolver and no read-back: the messages it imports are already durable, so it advances the durable head directly.
 --
 --   Block cut — resolve-side gauge, then PAUSE:
---   The block boundary is cut off a RESOLVE-side row gauge (rows_since_block),
---   seeded from the rows already applied into the open block (LiveIndex.block_row_count)
---   so a new leader inheriting a partially-filled block from replay cuts it at the same
---   point the old leader would have (else block sizes drift across restarts). It is cut
---   on the resolve side, AHEAD of the applied/durable count (LiveIndex.is_full lags —
---   it reflects only consumed-back txs). When the gauge crosses rows_per_block the
---   resolver injects a BlockBoundary (in resolution order, so it lands after this
---   block's txs and before the next block's) and PAUSES resolution — the source-log,
---   ext-source and GC select arms are EXCLUDED — until the block's own BlockUploaded is
---   read back and the block adopted.
+--   The block boundary is cut off a RESOLVE-side row gauge, seeded from the rows already applied into the open block, so a new leader inheriting a partially-filled block cuts it where the old leader would have — else block sizes drift across restarts.
+--   It is cut AHEAD of the applied count, which lags.
+--   When the gauge crosses rows_per_block the resolver injects a block boundary, in resolution order so that it lands after this block's transactions and before the next block's, and PAUSES resolution until that block is adopted.
 --   The pause carries two obligations.
---   It keeps the follower's bounded pending-block buffer from overflowing, no tx
---   interleaving between the boundary and its upload.
---   And it keeps anything from applying between FinishBlock and NextBlock, where the live
---   tables have been written to block storage and are about to be cleared — rows applied
---   there would be written nowhere.
---   The pause is deliberately the status quo; block double-buffering is separate future
---   work (#4495).
+--   It keeps the buffer of messages held behind an open block from overflowing, no transaction interleaving between the boundary and its upload.
+--   And it keeps anything from applying between the point where the live tables are written to block storage and the point where they are cleared — rows applied there would be written nowhere.
+--   The pause is deliberately the status quo; block double-buffering is separate future work (#4495).
 --
 --   Two heads, two homes — callers choose:
---     - the RESOLVED head, TxResolver.latest_completed_tx: the highest tx RESOLVED (and
---       so staged). Advanced at STAGE, on the resolve side. Drives resolution — next
---       tx_id, system-time smoothing, read-your-writes.
---     - the DURABLE head, LiveIndex.latest_completed_tx: the highest tx APPLIED, i.e.
---       consumed back off the replica log and imported. Advanced at APPLY. The query
---       basis.
---   Resolved LEADS; durable LAGS it by exactly everything queued but not yet applied.
---   ("Applied" throughout this file means the far end — imported into the durable live
---   index on consume-back, see ApplyResolvedTx — never merely staged.)
+--     - the RESOLVED head, on the resolver: the highest transaction RESOLVED, and so staged.
+--       Advanced at STAGE. Drives resolution — the next tx_id, system-time smoothing, read-your-writes.
+--     - the DURABLE head, on the live index: the highest transaction APPLIED, i.e. read back and imported.
+--       Advanced at APPLY. The query basis.
+--   Resolved LEADS; durable LAGS it by exactly everything staged but not yet applied.
+--   ("Applied" throughout this file means the far end — imported into the durable live index — never merely staged.)
 --
---   The queue is NOT a field on LiveIndex, and NOT standing beside the resolver: the
---   RESOLVER holds it. That is forced by read-your-writes — a tx resolving now must see
---   every predecessor not yet applied, so whoever resolves has to hold the staged txs.
---   The resolver in turn is standing state the leader (LeaderLogProcessor) owns: the
---   leader creates it at construction and closes it at teardown, once its persister
---   coroutine is joined (see CloseResolver). LiveIndex stays the durable layer and stays
---   resolver-agnostic. Consume-back imports into the durable LiveIndex under its
---   existing write lock.
+--   The queue belongs to the RESOLVER rather than to the live index, and that is forced by read-your-writes: a transaction resolving now must see every predecessor not yet applied, so whoever resolves has to hold the staged transactions.
+--   The live index stays the durable layer, and stays resolver-agnostic.
 --
---   Ownership: the RESOLVER OWNS the queue and its staged txs (their table relations).
---   It frees each at APPLY (removeHead — once imported) or at TEARDOWN (close). The
---   append pump only borrows a tx to serialize it; it never frees one. A record already
---   off the queue head (during apply) is freed by the apply path itself, on ANY throw,
---   so teardown's fail-pending can't reach it and double-close it.
+--   Per-transaction durability handles:
+--   Each staged EXTERNAL-SOURCE transaction carries a handle its caller may await; source-log transactions carry none, the source log being the durability record for those.
+--   The handle completes on APPLY — durably replicated AND confirmed unfenced.
+--   Every path on which the transaction will never be applied MUST fail the handle instead, or a caller waits forever: a failure before the transaction is staged fails it where it happens, and a transaction still staged when the resolver ends is failed there (see ResolverEnds).
 --
---   Per-tx durability handles: each staged EXTERNAL-SOURCE tx carries a nullable
---   durability handle (ResolvedTx.pending, a deferred completed with the tx's result);
---   source-log txs carry none (the source log is the durability record for those). The
---   handle is completed on CONSUME-BACK, once the tx is imported — durably replicated
---   AND confirmed unfenced (ReadIndex). executeTx = submit + await the handle;
---   submitTx = fire-and-forget. Failure paths MUST fail the handle so no caller waits
---   forever:
---     (a) a writer/stage throw BEFORE the tx is staged fails it at the throw site;
---     (b) staged txs that will never be applied are failed when the RESOLVER EXITS
---         (fault or cancellation) — the fail-pending leg (resolver.failPending) — before
---         the channels close;
---     (c) an undelivered task's handle is cancelled by the channel's undelivered-element
---         hook;
---     (d) a submit posted AFTER resolver death throws the close cause at the send.
---
--- Critical invariant: External queries see only durably-replicated transactions
---   (LiveIndex.latest_completed_tx) — those the leader has read BACK off its own
---   replica log and applied. A query returned to a user must never include a tx that
---   could vanish if the leader crashed before its replica-log write landed, nor a tx a
---   newer-term leader superseded. Resolution sees durable ⊕ staged-in-queue ⊕ the tx's
---   own writes.
+-- Critical invariant: external queries see only durably-replicated transactions — those the leader has read BACK off its own replica log and applied.
+-- A query returned to a user must never include a transaction that could vanish if the leader crashed before its replica-log write landed, nor one a newer-term leader superseded.
+-- Resolution sees durable ⊕ staged ⊕ the transaction's own writes.
 
 ------------------------------------------------------------
 -- External Entities
@@ -164,30 +78,21 @@ external entity IID {}   -- 16-byte entity identifier
 external entity Document {}   -- the actual row data for puts
 
 external entity MemorySegment {}
-    -- A slice of an Arrow relation paired with the MemoryHashTrie indexing
-    -- its IID column. The slice is taken at snapshot creation and is
-    -- unaffected by subsequent writes to the source relation.
-    -- See: xtdb.segment.MemorySegment, memory-hash-trie.allium.
+    -- A frozen slice of one table's rows, paired with the trie indexing its IID column.
+    -- The slice is taken when the snapshot is created and is unaffected by later writes to the table.
+    -- See: memory-hash-trie.allium.
 
 external entity TrieCatalogSnap {}
-    -- Frozen per-table trie-catalog state: which tries exist on disk, and the
-    -- highest L0 block index per table. See: xtdb.trie.TrieCatalog.Snap.
+    -- Frozen per-table trie-catalog state: which tries exist on disk, and the highest L0 block index per table.
 
 external entity TableCatalogSnap {}
-    -- Frozen per-table metadata for everything already flushed: each table's
-    -- column types and its count of rows ever written. The historical half of
-    -- a column's declared type. See: xtdb.catalog.TableCatalog.State.
+    -- Frozen per-table metadata for everything already flushed: each table's column types and its count of rows ever written.
+    -- The historical half of a column's declared type.
 
--- A per-tx durability handle: a deferred completed with the tx's result once the tx
--- has been CONSUMED BACK and imported into the durable live tables (durably replicated
--- AND confirmed unfenced — Raft's ReadIndex). Carried by external-source txs only
--- (ResolvedTx.pending); source-log txs carry none. executeTx awaits this handle before
--- returning; submitTx does not (fire-and-forget). The resolver completes it on apply
--- (see ApplyResolvedTx), or FAILS it on any path where the tx will never be applied (a
--- stage-time throw, resolver exit with the tx still staged, an undelivered task, or a
--- submit after resolver death) — see the header "Per-tx durability handles". Modelled
--- as a Deferred<TransactionResult> in the implementation.
 external entity DurabilityHandle {}
+    -- A per-transaction handle a caller may await, completed once the transaction has been read back and imported into the durable live tables.
+    -- Carried by external-source transactions only; source-log transactions carry none.
+    -- Completed on apply (ApplyResolvedTx), or FAILED on any path where the transaction will never be applied — see the header.
 
 ------------------------------------------------------------
 -- Value Types
@@ -199,12 +104,6 @@ value ValidTimeRange {
 }
 
 value Row {
-    -- `Row` is an abstraction used by the rules below to describe commit
-    -- semantics. The actual storage is an Arrow relation (not a row set): each
-    -- LiveTable holds a `liveRelation` and each in-flight table-tx holds a
-    -- `txRelation`, with a MemoryHashTrie built over the IID column. The `op`
-    -- column is an Arrow dense union with three legs: put, delete, erase.
-    -- See: LiveTable.kt, OpenTx.kt.
     iid: IID
     system_from: Timestamp
     valid_time: ValidTimeRange
@@ -212,17 +111,14 @@ value Row {
 }
 
 value Op {
-    -- Arrow DenseUnion: exactly one leg is populated per row. Modelled as three
-    -- optional legs (rather than a checker-enforced sum type) only because the
-    -- installed CLI predates the union construct this file targets; the "exactly one
-    -- populated" constraint is the real rule.
+    -- Exactly one leg is populated per row.
+    -- Modelled as three optionals rather than a sum type only because of what this file's language version can express; "exactly one populated" is the rule.
     put: Put?
     delete: Delete?
     erase: Erase?
 }
 
 value Put {
-    -- The put leg is a struct containing the document columns.
     doc: Document
 }
 
@@ -234,39 +130,25 @@ value Erase { }    -- null marker in the "erase" leg
 ------------------------------------------------------------
 
 entity LiveIndex {
-    -- DURABLE head / QUERY BASIS: the highest tx APPLIED into the durable live tables —
-    -- the highest tx the leader has read BACK off its own replica log and imported
-    -- (ReadIndex). shared_snap is built with basis_tx = latest_completed_tx; external
-    -- queries open at it. On a leader it is advanced by ApplyResolvedTx on consume-back
-    -- (so it LAGS the resolver's RESOLVED head by everything staged but not yet consumed
-    -- back and applied); on a follower/transition by importTx (every imported message is
-    -- already durable, so there is no lag).
+    -- DURABLE head / QUERY BASIS: the highest transaction APPLIED into the durable live tables.
+    -- External queries open at it.
+    -- On a leader it is advanced by ApplyResolvedTx on read-back, so it LAGS the RESOLVED head by everything staged but not yet applied; on a follower every imported message is already durable, so there is no lag.
     --
-    -- The RESOLVED head (which drives resolution — next external-source tx_id is
-    -- head.tx_id + 1, and system-time smoothing reads it) is NOT here: on a
-    -- leader the RESOLVER maintains its own latest_completed_tx over the queue it
-    -- holds (see TxResolver). LiveIndex is resolver-agnostic — it knows only the
-    -- durable layer. Callers choose which head to read — resolution reads the
-    -- resolver's RESOLVED head, external queries read this DURABLE one.
+    -- The RESOLVED head, which drives resolution, is NOT here: on a leader it lives on the resolver.
+    -- The live index knows only the durable layer, and callers choose which head to read.
     latest_completed_tx: TransactionKey?
 
     rows_per_block: Integer
 
-    -- Rows already applied into the currently-open block. Seeds the resolver's
-    -- rows_since_block gauge on leader startup so a new leader inheriting a
-    -- partially-filled block from replay cuts it at the same point the old leader
-    -- would have. See the header "Block cut".
+    -- Rows already applied into the currently-open block.
+    -- Seeds the resolver's block gauge when a leader takes the role, so a leader inheriting a partially-filled block cuts it where the previous one would have.
     block_row_count: Integer
 
-    -- Durable live tables: hold only applied (consumed-back, durably-replicated) rows.
+    -- Durable live tables: they hold only applied rows.
     tables: LiveTable with index = this
 
-    -- Current shared external snapshot: a lazily-advanced cache, NOT refreshed
-    -- eagerly. It is rebuilt (see RefreshSharedSnapshot) only when a reader
-    -- requests a basis this cache does not satisfy; apply and NextBlock leave
-    -- it stale. External readers retain this snapshot when calling
-    -- OpenSnapshot(index, min_basis); see OpenExternalSnapshot. Its basis is
-    -- latest_completed_tx (durable) as of the last rebuild.
+    -- The current shared external snapshot: a lazily-advanced cache, rebuilt only when a reader demands a basis it does not satisfy.
+    -- Apply and NextBlock leave it stale. Its basis is the durable head as of the last rebuild.
     shared_snap: Snapshot
 
     row_count: tables.sum(t => t.row_count)
@@ -274,81 +156,43 @@ entity LiveIndex {
 }
 
 entity TxResolver {
-    -- The leader's transaction RESOLVER: it turns a source-log message, a database
-    -- attach/detach or an external source's writer into a resolved tx, and holds the
-    -- FIFO of resolved-but-not-yet-applied txs until the leader has applied them.
+    -- The leader's transaction resolver: it turns a source-log message, a database attach or detach, or an external source's writer into a resolved transaction, and holds the queue of resolved-but-not-yet-applied transactions until the leader has applied them.
     --
-    -- The queue lives HERE, on the resolver, rather than beside it, because of
-    -- READ-YOUR-WRITES: a tx resolving now must see every predecessor still queued
-    -- (durable ⊕ staged ⊕ its own writes), so whoever resolves has to hold the staged
-    -- txs. Resolution and the queue are one concern, not two.
+    -- The queue lives HERE rather than beside it because of READ-YOUR-WRITES: a transaction resolving now must see every predecessor still queued, so whoever resolves has to hold the staged transactions.
+    -- Resolution and the queue are one concern, not two.
     --
-    -- NOT a field on LiveIndex: this is standing state the leader (LeaderLogProcessor)
-    -- owns — the leader creates the resolver at construction and closes it at teardown,
-    -- once its persister coroutine is joined (see CloseResolver). The resolver is driven
-    -- only from that persister coroutine, its sole accessor, so it is single-threaded by
-    -- confinement and needs no lock. Seeded at the durable head when created; absent on
-    -- followers and the transition processor, which only import already-durable messages.
-    --
-    -- The resolver OWNS its staged txs — their table relations. Each is freed at APPLY
-    -- (RemoveHead — once imported) or at TEARDOWN (close). The append pump only borrows
-    -- a tx to serialize it; it never frees one. Because the resolver holds the resolved
-    -- txs' relations directly, the leader imports them on consume-back with NO
-    -- re-materialisation (it doesn't re-load them from the replica log — the replica
-    -- record it reads back only confirms durability + term).
-    --
-    -- The durable LiveIndex this resolver pipelines into. The link is one-way: the
-    -- resolver references the index, but the index does not reference the resolver (it
-    -- stays resolver-agnostic).
+    -- It exists for the length of one leader term. Seeded at the durable head when the term takes the role; absent on a follower, which only imports already-durable messages.
+    -- The durable live index it pipelines into. The link is one-way: the resolver names the index, and the index stays resolver-agnostic.
     index: LiveIndex
 
-    -- RESOLVED head: the highest tx RESOLVED (and so staged) — NOT the highest applied.
-    -- Drives RESOLUTION — next external-source tx_id is latest_completed_tx.tx_id + 1,
-    -- system-time smoothing reads it, and resolution layers read-your-writes over the
-    -- staged txs. Seeded from index.latest_completed_tx (the durable head) when the
-    -- resolver is created, then advanced at STAGE — on the RESOLVE side (see
-    -- CommitTransaction / AbortTransaction), not at apply. So it LEADS the durable head:
-    -- always >= index.latest_completed_tx, by exactly the txs staged but not yet applied.
+    -- RESOLVED head: the highest transaction RESOLVED, and so staged — not the highest applied.
+    -- Drives RESOLUTION: the next external-source tx_id is one past it, system-time smoothing reads it, and resolution layers read-your-writes over the staged transactions.
+    -- Seeded from the durable head, then advanced at STAGE rather than at apply, so it LEADS the durable head by exactly the transactions staged but not yet applied.
     latest_completed_tx: TransactionKey?
 
-    -- The staged txs, oldest→newest (resolution order). Stage appends; ApplyResolvedTx
-    -- removes the head after importing it. Resolution layers these as read-your-writes
-    -- segments (see StagedSegments.for).
+    -- The staged transactions, oldest first (resolution order).
+    -- Stage appends; ApplyResolvedTx removes the head after importing it.
     staged: StagedTx with resolver = this
 
-    -- Whether the queue is empty: ApplyResolvedTx requires a head to import.
     is_empty: staged.count = 0
 }
 
 entity StagedTx {
-    -- One resolved tx held in the resolver's queue: no longer OPEN (it can't be written
-    -- to or queried), retaining its per-table rows so ApplyResolvedTx can import it into
-    -- the durable live tables on consume-back, and so later txs resolving behind it read
-    -- it (read-your-writes). Its relations are the OpenTx's own, ownership moved out at
-    -- Stage (a reference move — see the header "Ownership"); the resolver closes the
-    -- (now table-less) OpenTx right after staging. Freed at RemoveHead (apply) or
-    -- teardown (CloseResolver).
+    -- One resolved transaction held in the resolver's queue: no longer open, so it can neither be written to nor queried, but retaining its per-table rows.
+    -- Those rows are what ApplyResolvedTx imports on read-back, and what later transactions resolving behind it read (read-your-writes).
     --
-    -- StagedTx carries no replica-log position: it is serialized into a replica message
-    -- by the append pump, and its durability is confirmed when the leader reads that
-    -- message back at its own term (ReadIndex). It holds the row data (for
-    -- read-your-writes + import) plus, for an external-source tx, the caller's
-    -- durability handle.
-    --
-    -- durability (ResolvedTx.pending): the caller's per-tx durability handle, or null.
-    -- Non-null for external-source txs (executeTx/submitTx), null for source-log txs.
-    -- The resolver completes it on APPLY (ApplyResolvedTx) — once the tx is consumed
-    -- back and imported — or fails it on a path where the tx will never be applied (see
-    -- the header "Per-tx durability handles" and FailPendingHandles / CloseResolver).
+    -- It carries no replica-log position: its durability is confirmed when the leader reads its record back at its own term.
     resolver: TxResolver
     tx_key: TransactionKey
+
+    -- The caller's durability handle, for an external-source transaction; null for a source-log one.
     durability: DurabilityHandle?
+
     tables: StagedTxTable with staged_tx = this
 }
 
 entity StagedTxTable {
-    -- One tx's rows for one table, imported into the matching durable LiveTable
-    -- when the tx is applied (see ApplyResolvedTx).
+    -- One transaction's rows for one table, imported into the matching durable LiveTable when the transaction is applied.
     staged_tx: StagedTx
     table_ref: TableRef
     rows: Set<Row>
@@ -357,7 +201,7 @@ entity StagedTxTable {
 }
 
 entity LiveTable {
-    -- LiveTables are cleared (removed) by NextBlock, not just emptied
+    -- Live tables are removed by NextBlock, not just emptied.
     index: LiveIndex
     table_ref: TableRef
     rows: Set<Row>
@@ -368,10 +212,9 @@ entity LiveTable {
 entity OpenTx {
     index: LiveIndex
 
-    -- The resolver this tx resolves against. A resolving tx reads durable ⊕ the
-    -- resolver's staged txs ⊕ its own writes, so it carries the resolver (which hands
-    -- itself to each tx it opens). Always present: open transactions exist only on a
-    -- leader, where the resolver exists.
+    -- The resolver this transaction resolves against.
+    -- A resolving transaction reads durable ⊕ the resolver's staged transactions ⊕ its own writes, so it carries the resolver.
+    -- Always present: open transactions exist only on a leader, where the resolver exists.
     resolver: TxResolver
 
     tx_key: TransactionKey
@@ -391,79 +234,53 @@ entity OpenTx {
 entity LiveTableTx {
     transaction: OpenTx
     table_ref: TableRef
-    live_table: LiveTable?   -- null if table is new
+    live_table: LiveTable?   -- null if the table is new
     is_new_table: live_table = null
 
-    rows: Set<Row>           -- uncommitted rows in this tx
+    rows: Set<Row>           -- uncommitted rows in this transaction
     row_count: rows.count
 }
 
 ------------------------------------------------------------
 -- Snapshots (visibility)
 --
--- A Snapshot is a point-in-time view over one partition. It is composed of
--- per-table TableSnapshots, each holding a MemorySegment: a sliced live
--- relation plus the MemoryHashTrie indexing it. When opened from within an
--- active transaction, a TableSnapshot also layers an optional tx segment
--- (sliced from the OpenTx.Table's txRelation) on top of the live segment, so
--- queries inside the tx see committed rows + their own uncommitted rows.
+-- A Snapshot is a point-in-time view over one database.
+-- It is composed of per-table TableSnapshots, each holding a frozen segment of that table's rows.
+-- Opened from within an active transaction, a TableSnapshot also layers the staged transactions' rows and then the transaction's own, so a query inside the transaction sees durable rows, its predecessors' rows and its own.
 --
--- A Snapshot also pins the two catalogs a reader needs alongside those
--- segments: the trie catalog, which locates the historical tries on disk, and
--- the table catalog's per-table metadata (column types and row counts for
--- everything already flushed). Pinning them is what stops a reader combining
--- pinned data with catalog state read live at the moment it happens to ask.
+-- A Snapshot also pins the two catalogs a reader needs alongside those segments: the trie catalog, which locates the historical tries on disk, and the table catalog's per-table metadata.
+-- Pinning them is what stops a reader combining pinned data with catalog state read live at the moment it happens to ask.
 --
--- The three captures are NOT atomic with respect to one another. They are
--- taken in order — trie catalog, then segments, then table catalog — so a
--- block landing concurrently can fall between them. The table catalog is taken
--- last deliberately: a type view newer than the data view over-approximates,
--- which is always safe, whereas an older one would declare a narrower type
--- than the rows being scanned, which is not.
+-- The three captures are NOT atomic with respect to one another.
+-- They are taken in order — trie catalog, then segments, then table catalog — so a block landing concurrently can fall between them.
+-- The table catalog is taken last deliberately: a type view newer than the data view over-approximates, which is always safe, whereas an older one would declare a narrower type than the rows being scanned, which is not.
 --
--- That matters for a column's declared type, which is the join of what the
--- table catalog knows (flushed blocks), what the segments know (unflushed),
--- and what the superseded live tables know. The column set and the types
--- resolving it come from one capture, or they can disagree.
+-- That matters for a column's declared type, which is the join of what the table catalog knows (flushed blocks), what the segments know (unflushed), and what the superseded live tables know.
+-- The column set and the types resolving it come from one capture, or they can disagree.
 --
 -- L0 supersession:
---   After a block is flushed its rows exist twice — in the live table that
---   produced them, and in the L0 trie written from it. A snapshot therefore
---   excludes any live table the trie catalog's L0 watermark has reached, so
---   those rows are read once, from the L0.
+--   After a block is flushed its rows exist twice — in the live table that produced them, and in the L0 trie written from it.
+--   A snapshot therefore excludes any live table the trie catalog's L0 watermark has reached, so those rows are read once, from the L0.
 --
---   Their column TYPES are retained regardless. A block becomes visible in
---   two steps: the L0 reaches the trie catalog first, the block's column types
---   reach the table catalog second. A snapshot taken between the two would
---   otherwise have no source for those types at all — declaring a narrower
---   type than the rows it is about to scan, and failing to resolve a
---   brand-new table entirely. Retaining the types bridges that gap, and is
---   safe because the join is idempotent: once the catalog catches up the
---   answer is unchanged, whatever order the writers ran in.
+--   Their column TYPES are retained regardless.
+--   A block becomes visible in two steps: the L0 reaches the trie catalog first, the block's column types reach the table catalog second.
+--   A snapshot taken between the two would otherwise have no source for those types at all — declaring a narrower type than the rows it is about to scan, and failing to resolve a brand-new table entirely.
+--   Retaining the types bridges that gap, and is safe because the join is idempotent: once the catalog catches up the answer is unchanged, whatever order the writers ran in.
 --
---   The live table outlives the gap in both directions — it is cleared only
---   after the table catalog has been updated — so a source is always
---   available while the gap is open.
+--   The live table outlives the gap in both directions — it is cleared only after the table catalog has been updated — so a source is always available while the gap is open.
 --
 -- Consistency guarantees:
---   - A snapshot's underlying segments are sliced at creation and do not
---     observe later writes
---   - Its captured catalogs are likewise frozen: writes landing afterwards
---     have no effect on it
---   - Those captures are ordered, not simultaneous: a concurrently-landing block
---     can fall between them, which is what "L0 supersession" above covers
---   - Commits are atomic: all tx rows become visible together, or none
---   - Multiple snapshots can be held concurrently without interference
---   - Writes don't block reads: a shared external snapshot is rebuilt lazily on
---     read (only when a reader demands a basis it does not yet satisfy), and
---     existing snapshots remain valid until released
+--   - A snapshot's segments are frozen at creation and do not observe later writes.
+--   - Its captured catalogs are likewise frozen.
+--   - Those captures are ordered, not simultaneous: a concurrently-landing block can fall between them, which is what "L0 supersession" above covers.
+--   - Commits are atomic: all of a transaction's rows become visible together, or none do.
+--   - Multiple snapshots can be held concurrently without interference.
+--   - Writes don't block reads: the shared external snapshot is rebuilt lazily, and an existing snapshot stays valid until released.
 --
--- Sharing and reference counting:
---   - External snapshots are shared: the live index publishes a single
---     current shared snapshot, and each external opener retains it
---   - A snapshot is released by its holder via close(); the underlying
---     segments are freed when the last holder releases
---   - Transaction snapshots are per-OpenTx and not shared
+-- Sharing:
+--   External snapshots are shared — the live index publishes a single current one, and each external reader holds it until it closes it.
+--   A snapshot's segments survive exactly as long as its last holder.
+--   Transaction snapshots are per-transaction and are not shared.
 ------------------------------------------------------------
 
 entity Snapshot {
@@ -471,36 +288,25 @@ entity Snapshot {
 
     table_snapshots: TableSnapshot with snapshot = this
 
-    -- Frozen catalog state, captured with the segments above. The trie catalog
-    -- locates the historical tries; the table catalog carries their column
-    -- types and row counts.
+    -- Frozen catalog state, captured with the segments above.
     trie_catalog_snap: TrieCatalogSnap
     table_catalog_snap: TableCatalogSnap
 
-    -- External snapshots are shared and reference-counted; concurrent
-    -- readers each hold one retention on the current shared snapshot.
-    ref_count: Integer
-
-    -- Tables the pinned table catalog knows about: everything already flushed,
-    -- plus the data-backed system tables seeded when the partition opens
-    -- (xt.txs, xt.role_membership). A table here resolves with no segment at all.
+    -- Tables the pinned table catalog knows about: everything already flushed, plus the data-backed system tables seeded when the database opens.
+    -- A table here resolves with no segment at all.
     catalog_tables: Set<TableRef>
 
-    -- Live tables kept out of table_snapshots because a published L0 already
-    -- covers their rows, but whose column types are still needed until the table
-    -- catalog records them. See "L0 supersession" above.
+    -- Live tables kept out of table_snapshots because a published L0 already covers their rows, but whose column types are still needed until the table catalog records them.
+    -- See "L0 supersession" above.
     --
-    -- Supersession applies to the DURABLE live table only, so this does not
-    -- partition against segment_tables: a superseded table that the resolving tx
-    -- or a staged tx also writes to appears in both, and contributes through both.
+    -- Supersession applies to the DURABLE live table only, so this does not partition against segment_tables: a superseded table that the resolving transaction or a staged one also writes to appears in both, and contributes through both.
     superseded_tables: Set<TableRef>
 
     -- The tables carrying a segment in this snapshot.
     segment_tables: table_snapshots -> table_ref
 
-    -- Derived: which tables resolve in this snapshot. Base-table resolution reads
-    -- this, and a table can resolve without a segment — via the catalog, or via
-    -- supersession — so the segments alone do not answer it.
+    -- Derived: which tables resolve in this snapshot.
+    -- A table can resolve without a segment — via the catalog, or via supersession — so the segments alone do not answer it.
     visible_tables: catalog_tables + superseded_tables + segment_tables
 }
 
@@ -508,23 +314,17 @@ entity TableSnapshot {
     snapshot: Snapshot
     table_ref: TableRef
 
-    -- Live segment: slice of the LiveTable's (DURABLE) liveRelation paired with
-    -- its MemoryHashTrie. Absent when the table has no durable data at snapshot
-    -- time. This is the only layer on external snapshots.
+    -- The DURABLE live rows for this table. Absent when the table has no durable data at snapshot time.
+    -- This is the only layer on an external snapshot.
     live_segment: MemorySegment?
 
-    -- Staged segments: slices of this table's staged-in-queue rows, layered on top of
-    -- live_segment, oldest→newest — one per StagedTx in the queue that touched this
-    -- table (its matching StagedTxTable). A just-staged tx's rows live ONLY here until
-    -- consumed back and applied. Empty on external snapshots (which see durable data
-    -- only); populated only on transaction snapshots so a resolving tx reads staged
-    -- prior txs (read-your-writes). See StagedSegments.for.
+    -- The staged transactions' rows for this table, layered on the durable rows, oldest first — one per staged transaction that touched it.
+    -- A just-staged transaction's rows live ONLY here until they are applied.
+    -- Empty on an external snapshot, which sees durable data only; populated on a transaction snapshot so that a resolving transaction reads its staged predecessors.
     staged_segments: Set<MemorySegment>
 
-    -- Tx segment: slice of the enclosing OpenTx.Table's txRelation paired with
-    -- its MemoryHashTrie. Present only on transaction snapshots where the tx
-    -- has written rows for this table. Layered on top of staged_segments so a
-    -- query inside the tx sees durable + staged rows + its own uncommitted rows.
+    -- The enclosing transaction's own uncommitted rows, layered on top of the staged ones.
+    -- Present only on a transaction snapshot where the transaction has written to this table.
     tx_segment: MemorySegment?
 }
 
@@ -533,9 +333,7 @@ entity TableSnapshot {
 ------------------------------------------------------------
 
 config {
-    -- The block-sizing bound (IndexerConfig.rowsPerBlock). The resolver's block-cut
-    -- gauge (rows_since_block) crosses this to inject a BlockBoundary. See the header
-    -- "Block cut".
+    -- The block-sizing bound. The resolver's block gauge crosses this to cut a boundary.
     rows_per_block: Integer = 102_400
 }
 
@@ -550,8 +348,7 @@ default ValidTimeRange erase_valid_time = { from: MIN_TIMESTAMP, to: MAX_TIMESTA
 ------------------------------------------------------------
 
 rule StartTransaction {
-    -- Started by the resolver, which hands itself to the tx so the tx can resolve
-    -- against durable ⊕ its staged txs (read-your-writes).
+    -- Started by the resolver, which hands itself to the transaction so it can resolve against durable ⊕ staged (read-your-writes).
     when: StartTransaction(index, resolver, tx_key)
 
     requires: resolver.index = index
@@ -565,8 +362,7 @@ rule StartTransaction {
 }
 
 rule GetTableTx {
-    -- Idempotent: returns the existing LiveTableTx if one already exists for this tx and table.
-    -- See: live_index.clj (computeIfAbsent on table-txs)
+    -- Idempotent: returns the existing LiveTableTx where one already exists for this transaction and table.
     when: GetTableTx(tx, table_ref)
 
     requires: tx.status = active
@@ -630,26 +426,18 @@ rule LogErase {
 }
 
 ------------------------------------------------------------
--- Rules: Commit and Abort (RESOLVE side — stage + append, not apply)
+-- Rules: Commit and abort (RESOLVE side — stage and append, not apply)
 ------------------------------------------------------------
 
 rule CommitTransaction {
-    -- The resolver STAGES a committed tx onto its queue and advances its
-    -- RESOLVED head (TxResolver.latest_completed_tx). Staging takes ownership of
-    -- the tx's table relations (a reference move — see the header "Ownership"); the
-    -- (now table-less) OpenTx is closed right after. The staged tx is then SENT to the
-    -- append pump, which serializes it and plain-appends it to the replica log.
+    -- The resolver STAGES a committed transaction onto its queue and advances its RESOLVED head.
+    -- The staged transaction is then appended to the replica log.
     --
-    -- It does NOT advance the DURABLE head (LiveIndex.latest_completed_tx) and does
-    -- NOT refresh the external shared snapshot — those happen only when the leader
-    -- CONSUMES the tx BACK off its own replica log and imports it (see ApplyResolvedTx,
-    -- the ReadIndex step). Later txs in the same stream resolve against the resolver's
-    -- queue (read-your-writes), but external queries cannot yet see it.
+    -- It does NOT advance the DURABLE head and does NOT refresh the external shared snapshot.
+    -- Those happen only when the leader reads the transaction BACK off its own replica log and imports it (ApplyResolvedTx).
+    -- Later transactions in the same stream resolve against the queue (read-your-writes), but external queries cannot yet see it.
     --
-    -- durability is the caller's per-tx durability handle for an EXTERNAL-SOURCE tx
-    -- (executeTx/submitTx), or omitted (null) for a source-log tx. It is stored on the
-    -- StagedTx and completed on APPLY (see ApplyResolvedTx), or failed on a
-    -- non-applying path (see the header "Per-tx durability handles").
+    -- durability is the caller's handle for an EXTERNAL-SOURCE transaction, and absent for a source-log one.
     when: CommitTransaction(tx, durability?)
 
     requires: tx.status = active
@@ -659,9 +447,8 @@ rule CommitTransaction {
     ensures: tx.status = committed
     ensures: resolver.latest_completed_tx = tx.tx_key
 
-    -- Stage the tx: record it at the tail in resolution order, retaining its per-table
-    -- rows so ApplyResolvedTx can import it on consume-back and so later txs read it.
-    -- Tables with no tx rows are skipped.
+    -- Stage the transaction at the tail, in resolution order, retaining its per-table rows.
+    -- Tables the transaction wrote no rows to are skipped.
     ensures:
         let staged_tx = StagedTx.created(
             resolver: resolver,
@@ -682,40 +469,27 @@ rule AbortTransaction {
     requires: tx.status = active
 
     ensures: tx.status = aborted
-    -- The RESOLVED head tracks "resolved up to", not "successfully committed up
-    -- to" — even aborted transactions consume a tx_id and advance the resolver's
-    -- marker, so the next tx_id is correct. An aborted tx is still staged (as an
-    -- abort row) and appended, so it too is consumed back and applied.
+    -- The RESOLVED head tracks "resolved up to", not "successfully committed up to": an aborted transaction consumes a tx_id and advances the head, so the next tx_id is correct.
+    -- It is staged and appended like any other, so it too is read back and applied.
     ensures: tx.resolver.latest_completed_tx = tx.tx_key
 }
 
 ------------------------------------------------------------
--- Rules: Consume-back / apply (ReadIndex — where a tx becomes durable)
+-- Rules: Read-back and apply (where a transaction becomes durable)
 --
--- The RESOLVER's select loop services the consume-back channel the consume pump
--- feeds. This is Raft's ReadIndex: the leader applies its own writes only after
--- reading them back off its own replica log, at its own term. The term on read-back
--- is the fence (see ApplyRecord); it replaces the Kafka transactional producer that
--- used to fence at commit (#5817).
+-- The leader applies its own writes only after reading them back off its own replica log, at its own term.
+-- The term on read-back is the fence.
 ------------------------------------------------------------
 
 rule ApplyRecord {
-    -- Apply one record read back off the leader's OWN replica log. Fences by TERM:
-    --   - term GREATER than ours: a newer leader has superseded us → RESIGN. Modelled
-    --     as LeaderSuperseded; the leader term fails (its unconfirmed staged txs are
-    --     failed by the fail-pending leg, see FailPendingHandles), and the transport
-    --     re-follows on the next rebalance. This is EXPECTED — not a query-facing fault,
-    --     so it does NOT poison the watchers.
-    --   - term below the partition's HIGH-WATER: the fence refuses it, and it is discarded, still
-    --     advancing the consume cursor (RecordDiscarded). Folding and testing happen here, where
-    --     the leader acts on the record; our own claim folded before the term opened, so the
-    --     high-water is our own term throughout and what the fence refuses sits below it.
-    --   - term EQUAL to ours (the common case; terms are unique per leader, so an
-    --     equal-term record IS our own): dispatched to ApplyResolvedTx (for a tx) or
-    --     the block-upload path (for a BlockBoundary), etc.
+    -- Apply one record read back off the leader's OWN replica log, fenced by TERM.
+    --   term GREATER than ours: a newer leader has superseded us, so we RESIGN.
+    --     The term ends without acknowledging its outstanding writes, and the node follows again.
+    --     This is EXPECTED — not a query-facing fault, so it does not poison the watchers.
+    --   term BELOW the node's high-water: the fence refuses it, and it is discarded, still advancing the read position.
+    --   term EQUAL to ours: the common case. Terms are unique per leader, so an equal-term record IS our own.
     --
-    -- The high-water itself is db.allium's to hold and to fold (LogProcessor.max_leader_term,
-    -- LeaderAppliesRecord), because it spans the partition rather than the leader's own term.
+    -- The high-water itself is db.allium's to hold and to fold, because it spans the database on this node rather than one leader's term.
     -- This rule names our_term, which the high-water equals for the length of a confirmed term.
     when: ApplyRecord(resolver, record_term, our_term)
 
@@ -729,22 +503,14 @@ rule ApplyRecord {
 }
 
 rule ApplyResolvedTx {
-    -- The leader reads its OWN staged tx back at its own term and IMPORTS it — this is
-    -- the point at which a committed tx becomes queryable (durably replicated AND
-    -- confirmed unfenced, ReadIndex). It imports from the QUEUE HEAD (peeking the front
-    -- must match the consumed tx_id — a mismatch is a fault), which still holds the
-    -- tx's relations, so there is NO re-materialisation from the replica record. On any
-    -- throw here the head — already off the queue — has its durability handle failed and
-    -- its buffers freed by the apply path itself (so teardown's fail-pending can't reach
-    -- it). Notifying watchers happens per applied tx.
+    -- The leader reads its OWN staged transaction back at its own term and IMPORTS it.
+    -- This is where a committed transaction becomes queryable: durably replicated AND confirmed unfenced.
     --
-    -- The DURABLE head advance ALONE makes the newly-durable tx queryable; the shared
-    -- external snapshot is a lazily-advanced cache, rebuilt on the next demanding read
-    -- (see RefreshSharedSnapshot), NOT refreshed here.
+    -- It imports from the QUEUE HEAD, which still holds the transaction's rows, so nothing is re-read from the replica record.
+    -- The head must match the transaction just read back; a mismatch is a fault.
     --
-    -- The caller's per-tx durability handle (external-source txs only) is completed HERE,
-    -- as the last step — this is where an executeTx caller finally unblocks, after (not
-    -- before) the tx is durable. Source-log txs carry no handle.
+    -- The DURABLE head advance ALONE makes the transaction queryable.
+    -- The shared external snapshot is a lazily-advanced cache, rebuilt on the next demanding read, and is not refreshed here.
     when: RecordApplied(resolver)
 
     requires: not resolver.is_empty
@@ -753,7 +519,7 @@ rule ApplyResolvedTx {
     let staged_tx = resolver.staged.first
 
     ensures:
-        -- Import this tx's rows into the (possibly new) durable live tables.
+        -- Import this transaction's rows into the (possibly new) durable live tables.
         for staged_table in staged_tx.tables:
             let live_table =
                 let existing = index.tables.find(t => t.table_ref = staged_table.table_ref)
@@ -767,94 +533,75 @@ rule ApplyResolvedTx {
                     )
             live_table.rows.addAll(staged_table.rows)
 
-        -- Advance the DURABLE head to this tx (the durable live index's own
-        -- latest_completed_tx) — the RESOLVED head passed this tx back at stage time.
-        -- This alone makes the newly-durable tx queryable.
+        -- Advance the DURABLE head. The RESOLVED head passed this transaction at stage time.
         index.latest_completed_tx = staged_tx.tx_key
 
-        -- Complete an external-source tx's durability handle now that it is durable
-        -- (source-log txs carry none).
+        -- Complete an external caller's handle now that the transaction is durable, and last of all, so the caller unblocks after the transaction is queryable rather than before.
         if staged_tx.durability != null:
             HandleCompleted(staged_tx.durability)
 
-        -- Remove the head — AFTER importing it — and free it (the resolver owns it).
+        -- Drop the head, AFTER importing it.
         not exists staged_tx
 }
 
-rule FailPendingHandles {
-    -- The FAIL-PENDING leg (header legs b/c). When the RESOLVER EXITS — a fault, a
-    -- supersession (LeaderSuperseded), or a teardown cancellation — every durability
-    -- handle of a still-staged tx whose tx will NEVER be applied is FAILED with the exit
-    -- cause, so no executeTx caller waits forever. This runs at resolver exit, BEFORE the
-    -- channels close (resolver.failPending). Source-log txs carry no handle, so they
-    -- contribute nothing. An undelivered task's handle (leg c) is failed by the channel's
-    -- undelivered-element hook rather than here; a submit after resolver death (leg d)
-    -- throws the close cause at the submit site. See the header "Per-tx durability
-    -- handles".
+rule ResolverEnds {
+    -- A leader term ends — superseded, faulted or demoted — and its resolver with it.
+    -- Every transaction still staged will never be applied, so each one's durability handle is FAILED with the cause, and no caller waits forever.
+    -- Source-log transactions carry no handle and contribute nothing.
+    --
+    -- The staged transactions themselves are DISCARDED. They were never visible to an external query, so discarding them costs nothing: the next leader re-reads them from the source log and re-resolves them.
+    -- The durable live index is untouched, and still reflects a complete prefix of the replica log.
     when: ResolverExited(resolver, cause)
 
     ensures:
         for staged_tx in resolver.staged where staged_tx.durability != null:
             HandleFailed(staged_tx.durability, cause)
+
+        for staged_tx in resolver.staged:
+            not exists staged_tx
+
+        not exists resolver
 }
 
 ------------------------------------------------------------
 -- Rules: Snapshot visibility
 --
--- CRITICAL: External queries see only DURABLY-REPLICATED transactions
--- (LiveIndex.latest_completed_tx) — durable live segments only, no staged-in-queue
--- rows. Resolution (queries inside an in-flight tx) sees durable ⊕ staged ⊕ the
--- tx's own writes.
+-- CRITICAL: external queries see only DURABLY-REPLICATED transactions — durable live rows only, nothing staged.
+-- Resolution — a query inside an in-flight transaction — sees durable ⊕ staged ⊕ the transaction's own writes.
 ------------------------------------------------------------
 
 rule OpenExternalSnapshot {
-    -- Called by queries outside any transaction. min_basis is the caller's
-    -- minimum read basis (a system-time); it may be absent (null).
+    -- Called by queries outside any transaction.
+    -- min_basis is the caller's minimum read basis, and may be absent.
     --
-    -- The index holds a single shared Snapshot whose basis is latest_completed_tx
-    -- (durable) as of its last rebuild and whose layers are the DURABLE live
-    -- segments only — no staged-in-queue rows. It is a lazily-advanced cache, NOT
-    -- refreshed on apply or NextBlock. If the caller has no minimum basis, or the
-    -- cached snapshot's basis already satisfies it, the current cache is retained and
-    -- returned as-is; otherwise it is rebuilt to the current durable basis first
-    -- (see RefreshSharedSnapshot). The awaited/durable basis guarantees
-    -- latest_completed_tx >= min_basis by the time this runs, so a rebuild can
-    -- always reach a satisfying basis. Each external opener retains the shared
-    -- snapshot and releases it on close; the underlying segments are freed when
-    -- the last holder releases.
+    -- The index holds a single shared snapshot, whose basis is the durable head as of its last rebuild and whose rows are the DURABLE live rows only.
+    -- It is a lazily-advanced cache: where the caller has no minimum basis, or the cache already satisfies it, the cache is returned as it stands; otherwise it is rebuilt first.
+    -- The durable basis guarantees the head is at or past min_basis by the time this runs, so a rebuild can always reach a satisfying basis.
+    -- The caller holds the snapshot until it closes it.
     when: OpenSnapshot(index, min_basis?)
 
     ensures:
         -- Rebuild only when the cache is too stale for the requested basis.
         if min_basis != null and index.shared_snap.basis_tx.system_time < min_basis:
             RefreshSharedSnapshot(index)
-        let snap = index.shared_snap
-        snap.ref_count = snap.ref_count + 1
-        snap   -- returned to the caller; close() decrements ref_count
+        index.shared_snap
 }
 
 rule OpenTransactionSnapshot {
-    -- Called by queries within an in-flight resolving transaction
-    -- (e.g. UPDATE...WHERE). Only active transactions can open snapshots;
-    -- committed/aborted txs are closed. Transaction snapshots are built
-    -- per-OpenTx and are NOT shared.
+    -- Called by queries within an in-flight resolving transaction, e.g. UPDATE ... WHERE.
+    -- Only an active transaction can open one, and a transaction snapshot is never shared.
     --
-    -- A resolving tx must read all prior txs whether DURABLE or merely STAGED,
-    -- plus its own uncommitted writes. So each TableSnapshot layers, bottom to
-    -- top: the durable live segment ⊕ the staged segments (the resolver's StagedTxTables
-    -- for this table, oldest→newest) ⊕ the tx's own segment.
+    -- A resolving transaction must read all prior transactions whether DURABLE or merely STAGED, plus its own uncommitted writes.
+    -- So each TableSnapshot layers, bottom to top: the durable rows, the staged transactions' rows oldest first, and the transaction's own.
     when: OpenSnapshot(tx)
 
     requires: tx.status = active
 
     ensures:
-        let snap = Snapshot.created(basis_tx: tx.tx_key, ref_count: 1)
+        let snap = Snapshot.created(basis_tx: tx.tx_key)
         let resolver = tx.resolver
 
-        -- One TableSnapshot per table touched by the tx: durable live segment
-        -- from the existing LiveTable (if any), the staged segments for the
-        -- table (the resolver's StagedTxTables oldest→newest), and the tx segment
-        -- from this OpenTx.
+        -- One TableSnapshot per table the transaction touched.
         for table_tx in tx.table_txs:
             let live_seg = if table_tx.live_table != null: MemorySegment.for(table_tx.live_table) else: null
             let tx_seg = if table_tx.rows.count > 0: MemorySegment.for(table_tx) else: null
@@ -866,8 +613,7 @@ rule OpenTransactionSnapshot {
                 tx_segment: tx_seg
             )
 
-        -- Plus the remaining live tables the tx hasn't touched: durable live
-        -- segment plus any staged segments for the table, no tx segment.
+        -- Plus the remaining live tables it hasn't touched: durable rows and any staged rows, no transaction rows.
         for table in tx.index.tables
                 where not tx.table_txs.any(tt => tt.table_ref = table.table_ref):
             TableSnapshot.created(
@@ -882,24 +628,16 @@ rule OpenTransactionSnapshot {
 }
 
 rule RefreshSharedSnapshot {
-    -- The rebuild PRIMITIVE for the shared external snapshot. NOT triggered by
-    -- apply or NextBlock (the cache is advanced lazily). It is invoked by
-    -- OpenExternalSnapshot when the cached snapshot is too stale for the
-    -- requested basis, and out-of-band by compaction (which mutates the
-    -- trie-catalog without advancing latest_completed_tx). The index atomically
-    -- swaps its shared snapshot for a freshly-built one reflecting the current
-    -- durable state, and releases its own retention on the previous shared
-    -- snapshot. Readers already holding the previous shared snapshot retain it
-    -- independently.
+    -- The rebuild primitive for the shared external snapshot.
+    -- NOT triggered by apply or NextBlock — the cache is advanced lazily.
+    -- It is invoked by OpenExternalSnapshot where the cache is too stale for the requested basis, and out of band by compaction, which changes the trie catalog without advancing the durable head.
+    -- Readers already holding the previous shared snapshot keep it, and it stays valid for as long as they do.
     when: RefreshSharedSnapshot(index)
 
     ensures:
-        let old_snap = index.shared_snap
         let new_snap = Snapshot.created(
-            -- DURABLE basis: the external snapshot sees only durably-replicated
-            -- txs, never the resolver's RESOLVED head (staged, not yet applied).
-            basis_tx: index.latest_completed_tx,
-            ref_count: 1   -- the index's own retention on the shared snap
+            -- DURABLE basis: an external snapshot sees only durably-replicated transactions, never the RESOLVED head.
+            basis_tx: index.latest_completed_tx
         )
         for table in index.tables:
             TableSnapshot.created(
@@ -911,9 +649,6 @@ rule RefreshSharedSnapshot {
                 tx_segment: null
             )
         index.shared_snap = new_snap
-        -- Decrement the index's retention on the old shared snap; it is
-        -- freed once no external readers are still holding it.
-        old_snap.ref_count = old_snap.ref_count - 1
 }
 
 ------------------------------------------------------------
@@ -921,67 +656,34 @@ rule RefreshSharedSnapshot {
 ------------------------------------------------------------
 
 rule CutBlock {
-    -- The RESOLVER cuts a block off its resolve-side row gauge (rows_since_block):
-    -- when the gauge crosses rows_per_block after staging a tx, it injects a
-    -- BlockBoundary (in resolution order, via the append pump — a plain, term-stamped
-    -- append) and PAUSES resolution. The boundary lands after this block's txs and
-    -- before the next block's. Resolution stays paused (the source-log, ext-source and
-    -- GC arms are excluded from the select) until the boundary is read back and its
-    -- block uploaded, so the follower's bounded pending-block buffer can't overflow.
-    -- The gauge is reset to 0. See the header "Block cut".
+    -- The RESOLVER cuts a block off its resolve-side row gauge: when the gauge crosses rows_per_block after staging a transaction, it injects a boundary and PAUSES resolution.
+    -- The boundary is injected in resolution order, so it lands after this block's transactions and before the next block's.
+    -- Resolution stays paused until the block is adopted, so the buffer of messages held behind the open block cannot overflow.
+    -- The gauge resets. See the header "Block cut".
     when: CutBlock(index, block_idx, latest_processed_msg_id)
 
     ensures: BlockBoundaryAppended(index, block_idx, latest_processed_msg_id)
 }
 
 rule FinishBlock {
-    -- Triggered on consume-back when the leader reads its own BlockBoundary back at
-    -- its own term (or, on a follower/transition, when it reads a durable boundary).
-    -- The live index now holds exactly this block's txs (by log order), so its durable
-    -- contents are written to block storage, then a BlockUploaded is appended (which,
-    -- read back, resumes any resolution paused by CutBlock). Rows remain in memory
-    -- until NextBlock.
+    -- Triggered when the boundary is read back: by the leader at its own term, or by a follower reading a durable one.
+    -- By log order the live index now holds exactly this block's transactions, so its durable contents are written to block storage.
+    -- Rows remain in memory until NextBlock.
     --
-    -- Because resolution paused at the boundary and stays paused until this upload is read
-    -- back, nothing was staged-and-applied between the boundary and here — a durable L0
-    -- block never contains rows from a later block.
+    -- Because resolution paused at the boundary and stays paused until the block is adopted, nothing was staged and applied in between — so a durable L0 block never contains rows from a later block.
     when: FinishBlock(index, block_idx)
 
-    -- Writes current (durable) live table contents to block storage.
     ensures: BlockWritten(index, block_idx)
-}
-
-rule CloseResolver {
-    -- Leader → follower demotion (and teardown) closes the resolver — the leader owns it
-    -- and does this in its own close. Phase 1 cancels-and-joins the resolver + pump
-    -- coroutine tree (so nothing live still touches the queue) and, on resolver exit,
-    -- fails the pending durability handles (FailPendingHandles) BEFORE the channels
-    -- close, so no executeTx caller waits forever. Phase 2 (this) closes the resolver
-    -- synchronously, once its persister coroutine is joined: it frees the queue — any
-    -- un-applied staged txs' buffers — and then its own allocator. Any staged-but-not-
-    -- yet-applied txs are discarded (they were never visible to external queries) and
-    -- will be re-read from the source log and re-resolved by the next leader. The
-    -- durable LiveIndex is untouched. See log-processor-lifecycle.allium.
-    --
-    -- The FAIL-PENDING leg does NOT happen here — the handles are already failed at
-    -- resolver exit (phase 1). This rule only reclaims the buffers.
-    when: CloseResolver(resolver)
-
-    ensures:
-        for staged_tx in resolver.staged:
-            not exists staged_tx
-        not exists resolver
 }
 
 rule NextBlock {
     when: NextBlock(index)
 
-    -- Remove all live tables (their data is now in block storage)
-    -- Tables will be recreated on demand by future transactions
+    -- Remove all live tables; their data is now in block storage.
+    -- Tables are recreated on demand by future transactions.
     ensures: index.tables = {}
 
-    -- The shared snapshot is NOT refreshed here. A subsequent reader whose basis
-    -- the (now stale) cache still satisfies may reuse it: its sliced segments are
-    -- independent of the cleared tables and remain valid. A reader demanding a
-    -- newer basis rebuilds the cache (see OpenExternalSnapshot).
+    -- The shared snapshot is NOT refreshed here.
+    -- A subsequent reader whose basis the now-stale cache still satisfies may reuse it: its segments are frozen, independent of the cleared tables, and remain valid.
+    -- A reader demanding a newer basis rebuilds the cache.
 }
