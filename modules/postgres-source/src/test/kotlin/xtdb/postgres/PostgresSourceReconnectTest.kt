@@ -6,8 +6,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
@@ -74,7 +76,7 @@ class PostgresSourceReconnectTest {
      * Cancels the assignment from inside an idle poll, and returns rather than throwing — so the poll loop
      * leaves through its own condition, which is the only exit no exception passes through.
      */
-    private class StandDownStream(private val standDown: Job) : PostgresDriver.ChangeStream {
+    private class StandDownStream(private val standDown: CoroutineScope) : PostgresDriver.ChangeStream {
         override val walEnd get() = 0L
         override suspend fun acknowledge(lsn: Long) = Unit
         override fun close() = Unit
@@ -251,13 +253,13 @@ class PostgresSourceReconnectTest {
      * and the outcome is reported out through a deferred that isn't the cancelled coroutine's child.
      */
     private suspend fun CoroutineScope.standDownRacing(failure: () -> Nothing): Pair<Throwable?, List<Long>> {
-        val standDown = Job()
+        val standDown = CoroutineScope(currentCoroutineContext() + Job())
         val outcome = CompletableDeferred<Throwable?>()
 
         val driver = RecordingDriver(ArrayDeque(listOf(DyingStream(ArrayDeque()) { standDown.cancel(); failure() })))
 
         openSource(driver).use { source ->
-            launch(standDown) {
+            standDown.launch {
                 outcome.complete(
                     runCatching { source.onPartitionAssigned(0, resumeToken, StubIndexer) }.exceptionOrNull()
                 )
@@ -287,13 +289,13 @@ class PostgresSourceReconnectTest {
 
     @Test
     fun `a stand-down between polls cancels rather than reopening`() = runTest {
-        val standDown = Job()
+        val standDown = CoroutineScope(currentCoroutineContext() + Job())
         val outcome = CompletableDeferred<Throwable?>()
 
         val driver = RecordingDriver(ArrayDeque(listOf(StandDownStream(standDown))))
 
         openSource(driver).use { source ->
-            launch(standDown) {
+            standDown.launch {
                 outcome.complete(
                     runCatching { source.onPartitionAssigned(0, resumeToken, StubIndexer) }.exceptionOrNull()
                 )
