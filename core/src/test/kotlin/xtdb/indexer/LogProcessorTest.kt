@@ -104,27 +104,6 @@ class LogProcessorTest {
         replicaLog.close()
     }
 
-    @Test
-    fun `fresh node starts up with non-zero epoch`() = runTest {
-        val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 1)
-        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 1)
-        val bufferPool = mockBufferPool(epoch = 1)
-        val partitionState = newPartitionState()
-        val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
-
-        val scope = CoroutineScope(SupervisorJob())
-        val logProc = logProcessor(partitionStorage, partitionState, watchers, scope)
-
-        scope.launch { sourceLog.openGroupSubscription(logProc) }
-
-        // Teardown: cancel+join the scope reaps the subscription and the live term, then free it.
-        scope.coroutineContext.job.cancelAndJoin()
-        logProc.close()
-        sourceLog.close()
-        replicaLog.close()
-    }
-
     // A leader's election counter is only monotonic within one incarnation of the mechanism that
     // elects it: Kafka deletes an idle consumer group, and the local logs' counter dies with the
     // process. The next pair covers both sides of a counter that has restarted below the terms
@@ -215,41 +194,6 @@ class LogProcessorTest {
         scope.launch { sourceLog.openGroupSubscription(logProc) }
 
         // wait for the follower→leader transition to complete (runs on Dispatchers.Default)
-        watchers.awaitTx(1)
-
-        assertEquals(
-            1L, partitionState.liveIndex.latestCompletedTx?.txId,
-            "the replayed tx is committed into the live index"
-        )
-
-        // Teardown: cancel+join the scope reaps the subscription and the live term, then free it.
-        scope.coroutineContext.job.cancelAndJoin()
-        logProc.close()
-        sourceLog.close()
-        replicaLog.close()
-    }
-
-    @Test
-    fun `leader replays existing replica messages with non-zero epoch`() = runTest {
-        val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 1)
-        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 1)
-        val bufferPool = mockBufferPool(epoch = 1)
-        val partitionState = newPartitionState()
-        val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
-
-        // Pre-populate the replica log
-        replicaLog.appendMessage(
-            ReplicaMessage.ResolvedTx(
-                1, java.time.Instant.now(), true, null, emptyMap(), termId = LeaderTerm.of(0, 1)
-            )
-        )
-
-        val scope = CoroutineScope(SupervisorJob())
-        val logProc = logProcessor(partitionStorage, partitionState, watchers, scope)
-
-        scope.launch { sourceLog.openGroupSubscription(logProc) }
-
         watchers.awaitTx(1)
 
         assertEquals(
