@@ -114,10 +114,7 @@ internal class ExternalSourceProcessor(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
-                // A supersession reaches here raw, where every other term-teardown cause is re-cast by
-                // `asCancellation` and caught above: it says this node has resigned, not that the database
-                // has failed, so it is a shutdown signal in everything but type.
-                if (!e.isShutdownSignal && e !is LeaderSupersededException) watchers.notifyError(e)
+                if (!e.isShutdownSignal) watchers.notifyError(e)
             }
 
             // The adapter finishing ends the source, not the term: the term goes on serving the source log,

@@ -25,22 +25,9 @@ import xtdb.database.PartitionStorage
 import xtdb.trie.addTries
 import xtdb.types.MessageId
 import xtdb.util.StringUtil.asLexHex
-import xtdb.util.debug
-import xtdb.util.error
-import xtdb.util.info
-import xtdb.util.logger
 import xtdb.util.useAll
 import java.time.Duration
 import java.time.InstantSource
-
-/**
- * A higher-term record read back on our own replica log: a newer leader has superseded us. Thrown from
- * the apply loop to fail the term cleanly (not a query-facing fault, so it doesn't poison the watchers);
- * the transport re-follows on the next rebalance. See #5817.
- */
-internal class LeaderSupersededException(message: String) : RuntimeException(message)
-
-private val LOG = LeaderLogProcessor::class.logger
 
 internal class LeaderLogProcessor(
     private val al: BufferAllocator,
@@ -54,12 +41,11 @@ internal class LeaderLogProcessor(
     private val watchers: Watchers,
 
     private val replicaAppender: ReplicaLogAppender,
-    private val termFence: TermFence,
 
     extSource: ExternalSource?,
     skipTxs: Set<MessageId>,
     private val dbCatalog: Database.Catalog?,
-    private val leaderTerm: Long = 0,
+    val leaderTerm: Long = 0,
     instantSource: InstantSource = InstantSource.system(),
     flushTimeout: Duration,
     ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
@@ -156,14 +142,6 @@ internal class LeaderLogProcessor(
     }
 
     suspend fun applyReplicaMessage(record: Log.Record<ReplicaMessage>) {
-        val msgTermId = record.message.termId
-
-        if (msgTermId > leaderTerm)
-            throw LeaderSupersededException("[$dbName] superseded: read term $msgTermId > our term $leaderTerm at ${record.msgId}")
-
-        // Ahead of the fence, as the follower does: a record held behind an open block has not been acted
-        // on, so folding it here would move the high-water past the term that cut the boundary — and the
-        // upload closing the block, written by that same term, would then be fenced away.
         blockCutter.pendingBlock?.let { pending ->
             val msg = record.message
 
@@ -180,73 +158,63 @@ internal class LeaderLogProcessor(
             return
         }
 
-        // Our own claim folded before this term opened, so the fence's high-water is
-        // our term and anything it refuses is below ours — which shouldn't appear
-        // past our replay target anyway. The fold has to happen here whatever the
-        // verdict, or the high-water would stand still for the length of the term.
-        if (!termFence.admit(msgTermId)) {
-            LOG.debug { "[$dbName] leader: discarding fenced record ${record.msgId} (term $msgTermId < $leaderTerm)" }
-        } else {
-            when (val msg = record.message) {
-                is ReplicaMessage.ResolvedTx -> {
-                    // Ahead of the tx itself, so a caller that submitted an attach can use the database as
-                    // soon as its transaction returns — and once, whichever way the tx below is applied.
-                    // Nothing to guard on `committed`: a refused dbOp resolves to an abort carrying no dbOp.
-                    applyDbOp(msg.dbOp)
+        when (val msg = record.message) {
+            is ReplicaMessage.ResolvedTx -> {
+                // Ahead of the tx itself, so a caller that submitted an attach can use the database as
+                // soon as its transaction returns — and once, whichever way the tx below is applied.
+                // Nothing to guard on `committed`: a refused dbOp resolves to an abort carrying no dbOp.
+                applyDbOp(msg.dbOp)
 
-                    txResolver.removeHead(msg.txId).use { tx ->
-                        if (tx != null) {
-                            applyResolvedTx(tx)
-                        } else {
-                            applyResolvedTx(msg)
-                        }
+                txResolver.removeHead(msg.txId).use { tx ->
+                    if (tx != null) {
+                        applyResolvedTx(tx)
+                    } else {
+                        applyResolvedTx(msg)
                     }
                 }
-
-                is ReplicaMessage.TriesAdded -> {
-                    if (msg.storageVersion == Storage.VERSION && msg.storageEpoch == bufferPool.epoch)
-                        trieCatalog.addTries(msg.tries, record.logTimestamp)
-
-                    // Below the guard, not above it: the compactor awaits this watermark and then
-                    // recalculates jobs off the catalog, so notifying first would have it re-select the
-                    // job it has just published.
-                    watchers.notifyApplied(msg.sourceMsgId)
-                }
-
-                is BlockBoundary -> {
-                    // Produce only: the catalog refresh, the index roll, the source watermark and the
-                    // resolution resume all wait for the `BlockUploaded` this appends to come back.
-                    blockCutter.upload(PendingBlock(record.msgId, msg))
-                }
-
-                // Two terms can produce one block index: a promoting follower still holding the boundary
-                // produces that block itself, and `closes` matches on index, version and epoch rather
-                // than on term, so a role adopts on whichever upload reaches it first and the loser
-                // arrives here. Stale by the test every other reader applies — only an index the catalog
-                // has not reached is left unexplained.
-                is ReplicaMessage.BlockUploaded ->
-                    if (msg.blockIndex > (tableCatalog.currentBlockIndex ?: -1))
-                        error(
-                            "[$dbName] BlockUploaded b${msg.blockIndex.asLexHex} at ${record.msgId} " +
-                                    "with no block in flight"
-                        )
-
-                is ReplicaMessage.NoOp -> watchers.notifyApplied(msg.srcMsgId)
-
-                is ReplicaMessage.TriesDeleted -> gc.triesDeleted(msg)
-
-                is ReplicaMessage.OversizedMessage -> error(
-                    "[$dbName] OversizedMessage at ${record.msgId} reached apply unresolved (payload=${msg.path})"
-                )
             }
+
+            is ReplicaMessage.TriesAdded -> {
+                if (msg.storageVersion == Storage.VERSION && msg.storageEpoch == bufferPool.epoch)
+                    trieCatalog.addTries(msg.tries, record.logTimestamp)
+
+                // Below the guard, not above it: the compactor awaits this watermark and then
+                // recalculates jobs off the catalog, so notifying first would have it re-select the
+                // job it has just published.
+                watchers.notifyApplied(msg.sourceMsgId)
+            }
+
+            is BlockBoundary -> {
+                // Produce only: the catalog refresh, the index roll, the source watermark and the
+                // resolution resume all wait for the `BlockUploaded` this appends to come back.
+                blockCutter.upload(PendingBlock(record.msgId, msg))
+            }
+
+            // Unreachable: this term's own upload is matched against the block it holds, a lower term's
+            // is fenced, and a higher term's resigns the term before it gets here.
+            is ReplicaMessage.BlockUploaded ->
+                error(
+                    "[$dbName] BlockUploaded b${msg.blockIndex.asLexHex} at ${record.msgId} " +
+                            "reached apply with no block in flight"
+                )
+
+            is ReplicaMessage.NoOp -> watchers.notifyApplied(msg.srcMsgId)
+
+            is ReplicaMessage.TriesDeleted -> gc.triesDeleted(msg)
+
+            is ReplicaMessage.OversizedMessage -> error(
+                "[$dbName] OversizedMessage at ${record.msgId} reached apply unresolved (payload=${msg.path})"
+            )
         }
     }
 
     // ---- resolution ----
 
     /**
-     * Run the term until it ends, fail everything staged on it, and raise what ended it — a
-     * [LeaderSupersededException] where a newer term took over, otherwise the fault that stopped it.
+     * Run the term until it ends, fail everything staged on it, and raise the fault that stopped it.
+     *
+     * A resignation is not among those faults: it arrives as a cancellation of this term's job, from the
+     * replica tail that read the superseding record.
      */
     suspend fun runTerm(replicaMsgs: ReceiveChannel<ReplicaApply>) {
         coroutineScope {

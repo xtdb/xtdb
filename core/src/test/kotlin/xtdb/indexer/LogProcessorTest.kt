@@ -10,11 +10,9 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.assertDoesNotThrow
 import org.junit.jupiter.api.assertThrows
 import xtdb.api.IndexerConfig
 import xtdb.block.proto.block
-import xtdb.api.error.Conflict
 import org.junit.jupiter.api.Timeout
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.NodeBase
@@ -22,6 +20,9 @@ import xtdb.NodeBase.Companion.openBase
 import xtdb.api.log.*
 import xtdb.SimulationTestUtils.Companion.createTrieCatalog
 import xtdb.api.storage.Storage
+import xtdb.api.tx.ExternalSource
+import xtdb.api.tx.ExternalSourceToken
+import xtdb.api.tx.TxIndexer
 import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
 import xtdb.database.DatabaseLogs
@@ -74,11 +75,12 @@ class LogProcessorTest {
         partitionState: PartitionState,
         watchers: Watchers,
         scope: CoroutineScope,
+        externalSource: ExternalSource? = null,
     ) = LogProcessor(
         allocator, nodeBase, mockk(relaxed = true),
         partitionStorage, partitionState, "test-db", watchers,
         mockk<Compactor.ForDatabase>(relaxed = true), dbCatalog = null,
-        externalSource = null,
+        externalSource = externalSource,
         scope = scope,
         flushTimeout = IndexerConfig().flushDuration,
     )
@@ -126,7 +128,7 @@ class LogProcessorTest {
 
         // ...so the fresh counter's first term, 0.1, is one every reader would discard
         val subscription = scope.async { sourceLog.openGroupSubscription(logProc) }
-        val e = assertThrows<Conflict> { subscription.await() }
+        val e = assertThrows<LeaderSupersededException> { subscription.await() }
         assertTrue(
             e.message!!.contains("termEpoch"),
             "the refusal names the knob that fixes it, was: ${e.message}"
@@ -232,7 +234,7 @@ class LogProcessorTest {
             "the demote does not lower what the log has been seen to reach"
         )
 
-        assertThrows<Conflict> { logProc.transitionToLeader(0, LeaderTerm.of(0, 5)).await() }
+        assertThrows<LeaderSupersededException> { logProc.transitionToLeader(0, LeaderTerm.of(0, 5)).await() }
 
         scope.coroutineContext.job.cancelAndJoin()
         logProc.close()
@@ -241,24 +243,27 @@ class LogProcessorTest {
     }
 
     @Test
-    fun `refuses a leader term the persisted boundary has moved past`() = runTest {
+    fun `a leader term below the persisted boundary is refused, one at it is not`() = runTest {
         val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0)
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val bufferPool = mockBufferPool()
 
-        // the election counter is back to 1 — a Kafka group deleted while the cluster was down, or a
-        // local log's process restarting — while the last block was cut at 9
-        val partitionState = newPartitionState(boundaryTermId = LeaderTerm.of(0, 9))
+        // nothing on the replica log, so the last block is the only thing that says where the log got to
+        val boundary = LeaderTerm.of(0, 9)
+        val partitionState = newPartitionState(boundaryTermId = boundary)
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         val scope = CoroutineScope(SupervisorJob())
         val logProc = logProcessor(partitionStorage, partitionState, watchers, scope)
 
-        assertThrows<Conflict> { logProc.termFence.checkUnfenced(LeaderTerm.of(0, 1)) }
-        assertDoesNotThrow("bumping the term epoch clears the regression") {
-            logProc.termFence.checkUnfenced(LeaderTerm.of(1, 1))
+        assertThrows<LeaderSupersededException> {
+            logProc.transitionToLeader(0, LeaderTerm.of(0, 8)).await()
         }
+
+        // The claim is read back before it is checked, so by then the high-water IS the claim — an
+        // equal term has to pass, or no promotion would ever get through.
+        logProc.transitionToLeader(0, boundary).await()
 
         scope.coroutineContext.job.cancelAndJoin()
         logProc.close()
@@ -298,7 +303,7 @@ class LogProcessorTest {
     }
 
     @Test
-    fun `a block closes even once the fence has moved past the term that cut it`() = runTest {
+    fun `a block stays open on an upload from a term the fence has moved past`() = runTest {
         val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0)
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val bufferPool = mockBufferPool()
@@ -312,23 +317,31 @@ class LogProcessorTest {
         val logProc = logProcessor(partitionStorage, partitionState, watchers, scope)
 
         val cutter = LeaderTerm.of(0, 4)
+        val successor = LeaderTerm.of(0, 5)
         replicaLog.appendMessage(ReplicaMessage.BlockBoundary(0, 0, termId = cutter))
         // a claim landing between the boundary and its upload is what moves the fence past `cutter`,
         // and under self-election it lands there routinely
-        replicaLog.appendMessage(ReplicaMessage.NoOp(termId = LeaderTerm.of(0, 5)))
-        val uploaded = replicaLog.appendMessage(
+        replicaLog.appendMessage(ReplicaMessage.NoOp(termId = successor))
+        val staleUpload = replicaLog.appendMessage(
             ReplicaMessage.BlockUploaded(Storage.VERSION, 0, 0, 0, emptyList(), termId = cutter)
         )
 
-        logProc.awaitReplicaMsg(uploaded.msgId)
+        logProc.awaitReplicaMsg(staleUpload.msgId)
+
+        assertNull(
+            partitionState.tableCatalog.currentBlockIndex,
+            "the superseded term's upload is discarded like any other record it wrote"
+        )
+
+        val reUpload = replicaLog.appendMessage(
+            ReplicaMessage.BlockUploaded(Storage.VERSION, 0, 0, 0, emptyList(), termId = successor)
+        )
+
+        logProc.awaitReplicaMsg(reUpload.msgId)
 
         assertEquals(
             0L, partitionState.tableCatalog.currentBlockIndex,
-            "b0 is closed, so the follower is no longer buffering behind it"
-        )
-        assertEquals(
-            LeaderTerm.of(0, 5), logProc.termFence.highestSeen,
-            "the claim it held back still folded, so every reader agrees on what the log has reached"
+            "b0 closes on the successor re-uploading it, so the follower stops buffering behind it"
         )
 
         scope.coroutineContext.job.cancelAndJoin()
@@ -349,11 +362,11 @@ class LogProcessorTest {
         val scope = CoroutineScope(SupervisorJob())
         val logProc = logProcessor(partitionStorage, partitionState, watchers, scope)
 
-        // the leader that cut b0 died before uploading it, so the follower is still holding the block —
-        // and the tx behind it, unfolded. That tx carries the boundary's own source position: the block
-        // cut pauses resolution, so nothing the leader resolves can land between a boundary and its
-        // upload, and a held record that moved the source watermark on would walk it backwards when the
-        // upload is read back at the boundary's position.
+        // the leader that cut b0 died before uploading it, so the follower is still holding the block and
+        // the tx behind it. That tx carries the boundary's own source position: the block cut pauses
+        // resolution, so nothing the leader resolves can land between a boundary and its upload, and a
+        // held record that moved the source watermark on would walk it backwards when the upload is read
+        // back at the boundary's position.
         val cutter = LeaderTerm.of(0, 4)
         replicaLog.appendMessage(ReplicaMessage.BlockBoundary(0, 1, termId = cutter))
         replicaLog.appendMessage(
@@ -373,8 +386,57 @@ class LogProcessorTest {
         )
         assertEquals(
             incoming, logProc.termFence.highestSeen,
-            "the held records folded on replay, up to this leader's own claim"
+            "every record folded as it arrived, up to this leader's own claim"
         )
+
+        scope.coroutineContext.job.cancelAndJoin()
+        logProc.close()
+        sourceLog.close()
+        replicaLog.close()
+    }
+
+    @Test
+    fun `a live leader resigns when the tail reads back a higher term`() = runTest {
+        val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0)
+        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
+        val bufferPool = mockBufferPool()
+        val partitionState = newPartitionState()
+        val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+
+        // The term's teardown is what this source observes, so its `finally` is the handle on the
+        // resignation — a leader that is merely fenced from applying would leave it running.
+        val stoodDown = CompletableDeferred<Unit>()
+        val extSource = object : ExternalSource {
+            override suspend fun onPartitionAssigned(
+                partition: Int, afterToken: ExternalSourceToken?, txIndexer: TxIndexer
+            ) {
+                try {
+                    txIndexer.executeTx(null) { TxIndexer.TxResult.Committed() }
+                    awaitCancellation()
+                } finally {
+                    stoodDown.complete(Unit)
+                }
+            }
+
+            override fun close() {}
+        }
+
+        val scope = CoroutineScope(SupervisorJob())
+        val logProc = logProcessor(partitionStorage, partitionState, watchers, scope, extSource)
+
+        logProc.transitionToLeader(0, LeaderTerm.of(0, 5)).await()
+        watchers.awaitTx(0)
+
+        replicaLog.appendMessage(ReplicaMessage.NoOp(termId = LeaderTerm.of(0, 9)))
+
+        stoodDown.await()
+
+        assertEquals(
+            LeaderTerm.of(0, 9), logProc.termFence.highestSeen,
+            "the record that demoted this term is folded and then applied, by the follower replacing it"
+        )
+        assertNull(watchers.exception, "being superseded is not an ingestion fault")
 
         scope.coroutineContext.job.cancelAndJoin()
         logProc.close()
@@ -394,8 +456,8 @@ class LogProcessorTest {
         val scope = CoroutineScope(SupervisorJob())
         val logProc = logProcessor(partitionStorage, partitionState, watchers, scope)
 
-        // b0 stays open, so everything after it is held and the fence stays at the boundary's term —
-        // which is what lets the claim below pass its own unfenced check
+        // b0 stays open, so the term-9 claim is held rather than applied — but it folds on arrival all
+        // the same, which is what the claim below is refused against
         replicaLog.appendMessage(ReplicaMessage.BlockBoundary(0, 0, termId = LeaderTerm.of(0, 4)))
         replicaLog.appendMessage(ReplicaMessage.NoOp(termId = LeaderTerm.of(0, 9)))
 
@@ -408,8 +470,8 @@ class LogProcessorTest {
             "being superseded is not an ingestion fault, so the database stays queryable"
         )
         assertEquals(
-            LeaderTerm.of(0, 4), logProc.termFence.highestSeen,
-            "the held records were never folded, so nothing was applied at the superseding term either"
+            LeaderTerm.of(0, 9), logProc.termFence.highestSeen,
+            "the claim folded where it arrived, behind the open block, which is what refused the promotion"
         )
 
         scope.coroutineContext.job.cancelAndJoin()
@@ -455,27 +517,4 @@ class LogProcessorTest {
         replicaLog.close()
     }
 
-    @Test
-    fun `a term equal to the highest seen is unfenced, one below it is not`() = runTest {
-        val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0)
-        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
-        val bufferPool = mockBufferPool()
-        val partitionState = newPartitionState()
-        val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
-
-        val scope = CoroutineScope(SupervisorJob())
-        val logProc = logProcessor(partitionStorage, partitionState, watchers, scope)
-
-        logProc.termFence.admit(LeaderTerm.of(0, 9))
-
-        // a transition checks its own claim once it has been read back, so the max *is* the claim
-        assertDoesNotThrow { logProc.termFence.checkUnfenced(LeaderTerm.of(0, 9)) }
-        assertThrows<Conflict> { logProc.termFence.checkUnfenced(LeaderTerm.of(0, 8)) }
-
-        scope.coroutineContext.job.cancelAndJoin()
-        logProc.close()
-        sourceLog.close()
-        replicaLog.close()
-    }
 }

@@ -455,21 +455,20 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
-        // Gate our own append so this leader's tx never lands: the only record on the log will be the
-        // higher-term one injected below, so consume-back reaches it. Term fencing on read-back is the sole
-        // split-brain guard now the transactional producer is gone (#5817) — this exercises the resign path.
-        val gate = CompletableDeferred<Unit>() // never opened
+        // Never opened, so the tx below is still awaiting durability when the term ends.
+        val gate = CompletableDeferred<Unit>()
         val appendStarted = CompletableDeferred<Unit>()
 
+        val termJob = SupervisorJob(backgroundScope.coroutineContext.job)
         val lp = leaderProc(
             StandardTestDispatcher(testScheduler), replicaLog = replicaLog, watchers = watchers,
             leaderTerm = 1,
             wrapDriver = { gatedDriver(it, gate, appendStarted) },
+            termJob = termJob,
         )
 
-        // An executeTx staged and awaiting durability — the resignation must fail it, not hang it. Capture
-        // its failure via a launch + Deferred: a failing `async` would propagate to the (non-supervisor)
-        // backgroundScope and fail the test, so we don't await it directly.
+        // Capture the failure via a launch + Deferred: a failing `async` would propagate to the
+        // (non-supervisor) backgroundScope and fail the test, so we don't await it directly.
         val thrown = CompletableDeferred<Throwable>()
         backgroundScope.launch {
             thrown.complete(
@@ -479,16 +478,13 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
         }
         appendStarted.await()
 
-        // A newer leader (term 2) has written to our replica log. Injected straight onto the underlying log
-        // (past the gate), so consume-back reads it while our own term-1 append is still stalled.
-        replicaLog.appendMessage(ReplicaMessage.NoOp(termId = 2))
+        termJob.supersede()
 
-        // term 2 > our term 1 → we resign; the term tears down and fails everything staged.
+        // The ext source's poll thread awaits this, and anything but a cancellation reaching it unwinds
+        // into the Database scope's handler → notifyError. See SourceBatch.abandon.
         val e = thrown.await()
         assertTrue(e is CancellationException, "the staged executeTx is cancelled, got: $e")
 
-        // A clean resignation is expected, not a query fault: the watchers must not be poisoned — the
-        // transport re-follows on the next rebalance.
         assertNull(watchers.exception, "a clean resignation must not poison the watchers")
     }
 
@@ -503,9 +499,11 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
         val gate = CompletableDeferred<Unit>()
         val appendStarted = CompletableDeferred<Unit>()
 
+        val termJob = SupervisorJob(backgroundScope.coroutineContext.job)
         val lp = leaderProc(
             StandardTestDispatcher(testScheduler), replicaLog = replicaLog, watchers = watchers,
             leaderTerm = 1, wrapDriver = { gatedDriver(it, gate, appendStarted) },
+            termJob = termJob,
         )
 
         // Two batches, each standing in for the transport's poll thread awaiting `processRecords`.
@@ -525,14 +523,11 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
         val buffered = pollThread(1)        // sent while paused ⇒ buffered, received by nobody
         testScheduler.advanceUntilIdle()
 
-        // A newer leader writes at term 2 — injected past the gate, so consume-back reads it while paused
-        // (replicaMsgs is the one select arm the pause leaves open) and the leader resigns.
-        replicaLog.appendMessage(ReplicaMessage.NoOp(termId = 2))
+        termJob.supersede()
 
-        // Both must fail as CANCELLATION, not with the LeaderSupersededException. The poll thread awaits
-        // these, and a non-cancellation escaping processRecords unwinds openGroupSubscription into the
-        // Database scope's CoroutineExceptionHandler → notifyError, so a clean resignation would present to
-        // queries as a terminal failure. See SourceBatch.abandon.
+        // The poll thread awaits these, and a non-cancellation escaping processRecords unwinds
+        // openGroupSubscription into the Database scope's CoroutineExceptionHandler → notifyError, so a
+        // clean resignation would present to queries as a terminal failure. See SourceBatch.abandon.
         for ((name, handle) in listOf("paused" to paused, "buffered" to buffered))
             assertTrue(
                 handle.await() is CancellationException,

@@ -22,10 +22,6 @@ external entity Database {
 external entity FollowerTerm {
     -- A follower: consumes the replica log to build local queryable state.
     --
-    -- Reading the replica log belongs to the node rather than to the term: one read feeds whichever role is live, a follower building state and a leader confirming its own writes alike.
-    -- The position that read has reached is likewise the node's, so a role change continues from it rather than restarting.
-    replica_pos: MessageId
-
     -- A block is in flight on this node: a boundary read, and no confirmation of the block read back yet.
     -- Either the block is still to be produced, or a term produced it and ended before reading its own confirmation.
     mid_block: Boolean
@@ -38,11 +34,10 @@ external entity LeaderTerm {
     -- It pairs an operator-declared epoch with the elector's own election counter, packed so that the epoch dominates the ordering.
     -- The epoch is what keeps terms rising across a reset of the elector's counter, which is otherwise free to regress — see ClaimUnfenced.
     --
-    -- The fence is applied on CONSUME-BACK rather than at write time: reading back a record whose term exceeds this one means a newer leader has superseded us, and we resign.
+    -- The fence is applied on CONSUME-BACK rather than at write time: reading back a record whose term exceeds this one means a newer leader has superseded us, and this node is demoted where it reads it.
     -- So there is no fencing token and no write-time failure — the term stamp plus the consume-back check is the whole fence.
     --
     -- The highest term this node has seen is scoped to the database for the node's whole life rather than to a role: seeded once from the persisted block boundary, and monotonic from there.
-    -- Held per role it would be reseeded from that boundary at every role change, forgetting every term written since the last block flush — so the same term could be admitted twice, once either side of a demote.
     term: Integer
 
     -- The replica-log position this term claimed, and caught up to before taking the role.
@@ -129,7 +124,7 @@ contract LeaderElection {
     @invariant ExactlyOneConfirmedLeaderPerDatabase
         -- At most one leader's writes are ever CONFIRMED per database, enforced by the term fence on consume-back — Raft's ReadIndex, with no transactional append.
         -- Each leader stamps its replica writes with its own term.
-        -- A leader confirms — and so acknowledges — a write only when it reads that write back at its OWN term; reading back a HIGHER term means a newer leader has superseded it, so it resigns without confirming its outstanding writes.
+        -- A leader confirms — and so acknowledges — a write only when it reads that write back at its OWN term; reading back a HIGHER term means a newer leader has superseded it, so it is demoted without confirming its outstanding writes.
         -- Two nodes may therefore briefly both believe themselves leader and both append, but only the newer term's writes are ever confirmed, and the older leader's are discarded.
 
     @invariant StandingDownLeavesTheDatabaseReadable
@@ -162,6 +157,10 @@ contract LeaderElection {
 entity LogProcessor {
     -- One database's role on one node. Starts Following.
     database: Database
+
+    -- Reading the replica log belongs to the node rather than to either term: one read feeds whichever role is live, a follower building state and a leader confirming its own writes alike.
+    -- The position that read has reached is likewise the node's, so a role change continues from it rather than restarting — which is why it is held here and not on a term.
+    replica_pos: MessageId
 
     -- The role.
     --   following  -- holds a live follower term.
@@ -225,9 +224,8 @@ rule PromoteToLeader {
         FollowerStopped(follower_term: processor.follower_term)
 
         -- 5. Ask again whether the claim still stands, before anything is built or appended.
-        -- Step 3's answer goes stale: it is given while the follower is still live, and the follower raises the highest term seen until it stops.
-        -- The records held behind an open block are asked too, having been held rather than acted on and so counting towards that highest term at no point.
-        -- Either above this term refuses the claim, as step 3 does, and takes the same failure path.
+        -- Step 3's answer goes stale: it is given while the follower is still live, and the read goes on raising the highest term seen until that follower stops — over every record it admits, the ones it hands the follower to hold included.
+        -- A highest term above this one refuses the claim, as step 3 does, and takes the same failure path.
         ClaimStillUnfenced(follower_term: processor.follower_term, term: term)
 
         -- 6. Produce any dangling block.
@@ -262,10 +260,9 @@ rule RecoverFollowerOnFailedPromotion {
     requires: processor.state = following
 
     ensures:
-        -- Seeded from the follower position reached before it was stopped.
         -- It carries the dangling block forward, step 6's produce having run or not: either way the block is in flight and this node's catalog has not moved past it, so the re-opened follower is what closes it.
+        -- The read position is untouched: it is the node's, and nothing about a failed promotion moves it.
         processor.follower_term = FollowerTerm.created(
-            replica_pos: processor.follower_term.replica_pos,
             mid_block: processor.follower_term.mid_block
         )
         processor.state = following
@@ -282,11 +279,10 @@ rule DemoteLeader {
     requires: processor.state = leading
 
     ensures:
-        -- Re-open a follower seeded from the leader's replica position. The durable live index is untouched.
-        -- A block the term produced and did not adopt goes with it, so the follower closes it on a confirmation of that block, whichever term wrote it.
+        -- Re-open a follower. The durable live index is untouched, and so is the read position: the read spans the role change, so the follower continues from where the term left off rather than from anything the term claimed.
+        -- A block the term produced and did not adopt goes with it, so the follower closes it on a confirmation of that block that the fence admits.
         -- It is read once the term has ended, as step 6 reads the follower's: the term goes on applying records until then, and one of them may be that confirmation.
         processor.follower_term = FollowerTerm.created(
-            replica_pos: processor.leader_term.replay_target,
             mid_block: processor.leader_term.mid_block
         )
         processor.leader_term = null
