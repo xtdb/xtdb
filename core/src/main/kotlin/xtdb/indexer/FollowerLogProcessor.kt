@@ -177,7 +177,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
             }
 
             is ReplicaMessage.OversizedMessage -> error(
-                "OversizedMessage should be resolved by handleRecord, never reaching processRecord directly. msgId=${record.msgId}, payload=${msg.path}"
+                "OversizedMessage should be resolved by the replica tail, never reaching processRecord directly. msgId=${record.msgId}, payload=${msg.path}"
             )
         }
 
@@ -186,8 +186,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
     private fun ReplicaMessage.BlockUploaded.closes(pending: PendingBlock) =
         blockIndex == pending.blockIdx && storageVersion == Storage.VERSION && storageEpoch == bufferPool.epoch
 
-    fun handleRecord(polled: Log.Record<ReplicaMessage>) {
-        val record = bufferPool.resolveOversized(polled)
+    fun handleRecord(record: Log.Record<ReplicaMessage>) {
         val msg = record.message
         LOG.trace { "[$dbName] follower: message ${record.msgId} (${msg::class.simpleName})" }
 

@@ -104,6 +104,7 @@ class LogProcessor(
     }
 
     private val replicaLog = partitionStorage.replicaLog
+    private val bufferPool = partitionStorage.bufferPool
     private val hasExternalSource = externalSource != null
 
     val termFence = TermFence(dbName, partitionState.tableCatalogOrNull?.boundaryTermId ?: 0)
@@ -182,7 +183,9 @@ class LogProcessor(
 
         try {
             replicaLog.tailAll(tailPos.value.msgId) { recs ->
-                recs.forEach { record ->
+                recs.forEach { polled ->
+                    val record = bufferPool.resolveOversized(polled)
+
                     // A role ending cancels the handle mid-record, so the record is offered again to
                     // whatever replaces that role.
                     while (true) {

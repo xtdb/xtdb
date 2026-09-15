@@ -176,8 +176,7 @@ internal class LeaderLogProcessor(
         }
     }
 
-    suspend fun applyReplicaMessage(polled: Log.Record<ReplicaMessage>) {
-        val record = bufferPool.resolveOversized(polled)
+    suspend fun applyReplicaMessage(record: Log.Record<ReplicaMessage>) {
         val msgTermId = record.message.termId
 
         if (msgTermId > leaderTerm)
