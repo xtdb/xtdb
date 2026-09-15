@@ -62,6 +62,7 @@ class PostgresSourceFailoverTest : PostgresSourceTestBase() {
 
         val standby: GenericContainer<*> = GenericContainer(image)
             .withNetwork(network)
+            .withNetworkAliases("standby")
             .withEnv("HA_ROLE", "standby")
             .withEnv("HA_PRIMARY_HOST", "primary")
             .withEnv("HA_REPLICATION_USER", "testuser")
@@ -331,6 +332,90 @@ class PostgresSourceFailoverTest : PostgresSourceTestBase() {
                     "the source resumed cleanly against the promoted standby",
                 )
                 assertPrimaryDbHealthy(node)
+            }
+        }
+    }
+
+    /**
+     * The transition itself, which `a failover slot survives promotion` deliberately skips: that one closes
+     * the node while the old primary is still up and reopens against the standby, so the source is only ever
+     * *started* against the new primary. Here the connection dies underneath a running stream.
+     *
+     * The node reaches Postgres through a [PgProxy], which is what makes the recovery assertable: #5878 notes
+     * that a source pointed straight at the old primary's address retries into a hole, and only one pointed at
+     * an endpoint that follows the promotion lands on the new primary.
+     */
+    @Test
+    fun `a promotion under a running stream resumes against the new primary`() = runTest(timeout = 600.seconds) {
+        val slot = unique("xtdb_slot")
+        val pub = unique("xtdb_pub")
+        val logDir = Files.createTempDirectory("ha-log")
+        val storageDir = Files.createTempDirectory("ha-storage")
+        val cdcLog = Files.createTempDirectory("ha-cdc-log")
+        val cdcStorage = Files.createTempDirectory("ha-cdc-storage")
+
+        HaPair(haImage).use { ha ->
+            ha.start()
+
+            pgExecute(
+                ha.primary,
+                "CREATE TABLE widgets (_id INT PRIMARY KEY, name TEXT)",
+                "INSERT INTO widgets (_id, name) VALUES (1, 'snapshot-row')",
+                "CREATE PUBLICATION $pub FOR TABLE widgets",
+            )
+
+            eventually(60.seconds) {
+                assertEquals(
+                    listOf("t"), pgColumn(ha.standbyHost, ha.standbyPort, "SELECT pg_is_in_recovery()"),
+                    "standby is up and in recovery",
+                )
+            }
+
+            PgProxy(ha.network, "primary").use { proxy ->
+                openNode(logDir, storageDir, proxy.host, proxy.port).use { node ->
+                    attachCdc(node, "cdc", cdcLog, cdcStorage, slot, pub)
+                    awaitStreaming(node)
+
+                    pgExecute(ha.primary, "INSERT INTO widgets (_id, name) VALUES (2, 'streamed-row')")
+                    eventually(30.seconds) {
+                        assertTrue(
+                            xtQuery(node, "cdc", "SELECT _id FROM public.widgets WHERE _id = 2").isNotEmpty(),
+                            "streamed row mirrored",
+                        )
+                    }
+
+                    // consuming kept restart_lsn moving with the standby; a frozen slot can't be copied
+                    eventually(60.seconds) {
+                        assertEquals(listOf(slot), ha.syncSlots(), "slot copied to the standby")
+                    }
+
+                    // the node is left open, unlike the other cases here, so the loss lands under a
+                    // running poll loop — and it is the repoint, not the promotion, that lands it
+                    ha.promote()
+                    proxy.pointAt("standby")
+                    ha.primary.stop()
+
+                    assertEquals(
+                        listOf("f"), pgColumn(ha.standbyHost, ha.standbyPort, "SELECT pg_is_in_recovery()"),
+                        "the standby is the primary now",
+                    )
+
+                    pgExec(ha.standbyHost, ha.standbyPort, "INSERT INTO widgets (_id, name) VALUES (3, 'after-failover')")
+
+                    // inside the ~168s the seven backoffs take to exhaust
+                    eventually(150.seconds) {
+                        assertNull(
+                            (node as XtdbInternal).dbCatalog["cdc"]?.ingestionError,
+                            "a promotion under a running stream must not fail the database",
+                        )
+                        assertTrue(
+                            xtQuery(node, "cdc", "SELECT _id FROM public.widgets WHERE _id = 3").isNotEmpty(),
+                            "a row written to the promoted primary reaches XT",
+                        )
+                    }
+
+                    assertPrimaryDbHealthy(node)
+                }
             }
         }
     }
