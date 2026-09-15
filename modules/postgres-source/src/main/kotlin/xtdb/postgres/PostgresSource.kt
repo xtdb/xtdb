@@ -29,6 +29,7 @@ import xtdb.postgres.proto.postgresSourceToken
 import xtdb.postgres.PostgresSource.Assignment.Assigned
 import xtdb.postgres.PostgresSource.Assignment.Unassigned
 import xtdb.util.*
+import java.net.SocketException
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicReference
 import com.google.protobuf.Any as ProtoAny
@@ -208,6 +209,15 @@ class PostgresSource(
         }
     }
 
+    /**
+     * Whether this is our own teardown reported back at us: [closeOnCancel] force-closes the connection
+     * to unblock a parked pgjdbc read, which the read then reports as a broken socket.
+     *
+     * A genuine mid-stream death landing during a cancellation is swallowed here too.
+     */
+    private suspend fun PSQLException.isTeardownArtefact() =
+        cause is SocketException && !currentCoroutineContext().isActive
+
     override suspend fun onPartitionAssigned(
         partition: Int,
         afterToken: ExternalSourceToken?,
@@ -228,7 +238,7 @@ class PostgresSource(
 
         val assigned = Assigned().also { assignment.set(it) }
         try {
-            when {
+            val resumeLsn = when {
                 token != null && !token.snapshotCompleted ->
                     // > The snapshot is valid until a new command is executed on this connection or the replication connection is closed
                     // https://www.postgresql.org/docs/current/protocol-replication.html#PROTOCOL-REPLICATION-CREATE-REPLICATION-SLOT
@@ -239,27 +249,24 @@ class PostgresSource(
                         "xtdb.postgres/incomplete-snapshot",
                         mapOf("db-name" to dbName, "slot-name" to slotName),
                     )
-                token != null && token.snapshotCompleted -> {
-                    LOG.info("[$dbName] Resuming streaming from LSN ${LogSequenceNumber.valueOf(token.latestCommittedLsn)}")
-                    streamChanges(txIndexer, token.latestCommittedLsn, assigned)
-                }
+                token != null -> token.latestCommittedLsn
+                    .also { LOG.info("[$dbName] Resuming streaming from LSN ${LogSequenceNumber.valueOf(it)}") }
+
                 else -> {
                     LOG.info("[$dbName] Starting initial snapshot")
-                    val slotLsn = initialSnapshot(txIndexer)
-                    LOG.info("[$dbName] Snapshot complete, switching to streaming from LSN ${LogSequenceNumber.valueOf(slotLsn)}")
-                    streamChanges(txIndexer, slotLsn, assigned)
+                    initialSnapshot(txIndexer)
+                        .also { LOG.info("[$dbName] Snapshot complete, switching to streaming from LSN ${LogSequenceNumber.valueOf(it)}") }
                 }
             }
-        } catch (e: PSQLException) {
-            if (e.cause is java.net.SocketException && !currentCoroutineContext().isActive) {
+
+            streamChanges(txIndexer, resumeLsn, assigned)
+        } catch (e: Exception) {
+            if (e is PSQLException && e.isTeardownArtefact()) {
                 LOG.warn("[$dbName] Database connection failed when reading from copy (connection closed)")
             } else {
                 LOG.error(e, "[$dbName] External source failed")
                 throw e
             }
-        } catch (e: Exception) {
-            LOG.error(e, "[$dbName] External source failed")
-            throw e
         } finally {
             assignment.set(Unassigned)
         }
@@ -320,18 +327,18 @@ class PostgresSource(
     }
 
     private suspend fun streamChanges(txIndexer: TxIndexer, startLsn: Long, assigned: Assigned) {
-        driver.openStream(startLsn).use { stream ->
+        // Confirmation is specified in dev/doc/pgsrc.allium; the names below are its names.
+
+        // held_lsn — opens at startLsn per SourceOpensStream, not at nothing.
+        var heldLsn = startLsn
+
+        // Submitted to the indexer but not yet applied, in submission (= LSN) order. We submit ahead
+        // so back-to-back CDC txs pipeline through the double-buffered indexer; `submitTx`'s bounded
+        // hand-off buffer suspends us under backpressure, keeping this bounded.
+        val awaitingApply = ArrayDeque<Pair<PostgresDriver.Transaction, Deferred<TransactionResult>>>()
+
+        driver.openStream(heldLsn).use { stream ->
             assigned.streaming = true
-
-            // Transactions submitted to the indexer but not yet known durable, in submission (= LSN) order. We
-            // read + submit ahead of durability so back-to-back CDC txs pipeline through the double-buffered
-            // indexer; `submitTx`'s bounded hand-off buffer suspends us under backpressure, keeping this bounded.
-            val awaitingDurability = ArrayDeque<Pair<PostgresDriver.Transaction, Deferred<TransactionResult>>>()
-
-            // Confirmation is specified in dev/doc/pgsrc.allium; the names below are its names.
-
-            // held_lsn — opens at startLsn per SourceOpensStream, not at nothing.
-            var heldLsn = startLsn
 
             // A lower bound on slot.confirmed_lsn, per SourceConfirmsPosition's @guidance.
             var confirmedLsn = 0L
@@ -357,8 +364,8 @@ class PostgresSource(
             // loop. `await()` rethrows an ingest failure, which unwinds past `use` — ImportFailureTearsDownStream.
             // The metrics land here so a re-delivered tx isn't counted twice.
             suspend fun drainApplied() {
-                while (awaitingDurability.firstOrNull()?.second?.isCompleted == true) {
-                    val (tx, handle) = awaitingDurability.removeFirst()
+                while (awaitingApply.firstOrNull()?.second?.isCompleted == true) {
+                    val (tx, handle) = awaitingApply.removeFirst()
                     handle.await()
                     eventsCounter?.increment(tx.ops.size.toDouble())
                     commitsCounter?.increment()
@@ -377,8 +384,8 @@ class PostgresSource(
 
                     // SourceReceivesTransaction.
                     stream.poll()?.let { tx ->
-                        if (tx.lsn <= startLsn) {
-                            LOG.debug { "[$dbName] Skipping re-delivered tx at LSN ${LogSequenceNumber.valueOf(tx.lsn)} (<= resume LSN)" }
+                        if (tx.lsn <= heldLsn) {
+                            LOG.debug { "[$dbName] Skipping re-delivered tx at LSN ${LogSequenceNumber.valueOf(tx.lsn)} (<= held LSN)" }
                             return@let
                         }
 
@@ -391,7 +398,7 @@ class PostgresSource(
                             indexer.indexTx(tx, openTx)
                             TxResult.Committed()
                         }
-                        awaitingDurability.addLast(tx to handle)
+                        awaitingApply.addLast(tx to handle)
                         heldLsn = tx.lsn
                     }
 
