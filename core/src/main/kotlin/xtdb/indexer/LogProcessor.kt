@@ -34,6 +34,8 @@ private val LOG = LogProcessor::class.logger
 internal val Throwable.isShutdownSignal
     get() = this is CancellationException || this is InterruptedException || this is Interrupted
 
+internal class LeaderSupersededException(message: String) : RuntimeException(message)
+
 /**
  * Re-cast a term-teardown cause as a cancellation, preserving the original for the logs.
  *
@@ -107,7 +109,42 @@ class LogProcessor(
     private val bufferPool = partitionStorage.bufferPool
     private val hasExternalSource = externalSource != null
 
-    val termFence = TermFence(dbName, partitionState.tableCatalogOrNull?.boundaryTermId ?: 0)
+    /**
+     * The highest leader term seen on this partition's replica log.
+     *
+     * The partition's, not a role's. A role change opens a fresh follower, and a high-water seeded afresh
+     * from the persisted block boundary would forget every term written since the last block flush — so the
+     * same term could be admitted twice, once either side of a demote.
+     *
+     * Written by the tail coroutine, and by a transition while both roles are down; those don't race,
+     * because the transition holds the record the tail is waiting to hand on. Volatile because the
+     * transition reads it from its own coroutine.
+     */
+    @Volatile
+    internal var highestTermSeen: Long = partitionState.tableCatalogOrNull?.boundaryTermId ?: 0
+        private set
+
+    /**
+     * Refuse [term] where the log has already reached a higher one — every reader would discard what a
+     * leader at [term] wrote, so it must not take leadership.
+     *
+     * The same refusal covers both ways the log gets above a claim, because the fence cannot tell them
+     * apart and the operator needs the second named either way: a newer leader legitimately superseding
+     * this one, and the election counter regressing underneath it. Refusing costs liveness only, never
+     * safety, and it is a resignation rather than a fault — it MUST NOT reach the watchers, or a node that
+     * merely failed to lead would leave a healthy database unqueryable (#5817).
+     */
+    internal fun checkUnfenced(term: Long) {
+        val maxTerm = highestTermSeen
+        if (maxTerm > term)
+            throw LeaderSupersededException(
+                "[$dbName] leader term ${LeaderTerm.format(term)} is fenced by " +
+                        "${LeaderTerm.format(maxTerm)} on the replica log. Where the leader-election " +
+                        "counter has regressed rather than a newer leader having superseded this one " +
+                        "(a recreated Kafka consumer group, or a restarted local log), bump the log's " +
+                        "termEpoch above ${LeaderTerm.epochOf(maxTerm)}"
+            )
+    }
 
     private sealed interface TailPos {
         /** The last record the tail finished with, applied or discarded. */
@@ -142,7 +179,7 @@ class LogProcessor(
     // The role state machine — see allium/log-processor-lifecycle.allium.
     // Written by the transition coroutine and by demoteLeader; they don't race, because a revoke
     // cancel-and-joins the transition before demoteLeader reads it.
-    private sealed interface State: AutoCloseable {
+    private sealed interface State : AutoCloseable {
         val scope: CoroutineScope
 
         val job get() = scope.coroutineContext.job
@@ -151,6 +188,7 @@ class LogProcessor(
     }
 
     private class Following(val proc: FollowerLogProcessor, override val scope: CoroutineScope) : State {
+
         override suspend fun handleReplicaMessage(record: Log.Record<ReplicaMessage>) {
             scope.async { proc.handleRecord(record) }.await()
         }
@@ -162,7 +200,9 @@ class LogProcessor(
         val proc: LeaderLogProcessor,
         override val scope: CoroutineScope,
         private val replicaMsgs: SendChannel<ReplicaApply>,
+        val leaderTerm: Long,
     ) : State {
+
         override suspend fun handleReplicaMessage(record: Log.Record<ReplicaMessage>) {
             scope.async { replicaMsgs.applyAndAwait(record) }.await()
         }
@@ -178,40 +218,59 @@ class LogProcessor(
     // which under a simulation's virtual clock is a deadlock, the scheduler having nothing left to advance.
     private fun roleScope(job: Job) = scope + job
 
-    private suspend fun tailReplica() = coroutineScope {
+    private suspend fun applyReplicaMsg(polled: Log.Record<ReplicaMessage>, partition: Int) =
+        coroutineScope {
+            val record = bufferPool.resolveOversized(polled)
+            val msgTerm = record.message.termId
+
+            // Below the high-water: written by a leader the log has moved past, so every reader
+            // discards it. Guarding the apply rather than returning, because the consume position
+            // below advances for a discarded record too.
+            if (msgTerm >= highestTermSeen) {
+                highestTermSeen = msgTerm
+
+                // A role ending cancels the handle mid-record, so the record is offered again to
+                // whatever replaces that role — and the claim is tested inside the loop with it, so
+                // the record is judged against the term the role that takes it is leading.
+                while (true) {
+                    ensureActive()
+
+                    val role = state
+
+                    try {
+                        if (role is Leading && msgTerm > role.leaderTerm) {
+                            demoteLeader(partition)
+                            continue
+                        }
+
+                        role.handleReplicaMessage(record)
+
+                        break
+                    } catch (_: CancellationException) {
+                        stateFlow.first { it !== role }
+                    } catch (e: Throwable) {
+                        LOG.error(
+                            e,
+                            "[$dbName] failed to process replica record ${record.msgId} (${record.message::class.simpleName})"
+                        )
+                        throw e
+                    }
+                }
+            }
+
+            // Above the apply, this would advance past a record a role cancellation left
+            // unapplied, and that record would be skipped for good. A record the live role
+            // fenced or held advances it all the same, so a transition's catch-up can't hang
+            // waiting for one to be applied.
+            tailPos.value = Reading(record.msgId)
+        }
+
+    private suspend fun tailReplica(partition: Int) = coroutineScope {
         var stopCause: Throwable? = null
 
         try {
             replicaLog.tailAll(tailPos.value.msgId) { recs ->
-                recs.forEach { polled ->
-                    val record = bufferPool.resolveOversized(polled)
-
-                    // A role ending cancels the handle mid-record, so the record is offered again to
-                    // whatever replaces that role.
-                    while (true) {
-                        this@coroutineScope.ensureActive()
-                        val role = state
-
-                        try {
-                            role.handleReplicaMessage(record)
-                            break
-                        } catch (_: CancellationException) {
-                            stateFlow.first { it !== role }
-                        } catch (e: Throwable) {
-                            LOG.error(
-                                e,
-                                "[$dbName] failed to process replica record ${record.msgId} (${record.message::class.simpleName})"
-                            )
-                            throw e
-                        }
-                    }
-
-                    // Above the apply, this would advance past a record a role cancellation left
-                    // unapplied, and that record would be skipped for good. A record the live role
-                    // fenced or held advances it all the same, so a transition's catch-up can't hang
-                    // waiting for one to be applied.
-                    tailPos.value = Reading(record.msgId)
-                }
+                for (rec in recs) applyReplicaMsg(rec, partition)
             }
         } catch (e: Throwable) {
             stopCause = e
@@ -237,7 +296,7 @@ class LogProcessor(
 
         val proc = FollowerLogProcessor(
             allocator, partitionStorage.bufferPool, partitionState, dbName, compactor, watchers,
-            dbCatalog, pendingBlock, termFence,
+            dbCatalog, pendingBlock,
             hasExternalSource = hasExternalSource,
             meterRegistry = base.meterRegistry,
         )
@@ -276,7 +335,7 @@ class LogProcessor(
                 .register(reg)
         }
 
-        scope.launch(CoroutineName("$dbName-replica-tail")) { tailReplica() }
+        scope.launch(CoroutineName("$dbName-replica-tail")) { tailReplica(partition = 0) }
     }
 
     private suspend fun claimLeadership(termId: Long) {
@@ -290,7 +349,7 @@ class LogProcessor(
 
         // Our own claim is now read back, so the follower's max term is the log's — anything above
         // it fences us, and leading would index nothing. Refuse loudly instead (#5817).
-        termFence.checkUnfenced(termId)
+        checkUnfenced(termId)
     }
 
     override fun transitionToLeader(partition: Int, termId: Long): Deferred<TailSpec<SourceMessage>> {
@@ -335,7 +394,9 @@ class LogProcessor(
                         }
                     }
 
-                    checkNotSuperseded(termId, pendingBlock)
+                    // Asked again, because the claim's own check goes stale: that one runs while the
+                    // follower is still live, and the tail folds until the join above.
+                    checkUnfenced(termId)
 
                     val replicaAppender = ReplicaLogAppender(logsDriver)
 
@@ -349,7 +410,7 @@ class LogProcessor(
                     val proc = LeaderLogProcessor(
                         allocator, base, partitionStorage, crashLogger, partitionState, dbName, logsDriver,
                         blockCutter, watchers,
-                        replicaAppender, termFence,
+                        replicaAppender,
                         externalSource,
                         skipTxs, dbCatalog,
                         leaderTerm = termId,
@@ -379,20 +440,14 @@ class LogProcessor(
                         try {
                             proc.runTerm(replicaMsgs)
                         } catch (t: Throwable) {
-                            when {
-                                t is LeaderSupersededException -> {
-                                    LOG.info("[$dbName] ${t.message}")
-                                }
-
-                                !t.isShutdownSignal -> {
-                                    LOG.error(t) { "[$dbName] leader term failed" }
-                                    watchers.notifyError(t)
-                                }
+                            if (!t.isShutdownSignal) {
+                                LOG.error(t) { "[$dbName] leader term failed" }
+                                watchers.notifyError(t)
                             }
                         }
                     }
 
-                    state = Leading(proc, roleScope(termJob), replicaMsgs)
+                    state = Leading(proc, roleScope(termJob), replicaMsgs, termId)
 
                     LOG.info("[${dbName}] leader startup complete, resuming after $resumeAfterMsgId")
                     TailSpec(resumeAfterMsgId, proc.srcLogProc)
@@ -401,10 +456,9 @@ class LogProcessor(
                     throw e
                 }
             } catch (e: Throwable) {
-                // Cutover already restored a live `state` if it had to; here we only report. A
-                // supersession is reported the way the term's own is above — this node is merely not the
-                // leader, and poisoning the watchers over it would leave a healthy database unqueryable
-                // until the process restarts (#5817).
+                // Cutover already restored a live `state` if it had to; here we only report. A refused
+                // claim says this node is merely not the leader, and poisoning the watchers over it would
+                // leave a healthy database unqueryable until the process restarts (#5817).
                 when {
                     e is LeaderSupersededException -> LOG.info("[$dbName] transition: ${e.message}")
 
@@ -415,31 +469,6 @@ class LogProcessor(
                 }
                 throw e
             }
-        }
-    }
-
-    /**
-     * Refuse a cutover the log has already moved past, before it builds or appends anything.
-     *
-     * The claim's own unfenced check goes stale: it runs while the follower is still live, and the
-     * follower folds until the join. So the fence is asked again here — and asked, separately, of the
-     * records the follower was holding, which have not met it at all.
-     */
-    private fun checkNotSuperseded(termId: Long, pendingBlock: PendingBlock?) {
-        val seen = termFence.highestSeen
-        if (seen > termId)
-            throw LeaderSupersededException(
-                "[$dbName] superseded before cutover: log at ${LeaderTerm.format(seen)} " +
-                        "> our term ${LeaderTerm.format(termId)}"
-            )
-
-        pendingBlock?.bufferedRecords?.forEach { held ->
-            val heldTerm = held.message.termId
-            if (heldTerm > termId)
-                throw LeaderSupersededException(
-                    "[$dbName] superseded before cutover: held term ${LeaderTerm.format(heldTerm)} " +
-                            "> our term ${LeaderTerm.format(termId)} at ${held.msgId}"
-                )
         }
     }
 

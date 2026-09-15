@@ -4,8 +4,11 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.job
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
@@ -26,6 +29,7 @@ import xtdb.database.PartitionStorage
 import xtdb.indexer.LeaderTermTest
 import xtdb.indexer.LiveIndex
 import xtdb.indexer.LogProcessor.LogsDriver
+import xtdb.indexer.supersede
 import xtdb.storage.MemoryStorage
 import xtdb.tx.TxOpts
 import java.time.InstantSource
@@ -73,14 +77,17 @@ internal class ExternalSourceTest : LeaderTermTest() {
         }
     }
 
-    private class ExtTerm(val watchers: Watchers, private val replicaLog: InMemoryLog<ReplicaMessage>) {
+    private class ExtTerm(
+        val watchers: Watchers,
+        private val replicaLog: InMemoryLog<ReplicaMessage>,
+        private val termJob: Job,
+    ) {
 
         fun resolvedTxs() =
             replicaLog.readRecords(0, 0, replicaLog.latestSubmittedMsgId() + 1)
                 .mapNotNull { it.message as? ReplicaMessage.ResolvedTx }.toList()
 
-        /** Supersede the term, by putting a higher term on the log for it to read back. */
-        suspend fun supersede() = replicaLog.appendMessage(ReplicaMessage.NoOp(termId = 2))
+        fun supersede() = termJob.supersede()
 
         /**
          * Await the term's failure. `awaitTx` returns when a tx applies and throws when the database
@@ -107,14 +114,16 @@ internal class ExternalSourceTest : LeaderTermTest() {
     ): ExtTerm {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+        val termJob = SupervisorJob(backgroundScope.coroutineContext.job)
 
         leaderProc(
             StandardTestDispatcher(testScheduler),
             replicaLog = replicaLog, bufferPool = bufferPool, liveIndex = liveIndex,
             watchers = watchers, extSource = extSource, wrapDriver = wrapDriver,
+            termJob = termJob,
         )
 
-        return ExtTerm(watchers, replicaLog)
+        return ExtTerm(watchers, replicaLog, termJob)
     }
 
     @Test
@@ -228,6 +237,11 @@ internal class ExternalSourceTest : LeaderTermTest() {
         }
 
         val term = extTerm(source)
+
+        // Ahead of the resignation: `extTerm` only launches the term, so without this it would be
+        // cancelled before the source was ever assigned and there'd be nothing to stand down.
+        term.watchers.awaitTx(0)
+
         term.supersede()
 
         stoodDown.await()

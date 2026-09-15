@@ -140,7 +140,7 @@ entity LogProcessor {
     --
     -- max_leader_term: the READ-SIDE TERM FENCE — the highest leader term seen so far.
     --   A record BELOW it was written by a superseded leader and is discarded (see Fencing).
-    --   Folded and tested by whichever role is live, as it acts on the record: records are dispatched one at a time and awaited, so the fence has a single caller at any moment.
+    --   Folded and tested by this node's replica read, before either role acts on the record: records are read one at a time and awaited, so the fence has a single caller at any moment.
     --   Seeded from the last persisted block's term so that it survives restart.
     --   Scoped to the database on this node for its whole life rather than to a role — log-processor-lifecycle.allium's LeaderTerm carries why.
     --
@@ -161,7 +161,7 @@ variant Leader : LogProcessor {
     --
     -- A promotion's inherited block is produced through this role, before it reads its first source message, and adopted once it reads an upload of that block back.
     --   The boundary the outgoing leader cut is uploaded under the INCOMING term — see The block cycle.
-    --   The records the follower was holding drain at the adopt: each folds at its own position in the log and is applied where the fence admits it.
+    --   The records the follower was holding drain at the adopt, each having met the fence at its own position in the log on the way in.
     --
     -- external_source is present iff the database has one configured; it makes this leader externally fed rather than client-driven.
     external_source: ExternalSource?
@@ -304,8 +304,7 @@ value TableEntry {
 value PendingBlock {
     -- The state between a block boundary and the upload that closes it.
     -- Held by whichever role is live, which also holds the replica messages that arrive behind it, up to max_buffered_records.
-    -- A held record is stored, and nothing else: it is neither folded into the term fence nor tested against it, because it has not been acted on.
-    -- It meets the fence when the block drains.
+    -- A held record has already met the fence, at its own position in the log: the hold sits below the fence, so what it stores has been admitted.
     -- Overflow is a fault (xtdb.indexer/follower-buffer-overflow) that the leader's block-cut pause keeps unreachable.
     -- Passed on at every role change, in both directions.
     boundary_msg_id: MessageId
@@ -498,23 +497,20 @@ config {
 -- Every replica record carries the term of the leader that created it.
 -- The term pairs an operator-declared epoch with the elector's own counter, packed so that the epoch dominates the ordering, so plain numeric comparison is already lexicographic over the pair.
 --
--- The fence is applied by whichever ROLE is live, as it acts on the record: a record below the highest term seen so far is DISCARDED, and one at or above it folds that high-water upward and is acted on.
+-- The fence is applied ONCE to every record, on this node's replica read and before either role acts on it: a record below the highest term seen so far is DISCARDED, and one at or above it folds that high-water upward and is handed on.
 -- Records are read one at a time, handed to the live role and awaited, so the fence has a single caller at any moment.
 -- The high-water belongs to the database on this node, seeded from the last persisted block, so the fence survives restart.
 -- A discarded record still advances the read position, so a promotion's catch-up can never hang on a fenced record.
 --
--- A record held behind an OPEN PENDING BLOCK is stored, and nothing else: it has not been acted on, so the fence has not heard of it.
--- This holds of a leader waiting on the block it produced as much as of a follower waiting on someone else's.
--- Those records meet the fence when the block drains, each folding at its own position in the log.
--- So while a block is open the high-water stands at the term that cut the boundary, and the upload that closes the block reaches the holding role with nothing folded ahead of it.
--- The block closes on the MATCH — block index, storage version and storage epoch, and never the term — with the fence not consulted for that record at that point.
--- So an upload written by a term the log has moved past closes the block a role is holding all the same.
--- A follower's closing record goes round again on the drain, behind the records it was holding and at the position it occupied in the log, where the drain may already have folded a higher term and the fence refuse it.
--- Refusing it there costs nothing: the block is closed, and a refused record applies nothing.
--- A leader's needs no second pass: it sits at or below this term, a higher one resigning the term ahead of the guard, and this term's claim folds no later than the drain, so the high-water already holds every term the closing record carries.
+-- The fold belongs to the RECORD rather than to the role that acts on it, so it happens on admission, whichever role ends up taking the record.
 --
--- The LEADER additionally tests against its OWN term on READ-BACK — Raft's ReadIndex: it applies and acknowledges a write only once it has read that write back at that term.
--- A HIGHER term read back means a newer leader has superseded it, so it RESIGNS without acknowledging its outstanding writes.
+-- An admitted record above the term a LEADER is leading has superseded that term — Raft's ReadIndex: a leader applies and acknowledges a write only once it has read that write back at its own term.
+-- That leader is DEMOTED where the record is read, without acknowledging its outstanding writes, and the record is then handed to the follower that replaces it.
+-- A follower leads no term, so nothing handed to one supersedes it.
+--
+-- Every record meets the fence at its own position in the log, the ones held behind an OPEN PENDING BLOCK included: the hold sits BELOW the fence, so a record is admitted before it is held, and the drain applies what the block was holding without consulting the fence again.
+-- The block closes on the MATCH — block index, storage version and storage epoch, and never the term, which the fence has settled before the record reaches the match.
+-- So an upload written by a term the log has moved past closes nothing: it is discarded like everything else that term wrote, and the block stays open until a term at or above the high-water uploads it again.
 --
 -- Two nodes may therefore briefly both believe themselves leader and both APPEND.
 -- Only the newer term's writes are ever confirmed, and the older leader's are discarded, which is the property that matters — not single-writer-at-the-log.
@@ -539,7 +535,7 @@ config {
 -- Claiming a replay target and awaiting it ensures the follower has fully caught up before its state is captured and it is stopped: the follower is the sole replica-log consumer and the leader consumes the source log instead, so records between the follower's position and the target would otherwise be silently skipped.
 --
 -- Where the follower had a pending block — a boundary read but no upload — the new leader produces that block under its OWN term, before its role is published, and adopts it once it reads an upload of that block back.
--- That upload is this term's own, or the outgoing leader's where that term got one away before it ended: both confirm the same block, so the adopt takes whichever arrives first.
+-- That upload is this term's own: an outgoing leader's upload of the same block sits below the high-water by the time it is read, and is discarded.
 -- The block stays held across the cutover, and the records the follower was holding drain at the adopt.
 --
 -- Such a term resumes the source log at the last applied transaction, so it re-reads whatever the held boundary covered: the flush that triggered the cut, and nothing at all where the row gauge cut it, the boundary there carrying the preceding transaction's position.
@@ -573,11 +569,16 @@ config {
 --   Nothing may apply a transaction between the produce's step 1 and the roll the adopt ends on: the live tables have been snapshotted into L0 and are about to be cleared, so a transaction applied in between is written nowhere.
 --   The pending-block hold is what holds a record arriving in that window, and the resolution pause is what keeps the set of held records small.
 --
--- The MATCH that closes a block is on block index, storage version and storage epoch, and never on term.
+-- The MATCH that closes a block is on block index, storage version and storage epoch, and never on term — the term having been settled by the fence before the record reaches the match.
 --
 -- The producing term is not always the boundary's: a promotion produces the previous leader's pending block.
 -- An upload carries the term of whoever appends it, because a leader confirms a write only on reading it back at its own term.
--- Two terms can therefore produce one block index, where the term that cut the boundary also produced it before ending, and both uploads confirm the same block: one boundary over one prefix, covering one source position.
+-- Two terms can therefore produce one block index, where the term that cut the boundary also produced it before ending: one boundary over one prefix, covering one source position.
+--
+-- At most ONE of those two uploads is admitted on any reader, and the log's order is what decides which.
+-- Where the outgoing leader's upload PRECEDES the incoming claim, every reader closes the block on it before reading the claim — the promoting node included, which therefore inherits no block and produces nothing.
+-- Where it FOLLOWS the claim, every reader has folded the newer term by the time it arrives and discards it, and the block closes on the incoming term's own upload.
+-- So a block a dead leader left open always closes, on one upload or the other, and never on both.
 
 -- == Adopting a block ==
 --
@@ -603,9 +604,9 @@ config {
 --   tries deleted:        never stale — the removal is idempotent, so replay is a no-op
 -- A stale message is skipped entirely before dispatch, which is what replaces per-kind idempotency checks within each handler.
 --
--- The term fence is a SEPARATE check, run first (see Fencing): a record the fence discards never reaches the staleness comparison.
--- The pending-block hold runs ahead of both, so the upload that closes a held block is MATCHED there rather than compared: the adopt is what advances this node's catalog past the block.
--- A second upload of that index — two terms can produce one block — reaches the comparison with no block in flight, and is stale by it, on the leader as on the follower.
+-- The term fence is a SEPARATE check, run first and on the read (see Fencing): a record the fence discards reaches neither the pending-block hold nor the staleness comparison.
+-- The hold runs next, so the upload that closes a held block is MATCHED there rather than compared: the adopt is what advances this node's catalog past the block.
+-- An upload reaching the comparison with no block in flight is one this node has already adopted, and is stale by block index; an index the catalog has NOT reached is a fault.
 
 rule TransitionToLeader {
     -- db.allium's view of a promotion: what it means for THIS database's pipeline.
@@ -637,12 +638,9 @@ rule TransitionToLeader {
         let pending_block = log_processor.pending_block
 
         -- Refuse a cutover the log has already moved past, before anything is built or appended.
-        -- Two sources, asked together here.
-        -- The fence's high-water, because the check above goes stale: it is given while the follower is still live, and the follower folds every record it acts on until it stops.
-        -- And the records the follower was holding, which have met the fence at no point.
-        -- Either above this term means a newer leader, and the promotion RESIGNS — reported the way a leader term reports its own supersession rather than as an ingestion fault, so it leaves the watchers alone.
-        if log_processor.max_leader_term > term
-           or (pending_block != null and pending_block.buffered_records.any(held => held.term_id > term)):
+        -- The same check as above, asked again because its answer goes stale: it is given while the follower is still live, and the read goes on folding every record it admits until that follower stops — the ones it handed the follower to hold included.
+        -- A high-water above this term means a newer leader, and the promotion RESIGNS — reported the way a leader term reports its own supersession rather than as an ingestion fault, so it leaves the watchers alone.
+        if log_processor.max_leader_term > term:
             LeaderSuperseded(resolver: tx_resolver)
 
         -- Take the leader role.
@@ -888,24 +886,18 @@ rule AppendReplicaMessage {
 
 ---- Rules: Leader Mode — read back and apply
 
--- The leader reads its OWN replica log from the position its promotion claimed, separately from whatever drives leader election so that the two do not interfere.
+-- The leader is fed by this node's replica read, from the position its promotion claimed, separately from whatever drives leader election so that the two do not interfere.
 -- This is where a committed transaction becomes queryable and where an external caller's durability handle completes: confirmed durably replicated AND confirmed unfenced.
 
 rule LeaderAppliesRecord {
     -- Apply one record read back off our own replica log, fenced by TERM.
-    -- Discarding suppresses application, not consumption: the read advances past a discarded record all the same, so a catch-up can never hang on a fenced one.
-    when: ReplicaMessageReceived(record)
+    -- The record carries this term's own term: terms are unique per leader, the fence discards anything below it and demotes this term on anything above it, so there is nothing left here to compare.
+    when: HandleReplicaMessage(record)
     requires: log_processor.mode = Leader
 
     ensures:
-        if record.term_id > log_processor.leader_term:
-            -- A newer leader has superseded us. RESIGN: the term ends without acknowledging its outstanding writes, everything awaiting it is failed, and this node follows again.
-            --
-            -- A clean resignation, NOT an ingestion fault: it must not poison the watchers, or a routine leadership handover would surface to queries as a failed database (see ProcessingErrorHaltsNode).
-            LeaderSuperseded(resolver: tx_resolver)
-        else if log_processor.pending_block != null:
-            -- Held, not fenced, ahead of the fence as on a follower: a record behind an open block has not been acted on, so folding it here would move the high-water past the term that cut the boundary, and the upload closing the block — written by that same term — would then be fenced away.
-            -- The upload this term is waiting for is matched here, on block index, storage version and storage epoch and never on term, so an upload of that block from a term the log has moved past closes it too.
+        if log_processor.pending_block != null:
+            -- The upload this term is waiting for is matched here, on block index, storage version and storage epoch and never on term, which the fence has settled already.
             if record.kind = BlockUploadedMessage
                and record.block_index = log_processor.pending_block.boundary_message.block_index
                and record.storage_version = storage_format.storage_version
@@ -914,16 +906,8 @@ rule LeaderAppliesRecord {
             else:
                 log_processor.pending_block.buffered_records =
                     log_processor.pending_block.buffered_records.append(record)
-        else if record.term_id < log_processor.max_leader_term:
-            -- The fence, applied here because this is where the leader acts on the record.
-            -- Our own claim folded before the term opened, so the high-water is this leader's own term throughout, and what the fence refuses is what sits below it.
-            RecordDiscarded(resolver: tx_resolver)
         else:
-            -- Equal term, the common case: terms are unique per leader, so this record is our own.
             ApplyOwnRecord(record)
-
-            -- The fence folds in the same step as it admits, here as on a follower, so the high-water holds the terms the log has reached and a later demote re-seeds a follower from them.
-            log_processor.max_leader_term = max(log_processor.max_leader_term, record.term_id)
 }
 
 rule LeaderAppliesOwnTx {
@@ -970,9 +954,8 @@ rule LeaderUploadsBlockOnBoundary {
 rule LeaderAdoptsOwnBlock {
     -- The leader reads an upload confirming the block it holds and ADOPTS that block (see Adopting a block), then applies the records held behind the boundary.
     -- It runs the adopt a follower runs, supplying the block its own produce built and has held since — until here nothing on this node has moved past the block.
-    -- The upload adopted is whichever of that block index reaches this term first, whichever term wrote it: both uploads confirm the same block, so adopting either is correct.
-    -- The other arrives with no block in flight, and is stale there (LeaderSkipsAdoptedBlockUpload).
-    -- The held records go back through the leader's own apply, so a boundary among them produces the next block there and the records behind that one are held again.
+    -- The upload adopted is this term's own: an upload of that block index from a term the log has moved past is discarded before it reaches here (see Fencing).
+    -- The held records go back through the leader's own apply, BELOW the fence they met on the way in, so a boundary among them produces the next block there and the records behind that one are held again.
     when: AdoptOwnBlock(record)
 
     ensures:
@@ -995,16 +978,17 @@ rule LeaderAdoptsOwnBlock {
         let buffered = log_processor.pending_block.buffered_records
         log_processor.pending_block = null
         for held in buffered:
-            ReplicaMessageReceived(held)
+            HandleReplicaMessage(held)
 }
 
-rule LeaderSkipsAdoptedBlockUpload {
-    -- An upload read back with no block in flight confirms a block this node has already adopted: the other upload of that index closed it, and the adopt moved the catalog past it.
-    -- It is skipped on block index, the staleness test every reader applies to an upload (see Staleness).
-    -- An index the catalog has NOT reached is a fault: this node is holding no boundary for that block and has adopted no block at that index, which nothing explains.
+rule LeaderFaultsOnUnmatchedBlockUpload {
+    -- An upload reaching a leader's apply with no block in flight is a FAULT, and nothing explains it: this node holds no boundary for that block, and the fence admitted the record at or above this term.
+    -- Unreachable on three counts: this term's own upload is matched against the block it holds, one from a term the log has moved past is discarded, and one from a higher term demotes this term before the record reaches a role at all.
     when: ApplyOwnRecord(record)
     requires: record.kind = BlockUploadedMessage
-    requires: record.block_index <= (table_catalog.current_block_index ?? -1)
+
+    ensures:
+        ProcessingError(msg_id: record.msg_id, error: "BlockUploaded reached apply with no block in flight")
 }
 
 rule LeaderAppliesOwnTriesAdded {
@@ -1111,21 +1095,31 @@ rule ExternalSourceIndexesTx {
 ---- Rules: Replica Message Handling
 
 -- A follower applies already-durable messages, so it imports straight into the durable live index and advances the watchers as it goes.
--- The TERM FENCE (see Fencing) runs on the record as it is dispatched, and STALENESS (see Staleness) after it: a message whose effect is already applied is skipped.
---
--- Both sit OUTSIDE the pending-block hold: while a block is open the hold runs first, either matching the upload that closes the block or holding the record.
--- Only unheld, admitted, non-stale messages reach the handlers below.
+-- The TERM FENCE (see Fencing) runs on the read, above everything below: only admitted messages reach a role at all.
+-- The pending-block hold runs next, while a block is open, either matching the upload that closes the block or holding the record; STALENESS (see Staleness) runs last, skipping a message whose effect is already applied.
+-- So only unheld, non-stale messages reach the handlers below, and all of them have been admitted.
 
 rule LogProcessorDispatchesRecord {
-    -- This node's replica read: read one record, hand it to whichever role is live, await it, advance.
-    -- Dispatching one at a time and awaiting it is what leaves the term fence with a single caller.
+    -- This node's replica read: read one record, fence it, hand what it admits to whichever role is live, await it, advance.
+    -- Reading one at a time and awaiting it is what leaves the term fence with a single caller.
     when: ReplicaMessageReceived(record)
 
     ensures:
-        HandleReplicaMessage(record)
+        if record.term_id < log_processor.max_leader_term:
+            -- Written by a leader the log has since moved past, so every reader discards it.
+            RecordDiscarded(record)
+        else:
+            log_processor.max_leader_term = record.term_id
 
-        -- One advance per record, whatever the live role did with it — this is what a promotion's await waits on.
-        -- A record the role fenced or held advances it all the same, so a promotion's catch-up can't hang on one.
+            -- A record above the term a leader is leading has superseded that term (see Fencing).
+            -- The demote is the one a revoke runs, not a second path, so the record is offered to the follower that replaces the term rather than waiting for the elector to notice.
+            if log_processor.mode = Leader and record.term_id > log_processor.leader_term:
+                DemoteRequested(database)
+
+            HandleReplicaMessage(record)
+
+        -- One advance per record, whatever became of it — this is what a promotion's await waits on.
+        -- A record the fence discarded or a role held advances it all the same, so a promotion's catch-up can't hang on one.
         -- A faulting apply does not advance it: it ends the read.
         log_processor.latest_replica_msg_id = record.msg_id
 }
@@ -1147,56 +1141,51 @@ rule FollowerHoldsRecordBehindPendingBlock {
 }
 
 rule HandleReplicaMessage {
-    -- Dispatches a single replica message, applying the term fence to it and then the staleness check.
-    -- The pending-block hold overrides this rule while a block is open (FollowerHoldsRecordBehindPendingBlock, FollowerHandlesBlockUploaded).
+    -- Applies an admitted message on a follower: the staleness check, and then the apply.
+    -- The pending-block hold overrides this rule while a block is open (FollowerHoldsRecordBehindPendingBlock, FollowerHandlesBlockUploaded), and LeaderAppliesRecord takes the message where a leader is live.
     when: HandleReplicaMessage(msg)
+    requires: log_processor.mode = Follower
 
     ensures:
-        if msg.term_id < log_processor.max_leader_term:
-            -- Written by a leader the log has since moved past.
-            RecordDiscarded(msg)
-        else:
-            log_processor.max_leader_term = max(log_processor.max_leader_term, msg.term_id)
+        if msg.kind = ResolvedTxMessage:
+            live_index.importTx(msg)
+            if msg.committed:
+                if msg.db_op.kind = Attach:
+                    database.catalog.attach(msg.db_op.db_name, msg.db_op.config)
+                if msg.db_op.kind = Detach:
+                    database.catalog.detach(msg.db_op.db_name)
+            -- The stamped position where present.
+            -- On an older record it is absent, and the fallback differs by database: an external-source tx_id is an independent counter, so it says nothing about the source log and the tracked watermark has to stand in; a source-log tx_id IS a source-log position.
+            let effective_src_msg_id =
+                msg.src_msg_id
+                    ?? (if database.external_source != null:
+                            watchers.latest_source_msg_id
+                        else: msg.tx_id)
+            watchers.notifyTx(msg.result, effective_src_msg_id, msg.external_source_token)
 
-            if msg.kind = ResolvedTxMessage:
-                live_index.importTx(msg)
-                if msg.committed:
-                    if msg.db_op.kind = Attach:
-                        database.catalog.attach(msg.db_op.db_name, msg.db_op.config)
-                    if msg.db_op.kind = Detach:
-                        database.catalog.detach(msg.db_op.db_name)
-                -- The stamped position where present.
-                -- On an older record it is absent, and the fallback differs by database: an external-source tx_id is an independent counter, so it says nothing about the source log and the tracked watermark has to stand in; a source-log tx_id IS a source-log position.
-                let effective_src_msg_id =
-                    msg.src_msg_id
-                        ?? (if database.external_source != null:
-                                watchers.latest_source_msg_id
-                            else: msg.tx_id)
-                watchers.notifyTx(msg.result, effective_src_msg_id, msg.external_source_token)
+        if msg.kind = TriesAddedMessage:
+            if msg.storage_version = storage_format.storage_version
+               and msg.storage_epoch = storage_format.storage_epoch:
+                trie_cat/trie_catalog.addTries(msg.tries, msg.log_timestamp)
+            watchers.notifyMsg(msg.source_msg_id)
 
-            if msg.kind = TriesAddedMessage:
-                if msg.storage_version = storage_format.storage_version
-                   and msg.storage_epoch = storage_format.storage_epoch:
-                    trie_cat/trie_catalog.addTries(msg.tries, msg.log_timestamp)
-                watchers.notifyMsg(msg.source_msg_id)
+        if msg.kind = TriesDeletedMessage:
+            -- Idempotent removal, so unconditional: no storage guard and no staleness check.
+            trie_cat/trie_catalog.deleteTries(msg.table_name, msg.trie_keys)
 
-            if msg.kind = TriesDeletedMessage:
-                -- Idempotent removal, so unconditional: no storage guard and no staleness check.
-                trie_cat/trie_catalog.deleteTries(msg.table_name, msg.trie_keys)
+        if msg.kind = BlockBoundaryMessage:
+            -- The follower opens a pending block. Every subsequent message except the matching upload is held by the hold above.
+            log_processor.pending_block = PendingBlock(msg.msg_id, msg)
 
-            if msg.kind = BlockBoundaryMessage:
-                -- The follower opens a pending block. Every subsequent message except the matching upload is held by the hold above.
-                log_processor.pending_block = PendingBlock(msg.msg_id, msg)
-
-            if msg.kind = NoOpMessage and msg.src_msg_id != null:
-                watchers.notifyMsg(msg.src_msg_id)
+        if msg.kind = NoOpMessage and msg.src_msg_id != null:
+            watchers.notifyMsg(msg.src_msg_id)
 }
 
 rule FollowerHandlesBlockUploaded {
     -- The follower holding a block reads the matching upload and runs the adopt a leader runs (see Adopting a block), supplying a block it reads from the object store.
     -- The block does not come from the message; the message is just a signal.
     -- Subscribes to the same dispatch event as HandleReplicaMessage, which has no upload branch of its own, and overrides it for the pending-block case.
-    -- The block closes on the match alone, with the fence not consulted for this record here: nothing has folded since the boundary, everything since having been held, so the record reaches the match rather than being discarded ahead of it (see Fencing).
+    -- The record has already met the fence, on the read and ahead of the hold, so the match is all that is left to test (see Fencing).
     when: HandleReplicaMessage(msg)
     requires: msg.kind = BlockUploadedMessage
     requires: log_processor.mode = Follower
@@ -1214,16 +1203,12 @@ rule FollowerHandlesBlockUploaded {
         -- The block's covered source position, ahead of the drain below: the held records carry later positions, so behind them this one would go backwards (see the watchers' monotonicity obligations).
         watchers.notifyMsg(msg.latest_processed_msg_id)
 
-        -- Close the block, then apply what it was holding back through the dispatch above; their own notifications are what advance the watermarks past this position.
-        -- Each held record therefore folds at its own position in the log.
+        -- Close the block, then apply what it was holding; their own notifications are what advance the watermarks past this position.
+        -- They re-enter BELOW the fence, each having met it at its own position in the log on the way in.
         let buffered = log_processor.pending_block.buffered_records
         log_processor.pending_block = null
         for record in buffered:
             HandleReplicaMessage(record)
-
-        -- This record goes round again behind them, where it sat in the log: that is where its own term meets the fence.
-        -- It applies nothing second time round — either the drain has folded a term above it, or it is stale by block index.
-        HandleReplicaMessage(msg)
 }
 
 ---- Rules: Compaction Orchestration

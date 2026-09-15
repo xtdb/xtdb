@@ -20,7 +20,7 @@
 --     2. APPEND. The staged transaction is written to the replica log, STAMPED with the leader's term.
 --        Control messages — block boundaries, term claims, tries added and deleted — are appended the same way, and stamped the same way.
 --     3. READ BACK. The leader reads its own replica log from the position its promotion claimed.
---     4. APPLY. Each record read back meets the term fence, and what the fence admits is applied (see ApplyRecord).
+--     4. APPLY. Each record has met the term fence on the way in, so what reaches the term is its own to apply (see ApplyRecord).
 --        Applying the leader's own transaction imports it from the QUEUE HEAD, which still holds its rows, so nothing is re-read from the replica record — that record's job was to confirm durability and term.
 --        THIS is where a committed transaction becomes queryable, and where an external caller's durability handle completes.
 --
@@ -482,24 +482,17 @@ rule AbortTransaction {
 ------------------------------------------------------------
 
 rule ApplyRecord {
-    -- Apply one record read back off the leader's OWN replica log, fenced by TERM.
-    --   term GREATER than ours: a newer leader has superseded us, so we RESIGN.
-    --     The term ends without acknowledging its outstanding writes, and the node follows again.
-    --     This is EXPECTED — not a query-facing fault, so it does not poison the watchers.
-    --   term BELOW the node's high-water: the fence refuses it, and it is discarded, still advancing the read position.
-    --   term EQUAL to ours: the common case. Terms are unique per leader, so an equal-term record IS our own.
+    -- Apply one record read back off the leader's OWN replica log.
+    -- The record is this term's own: terms are unique per leader, and the fence has settled the record's term before the term is offered it, discarding anything the log has moved past and ending this term on anything above it.
+    -- So the apply holds no term comparison of its own.
     --
-    -- The high-water itself is db.allium's to hold and to fold, because it spans the database on this node rather than one leader's term.
-    -- This rule names our_term, which the high-water equals for the length of a confirmed term.
-    when: ApplyRecord(resolver, record_term, our_term)
+    -- A record ABOVE this term has superseded it, and the term ends there rather than here — EXPECTED, so it does not poison the watchers, and every transaction still staged on it fails its handle (see ResolverEnds).
+    --
+    -- The fence and its high-water are db.allium's, because they span the database on this node rather than one leader's term.
+    when: ApplyRecord(resolver, record)
 
     ensures:
-        if record_term > our_term:
-            LeaderSuperseded(resolver: resolver)
-        else if record_term < our_term:
-            RecordDiscarded(resolver: resolver)
-        else:
-            RecordApplied(resolver: resolver)
+        RecordApplied(resolver: resolver)
 }
 
 rule ApplyResolvedTx {

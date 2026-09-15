@@ -2,6 +2,7 @@ package xtdb.indexer
 
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -40,6 +41,14 @@ import xtdb.types.MessageId
 import xtdb.util.closeAll
 import java.time.InstantSource
 import java.util.concurrent.atomic.AtomicLong
+
+/**
+ * Resign a term, the way [LogProcessor] does on reading a higher one back off the replica log: cancel its
+ * job, naming the supersession.
+ *
+ * The fence is the log processor's, so a term standing alone here is told rather than finding out.
+ */
+internal fun Job.supersede() = cancel(CancellationException("[test] superseded by a higher term"))
 
 /**
  * Stands up a leader term without a transport, for tests of anything the term drives.
@@ -143,7 +152,7 @@ internal abstract class LeaderTermTest {
                 } catch (t: Throwable) {
                     // Reporting a term's failure belongs to whoever started it, not to the term — see
                     // LogProcessor.transitionToLeader.
-                    if (t !is LeaderSupersededException && !t.isShutdownSignal) watchers.notifyError(t)
+                    if (!t.isShutdownSignal) watchers.notifyError(t)
                 } finally {
                     reader.cancel()
                 }
@@ -189,7 +198,7 @@ internal abstract class LeaderTermTest {
             LeaderLogProcessor(
                 allocator, nodeBase, partitionStorage, mockk(relaxed = true),
                 partitionState, dbName,
-                driver, blockCutter, watchers, replicaAppender, TermFence(dbName, 0), extSource,
+                driver, blockCutter, watchers, replicaAppender, extSource,
                 skipTxs = skipTxs, dbCatalog = dbCatalog,
                 leaderTerm = leaderTerm,
                 flushTimeout = IndexerConfig().flushDuration,
@@ -224,7 +233,7 @@ internal abstract class LeaderTermTest {
 
         val proc = LeaderLogProcessor(
             allocator, nodeBase, partitionStorage, mockk(relaxed = true),
-            partitionState, "test", logsDriver, blockCutter, watchers, appender, TermFence("test", 0),
+            partitionState, "test", logsDriver, blockCutter, watchers, appender,
             extSource,
             skipTxs = emptySet(), dbCatalog = null,
             leaderTerm = 1,
