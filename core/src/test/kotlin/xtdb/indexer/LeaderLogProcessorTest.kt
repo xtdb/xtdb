@@ -16,6 +16,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import xtdb.api.DatabaseName
 import xtdb.api.TableRef
 import xtdb.api.TransactionResult
@@ -93,8 +94,7 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
 
         appender.append(ControlItem(ReplicaMessage.NoOp(termId = 1)))
 
-        // returns once the pump's failure has ended the term
-        proc.runTerm(Channel())
+        assertThrows<InterruptedException> { proc.runTerm(Channel()) }
 
         assertNull(
             watchers.exception,

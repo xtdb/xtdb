@@ -188,8 +188,15 @@ internal class LeaderLogProcessor(
         blockCutter.pendingBlock?.let { pending ->
             val msg = record.message
 
-            if (msg is ReplicaMessage.BlockUploaded && blockCutter.closes(msg)) closeBlock(record, msg)
-            else pending += record
+            if (msg is ReplicaMessage.BlockUploaded && blockCutter.closes(msg)) {
+                val held = blockCutter.closeBlock(msg, record.logTimestamp)
+                watchers.notifyApplied(msg.latestProcessedMsgId)
+                gc.signal()
+                srcLogProc.blockUploaded()
+                held.bufferedRecords.forEach { applyReplicaMessage(it) }
+            } else {
+                pending += record
+            }
 
             return
         }
@@ -229,8 +236,7 @@ internal class LeaderLogProcessor(
 
                 is BlockBoundary -> {
                     // Produce only: the catalog refresh, the index roll, the source watermark and the
-                    // resolution resume all wait for the `BlockUploaded` this appends to come back — see
-                    // [closeBlock].
+                    // resolution resume all wait for the `BlockUploaded` this appends to come back.
                     blockCutter.upload(PendingBlock(record.msgId, msg))
                 }
 
@@ -257,37 +263,15 @@ internal class LeaderLogProcessor(
         }
     }
 
-    /**
-     * Adopt the block our own upload confirms, then apply what its boundary was holding back.
-     *
-     * The drain goes back through [applyReplicaMessage] rather than applying the records directly, so a
-     * boundary among them opens the next block there and the records behind it are held again instead of
-     * being applied into a block already snapshotted.
-     */
-    private suspend fun closeBlock(record: Log.Record<ReplicaMessage>, msg: ReplicaMessage.BlockUploaded) {
-        val pending = blockCutter.closeBlock(msg, record.logTimestamp)
-
-        watchers.notifyApplied(msg.latestProcessedMsgId)
-
-        gc.signal()
-
-        srcLogProc.blockUploaded()
-
-        pending.bufferedRecords.forEach { applyReplicaMessage(it) }
-    }
-
     // ---- resolution ----
 
     /**
-     * Run the term until it ends, then fail everything staged on it.
-     *
-     * A supersession is not a fault — it says this node is merely no longer the leader — so it MUST NOT
-     * reach the watchers: `Failed` is absorbing, and poisoning them over a resignation would leave a
-     * healthy database unqueryable until the process restarts (#5817).
+     * Run the term until it ends, fail everything staged on it, and raise what ended it — a
+     * [LeaderSupersededException] where a newer term took over, otherwise the fault that stopped it.
      */
     suspend fun runTerm(replicaMsgs: ReceiveChannel<ReplicaApply>) {
-        try {
-            coroutineScope {
+        coroutineScope {
+            try {
                 launch { gc.runGc() }
                 extSrcProc?.let { extSrcProc -> launch { extSrcProc.run() } }
 
@@ -317,22 +301,10 @@ internal class LeaderLogProcessor(
                         }
                     }
                 }
+            } finally {
+                txResolver.cancel()
+                srcLogProc.cancel()
             }
-
-        } catch (t: Throwable) {
-            when {
-                t is LeaderSupersededException -> {
-                    LOG.info("[$dbName] ${t.message}")
-                }
-
-                !t.isShutdownSignal -> {
-                    LOG.error(t) { "[$dbName] leader term failed" }
-                    watchers.notifyError(t)
-                }
-            }
-        } finally {
-            txResolver.cancel()
-            srcLogProc.cancel()
         }
     }
 

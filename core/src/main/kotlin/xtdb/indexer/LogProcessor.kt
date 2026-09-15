@@ -375,7 +375,22 @@ class LogProcessor(
                     // own handle, so a buffer would only let it read ahead of a term about to end.
                     val replicaMsgs = Channel<ReplicaApply>()
 
-                    val termJob = scope.launch { proc.runTerm(replicaMsgs) }
+                    val termJob = scope.launch {
+                        try {
+                            proc.runTerm(replicaMsgs)
+                        } catch (t: Throwable) {
+                            when {
+                                t is LeaderSupersededException -> {
+                                    LOG.info("[$dbName] ${t.message}")
+                                }
+
+                                !t.isShutdownSignal -> {
+                                    LOG.error(t) { "[$dbName] leader term failed" }
+                                    watchers.notifyError(t)
+                                }
+                            }
+                        }
+                    }
 
                     state = Leading(proc, roleScope(termJob), replicaMsgs)
 
@@ -387,8 +402,9 @@ class LogProcessor(
                 }
             } catch (e: Throwable) {
                 // Cutover already restored a live `state` if it had to; here we only report. A
-                // supersession is reported the way a term reports its own — this node is merely not the
-                // leader, and poisoning the watchers over it would leave a healthy database unqueryable.
+                // supersession is reported the way the term's own is above — this node is merely not the
+                // leader, and poisoning the watchers over it would leave a healthy database unqueryable
+                // until the process restarts (#5817).
                 when {
                     e is LeaderSupersededException -> LOG.info("[$dbName] transition: ${e.message}")
 

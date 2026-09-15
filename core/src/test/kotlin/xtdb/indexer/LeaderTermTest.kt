@@ -120,11 +120,14 @@ internal abstract class LeaderTermTest {
     /**
      * Start a term the way [LogProcessor] does: the term and a replica-log reader feeding it launched into
      * the term's own job, so cancelling that job is what stops it, and freed once the test has joined it.
+     * A failure the term raises is reported to [watchers] here, as the transport reports one.
      *
      * The reader stands in for the partition's tail, which in production outlives the term — so it is the
      * term ending that has to stop it here.
      */
-    protected fun CoroutineScope.startTerm(partitionStorage: PartitionStorage, proc: LeaderLogProcessor) =
+    protected fun CoroutineScope.startTerm(
+        partitionStorage: PartitionStorage, watchers: Watchers, proc: LeaderLogProcessor,
+    ) =
         proc.also {
             leadersToClose += it
             val replicaMsgs = Channel<ReplicaApply>()
@@ -137,6 +140,10 @@ internal abstract class LeaderTermTest {
 
                 try {
                     proc.runTerm(replicaMsgs)
+                } catch (t: Throwable) {
+                    // Reporting a term's failure belongs to whoever started it, not to the term — see
+                    // LogProcessor.transitionToLeader.
+                    if (t !is LeaderSupersededException && !t.isShutdownSignal) watchers.notifyError(t)
                 } finally {
                     reader.cancel()
                 }
@@ -178,7 +185,7 @@ internal abstract class LeaderTermTest {
             )
 
         return termScope.startTerm(
-            partitionStorage,
+            partitionStorage, watchers,
             LeaderLogProcessor(
                 allocator, nodeBase, partitionStorage, mockk(relaxed = true),
                 partitionState, dbName,
