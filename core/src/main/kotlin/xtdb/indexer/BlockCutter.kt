@@ -33,41 +33,24 @@ private val LOG = BlockCutter::class.logger
 
 private const val MAX_CONCURRENT_BLOCK_UPLOADS = 16
 
-/**
- * Where a leader term is in the block it is filling: [Filling] → [Cut] → [Uploading] → [Filling], the
- * last step driven by reading our own `BlockUploaded` back rather than by finishing the upload.
- *
- * Resolution is armed only in [Filling] — see [acceptingResolution] — so no tx can interleave between a
- * boundary and its upload. That is what keeps the follower's bounded pending-block buffer empty, and now
- * also what keeps anything from applying inside [Uploading], where the live index holds a block already
- * snapshotted into L0.
- *
- * The term's coroutine is the sole writer and, [pendingBlock] apart, the sole reader; a demotion reads
- * that one only after joining the term, which is the edge that publishes it.
- */
 internal class BlockCutter(
     partitionStorage: PartitionStorage,
     private val partitionState: PartitionState,
     private val dbName: DatabaseName,
     private val leaderTerm: Long,
     private val replicaAppender: ReplicaLogAppender,
-    // Both seams, because the two messages of a cut need different things. The boundary goes through the
-    // pump, to stay ordered behind the txs already queued there; the `BlockUploaded` goes direct, because
-    // it has to be durable before this node rolls its own index past the block — see [uploadBlock].
     private val logsDriver: LogProcessor.LogsDriver,
     private val compactor: Compactor.ForDatabase,
     private val dbCatalog: Database.Catalog?,
     private val meterRegistry: MeterRegistry?,
+
     // The database's, not this term's: it backs a gauge registered once alongside it, and a gauge keeps
     // the state object it was registered with — so a per-term one would be dropped (#5867).
     private val lastUploadEpochSeconds: AtomicLong,
-    // The database's too, for the trailing post below, which outlives the upload deliberately.
+
     private val scope: CoroutineScope,
     ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
-    // Caps the per-table block-file uploads below, bounding the heap held by their in-flight
-    // `TableBlock.toByteArray()` buffers. S3's default HTTP client caps concurrency at 50, so
-    // parallelism beyond this would queue inside the SDK with the `byte[]`s still pinned on heap.
     private val uploadDispatcher = ioDispatcher.limitedParallelism(MAX_CONCURRENT_BLOCK_UPLOADS, "block-upload")
 
     private val sourceLog = partitionStorage.sourceLog
@@ -94,7 +77,6 @@ internal class BlockCutter(
      */
     private class Filling(val rows: Long) : BlockState
 
-    /** The boundary is queued for append, and has not been read back yet. */
     private data object Cut : BlockState
 
     /**
@@ -130,30 +112,13 @@ internal class BlockCutter(
     // live index is what owns the block being filled.
     private val rowsPerBlock = liveIndex.rowsPerBlock
 
-    /**
-     * Whether this term will take resolution work right now.
-     *
-     * False for the length of a block cut, so nothing interleaves between the boundary and its upload —
-     * which is what keeps the follower's bounded pending-block buffer empty.
-     */
     val acceptingResolution get() = blockState is Filling
 
-    /**
-     * Whether the block being filled has reached [rowsPerBlock], and so wants [cut].
-     *
-     * An empty block is never full, whatever the threshold. Without that, a `rowsPerBlock` of 0 leaves
-     * the term cutting an empty block, re-opening an empty one and cutting that — live-locked, never
-     * arming resolution again.
-     */
     val isFull get() = (blockState as? Filling)?.let { it.rows > 0 && it.rows >= rowsPerBlock } == true
 
-    /** Account [rows] more towards the block being filled. */
     fun addRows(rows: Long) {
         blockState = when (val state = blockState) {
             is Filling -> Filling(state.rows + rows)
-
-            // Only reachable from clauses the term arms in Filling alone, so getting here means the
-            // arm-set and this state have come apart.
             Cut, is Uploading -> error("[$dbName] tx resolved during a block cut")
         }
     }
@@ -193,7 +158,94 @@ internal class BlockCutter(
      * attempt at an index the catalog already holds.
      */
     suspend fun upload(pendingBlock: PendingBlock) {
-        blockState = uploadBlock(pendingBlock)
+        val boundary = pendingBlock.boundaryMessage
+        val boundaryReplicaMsgId = pendingBlock.boundaryMsgId
+        val latestProcessedMsgId = boundary.latestProcessedMsgId
+        val blockIdx = boundary.blockIndex
+
+        LOG.debug("finishing block: 'b${blockIdx.asLexHex}'...")
+
+        val timer = meterRegistry?.let { Timer.start(it) }
+
+        val finishedBlocks = liveIndex.finishBlock(bufferPool, blockIdx)
+
+        // One timestamp for the whole block rather than one per table: it dates the supersession these
+        // tries cause, and they all supersede as of the same block.
+        val triesAsOf = Instant.now()
+
+        // One trie per table that took rows — `writtenTrie` is singular — and none at all for a table
+        // staged with no rows. That table still reaches the table catalog below, so its declared columns
+        // survive.
+        val addedTriesByTable =
+            finishedBlocks.mapNotNull { (table, fb) ->
+                fb.writtenTrie?.let { writtenTrie ->
+                    table to TrieDetails.newBuilder()
+                        .setTableName(table.schemaAndTable)
+                        .setTrieKey(writtenTrie.trieKey)
+                        .setDataFileSize(writtenTrie.dataFileSize)
+                        .also { it.setTrieMetadata(writtenTrie.trieMetadata) }
+                        .build()
+                }
+            }.toMap()
+
+        val addedTries = addedTriesByTable.values.toList()
+
+        // The layout these tries imply rather than the one the catalog holds: the block records the
+        // partitions as of itself, and the add below is what the catalog will agree with afterwards.
+        val allTables = finishedBlocks.keys + tableCatalog.allTables
+
+        val tablePartitions = allTables.associateWith { table ->
+            trieCatalog.withPartitions(table, listOfNotNull(addedTriesByTable[table]), triesAsOf)
+        }
+
+        val tableBlocks = tableCatalog.buildTableBlocks(finishedBlocks, tablePartitions)
+
+        // A table new in this block has already written its L0 trie by now, under the slug its LiveTable was
+        // created with — the same one minted here, because both resolve through `State.slug`.
+        val entries = tableCatalog.resolveTables(tableBlocks.keys).associateBy { it.table }
+
+        coroutineScope {
+            tableBlocks.forEach { (table, tableBlock) ->
+                launch(uploadDispatcher) {
+                    val path = TableCatalog.tableBlockPath(entries.getValue(table).slug, blockIdx)
+                    bufferPool.putObject(path, ByteBuffer.wrap(tableBlock.toByteArray()))
+                }
+            }
+        }
+
+        val secondaryDatabasesForBlock = dbCatalog?.serialisedSecondaryDatabases
+        val externalSourceToken = boundary.externalSourceToken
+
+        val block = tableCatalog.buildBlock(
+            blockIdx, liveIndex.latestCompletedTx, latestProcessedMsgId,
+            boundaryReplicaMsgId, entries.values, secondaryDatabasesForBlock,
+            externalSourceToken,
+            boundary.termId // not leaderTerm - #6059
+        )
+
+        bufferPool.putObject(TableCatalog.blockFilePath(blockIdx), ByteBuffer.wrap(block.toByteArray()))
+        lastUploadEpochSeconds.set(Instant.now().epochSecond)
+
+        // Awaited, and not through the append pump: this is the message the whole cluster is waiting on
+        // to close the block, this node now included. Queued, a term ending in between would drop it —
+        // the pump's shutdown discards whatever it still holds. Awaited, a failure to append reaches the
+        // term instead, which leaves the boundary unapplied for the next role to pick up and re-produce.
+        val uploadedMsgId = logsDriver.appendToReplica(
+            BlockUploaded(
+                Storage.VERSION, bufferPool.epoch,
+                blockIdx, latestProcessedMsgId,
+                addedTries, externalSourceToken,
+                // This term's, not the boundary's: a promotion finishes the block the previous leader
+                // cut, and a leader confirms a write only on reading it back at its own term.
+                termId = leaderTerm,
+            )
+        ).msgId
+
+        LOG.debug("block uploaded b${blockIdx.asLexHex}: source=$latestProcessedMsgId, replica=$uploadedMsgId")
+
+        blockUploadTimer?.let { timer?.stop(it) }
+
+        blockState = Uploading(pendingBlock, block)
     }
 
     /**
@@ -233,93 +285,4 @@ internal class BlockCutter(
         return uploading.pendingBlock
     }
 
-    private suspend fun uploadBlock(pendingBlock: PendingBlock): Uploading {
-        val boundary = pendingBlock.boundaryMessage
-        val boundaryReplicaMsgId = pendingBlock.boundaryMsgId
-        val latestProcessedMsgId = boundary.latestProcessedMsgId
-        val blockIdx = boundary.blockIndex
-        LOG.debug("finishing block: 'b${blockIdx.asLexHex}'...")
-        val timer = meterRegistry?.let { Timer.start(it) }
-
-        val finishedBlocks = liveIndex.finishBlock(bufferPool, blockIdx)
-
-        // One timestamp for the whole block rather than one per table: it dates the supersession these
-        // tries cause, and they all supersede as of the same block.
-        val triesAsOf = Instant.now()
-
-        // One trie per table that took rows — `writtenTrie` is singular — and none at all for a table
-        // staged with no rows. That table still reaches the table catalog below, so its declared columns
-        // survive.
-        val addedTriesByTable =
-            finishedBlocks.mapNotNull { (table, fb) ->
-                fb.writtenTrie?.let { writtenTrie ->
-                    table to TrieDetails.newBuilder()
-                        .setTableName(table.schemaAndTable)
-                        .setTrieKey(writtenTrie.trieKey)
-                        .setDataFileSize(writtenTrie.dataFileSize)
-                        .also { it.setTrieMetadata(writtenTrie.trieMetadata) }
-                        .build()
-                }
-            }.toMap()
-
-        val addedTries = addedTriesByTable.values.toList()
-
-        // The layout these tries imply rather than the one the catalog holds: the block records the
-        // partitions as of itself, and the add below is what the catalog will agree with afterwards.
-        val allTables = finishedBlocks.keys + tableCatalog.allTables
-        val tablePartitions = allTables.associateWith { table ->
-            trieCatalog.withPartitions(table, listOfNotNull(addedTriesByTable[table]), triesAsOf)
-        }
-
-        val tableBlocks = tableCatalog.buildTableBlocks(finishedBlocks, tablePartitions)
-
-        // A table new in this block has already written its L0 trie by now, under the slug its LiveTable was
-        // created with — the same one minted here, because both resolve through `State.slug`.
-        val entries = tableCatalog.resolveTables(tableBlocks.keys).associateBy { it.table }
-
-        coroutineScope {
-            tableBlocks.forEach { (table, tableBlock) ->
-                launch(uploadDispatcher) {
-                    val path = TableCatalog.tableBlockPath(entries.getValue(table).slug, blockIdx)
-                    bufferPool.putObject(path, ByteBuffer.wrap(tableBlock.toByteArray()))
-                }
-            }
-        }
-
-        val secondaryDatabasesForBlock = dbCatalog?.serialisedSecondaryDatabases
-
-        val externalSourceToken = boundary.externalSourceToken
-
-        val block = tableCatalog.buildBlock(
-            blockIdx, liveIndex.latestCompletedTx, latestProcessedMsgId,
-            boundaryReplicaMsgId, entries.values, secondaryDatabasesForBlock,
-            externalSourceToken,
-            // not leaderTerm - #6059
-            boundary.termId
-        )
-
-        bufferPool.putObject(TableCatalog.blockFilePath(blockIdx), ByteBuffer.wrap(block.toByteArray()))
-        lastUploadEpochSeconds.set(Instant.now().epochSecond)
-
-        // Awaited, and not through the append pump: this is the message the whole cluster is waiting on
-        // to close the block, this node now included. Queued, a term ending in between would drop it —
-        // the pump's shutdown discards whatever it still holds. Awaited, a failure to append reaches the
-        // term instead, which leaves the boundary unapplied for the next role to pick up and re-produce.
-        val uploadedMsgId = logsDriver.appendToReplica(
-            BlockUploaded(
-                Storage.VERSION, bufferPool.epoch,
-                blockIdx, latestProcessedMsgId,
-                addedTries, externalSourceToken,
-                // This term's, not the boundary's: a promotion finishes the block the previous leader
-                // cut, and a leader confirms a write only on reading it back at its own term.
-                termId = leaderTerm,
-            )
-        ).msgId
-
-        LOG.debug("block uploaded b${blockIdx.asLexHex}: source=$latestProcessedMsgId, replica=$uploadedMsgId")
-
-        blockUploadTimer?.let { timer?.stop(it) }
-
-        return Uploading(pendingBlock, block)
-    }
 }
