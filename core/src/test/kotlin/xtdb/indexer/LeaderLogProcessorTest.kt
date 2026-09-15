@@ -110,7 +110,11 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
         }
 
         val proc = unstartedTerm(watchers, extSource = extSource).proc
-        proc.extSrcProc!!.run()
+
+        // `run` parks once the adapter is done, so the interrupt's handling is observed by cancelling it.
+        val job = backgroundScope.launch { proc.extSrcProc!!.run() }
+        testScheduler.advanceUntilIdle()
+        job.cancelAndJoin()
 
         assertNull(
             watchers.exception,
@@ -447,7 +451,7 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
     }
 
     @Test
-    fun `a higher-term record read back resigns the leader`() = runTest(timeout = 5.seconds) {
+    fun `resigning cancels a staged executeTx rather than surfacing the supersession`() = runTest(timeout = 5.seconds) {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
@@ -468,13 +472,10 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
         // backgroundScope and fail the test, so we don't await it directly.
         val thrown = CompletableDeferred<Throwable>()
         backgroundScope.launch {
-            try {
-                lp.extSrcProc!!.executeTx(null) { TxIndexer.TxResult.Committed() }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Throwable) {
-                thrown.complete(e)
-            }
+            thrown.complete(
+                runCatching { lp.extSrcProc!!.executeTx(null) { TxIndexer.TxResult.Committed() } }
+                    .exceptionOrNull() ?: AssertionError("executeTx returned normally")
+            )
         }
         appendStarted.await()
 
@@ -484,10 +485,7 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
 
         // term 2 > our term 1 → we resign; the term tears down and fails everything staged.
         val e = thrown.await()
-        assertTrue(
-            generateSequence(e) { it.cause }.any { it.message?.contains("superseded") == true },
-            "the awaiting executeTx surfaces the supersession, got: $e"
-        )
+        assertTrue(e is CancellationException, "the staged executeTx is cancelled, got: $e")
 
         // A clean resignation is expected, not a query fault: the watchers must not be poisoned — the
         // transport re-follows on the next rebalance.

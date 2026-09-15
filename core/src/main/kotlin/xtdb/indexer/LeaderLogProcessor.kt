@@ -265,9 +265,7 @@ internal class LeaderLogProcessor(
      * boundary among them opens the next block there and the records behind it are held again instead of
      * being applied into a block already snapshotted.
      */
-    private suspend fun closeBlock(
-        record: Log.Record<ReplicaMessage>, msg: ReplicaMessage.BlockUploaded,
-    ) {
+    private suspend fun closeBlock(record: Log.Record<ReplicaMessage>, msg: ReplicaMessage.BlockUploaded) {
         val pending = blockCutter.closeBlock(msg, record.logTimestamp)
 
         watchers.notifyApplied(msg.latestProcessedMsgId)
@@ -333,14 +331,9 @@ internal class LeaderLogProcessor(
                     watchers.notifyError(t)
                 }
             }
-
-            // A flat sweep rather than per-caller handling: nothing may be left awaiting a term that has gone,
-            // and the symptom of missing one is a hang, not an error (#5711 / #5817).
-            txResolver.failPending(t)
-            srcLogProc.shutdown()
-            extSrcProc?.shutdown(t)
-            gc.shutdown(t)
-            replicaAppender.shutdown(t)
+        } finally {
+            txResolver.cancel()
+            srcLogProc.cancel()
         }
     }
 

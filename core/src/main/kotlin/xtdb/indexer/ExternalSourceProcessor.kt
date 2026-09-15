@@ -2,6 +2,7 @@ package xtdb.indexer
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.selects.SelectBuilder
@@ -106,33 +107,24 @@ internal class ExternalSourceProcessor(
         return task.msg.pending
     }
 
-    /** Run the source adapter against this term until cancelled. */
     suspend fun run() {
         try {
-            extSource.onPartitionAssigned(partition, watchers.externalSourceToken, this)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Throwable) {
-            // A supersession reaches here raw, where every other term-teardown cause is re-cast by
-            // `asCancellation` and caught above: it says this node has resigned, not that the database
-            // has failed, so it is a shutdown signal in everything but type.
-            if (!e.isShutdownSignal && e !is LeaderSupersededException) watchers.notifyError(e)
-        }
-    }
+            try {
+                extSource.onPartitionAssigned(partition, watchers.externalSourceToken, this)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                // A supersession reaches here raw, where every other term-teardown cause is re-cast by
+                // `asCancellation` and caught above: it says this node has resigned, not that the database
+                // has failed, so it is a shutdown signal in everything but type.
+                if (!e.isShutdownSignal && e !is LeaderSupersededException) watchers.notifyError(e)
+            }
 
-    /**
-     * Shut the queue down and fail everyone still waiting on it: senders (via the close cause) and
-     * whatever is still queued (via each task's [Task.abandon]).
-     *
-     * Close and drain are bundled because both are needed and the order matters — `close` alone doesn't
-     * visit buffered elements (only `cancel` does), so a queued task's caller would wait forever; and
-     * closing *first* means no send can slip into a buffer we've already drained.
-     *
-     * Only safe on the persister's own exit path: it is the sole receiver, so nothing competes with these
-     * `tryReceive`s.
-     */
-    fun shutdown(cause: Throwable) {
-        tasks.close(cause)
-        while (true) (tasks.tryReceive().getOrNull() ?: break).abandon(cause)
+            // The adapter finishing ends the source, not the term: the term goes on serving the source log,
+            // and its select still arms `tasks`, so cancelling the queue here would take it down.
+            awaitCancellation()
+        } finally {
+            tasks.cancel()
+        }
     }
 }

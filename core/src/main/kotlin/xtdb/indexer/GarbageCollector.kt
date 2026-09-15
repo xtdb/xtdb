@@ -46,16 +46,10 @@ internal class GarbageCollector(
         )
     }
 
-    private val gcCh = Channel<GcTask>(
-        Channel.UNLIMITED,
-        onUndeliveredElement = { it.abandon(CancellationException("leader term closed")) }
-    )
+    private val gcCh = Channel<GcTask>(Channel.UNLIMITED, onUndeliveredElement = { it.cancel() })
 
     // Tasks whose `TriesDeleted` is appended and not read back yet. Positional: the log hands them back in
     // append order, so the head is the one that the record arriving confirms.
-    //
-    // A transient — the term's coroutine is the only thing that touches it, across the arm below,
-    // [triesDeleted] and [shutdown].
     private val inFlight = ArrayDeque<GcTask>()
 
     fun SelectBuilder<Unit>.armSelect() {
@@ -115,9 +109,7 @@ internal class GarbageCollector(
     sealed class GcTask {
         val onComplete = CompletableDeferred<Unit>()
 
-        fun abandon(cause: Throwable) {
-            onComplete.completeExceptionally(cause)
-        }
+        fun cancel() = onComplete.cancel()
 
         data class TriesDeleted(val tableName: TableRef, val trieKeys: Set<TrieKey>) : GcTask()
     }
@@ -127,21 +119,21 @@ internal class GarbageCollector(
         trieGc.signal()
     }
 
-    suspend fun runGc() = supervisorScope {
-        launch { blockGc.run() }
-        launch { trieGc.run() }
-    }
+    suspend fun runGc() =
+        try {
+            supervisorScope {
+                launch { blockGc.run() }
+                launch { trieGc.run() }
+            }
+        } finally {
+            gcCh.cancel()
+
+            inFlight.forEach { it.cancel() }
+            inFlight.clear()
+        }
 
     fun awaitNoGarbageBlocking() {
         blockGc.awaitNoGarbageBlocking()
         trieGc.awaitNoGarbageBlocking()
-    }
-
-    fun shutdown(cause: Throwable) {
-        gcCh.close(cause)
-        while (true) (gcCh.tryReceive().getOrNull() ?: break).abandon(cause)
-
-        inFlight.forEach { it.abandon(cause) }
-        inFlight.clear()
     }
 }

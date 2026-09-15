@@ -149,7 +149,7 @@ internal class TxResolver(
      * Fail every pending deferred we're still holding. Called on teardown paths where queued txs will never
      * settle — the leader's persister is exiting and nobody else will complete them.
      */
-    fun failPending(cause: Throwable) = queue.forEach { it.pending?.completeExceptionally(cause) }
+    fun cancel() = queue.forEach { it.pending?.cancel() }
 
     /**
      * Take ownership of [openTx]'s written tables (a reference move — see `OpenTx.sealTables`), enqueue them,

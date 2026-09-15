@@ -2,7 +2,6 @@ package xtdb.indexer
 
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.channels.ClosedSendChannelException
 import kotlinx.coroutines.selects.SelectBuilder
 import xtdb.api.DatabaseName
 import xtdb.api.error.Anomaly
@@ -264,7 +263,7 @@ internal class SourceLogProcessor(
             SourceBatch(records).also { ch.send(it) }.onComplete.await()
     }
 
-    fun shutdown() {
+    fun cancel() {
         pausedBatch?.shutdown()
         ch.cancel()
     }

@@ -23,13 +23,6 @@ internal class ControlItem(private val message: ReplicaMessage) : AppendItem {
     override fun toReplicaMessage() = message
 }
 
-/**
- * The replica log's write end for one leader term: everything the term resolves is queued here and appended
- * in that order.
- *
- * Appending is its own coroutine so that the serialization and the log round-trip stay off the term's work
- * loop — which is what releases the transport's poll thread at "resolved" rather than at "durable" (#5741).
- */
 internal class ReplicaLogAppender(private val logsDriver: LogProcessor.LogsDriver) {
 
     // Unbounded: the term queues here from the same coroutine that services its consume-back, so a bounded
@@ -40,12 +33,10 @@ internal class ReplicaLogAppender(private val logsDriver: LogProcessor.LogsDrive
     suspend fun append(item: AppendItem) = queue.send(item)
 
     suspend fun run() {
-        for (item in queue) logsDriver.appendToReplica(item.toReplicaMessage())
+        try {
+            for (item in queue) logsDriver.appendToReplica(item.toReplicaMessage())
+        } finally {
+            queue.cancel()
+        }
     }
-
-    /**
-     * A close rather than a cancel, so an append already in flight lands rather than tearing. Whatever is
-     * still queued is dropped: its `ResolvedTx` is borrowed, and the resolver frees it.
-     */
-    fun shutdown(cause: Throwable) = queue.close(cause.asCancellation())
 }
