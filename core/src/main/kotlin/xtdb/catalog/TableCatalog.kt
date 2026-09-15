@@ -25,9 +25,11 @@ import xtdb.block.proto.txKey
 import xtdb.database.proto.DatabaseConfig
 import xtdb.indexer.LiveTable
 import xtdb.storage.BufferPool
+import xtdb.table.ColumnMeta
 import xtdb.table.TableEntry
 import xtdb.table.TableSlug
 import xtdb.table.fromSchemaAndTable
+import xtdb.table.vectorType
 import xtdb.time.InstantUtil.asMicros
 import xtdb.time.microsAsInstant
 import xtdb.trie.BlockIndex
@@ -357,14 +359,25 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
             allBlockFiles.toList().dropLast(maxOf(0, distance - 1)).lastOrNull()?.key
                 ?.let { blockKey -> Block.parseFrom(getByteArray(blockKey)) }
 
-        private fun parseTableBlock(tableBlock: TableBlock) =
-            TableMeta(
+        internal fun parseTableBlock(tableBlock: TableBlock): TableMeta {
+            if (tableBlock.columnsCount > 0) {
+                val cols = tableBlock.columnsMap.mapValues { (name, col) -> ColumnMeta.fromProto(name, col) }
+
+                return TableMeta(
+                    cols.mapValues { it.value.type.vectorType },
+                    tableBlock.rowCount,
+                    cols.mapNotNull { (name, col) -> col.hll?.let { name to it } }.toMap()
+                )
+            }
+
+            return TableMeta(
                 tableBlock.arrowSchema.toByteArray()
                     .let { ByteBuffer.wrap(it).deserializeMessageAsSchemaInterruptibly() }
                     .fields.associate { field -> field.name to field.asType },
                 tableBlock.rowCount,
                 tableBlock.columnNameToHllMap.mapValues { (_, bs) -> toHLL(bs.toByteArray()) }
             )
+        }
 
         internal fun loadTablesFromStorage(
             bufferPool: BufferPool, entries: List<TableEntry>, blockIndex: BlockIndex
@@ -444,10 +457,13 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
 
             return TableBlock.newBuilder()
                 .apply {
+                    // the schema and the hll map are what a reader predating the tree finds the columns by,
+                    // so they keep being written until a release can assume every node reads `columns`
                     this.arrowSchema = ByteString.copyFrom(schema.serializeAsMessageInterruptibly())
                     this.rowCount = rowCount
                     putAllColumnNameToHll(hlls.mapValues { (_, hll) -> ByteString.copyFrom(hll.duplicate()) })
                     addAllPartitions(partitions)
+                    putAllColumns(vecTypes.mapValues { (name, type) -> ColumnMeta.of(name, type, hlls[name]).toProto() })
                 }
                 .build()
         }

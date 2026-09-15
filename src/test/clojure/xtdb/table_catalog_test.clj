@@ -42,9 +42,10 @@
         (xt/execute-tx node [[:put-docs :foo {:xt/id 2}]])
         (tu/flush-block! node)
 
-        (t/is (= [(os/->StoredObject "tables/public$foo/blocks/b00.binpb" 4353)
-                  (os/->StoredObject "tables/public$foo/blocks/b01.binpb" 4435)]
-                 (.listAllObjects bp (table-cat/->table-block-dir (TableSlug/of #xt/table foo)))))
+        (t/is (= [(util/->path "tables/public$foo/blocks/b00.binpb")
+                  (util/->path "tables/public$foo/blocks/b01.binpb")]
+                 (->> (.listAllObjects bp (table-cat/->table-block-dir (TableSlug/of #xt/table foo)))
+                      (mapv (comp :key os/<-StoredObject)))))
 
         (let [{hlls1 :hlls :as _table-block1} (->> (.getByteArray bp (util/->path "tables/public$foo/blocks/b00.binpb"))
                                                    TableBlock/parseFrom
