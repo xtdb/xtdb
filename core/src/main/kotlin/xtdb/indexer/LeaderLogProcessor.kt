@@ -12,8 +12,6 @@ import xtdb.NodeBase
 import xtdb.api.DatabaseName
 import xtdb.api.TransactionKey
 import xtdb.api.TransactionResult
-import xtdb.api.error.Anomaly
-import xtdb.api.error.Fault
 import xtdb.api.log.DbOp
 import xtdb.api.log.Log
 import xtdb.api.log.ReplicaMessage
@@ -150,29 +148,10 @@ internal class LeaderLogProcessor(
         // some other cluster's primary before it was attached here, and those are that cluster's to apply.
         val dbCatalog = dbCatalog ?: return
 
-        try {
-            when (dbOp) {
-                is DbOp.Attach -> dbCatalog.attach(dbOp.dbName, dbOp.config)
-                is DbOp.Detach -> dbCatalog.detach(dbOp.dbName)
-                null -> {}
-            }
-        } catch (e: Anomaly.Caller) {
-            // A caller fault at resolution belongs to whoever submitted the attach, and aborts their
-            // transaction. The same failure here belongs to nobody: the transaction has committed, no
-            // caller is left to act on it, and nothing re-reads the instruction. So it is this node's
-            // fault, and it stops the database rather than being reported.
-            //
-            // Every refusal reaching here says this node disagrees with the log — including one that
-            // names a database it already holds, because holding the name says nothing about holding
-            // it under the config the log just carried.
-            //
-            // Carrying on is the worse option, not the safer one: a block records the whole secondary
-            // list and replaces the previous one, so the next boundary would erase a database this node
-            // merely failed to open, for the entire cluster.
-            throw Fault(
-                "[$dbName] could not apply $dbOp", "xtdb/db-op-not-applied",
-                mapOf("db-name" to dbName, "db-op" to dbOp.toString()), e
-            )
+        when (dbOp) {
+            is DbOp.Attach -> dbCatalog.attach(dbOp.dbName, dbOp.config)
+            is DbOp.Detach -> dbCatalog.detach(dbOp.dbName)
+            null -> {}
         }
     }
 
