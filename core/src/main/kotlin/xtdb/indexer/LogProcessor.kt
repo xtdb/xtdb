@@ -217,7 +217,7 @@ class LogProcessor(
             return
         }
 
-        LOG.debug("[$dbName] claiming leadership at term ${LeaderTerm.format(termId)}")
+        LOG.debug("[$dbName] claiming leadership at term $termId")
     }
 
     private suspend fun handleRecord(polled: Log.Record<ReplicaMessage>) {
@@ -241,7 +241,7 @@ class LogProcessor(
 
                 try {
                     if (role is Leading && msgTerm > role.leaderTerm) {
-                        LOG.info("[$dbName] superseded by term ${LeaderTerm.format(msgTerm)} — resigning")
+                        LOG.info("[$dbName] superseded by term $msgTerm — resigning")
                         role.job.cancelAndJoin()
                         reopenFollower()
                         continue
@@ -336,7 +336,7 @@ class LogProcessor(
 
     /** Runs inline on the reader, so a rival's claim cannot land between reading our own back and leading. */
     private suspend fun cutOverToLeader(following: Following, termId: Long) {
-        LOG.info("[$dbName] claim at term ${LeaderTerm.format(termId)} conferred leadership")
+        LOG.info("[$dbName] claim at term $termId conferred leadership")
 
         var pendingBlock: PendingBlock? = null
 
