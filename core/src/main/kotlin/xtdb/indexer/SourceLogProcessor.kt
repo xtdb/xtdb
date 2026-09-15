@@ -2,9 +2,9 @@ package xtdb.indexer
 
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.ClosedSendChannelException
 import kotlinx.coroutines.selects.SelectBuilder
 import xtdb.api.DatabaseName
-import xtdb.api.TransactionResult
 import xtdb.api.error.Anomaly
 import xtdb.api.error.Conflict
 import xtdb.api.error.NotFound
@@ -30,70 +30,23 @@ internal class SourceBatch(val records: List<Log.Record<SourceMessage>>) {
     /**
      * Fail the awaiting submitter, because the term is going away without finishing this batch.
      *
-     * Always a cancellation, whatever the term's cause. The transport's poll thread awaits this inside
-     * `processRecords`, and anything other than a CancellationException escaping there unwinds
-     * `openGroupSubscription` into the Database scope's `CoroutineExceptionHandler` — which calls
-     * `watchers.notifyError`, so a *clean* resignation would end up poisoning queries and evicting the
-     * shared consumer. The term's real fault, if any, is already on the watchers; we keep it as this
-     * cancellation's cause for the logs. See #5817.
+     * The transport's poll thread awaits this inside `processRecords`, and anything other than a
+     * CancellationException escaping there unwinds `openGroupSubscription` into the Database scope's
+     * `CoroutineExceptionHandler` — which calls `watchers.notifyError`, so a *clean* resignation would end
+     * up poisoning queries and evicting the shared consumer. See #5817.
      */
-    fun abandon(cause: Throwable?) = onComplete.cancel(cause.asCancellation())
+    fun abandon() = onComplete.cancel()
 }
 
 /**
- * The inbound source-log pipe — the one edge that runs the other way, so the persister *pulls*
- * batches through a select clause rather than being pushed at.
+ * Run a resolution task, routing its failure onto its completion handle so that no caller hangs.
  *
- * One owned object rather than three members on [SourceLogProcessor]: submitting, selecting and shutting
- * down are the three ends of a single pipe, and keeping them together is what stops them drifting.
+ * A successful source batch completes its own handle, possibly deferred if a block cut paused it.
  */
-internal class SourceBatches {
-    // capacity 1: the poll thread can deposit one batch ahead and read the next while the persister
-    // works, bounding lookahead to ~2 batches. Backpressure falls out of a full channel suspending
-    // the send.
-    private val ch = Channel<SourceBatch>(capacity = 1, onUndeliveredElement = { it.abandon(null) })
-
-    /** Armed by the persister's select, alongside its own channels. */
-    val onBatch get() = ch.onReceive
-
-    /** Hand a batch to the persister; the returned handle completes once it has been processed. */
-    suspend fun submit(records: List<Log.Record<SourceMessage>>) =
-        SourceBatch(records).also { ch.send(it) }.onComplete
-
-    /**
-     * Term teardown: no batch will be processed after this, and a later [submit] throws.
-     *
-     * Fails everyone still waiting — senders via the close cause, and whatever is still queued via
-     * [SourceBatch.abandon]. Miss the queued ones and the symptom is a hang on the transport's poll
-     * thread, which is also the sole servicer of the transport's unregister, so it wedges the whole
-     * subscription teardown (#5711 / #5817).
-     *
-     * Close and drain, in that order: `close` alone doesn't visit buffered elements (only `cancel` does),
-     * so a queued batch's submitter would wait forever; and closing first means no send can slip into a
-     * buffer we've already drained. The close cause must be a cancellation too — it is what a later `send`
-     * throws, and the poll thread sends here. Only safe on the persister's exit path: it is the sole
-     * receiver, so nothing competes with these `tryReceive`s.
-     */
-    fun shutdown(cause: Throwable?) {
-        ch.close(cause.asCancellation())
-        while (true) (ch.tryReceive().getOrNull() ?: break).abandon(cause)
-    }
-}
-
-/**
- * Run a resolution task, routing failures onto its completion handle (and any external-source result) so
- * that no caller hangs. Interrupts are shutdown signals, not ingestion faults, so they don't poison the
- * watchers. A successful source batch completes its own handle, possibly deferred if a block cut paused it.
- */
-private inline fun runTaskGuarded(
-    onComplete: CompletableDeferred<Unit>,
-    extResult: CompletableDeferred<TransactionResult>? = null,
-    block: () -> Unit,
-) =
+private inline fun runTaskGuarded(onComplete: CompletableDeferred<Unit>, block: () -> Unit) =
     try {
         block()
     } catch (e: Throwable) {
-        if (!e.isShutdownSignal) extResult?.let { if (!it.isCompleted) it.completeExceptionally(e) }
         onComplete.completeExceptionally(e)
         throw e
     }
@@ -115,7 +68,10 @@ internal class SourceLogProcessor(
     flushTimeout: Duration,
 ) : Log.RecordProcessor<SourceMessage> {
 
-    private val sourceBatches = SourceBatches()
+    // capacity 1: the poll thread can deposit one batch ahead and read the next while the persister
+    // works, bounding lookahead to ~2 batches.
+    // Backpressure falls out of a full channel suspending the send.
+    private val ch = Channel<SourceBatch>(capacity = 1, onUndeliveredElement = { it.abandon() })
 
     private val tableCatalog = partitionState.tableCatalog
 
@@ -124,7 +80,9 @@ internal class SourceLogProcessor(
     // A source batch paused mid-way by a block cut: the task, and where to pick it up again. At most one —
     // the poll thread awaits each batch before sending the next, so only one is ever in flight; a nullable
     // field makes that structural. Holds the *task*, so its failure policy stays the task's own.
-    private class PausedBatch(val task: SourceBatch, val nextIdx: Int)
+    private class PausedBatch(val task: SourceBatch, val nextIdx: Int) {
+        fun shutdown() = task.abandon()
+    }
 
     private var pausedBatch: PausedBatch? = null
 
@@ -259,30 +217,33 @@ internal class SourceLogProcessor(
     // Process a batch from `startIdx`, stopping where a record cuts a block — stashing the remainder on
     // [pausedBatch] so the loop resumes it after the upload. Completes the task only when fully drained.
     private suspend fun runBatch(task: SourceBatch, startIdx: Int) {
-        var i = startIdx
-        while (i < task.records.size) {
-            val cutBlock = handleRecord(task.records[i])
-            i++
-            if (cutBlock) {
-                pausedBatch = PausedBatch(task, i)
-                return
+        try {
+            var i = startIdx
+            while (i < task.records.size) {
+                val cutBlock = handleRecord(task.records[i])
+                i++
+                if (cutBlock) {
+                    pausedBatch = PausedBatch(task, i)
+                    return
+                }
             }
+            task.onComplete.complete(Unit)
+        } catch (e: Throwable) {
+            task.onComplete.completeExceptionally(e)
+            throw e
         }
-        task.onComplete.complete(Unit)
     }
 
-    /** Arm this processor's clauses. The term arms them only while no block cut is in progress. */
     fun SelectBuilder<Unit>.armSelect() {
         if (pausedBatch != null)
             resumeCh.onReceive {
-                val pb = pausedBatch ?: return@onReceive
-                pausedBatch = null
-                runTaskGuarded(pb.task.onComplete) { runBatch(pb.task, pb.nextIdx) }
+                pausedBatch?.let { pb ->
+                    pausedBatch = null
+                    runBatch(pb.task, pb.nextIdx)
+                }
             }
 
-        sourceBatches.onBatch { batch ->
-            runTaskGuarded(batch.onComplete) { runBatch(batch, 0) }
-        }
+        ch.onReceive { batch -> runBatch(batch, 0) }
     }
 
     private suspend fun maybeFlushBlock() {
@@ -290,7 +251,6 @@ internal class SourceLogProcessor(
             logsDriver.requestFlushBlock(tableCatalog.currentBlockIndex ?: -1)
     }
 
-    /** The transport's edge: hand a poll batch over and await its resolution. */
     override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
         maybeFlushBlock()
 
@@ -300,17 +260,12 @@ internal class SourceLogProcessor(
         //  - blocking here until the batch is resolved keeps the poll loop and the persister roughly in
         //    step (channel cap 1 → ~2 batches of lookahead);
         //  - so a rebalance/transition under runBlocking doesn't pile up behind unbounded resolution (#5741).
-        if (records.isNotEmpty()) sourceBatches.submit(records).await()
+        if (records.isNotEmpty())
+            SourceBatch(records).also { ch.send(it) }.onComplete.await()
     }
 
-    /**
-     * Fail everyone still waiting on the source log: whatever a block cut stashed, and the pipe itself.
-     *
-     * The pipe's own shutdown owns the must-be-a-cancellation rule ([SourceBatch.abandon]), because the
-     * transport's poll thread both awaits and sends there.
-     */
-    fun shutdown(cause: Throwable) {
-        pausedBatch?.task?.abandon(cause)
-        sourceBatches.shutdown(cause)
+    fun shutdown() {
+        pausedBatch?.shutdown()
+        ch.cancel()
     }
 }

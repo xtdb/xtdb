@@ -337,7 +337,7 @@ internal class LeaderLogProcessor(
             // A flat sweep rather than per-caller handling: nothing may be left awaiting a term that has gone,
             // and the symptom of missing one is a hang, not an error (#5711 / #5817).
             txResolver.failPending(t)
-            srcLogProc.shutdown(t)
+            srcLogProc.shutdown()
             extSrcProc?.shutdown(t)
             gc.shutdown(t)
             replicaAppender.shutdown(t)
