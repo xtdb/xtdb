@@ -230,7 +230,7 @@ class LogProcessorTest {
         logProc.demoteLeader(0)
 
         assertEquals(
-            highTerm, logProc.termFence.highestSeen,
+            highTerm, logProc.highestTermSeen,
             "the demote does not lower what the log has been seen to reach"
         )
 
@@ -293,7 +293,7 @@ class LogProcessorTest {
         logProc.awaitReplicaMsg(superseded.msgId)
 
         assertEquals(1L, watchers.latestTxId, "the superseded leader's tx was never applied")
-        assertEquals(LeaderTerm.of(0, 2), logProc.termFence.highestSeen)
+        assertEquals(LeaderTerm.of(0, 2), logProc.highestTermSeen)
         assertTrue(leader.msgId < superseded.msgId)
 
         scope.coroutineContext.job.cancelAndJoin()
@@ -385,7 +385,7 @@ class LogProcessorTest {
             "the incoming leader finished the block its predecessor left open"
         )
         assertEquals(
-            incoming, logProc.termFence.highestSeen,
+            incoming, logProc.highestTermSeen,
             "every record folded as it arrived, up to this leader's own claim"
         )
 
@@ -433,7 +433,7 @@ class LogProcessorTest {
         stoodDown.await()
 
         assertEquals(
-            LeaderTerm.of(0, 9), logProc.termFence.highestSeen,
+            LeaderTerm.of(0, 9), logProc.highestTermSeen,
             "the record that demoted this term is folded and then applied, by the follower replacing it"
         )
         assertNull(watchers.exception, "being superseded is not an ingestion fault")
@@ -470,7 +470,7 @@ class LogProcessorTest {
             "being superseded is not an ingestion fault, so the database stays queryable"
         )
         assertEquals(
-            LeaderTerm.of(0, 9), logProc.termFence.highestSeen,
+            LeaderTerm.of(0, 9), logProc.highestTermSeen,
             "the claim folded where it arrived, behind the open block, which is what refused the promotion"
         )
 

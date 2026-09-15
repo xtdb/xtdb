@@ -34,6 +34,8 @@ private val LOG = LogProcessor::class.logger
 internal val Throwable.isShutdownSignal
     get() = this is CancellationException || this is InterruptedException || this is Interrupted
 
+internal class LeaderSupersededException(message: String) : RuntimeException(message)
+
 /**
  * Re-cast a term-teardown cause as a cancellation, preserving the original for the logs.
  *
@@ -107,7 +109,42 @@ class LogProcessor(
     private val bufferPool = partitionStorage.bufferPool
     private val hasExternalSource = externalSource != null
 
-    val termFence = TermFence(dbName, partitionState.tableCatalogOrNull?.boundaryTermId ?: 0)
+    /**
+     * The highest leader term seen on this partition's replica log.
+     *
+     * The partition's, not a role's. A role change opens a fresh follower, and a high-water seeded afresh
+     * from the persisted block boundary would forget every term written since the last block flush — so the
+     * same term could be admitted twice, once either side of a demote.
+     *
+     * Written by the tail coroutine, and by a transition while both roles are down; those don't race,
+     * because the transition holds the record the tail is waiting to hand on. Volatile because the
+     * transition reads it from its own coroutine.
+     */
+    @Volatile
+    internal var highestTermSeen: Long = partitionState.tableCatalogOrNull?.boundaryTermId ?: 0
+        private set
+
+    /**
+     * Refuse [term] where the log has already reached a higher one — every reader would discard what a
+     * leader at [term] wrote, so it must not take leadership.
+     *
+     * The same refusal covers both ways the log gets above a claim, because the fence cannot tell them
+     * apart and the operator needs the second named either way: a newer leader legitimately superseding
+     * this one, and the election counter regressing underneath it. Refusing costs liveness only, never
+     * safety, and it is a resignation rather than a fault — it MUST NOT reach the watchers, or a node that
+     * merely failed to lead would leave a healthy database unqueryable (#5817).
+     */
+    internal fun checkUnfenced(term: Long) {
+        val maxTerm = highestTermSeen
+        if (maxTerm > term)
+            throw LeaderSupersededException(
+                "[$dbName] leader term ${LeaderTerm.format(term)} is fenced by " +
+                        "${LeaderTerm.format(maxTerm)} on the replica log. Where the leader-election " +
+                        "counter has regressed rather than a newer leader having superseded this one " +
+                        "(a recreated Kafka consumer group, or a restarted local log), bump the log's " +
+                        "termEpoch above ${LeaderTerm.epochOf(maxTerm)}"
+            )
+    }
 
     private sealed interface TailPos {
         /** The last record the tail finished with, applied or discarded. */
@@ -186,10 +223,11 @@ class LogProcessor(
             val record = bufferPool.resolveOversized(polled)
             val msgTerm = record.message.termId
 
-            // A record below the high-water was written by a leader the log has moved past, so every
-            // reader discards it. Guarding the apply rather than returning, because the consume
-            // position below advances for a discarded record too.
-            if (termFence.admit(msgTerm)) {
+            // Below the high-water: written by a leader the log has moved past, so every reader
+            // discards it. Guarding the apply rather than returning, because the consume position
+            // below advances for a discarded record too.
+            if (msgTerm >= highestTermSeen) {
+                highestTermSeen = msgTerm
 
                 // A role ending cancels the handle mid-record, so the record is offered again to
                 // whatever replaces that role — and the claim is tested inside the loop with it, so
@@ -311,7 +349,7 @@ class LogProcessor(
 
         // Our own claim is now read back, so the follower's max term is the log's — anything above
         // it fences us, and leading would index nothing. Refuse loudly instead (#5817).
-        termFence.checkUnfenced(termId)
+        checkUnfenced(termId)
     }
 
     override fun transitionToLeader(partition: Int, termId: Long): Deferred<TailSpec<SourceMessage>> {
@@ -358,7 +396,7 @@ class LogProcessor(
 
                     // Asked again, because the claim's own check goes stale: that one runs while the
                     // follower is still live, and the tail folds until the join above.
-                    termFence.checkUnfenced(termId)
+                    checkUnfenced(termId)
 
                     val replicaAppender = ReplicaLogAppender(logsDriver)
 
