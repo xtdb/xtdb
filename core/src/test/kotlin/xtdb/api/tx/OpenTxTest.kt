@@ -10,19 +10,10 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import xtdb.NodeBase
 import xtdb.NodeBase.Companion.openBase
-import xtdb.SimulationTestUtils.Companion.createTrieCatalog
+import xtdb.TestPartition
 import xtdb.api.TransactionKey
-import xtdb.api.log.InMemoryLog
-import xtdb.api.log.ReplicaMessage
-import xtdb.api.log.SourceMessage
-import xtdb.catalog.TableCatalog
-import xtdb.database.DatabaseLogs
-import xtdb.database.PartitionState
-import xtdb.database.PartitionStorage
-import xtdb.indexer.LiveIndex
 import xtdb.storage.MemoryStorage
 import java.time.Instant
-import java.time.InstantSource
 
 class OpenTxTest {
 
@@ -43,20 +34,11 @@ class OpenTxTest {
 
     private fun <R> withOpenTx(dbName: String, f: (OpenTx) -> R): R =
         MemoryStorage(allocator, epoch = 0).use { bp ->
-            val tableCatalog = TableCatalog(bp)
-            val trieCatalog = createTrieCatalog()
-            val liveIndex = LiveIndex.open(allocator, tableCatalog, trieCatalog)
-
-            PartitionState(tableCatalog, trieCatalog, liveIndex).use { partitionState ->
-                val storage = PartitionStorage(
-                    DatabaseLogs(
-                        InMemoryLog<SourceMessage>(InstantSource.system(), 0),
-                        InMemoryLog<ReplicaMessage>(InstantSource.system(), 0),
-                    ),
-                    bp, null
-                )
-
-                OpenTx(allocator, nodeBase, storage, partitionState, dbName, TransactionKey(0, Instant.EPOCH), null).use(f)
+            TestPartition(allocator, bp).use { partition ->
+                OpenTx(
+                    allocator, nodeBase, partition.storage, partition.state, dbName,
+                    TransactionKey(0, Instant.EPOCH), null
+                ).use(f)
             }
         }
 

@@ -19,25 +19,17 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import xtdb.NodeBase
 import xtdb.NodeBase.Companion.openBase
-import xtdb.SimulationTestUtils.Companion.createTrieCatalog
+import xtdb.TestPartition
 import xtdb.api.IndexerConfig
 import xtdb.api.TableRef
 import xtdb.api.TransactionKey
-import xtdb.api.log.InMemoryLog
 import xtdb.api.log.ReplicaMessage.BlockBoundary
 import xtdb.api.log.ReplicaMessage.BlockUploaded
-import xtdb.api.log.ReplicaMessage
-import xtdb.api.log.SourceMessage
 import xtdb.api.tx.OpenTx
-import xtdb.catalog.TableCatalog
-import xtdb.database.DatabaseLogs
-import xtdb.database.PartitionState
-import xtdb.database.PartitionStorage
 import xtdb.storage.MemoryStorage
 import xtdb.trie.Trie
 import xtdb.util.closeAll
 import java.time.Instant
-import java.time.InstantSource
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
 
@@ -79,22 +71,18 @@ internal class BlockCutterTest {
         private val ioDispatcher: CoroutineDispatcher,
     ) : AutoCloseable {
         private val bufferPool = MemoryStorage(allocator, epoch = 0)
-        val tableCatalog = TableCatalog(bufferPool)
-        val trieCatalog = createTrieCatalog()
 
-        val liveIndex = LiveIndex.open(
-            allocator, tableCatalog, trieCatalog,
-            IndexerConfig().rowsPerBlock(blockThreshold), ioDispatcher
+        private val partition = TestPartition(
+            allocator, bufferPool,
+            indexerConfig = IndexerConfig().rowsPerBlock(blockThreshold), ioDispatcher = ioDispatcher
         )
 
-        private val partitionState = PartitionState(tableCatalog, trieCatalog, liveIndex)
-        private val partitionStorage = PartitionStorage(
-            DatabaseLogs(
-                InMemoryLog<SourceMessage>(InstantSource.system(), 0),
-                InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
-            ),
-            bufferPool, null
-        )
+        val tableCatalog get() = partition.tableCatalog
+        val trieCatalog get() = partition.trieCatalog
+        val liveIndex get() = partition.liveIndex
+
+        private val partitionState get() = partition.state
+        private val partitionStorage get() = partition.storage
 
         private val driver = RecordingLogsDriver()
         val appender = ReplicaLogAppender(driver)
@@ -129,7 +117,7 @@ internal class BlockCutterTest {
             )
 
         override fun close() {
-            partitionState.close()
+            partition.close()
             bufferPool.close()
         }
     }

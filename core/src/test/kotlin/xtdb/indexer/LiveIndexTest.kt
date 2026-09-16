@@ -18,15 +18,8 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import xtdb.NodeBase
 import xtdb.NodeBase.Companion.openBase
-import xtdb.SimulationTestUtils.Companion.createTrieCatalog
+import xtdb.TestPartition
 import xtdb.api.TransactionKey
-import xtdb.api.log.InMemoryLog
-import xtdb.api.log.ReplicaMessage
-import xtdb.api.log.SourceMessage
-import xtdb.catalog.TableCatalog
-import xtdb.database.DatabaseLogs
-import xtdb.database.PartitionState
-import xtdb.database.PartitionStorage
 import xtdb.log.proto.TrieDetails
 import xtdb.storage.MemoryStorage
 import xtdb.api.TableRef
@@ -37,7 +30,6 @@ import xtdb.api.error.Incorrect
 import xtdb.trie.Bucketer
 import java.nio.ByteBuffer
 import java.time.Instant
-import java.time.InstantSource
 import java.util.UUID
 import xtdb.api.tx.OpenTx
 
@@ -63,20 +55,16 @@ class LiveIndexTest {
 
     private inner class TestDb(private val dbName: String = "xtdb") : AutoCloseable {
         val bp = MemoryStorage(allocator, epoch = 0)
-        private val tableCatalog = TableCatalog(bp)
-        val trieCatalog = createTrieCatalog()
-        val liveIndex = LiveIndex.open(allocator, tableCatalog, trieCatalog)
-        private val partitionState = PartitionState(tableCatalog, trieCatalog, liveIndex)
-        private val partitionStorage = PartitionStorage(
-            DatabaseLogs(
-                InMemoryLog<SourceMessage>(InstantSource.system(), 0),
-                InMemoryLog<ReplicaMessage>(InstantSource.system(), 0),
-            ),
-            bp, null
-        )
+        private val partition = TestPartition(allocator, bp)
+
+        val trieCatalog get() = partition.trieCatalog
+        val liveIndex get() = partition.liveIndex
 
         fun openTx(txId: Long, systemTime: Instant) =
-            OpenTx(allocator, nodeBase, partitionStorage, partitionState, dbName, TransactionKey(txId, systemTime), null)
+            OpenTx(
+                allocator, nodeBase, partition.storage, partition.state, dbName,
+                TransactionKey(txId, systemTime), null
+            )
 
         fun commitTx(openTx: OpenTx) {
             openTx.writeTxRow(null, null)
@@ -84,7 +72,7 @@ class LiveIndexTest {
         }
 
         override fun close() {
-            partitionState.close()
+            partition.close()
             bp.close()
         }
     }
