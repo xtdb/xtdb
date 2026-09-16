@@ -233,7 +233,9 @@ class PostgresSourceFailoverTest : PostgresSourceTestBase() {
 
                 // the disabled `slot recreation silently drops changes` in
                 // PostgresSourceIntegrationTest is what failing loudly here protects against
-                val error = eventually(60.seconds) {
+                // longer than the reconnect bound: a missing slot is retried like any other refusal, and
+                // only reported once the attempts are spent
+                val error = eventually(300.seconds) {
                     assertNotNull(
                         dbs["cdc"]?.ingestionError,
                         "a missing slot must stop ingestion, not resume from the new server's position",
