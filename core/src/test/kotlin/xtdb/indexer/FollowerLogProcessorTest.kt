@@ -12,7 +12,6 @@ import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import xtdb.TestPartition
-import xtdb.api.log.LeaderTerm
 import xtdb.api.log.Log
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.Watchers
@@ -31,7 +30,7 @@ private fun FollowerLogProcessor.processRecords(records: List<Log.Record<Replica
 
 // The term most of these records carry. The fence starts at 0, so it admits them all, and only the
 // tests that name a second term are saying anything about fencing.
-private val TERM = LeaderTerm.of(0, 1)
+private const val TERM = 1L
 
 class FollowerLogProcessorTest {
 
@@ -110,6 +109,23 @@ class FollowerLogProcessorTest {
         )
 
         assertThrows<Fault> { proc.processRecords(records) }    }
+
+    @Test
+    fun `the records a block was holding apply when it closes`() =
+        runTest {
+            val proc = makeProcessor()
+
+            writeBlockFile(0)
+
+            proc.processRecords(listOf(
+                record(0, ReplicaMessage.BlockBoundary(0, 0, termId = TERM)),
+                record(1, ReplicaMessage.ResolvedTx(7, Instant.now(), true, null, emptyMap(), srcMsgId = 1, termId = TERM)),
+                record(2, ReplicaMessage.BlockUploaded(Storage.VERSION, 1, 0, 0, emptyList(), termId = TERM)),
+            ))
+
+            assertEquals(0L, tableCatalog.currentBlockIndex, "the block closed, so the follower stopped buffering")
+            assertEquals(7L, watchers.latestTxId, "and the record it was holding applied behind it")
+        }
 
     @Test
     fun `a block inherited from the role before it closes on that role's own upload`() = runTest {

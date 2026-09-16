@@ -15,9 +15,9 @@
 -- Leader pipelining — resolve, append, read back, apply:
 --   The leader applies its OWN writes only once it has read them BACK off its own replica log at its own TERM — Raft's ReadIndex.
 --   That read-back IS the fence.
---   Four stages: RESOLVE a transaction against what the leader already holds and stage it; APPEND it to the replica log, stamped with the term; READ BACK the leader's own replica log from the position its promotion claimed; APPLY what the fence admits.
+--   Four stages: RESOLVE a transaction against what the leader already holds and stage it; APPEND it to the replica log, stamped with the term; READ BACK, this node's own replica read delivering each record to whichever role is live; APPLY what the fence admits.
 --   Resolution and apply never interleave, so a transaction is never half-applied.
---   Staging, ownership and the durability handles: live-index.allium. The role lifecycle, the term and its epoch: log-processor-lifecycle.allium.
+--   Staging, ownership and the durability handles: live-index.allium. The role lifecycle, the claim and the term: log-processor-lifecycle.allium.
 --
 -- Two heads, two homes — callers choose:
 --   RESOLVED head (on the resolver): the highest transaction resolved, and so staged.
@@ -132,7 +132,7 @@ entity LogProcessor {
     --   That read is its sole writer and advances it once per record, so the position spans both roles rather than being tracked by each.
     --   A role that ends mid-apply therefore leaves it where it was, and that record is offered again to whatever replaces the role.
     --   Seeded at open from the last persisted block's boundary position, and lives for as long as the database is open on this node.
-    --   The read is started once and nothing restarts it, so once it stops this node consumes no further replica records, and a promotion awaiting a position is refused rather than answered.
+    --   The read is started once and nothing restarts it, so once it stops this node consumes no further replica records — and claims none, a claim being made only on an empty read of its own.
     --
     -- The SOURCE-log watermark is deliberately NOT here.
     --   The durable one lives on the watchers, advanced on apply by whichever role is live; the leader additionally keeps a resolve-side one, ahead of it, on the Leader variant.
@@ -166,7 +166,7 @@ variant Leader : LogProcessor {
     -- external_source is present iff the database has one configured; it makes this leader externally fed rather than client-driven.
     external_source: ExternalSource?
 
-    -- This leader's fencing term: the elector's counter packed under an operator-declared epoch (see log-processor-lifecycle.allium).
+    -- This leader's fencing term: one above the highest term this node had read when it claimed (see log-processor-lifecycle.allium).
     -- Stamped onto every replica record this term writes, and checked on read-back.
     leader_term: Integer
 
@@ -230,7 +230,7 @@ entity TableCatalog {
 entity Watchers {
     -- The DURABLE watermarks for one database, plus the external-source resume token where it has one.
     -- Whichever role is live advances them only once a message has been applied.
-    -- Clients await a tx_id to learn a transaction's result; a promotion awaits a source position.
+    -- Clients await a tx_id to learn a transaction's result; a promotion reads a source position from here to resume from.
     --
     -- A block's covered source position is reported on the ADOPT, by whichever role adopts the block: a node that has not recorded the block claims none of the position it covers, so a caller that flushes a block and then awaits this watermark is told of it once the flush is done.
     --
@@ -460,10 +460,11 @@ variant TriesDeletedMessage : ReplicaMessage {
 }
 
 variant NoOpMessage : ReplicaMessage {
-    -- Carries no effect of its own, and is used for two things.
-    --   1. A promotion's term claim. A new leader appends one stamped with its term to learn a known, CONSUMER-DELIVERABLE position: the log's latest-submitted position won't do, because it can include positions a consumer never delivers.
-    --   2. Carrying the leader's source watermark forward where no other record would — a flush whose CAS fails, and which therefore finishes no block.
-    src_msg_id: MessageId?   -- null when it is purely a term claim
+    -- Carries no effect of its own, and is used for three things.
+    --   1. A leadership claim. A node appends one stamped with a term above the highest it has read; whether that claim confers leadership is settled by where the log put it (see log-processor-lifecycle.allium).
+    --   2. A leader's assertion that it is still there, on a database with no traffic to write. A leader with work needs none, its own writes carrying the same term.
+    --   3. Carrying the leader's source watermark forward where no other record would — a flush whose CAS fails, and which therefore finishes no block.
+    src_msg_id: MessageId?   -- null on a claim and on an assertion
 }
 
 variant OversizedMessage : ReplicaMessage {
@@ -495,12 +496,12 @@ config {
 -- There is no write-time fence.
 --
 -- Every replica record carries the term of the leader that created it.
--- The term pairs an operator-declared epoch with the elector's own counter, packed so that the epoch dominates the ordering, so plain numeric comparison is already lexicographic over the pair.
+-- The term is taken from the log itself — a node claims one above the highest it has read — so the terms being compared come from the same durable record every reader is fenced against.
 --
 -- The fence is applied ONCE to every record, on this node's replica read and before either role acts on it: a record below the highest term seen so far is DISCARDED, and one at or above it folds that high-water upward and is handed on.
 -- Records are read one at a time, handed to the live role and awaited, so the fence has a single caller at any moment.
 -- The high-water belongs to the database on this node, seeded from the last persisted block, so the fence survives restart.
--- A discarded record still advances the read position, so a promotion's catch-up can never hang on a fenced record.
+-- A discarded record still advances the read position, so the read never stalls on one and a claim behind one is still reached.
 --
 -- The fold belongs to the RECORD rather than to the role that acts on it, so it happens on admission, whichever role ends up taking the record.
 --
@@ -611,40 +612,22 @@ config {
 rule TransitionToLeader {
     -- db.allium's view of a promotion: what it means for THIS database's pipeline.
     -- log-processor-lifecycle.allium owns the ordered steps and the recovery path; they are not duplicated here.
-    when: PromotionRequested(database, term)
+    when: ClaimConferredLeadership(database, term)
     requires: log_processor.mode = Follower
 
     ensures:
-        -- Claim the term: append a no-op stamped with it to learn a known, consumer-deliverable replay target.
-        let replay_target = NoOpMessage.created(term_id: term, src_msg_id: null)
-                                appended to database.replica_log
-
-        -- Wait for this node's replica read to finish with the claim.
-        -- This waits on the READ position, which advances once per record whatever the live role did with it, not on the durable watermarks, which a fenced or held record does not advance.
-        -- Where the read has stopped, the await FAILS with its cause, the claim already passed or not: a term whose replica log nothing is reading would never read its own writes back, so a promotion behind a stopped read is refused here.
-        AwaitReplicaPosition(log_processor, replay_target)
-
-        -- Refuse a term the replica log has already moved past.
-        -- Our own claim has just been read back, so the high-water is expected to BE this term; a higher one is another leader's, and leading under a fenced term would index nothing.
-        -- Fails with xtdb/leader-term-fenced, naming the epoch to raise.
-        -- Checked here — after the catch-up, before the follower stops — so that a refusal takes the recovery path with the follower still alive.
-        CheckTermUnfenced(log_processor, term)
+        -- Nothing to catch up to and no term to refuse: the claim was read like any other record, and by the time it conferred this node had already read everything before it.
+        -- This runs on the read itself, which is the log's only consumer here, so nothing arrives between the claim conferring and this term leading.
 
         -- Stop following. No further processing after this point.
         FollowerStopped(log_processor)
 
-        -- Capture the follower's pending block, where it saw a boundary but no upload before the replay target.
+        -- Capture the follower's pending block, where it saw a boundary but no upload before the claim.
         -- The read follows the stop: the follower goes on applying records until then, and one of them may be the upload that closes this very block.
         let pending_block = log_processor.pending_block
 
-        -- Refuse a cutover the log has already moved past, before anything is built or appended.
-        -- The same check as above, asked again because its answer goes stale: it is given while the follower is still live, and the read goes on folding every record it admits until that follower stops — the ones it handed the follower to hold included.
-        -- A high-water above this term means a newer leader, and the promotion RESIGNS — reported the way a leader term reports its own supersession rather than as an ingestion fault, so it leaves the watchers alone.
-        if log_processor.max_leader_term > term:
-            LeaderSuperseded(resolver: tx_resolver)
-
         -- Take the leader role.
-        -- It resumes the SOURCE log from the durable watermark, and reads the REPLICA log back from the replay target.
+        -- It resumes the SOURCE log from the durable watermark, and the replica read continues on this node from where the follower left off.
         -- Its resolver is seeded at the durable head, and its block gauge from the rows already in the open block, so it cuts this block where the previous leader would have.
         log_processor.mode = Leader.created(
             -- The database's own source, borrowed for the length of this term, so this leader is externally fed iff the database is.
@@ -675,17 +658,17 @@ rule TransitionToLeader {
 }
 
 rule TransitionToFollower {
-    when: DemoteRequested(database)
+    -- A term ends itself — superseded on read-back, or failed — and this node re-opens a follower when it finds the term over.
+    when: LeaderTermEnded(database)
     requires: log_processor.mode = Leader
 
     ensures:
-        -- The term ends. Everything awaiting it is failed, and every staged-but-not-yet-applied transaction is discarded — they were never visible to an external query, and the next leader re-reads them from the source log and re-resolves them.
+        -- Everything awaiting the term is failed, and every staged-but-not-yet-applied transaction is discarded — they were never visible to an external query, and the next leader re-reads them from the source log and re-resolves them.
         -- The durable live index is untouched (live-index.allium, ResolverEnds).
-        LeaderTermEnded(log_processor)
         if tx_resolver != null:
             ResolverExited(tx_resolver)
 
-        -- A block this term produced and has not adopted is carried to the new follower, which closes it on the same message this term was waiting for.
+        -- A block this term produced and has not adopted is carried to the new follower, which closes it on a confirmation of that block that the fence admits.
         -- It is read after the term has ended, as a promotion reads the follower's: the term goes on applying records until then, and one of them may be the upload that closes this very block.
         -- Ending the term mid-boundary leaves no block here at all: that record's apply is incomplete, so it is offered again and the follower opens the block itself, as on any other boundary.
         -- The follower continues from this node's replica position rather than being seeded with one: the read spans the role change.
@@ -886,12 +869,13 @@ rule AppendReplicaMessage {
 
 ---- Rules: Leader Mode — read back and apply
 
--- The leader is fed by this node's replica read, from the position its promotion claimed, separately from whatever drives leader election so that the two do not interfere.
+-- The leader is fed by this node's replica read, which continues from where the follower it replaced had got to — the same read that settles leadership, so there is no second consumer to keep in step.
 -- This is where a committed transaction becomes queryable and where an external caller's durability handle completes: confirmed durably replicated AND confirmed unfenced.
 
 rule LeaderAppliesRecord {
     -- Apply one record read back off our own replica log, fenced by TERM.
-    -- The record carries this term's own term: terms are unique per leader, the fence discards anything below it and demotes this term on anything above it, so there is nothing left here to compare.
+    -- The record carries this term's own term: the fence discards anything below it and ends this term on anything above it, so there is nothing left here to compare.
+    -- The exception is a rival's losing claim, which carries this same term — a bare no-op, which applies nothing.
     when: HandleReplicaMessage(record)
     requires: log_processor.mode = Leader
 
@@ -1112,14 +1096,14 @@ rule LogProcessorDispatchesRecord {
             log_processor.max_leader_term = record.term_id
 
             -- A record above the term a leader is leading has superseded that term (see Fencing).
-            -- The demote is the one a revoke runs, not a second path, so the record is offered to the follower that replaces the term rather than waiting for the elector to notice.
+            -- The term ends where the record is read, and the record is then offered to the follower that replaces it.
             if log_processor.mode = Leader and record.term_id > log_processor.leader_term:
-                DemoteRequested(database)
+                LeaderTermEnded(database)
 
             HandleReplicaMessage(record)
 
-        -- One advance per record, whatever became of it — this is what a promotion's await waits on.
-        -- A record the fence discarded or a role held advances it all the same, so a promotion's catch-up can't hang on one.
+        -- One advance per record, whatever became of it — a role change continues from it.
+        -- A record the fence discarded or a role held advances it all the same, so the read never stalls on one.
         -- A faulting apply does not advance it: it ends the read.
         log_processor.latest_replica_msg_id = record.msg_id
 }
@@ -1425,7 +1409,3 @@ deferred ProduceBlock
 deferred AdoptBlock
   -- Adopt a block a confirmation names: add its L0 tries to the trie catalog, refresh the table catalog onto the block, and roll the live index onto the block behind it.
   -- See: Adopting a block, above.
-deferred CheckTermUnfenced
-  -- Refuse a claimed leader term the replica log has already moved past, naming the term epoch to raise (xtdb/leader-term-fenced).
-  -- Refusing costs liveness only, never safety.
-  -- See: log-processor-lifecycle.allium ClaimUnfenced

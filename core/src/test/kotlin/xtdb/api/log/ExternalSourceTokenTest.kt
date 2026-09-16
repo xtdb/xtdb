@@ -10,7 +10,7 @@ import xtdb.storage.BufferPool
 class ExternalSourceTokenTest {
 
     private val testToken: ByteArray = "kafka-offset:42".toByteArray()
-    private val term = LeaderTerm.of(0, 1)
+    private val term = 1L
 
     @Test
     fun `BlockBoundary round-trips external source token`() {
