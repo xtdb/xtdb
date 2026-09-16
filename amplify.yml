@@ -4,7 +4,7 @@ applications:
       phases:
         preBuild:
           commands:
-            - yarn install
+            - npm ci
             # activate swap to avoid OOM https://github.com/aws-amplify/amplify-hosting/issues/654
             - export NODE_OPTIONS=--max-old-space-size=16384
             - dd if=/dev/zero of=swapfile bs=1K count=6M
@@ -14,16 +14,16 @@ applications:
             - swapon -s
         build:
           commands:
-            - yarn run build-api-docs
+            - npm run build-api-docs
             - ../gradlew --stop
-            - yarn run build
+            - npm run build
       artifacts:
         baseDirectory: /dist
         files:
           - '**/*'
       cache:
         paths:
-          - node_modules/**/*
+          - ~/.npm/**/*
           - ~/.m2/repository
           - ~/.gradle/caches
     appRoot: docs
