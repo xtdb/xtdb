@@ -43,11 +43,18 @@ const mdSource = filePath && `https://raw.githubusercontent.com/xtdb/xtdb/${ref}
 
 <script>
     import { clearRegistry }  from '@components/fiddle/fiddle'
+
+    const closeMobileMenu = () => {
+        const sidebar = document.getElementById('starlight__sidebar');
+        // Starlight drops the popover attribute on desktop, where hidePopover() throws.
+        if (sidebar?.matches(':popover-open')) sidebar.hidePopover();
+    };
+
     const setup = () => {
-        window.swup.hooks.on('page:view', () => {
-            document.querySelector("starlight-menu-button").setExpanded(false);
-        });
         window.swup.hooks.on('content:replace', () => {
+            // Closing ahead of the swap is what releases the menu's focus trap, which
+            // holds `inert` on the skip link - outside every container swup replaces.
+            closeMobileMenu();
             clearRegistry();
         }, { before: true });
     }

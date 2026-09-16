@@ -1,6 +1,6 @@
 import { defineConfig } from 'astro/config';
+import { unified } from '@astrojs/markdown-remark';
 import starlight from '@astrojs/starlight';
-import yaml from '@rollup/plugin-yaml';
 import swup from '@swup/astro';
 import { remarkDefinitionList, defListHastHandlers } from 'remark-definition-list';
 import { railroadPlugin } from './src/railroad-plugin.js';
@@ -368,13 +368,15 @@ export default defineConfig({
     },
 
     markdown: {
-        remarkPlugins: [railroadPlugin, remarkDefinitionList],
-        remarkRehype: {
-            handlers: { ...defListHastHandlers }
-        }
+        processor: unified({
+            remarkPlugins: [railroadPlugin, remarkDefinitionList],
+            remarkRehype: {
+                handlers: { ...defListHastHandlers }
+            }
+        })
     },
 
     vite: {
-        plugins: [tailwindcss(), yaml()]
+        plugins: [tailwindcss()]
     },
 });
