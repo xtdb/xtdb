@@ -112,17 +112,28 @@ internal abstract class LeaderTermTest {
         }
     }
 
-    // Decorate a driver so its replica-log append blocks on [gate] before the message lands, completing
-    // [appendStarted] the first time the pump reaches it. Models a slow append-ack: while the gate is shut
-    // the message is not on the log, so it can't be consumed back — the ReadIndex ack (and thus executeTx)
-    // stays pending. Everything else, the tail included, delegates to the real driver.
-    protected fun gatedDriver(
-        inner: LogsDriver, gate: CompletableDeferred<Unit>, appendStarted: CompletableDeferred<Unit>,
-    ): LogsDriver = object : LogsDriver by inner {
-        override suspend fun appendToReplica(msg: ReplicaMessage): Log.MessageMetadata {
-            appendStarted.complete(Unit)
-            gate.await()
-            return inner.appendToReplica(msg)
+    /**
+     * A replica-log append parked until [open], modelling a slow append-ack: while it is shut the message is
+     * not on the log, so it can't be consumed back, and the ReadIndex ack — with it `executeTx` — stays
+     * pending. Everything else the driver does, the tail included, delegates to the real one.
+     *
+     * Pass [wrap] as `leaderProc`'s `wrapDriver`, then await [started] to know the pump has reached it.
+     * A gate that is never opened is how a test holds a caller in flight until the term ends under it.
+     */
+    protected class GatedAppend {
+        private val gate = CompletableDeferred<Unit>()
+
+        val started = CompletableDeferred<Unit>()
+        val isOpen get() = gate.isCompleted
+
+        fun open() = gate.complete(Unit)
+
+        fun wrap(inner: LogsDriver): LogsDriver = object : LogsDriver by inner {
+            override suspend fun appendToReplica(msg: ReplicaMessage): Log.MessageMetadata {
+                started.complete(Unit)
+                gate.await()
+                return inner.appendToReplica(msg)
+            }
         }
     }
 

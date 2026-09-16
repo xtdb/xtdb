@@ -43,8 +43,7 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
 
     @Test
     fun `an attach is applied when its record is read back, not when it resolves`() = runTest(timeout = 5.seconds) {
-        val gate = CompletableDeferred<Unit>()
-        val appendStarted = CompletableDeferred<Unit>()
+        val append = GatedAppend()
         val dbCatalog = RecordingDbCatalog()
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
@@ -52,7 +51,7 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
             StandardTestDispatcher(testScheduler),
             watchers = watchers,
             dbCatalog = dbCatalog,
-            wrapDriver = { gatedDriver(it, gate, appendStarted) },
+            wrapDriver = append::wrap,
         )
 
         backgroundScope.launch {
@@ -66,7 +65,7 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
             )
         }
 
-        appendStarted.await()
+        append.started.await()
         testScheduler.advanceUntilIdle()
 
         assertEquals(
@@ -74,7 +73,7 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
             "resolved but not yet durable — a term that is superseded here must not have attached anything"
         )
 
-        gate.complete(Unit)
+        append.open()
         watchers.awaitTx(0)
 
         assertEquals(listOf("new_db"), dbCatalog.attached, "consume-back is what attaches it")
@@ -145,6 +144,15 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
     }
 
     private fun record(msgId: Long, msg: ReplicaMessage) = Log.Record(0, msgId, Instant.now(), msg)
+
+    private fun sourceRecord(msgId: Long, msg: SourceMessage) = Log.Record(0, msgId, Instant.now(), msg)
+
+    private fun txRecord(msgId: Long) =
+        sourceRecord(msgId, SourceMessage.Tx(ByteArray(0), null, ZoneId.of("UTC"), null, null))
+
+    /** A committing external-source tx, optionally parking in [writer] while the leader's persister holds it. */
+    private suspend fun LeaderLogProcessor.commitTx(writer: suspend () -> Unit = {}) =
+        extSrcProc!!.executeTx(null) { writer(); TxIndexer.TxResult.Committed() }
 
     private fun uploaded(blockIdx: Long, latestProcessedMsgId: Long) =
         ReplicaMessage.BlockUploaded(
@@ -225,21 +233,23 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
 
     // Inert, because these two are about when the commit returns rather than about what it removes: a
     // `deleteTries` for a shard the catalog doesn't hold trips its own spec assertion.
-    private fun TestScope.gcTerm(gate: CompletableDeferred<Unit>, appendStarted: CompletableDeferred<Unit>, termJob: Job) =
+    private fun TestScope.gcTerm(append: GatedAppend, termJob: Job = SupervisorJob(backgroundScope.coroutineContext.job)) =
         leaderProc(
             StandardTestDispatcher(testScheduler), trieCatalog = mockk(relaxed = true),
-            wrapDriver = { gatedDriver(it, gate, appendStarted) }, termJob = termJob,
+            wrapDriver = append::wrap, termJob = termJob,
         )
+
+    private suspend fun LeaderLogProcessor.commitTriesDeleted() =
+        gc.commitTriesDeleted(TableRef("public", "foo"), setOf("l01-rc-b00"))
 
     @Test
     fun `a GC commit returns only once its own record reads back`() = runTest(timeout = 5.seconds) {
-        val gate = CompletableDeferred<Unit>()
-        val appendStarted = CompletableDeferred<Unit>()
-        val lp = gcTerm(gate, appendStarted, SupervisorJob(backgroundScope.coroutineContext.job))
+        val append = GatedAppend()
+        val lp = gcTerm(append)
 
-        val commit = backgroundScope.async { lp.gc.commitTriesDeleted(TableRef("public", "foo"), setOf("l01-rc-b00")) }
+        val commit = backgroundScope.async { lp.commitTriesDeleted() }
 
-        appendStarted.await()
+        append.started.await()
         testScheduler.advanceUntilIdle()
 
         assertFalse(
@@ -248,28 +258,8 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
         )
 
         // a hang here fires runTest's timeout — that is the assertion
-        gate.complete(Unit)
+        append.open()
         commit.await()
-    }
-
-    @Test
-    fun `closing the leader term fails an awaiting GC commit rather than hanging`() = runTest(timeout = 5.seconds) {
-        // Never opened, so the record never reads back and the commit is past the channel the exit drains:
-        // only the in-flight sweep can free it.
-        val gate = CompletableDeferred<Unit>()
-        val appendStarted = CompletableDeferred<Unit>()
-
-        val termJob = SupervisorJob(backgroundScope.coroutineContext.job)
-        val lp = gcTerm(gate, appendStarted, termJob)
-
-        val commit = backgroundScope.async { lp.gc.commitTriesDeleted(TableRef("public", "foo"), setOf("l01-rc-b00")) }
-
-        appendStarted.await()
-        testScheduler.advanceUntilIdle()
-
-        termJob.cancelAndJoin()
-
-        assertTrue(runCatching { commit.await() }.isFailure, "the in-flight commit must fail, not hang")
     }
 
     @Test
@@ -277,30 +267,26 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
-        val gate = CompletableDeferred<Unit>()
-        val appendStarted = CompletableDeferred<Unit>()
+        val append = GatedAppend()
 
         // Skipped txs each stage a real (aborted) row without needing a valid tx-ops payload.
         val n = 5L
         val lp = leaderProc(
             StandardTestDispatcher(testScheduler), replicaLog = replicaLog, watchers = watchers,
             skipTxs = (0 until n).toSet(),
-            wrapDriver = { gatedDriver(it, gate, appendStarted) },
+            wrapDriver = append::wrap,
         )
 
-        val now = Instant.now()
-        val records = (0 until n).map {
-            Log.Record(0, it, now.plusMillis(it), SourceMessage.Tx(ByteArray(0), null, ZoneId.of("UTC"), null, null))
-        }
+        val records = (0 until n).map { txRecord(it) }
 
         // Resolution is decoupled from the append pump: the whole batch resolves and processRecords returns
         // even though the append is still stalled on the gate — reaching the assertions below is the proof.
         lp.srcLogProc.processRecords(records)
-        appendStarted.await()
-        assertFalse(gate.isCompleted, "sanity: nothing opened the append gate")
+        append.started.await()
+        assertFalse(append.isOpen, "sanity: nothing opened the append gate")
 
         // Once the append drains, every tx reaches the replica log — in send order.
-        gate.complete(Unit)
+        append.open()
         watchers.awaitTx(n - 1)
 
         val resolvedTxs = replicaLog.readRecords(0, 0, replicaLog.latestSubmittedMsgId() + 1)
@@ -313,25 +299,64 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
-        val gate = CompletableDeferred<Unit>()
-        val appendStarted = CompletableDeferred<Unit>()
+        val append = GatedAppend()
 
         val lp = leaderProc(
             StandardTestDispatcher(testScheduler), replicaLog = replicaLog, watchers = watchers,
-            wrapDriver = { gatedDriver(it, gate, appendStarted) },
+            wrapDriver = append::wrap,
         )
 
         // launch the executeTx so we can observe its completion state without blocking the test
-        val txJob = backgroundScope.async { lp.extSrcProc!!.executeTx(null) { TxIndexer.TxResult.Committed() } }
+        val txJob = backgroundScope.async { lp.commitTx() }
 
-        appendStarted.await()
+        append.started.await()
 
         assertFalse(txJob.isCompleted, "executeTx must not return before the replica-log append settles")
 
-        gate.complete(Unit)
+        append.open()
         val result = txJob.await()
 
         assertTrue(result is TransactionResult.Committed, "executeTx returns Committed once durable")
+    }
+
+    /**
+     * The exception [body] fails with, awaited rather than thrown, and named [what] in the failure.
+     *
+     * A caller parked in one of these tests has to be observed from outside, because an `async` that fails
+     * propagates into the non-supervisor [TestScope.backgroundScope] and fails the test before the assertion
+     * runs. A body that returns fails this deferred instead, so a caller freed wrongly shows up as that
+     * assertion rather than as a passing test.
+     */
+    private fun TestScope.failureOf(what: String, body: suspend () -> Unit) =
+        CompletableDeferred<Throwable>().also { outcome ->
+            backgroundScope.launch {
+                try {
+                    body()
+                    outcome.completeExceptionally(AssertionError("$what returned rather than failing"))
+                } catch (e: Throwable) {
+                    outcome.complete(e)
+                    if (e is CancellationException) throw e
+                }
+            }
+        }
+
+    @Test
+    fun `closing the leader term fails an awaiting GC commit rather than hanging`() = runTest(timeout = 5.seconds) {
+        // Never opened, so the record never reads back and the commit is past the channel the exit drains:
+        // only the in-flight sweep can free it.
+        val append = GatedAppend()
+
+        val termJob = SupervisorJob(backgroundScope.coroutineContext.job)
+        val lp = gcTerm(append, termJob)
+
+        val commit = backgroundScope.async { lp.commitTriesDeleted() }
+
+        append.started.await()
+        testScheduler.advanceUntilIdle()
+
+        termJob.cancelAndJoin()
+
+        assertTrue(runCatching { commit.await() }.isFailure, "the in-flight commit must fail, not hang")
     }
 
     @Test
@@ -339,37 +364,19 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
-        // Gate that is never opened — the append will stall indefinitely unless the term is cancelled.
-        val gate = CompletableDeferred<Unit>()
-        val appendStarted = CompletableDeferred<Unit>()
+        val append = GatedAppend()
 
         val termJob = SupervisorJob(backgroundScope.coroutineContext.job)
         val lp = leaderProc(
             StandardTestDispatcher(testScheduler), replicaLog = replicaLog, watchers = watchers,
-            wrapDriver = { gatedDriver(it, gate, appendStarted) },
-            termJob = termJob,
+            wrapDriver = append::wrap, termJob = termJob,
         )
 
-        // Capture the executeTx failure; the runTest timeout guards against a hang if it never completes.
-        val thrown = CompletableDeferred<Throwable>()
-        backgroundScope.launch {
-            try {
-                lp.extSrcProc!!.executeTx(null) { TxIndexer.TxResult.Committed() }
-            } catch (e: CancellationException) {
-                thrown.complete(e)
-                throw e
-            } catch (e: Throwable) {
-                thrown.complete(e)
-            }
-        }
+        val thrown = failureOf("executeTx") { lp.commitTx() }
 
-        appendStarted.await()
-
-        // Cancel the leader term — the gate will never open, so without term-close propagation
-        // executeTx would hang until the runTest timeout.
+        append.started.await()
         termJob.cancelAndJoin()
 
-        // If executeTx hangs, thrown never completes and runTest's timeout fires — that's the hang guard.
         thrown.await()
     }
 
@@ -383,11 +390,9 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
 
         // t1 parks the persister inside its writer, so t2's task sits buffered in the channel —
         // never received, so never staged: only the exit drain can unblock its caller.
-        val t1 = backgroundScope.async {
-            lp.extSrcProc!!.executeTx(null) { writerEntered.complete(Unit); writerGate.await(); TxIndexer.TxResult.Committed() }
-        }
+        val t1 = backgroundScope.async { lp.commitTx { writerEntered.complete(Unit); writerGate.await() } }
         writerEntered.await()
-        val t2 = backgroundScope.async { lp.extSrcProc!!.executeTx(null) { TxIndexer.TxResult.Committed() } }
+        val t2 = backgroundScope.async { lp.commitTx() }
         testScheduler.advanceUntilIdle()
 
         termJob.cancelAndJoin()
@@ -410,42 +415,22 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
         // Park the persister inside an ext-source writer, so the source batch below lands in sourceLogCh's
         // buffer and is never received.
         backgroundScope.launch {
-            runCatching {
-                lp.extSrcProc!!.executeTx(null) { writerEntered.complete(Unit); writerGate.await(); TxIndexer.TxResult.Committed() }
-            }
+            runCatching { lp.commitTx { writerEntered.complete(Unit); writerGate.await() } }
         }
         writerEntered.await()
 
         // processRecords stands in for the transport's poll thread: it awaits the batch's completion. If the
         // term dies without failing the buffered batch, this await never returns — the poll thread wedges,
         // the transport's unregister is never serviced, and DatabaseCatalog.close blows its bound (#5711).
-        val thrown = CompletableDeferred<Throwable>()
-        backgroundScope.launch {
-            try {
-                lp.srcLogProc.processRecords(listOf(
-                    Log.Record(0, 0, Instant.now(), SourceMessage.Tx(ByteArray(0), null, ZoneId.of("UTC"), null, null))
-                ))
-                thrown.complete(AssertionError("processRecords returned normally"))
-            } catch (e: CancellationException) {
-                thrown.complete(e); throw e
-            } catch (e: Throwable) {
-                thrown.complete(e)
-            }
-        }
+        val thrown = failureOf("processRecords") { lp.srcLogProc.processRecords(listOf(txRecord(0))) }
         testScheduler.advanceUntilIdle()
 
         termJob.cancelAndJoin()
 
-        // A hang here fires runTest's timeout — that's the regression guard.
-        val e = thrown.await()
-        assertFalse(
-            e is AssertionError,
-            "processRecords must fail when the term closes on a buffered batch, not return normally"
-        )
-
-        // ...and it must fail as CANCELLATION. The transport treats anything else as a poll-loop failure and
+        // It has to fail as CANCELLATION. The transport treats anything else as a poll-loop failure and
         // unwinds openGroupSubscription into the Database scope's handler, which poisons the watchers — so a
         // benign teardown would present as a terminal query failure. See SourceBatch.abandon.
+        val e = thrown.await()
         assertTrue(e is CancellationException, "the poll thread must see cancellation, got: $e")
         assertNull(watchers.exception, "a benign term close must not poison the watchers")
     }
@@ -456,27 +441,16 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         // Never opened, so the tx below is still awaiting durability when the term ends.
-        val gate = CompletableDeferred<Unit>()
-        val appendStarted = CompletableDeferred<Unit>()
+        val append = GatedAppend()
 
         val termJob = SupervisorJob(backgroundScope.coroutineContext.job)
         val lp = leaderProc(
             StandardTestDispatcher(testScheduler), replicaLog = replicaLog, watchers = watchers,
-            leaderTerm = 1,
-            wrapDriver = { gatedDriver(it, gate, appendStarted) },
-            termJob = termJob,
+            leaderTerm = 1, wrapDriver = append::wrap, termJob = termJob,
         )
 
-        // Capture the failure via a launch + Deferred: a failing `async` would propagate to the
-        // (non-supervisor) backgroundScope and fail the test, so we don't await it directly.
-        val thrown = CompletableDeferred<Throwable>()
-        backgroundScope.launch {
-            thrown.complete(
-                runCatching { lp.extSrcProc!!.executeTx(null) { TxIndexer.TxResult.Committed() } }
-                    .exceptionOrNull() ?: AssertionError("executeTx returned normally")
-            )
-        }
-        appendStarted.await()
+        val thrown = failureOf("executeTx") { lp.commitTx() }
+        append.started.await()
 
         termJob.supersede()
 
@@ -496,30 +470,21 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
         // Never opened. The BlockBoundary's append hangs here, so the cut never reads back and resolution
         // stays paused — which is what makes this deterministic: batch #1 parks as `pausedBatch` and batch #2
         // stays buffered in the driver's source-batch pipe, so the term resigns with both in flight.
-        val gate = CompletableDeferred<Unit>()
-        val appendStarted = CompletableDeferred<Unit>()
+        val append = GatedAppend()
 
         val termJob = SupervisorJob(backgroundScope.coroutineContext.job)
         val lp = leaderProc(
             StandardTestDispatcher(testScheduler), replicaLog = replicaLog, watchers = watchers,
-            leaderTerm = 1, wrapDriver = { gatedDriver(it, gate, appendStarted) },
-            termJob = termJob,
+            leaderTerm = 1, wrapDriver = append::wrap, termJob = termJob,
         )
 
         // Two batches, each standing in for the transport's poll thread awaiting `processRecords`.
-        fun pollThread(msgId: Long) = CompletableDeferred<Throwable>().also { outcome ->
-            backgroundScope.launch {
-                try {
-                    lp.srcLogProc.processRecords(listOf(Log.Record(0, msgId, Instant.now(), SourceMessage.FlushBlock(-1))))
-                    outcome.complete(AssertionError("processRecords returned normally"))
-                } catch (e: Throwable) {
-                    outcome.complete(e)
-                }
-            }
+        fun pollThread(msgId: Long) = failureOf("processRecords") {
+            lp.srcLogProc.processRecords(listOf(sourceRecord(msgId, SourceMessage.FlushBlock(-1))))
         }
 
         val paused = pollThread(0)          // cuts the block, then parks mid-batch
-        appendStarted.await()               // the boundary hit the gated append ⇒ we are paused
+        append.started.await()              // the boundary hit the gated append ⇒ we are paused
         val buffered = pollThread(1)        // sent while paused ⇒ buffered, received by nobody
         testScheduler.advanceUntilIdle()
 
