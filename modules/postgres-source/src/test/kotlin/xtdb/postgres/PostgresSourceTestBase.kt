@@ -27,6 +27,10 @@ abstract class PostgresSourceTestBase {
 
     // --- pg ---
 
+    /** The shared container's address, for a test that connects as something other than a node. */
+    protected val postgresHost: String get() = postgres.host
+    protected val postgresPort: Int get() = postgres.firstMappedPort
+
     protected fun pgConn(pg: PostgreSQLContainer = postgres): Connection =
         DriverManager.getConnection(pg.jdbcUrl, pg.username, pg.password)
 
