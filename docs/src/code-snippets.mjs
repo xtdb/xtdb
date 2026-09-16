@@ -1,4 +1,4 @@
-import yaml from 'js-yaml';
+import { load as loadYaml } from 'js-yaml';
 
 function dedent(text) {
   const lines = text.split('\n');
@@ -15,7 +15,7 @@ function dedent(text) {
 }
 
 export function extractSnippets(yamlContent) {
-  const parsed = yaml.load(yamlContent);
+  const parsed = loadYaml(yamlContent);
   const snippets = {};
 
   for (const [key, value] of Object.entries(parsed)) {

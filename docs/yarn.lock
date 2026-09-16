@@ -5351,7 +5351,7 @@ __metadata:
     date-fns: "npm:^3.6.0"
     gray-matter: "npm:^4.0.3"
     highlight.js: "npm:^11.9.0"
-    js-yaml: "npm:^5.2.2"
+    js-yaml: "npm:^4.1.1"
     mustache: "npm:^4.2.0"
     railroad-diagrams: "npm:^1.0.0"
     rehype: "npm:^13.0.1"
@@ -7584,17 +7584,6 @@ __metadata:
   bin:
     js-yaml: bin/js-yaml.js
   checksum: 10c0/561c7d7088c40a9bb53cc75becbfb1df6ae49b34b5e6e5a81744b14ae8667ec564ad2527709d1a6e7d5e5fa6d483aa0f373a50ad98d42fde368ec4a190d4fae7
-  languageName: node
-  linkType: hard
-
-"js-yaml@npm:^5.2.2":
-  version: 5.2.2
-  resolution: "js-yaml@npm:5.2.2"
-  dependencies:
-    argparse: "npm:^2.0.1"
-  bin:
-    js-yaml: bin/js-yaml.mjs
-  checksum: 10c0/e8ded203b235b3d562818c67bf362122abbcee89e507b62bddcdd3085b2f2dd866071e5e78f8e617d41d1a0c0baa1cec12a8fdec5859c571bf862adf585e2684
   languageName: node
   linkType: hard
 
