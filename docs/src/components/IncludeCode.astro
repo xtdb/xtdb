@@ -1,7 +1,7 @@
 ---
 import fs from 'fs';
 import path from 'path';
-import yaml from 'js-yaml';
+import { load as loadYaml } from 'js-yaml';
 import { Code } from '@astrojs/starlight/components';
 
 const { file, snippet, lang } = Astro.props;
@@ -21,7 +21,7 @@ function dedent(text) {
 }
 
 function extractSnippets(yamlContent) {
-  const parsed = yaml.load(yamlContent);
+  const parsed = loadYaml(yamlContent);
   const snippets = {};
 
   for (const [key, value] of Object.entries(parsed)) {

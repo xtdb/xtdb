@@ -10,13 +10,9 @@ public/drivers/kotlin/kdoc
 
 # dependencies
 node_modules/
-.yarn/install-state.gz
 
 # logs
 npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
 
 # environment variables
 .env
@@ -26,7 +22,5 @@ pnpm-debug.log*
 .DS_Store
 
 .vscode
-
-/.pnp.*
 
 /public/images/d2
