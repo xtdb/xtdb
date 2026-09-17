@@ -16,7 +16,6 @@ import xtdb.api.error.Incorrect
 import xtdb.pgwire.PgType
 import xtdb.util.closeOnCatch
 import xtdb.util.debug
-import xtdb.util.error
 import xtdb.util.info
 import xtdb.util.logger
 import xtdb.util.trace
@@ -29,10 +28,6 @@ import kotlin.time.Duration.Companion.milliseconds
 private val LOG = PgWireDriver::class.logger
 
 private const val SNAPSHOT_BATCH_SIZE = 1000
-
-private const val SLOT_RETRY_MAX_ATTEMPTS = 7
-private const val SLOT_RETRY_BASE_DELAY_MS = 1000L
-private val SLOT_ACTIVE_PATTERN = Regex(".*replication slot .* is active.*")
 
 private const val MAX_EMPTY_HOT_POLLS = 5
 
@@ -236,8 +231,6 @@ class PgWireDriver(
 
     override suspend fun openStream(startLsn: Long): PostgresDriver.ChangeStream {
         LOG.debug { "[$dbName] Opening replication connection for streaming" }
-        // startReplicationStream backs off around a slot the previous leader still holds, so its delay is a
-        // cancellation point — and a demotion there would otherwise strand the connection upstream.
         return openReplicationConnection().closeOnCatch { replConn ->
             val pgReplConn = replConn.unwrap(PGConnection::class.java)
 
@@ -349,51 +342,22 @@ class PgWireDriver(
         }
     }
 
-    /**
-     * Retries starting the replication stream when the slot is still held by a previous connection
-     * (e.g. after leadership handover). PG's wal_sender_timeout (default 60s) will kill the old
-     * connection eventually — we just need to wait it out.
-     */
-    private suspend fun startReplicationStream(pgReplConn: PGConnection, startLsn: Long): PGReplicationStream {
-        for (attempt in 1..SLOT_RETRY_MAX_ATTEMPTS) {
-            try {
-                val stream = pgReplConn.replicationAPI
-                    .replicationStream()
-                    .logical()
-                    .withSlotName(slotName)
-                    .withStartPosition(LogSequenceNumber.valueOf(startLsn))
-                    .withSlotOption("proto_version", "1")
-                    .withSlotOption("publication_names", publicationName)
-                    // on by default, and pgjdbc's flush is not ours: a keepalive otherwise raises its flush
-                    // LSN to the server's, which the next status update sends, confirming the slot without
-                    // ever reaching [acknowledge]. The two LSNs its guard compares both start invalid, so
-                    // the window is open from stream open — where the resume position leads the durable
-                    // extent and is exactly what must not be confirmed over. SoleConfirmer in
-                    // dev/doc/pgsrc.allium; #5975.
-                    .withAutomaticFlush(false)
-                    .start()
-
-                if (attempt > 1)
-                    LOG.info("[$dbName] Replication slot '$slotName' acquired after $attempt attempts")
-
-                return stream
-            } catch (e: PSQLException) {
-                if (!SLOT_ACTIVE_PATTERN.matches(e.message ?: "")) throw e
-                if (attempt == SLOT_RETRY_MAX_ATTEMPTS) {
-                    LOG.error(e) { "[$dbName] Replication slot '$slotName' still held after $SLOT_RETRY_MAX_ATTEMPTS attempts; giving up (startLsn=${LogSequenceNumber.valueOf(startLsn)})" }
-                    throw e
-                }
-
-                val baseDelay = SLOT_RETRY_BASE_DELAY_MS shl (attempt - 1)
-                val delayMs = baseDelay + (baseDelay * 0.5 * Math.random()).toLong()
-
-                LOG.info("[$dbName] Replication slot '$slotName' is active (attempt $attempt/$SLOT_RETRY_MAX_ATTEMPTS), retrying in ${delayMs}ms")
-                delay(delayMs)
-            }
-        }
-
-        error("unreachable")
-    }
+    private fun startReplicationStream(pgReplConn: PGConnection, startLsn: Long): PGReplicationStream =
+        pgReplConn.replicationAPI
+            .replicationStream()
+            .logical()
+            .withSlotName(slotName)
+            .withStartPosition(LogSequenceNumber.valueOf(startLsn))
+            .withSlotOption("proto_version", "1")
+            .withSlotOption("publication_names", publicationName)
+            // on by default, and pgjdbc's flush is not ours: a keepalive otherwise raises its flush
+            // LSN to the server's, which the next status update sends, confirming the slot without
+            // ever reaching [acknowledge]. The two LSNs its guard compares both start invalid, so
+            // the window is open from stream open — where the resume position leads the durable
+            // extent and is exactly what must not be confirmed over. SoleConfirmer in
+            // dev/doc/pgsrc.allium; #5975.
+            .withAutomaticFlush(false)
+            .start()
 
     // --- Row conversion ---
 

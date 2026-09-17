@@ -55,6 +55,13 @@ class PostgresSourceReconnectTest {
         fun advance(millis: Long) { now = now.plusMillis(millis) }
     }
 
+    /** What Postgres raises while a previous connection's WAL sender still holds the slot. */
+    private fun slotInUse() =
+        PSQLException(
+            """ERROR: replication slot "test_slot" is active for PID 42""",
+            PSQLState.OBJECT_IN_USE,
+        )
+
     /** [n] streams that die the moment they are polled, without delivering anything. */
     private fun fruitlessStreams(n: Int) = List(n) { DyingStream(ArrayDeque()) { throw connectionLost() } }
 
@@ -103,13 +110,18 @@ class PostgresSourceReconnectTest {
     }
 
     /** Hands out [streams] in order, recording the LSN each was asked to resume from. */
-    private class RecordingDriver(private val streams: ArrayDeque<PostgresDriver.ChangeStream>) : PostgresDriver {
+    private class RecordingDriver(
+        private val streams: ArrayDeque<PostgresDriver.ChangeStream>,
+        /** Refusals to raise before any stream is handed out, one per open. */
+        private val openFailures: ArrayDeque<Throwable> = ArrayDeque(),
+    ) : PostgresDriver {
         val startLsns = mutableListOf<Long>()
 
         override fun openSnapshot(): PostgresDriver.SnapshotReader = error("resumes, so never snapshots")
 
         override suspend fun openStream(startLsn: Long): PostgresDriver.ChangeStream {
             startLsns += startLsn
+            openFailures.removeFirstOrNull()?.let { throw it }
             return streams.removeFirstOrNull() ?: error("opened more streams than this test provided: $startLsns")
         }
 
@@ -330,6 +342,27 @@ class PostgresSourceReconnectTest {
                 RECONNECT_MAX_ATTEMPTS + 2, driver.startLsns.size,
                 "one open per stream, the bound never reached",
             )
+
+            assignment.cancelAndJoin()
+        }
+    }
+
+    @Test
+    fun `a slot the previous connection still holds is waited out`() = runTest {
+        val survivor = ParkedStream()
+
+        // Postgres only releases the slot when it reaps our own dead WAL sender, at wal_sender_timeout, so a
+        // reopen ordinarily arrives while it is still held
+        val driver = RecordingDriver(
+            ArrayDeque(listOf(survivor)),
+            openFailures = ArrayDeque(List(3) { slotInUse() }),
+        )
+
+        openSource(driver).use { source ->
+            val assignment = launch { source.onPartitionAssigned(0, resumeToken, StubIndexer) }
+
+            withTimeout(BACKOFF_HEADROOM) { survivor.parked.await() }
+            assertEquals(List(4) { 0L }, driver.startLsns, "three refusals, then the stream")
 
             assignment.cancelAndJoin()
         }

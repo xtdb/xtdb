@@ -1,6 +1,7 @@
 package xtdb.postgres
 
 import io.kotest.assertions.nondeterministic.eventually
+import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
@@ -35,6 +36,9 @@ class PostgresSourceConnectionLossTest : PostgresSourceTestBase() {
 
     private fun conn(host: String, port: Int): Connection =
         DriverManager.getConnection("jdbc:postgresql://$host:$port/testdb", "testuser", "testpass")
+
+    private fun slotActive(slot: String) =
+        pgColumn("SELECT active FROM pg_replication_slots WHERE slot_name = '$slot'")
 
     private fun cdcError(node: Xtdb) = (node as XtdbInternal).dbCatalog["cdc"]?.ingestionError
 
@@ -168,6 +172,71 @@ class PostgresSourceConnectionLossTest : PostgresSourceTestBase() {
                 runCatching { network.close() }
                 dirs.forEach { it.toFile().deleteRecursively() }
             }
+        }
+    }
+
+    @Test
+    fun `a reconnect waits out a slot the previous connection still holds`() = runTest(timeout = 600.seconds) {
+        val slot = unique("slot")
+        val pub = unique("pub")
+        val table = unique("widgets")
+        val dirs = List(4) { Files.createTempDirectory("slot-held") }
+
+        pgExecute(
+            "CREATE TABLE $table (_id INT PRIMARY KEY, name TEXT)",
+            "INSERT INTO $table (_id, name) VALUES (1, 'snapshot-row')",
+            "CREATE PUBLICATION $pub FOR TABLE $table",
+        )
+
+        try {
+            // first assignment: snapshot, then stream, so the reopen below takes the resume path
+            openNode(dirs[0], dirs[1]).use { node ->
+                attachCdc(node, "cdc", dirs[2], dirs[3], slot, pub)
+                awaitStreaming(node)
+            }
+
+            // The node's `use` returns before its source has finished letting go, and a squat that lands in
+            // that window takes the slot from nobody — leaving the node below to open it unopposed.
+            eventually(30.seconds) {
+                assertEquals(listOf("f"), slotActive(slot), "the first node has released the slot")
+            }
+
+            // Hold it before the node comes back, so the source's first open meets a slot that is already
+            // held rather than racing for it. This is the condition `startReplicationStream` used to retry
+            // for itself.
+            val squatter = PgWireDriver(
+                "squatter", postgresHost, postgresPort, "testdb", "testuser", "testpass", slot, pub,
+            )
+            val held = squatter.openStream(0)
+
+            try {
+                assertEquals(listOf("t"), slotActive(slot), "test precondition: the squatter holds the slot")
+
+                openNode(dirs[0], dirs[1]).use { node ->
+                    pgExecute("INSERT INTO $table (_id, name) VALUES (2, 'while-held')")
+
+                    // real time, not runTest's virtual clock — the source is on its own dispatchers, and
+                    // the point is to let it actually meet the refusal before the slot frees
+                    runInterruptible { Thread.sleep(5_000) }
+                    assertNull(cdcError(node), "a held slot is retried, not fatal")
+
+                    held.close()
+
+                    eventually(180.seconds) {
+                        assertNull(cdcError(node), "the source waits the slot out rather than failing")
+                        assertTrue(
+                            xtQuery(node, "cdc", "SELECT _id FROM public.$table WHERE _id = 2").isNotEmpty(),
+                            "and resumes once it is released",
+                        )
+                    }
+                }
+            } finally {
+                runCatching { held.close() }
+                runCatching { squatter.close() }
+            }
+        } finally {
+            runCatching { dropSlot(slot) }
+            dirs.forEach { it.toFile().deleteRecursively() }
         }
     }
 }

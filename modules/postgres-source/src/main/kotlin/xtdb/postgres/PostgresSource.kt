@@ -13,7 +13,6 @@ import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.subclass
 import org.postgresql.replication.LogSequenceNumber
 import org.postgresql.util.PSQLException
-import org.postgresql.util.PSQLState
 import xtdb.api.tx.TxIndexer
 import xtdb.api.Remote
 import xtdb.api.RemoteAlias
@@ -444,8 +443,6 @@ class PostgresSource(
                 // A stand-down racing the failure makes this a cancellation, whatever the exception says. Our
                 // own teardown raises connection failures of its own, and nothing below may outlive the term.
                 currentCoroutineContext().ensureActive()
-
-                if (!PSQLState.isConnectionError(e.sqlState)) throw e
 
                 drainToEmpty()
 
