@@ -67,6 +67,8 @@ class Database(
     private val meterRegistry: MeterRegistry?,
     private val job: Job? = null,
     private val registeredGauges: List<Gauge> = emptyList(),
+    // One per database, borrowed by each partition's log processor, so it is freed after all of them.
+    private val externalSource: ExternalSource? = null,
 ) : IQuerySource.QueryDatabase, AutoCloseable {
 
     init {
@@ -151,7 +153,7 @@ class Database(
         // Phase 2: the job tree has already been cancel-joined (by `cancelAndJoin` above, or by the
         // owner cancelling the catalog root). Free state, children before the database allocator.
         meterRegistry?.let { reg -> registeredGauges.forEach { reg.remove(it) } }
-        (partitions + listOf(logs, allocator)).closeAll()
+        (partitions + listOfNotNull(externalSource) + listOf(logs, allocator)).closeAll()
     }
 
     fun submitTxBlocking(ops: List<TxOp>, opts: TxOpts): Xtdb.SubmittedTx {
@@ -340,8 +342,8 @@ class Database(
                 watchers.notifyError(e)
             })
 
-            // One per database, outliving every leader term: the partition frees it after the processor that
-            // borrows it, and the `open` registration covers only an open that fails before we get there.
+            // The `open` registration covers only an open that fails before the Database is constructed; from
+            // there on the Database frees it.
             // Gated exactly as the processor's own eligibility to lead is, so a read-only or non-indexing node opens no source and validates no source config.
             val extSource =
                 if (indexerConfig.enabled && !readOnly)
@@ -394,7 +396,6 @@ class Database(
                 watchers = watchers,
                 compactorOrNull = compactorForDb,
                 logProcessor = logProcessor,
-                externalSource = extSource,
             )
 
             val db = Database(
@@ -407,6 +408,7 @@ class Database(
                 meterRegistry = meterRegistry,
                 job = job,
                 registeredGauges = gauges,
+                externalSource = extSource,
             )
 
             db
