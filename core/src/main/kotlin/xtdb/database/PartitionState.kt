@@ -6,6 +6,7 @@ import xtdb.block.proto.Block
 import xtdb.catalog.TableCatalog
 import xtdb.catalog.TableCatalog.Companion.latestBlock
 import xtdb.indexer.LiveIndex
+import xtdb.storage.BufferPool
 import xtdb.api.TableRef
 import xtdb.log.proto.TrieDetails
 import xtdb.trie.TrieCatalog
@@ -52,11 +53,9 @@ class PartitionState(
         @JvmOverloads
         fun open(
             allocator: BufferAllocator,
-            storage: PartitionStorage,
+            bufferPool: BufferPool,
             indexerConfig: IndexerConfig = IndexerConfig(),
         ): PartitionState = safelyOpening {
-            val bufferPool = storage.bufferPool
-
             val tableCatalog = TableCatalog(bufferPool, bufferPool.latestBlock).also {
                 it.loadTables()
                 // xt.txs and xt.role_membership are data-backed, so they're absent from the catalog
