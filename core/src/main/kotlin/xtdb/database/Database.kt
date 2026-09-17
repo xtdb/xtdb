@@ -266,9 +266,9 @@ class Database(
 
             val allocator = open { base.allocator.newChildAllocator("database/$dbName", 0, Long.MAX_VALUE) }
 
-            // buffer pool + metadata manager open before the logs, preserving the pre-split failure
-            // order: a storage misconfig must surface before any log/broker interaction (opening a
-            // Kafka log can create topics as a side effect).
+            // Everything that reads object storage opens before the logs: a storage misconfig must surface
+            // before any log/broker interaction, because opening a Kafka log creates topics as a side
+            // effect, and a failed open would otherwise leave them behind.
             val bufferPool = open {
                 val bp = dbConfig.storage.open(
                     allocator, base.memoryCache, base.diskCache,
@@ -279,10 +279,11 @@ class Database(
                 if (readOnly) ReadOnlyBufferPool(bp) else bp
             }
             val metadataManager = open { PageMetadata.factory(allocator, bufferPool) }
+            val state = open { PartitionState.open(allocator, bufferPool, indexerConfig) }
+
             val logs = open { DatabaseLogs.open(base, dbConfig) }
 
             val storage = PartitionStorage(logs, bufferPool, metadataManager, partition = 0)
-            val state = open { PartitionState.open(allocator, bufferPool, indexerConfig) }
             val tableCatalog = state.tableCatalog
             val sourceMsgId = maxOf(
                 tableCatalog.latestProcessedMsgId ?: -1,
