@@ -10,6 +10,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.NodeBase
+import xtdb.api.IndexerConfig
 import xtdb.api.TransactionKey
 import xtdb.api.TransactionResult
 import xtdb.api.Xtdb
@@ -47,6 +48,7 @@ import xtdb.util.MsgIdUtil.msgIdToOffset
 import xtdb.util.MsgIdUtil.offsetToMsgId
 import xtdb.util.closeAll
 import xtdb.util.info
+import xtdb.util.SafelyOpeningScope
 import xtdb.util.safelyOpening
 import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
@@ -228,13 +230,15 @@ class Database(
             )
         }
 
-        private fun validateOffsets(dbName: DatabaseName, log: Log<SourceMessage>, latestProcessedMsgId: MessageId?) {
+        private fun validateOffsets(
+            dbName: DatabaseName, log: Log<SourceMessage>, partition: Int, latestProcessedMsgId: MessageId?
+        ) {
             if (latestProcessedMsgId == null) return
 
             val processedOffset = msgIdToOffset(latestProcessedMsgId)
             val processedEpoch = msgIdToEpoch(latestProcessedMsgId)
             val logEpoch = log.epoch
-            val latestSubmittedOffset = log.latestSubmittedOffset()
+            val latestSubmittedOffset = log.latestSubmittedOffset(partition)
 
             // Epochs are monotonic (see /ops/config/log#epochs), and the direction matters.
             // Skipping offset validation is only safe on a later epoch, where the log is
@@ -251,6 +255,130 @@ class Database(
                     throwIllegalLogState(dbName, latestSubmittedOffset, logEpoch, processedEpoch, processedOffset)
             }
         }
+
+        /** A partition's object-storage-backed objects: all that reads storage, nothing that needs the logs. */
+        private class PartitionStores(
+            val bufferPool: BufferPool,
+            val metadataManager: PageMetadata.Factory,
+            val state: PartitionState,
+        )
+
+        private fun SafelyOpeningScope.openPartitionStores(
+            base: NodeBase, dbName: DatabaseName, dbConfig: Config,
+            indexerConfig: IndexerConfig, allocator: BufferAllocator, readOnly: Boolean,
+        ): List<PartitionStores> {
+            val partitionCount = dbConfig.partitions
+
+            return List(partitionCount) { partition ->
+                val bufferPool = open {
+                    val bp = dbConfig.storage.open(
+                        allocator, base.memoryCache, base.diskCache,
+                        dbName, partition, partitionCount,
+                        base.meterRegistry, Storage.VERSION,
+                        base.remotes,
+                    )
+                    if (readOnly) ReadOnlyBufferPool(bp) else bp
+                }
+
+                PartitionStores(
+                    bufferPool,
+                    open { PageMetadata.factory(allocator, bufferPool) },
+                    open { PartitionState.open(allocator, bufferPool, indexerConfig) },
+                )
+            }
+        }
+
+        /**
+         * One [DatabasePartition] per entry in [stores], each bound to its own slice of [logs].
+         *
+         * [PartitionStorage] is deliberately not registered with the [SafelyOpeningScope]: its `close` frees
+         * the buffer pool and metadata manager that [openPartitionStores] registered individually, and on the
+         * success path [DatabasePartition] frees it instead. One owner per path, and only one path runs.
+         */
+        private fun SafelyOpeningScope.openPartitions(
+            stores: List<PartitionStores>, logs: DatabaseLogs,
+            base: NodeBase, dbName: DatabaseName, indexerConfig: IndexerConfig,
+            allocator: BufferAllocator, compactor: Compactor, dbCatalog: Catalog?,
+            job: Job, extSource: ExternalSource?, readOnly: Boolean,
+        ): List<DatabasePartition> =
+            stores.mapIndexed { partition, partitionStores ->
+                val storage =
+                    PartitionStorage(logs, partitionStores.bufferPool, partitionStores.metadataManager, partition)
+                val state = partitionStores.state
+                val tableCatalog = state.tableCatalog
+
+                val sourceMsgId = maxOf(
+                    tableCatalog.latestProcessedMsgId ?: -1,
+                    offsetToMsgId(logs.sourceLog.epoch, -1)
+                )
+                // tx-id and source-msg-id can diverge under ext-source — seed them independently:
+                // tx-id from the live-index's last committed tx, source-msg-id from the persisted
+                // block-catalog watermark (or the source-log epoch floor on a fresh epoch).
+                val txId = state.liveIndex.latestCompletedTx?.txId ?: -1L
+
+                // Catch log/storage divergence (rotated/truncated/wrong topic) before we wire up
+                // the indexer — see /ops/backup-and-restore/out-of-sync-log.
+                validateOffsets(dbName, logs.sourceLog, partition, tableCatalog.latestProcessedMsgId)
+
+                val watchers = Watchers(
+                    latestTxId = txId,
+                    latestSourceMsgId = sourceMsgId,
+                    externalSourceToken = tableCatalog.externalSourceToken,
+                )
+
+                val crashLogger = CrashLogger(allocator, partitionStores.bufferPool, base.config.nodeId)
+
+                // Child of the database `job`; the owner's cancel stops and joins it along with the rest
+                // of the tree.
+                val compactorScope = CoroutineScope(Job(job))
+
+                // For open-failure unwinding, each coroutine-owning resource registers a closeable that
+                // cancel-joins its scope then frees it. Per-resource (rather than one global cancel
+                // registered last) so a failure *between* resources can't leave safelyOpening freeing a
+                // child allocator while its loop is still live. safelyOpening unwinds last-registered-
+                // first, so these run before the plain allocator/storage/state closes — children first.
+                val compactorForDb =
+                    (if (readOnly) Compactor.NOOP.openForDatabase(compactorScope, allocator, storage, state, watchers)
+                    else compactor.openForDatabase(compactorScope, allocator, storage, state, watchers))
+                        .also { forDb ->
+                            open {
+                                AutoCloseable {
+                                    runBlocking { compactorScope.coroutineContext.job.cancelAndJoin() }
+                                    forDb.close()
+                                }
+                            }
+                        }
+
+                // Per partition, because the handler reports into that partition's watchers.
+                val scope = CoroutineScope(job + CoroutineExceptionHandler { _, e ->
+                    watchers.notifyError(e)
+                })
+
+                val logProcessor = if (indexerConfig.enabled) {
+                    LogProcessor(
+                        allocator, base, crashLogger,
+                        storage, state, dbName, watchers,
+                        compactorForDb, dbCatalog,
+                        externalSource = extSource,
+                        scope = scope,
+                        skipTxs = indexerConfig.skipTxs.toSet(),
+                        flushTimeout = indexerConfig.flushDuration,
+                        readOnly = readOnly,
+                    )
+                        .also { lp ->
+                            // job.cancelAndJoin joins the term *and* the partition's replica-log reader.
+                            open { AutoCloseable { runBlocking { job.cancelAndJoin() }; lp.close() } }
+                        }
+                } else null
+
+                DatabasePartition(
+                    storage = storage,
+                    state = state,
+                    watchers = watchers,
+                    compactorOrNull = compactorForDb,
+                    logProcessor = logProcessor,
+                )
+            }
 
         @JvmStatic
         fun open(
@@ -271,101 +399,34 @@ class Database(
             // Everything that reads object storage opens before the logs: a storage misconfig must surface
             // before any log/broker interaction, because opening a Kafka log creates topics as a side
             // effect, and a failed open would otherwise leave them behind.
-            val bufferPool = open {
-                val bp = dbConfig.storage.open(
-                    allocator, base.memoryCache, base.diskCache,
-                    dbName, 0, dbConfig.partitions,
-                    base.meterRegistry, Storage.VERSION,
-                    base.remotes,
-                )
-                if (readOnly) ReadOnlyBufferPool(bp) else bp
-            }
-            val metadataManager = open { PageMetadata.factory(allocator, bufferPool) }
-            val state = open { PartitionState.open(allocator, bufferPool, indexerConfig) }
+            val stores = openPartitionStores(base, dbName, dbConfig, indexerConfig, allocator, readOnly)
 
             val logs = open { DatabaseLogs.open(base, dbConfig) }
 
-            val storage = PartitionStorage(logs, bufferPool, metadataManager, partition = 0)
-            val tableCatalog = state.tableCatalog
-            val sourceMsgId = maxOf(
-                tableCatalog.latestProcessedMsgId ?: -1,
-                offsetToMsgId(logs.sourceLog.epoch, -1)
-            )
-            // tx-id and source-msg-id can diverge under ext-source — seed them independently:
-            // tx-id from the live-index's last committed tx, source-msg-id from the persisted
-            // block-catalog watermark (or the source-log epoch floor on a fresh epoch).
-            val txId = state.liveIndex.latestCompletedTx?.txId ?: -1L
-
-            // Catch log/storage divergence (rotated/truncated/wrong topic) before we wire up
-            // the indexer — see /ops/backup-and-restore/out-of-sync-log.
-            validateOffsets(dbName, logs.sourceLog, tableCatalog.latestProcessedMsgId)
-
-            val watchers = Watchers(
-                latestTxId = txId,
-                latestSourceMsgId = sourceMsgId,
-                externalSourceToken = tableCatalog.externalSourceToken,
-            )
-
-            val crashLogger = CrashLogger(allocator, storage.bufferPool, base.config.nodeId)
-
             // SupervisorJob child of the catalog's root job: the owner's single cancel still cascades
-            // down to this database's whole tree (term, compactor, replica-log reader), but a
-            // failure *within* the database (e.g. the replica-log reader) surfaces through this
-            // scope's CoroutineExceptionHandler — `watchers.notifyError` — rather than propagating
+            // down to this database's whole tree (terms, compactors, replica-log readers), but a
+            // failure *within* the database (e.g. a replica-log reader) surfaces through that
+            // partition's CoroutineExceptionHandler — `watchers.notifyError` — rather than propagating
             // up. A CoroutineExceptionHandler only fires for a root coroutine or a direct child of a
             // SupervisorJob, so this must be a SupervisorJob (cf. LogProcessor.openTerm). Sibling-
             // database isolation is a separate concern, provided by the parent dbJob being a Supervisor.
             val job = SupervisorJob(parentScope.coroutineContext.job)
 
-            // Child of the database `job`; the owner's cancel stops and joins it along with the rest
-            // of the tree.
-            val compactorScope = CoroutineScope(Job(job))
-
-            // For open-failure unwinding, each coroutine-owning resource registers a closeable that
-            // cancel-joins its scope then frees it. Per-resource (rather than one global cancel
-            // registered last) so a failure *between* resources can't leave safelyOpening freeing a
-            // child allocator while its loop is still live. safelyOpening unwinds last-registered-
-            // first, so these run before the plain allocator/storage/state closes — children first.
-            val compactorForDb =
-                (if (readOnly) Compactor.NOOP.openForDatabase(compactorScope, allocator, storage, state, watchers)
-                else compactor.openForDatabase(compactorScope, allocator, storage, state, watchers))
-                    .also { forDb ->
-                        open {
-                            AutoCloseable {
-                                runBlocking { compactorScope.coroutineContext.job.cancelAndJoin() }
-                                forDb.close()
-                            }
-                        }
-                    }
-
-            val scope = CoroutineScope(job + CoroutineExceptionHandler { _, e ->
-                watchers.notifyError(e)
-            })
-
-            // The `open` registration covers only an open that fails before the Database is constructed; from
-            // there on the Database frees it.
+            // One per database, borrowed by every partition's log processor, so it opens before them and
+            // the Database frees it after them. The `open` registration covers only an open that fails
+            // before the Database is constructed.
             // Gated exactly as the processor's own eligibility to lead is, so a read-only or non-indexing node opens no source and validates no source config.
             val extSource =
                 if (indexerConfig.enabled && !readOnly)
                     open { dbConfig.externalSource?.open(dbName, base.remotes, base.meterRegistry) }
                 else null
 
-            val logProcessor = if (indexerConfig.enabled) {
-                LogProcessor(
-                    allocator, base, crashLogger,
-                    storage, state, dbName, watchers,
-                    compactorForDb, dbCatalog,
-                    externalSource = extSource,
-                    scope = scope,
-                    skipTxs = indexerConfig.skipTxs.toSet(),
-                    flushTimeout = indexerConfig.flushDuration,
-                    readOnly = readOnly,
-                )
-                    .also { lp ->
-                        // job.cancelAndJoin joins the term *and* the partition's replica-log reader.
-                        open { AutoCloseable { runBlocking { job.cancelAndJoin() }; lp.close() } }
-                    }
-            } else null
+            val partitions = openPartitions(
+                stores, logs,
+                base, dbName, indexerConfig,
+                allocator, compactor, dbCatalog,
+                job, extSource, readOnly,
+            )
 
             val meterRegistry = base.meterRegistry
             val gauges = meterRegistry?.let { reg ->
@@ -374,29 +435,25 @@ class Database(
                         .tag("db", dbName)
                         .register(reg)
 
+                // TODO (#5849) tagged `db` only and reading one partition, so above one partition these
+                //   report the first partition's progress as the whole database's.
+                val p0 = partitions.first()
+
                 listOf(
                     gauge("node.tx.latestCompletedTxId") {
-                        (state.liveIndex.latestCompletedTx?.txId ?: -1).toDouble()
+                        (p0.liveIndex.latestCompletedTx?.txId ?: -1).toDouble()
                     },
                     gauge("node.tx.latestSubmittedMsgId") {
                         logs.sourceLog.latestSubmittedMsgId().toDouble()
                     },
                     gauge("node.tx.latestProcessedMsgId") {
-                        watchers.latestSourceMsgId.toDouble()
+                        p0.watchers.latestSourceMsgId.toDouble()
                     },
                     gauge("node.tx.lag.MsgId") {
-                        maxOf(logs.sourceLog.latestSubmittedMsgId() - watchers.latestSourceMsgId, 0).toDouble()
+                        maxOf(logs.sourceLog.latestSubmittedMsgId() - p0.watchers.latestSourceMsgId, 0).toDouble()
                     },
                 )
             } ?: emptyList()
-
-            val partition = DatabasePartition(
-                storage = storage,
-                state = state,
-                watchers = watchers,
-                compactorOrNull = compactorForDb,
-                logProcessor = logProcessor,
-            )
 
             val db = Database(
                 allocator = allocator,
@@ -404,7 +461,7 @@ class Database(
                 name = dbName,
                 logs = logs,
                 isIndexing = indexerConfig.enabled,
-                partitions = listOf(partition),
+                partitions = partitions,
                 meterRegistry = meterRegistry,
                 job = job,
                 registeredGauges = gauges,
