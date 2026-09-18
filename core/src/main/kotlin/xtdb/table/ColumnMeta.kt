@@ -284,19 +284,24 @@ private fun VectorType.asColType(): ColumnMeta.Type = when (this) {
  *
  * [type] mirrors [VectorType], except that a [Type.Struct]'s children and a [Type.Listy]'s element hold a
  * [ColumnMeta] rather than a [VectorType]. Polymorphism recurses straight through — [Type.Poly]'s legs and
- * [Type.Maybe]'s mono are types rather than nodes — because a leg has no stable position to hang anything
- * off: [VectorType.Poly] holds an unordered set that `fromLegs` normalises.
+ * [Type.Maybe]'s mono are types rather than nodes — because a leg has neither a stable position to be
+ * identified by ([VectorType.Poly] holds an unordered set that `fromLegs` normalises) nor a name of its own
+ * that a rename could change.
  *
  * The consequence worth knowing at a call site: widening a type moves no nodes. `a: i64` becoming
  * `a: i64 | text` re-shapes `a`'s [type] and leaves everything else on the node where it was.
  *
- * @param name the Arrow field name this position's data is written under, and the key it is held under —
- *   mirrored onto the node so that one can be passed around on its own. A list's element takes the name
+ * @param slug the Arrow field name this position's data is written under, and the key it is held under —
+ *   mirrored onto the node so that one can be passed around on its own. Fixed for the position's
+ *   lifetime: changing it orphans everything already written under it. A list's element takes the slug
  *   its parent's arrow type fixes.
+ * @param name the name a user sees, which a rename changes and [slug] does not. The two are the same
+ *   string until there is a rename to tell them apart.
  * @param hll the distinct-value estimate accumulated for this position, or null where none has been
  *   computed.
  */
 data class ColumnMeta(
+    val slug: FieldName,
     val name: FieldName,
     val type: Type,
     val hll: HLL?
@@ -327,21 +332,27 @@ data class ColumnMeta(
     fun toProto(): ColumnMetaProto =
         ColumnMetaProto.newBuilder()
             .setType(type.toProto())
+            .setName(name)
             .also { b -> hll?.let { b.hll = ByteString.copyFrom(it.duplicate()) } }
             .build()
 
     companion object {
-        /** A node for [type] at a position called [name], and one for each position beneath it. */
+        /**
+         * A node for [type] at a position called [name], and one for each position beneath it.
+         *
+         * The slug is the name: a column arrives as a key in the put struct and its data is written under
+         * that key, so there is nothing to normalise, unlike a table's.
+         */
         @JvmStatic
         @JvmOverloads
         fun of(name: FieldName, type: VectorType, hll: HLL? = null) =
-            ColumnMeta(name, type.asColType(), hll)
+            ColumnMeta(name, name, type.asColType(), hll)
 
-        /** A node held under [name]. */
+        /** A node held under [slug], taking [slug] as its name where the block predates the two being distinct. */
         @JvmStatic
-        fun fromProto(name: FieldName, proto: ColumnMetaProto) =
+        fun fromProto(slug: FieldName, proto: ColumnMetaProto) =
             ColumnMeta(
-                name,
+                slug, proto.name.takeIf { proto.hasName() } ?: slug,
                 proto.type.asType(),
                 proto.hll.takeIf { proto.hasHll() }?.let { toHLL(it.toByteArray()) }
             )
