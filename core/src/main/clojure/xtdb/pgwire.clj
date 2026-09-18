@@ -1513,9 +1513,9 @@
       (catch Exception e
         (log/debug e "Error deleting COPY file during failure")))
 
-    (swap! conn-state dissoc :copy))
+    (swap! conn-state dissoc :copy)
 
-  (cmd-send-ready conn))
+    (cmd-send-ready conn)))
 
 ;; ignore password messages, we are authenticated when getting here
 (defmethod handle-msg* :msg-password [_conn _msg])
