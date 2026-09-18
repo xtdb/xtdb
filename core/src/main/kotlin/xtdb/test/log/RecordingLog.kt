@@ -1,11 +1,14 @@
 package xtdb.test.log
 
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Deferred
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 import xtdb.api.Remote
 import xtdb.api.RemoteAlias
 import xtdb.api.log.Log
+import xtdb.api.log.Log.MessageMetadata
 import xtdb.types.MessageId
 import xtdb.api.log.SourceMessage
 import xtdb.api.log.ReplicaMessage
@@ -51,15 +54,18 @@ class RecordingLog<M>(private val instantSource: InstantSource, messages: List<M
 
     override fun latestSubmittedOffset(partition: Int): LogOffset = latestSubmittedOffset0
 
-    override suspend fun appendMessage(message: M, partition: Int): Log.MessageMetadata {
+    override suspend fun appendMessage(message: M, partition: Int): MessageMetadata {
         messages.add(message)
 
         val ts = if (message is SourceMessage.Tx || message is SourceMessage.LegacyTx) instantSource.instant() else Instant.now()
         val offset = ++latestSubmittedOffset0
         records.add(Log.Record(epoch, offset, ts.truncatedTo(ChronoUnit.MICROS), message))
 
-        return Log.MessageMetadata(epoch, offset, ts.truncatedTo(ChronoUnit.MICROS))
+        return MessageMetadata(epoch, offset, ts.truncatedTo(ChronoUnit.MICROS))
     }
+
+    override suspend fun enqueueMessage(message: M, partition: Int): Deferred<MessageMetadata> =
+        CompletableDeferred(appendMessage(message, partition))
 
     override fun readLastMessage(partition: Int): M? = messages.lastOrNull()
 

@@ -255,28 +255,36 @@ class KafkaCluster(
         private val latestSubmittedOffset0 = AtomicLong(readLatestSubmittedMessage(kafkaConfigMap))
         override fun latestSubmittedOffset(partition: Int) = latestSubmittedOffset0.get()
 
-        override suspend fun appendMessage(message: M, partition: Int): Log.MessageMetadata =
-            try {
-                CompletableDeferred<Log.MessageMetadata>()
-                    .also { res ->
-                        producer.send(
-                            ProducerRecord(topic, null, Unit, codec.encode(message))
-                        ) { recordMetadata, e ->
-                            if (e == null) {
-                                val metadata = Log.MessageMetadata(
-                                    epoch,
-                                    recordMetadata.offset(),
-                                    ofEpochMilli(recordMetadata.timestamp())
-                                )
-                                latestSubmittedOffset0.updateAndGet { it.coerceAtLeast(metadata.logOffset) }
-                                res.complete(metadata)
-                            } else res.completeExceptionally(e)
-                        }
-                    }
-                    .await()
-            } catch (e: RecordTooLargeException) {
-                throw Log.MessageTooLargeException(e.message ?: "Kafka record too large", e)
+        override suspend fun enqueueMessage(message: M, partition: Int): Deferred<Log.MessageMetadata> {
+            val res = CompletableDeferred<Log.MessageMetadata>()
+
+            // `send` fixes this record's order by handing it to the per-partition accumulator before returning.
+            // The offset isn't known until the callback, so the handle carries it rather than this call.
+            val sent = producer.send(ProducerRecord(topic, null, Unit, codec.encode(message))) { recordMetadata, e ->
+                if (e == null) {
+                    val metadata = Log.MessageMetadata(epoch, recordMetadata.offset(), ofEpochMilli(recordMetadata.timestamp()))
+                    latestSubmittedOffset0.updateAndGet { it.coerceAtLeast(metadata.logOffset) }
+                    res.complete(metadata)
+                } else res.completeExceptionally(e)
             }
+
+            // A record over the producer's size cap never reaches the accumulator, but `send` reports that as an
+            // already-failed future rather than throwing - so it is checked here, while no order has been fixed.
+            if (sent.isDone) {
+                try {
+                    sent.get()
+                } catch (e: ExecutionException) {
+                    val cause = e.cause
+                    if (cause is RecordTooLargeException)
+                        throw Log.MessageTooLargeException(cause.message ?: "Kafka record too large", cause)
+                }
+            }
+
+            return res
+        }
+
+        override suspend fun appendMessage(message: M, partition: Int) =
+            enqueueMessage(message, partition).await()
 
         override fun readLastMessage(partition: Int): M? =
             kafkaConfigMap.openConsumer().use { c ->

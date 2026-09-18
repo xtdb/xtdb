@@ -91,6 +91,9 @@ class InMemoryLog<M> @JvmOverloads constructor(
         }
     }
 
+    override suspend fun enqueueMessage(message: M, partition: Int): Deferred<MessageMetadata> =
+        CompletableDeferred(appendMessage(message, partition))
+
     override fun readLastMessage(partition: Int): M? = null
 
     override fun readRecords(partition: Int, fromMsgId: MessageId, toMsgId: MessageId) = sequence {
@@ -103,6 +106,7 @@ class InMemoryLog<M> @JvmOverloads constructor(
         }
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     override suspend fun <R> withTail(
         partition: Int, afterMsgId: MessageId, action: suspend (Tail<M>) -> R
     ): R = coroutineScope {

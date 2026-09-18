@@ -57,8 +57,14 @@ private val LOG = LogProcessorSimTest::class.logger
 private class NodeReplicaLog(private val log: Log<ReplicaMessage>) : Log<ReplicaMessage> by log {
     val appendedOffsets = mutableSetOf<LogOffset>()
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override suspend fun enqueueMessage(message: ReplicaMessage, partition: Int) =
+        log.enqueueMessage(message, partition).also { enqueued ->
+            enqueued.invokeOnCompletion { if (it == null) appendedOffsets += enqueued.getCompleted().logOffset }
+        }
+
     override suspend fun appendMessage(message: ReplicaMessage, partition: Int) =
-        log.appendMessage(message, partition).also { appendedOffsets += it.logOffset }
+        enqueueMessage(message, partition).await()
 }
 
 @Tag("property")

@@ -2,6 +2,8 @@
 
 package xtdb.api.log
 
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.runBlocking
@@ -138,8 +140,23 @@ interface Log<M> : AutoCloseable {
 
     class MessageTooLargeException(message: String, cause: Throwable? = null) : RuntimeException(message, cause)
 
+    /**
+     * Appends [message], returning once its place in this partition's order is fixed - the [Deferred]
+     * completes with its offset once it is durable.
+     *
+     * Order is fixed against any other caller of this log: a message enqueued after this call returns
+     * lands after this one. Durability is not - the returned handle is the only report of whether this
+     * message made it, so a caller that drops it will not learn that the message was lost.
+     *
+     * Throws [MessageTooLargeException] rather than failing the handle when the log declines the
+     * message outright: nothing was enqueued, so no order was fixed and nothing behind it is affected.
+     */
     @Throws(MessageTooLargeException::class)
-    suspend fun appendMessage(message: M, partition: Int = 0): MessageMetadata
+    suspend fun enqueueMessage(message: M, partition: Int = 0): Deferred<MessageMetadata>
+
+    @Throws(MessageTooLargeException::class)
+    suspend fun appendMessage(message: M, partition: Int = 0): MessageMetadata =
+        enqueueMessage(message, partition).await()
 
     @Throws(MessageTooLargeException::class)
     fun appendMessageBlocking(message: M, partition: Int = 0): MessageMetadata =
