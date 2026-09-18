@@ -50,6 +50,16 @@ internal fun Throwable?.asCancellation(): CancellationException =
  * state, live index and tx resolver with the clauses [LeaderLogProcessor.runTerm] arms — concurrently, a
  * tx could resolve during a block cut, which the term treats as unreachable.
  */
+/**
+ * Appends [msg] and waits for it to be durable, for a caller that needs its id or cannot go on without it.
+ *
+ * An extension rather than a member of [LogProcessor.LogsDriver], so that a driver wrapping another with
+ * `by` has exactly one append to override: a second member would be forwarded to the delegate, silently
+ * bypassing whatever the wrapper does to the first.
+ */
+internal suspend fun LogProcessor.LogsDriver.appendToReplica(msg: ReplicaMessage) =
+    enqueueToReplica(msg).await()
+
 internal class ReplicaApply(val record: Log.Record<ReplicaMessage>) {
     val applied = CompletableDeferred<Unit>()
 }
@@ -86,8 +96,17 @@ class LogProcessor(
     /** The partition's log appends, behind one seam, so that a test can fail or stall one. */
     interface LogsDriver {
 
-        /** Needs no atomicity across messages: a superseded leader is fenced by the term its records carry (#5817). */
-        suspend fun appendToReplica(msg: ReplicaMessage): Log.MessageMetadata
+        /**
+         * Appends [msg], returning once its place in the replica log's order is fixed rather than once it
+         * is durable — see [Log.enqueueMessage], including why the handle is safe to drop.
+         *
+         * Needs no atomicity across messages: a superseded leader is fenced by the term its records
+         * carry (#5817).
+         *
+         * The sole append member, so that a driver wrapping another with `by` cannot leave one of two
+         * forwarding to the delegate — [appendToReplica] is an extension for the same reason.
+         */
+        suspend fun enqueueToReplica(msg: ReplicaMessage): Deferred<Log.MessageMetadata>
 
         /** [expectedBlockIdx] is -1 where no block has been cut yet. */
         suspend fun requestFlushBlock(expectedBlockIdx: Long): MessageId
@@ -97,7 +116,7 @@ class LogProcessor(
         private val sourceLog = partitionStorage.sourceLog
         private val replicaLog = partitionStorage.replicaLog
 
-        override suspend fun appendToReplica(msg: ReplicaMessage) = replicaLog.appendMessage(msg)
+        override suspend fun enqueueToReplica(msg: ReplicaMessage) = replicaLog.enqueueMessage(msg)
 
         override suspend fun requestFlushBlock(expectedBlockIdx: Long) =
             sourceLog.appendMessage(SourceMessage.FlushBlock(expectedBlockIdx)).msgId

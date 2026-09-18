@@ -4,6 +4,7 @@ import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
@@ -86,7 +87,7 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
         val (proc, appender) = unstartedTerm(watchers, driver = { inner ->
             object : LogsDriver by inner {
                 // LocalStorage converts a ClosedByInterruptException into this on both its write paths
-                override suspend fun appendToReplica(msg: ReplicaMessage): Log.MessageMetadata =
+                override suspend fun enqueueToReplica(msg: ReplicaMessage): Deferred<Log.MessageMetadata> =
                     throw InterruptedException("interrupted writing to storage")
             }
         })

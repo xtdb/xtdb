@@ -2,7 +2,6 @@
 
 package xtdb.api.log
 
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.isActive
@@ -141,15 +140,28 @@ interface Log<M> : AutoCloseable {
     class MessageTooLargeException(message: String, cause: Throwable? = null) : RuntimeException(message, cause)
 
     /**
+     * Raised by every append after one of this log's records was lost, carrying that loss as its cause.
+     *
+     * Terminal: a log with a gap in it cannot be repaired, so this never clears, and a leader that sees
+     * it has to end its term.
+     */
+    class LogFailedException(cause: Throwable) :
+        RuntimeException("log stopped accepting records after losing one", cause)
+
+    /**
      * Appends [message], returning once its place in this partition's order is fixed - the [Deferred]
      * completes with its offset once it is durable.
      *
      * Order is fixed against any other caller of this log: a message enqueued after this call returns
-     * lands after this one. Durability is not - the returned handle is the only report of whether this
-     * message made it, so a caller that drops it will not learn that the message was lost.
+     * lands after this one. Durability is not, so a caller wanting it awaits the handle.
+     *
+     * A caller MAY drop the handle. **No message lands behind one that was lost**: a log whose record
+     * fails takes no further messages, and raises [LogFailedException] from every later append. So a
+     * caller that never awaits still learns, at its next append, that the log is gone.
      *
      * Throws [MessageTooLargeException] rather than failing the handle when the log declines the
-     * message outright: nothing was enqueued, so no order was fixed and nothing behind it is affected.
+     * message outright: nothing was enqueued, so no order was fixed, nothing behind it is affected, and
+     * the log goes on accepting messages.
      */
     @Throws(MessageTooLargeException::class)
     suspend fun enqueueMessage(message: M, partition: Int = 0): Deferred<MessageMetadata>

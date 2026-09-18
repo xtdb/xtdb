@@ -5,6 +5,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
+import xtdb.api.error.Incorrect
 import xtdb.api.log.Log.Record
 import java.time.InstantSource
 import java.util.concurrent.Executors
@@ -24,6 +25,17 @@ class InMemoryLogTest {
 
             // Still null because InMemoryLog has no persistence
             assertNull(log.readLastMessage())
+        }
+    }
+
+    @Test
+    fun `a read-only log refuses every append surface, and nothing reaches the log beneath`() = runTest {
+        InMemoryLog.Factory().openReadOnlySourceLog(emptyMap()).use { readOnly ->
+            assertThrows(Incorrect::class.java) { runBlocking { readOnly.appendMessage(txMessage(1)) } }
+            assertThrows(Incorrect::class.java) { runBlocking { readOnly.enqueueMessage(txMessage(2)) } }
+            assertThrows(Incorrect::class.java) { readOnly.appendMessageBlocking(txMessage(3)) }
+
+            assertEquals(-1L, readOnly.latestSubmittedMsgId())
         }
     }
 

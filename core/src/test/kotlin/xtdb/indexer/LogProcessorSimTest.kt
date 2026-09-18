@@ -57,8 +57,13 @@ private val LOG = LogProcessorSimTest::class.logger
 private class NodeReplicaLog(private val log: Log<ReplicaMessage>) : Log<ReplicaMessage> by log {
     val appendedOffsets = mutableSetOf<LogOffset>()
 
-    override suspend fun appendMessage(message: ReplicaMessage, partition: Int) =
-        log.appendMessage(message, partition).also { appendedOffsets += it.logOffset }
+    // Recorded on completion rather than awaited: awaiting here would hold the appender for a round-trip
+    // and leave the sim exercising the behaviour this commit removes.
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override suspend fun enqueueMessage(message: ReplicaMessage, partition: Int) =
+        log.enqueueMessage(message, partition).also { handle ->
+            handle.invokeOnCompletion { if (it == null) appendedOffsets += handle.getCompleted().logOffset }
+        }
 }
 
 @Tag("property")
@@ -752,10 +757,10 @@ class LogProcessorSimTest : SimulationTestBase() {
      * node that goes on to lead would fail its term on the first assertion, which is a different invariant.
      */
     private class ClaimRefusingDriver(private val inner: LogProcessor.LogsDriver) : LogProcessor.LogsDriver by inner {
-        override suspend fun appendToReplica(msg: ReplicaMessage): Log.MessageMetadata =
+        override suspend fun enqueueToReplica(msg: ReplicaMessage): Deferred<Log.MessageMetadata> =
             if (msg is NoOp && msg.srcMsgId == null)
                 throw IOException("[sim] the replica log will not accept a claim")
-            else inner.appendToReplica(msg)
+            else inner.enqueueToReplica(msg)
     }
 
     @RepeatableSimulationTest

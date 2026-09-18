@@ -3,7 +3,6 @@
 package xtdb.api.log
 
 import kotlinx.coroutines.*
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -202,7 +201,23 @@ class LocalLog<M> @JvmOverloads constructor(
                         msgs.add(ps.appendCh.tryReceive().getOrNull() ?: break)
                     }
 
-                    val records = ps.writeMessages(msgs)
+                    val records = try {
+                        ps.writeMessages(msgs)
+                    } catch (t: Throwable) {
+                        // A failed write leaves this partition at an offset nothing can reconcile, so it
+                        // takes no further messages: the channel closes with the cause, and `send` raises
+                        // it from then on. Closed rather than cancelled, so the messages already queued
+                        // can be drained and failed here - this coroutine is the only thing that would
+                        // ever have completed their handles, and a caller awaiting one would hang.
+                        if (t !is CancellationException) ps.appendCh.close(LogFailedException(t))
+
+                        msgs.forEach { it.onCommit.completeExceptionally(t) }
+                        while (true) (ps.appendCh.tryReceive().getOrNull() ?: break).onCommit.completeExceptionally(t)
+
+                        // Returning rather than rethrowing: these coroutines share one scope, so raising
+                        // here would take every other partition's writer down with this one.
+                        return@launch
+                    }
 
                     ps.committedOffset.value = records.last().logOffset
                     msgs.forEachIndexed { idx, msg ->

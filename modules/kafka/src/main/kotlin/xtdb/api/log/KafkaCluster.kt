@@ -39,8 +39,6 @@ import xtdb.types.MessageId
 import xtdb.util.MsgIdUtil.afterMsgIdToOffset
 import xtdb.util.MsgIdUtil.msgIdToEpoch
 import xtdb.util.MsgIdUtil.msgIdToOffset
-import xtdb.util.close
-import xtdb.util.error
 import xtdb.util.logger
 import xtdb.util.warn
 import java.nio.file.Path
@@ -255,8 +253,22 @@ class KafkaCluster(
         private val latestSubmittedOffset0 = AtomicLong(readLatestSubmittedMessage(kafkaConfigMap))
         override fun latestSubmittedOffset(partition: Int) = latestSubmittedOffset0.get()
 
-        override suspend fun enqueueMessage(message: M, partition: Int): Deferred<Log.MessageMetadata> =
-            try {
+        /**
+         * Set from a send callback, on a producer I/O thread - hence `@Volatile`, which is the whole of
+         * the publication this needs: one reference, written once, read on every append.
+         *
+         * A per-topic flag rather than closing the producer, because [KafkaCluster] shares one producer
+         * across every database's logs and a lost record is confined to the partition it was bound for.
+         */
+        @Volatile
+        private var lostRecord: Throwable? = null
+
+        override suspend fun enqueueMessage(message: M, partition: Int): Deferred<Log.MessageMetadata> {
+            // Kafka won't do this for us: an idempotent, non-transactional producer answers a lost record
+            // by bumping its epoch and re-sequencing the records queued behind the gap, so they land.
+            lostRecord?.let { throw Log.LogFailedException(it) }
+
+            return try {
                 // `send` fixes this record's order: it validates the size and then hands the record to the
                 // per-partition accumulator, both before returning. The offset isn't known until the
                 // callback, so the handle carries it rather than this call.
@@ -273,12 +285,18 @@ class KafkaCluster(
                                 )
                                 latestSubmittedOffset0.updateAndGet { it.coerceAtLeast(metadata.logOffset) }
                                 res.complete(metadata)
-                            } else res.completeExceptionally(e)
+                            } else {
+                                lostRecord = e
+                                res.completeExceptionally(e)
+                            }
                         }
                     }
             } catch (e: RecordTooLargeException) {
+                // Declined before it reached the accumulator, so no order was fixed and nothing behind it
+                // is affected - this is not a loss, and the log goes on accepting records.
                 throw Log.MessageTooLargeException(e.message ?: "Kafka record too large", e)
             }
+        }
 
         override suspend fun appendMessage(message: M, partition: Int) =
             enqueueMessage(message, partition).await()

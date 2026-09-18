@@ -388,7 +388,7 @@ class LogProcessorTest {
         withFreshLogs { sourceLog, replicaLog ->
             TestNode(sourceLog, replicaLog, logsDriver = { inner ->
                 object : LogProcessor.LogsDriver by inner {
-                    override suspend fun appendToReplica(msg: ReplicaMessage): Log.MessageMetadata =
+                    override suspend fun enqueueToReplica(msg: ReplicaMessage): Deferred<Log.MessageMetadata> =
                         throw IOException("the replica log refused the write")
                 }
             }).use { node ->
@@ -421,9 +421,9 @@ class LogProcessorTest {
             // stopping the follower and publishing the leader.
             TestNode(sourceLog, replicaLog, logsDriver = { inner ->
                 object : LogProcessor.LogsDriver by inner {
-                    override suspend fun appendToReplica(msg: ReplicaMessage): Log.MessageMetadata =
+                    override suspend fun enqueueToReplica(msg: ReplicaMessage): Deferred<Log.MessageMetadata> =
                         if (msg is ReplicaMessage.BlockUploaded) throw IOException("the replica log refused the upload")
-                        else inner.appendToReplica(msg)
+                        else inner.enqueueToReplica(msg)
                 }
             }).use { node ->
                 awaitFence(node, cutter + 1)
@@ -465,11 +465,11 @@ class LogProcessorTest {
             // while still holding the block it has just produced.
             TestNode(sourceLog, replicaLog, logsDriver = { inner ->
                 object : LogProcessor.LogsDriver by inner {
-                    override suspend fun appendToReplica(msg: ReplicaMessage): Log.MessageMetadata {
+                    override suspend fun enqueueToReplica(msg: ReplicaMessage): Deferred<Log.MessageMetadata> {
                         if (msg is ReplicaMessage.BlockUploaded)
                             inner.appendToReplica(ReplicaMessage.NoOp(termId = superseding))
 
-                        return inner.appendToReplica(msg)
+                        return inner.enqueueToReplica(msg)
                     }
                 }
             }).use { node ->
@@ -505,11 +505,11 @@ class LogProcessorTest {
 
             TestNode(sourceLog, replicaLog, logsDriver = { inner ->
                 object : LogProcessor.LogsDriver by inner {
-                    override suspend fun appendToReplica(msg: ReplicaMessage): Log.MessageMetadata {
+                    override suspend fun enqueueToReplica(msg: ReplicaMessage): Deferred<Log.MessageMetadata> {
                         // The term this node is superseding cut the same boundary, so it produced this block too — and its upload lands ahead of ours, having started first.
                         if (msg is ReplicaMessage.BlockUploaded) inner.appendToReplica(msg.copy(termId = cutter))
 
-                        return inner.appendToReplica(msg)
+                        return inner.enqueueToReplica(msg)
                     }
                 }
             }).use { node ->

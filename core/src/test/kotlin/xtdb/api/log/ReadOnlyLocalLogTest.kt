@@ -10,6 +10,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import xtdb.api.error.Incorrect
 import xtdb.api.log.Log.Record
 import java.nio.file.Path
 import kotlin.time.Duration
@@ -33,6 +34,21 @@ class ReadOnlyLocalLogTest {
     @Test
     fun `tailAll observes external writes at N greater than 1`(): Unit = runBlocking {
         observesExternalWrites(partitions = 2)
+    }
+
+    @Test
+    fun `every append surface is refused, and nothing reaches the log`(): Unit = runBlocking {
+        val factory = LocalLog.Factory(tempDir.resolve("refusal-log"))
+
+        factory.openSourceLog(emptyMap()).use {
+            factory.openReadOnlySourceLog(emptyMap()).use { reader ->
+                assertThrows(Incorrect::class.java) { runBlocking { reader.appendMessage(txMessage(1)) } }
+                assertThrows(Incorrect::class.java) { runBlocking { reader.enqueueMessage(txMessage(2)) } }
+                assertThrows(Incorrect::class.java) { reader.appendMessageBlocking(txMessage(3)) }
+
+                assertEquals(-1L, reader.latestSubmittedMsgId(0))
+            }
+        }
     }
 
     @Test

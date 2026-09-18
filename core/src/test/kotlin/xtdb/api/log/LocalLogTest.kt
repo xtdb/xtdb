@@ -9,10 +9,13 @@ import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.RepeatedTest
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.io.TempDir
 import xtdb.api.log.Log.Record
+import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.InstantSource
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
@@ -212,6 +215,75 @@ class LocalLogTest {
 
             // N=1 keeps the pre-#5557 layout — a plain file at rootPath.
             assertTrue(Files.isRegularFile(root.resolve("LOG")), "root/LOG should be a file at N=1")
+        }
+    }
+
+    private class FailsOn(private val id: Byte) : MessageCodec<SourceMessage> {
+        override fun encode(message: SourceMessage): ByteArray {
+            val payload = (message as SourceMessage.LegacyTx).payload
+            if (payload.size > 1 && payload[1] == id) throw IOException("write failed")
+            return SourceMessage.Codec.encode(message)
+        }
+
+        override fun decode(bytes: ByteArray) = SourceMessage.Codec.decode(bytes)
+    }
+
+    private fun logFailingOn(id: Byte) =
+        LocalLog(tempDir.resolve("log"), FailsOn(id), InstantSource.system(), epoch = 0, useInstantSourceForNonTx = false)
+
+    @Test
+    fun `no message lands after one is lost`() = runTest(timeout = 5.seconds) {
+        logFailingOn(2).use { log ->
+            log.appendMessage(txMessage(1))
+
+            assertThrows<IOException>(
+                "the lost message's own append reports the write failure"
+            ) { log.appendMessage(txMessage(2)) }
+
+            val closed = assertThrows<Log.LogFailedException>(
+                "a later append is refused rather than landing behind the gap"
+            ) { log.appendMessage(txMessage(3)) }
+            // walked rather than indexed: coroutine stack-trace recovery re-throws a copy carrying the
+            // original as its cause, so the write failure's depth depends on whether recovery is on
+            assertTrue(
+                generateSequence(closed as Throwable) { it.cause }.any { it is IOException },
+                "the refusal carries the loss that caused it"
+            )
+
+            assertArrayEquals(
+                byteArrayOf(-1, 1), (log.readLastMessage() as SourceMessage.LegacyTx).payload,
+                "only the message written before the loss is on disk"
+            )
+        }
+    }
+
+    @Test
+    fun `a handle nobody awaits still stops the log`() = runTest(timeout = 10.seconds) {
+        logFailingOn(2).use { log ->
+            log.appendMessage(txMessage(1))
+
+            log.enqueueMessage(txMessage(2))
+
+            // The loss lands asynchronously, so the first append to notice it may be one batched
+            // alongside the lost message (which fails with the write error) or a later one (refused).
+            assertThrows<Throwable> { repeat(1000) { log.appendMessage(txMessage(3)) } }
+
+            assertThrows<Log.LogFailedException>(
+                "the log is closed from then on, though nothing ever awaited the lost message"
+            ) { log.appendMessage(txMessage(4)) }
+        }
+    }
+
+    @Test
+    fun `a partition's loss does not stop its siblings`() = runTest(timeout = 5.seconds) {
+        LocalLog(
+            tempDir.resolve("log"), FailsOn(1), InstantSource.system(),
+            epoch = 0, useInstantSourceForNonTx = false, partitions = 2
+        ).use { log ->
+            assertThrows<IOException> { log.appendMessage(txMessage(1), partition = 0) }
+
+            log.appendMessage(txMessage(2), partition = 1)
+            assertArrayEquals(byteArrayOf(-1, 2), (log.readLastMessage(1) as SourceMessage.LegacyTx).payload)
         }
     }
 
