@@ -83,7 +83,6 @@ internal fun KafkaConfigMap.producerConfig(): KafkaConfigMap =
     mapOf(
         "enable.idempotence" to "true",
         "compression.type" to "snappy",
-        "linger.ms" to "0",
     ) + this + mapOf("acks" to "all")
 
 private fun KafkaConfigMap.openProducer(): KafkaProducer<Unit, ByteArray> {
