@@ -3,7 +3,6 @@
 package xtdb.api.log
 
 import kotlinx.coroutines.*
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -115,7 +114,7 @@ class LocalLog<M> @JvmOverloads constructor(
 
     internal data class NewMessage<M>(
         val message: M,
-        val onCommit: CompletableDeferred<Record<M>>
+        val onCommit: CompletableDeferred<MessageMetadata>
     )
 
     // N=1 keeps the pre-#5557 path (byte-identical layout, existing directories/fixtures survive). N>1
@@ -202,29 +201,43 @@ class LocalLog<M> @JvmOverloads constructor(
                         msgs.add(ps.appendCh.tryReceive().getOrNull() ?: break)
                     }
 
-                    val records = ps.writeMessages(msgs)
+                    val records = try {
+                        ps.writeMessages(msgs)
+                    } catch (t: Throwable) {
+                        // A failed write leaves this partition at an offset nothing can reconcile, so it
+                        // takes no further messages: the channel closes with the cause, and `send` raises
+                        // it from then on. Closed rather than cancelled, so the messages already queued
+                        // can be drained and failed here - this coroutine is the only thing that would
+                        // ever have completed their handles, and a caller awaiting one would hang.
+                        if (t !is CancellationException) ps.appendCh.close(LogFailedException(t))
+
+                        msgs.forEach { it.onCommit.completeExceptionally(t) }
+                        while (true) (ps.appendCh.tryReceive().getOrNull() ?: break).onCommit.completeExceptionally(t)
+
+                        // Returning rather than rethrowing: these coroutines share one scope, so raising
+                        // here would take every other partition's writer down with this one.
+                        return@launch
+                    }
 
                     ps.committedOffset.value = records.last().logOffset
                     msgs.forEachIndexed { idx, msg ->
-                        msg.onCommit.complete(records[idx])
+                        val record = records[idx]
+                        msg.onCommit.complete(MessageMetadata(epoch, record.logOffset, record.logTimestamp))
                     }
                 }
             }
         }
     }
 
-    override suspend fun appendMessage(message: M, partition: Int): MessageMetadata {
+    override suspend fun enqueueMessage(message: M, partition: Int): Deferred<MessageMetadata> {
         val ps = state(partition)
-        return CompletableDeferred<MessageMetadata>()
-            .also { res ->
-                scope.launch {
-                    val onCommit = CompletableDeferred<Record<M>>()
-                    ps.appendCh.send(NewMessage(message, onCommit))
-                    val record = onCommit.await()
-                    res.complete(MessageMetadata(epoch, record.logOffset, record.logTimestamp))
-                }
-            }
-            .await()
+
+        // The send is what fixes this message's order against a concurrent caller's, so it runs here
+        // rather than on `scope` - launched, two callers reach the channel in either order.
+        val onCommit = CompletableDeferred<MessageMetadata>()
+        ps.appendCh.send(NewMessage(message, onCommit))
+
+        return onCommit
     }
 
     override fun readLastMessage(partition: Int): M? {

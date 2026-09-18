@@ -1,5 +1,6 @@
 package xtdb.api.log
 
+import kotlinx.coroutines.Deferred
 import xtdb.types.LogOffset
 import xtdb.types.MessageId
 
@@ -10,6 +11,8 @@ import xtdb.types.MessageId
  */
 class PartitionLog<M>(private val log: Log<M>, val partition: Int) {
     suspend fun appendMessage(message: M): Log.MessageMetadata = log.appendMessage(message, partition)
+
+    suspend fun enqueueMessage(message: M): Deferred<Log.MessageMetadata> = log.enqueueMessage(message, partition)
 
     suspend fun <R> withTail(afterMsgId: MessageId, action: suspend (Log.Tail<M>) -> R): R =
         log.withTail(partition, afterMsgId, action)

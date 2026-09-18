@@ -47,7 +47,9 @@ internal class ReplicaLogAppender(
                     electionDriver.run { onAssertTimeout { ControlItem(NoOp(termId = leaderTerm)) } }
                 }
 
-                logsDriver.appendToReplica(item.toReplicaMessage())
+                // The handle goes unheld: the log itself refuses every record after a lost one, so a
+                // failure reaches this loop as a throw from a later enqueue rather than from this one.
+                logsDriver.enqueueToReplica(item.toReplicaMessage())
             }
         } finally {
             queue.cancel()

@@ -1,6 +1,8 @@
 package xtdb.indexer
 
 import com.google.protobuf.ByteString
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.test.runTest
 import org.apache.arrow.memory.BufferAllocator
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -29,12 +31,12 @@ class OffloadedMessagesTest {
     private class DecliningDriver(private val maxBytes: Int) : LogProcessor.LogsDriver {
         val appended = mutableListOf<ReplicaMessage>()
 
-        override suspend fun appendToReplica(msg: ReplicaMessage): Log.MessageMetadata {
+        override suspend fun enqueueToReplica(msg: ReplicaMessage): Deferred<Log.MessageMetadata> {
             if (msg.encode().size > maxBytes)
                 throw Log.MessageTooLargeException("${msg.encode().size} bytes is over $maxBytes")
 
             appended += msg
-            return Log.MessageMetadata(0, appended.size - 1L, Instant.EPOCH)
+            return CompletableDeferred(Log.MessageMetadata(0, appended.size - 1L, Instant.EPOCH))
         }
 
         override suspend fun requestFlushBlock(expectedBlockIdx: Long) = error("unused")

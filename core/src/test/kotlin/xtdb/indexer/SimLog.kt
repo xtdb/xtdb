@@ -3,12 +3,14 @@ package xtdb.indexer
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import xtdb.api.log.Log
+import xtdb.api.log.Log.MessageMetadata
+import xtdb.api.log.Log.Record
 import xtdb.types.LogOffset
 import xtdb.types.MessageId
 import xtdb.util.MsgIdUtil
 import xtdb.util.debug
 import xtdb.util.logger
-import java.time.Instant
+import java.time.Instant.now
 import kotlin.time.Duration
 import kotlin.random.Random
 
@@ -21,6 +23,19 @@ internal class SimLog<M>(private val name: String, private val rand: Random) : L
 
     override fun latestSubmittedOffset(partition: Int): LogOffset = latestSubmittedOffset0
 
+    private var latestEnqueuedOffset: LogOffset = -1
+
+    /** Parents the durability coroutines, so [close] ends them and a cancelled caller does not. */
+    private val job = SupervisorJob()
+
+    /**
+     * Records whose order is fixed but which are not yet durable, oldest first.
+     *
+     * They are deliberately not on [topic]: a real log acknowledges a record before it exposes it, so
+     * a reader that could see one from here would see a record that might still fail.
+     */
+    private val inFlight = ArrayDeque<Pair<Record<M>, CompletableDeferred<MessageMetadata>>>()
+
     class Consumer<M>(var nextOffset: Int) {
         val wake = Channel<Unit>(Channel.CONFLATED)
 
@@ -32,23 +47,37 @@ internal class SimLog<M>(private val name: String, private val rand: Random) : L
 
     val consumers = mutableSetOf<Consumer<M>>()
 
-    val topic = mutableListOf<Log.Record<M>>()
+    val topic = mutableListOf<Record<M>>()
 
-    private fun appendSync(message: M): Log.MessageMetadata {
-        val offset = ++latestSubmittedOffset0
-        val ts = Instant.now()
-        LOG.debug("$name/append: offset=$offset message=${message!!::class.simpleName}")
-        topic += Log.Record(epoch, offset, ts, message)
-        consumers.forEach { it.wake.trySend(Unit) }
-        return Log.MessageMetadata(epoch, offset, ts)
+    override suspend fun enqueueMessage(message: M, partition: Int): Deferred<MessageMetadata> {
+        val offset = ++latestEnqueuedOffset
+        val ts = now()
+        LOG.debug("${name}/enqueue: offset=$offset message=${message!!::class.simpleName}")
+
+        val handle = CompletableDeferred<MessageMetadata>()
+        inFlight += Record(epoch, offset, ts, message) to handle
+
+        // On the caller's dispatcher - the sim's, so the seed picks when this runs relative to everything
+        // else - but under this log's job rather than the caller's, because a record whose caller was
+        // cancelled still lands. That is what makes the handle safe to drop.
+        CoroutineScope(currentCoroutineContext().minusKey(Job) + job).launch { commit() }
+
+        return handle
     }
 
-    override suspend fun appendMessage(message: M, partition: Int): Log.MessageMetadata =
-        appendSync(message)
+    /** Makes the oldest in-flight record durable, in the order [enqueueMessage] fixed. */
+    private fun commit() {
+        val (record, handle) = inFlight.removeFirstOrNull() ?: return
+        LOG.debug("${name}/commit: offset=${record.logOffset}")
+        topic += record
+        latestSubmittedOffset0 = record.logOffset
+        consumers.forEach<Consumer<M>> { it.wake.trySend(Unit) }
+        handle.complete(MessageMetadata(epoch, record.logOffset, record.logTimestamp))
+    }
 
     override fun readLastMessage(partition: Int): M? = topic.lastOrNull()?.message
 
-    override fun readRecords(partition: Int, fromMsgId: MessageId, toMsgId: MessageId): Sequence<Log.Record<M>> {
+    override fun readRecords(partition: Int, fromMsgId: MessageId, toMsgId: MessageId): Sequence<Record<M>> {
         val fromOffset = MsgIdUtil.msgIdToOffset(fromMsgId).toInt()
         val toOffset = MsgIdUtil.msgIdToOffset(toMsgId).toInt()
         return topic.subList(fromOffset.coerceAtLeast(0), toOffset.coerceAtMost(topic.size)).asSequence()
@@ -68,7 +97,7 @@ internal class SimLog<M>(private val name: String, private val rand: Random) : L
 
         try {
             return action(object : Log.Tail<M> {
-                override suspend fun poll(timeout: Duration): List<Log.Record<M>> {
+                override suspend fun poll(timeout: Duration): List<Record<M>> {
                     while (true) {
                         consumer.wake.receive()
                         yield()
@@ -110,11 +139,11 @@ internal class SimLog<M>(private val name: String, private val rand: Random) : L
      * Waits until all active plain consumers have processed all messages currently on the topic.
      */
     suspend fun awaitAllDelivered() {
-        while (consumers.any { it.nextOffset < topic.size }) {
+        while (inFlight.isNotEmpty() || consumers.any { it.nextOffset < topic.size }) {
             consumers.forEach { it.wake.trySend(Unit) }
             yield()
         }
     }
 
-    override fun close() = Unit
+    override fun close() = job.cancel()
 }
