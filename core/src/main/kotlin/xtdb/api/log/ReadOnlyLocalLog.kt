@@ -104,8 +104,8 @@ class ReadOnlyLocalLog<M> @JvmOverloads constructor(
         return readLatestSubmittedOffset(logFilePath(partition))
     }
 
-    override suspend fun appendMessage(message: M, partition: Int): MessageMetadata =
-        throw Incorrect("Cannot append to read-only database log")
+    override suspend fun enqueueMessage(message: M, partition: Int) =
+        throw Incorrect("Cannot write to read-only database log")
 
     override fun readLastMessage(partition: Int): M? {
         val latest = latestSubmittedOffset(partition)

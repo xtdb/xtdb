@@ -255,8 +255,11 @@ class KafkaCluster(
         private val latestSubmittedOffset0 = AtomicLong(readLatestSubmittedMessage(kafkaConfigMap))
         override fun latestSubmittedOffset(partition: Int) = latestSubmittedOffset0.get()
 
-        override suspend fun appendMessage(message: M, partition: Int): Log.MessageMetadata =
+        override suspend fun enqueueMessage(message: M, partition: Int): Deferred<Log.MessageMetadata> =
             try {
+                // `send` fixes this record's order: it validates the size and then hands the record to the
+                // per-partition accumulator, both before returning. The offset isn't known until the
+                // callback, so the handle carries it rather than this call.
                 CompletableDeferred<Log.MessageMetadata>()
                     .also { res ->
                         producer.send(
@@ -273,10 +276,12 @@ class KafkaCluster(
                             } else res.completeExceptionally(e)
                         }
                     }
-                    .await()
             } catch (e: RecordTooLargeException) {
                 throw Log.MessageTooLargeException(e.message ?: "Kafka record too large", e)
             }
+
+        override suspend fun appendMessage(message: M, partition: Int) =
+            enqueueMessage(message, partition).await()
 
         override fun readLastMessage(partition: Int): M? =
             kafkaConfigMap.openConsumer().use { c ->

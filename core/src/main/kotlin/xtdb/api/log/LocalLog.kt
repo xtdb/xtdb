@@ -115,7 +115,7 @@ class LocalLog<M> @JvmOverloads constructor(
 
     internal data class NewMessage<M>(
         val message: M,
-        val onCommit: CompletableDeferred<Record<M>>
+        val onCommit: CompletableDeferred<MessageMetadata>
     )
 
     // N=1 keeps the pre-#5557 path (byte-identical layout, existing directories/fixtures survive). N>1
@@ -206,25 +206,23 @@ class LocalLog<M> @JvmOverloads constructor(
 
                     ps.committedOffset.value = records.last().logOffset
                     msgs.forEachIndexed { idx, msg ->
-                        msg.onCommit.complete(records[idx])
+                        val record = records[idx]
+                        msg.onCommit.complete(MessageMetadata(epoch, record.logOffset, record.logTimestamp))
                     }
                 }
             }
         }
     }
 
-    override suspend fun appendMessage(message: M, partition: Int): MessageMetadata {
+    override suspend fun enqueueMessage(message: M, partition: Int): Deferred<MessageMetadata> {
         val ps = state(partition)
-        return CompletableDeferred<MessageMetadata>()
-            .also { res ->
-                scope.launch {
-                    val onCommit = CompletableDeferred<Record<M>>()
-                    ps.appendCh.send(NewMessage(message, onCommit))
-                    val record = onCommit.await()
-                    res.complete(MessageMetadata(epoch, record.logOffset, record.logTimestamp))
-                }
-            }
-            .await()
+
+        // The send is what fixes this message's order against a concurrent caller's, so it runs here
+        // rather than on `scope` - launched, two callers reach the channel in either order.
+        val onCommit = CompletableDeferred<MessageMetadata>()
+        ps.appendCh.send(NewMessage(message, onCommit))
+
+        return onCommit
     }
 
     override fun readLastMessage(partition: Int): M? {
