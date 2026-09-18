@@ -1265,8 +1265,28 @@
       (t/testing "past system time"
         (q conn ["BEGIN READ WRITE WITH (SYSTEM_TIME ?)" "2021-08-02Z"])
         (sql "INSERT INTO foo (_id, version) VALUES ('foo', 2)")
-        (t/is (thrown-with-msg? PSQLException #"specified system-time older than current tx"
+        (t/is (thrown-with-msg? PSQLException #"specified system-time must be later than current tx"
                                 (sql "COMMIT")))))))
+
+(t/deftest a-system-time-equal-to-the-latest-completed-tx-is-rejected
+  (with-open [conn (jdbc-conn)]
+    (let [sql #(q conn [%])]
+      (sql "BEGIN READ WRITE WITH (SYSTEM_TIME = TIMESTAMP '2026-01-01T00:00:00Z')")
+      (sql "INSERT INTO t (_id, v) VALUES (1, 'a')")
+      (sql "COMMIT")
+
+      (sql "BEGIN READ WRITE WITH (SYSTEM_TIME = TIMESTAMP '2026-01-01T00:00:00Z')")
+      (sql "INSERT INTO t (_id, v) VALUES (1, 'b')")
+      (t/is (thrown-with-msg? PSQLException #"specified system-time must be later than current tx"
+                              (sql "COMMIT")))
+
+      (t/is (= [{:v "a"}] (sql "SELECT v FROM t")))
+
+      (sql "BEGIN READ WRITE WITH (SYSTEM_TIME = TIMESTAMP '2026-01-01T00:00:00.000002Z')")
+      (sql "INSERT INTO t (_id, v) VALUES (1, 'c')")
+      (sql "COMMIT")
+
+      (t/is (= [{:v "c"}] (sql "SELECT v FROM t"))))))
 
 ;; this demonstrates that session / set variables do not change the next statement
 ;; its undefined - but we can say what it is _not_.
@@ -2548,7 +2568,7 @@ ORDER BY t.oid DESC LIMIT 1"
               {:xt/id 1,
                :committed false,
                :error #xt/illegal-arg [:invalid-system-time
-                                       "specified system-time older than current tx"
+                                       "specified system-time must be later than current tx"
                                        {:tx-key #xt/tx-key {:tx-id 1, :system-time #xt/instant "2019-01-01T00:00:00Z"}
                                         :latest-completed-tx #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"}}],
                :system-time (time/->zdt #inst "2020-01-02")}]

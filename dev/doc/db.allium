@@ -268,7 +268,9 @@ value ExternalSourceToken {
 
 value TransactionKey {
     -- tx_id is monotonically increasing, assigned by the source log or off the RESOLVED head for an external-source database.
-    -- system_time is NOT monotonic — clients can set arbitrary system times — so ordering comparisons MUST use tx_id.
+    -- system_time is strictly increasing across a partition's committed transactions.
+    -- A client MAY specify one, and a specified system_time that does not advance on the latest completed transaction aborts the transaction.
+    -- Strictness is what lets a read basis name a transaction by its system_time — see snapshot_token.
     tx_id: Integer
     system_time: Timestamp
 }

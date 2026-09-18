@@ -128,7 +128,7 @@
                 :system-time #xt/zoned-date-time "2020-01-02T00:00Z[UTC]",
                 :committed? false,
                 :error #xt/error [:incorrect :invalid-system-time
-                                  "specified system-time older than current tx"
+                                  "specified system-time must be later than current tx"
                                   {:tx-key #xt/tx-key {:tx-id 1, :system-time #xt/instant "2011-01-01T00:00:00Z"}
                                    :latest-completed-tx #xt/tx-key {:tx-id 0, :system-time #xt/instant "2012-01-01T00:00:00Z"}}]}
                {:tx-id 2,
@@ -136,6 +136,25 @@
                 :committed? true}}
              (set (xt/q *node*
                         '(from :xt/txs [{:xt/id tx-id, :committed committed?} system-time error])))))))
+
+(t/deftest a-system-time-equal-to-the-latest-completed-tx-is-rejected
+  (xt/execute-tx *node* [[:sql "INSERT INTO docs (_id, v) VALUES (1, 'a')"]]
+                 {:system-time #inst "2026-01-01"})
+
+  (t/is (anomalous? [:incorrect :invalid-system-time]
+                    (xt/execute-tx *node* [[:sql "INSERT INTO docs (_id, v) VALUES (1, 'b')"]]
+                                   {:system-time #inst "2026-01-01"})))
+
+  (t/is (= [{:v "a"}] (xt/q *node* "SELECT v FROM docs")))
+
+  (t/is (= [{:tx-id 1, :system-time #xt/zoned-date-time "2026-01-01T00:00:00.000001Z[UTC]"}]
+           (xt/q *node* "SELECT _id AS tx_id, system_time FROM xt.txs WHERE NOT committed"))
+        "the rejected tx takes the smoothed system-time, advancing the clock past the one it asked for")
+
+  (xt/execute-tx *node* [[:sql "INSERT INTO docs (_id, v) VALUES (1, 'c')"]]
+                 {:system-time #xt/instant "2026-01-01T00:00:00.000002Z"})
+
+  (t/is (= [{:v "c"}] (xt/q *node* "SELECT v FROM docs"))))
 
 (def ^:private devs
   [[:put-docs :users {:xt/id :jms, :name "James"}]

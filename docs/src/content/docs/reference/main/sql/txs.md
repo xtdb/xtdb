@@ -184,7 +184,9 @@ return rr.Diagram(rr.Choice(0, begin, commit, 'ROLLBACK'))
   Transactions must not mix query statements and [DML](https://en.wikipedia.org/wiki/Data_manipulation_language) statements.
 * Additionally, for read-write transactions:
   * `SYSTEM_TIME` overrides the system-time of the transaction, used for an initial backfill of the database.
-    It must not be earlier than any other transaction that has been submitted to the database.
+    It must be strictly later than the system-time of the latest completed transaction — a backfill submitting several transactions gives each its own system-time rather than sharing one.
+    A system-time that doesn't advance aborts the transaction, and the abort is recorded in `xt.txs`.
+    The aborted transaction still takes a system-time of its own, 1µs past the latest completed one, so a retry has to advance on that rather than on the instant it asked for.
     Otherwise, the system-time of the transaction will be defined by the log.
   * `ASYNC` affects whether the connection will wait for the transaction to be indexed before returning from `COMMIT`.
     If not provided, it defaults to `false` - i.e. the connection will wait for the transaction to be indexed before returning.

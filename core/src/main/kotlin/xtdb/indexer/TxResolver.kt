@@ -207,19 +207,20 @@ internal class TxResolver(
             if (lcSysTime >= msgTimestamp) lcSysTime.plusNanos(1_000) else null
         } ?: msgTimestamp
 
-        // Specified system-time before lc-tx → invalid; abort with that error.
+        // Equal is rejected as well as older — a read basis names a tx by its system-time, so two txs
+        // sharing one leaves it ambiguous (#6086).
         // The aborted tx-key uses the *default* (smoothed) systemTime, not the rejected one,
         // so the tx-key still satisfies the monotonicity invariant.
-        if (systemTime != null && lcTx != null && systemTime < lcTx.systemTime) {
+        if (systemTime != null && lcTx != null && systemTime <= lcTx.systemTime) {
             val err = Incorrect(
-                "specified system-time older than current tx",
+                "specified system-time must be later than current tx",
                 "invalid-system-time",
                 mapOf(
                     "tx-key" to TransactionKey(msgId, systemTime),
                     "latest-completed-tx" to lcTx,
                 ),
             )
-            LOG.warn { "specified system-time '$systemTime' older than current tx '$lcTx'" }
+            LOG.warn { "specified system-time '$systemTime' not later than current tx '$lcTx'" }
 
             return@withSpan stageStandaloneTx(
                 msgId, TransactionKey(msgId, defaultSystemTime), err, userMetadataMap, countError = true
