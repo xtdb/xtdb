@@ -23,6 +23,7 @@
            java.util.function.Function
            (org.antlr.v4.runtime ParserRuleContext)
            (org.antlr.v4.runtime.tree ParseTree)
+           (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector.types.pojo Field)
            (org.apache.commons.codec.binary Hex)
            (xtdb.tx TxOp$PatchDocs TxOp$PutDocs)
@@ -3511,25 +3512,25 @@
 
 (declare sql->static-ops)
 
+;; materialises sql->static-ops' neutral ops into core TxOps (via safe-mapv, closing partials on throw)
+(defn sql->tx-ops [sql args ^BufferAllocator al default-tz]
+  (when-let [static-ops (seq (sql->static-ops sql args))]
+    (let [opts {:default-tz default-tz}]
+      (util/safe-mapv
+       (fn [{:keys [op table-name docs valid-from valid-to]}]
+         (let [schema (or (namespace table-name) "public"), table (name table-name)
+               vf (some-> valid-from (time/->instant opts))
+               vt (some-> valid-to (time/->instant opts))]
+           (case op
+             :put-docs (TxOp$PutDocs/openFromRows al schema table docs vf vt)
+             :patch-docs (TxOp$PatchDocs/openFromRows al schema table docs vf vt))))
+       static-ops))))
+
 (defn ->sql-planner ^SqlPlanner []
   (reify SqlPlanner
     (evalLiteral [_ expr args]
       (-> (plan-expr expr)
-          (apply-args args)))
-
-    ;; materialises sql->static-ops' neutral ops into core TxOps (via safe-mapv, closing partials on throw)
-    (toStaticOps [_ sql args al default-tz]
-      (when-let [static-ops (seq (sql->static-ops sql args))]
-        (let [opts {:default-tz default-tz}]
-          (util/safe-mapv
-           (fn [{:keys [op table-name docs valid-from valid-to]}]
-             (let [schema (or (namespace table-name) "public"), table (name table-name)
-                   vf (some-> valid-from (time/->instant opts))
-                   vt (some-> valid-to (time/->instant opts))]
-               (case op
-                 :put-docs (TxOp$PutDocs/openFromRows al schema table docs vf vt)
-                 :patch-docs (TxOp$PatchDocs/openFromRows al schema table docs vf vt))))
-           static-ops))))))
+          (apply-args args)))))
 
 (defprotocol PlanQuery
   (-plan-query [query opts]))

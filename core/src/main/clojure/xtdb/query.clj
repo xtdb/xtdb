@@ -523,6 +523,9 @@
                    lp/rewrite-plan)]
       (.prepareRa this plan db-cat opts)))
 
+  (toStaticOps [_ sql args al default-tz]
+    (sql/sql->tx-ops sql args al default-tz))
+
   AutoCloseable
   (close [_]
     (when-not (.tryClose ref-ctr (Duration/ofMinutes 1))

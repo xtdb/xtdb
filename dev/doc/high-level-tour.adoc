@@ -63,7 +63,7 @@ Transaction 'operations' (e.g. put-docs, delete-docs, or a SQL query) are buffer
 The client receives a 'ticket' containing the tx-id (essentially a log sequence number) and system-time of the transaction, which it later provides on query to ensure it observes the results of the submitted transactions.
 
 *SQL DML is expanded eagerly, at submit time, wherever we can manage it* - rather than submitting a raw `TxOp.Sql` and re-planning it on every node at index time.
-`Xtdb.Connection.expandStaticOps` runs each op through `SqlPlanner.toStaticOps` (implemented by `xtdb.sql/->sql-planner` over `sql->static-ops`), which turns INSERT and PATCH into core `TxOp.PutDocs`/`TxOp.PatchDocs`.
+`Xtdb.Connection.expandStaticOps` runs each op through `IQuerySource.toStaticOps` (implemented by `xtdb.query/->query-source` over `sql->tx-ops`), which turns INSERT and PATCH into core `TxOp.PutDocs`/`TxOp.PatchDocs`.
 Statements we can't expand statically - UPDATE, DELETE, ERASE, and the non-DML remainder - return `nil` from the planner, and the caller keeps the raw `TxOp.Sql`.
 
 There are two submit points, both going through `expandStaticOps`: the manual-tx drain (`drainWriteTx`) and the autocommit `executeTxOp`.
