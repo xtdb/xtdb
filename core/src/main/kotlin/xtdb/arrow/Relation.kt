@@ -7,6 +7,7 @@ import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.VectorLoader
 import org.apache.arrow.vector.VectorSchemaRoot
+import org.apache.arrow.vector.compression.NoCompressionCodec
 import org.apache.arrow.vector.ipc.ReadChannel
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
@@ -68,13 +69,23 @@ class Relation(
         rowCount = root.rowCount
     }
 
+    /**
+     * Opens a record batch sharing this relation's memory rather than copying it.
+     *
+     * Every buffer in the batch carries exactly one reference, which closing the batch releases:
+     * `unloadPage` retains a vector's buffers on the way in, so the batch is built with
+     * `retainBuffers = false`. The batch may therefore outlive the relation, so long as it is closed.
+     */
     fun openArrowRecordBatch(): ArrowRecordBatch {
         val nodes = mutableListOf<ArrowFieldNode>()
         val buffers = mutableListOf<ArrowBuf>()
         for (v in vecs.values)
             v.unloadPage(nodes, buffers)
 
-        return ArrowRecordBatch(rowCount, nodes, buffers)
+        return ArrowRecordBatch(
+            rowCount, nodes, buffers, NoCompressionCodec.DEFAULT_BODY_COMPRESSION,
+            /* alignBuffers = */ true, /* retainBuffers = */ false
+        )
     }
 
     fun openAsRoot(al: BufferAllocator): VectorSchemaRoot =

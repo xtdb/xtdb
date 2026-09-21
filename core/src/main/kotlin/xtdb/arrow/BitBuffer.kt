@@ -172,9 +172,13 @@ internal class BitBuffer private constructor(
         }
     }
 
+    /**
+     * Adds this buffer to an Arrow page under construction, passing it one reference to release
+     * — see [Relation.openArrowRecordBatch].
+     */
     internal fun unloadBuffer(buffers: MutableList<ArrowBuf>) {
         val writerByteIndex = bufferSize(writerBitIndex)
-        buffers.add(buf.readerIndex(0).writerIndex(writerByteIndex))
+        buffers.add(buf.readerIndex(0).writerIndex(writerByteIndex).also { it.referenceManager.retain() })
     }
 
     internal fun loadBuffer(arrowBuf: ArrowBuf, bitCount: Int) {

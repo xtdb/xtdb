@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
 import xtdb.arrow.VectorIndirection.Companion.Selection
 import xtdb.test.AllocatorResolver
+import xtdb.util.useAll
 
 @ExtendWith(AllocatorResolver::class)
 class BitBufferTest {
@@ -55,12 +56,15 @@ class BitBufferTest {
 
                 val unloaded = mutableListOf<ArrowBuf>()
                 srcBuf.unloadBuffer(unloaded)
-                BitBuffer(al).use { destBuf ->
-                    val unloadedBuf = unloaded.first()
-                    unloadedBuf.writerIndex() shouldBe divideBy8Ceil(srcBits.size)
-                    destBuf.loadBuffer(unloadedBuf, srcBits.size)
 
-                    destBuf.asBooleans shouldBe srcBits
+                unloaded.useAll { bufs ->
+                    BitBuffer(al).use { destBuf ->
+                        val unloadedBuf = bufs.first()
+                        unloadedBuf.writerIndex() shouldBe divideBy8Ceil(srcBits.size)
+                        destBuf.loadBuffer(unloadedBuf, srcBits.size)
+
+                        destBuf.asBooleans shouldBe srcBits
+                    }
                 }
             }
         }
