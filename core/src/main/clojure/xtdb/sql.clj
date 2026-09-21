@@ -3455,8 +3455,8 @@
     idxs))
 
 (defn ->env
-  ([] (->env {}))
-  ([{:keys [table-info default-db db-names tx-scoped?], :or {default-db "xtdb"}}]
+  ([ast] (->env ast {}))
+  ([ast {:keys [table-info default-db db-names tx-scoped? arg-fields], :or {default-db "xtdb"}}]
    (let [db-names (or db-names [default-db])
          table-info (xform-table-info table-info db-names default-db)]
      {:!errors (atom [])
@@ -3465,8 +3465,10 @@
       :!param-count (atom 0)
       :default-db default-db
       :tx-scoped? tx-scoped?
+      :dynamic-param-idxs (->dynamic-param-idxs ast)
       :table-info table-info
-      :table-chains (->table-chains (keys table-info) db-names default-db)})))
+      :table-chains (->table-chains (keys table-info) db-names default-db)
+      :arg-fields arg-fields})))
 
 (defprotocol PlanExpr
   (-plan-expr [sql opts]))
@@ -3474,8 +3476,7 @@
 (extend-protocol PlanExpr
   ParserRuleContext
   (-plan-expr [ast {:keys [scope], :as opts}]
-    (let [{:keys [!errors !warnings] :as env} (-> (->env opts)
-                                                  (assoc :dynamic-param-idxs (->dynamic-param-idxs ast)))
+    (let [{:keys [!errors !warnings] :as env} (->env ast opts)
 
           plan (-> ast
                    #_(doto (-> (.toStringTree parser) read-string (clojure.pprint/pprint))) ; <<no-commit>>
@@ -3513,7 +3514,7 @@
 (defn ->sql-planner ^SqlPlanner []
   (reify SqlPlanner
     (evalLiteral [_ expr args]
-      (-> (plan-expr expr (->env))
+      (-> (plan-expr expr)
           (apply-args args)))
 
     ;; materialises sql->static-ops' neutral ops into core TxOps (via safe-mapv, closing partials on throw)
@@ -3540,25 +3541,8 @@
         (-plan-query opts)))
 
   Sql$DirectlyExecutableStatementContext
-  (-plan-query [ctx {:keys [default-db scope table-info db-names arg-fields tx-scoped?]
-                     :or {default-db "xtdb"}}]
-    (let [db-names (or db-names [default-db])
-          table-info (xform-table-info table-info db-names default-db)
-          !errors (atom [])
-          !warnings (atom [])
-          !param-count (atom 0)
-          env {:default-db default-db
-               :tx-scoped? tx-scoped?
-               :!errors !errors
-               :!warnings !warnings
-               :!id-count (atom 0)
-               :!param-count !param-count
-               :dynamic-param-idxs (->dynamic-param-idxs ctx)
-               :table-info table-info
-               :table-chains (->table-chains (keys table-info) db-names default-db)
-               ;; NOTE this may not necessarily be provided
-               ;; we get it through SQL DML, which is the main case we need it for #3656
-               :arg-fields arg-fields}
+  (-plan-query [ctx {:keys [scope], :as opts}]
+    (let [{:keys [!errors !warnings !param-count], :as env} (->env ctx opts)
 
           stmt (.accept ctx (->StmtVisitor env scope))]
       (if-let [errs (not-empty @!errors)]
@@ -3705,9 +3689,7 @@
          (let [arg-rows (some-> args-rel (.toTuples #xt/key-fn :snake-case-string))
                arg-fields (mapv VectorReader/.getField (or args-rel []))
 
-               {:keys [!errors !warnings] :as env} (-> (->env opts)
-                                                       (assoc :arg-fields arg-fields
-                                                              :dynamic-param-idxs (->dynamic-param-idxs (.getAst parsed))))
+               {:keys [!errors !warnings] :as env} (->env (.getAst parsed) (assoc opts :arg-fields arg-fields))
                tx-ops (.accept (.getAst parsed) (->SqlToStaticOpsVisitor env scope arg-rows))]
            (when (and (empty? @!errors) (empty? @!warnings))
              tx-ops))
