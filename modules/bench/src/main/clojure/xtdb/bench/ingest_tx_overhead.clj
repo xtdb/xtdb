@@ -9,15 +9,21 @@
             [xtdb.util :as util])
   (:import [java.lang AutoCloseable]
            [java.sql Connection]
-           [xtdb.api Xtdb Xtdb$Statement]
-           [xtdb.arrow Relation]))
+           [xtdb.api Xtdb Xtdb$Connection]))
 
 (defprotocol DoIngest
+  "Ingest `doc-count` documents into `table`, in transactions of `per-batch`, by whichever route
+   the receiver has. Returns once every document is queryable."
   (do-ingest [this table doc-count per-batch]))
 
 (extend-protocol DoIngest
+  Xtdb
+  (do-ingest [node table doc-count per-batch]
+    (with-open [conn (.connect node)]
+      (do-ingest conn table doc-count per-batch)))
+
   Connection
-  (do-ingest [conn table ^long doc-count ^long per-batch]
+  (do-ingest [conn table doc-count per-batch]
     (with-open [ps (jdbc/prepare conn [(format "INSERT INTO %s (_id) VALUES (?)" (name table))])]
       (doseq [batch (partition-all per-batch (range doc-count))]
         (when (zero? (mod (first batch) 1000))
@@ -32,27 +38,22 @@
       (assert (= actual doc-count)
               (format "failed for %s: expected: %d, got: %d" (name table) doc-count actual))))
 
-  Xtdb
-  (do-ingest [node table ^long doc-count ^long per-batch]
-    (let [al (.getAllocator node)]
-      (with-open [conn (.connect node)
-                  ^Xtdb$Statement stmt (.createStatement conn)]
-        (.setSqlQuery stmt (format "INSERT INTO %s (_id) VALUES (?)" (name table)))
-        (.prepare stmt)
+  Xtdb$Connection
+  (do-ingest [conn table doc-count per-batch]
+    (doseq [batch (partition-all per-batch (range doc-count))]
+      (when (Thread/interrupted) (throw (InterruptedException.)))
 
-        (doseq [batch (partition-all per-batch (range doc-count))]
-          (when (Thread/interrupted) (throw (InterruptedException.)))
+      (when (zero? (mod (first batch) 1000))
+        (log/trace :done (first batch)))
 
-          (when (zero? (mod (first batch) 1000))
-            (log/trace :done (first batch)))
+      (xt/submit-tx conn [(into [:put-docs table] (map (fn [idx] {:xt/id idx})) batch)]))
 
-          (with-open [rel (Relation. al)]
-            (let [id-col (.vectorFor rel "$1" #xt.arrow/type :i64 false)]
-              (doseq [idx batch]
-                (.writeLong id-col (long idx))))
-            (.setRowCount rel (count batch))
-            (.bind stmt rel)
-            (.executeUpdate stmt)))))))
+    ;; nothing above awaits, so without this the stage would time only the submits
+    (xt/execute-tx conn [])
+
+    (let [[{actual :doc-count}] (xt/q conn (format "SELECT COUNT(*) doc_count FROM %s" (name table)))]
+      (assert (= actual doc-count)
+              (format "failed for %s: expected: %d, got: %d" (name table) doc-count actual)))))
 
 (defmethod b/cli-flags :ingest-tx-overhead [_]
   [["-dc" "--doc-count DOCUMENT_COUNT" "Number of documents to ingest"
@@ -72,31 +73,12 @@
   {:title "Ingest batch vs individual"
    :seed seed
    :parameters {:doc-count doc-count :batch-sizes (sort > batch-sizes)}
-   :tasks (->> [{:t :call
-                 :batch-size 1000
-                 :stage :ingest-batch-1000
-                 :f (fn [{:keys [node]}]
-                      (do-ingest node :batched_1000 doc-count 1000))}
-
-                {:t :call
-                 :batch-size 100
-                 :stage :ingest-batch-100
-                 :f (fn [{:keys [node]}]
-                      (do-ingest node :batched_100 doc-count 100))}
-
-                {:t :call
-                 :batch-size 10
-                 :stage :ingest-batch-10
-                 :f (fn [{:keys [node]}]
-                      (do-ingest node :batched_10 doc-count 10))}
-
-                {:t :call
-                 :batch-size 1
-                 :stage :ingest-batch-1
-                 :f (fn [{:keys [node]}]
-                      (do-ingest node :batched_1 doc-count 1))}]
-
-               (filter (comp batch-sizes :batch-size)))})
+   :tasks (for [batch-size (sort > batch-sizes)]
+            {:t :call
+             :batch-size batch-size
+             :stage (keyword (str "ingest-batch-" batch-size))
+             :f (fn [{:keys [node]}]
+                  (do-ingest node (keyword (str "batched_" batch-size)) doc-count batch-size))})})
 
 (defmethod b/->benchmark :ingest-tx-overhead [_ {:keys [doc-count batch-sizes] :as opts}]
   (log/info {:doc-count doc-count :batch-sizes batch-sizes})
