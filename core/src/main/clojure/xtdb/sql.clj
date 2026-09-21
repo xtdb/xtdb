@@ -16,7 +16,7 @@
             [xtdb.xtql :as xtql]
             [xtdb.xtql.plan :as xtql.plan])
   (:import (clojure.lang MapEntry)
-           (com.github.benmanes.caffeine.cache Cache Caffeine)
+           (com.github.benmanes.caffeine.cache Cache Caffeine LoadingCache)
            (java.net URI)
            (java.time Duration LocalDate LocalTime OffsetTime ZoneOffset)
            (java.util Collection HashMap HashSet IdentityHashMap LinkedHashSet Map SequencedSet Set UUID)
@@ -29,7 +29,7 @@
            (xtdb.tx TxOp$PatchDocs TxOp$PutDocs)
            (xtdb.antlr Sql$DirectlyExecutableStatementContext Sql$DynamicParameterContext Sql$XtqlQueryContext Sql$GroupByClauseContext Sql$HavingClauseContext Sql$JoinSpecificationContext Sql$JoinTypeContext Sql$ObjectNameAndValueContext Sql$OrderByClauseContext Sql$QualifiedRenameColumnContext Sql$QueryBodyTermContext Sql$QuerySpecificationContext Sql$QueryTailContext Sql$RenameColumnContext Sql$SearchedWhenClauseContext Sql$SelectClauseContext Sql$SetClauseContext Sql$SimpleWhenClauseContext Sql$SortSpecificationContext Sql$SortSpecificationListContext Sql$WhenOperandContext Sql$WhereClauseContext Sql$WithTimeZoneContext SqlLexer SqlVisitor)
            (xtdb.arrow RelationReader VectorReader)
-           (xtdb.query ParsedStatement$Dml SqlParser SqlPlanner)
+           (xtdb.query DmlCacheKey ParsedStatement$Dml SqlParser SqlPlanner)
            (xtdb.xtql QueryWithParams)
            xtdb.api.TableRef
            xtdb.util.StringUtil))
@@ -3455,21 +3455,39 @@
       (walk! tree))
     idxs))
 
-(defn ->env
-  ([ast] (->env ast {}))
+(defn ->env-skeleton
+  "The half of an env derived from the statement and the catalog, and so shareable between runs of the same
+  statement against the same catalog. Anything mutable belongs in `skeleton->env` instead, or runs will share it."
+  ([ast] (->env-skeleton ast {}))
   ([ast {:keys [table-info default-db db-names tx-scoped? arg-fields], :or {default-db "xtdb"}}]
    (let [db-names (or db-names [default-db])
          table-info (xform-table-info table-info db-names default-db)]
-     {:!errors (atom [])
-      :!warnings (atom [])
-      :!id-count (atom 0)
-      :!param-count (atom 0)
-      :default-db default-db
+     {:default-db default-db
       :tx-scoped? tx-scoped?
       :dynamic-param-idxs (->dynamic-param-idxs ast)
       :table-info table-info
       :table-chains (->table-chains (keys table-info) db-names default-db)
       :arg-fields arg-fields})))
+
+(defn dml-key->skeleton [^DmlCacheKey k]
+  (->env-skeleton (.getAst k)
+                  ;; default-db is omitted rather than passed as nil, so `->env-skeleton`'s own default applies
+                  (cond-> {:table-info (.getTableInfo k)
+                           :db-names (.getDbNames k)
+                           :tx-scoped? (.getTxScoped k)
+                           :arg-fields (.getArgFields k)}
+                    (.getDefaultDb k) (assoc :default-db (.getDefaultDb k)))))
+
+(defn skeleton->env [skeleton]
+  (assoc skeleton
+         :!errors (atom [])
+         :!warnings (atom [])
+         :!id-count (atom 0)
+         :!param-count (atom 0)))
+
+(defn ->env
+  ([ast] (->env ast {}))
+  ([ast opts] (skeleton->env (->env-skeleton ast opts))))
 
 (defprotocol PlanExpr
   (-plan-expr [sql opts]))
@@ -3513,8 +3531,8 @@
 (declare sql->static-ops)
 
 ;; materialises sql->static-ops' neutral ops into core TxOps (via safe-mapv, closing partials on throw)
-(defn sql->tx-ops [sql args ^BufferAllocator al default-tz]
-  (when-let [static-ops (seq (sql->static-ops sql args))]
+(defn sql->tx-ops [sql args ^BufferAllocator al default-tz opts]
+  (when-let [static-ops (seq (sql->static-ops sql args opts))]
     (let [opts {:default-tz default-tz}]
       (util/safe-mapv
        (fn [{:keys [op table-name docs valid-from valid-to]}]
@@ -3675,7 +3693,7 @@
 (defn sql->static-ops
   ([sql args-rel] (sql->static-ops sql args-rel {}))
 
-  ([sql ^RelationReader args-rel {:keys [scope] :as opts}]
+  ([sql ^RelationReader args-rel {:keys [scope ^LoadingCache dml-cache default-db db-names tx-scoped? table-info] :as opts}]
    ;; classified outside the catch below: a syntax error is the caller's, so it propagates to whoever is
    ;; expanding (which surfaces and counts it) rather than being swallowed into an op that reaches the
    ;; log and only fails in the indexer.
@@ -3687,11 +3705,16 @@
    (let [parsed (SqlParser/parseStatement sql)]
      (when (instance? ParsedStatement$Dml parsed)
        (try
-         (let [arg-rows (some-> args-rel (.toTuples #xt/key-fn :snake-case-string))
+         (let [ast (.getAst parsed)
+               arg-rows (some-> args-rel (.toTuples #xt/key-fn :snake-case-string))
                arg-fields (mapv VectorReader/.getField (or args-rel []))
 
-               {:keys [!errors !warnings] :as env} (->env (.getAst parsed) (assoc opts :arg-fields arg-fields))
-               tx-ops (.accept (.getAst parsed) (->SqlToStaticOpsVisitor env scope arg-rows))]
+               skeleton (if dml-cache
+                          (.get dml-cache (DmlCacheKey. ast default-db db-names (boolean tx-scoped?) arg-fields table-info))
+                          (->env-skeleton ast (assoc opts :arg-fields arg-fields)))
+
+               {:keys [!errors !warnings] :as env} (skeleton->env skeleton)
+               tx-ops (.accept ast (->SqlToStaticOpsVisitor env scope arg-rows))]
            (when (and (empty? @!errors) (empty? @!warnings))
              tx-ops))
 

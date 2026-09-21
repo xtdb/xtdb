@@ -52,7 +52,7 @@
            (xtdb.indexer DatabaseSnapshot Snapshot)
            xtdb.NodeBase
            xtdb.operator.scan.IScanEmitter
-           (xtdb.query IQuerySource IQuerySource$Factory IQuerySource$QueryDatabase ParsedStatement PlanCacheKey PlanCacheKey$Explain PreparedQuery SqlStatement$Assert SqlStatement$CreateTable SqlStatement$Delete SqlStatement$Erase SqlStatement$GrantRole SqlStatement$Patch SqlStatement$Put SqlStatement$RevokeRole)
+           (xtdb.query DmlCacheKey IQuerySource IQuerySource$Factory IQuerySource$QueryDatabase ParsedStatement PlanCacheKey PlanCacheKey$Explain PreparedQuery SqlStatement$Assert SqlStatement$CreateTable SqlStatement$Delete SqlStatement$Erase SqlStatement$GrantRole SqlStatement$Patch SqlStatement$Put SqlStatement$RevokeRole)
            xtdb.util.RefCounter))
 
 (defn- wrap-result-types [^ICursor cursor, result-types]
@@ -341,7 +341,8 @@
                         ^IScanEmitter scan-emitter
                         ^Counter query-warning-counter
                         ^RefCounter ref-ctr
-                        ^LoadingCache plan-cache]
+                        ^LoadingCache plan-cache
+                        ^LoadingCache dml-cache]
   PQuerySource
   (-plan-query [_ parsed-query query-opts table-info]
     (.get plan-cache (->plan-key parsed-query query-opts table-info)))
@@ -540,7 +541,7 @@
       (.prepareRa this plan db-cat opts)))
 
   (toStaticOps [_ sql args al default-tz]
-    (sql/sql->tx-ops sql args al default-tz))
+    (sql/sql->tx-ops sql args al default-tz {:dml-cache dml-cache}))
 
   AutoCloseable
   (close [_]
@@ -548,6 +549,7 @@
       (log/warn "Failed to shut down after 60s due to outstanding queries"))
 
     (doto plan-cache .invalidateAll .cleanUp)
+    (doto dml-cache .invalidateAll .cleanUp)
 
     (util/close allocator)))
 
@@ -565,7 +567,13 @@
                         :query-warning-counter (some-> metrics-registry (metrics/add-counter "query.warning"))
                         :plan-cache (-> (Caffeine/newBuilder)
                                         (.maximumSize 4096)
-                                        (.build (fn [k] (load-plan k))))))]
+                                        (.build (fn [k] (load-plan k))))
+
+                        ;; smaller than the plan cache: each entry pins its own copy of the transformed
+                        ;; table-info and the chains built from it, where a plan shares neither
+                        :dml-cache (-> (Caffeine/newBuilder)
+                                       (.maximumSize 256)
+                                       (.build (fn [k] (sql/dml-key->skeleton k))))))]
 
     (map->QuerySource deps)))
 
