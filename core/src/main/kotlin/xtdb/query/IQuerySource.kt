@@ -10,7 +10,10 @@ import xtdb.database.PartitionStorage
 import xtdb.indexer.DatabaseSnapshot
 import xtdb.util.closeAllOnCatch
 import xtdb.api.TableRef
+import xtdb.arrow.RelationReader
+import xtdb.tx.TxOp
 import java.time.Instant
+import java.time.ZoneId
 
 interface IQuerySource : AutoCloseable {
 
@@ -74,6 +77,15 @@ interface IQuerySource : AutoCloseable {
     fun prepareRa(plan: Any, dbs: QueryCatalog, opts: PrepareOpts): PreparedQuery
     fun prepareTxSql(sql: String, dbs: QueryCatalog, opts: PrepareOpts): SqlStatement
     fun preparePatchDocsQuery(table: TableRef, validFrom: Instant?, validTo: Instant?, dbs: QueryCatalog, opts: PrepareOpts): PreparedQuery
+
+    /**
+     * Eager-expand a DML statement into core [TxOp]s (e.g. INSERT/PATCH RECORDS → PutDocs/PatchDocs),
+     * reading positional params (?_0, ?_1, …) column-major from [args].
+     *
+     * Returns null when the statement isn't statically expandable — the caller submits the raw SQL op and
+     * lets the indexer expand it at index time.
+     */
+    fun toStaticOps(sql: String, args: RelationReader?, al: BufferAllocator, defaultTz: ZoneId?): List<TxOp>?
 
     fun interface Factory {
         fun create(allocator: BufferAllocator, meterRegistry: MeterRegistry?, scanEmitter: Any): IQuerySource

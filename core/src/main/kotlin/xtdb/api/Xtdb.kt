@@ -813,7 +813,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             mutableListOf<TxOp>().closeAllOnCatch { out ->
                 ops.forEachIndexed { idx, op ->
                     val expanded = try {
-                        (op as? TxOp.Sql)?.let { sqlPlanner.toStaticOps(it.sql, it.args, allocator, tz) }
+                        (op as? TxOp.Sql)?.let { qSrc.toStaticOps(it.sql, it.args, allocator, tz) }
                     } catch (t: Throwable) {
                         // a presubmit failure: the tx never reaches doSubmit, so it's counted here instead
                         metrics?.txErrorCounter?.increment()

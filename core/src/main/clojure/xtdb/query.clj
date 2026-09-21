@@ -35,7 +35,7 @@
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
   (:import clojure.lang.MapEntry
-           (com.github.benmanes.caffeine.cache Cache Caffeine)
+           (com.github.benmanes.caffeine.cache Cache Caffeine LoadingCache)
            io.micrometer.core.instrument.Counter
            java.lang.AutoCloseable
            (java.time Duration InstantSource)
@@ -52,7 +52,7 @@
            (xtdb.indexer DatabaseSnapshot Snapshot)
            xtdb.NodeBase
            xtdb.operator.scan.IScanEmitter
-           (xtdb.query IQuerySource IQuerySource$Factory IQuerySource$QueryDatabase ParsedStatement PreparedQuery SqlStatement$Assert SqlStatement$CreateTable SqlStatement$Delete SqlStatement$Erase SqlStatement$GrantRole SqlStatement$Patch SqlStatement$Put SqlStatement$RevokeRole)
+           (xtdb.query DmlCacheKey IQuerySource IQuerySource$Factory IQuerySource$QueryDatabase ParsedStatement PlanCacheKey PlanCacheKey$Explain PreparedQuery SqlStatement$Assert SqlStatement$CreateTable SqlStatement$Delete SqlStatement$Erase SqlStatement$GrantRole SqlStatement$Patch SqlStatement$Put SqlStatement$RevokeRole)
            xtdb.util.RefCounter))
 
 (defn- wrap-result-types [^ICursor cursor, result-types]
@@ -291,10 +291,48 @@
   (cond-> {}
     (.getDefaultTz opts) (assoc :default-tz (.getDefaultTz opts))
     (.getDefaultDb opts) (assoc :default-db (.getDefaultDb opts))
-    (.getCurrentTime opts) (assoc :current-time (.getCurrentTime opts))
     (.getArgFields opts) (assoc :arg-fields (.getArgFields opts))
     (.getExplain opts) (assoc :explain? true)
     (.getExplainAnalyze opts) (assoc :explain-analyze? true)))
+
+(defn- ->plan-key ^PlanCacheKey
+  [parsed-query {:keys [default-db db-names tx-scoped? decorrelate? explain? explain-analyze? arg-fields]} table-info]
+  (PlanCacheKey. parsed-query default-db db-names (boolean tx-scoped?)
+                 (if (nil? decorrelate?) true (boolean decorrelate?))
+                 (cond explain? PlanCacheKey$Explain/PLAN
+                       explain-analyze? PlanCacheKey$Explain/ANALYZE)
+                 arg-fields table-info))
+
+(defn- plan-key->opts [^PlanCacheKey k]
+  (let [explain (.getExplain k)]
+    {:default-db (.getDefaultDb k)
+     :db-names (.getDbNames k)
+     :tx-scoped? (.getTxScoped k)
+     :decorrelate? (.getDecorrelate k)
+     :explain? (= PlanCacheKey$Explain/PLAN explain)
+     :explain-analyze? (= PlanCacheKey$Explain/ANALYZE explain)
+     :arg-fields (.getArgFields k)
+     :table-info (.getTableInfo k)}))
+
+(defn- load-plan [^PlanCacheKey k]
+  (let [plan (plan-query (.getAst k) (plan-key->opts k))
+        conformed-plan (conform-plan plan)
+
+        {:keys [ordered-outer-projection warnings param-count], :or {param-count 0}, :as plan-meta} (meta plan)]
+
+    (into (select-keys plan-meta [:current-time :snapshot-token :snapshot-time
+                                  :explain? :explain-analyze?])
+          {:plan plan,
+           :conformed-plan conformed-plan
+           :scan-cols (->> (lp/child-exprs conformed-plan)
+                           (filter (comp #{:scan} :op))
+                           (into #{} (mapcat scan/->scan-cols)))
+           :col-names ordered-outer-projection
+           :warnings warnings
+           :param-count param-count
+           :emit-cache (-> (Caffeine/newBuilder)
+                           (.maximumSize 16)
+                           (.build))})))
 
 (defprotocol PQuerySource
   (-plan-query [q-src parsed-query query-opts table-info]))
@@ -303,32 +341,11 @@
                         ^IScanEmitter scan-emitter
                         ^Counter query-warning-counter
                         ^RefCounter ref-ctr
-                        ^Cache plan-cache]
+                        ^LoadingCache plan-cache
+                        ^LoadingCache dml-cache]
   PQuerySource
   (-plan-query [_ parsed-query query-opts table-info]
-    (.get plan-cache [parsed-query (-> query-opts
-                                       (select-keys [:default-db :db-names :tx-scoped? :decorrelate? :explain? :explain-analyze? :arg-fields])
-                                       (update :decorrelate? (fnil boolean true))
-                                       (assoc :table-info table-info))]
-          (fn [[parsed-query query-opts]]
-            (let [plan (plan-query parsed-query query-opts)
-                  conformed-plan (conform-plan plan)
-
-                  {:keys [ordered-outer-projection warnings param-count], :or {param-count 0}, :as plan-meta} (meta plan)]
-
-              (into (select-keys plan-meta [:current-time :snapshot-token :snapshot-time
-                                            :explain? :explain-analyze?])
-                    {:plan plan,
-                     :conformed-plan conformed-plan
-                     :scan-cols (->> (lp/child-exprs conformed-plan)
-                                     (filter (comp #{:scan} :op))
-                                     (into #{} (mapcat scan/->scan-cols)))
-                     :col-names ordered-outer-projection
-                     :warnings warnings
-                     :param-count param-count
-                     :emit-cache (-> (Caffeine/newBuilder)
-                                     (.maximumSize 16)
-                                     (.build))})))))
+    (.get plan-cache (->plan-key parsed-query query-opts table-info)))
 
   IQuerySource
   (prepareQuery [this query db-cat query-opts]
@@ -523,14 +540,16 @@
                    lp/rewrite-plan)]
       (.prepareRa this plan db-cat opts)))
 
+  (toStaticOps [_ sql args al default-tz]
+    (sql/sql->tx-ops sql args al default-tz {:dml-cache dml-cache}))
+
   AutoCloseable
   (close [_]
     (when-not (.tryClose ref-ctr (Duration/ofMinutes 1))
       (log/warn "Failed to shut down after 60s due to outstanding queries"))
 
-    ;; Clear the plan cache itself
-    (.invalidateAll plan-cache)
-    (.cleanUp plan-cache)
+    (doto plan-cache .invalidateAll .cleanUp)
+    (doto dml-cache .invalidateAll .cleanUp)
 
     (util/close allocator)))
 
@@ -548,7 +567,13 @@
                         :query-warning-counter (some-> metrics-registry (metrics/add-counter "query.warning"))
                         :plan-cache (-> (Caffeine/newBuilder)
                                         (.maximumSize 4096)
-                                        (.build))))]
+                                        (.build (fn [k] (load-plan k))))
+
+                        ;; smaller than the plan cache: each entry pins its own copy of the transformed
+                        ;; table-info and the chains built from it, where a plan shares neither
+                        :dml-cache (-> (Caffeine/newBuilder)
+                                       (.maximumSize 256)
+                                       (.build (fn [k] (sql/dml-key->skeleton k))))))]
 
     (map->QuerySource deps)))
 
