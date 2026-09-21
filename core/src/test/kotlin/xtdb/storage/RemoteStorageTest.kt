@@ -150,7 +150,10 @@ class RemoteStorageTest : PartitionedStorageTest() {
         Relation(al, "a" ofType I32).use { relation ->
             remoteBufferPool.openArrowWriter(key, relation).use { writer ->
                 val v = relation["a"]
-                for (i in 0 until 10) v.writeInt(i)
+                for (i in 0 until 10) {
+                    v.writeInt(i)
+                    relation.endRow()
+                }
                 writer.writePage()
                 writer.endSync()
             }
@@ -167,7 +170,10 @@ class RemoteStorageTest : PartitionedStorageTest() {
         Relation(al, "a" ofType I32).use { relation ->
             remoteBufferPool.openArrowWriter(path, relation).use { writer ->
                 val v = relation["a"]
-                for (i in 0 until 10) v.writeInt(i)
+                for (i in 0 until 10) {
+                    v.writeInt(i)
+                    relation.endRow()
+                }
                 writer.writePage()
                 writer.end()
             }

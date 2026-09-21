@@ -17,6 +17,7 @@ import org.apache.arrow.vector.types.pojo.ArrowType.*
 import org.apache.arrow.vector.types.pojo.DictionaryEncoding
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
+import xtdb.InternalApi
 import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.arrow.extensions.IntervalMDMType
 import xtdb.arrow.extensions.KeywordType
@@ -97,7 +98,11 @@ sealed class Vector : VectorReader, VectorWriter {
     abstract override fun openSlice(al: BufferAllocator): Vector
     override fun openDirectSlice(al: BufferAllocator) = openSlice(al)
 
-    internal abstract fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>)
+    @InternalApi
+    abstract override fun unloadPage(
+        nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>, startIdx: Int, len: Int
+    )
+
     internal abstract fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>)
     internal abstract fun loadFromArrow(vec: ValueVector)
 
