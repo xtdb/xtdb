@@ -4,6 +4,7 @@ import com.carrotsearch.hppc.IntArrayList
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.arrow.Relation
 import xtdb.arrow.Relation.RelationUnloader
+import xtdb.arrow.RelationReader
 import xtdb.arrow.Vector.Companion.openVector
 import xtdb.arrow.VectorWriter
 import xtdb.expression.map.IndexHasher.Companion.hasher
@@ -31,7 +32,6 @@ class Shuffle private constructor(
     private val hashMask: Int = partCount - 1
     private val approxRowsPerPart =
         (expectedRowCount / expectedBlockCount.coerceAtLeast(1) / partCount.coerceAtLeast(1)).toInt()
-    private val hashCol = hashRel[HASH_COL_NAME]
 
     private val dataRowCopier = inDataRel.rowCopier(outDataRel)
     private val hasher = inDataRel.hasher(hashColNames)
@@ -46,7 +46,7 @@ class Shuffle private constructor(
                 selections[hashCode and hashMask].add(inIdx)
             }
 
-            val hashCopier = tmpHashCol.rowCopier(hashCol)
+            val hashCopier = RelationReader.from(listOf(tmpHashCol)).rowCopier(hashRel)
 
             for (selection in selections) {
                 outDataRel.clear()

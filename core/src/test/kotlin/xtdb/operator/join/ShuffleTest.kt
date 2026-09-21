@@ -14,6 +14,7 @@ import xtdb.arrow.VectorType.Companion.I32
 import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.arrow.schema
 import xtdb.util.Hasher
+import java.nio.file.Path
 import kotlin.io.path.exists
 
 @ExtendWith(AllocatorResolver::class)
@@ -45,6 +46,13 @@ class ShuffleTest {
 
     private fun hashList(ids: List<Int>) = ids.map { hashInt(it) }
 
+    private fun pageRowCounts(al: BufferAllocator, file: Path): List<Int> =
+        Relation.loader(al, file).use { loader ->
+            Relation(al, loader.schema).use { rel ->
+                List(loader.pageCount) { i -> loader.loadPage(i, rel); rel.rowCount }
+            }
+        }
+
     @Test
     fun testShuffle(al: BufferAllocator) {
         Relation(al, schema("id" ofType I32)).use { rel ->
@@ -75,6 +83,11 @@ class ShuffleTest {
                             hashList(listOf(5, 8))
                         ),
                         shuffle.toHashes(hashCol)
+                    )
+
+                    assertEquals(
+                        pageRowCounts(al, shuffle.dataFile), pageRowCounts(al, shuffle.hashFile),
+                        "a hash page declares the same row count as the data page it pairs with"
                     )
 
                     listOf(shuffle.dataFile, shuffle.hashFile).apply {
