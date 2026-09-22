@@ -9,6 +9,8 @@ import xtdb.types.MessageId
  * Deliberately not the whole [Log] surface — [Log.epoch] belongs to the shared log, reached through DatabaseLogs, not to a single partition's view.
  */
 class PartitionLog<M>(private val log: Log<M>, val partition: Int) {
+    val latestSubmittedMsgId: MessageId get() = log.latestSubmittedMsgId(partition)
+
     suspend fun appendMessage(message: M): Log.MessageMetadata = log.appendMessage(message, partition)
 
     suspend fun <R> withTail(afterMsgId: MessageId, action: suspend (Log.Tail<M>) -> R): R =

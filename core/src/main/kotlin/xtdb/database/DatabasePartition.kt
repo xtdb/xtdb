@@ -33,6 +33,9 @@ class DatabasePartition(
 
     fun openSnapshot(minSystemTime: Instant?): Snapshot = state.liveIndex.openSnapshot(minSystemTime)
 
+    /** Waits until this partition has caught up with everything submitted to its own slice of the log. */
+    suspend fun sync() = watchers.awaitSource(storage.sourceLog.latestSubmittedMsgId)
+
     override fun close() {
         logProcessor?.close()
         compactorOrNull?.close()

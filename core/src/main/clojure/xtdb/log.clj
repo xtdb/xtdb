@@ -92,8 +92,7 @@
   (.awaitSourceBlocking db msg-id timeout))
 
 (defn sync-db [^Database db, ^Duration timeout]
-  (let [msg-id (.latestSubmittedMsgId (.getSourceLog db) 0)]
-    (await-source db msg-id timeout)))
+  (.syncBlocking db timeout))
 
 (defn await-node [node token timeout]
   (.awaitAll (db/<-node node) token timeout))

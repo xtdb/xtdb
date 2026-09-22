@@ -31,6 +31,7 @@ import xtdb.compactor.Compactor
 import xtdb.database.proto.DatabaseConfig
 import xtdb.database.proto.DatabaseMode
 import xtdb.api.error.Incorrect
+import xtdb.api.error.Unsupported
 import xtdb.indexer.*
 import xtdb.metadata.PageMetadata
 import xtdb.query.IQuerySource
@@ -131,6 +132,15 @@ class Database(
     fun awaitTxBlocking(txId: Long, timeout: Duration? = null): TransactionResult? =
         runBlocking {
             check(isIndexing) { "log processor not initialised" }
+            // Tx-ids are per-partition counters, so a bare one names a transaction in every partition and
+            // a transaction in none. Unreachable in practice — the paths that hand a caller a tx-id all
+            // require a database that accepts `submitTx`, which no multi-partition database does.
+            if (partitions.size != 1)
+                throw Unsupported(
+                    "awaiting a bare tx-id is not meaningful above one partition — tx-ids are per-partition (#5839)",
+                    "xtdb/await-tx-multi-partition",
+                    mapOf("db-name" to name, "partitions" to partitions.size)
+                )
             if (timeout == null) watchers.awaitTx(txId) else withTimeout(timeout) { watchers.awaitTx(txId) }
         }
 
@@ -139,6 +149,20 @@ class Database(
             check(isIndexing) { "log processor not initialised" }
             if (timeout == null) watchers.awaitSource(sourceMsgId)
             else withTimeout(timeout) { watchers.awaitSource(sourceMsgId) }
+        }
+
+    /**
+     * Waits until every partition has caught up with everything submitted to its own slice of the log.
+     *
+     * A database is caught up only when all of its partitions are, so this is as slow as the slowest —
+     * the same coupling the catalog already accepts when it syncs every database.
+     */
+    suspend fun sync() = coroutineScope { partitions.forEach { part -> launch { part.sync() } } }
+
+    fun syncBlocking(timeout: Duration? = null) =
+        runBlocking {
+            check(isIndexing) { "log processor not initialised" }
+            if (timeout == null) sync() else withTimeout(timeout) { sync() }
         }
 
     override fun equals(other: Any?): Boolean =
@@ -582,8 +606,6 @@ class Database(
 
     interface Catalog : ILookup, Seqable, Iterable<Database>, IQuerySource.QueryCatalog {
         companion object {
-            private suspend fun Database.sync() = watchers.awaitSource(sourceLog.latestSubmittedMsgId())
-
             private suspend fun Catalog.awaitAll0(token: String) = coroutineScope {
                 val basis = token.decodeTxBasisToken()
 

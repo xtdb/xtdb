@@ -14,6 +14,7 @@ import xtdb.XtdbInternal
 import xtdb.api.TableRef
 import xtdb.api.Xtdb
 import xtdb.api.error.Incorrect
+import xtdb.api.error.Unsupported
 import xtdb.api.log.Log
 import xtdb.api.storage.Storage
 import xtdb.tx.TxOp
@@ -163,6 +164,39 @@ class MultiPartitionTest {
                 assertEquals(0L, partitions[1].tableCatalog.currentBlockIndex)
                 assertNull(partitions[0].tableCatalog.currentBlockIndex, "partition 0 did not cut")
                 assertNull(partitions[2].tableCatalog.currentBlockIndex, "partition 2 did not cut")
+            }
+        }
+    }
+
+    @Test
+    fun `awaiting a bare tx-id is refused above one partition`() {
+        InMemoryExternalSource(partitions = 3).use { source ->
+            Xtdb.openNode().use { node ->
+                val db = node.attach("parts", source, partitions = 3)
+
+                val ex = assertThrows<Unsupported> { db.awaitTxBlocking(0) }
+                assertEquals(Keyword.intern("xtdb", "await-tx-multi-partition"), ex.data.valAt(Keyword.intern("xtdb.error", "code")))
+            }
+        }
+    }
+
+    @Test
+    fun `sync leaves every partition caught up with its own slice of the log`() = runBlocking {
+        InMemoryExternalSource(partitions = 3).use { source ->
+            Xtdb.openNode().use { node ->
+                val db = node.attach("parts", source, partitions = 3)
+
+                // the last partition only, so that a sync watching the first has nothing of its own to wait for
+                val flush = db.sendFlushBlockMessage(2)
+
+                withTimeout(10.seconds) { db.sync() }
+
+                // against the message we sent, not against the log's head: a block cut publishes its tries
+                // back to the source log, so the head moves under a live database
+                assertTrue(
+                    db.partitions[2].watchers.latestSourceMsgId >= flush.msgId,
+                    "partition 2 processed the flush that sync was waiting for"
+                )
             }
         }
     }
