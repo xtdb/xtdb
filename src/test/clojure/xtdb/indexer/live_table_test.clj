@@ -32,12 +32,11 @@
         (util/with-open [node (tu/->local-node {:node-dir path, :compactor-threads 0})
                          bp (.getBufferPool (db/primary-db node))
                          allocator (RootAllocator.)
-                         live-table (LiveTable. allocator #xt/table foo (TableSlug/of #xt/table foo) 0 (RowCounter.)
-                                                (partial trie/->live-trie 2 4))]
-          (util/with-open [rel (tu/open-put-log-rel allocator 0 (->max-depth-puts uuid n))]
-            (.importData live-table rel))
-
-          (.finishBlockSync live-table bp 0)
+                         base (LiveTable/open allocator #xt/table foo (TableSlug/of #xt/table foo) 0 (RowCounter.)
+                                              (partial trie/->live-trie 2 4))]
+          (let [^LiveTable live-table (util/with-open [rel (tu/open-put-log-rel allocator 0 (->max-depth-puts uuid n))]
+                                        (.importData base rel))]
+            (.finishBlockSync live-table bp 0))
 
           (aet/check-arrow-edn-dir (.toPath (io/as-file (io/resource "xtdb/live-table-test/max-depth-trie")))
                                    (.resolve path "objects")))))))

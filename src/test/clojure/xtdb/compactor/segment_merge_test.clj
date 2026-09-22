@@ -16,25 +16,27 @@
     (util/with-open [lt0 (tu/open-live-table #xt/table foo)
                      lt1 (tu/open-live-table #xt/table "foo")]
 
-      (tu/index-tx! lt0 #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"}
-                    [{:xt/id "foo", :v 0}
-                     {:xt/id "bar", :v 0}])
+      (let [lt0 (-> lt0
+                    (tu/index-tx! #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"}
+                                  [{:xt/id "foo", :v 0}
+                                   {:xt/id "bar", :v 0}])
 
-      (tu/index-tx! lt0 #xt/tx-key {:tx-id 1, :system-time #xt/instant "2021-01-01T00:00:00Z"}
-                    [{:xt/id "bar", :v 1}])
+                    (tu/index-tx! #xt/tx-key {:tx-id 1, :system-time #xt/instant "2021-01-01T00:00:00Z"}
+                                  [{:xt/id "bar", :v 1}]))
 
-      (tu/index-tx! lt1 #xt/tx-key {:tx-id 2, :system-time #xt/instant "2022-01-01T00:00:00Z"}
-                    [{:xt/id "foo", :v 1}])
+            lt1 (-> lt1
+                    (tu/index-tx! #xt/tx-key {:tx-id 2, :system-time #xt/instant "2022-01-01T00:00:00Z"}
+                                  [{:xt/id "foo", :v 1}])
 
-      (tu/index-tx! lt1 #xt/tx-key {:tx-id 3, :system-time #xt/instant "2023-01-01T00:00:00Z"}
-                    [{:xt/id "foo", :v 2}
-                     {:xt/id "bar", :v 2}])
+                    (tu/index-tx! #xt/tx-key {:tx-id 3, :system-time #xt/instant "2023-01-01T00:00:00Z"}
+                                  [{:xt/id "foo", :v 2}
+                                   {:xt/id "bar", :v 2}]))]
 
-      (util/with-open [segments (util/safe-mapv (fn [^LiveTable lt]
-                                                  (util/with-close-on-catch [rel (.openSlice (.getLiveRelation lt) tu/*allocator*)]
-                                                    (MemorySegment. (.withIidReader (.compactLogs (.getLiveTrie lt)) (.vectorFor rel "_iid"))
-                                                                    rel)))
-                                                [lt0 lt1])]
+        (util/with-open [segments (util/safe-mapv (fn [^LiveTable lt]
+                                                    (util/with-close-on-catch [rel (.openSlice (.getRelation lt) tu/*allocator*)]
+                                                      (MemorySegment. (.withIidReader (.compactLogs (.getTrie lt)) (.vectorFor rel "_iid"))
+                                                                      rel)))
+                                                  [lt0 lt1])]
 
         (t/testing "merge segments"
           (util/with-open [results (.mergeSegmentsSync seg-merge segments nil (SegmentMerge$RecencyPartitioning$Preserve. nil))]
@@ -138,4 +140,4 @@
                              (with-open [rel (.openAllAsRelation seg-merge res)]
                                (->> (.getAsMaps rel)
                                     (mapv #(update % :xt/iid (comp util/byte-buffer->uuid ByteBuffer/wrap)))))])
-                          (into {}))))))))))
+                          (into {})))))))))))

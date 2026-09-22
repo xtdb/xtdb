@@ -123,6 +123,65 @@ class LiveIndex private constructor(
     fun table(table: TableRef): LiveTable? = this@LiveIndex.tables[table]
     val tableRefs: Iterable<TableRef> get() = this@LiveIndex.tables.keys
 
+    /**
+     * A transient for [table], over the rows the live index holds for it now.
+     *
+     * A table nobody has committed to yet gets one over a relation of its own, rather than an empty
+     * [LiveTable] entered here: the map is what resolution reads a table's existence from, so a table
+     * entered at resolve would be visible to queries before the transaction creating it applied.
+     */
+    fun openTable(table: TableRef, systemTimeMicros: Long): LiveTable.Tx =
+        snapLock.withReadLock {
+            this@LiveIndex.tables[table]?.openTx(systemTimeMicros)
+            // The empty value is opened and dropped rather than entered: the transient holds its own
+            // references over the same memory, so closing the value it came from frees nothing it needs.
+                ?: LiveTable.open(allocator, table, tableCatalog.slug(table), blockIdx, rowCounter, liveTrieFactory)
+                    .use { it.openTx(systemTimeMicros) }
+        }
+
+    /**
+     * Installs each table's next value and releases the one it displaces.
+     *
+     * [tables] is DRAINED: an entry leaves it at the moment this index takes the value, so whatever is
+     * still in it on return is still the caller's to free. That is what makes a throw part-way through
+     * survivable — every value is owned by exactly one side rather than by neither — and it is why the
+     * caller hands the map over under `closeAllOnCatch` rather than after it.
+     *
+     * The displaced value's buffers are its own references over memory the new value shares, so releasing
+     * them frees nothing a reader still holds — every reader took its own slice (see [TableSnapshot.open]).
+     *
+     * The leader's path for a transaction it resolved itself; one it reads back without having staged —
+     * a promoted leader catching up — arrives as a deserialised relation and goes through [commitTx].
+     */
+    fun applyTx(txKey: TransactionKey, tables: MutableMap<TableRef, LiveTable>) {
+        val stamp = snapLock.writeLock()
+        try {
+            tableCatalog.registerTables(tables.keys)
+
+            val iter = tables.iterator()
+            while (iter.hasNext()) {
+                val (ref, liveTable) = iter.next()
+
+                // Installing is what can fail — a map grows — and it fails before it has taken anything,
+                // so at that instant the value is still the caller's and their guard frees it. The
+                // removal that follows cannot fail, so the value is never reachable from neither.
+                val displaced = this@LiveIndex.tables.put(ref, liveTable)
+                iter.remove()
+
+                // The rows the block gained, read off the two values rather than accumulated: a value
+                // carries every row below it, so this stays right even where the value it displaces is
+                // several transactions behind — a stale tx skipped on the way in, say.
+                rowCounter.addRows(liveTable.relation.rowCount - (displaced?.relation?.rowCount ?: 0))
+
+                if (displaced !== liveTable) displaced?.close()
+            }
+
+            latestCompletedTx = txKey
+        } finally {
+            snapLock.unlock(stamp)
+        }
+    }
+
     // Promote a committed tx into the live tables straight from its relations — no IPC round-trip.
     // The leader passes its staged relation slices; a follower deserializes the replica message's
     // table data first (see `loadTableData`). The caller owns [tables] and closes them afterwards.
@@ -135,12 +194,14 @@ class LiveIndex private constructor(
 
             for ((ref, rel) in tables) {
                 val liveTable =
-                    this@LiveIndex.tables.getOrPut(ref) {
-                        // Pinned at creation, so the L0 trie this table writes at the block boundary lands
-                        // under the same slug `BlockCutter` then records for it.
-                        LiveTable(allocator, ref, tableCatalog.slug(ref), blockIdx, rowCounter, liveTrieFactory)
-                    }
-                liveTable.importData(rel)
+                    this@LiveIndex.tables[ref]
+                    // Pinned at creation, so the L0 trie this table writes at the block boundary lands
+                    // under the same slug `BlockCutter` then records for it.
+                        ?: LiveTable.open(allocator, ref, tableCatalog.slug(ref), blockIdx, rowCounter, liveTrieFactory)
+
+                // The next value shares the relation this one appended to, so it replaces rather than
+                // joins it — and the displaced value is dropped without closing, for the same reason.
+                this@LiveIndex.tables[ref] = liveTable.importData(rel)
             }
 
             latestCompletedTx = txKey
@@ -223,6 +284,11 @@ class LiveIndex private constructor(
     override fun close() {
         sharedSnap?.close()
         this@LiveIndex.tables.values.closeAll()
+
+        // Emptied as well as closed, as `nextBlock` does: these relations are slices sharing memory with
+        // readers' own, so releasing one a second time underflows a ledger somebody else is still holding.
+        this@LiveIndex.tables.clear()
+
         if (!snapRefCounter.tryClose(Duration.ofMinutes(1)))
             LOG.warn("Failed to shut down live-index after 60s due to outstanding watermarks.")
         else

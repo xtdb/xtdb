@@ -1,11 +1,13 @@
 package xtdb.indexer
 
 import org.apache.arrow.memory.BufferAllocator
+import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorType
 import xtdb.indexer.LiveTable.Companion.logRelTypes
 import xtdb.segment.MemorySegment
 import xtdb.api.TableRef
 import xtdb.trie.ColumnName
+import xtdb.trie.MemoryHashTrie
 import xtdb.util.safelyOpening
 import kotlin.collections.orEmpty
 import xtdb.api.tx.OpenTx
@@ -38,25 +40,21 @@ class TableSnapshot(
     override fun close() = segment.close()
 
     companion object {
+        /**
+         * A caller-owned view of [relation] and the [trie] over it, re-sliced into [al] so it is freed with
+         * the enclosing [Snapshot] and the table it came from goes on being written.
+         */
         @JvmStatic
-        fun open(al: BufferAllocator, liveTable: LiveTable): TableSnapshot = safelyOpening {
-            val wmRel = open { liveTable.liveRelation.openDirectSlice(al) }
-            val wmTrie = liveTable.liveTrie.withIidReader(wmRel["_iid"])
+        fun open(al: BufferAllocator, table: TableRef, relation: RelationReader, trie: MemoryHashTrie): TableSnapshot = safelyOpening {
+            val wmRel = open { relation.openDirectSlice(al) }
+            val wmTrie = trie.withIidReader(wmRel["_iid"])
             val seg = MemorySegment(wmTrie, wmRel)
 
-            TableSnapshot(liveTable.table, seg.rel.logRelTypes.orEmpty(), seg)
+            TableSnapshot(table, seg.rel.logRelTypes.orEmpty(), seg)
         }
 
         @JvmStatic
-        fun openTx(al: BufferAllocator, tableTx: OpenTx.Table): TableSnapshot? {
-            if (tableTx.txRelation.rowCount == 0) return null
-            return safelyOpening {
-                val wmRel = open { tableTx.txRelation.openDirectSlice(al) }
-                val wmTrie = tableTx.trie.withIidReader(wmRel["_iid"])
-                val seg = MemorySegment(wmTrie, wmRel)
-
-                TableSnapshot(tableTx.ref, seg.rel.logRelTypes.orEmpty(), seg)
-            }
-        }
+        fun open(al: BufferAllocator, liveTable: LiveTable): TableSnapshot =
+            open(al, liveTable.table, liveTable.relation, liveTable.trie)
     }
 }

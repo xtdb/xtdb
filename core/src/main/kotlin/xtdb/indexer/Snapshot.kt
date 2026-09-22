@@ -3,12 +3,14 @@ package xtdb.indexer
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.TransactionKey
 import xtdb.arrow.MergeTypes.Companion.mergeTypes
+import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorType
 import xtdb.catalog.TableCatalog
 import xtdb.indexer.LiveTable.Companion.logRelTypes
 import xtdb.api.TableRef
 import xtdb.table.Oid
 import xtdb.trie.ColumnName
+import xtdb.trie.MemoryHashTrie
 import xtdb.trie.TrieCatalog
 import xtdb.util.closeAll
 import xtdb.util.safeMap
@@ -150,28 +152,29 @@ class Snapshot(
                 .mapNotNull { liveIndex.table(it) }
                 .partition { it.blockIdx > trieCatSnap.l0MaxBlockIdx(it.table) }
 
-            val liveIndexSnaps = openAll { liveTables.safeMap { TableSnapshot.open(al, it) } }
-
-            val supersededLiveTypes = supersededTables.associate { it.table to it.liveRelation.logRelTypes.orEmpty() }
+            val supersededLiveTypes = supersededTables.associate { it.table to it.relation.logRelTypes.orEmpty() }
 
             val stagedTables = resolvedTxs.flatMap { it.allTables }
 
-            val stagedSnaps = openAll {
-                stagedTables
-                    .safeMap { it.openSnapshot(al) }
-                    .filterNotNull()
-            }
+            // One segment per table, newest wins — these views subsume rather than complement, so scanning
+            // more than one of them would count a row once per view able to see it. A staged tx's rows are
+            // the committed rows plus its own, and the resolving tx's are those plus its own again, every
+            // one of them over the table's own relation. Newest is whatever writes last here, which is what
+            // makes the resolver's queue order load-bearing.
+            val newestRows = LinkedHashMap<TableRef, Pair<RelationReader, MemoryHashTrie>>()
+            for (lt in liveTables) newestRows[lt.table] = lt.relation to lt.trie
+            for (staged in stagedTables) newestRows[staged.ref] = staged.liveTable.relation to staged.liveTable.trie
+            ownTx?.tables?.forEach { (ref, tableTx) -> newestRows[ref] = tableTx.tx.relation to tableTx.tx.trie }
 
-            val ownSnaps = openAll {
-                ownTx?.tables?.safeMap { TableSnapshot.openTx(al, it.value) }?.filterNotNull() ?: emptyList()
-            }
-
-            val byTable = (liveIndexSnaps + stagedSnaps + ownSnaps).groupBy { it.table }
+            val byTable =
+                openAll { newestRows.entries.safeMap { (ref, rows) -> TableSnapshot.open(al, ref, rows.first, rows.second) } }
+                    .groupBy { it.table }
 
             // tableInfo drives base-table resolution — an unresolved table throws `Table not found`. It
             // must carry every staged table's declared columns *including* 0-row ones (e.g. `CREATE TABLE`),
-            // which openSnapshot drops from `byTable` (empty relation), so a tx resolving behind a freshly
-            // created empty table in the same batch still sees it exists.
+            // whose segment declares none — column types are read off the `put` leg, which a table nothing
+            // has written to hasn't got — so a tx resolving behind a freshly created empty table in the
+            // same batch still sees it exists.
             val liveColumnNames = LinkedHashMap<TableRef, MutableSet<ColumnName>>()
             for ((table, snaps) in byTable)
                 snaps.flatMapTo(liveColumnNames.getOrPut(table) { linkedSetOf() }) { it.types.keys }

@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import xtdb.util.closeAllOnCatch
 import xtdb.NodeBase
 import xtdb.NodeBase.Companion.openBase
 import xtdb.TestPartition
@@ -104,7 +105,8 @@ internal class BlockCutterTest {
                     }
                 }
                 tx.writeTxRow(null, null)
-                liveIndex.commitTx(tx.txKey, tx.tables.associate { (ref, t) -> ref to t.txRelation })
+                tx.sealTables().associateTo(mutableMapOf()) { it.ref to it.liveTable }
+                    .closeAllOnCatch { liveIndex.applyTx(tx.txKey, it) }
             }
         }
 
@@ -176,7 +178,7 @@ internal class BlockCutterTest {
         runCurrent()
 
         assertFalse(cutter.acceptingResolution, "resolution is refused from the cut")
-        assertThrows<IllegalStateException> { cutter.addRows(1) }
+        assertThrows<IllegalStateException> { cutter.txResolved(1) }
 
         cutter.upload(PendingBlock(0, term.appended.single() as BlockBoundary))
         runCurrent()
@@ -185,7 +187,7 @@ internal class BlockCutterTest {
             cutter.acceptingResolution,
             "and still refused once produced: the live index is holding a block already snapshotted into L0"
         )
-        assertThrows<IllegalStateException> { cutter.addRows(1) }
+        assertThrows<IllegalStateException> { cutter.txResolved(1) }
 
         cutter.closeBlock(term.appended.last() as BlockUploaded, Instant.EPOCH)
         assertTrue(cutter.acceptingResolution, "the read-back re-opens the block behind it")
@@ -250,7 +252,7 @@ internal class BlockCutterTest {
 
         assertFalse(cutter.isFull, "cutting an empty block would live-lock the term")
 
-        cutter.addRows(1)
+        cutter.txResolved(1)
         assertTrue(cutter.isFull)
     }
 
@@ -266,7 +268,7 @@ internal class BlockCutterTest {
         val cutter = term.cutter(backgroundScope)
         assertFalse(cutter.isFull)
 
-        cutter.addRows(1)
+        cutter.txResolved(1)
         assertTrue(cutter.isFull, "the gauge is seeded from the rows already in the open block")
     }
 }

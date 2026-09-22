@@ -1,22 +1,17 @@
 package xtdb.indexer
 
 import kotlinx.coroutines.CompletableDeferred
-import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.TransactionKey
 import xtdb.api.TransactionResult
 import xtdb.api.log.DbOp
 import xtdb.types.MessageId
 import xtdb.api.log.ReplicaMessage
-import xtdb.arrow.Relation
 import xtdb.arrow.VectorType
 import xtdb.api.tx.ExternalSourceToken
 import xtdb.indexer.LiveTable.Companion.logRelTypes
-import xtdb.segment.MemorySegment
 import xtdb.api.TableRef
 import xtdb.trie.ColumnName
-import xtdb.trie.MemoryHashTrie
 import xtdb.util.closeAll
-import xtdb.util.safelyOpening
 import xtdb.api.tx.OpenTx
 
 /**
@@ -28,9 +23,8 @@ import xtdb.api.tx.OpenTx
  * across the in-flight batch) and (b) imported into the durable live tables once its replica-log commit
  * lands.
  *
- * The relations are the [OpenTx]'s own, ownership transferred out at [stage] (see `OpenTx.sealTables`) —
- * a reference move, not a slice: re-materializing every vector in the tree cost real time per tx, and the
- * trie already points at the relation's `_iid` vector so it moves as-is. So a ResolvedTx outlives its
+ * Each table arrives as the value that table takes if this tx applies: [stage] commits the transient the
+ * [OpenTx] was writing into and moves it here (see `OpenTx.sealTables`), so a ResolvedTx outlives its
  * OpenTx — the resolver closes the (now table-less) OpenTx right after staging — and its lifetime is its
  * own (freed at [close], on promote/teardown).
  *
@@ -47,42 +41,54 @@ class ResolvedTx private constructor(
     val externalSourceToken: ExternalSourceToken?,
     val pending: CompletableDeferred<TransactionResult>?,
     val dbOp: DbOp?,
-    private val tables: Map<TableRef, Table>,
+    private val tables: MutableMap<TableRef, Table>,
 ) : AutoCloseable {
 
-    /** One table's staged writes: the tx's own relation (ownership moved at [stage]) plus its iid trie. */
-    class Table(val ref: TableRef, val relation: Relation, private val trie: MemoryHashTrie) : AutoCloseable {
+    /**
+     * One table's staged writes, as the value that table takes if this tx applies.
+     *
+     * [rowsFrom] is where this tx's own rows start in it — the rows below belong to the transactions it
+     * resolved behind, which is why the whole value serves read-your-writes while only the range above
+     * [rowsFrom] goes to the replica log.
+     */
+    class Table(val ref: TableRef, val liveTable: LiveTable, val rowsFrom: Int) : AutoCloseable {
 
         /**
-         * A fresh, caller-owned [TableSnapshot] of these staged writes — re-sliced into [al] so it's
-         * freed with the enclosing [Snapshot], leaving this table's own slice intact until promote.
+         * How many rows *this* tx wrote — not what the table now holds, which includes every tx it
+         * resolved behind. The block gauge and the replica-log page are both this tx's rows alone.
          */
-        fun openSnapshot(al: BufferAllocator): TableSnapshot? {
-            if (relation.rowCount == 0) return null
-            return safelyOpening {
-                val wmRel = open { relation.openDirectSlice(al) }
-                val wmTrie = trie.withIidReader(wmRel["_iid"])
-                val seg = MemorySegment(wmTrie, wmRel)
-                TableSnapshot(ref, seg.rel.logRelTypes.orEmpty(), seg)
-            }
-        }
+        val rowCount get() = liveTable.relation.rowCount - rowsFrom
 
         /**
          * The tx's declared columns for this table, present even at 0 rows (e.g. `CREATE TABLE`).
-         * Resolution needs these for table *existence*: [openSnapshot] drops the empty relation, so a
-         * freshly-created empty table can't be learned from the snapshot data alone.
+         * Resolution needs these for table *existence*: a table nothing has written to declares no columns
+         * through its segment, so a freshly-created empty one can't be learned from the snapshot data alone.
          */
-        val columnTypes: Map<ColumnName, VectorType> get() = relation.logRelTypes.orEmpty()
+        val columnTypes: Map<ColumnName, VectorType> get() = liveTable.relation.logRelTypes.orEmpty()
 
-        override fun close() = relation.close()
+        override fun close() = liveTable.close()
     }
 
     val allTables: Collection<Table> get() = tables.values
 
+    /** This tx's value for [table], for a later tx resolving behind it to derive its own from. */
+    fun liveTable(table: TableRef): LiveTable? = tables[table]?.liveTable
+
     /**
-     * Assemble this tx's replica-log message, serializing the table slices to Arrow IPC here — at seal,
-     * on the drain path — rather than eagerly at resolve, so the relation→bytes cost stays off the
-     * resolver's hot path. The leader imports from the slices directly ([LiveIndex.commitTx]); these
+     * Hands this tx's table values over, the way `OpenTx.sealTables` hands them here: ownership is
+     * presence in a map, so a tx discarded on teardown releases everything with no was-applied flag to
+     * guard.
+     *
+     * The result is the caller's to free, and MUST be taken under `closeAllOnCatch` — [LiveIndex.applyTx]
+     * drains it as it installs, so what is left in it if that throws is exactly what never landed.
+     */
+    fun sealTables(): MutableMap<TableRef, LiveTable> =
+        tables.mapValuesTo(mutableMapOf()) { it.value.liveTable }.also { tables.clear() }
+
+    /**
+     * Assemble this tx's replica-log message, serializing each table's own row range to Arrow IPC here —
+     * at seal, on the drain path — rather than eagerly at resolve, so the relation→bytes cost stays off
+     * the resolver's hot path. The leader takes the table values directly ([LiveIndex.applyTx]); these
      * bytes exist only for the replica log.
      */
     fun toReplicaMessage(termId: Long): ReplicaMessage.ResolvedTx {
@@ -93,7 +99,10 @@ class ResolvedTx private constructor(
 
         return ReplicaMessage.ResolvedTx(
             txKey.txId, txKey.systemTime, committed, error,
-            tableData = tables.entries.associate { (ref, table) -> ref.schemaAndTable to table.relation.asArrowStream },
+            tableData = tables.entries.associate { (ref, table) ->
+                ref.schemaAndTable to
+                        table.liveTable.relation.asArrowStream(table.rowsFrom, table.rowCount)
+            },
             dbOp = dbOp,
             externalSourceToken = externalSourceToken,
             srcMsgId = srcMsgId,
@@ -105,8 +114,8 @@ class ResolvedTx private constructor(
 
     companion object {
         /**
-         * Resolve a committed [openTx]: take ownership of its table relations (a reference move — see
-         * `OpenTx.sealTables`) so they outlive the OpenTx. The caller closes the OpenTx after.
+         * Resolve a committed [openTx]: commit each table's transient and take ownership of the result
+         * (see `OpenTx.sealTables`) so it outlives the OpenTx. The caller closes the OpenTx after.
          */
         @JvmStatic
         fun stage(
@@ -117,10 +126,10 @@ class ResolvedTx private constructor(
             ResolvedTx(
                 openTx.txKey, srcMsgId, txResult, openTx.externalSourceToken, pending, dbOp,
                 // Every table the tx touched, including 0-row ones: `CREATE TABLE` declares columns with no
-                // rows, and it must register in the durable index on promotion. `Table.openSnapshot` drops
-                // the empty relation for row-reads, but the table's existence still reaches resolution via
-                // its `columnTypes` (see `Snapshot.open`), and `toReplicaMessage` serializes it for the replica.
-                openTx.sealTables().associateBy { it.ref }
+                // rows, and it must register in the durable index on promotion. Its segment declares no
+                // columns, so the table's existence reaches resolution via its `columnTypes` instead
+                // (see `Snapshot.open`), and `toReplicaMessage` serializes it for the replica.
+                openTx.sealTables().associateByTo(mutableMapOf()) { it.ref }
             )
     }
 }

@@ -10,6 +10,12 @@
 --   Many concurrent readers. A snapshot can be held and read while writes continue.
 --   Writes never block reads: a snapshot is frozen at creation, and stays valid until its last holder releases it.
 --
+--   A live table is a VALUE, and a transaction writes it through a TRANSIENT derived from that value.
+--   The transient appends only, and what it appends the value it came from cannot see; committing it yields the table's next value, and applying a transaction installs those values.
+--   One coroutine writes a transient, and it is never published mid-flight.
+--   Staged rows ARE read, by the transactions resolving behind them (read-your-writes), and that stays within the discipline only because the reader is the same owner — the term's own coroutine.
+--   Nothing else may read staged rows.
+--
 -- Pipelining — resolve, append, read back, apply:
 --   A LEADER applies its own writes to the durable live tables only once it has read them BACK off its own replica log, at its own term.
 --   That read-back is the fence — Raft's ReadIndex. The four stages:
@@ -30,14 +36,16 @@
 --
 --   A FOLLOWER has no resolver and no read-back: the messages it imports are already durable, so it advances the durable head directly.
 --
---   Block cut — resolve-side gauge, then PAUSE:
---   The block boundary is cut off a RESOLVE-side row gauge, seeded from the rows already applied into the open block, so a new leader inheriting a partially-filled block cuts it where the old leader would have — else block sizes drift across restarts.
---   It is cut AHEAD of the applied count, which lags.
+--   Block cut — applied-row gauge, then PAUSE:
+--   The block boundary is cut off the rows APPLIED into the open block, so a new leader inheriting a partially-filled block cuts it where the old leader would have — else block sizes drift across restarts.
+--   The gauge counts a transaction once, where its rows land, so a transaction resolved by a term that ends before it applies leaves nothing in it.
+--   It therefore TRAILS what the resolver has staged, and a block runs over by whatever is in flight when the count crosses.
 --   When the gauge crosses rows_per_block the resolver injects a block boundary, in resolution order so that it lands after this block's transactions and before the next block's, and PAUSES resolution until that block is adopted.
---   The pause carries two obligations.
+--   The pause carries three obligations.
 --   It keeps the buffer of messages held behind an open block from overflowing, no transaction interleaving between the boundary and its upload.
---   And it keeps anything from applying between the point where the live tables are written to block storage and the point where they are cleared — rows applied there would be written nowhere.
---   The pause is deliberately the status quo; block double-buffering is separate future work (#4495).
+--   It keeps anything from applying between the point where the live tables are written to block storage and the point where they are cleared — rows applied there would be written nowhere.
+--   And it keeps a transaction from resolving ACROSS the cut: a transaction resolving there holds a transient over a relation NextBlock removes, and would apply one block's rows into a table re-created at the next block index.
+--   Block double-buffering (#4495) has to keep the pause, or replace what that third obligation buys.
 --
 --   Two heads, two homes — callers choose:
 --     - the RESOLVED head, on the resolver: the highest transaction RESOLVED, and so staged.
@@ -141,8 +149,8 @@ entity LiveIndex {
 
     rows_per_block: Integer
 
-    -- Rows already applied into the currently-open block.
-    -- Seeds the resolver's block gauge when a leader takes the role, so a leader inheriting a partially-filled block cuts it where the previous one would have.
+    -- Rows APPLIED into the currently-open block, and the gauge the leader cuts on.
+    -- Counted where a transaction's rows land, so a transaction resolved but never applied contributes nothing to it, whichever term resolved it.
     block_row_count: Integer
 
     -- Durable live tables: they hold only applied rows.
@@ -247,7 +255,7 @@ entity LiveTableTx {
 --
 -- A Snapshot is a point-in-time view over one database.
 -- It is composed of per-table TableSnapshots, each holding a frozen segment of that table's rows.
--- Opened from within an active transaction, a TableSnapshot also layers the staged transactions' rows and then the transaction's own, so a query inside the transaction sees durable rows, its predecessors' rows and its own.
+-- Opened from within an active transaction, a TableSnapshot takes the newest view of that table instead — the transaction's own where it has written to it, else its newest staged predecessor's — so a query inside the transaction sees durable rows, its predecessors' rows and its own.
 --
 -- A Snapshot also pins the two catalogs a reader needs alongside those segments: the trie catalog, which locates the historical tries on disk, and the table catalog's per-table metadata.
 -- Pinning them is what stops a reader combining pinned data with catalog state read live at the moment it happens to ask.
@@ -315,18 +323,12 @@ entity TableSnapshot {
     snapshot: Snapshot
     table_ref: TableRef
 
-    -- The DURABLE live rows for this table. Absent when the table has no durable data at snapshot time.
-    -- This is the only layer on an external snapshot.
-    live_segment: MemorySegment?
-
-    -- The staged transactions' rows for this table, layered on the durable rows, oldest first — one per staged transaction that touched it.
-    -- A just-staged transaction's rows live ONLY here until they are applied.
-    -- Empty on an external snapshot, which sees durable data only; populated on a transaction snapshot so that a resolving transaction reads its staged predecessors.
-    staged_segments: Set<MemorySegment>
-
-    -- The enclosing transaction's own uncommitted rows, layered on top of the staged ones.
-    -- Present only on a transaction snapshot where the transaction has written to this table.
-    tx_segment: MemorySegment?
+    -- This table's rows, as ONE segment: the newest view that can see them.
+    -- Each view carries every row beneath it — a staged transaction's are the applied rows plus its own, and a resolving transaction's are those plus its own again — so the newest SUBSUMES the rest, and taking more than one would count a row once per view able to see it.
+    -- On an external snapshot that is the applied rows, which is the only view such a reader may have.
+    -- Within a transaction it is the transaction's own view where it has written to this table, else the newest staged transaction's, else the applied rows.
+    -- Absent when the table has no rows at snapshot time.
+    segment: MemorySegment?
 }
 
 ------------------------------------------------------------
@@ -596,27 +598,22 @@ rule OpenTransactionSnapshot {
         let snap = Snapshot.created(basis_tx: tx.tx_key)
         let resolver = tx.resolver
 
-        -- One TableSnapshot per table the transaction touched.
+        -- One TableSnapshot per table the transaction touched, over the transaction's own view — which already carries the applied rows and every staged predecessor's.
         for table_tx in tx.table_txs:
-            let live_seg = if table_tx.live_table != null: MemorySegment.for(table_tx.live_table) else: null
-            let tx_seg = if table_tx.rows.count > 0: MemorySegment.for(table_tx) else: null
             TableSnapshot.created(
                 snapshot: snap,
                 table_ref: table_tx.table_ref,
-                live_segment: live_seg,
-                staged_segments: StagedSegments.for(resolver, table_tx.table_ref),
-                tx_segment: tx_seg
+                segment: MemorySegment.for(table_tx)
             )
 
-        -- Plus the remaining live tables it hasn't touched: durable rows and any staged rows, no transaction rows.
+        -- Plus the remaining live tables it hasn't touched, each over the newest view that has.
         for table in tx.index.tables
                 where not tx.table_txs.any(tt => tt.table_ref = table.table_ref):
+            let staged_seg = NewestStagedSegment.for(resolver, table.table_ref)
             TableSnapshot.created(
                 snapshot: snap,
                 table_ref: table.table_ref,
-                live_segment: MemorySegment.for(table),
-                staged_segments: StagedSegments.for(resolver, table.table_ref),
-                tx_segment: null
+                segment: if staged_seg != null: staged_seg else: MemorySegment.for(table)
             )
 
         snap
@@ -638,10 +635,8 @@ rule RefreshSharedSnapshot {
             TableSnapshot.created(
                 snapshot: new_snap,
                 table_ref: table.table_ref,
-                live_segment: MemorySegment.for(table),
-                -- External snapshot: durable data only, no staged layers.
-                staged_segments: {},
-                tx_segment: null
+                -- External snapshot: the applied rows, never a staged view.
+                segment: MemorySegment.for(table)
             )
         index.shared_snap = new_snap
 }

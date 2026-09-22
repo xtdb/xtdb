@@ -25,6 +25,7 @@ import xtdb.database.PartitionStorage
 import xtdb.trie.addTries
 import xtdb.types.MessageId
 import xtdb.util.StringUtil.asLexHex
+import xtdb.util.closeAllOnCatch
 import xtdb.util.useAll
 import java.time.Duration
 import java.time.InstantSource
@@ -117,7 +118,7 @@ internal class LeaderLogProcessor(
 
     private fun applyResolvedTx(tx: ResolvedTx) {
         try {
-            liveIndex.commitTx(tx.txKey, tx.allTables.associate { it.ref to it.relation })
+            tx.sealTables().closeAllOnCatch { liveIndex.applyTx(tx.txKey, it) }
 
             watchers.notifyApplied(tx.srcMsgId, tx.txResult, tx.externalSourceToken)
 

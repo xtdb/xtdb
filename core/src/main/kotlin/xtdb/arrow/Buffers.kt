@@ -7,6 +7,7 @@ import org.apache.arrow.memory.util.hash.ArrowBufHasher
 import org.apache.arrow.vector.util.DecimalUtility
 import xtdb.arrow.ArrowUtil.toByteBuffer
 import xtdb.util.Hasher
+import xtdb.util.closeOnCatch
 import java.math.BigDecimal
 import java.nio.ByteBuffer
 import kotlin.math.max
@@ -188,7 +189,7 @@ internal class ExtensibleBuffer private constructor(private val allocator: Buffe
         val base = getInt(startIdx)
 
         buffers.add(
-            allocator.buffer(byteLen).also { out ->
+            allocator.buffer(byteLen).closeOnCatch { out ->
                 for (i in 0..len) out.setInt(i.toLong() * Int.SIZE_BYTES, getInt(startIdx + i) - base)
                 out.writerIndex(byteLen)
             }

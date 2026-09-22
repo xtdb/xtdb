@@ -14,6 +14,7 @@ import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.api.error.Unsupported
 import xtdb.kw
 import xtdb.util.Hasher
+import xtdb.util.closeOnCatch
 import xtdb.util.safeMap
 import xtdb.util.safelyOpening
 import java.nio.ByteBuffer
@@ -438,7 +439,7 @@ class DenseUnionVector private constructor(
             offsetBuffer.unloadBuffer(buffers, 0, offsetBytes)
         else
             buffers.add(
-                allocator.buffer(offsetBytes).also { out ->
+                allocator.buffer(offsetBytes).closeOnCatch { out ->
                     for (i in 0 until len) {
                         val typeId = getTypeId(startIdx + i).toInt()
                         val rebased = if (typeId < 0) 0 else getOffset(startIdx + i) - legStarts[typeId]

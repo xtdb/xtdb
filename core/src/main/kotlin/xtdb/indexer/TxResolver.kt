@@ -395,7 +395,13 @@ internal class TxResolver(
         }
     }
 
-    // Called in the leader's close, once its persister is joined so nothing live still touches the slices.
+    /**
+     * Called in the leader's close, once its persister is joined so nothing live still touches the slices.
+     *
+     * A queued tx's table values are slices of the LIVE INDEX's relations, not of anything this allocator
+     * handed out — so draining the queue here is what lets the live index close later, and reversing the
+     * two in `DatabasePartition.close` would fail that allocator rather than this one.
+     */
     override fun close() {
         queue.closeAll()
         allocator.close() // last: Arrow won't close it while a child buffer is live

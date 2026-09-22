@@ -47,14 +47,18 @@ interface RelationReader : ILookup, Seqable, Counted, AutoCloseable {
     @OptIn(InternalApi::class)
     fun openArrowRecordBatch(startIdx: Int = 0, len: Int = rowCount - startIdx): ArrowRecordBatch {
         val nodes = mutableListOf<ArrowFieldNode>()
-        val buffers = mutableListOf<ArrowBuf>()
 
-        for (v in vectors) v.unloadPage(nodes, buffers, startIdx, len)
+        // The list owns each reference from the moment `unloadPage` puts it there until the batch takes
+        // them all, so a vector part-way through the fan-out throwing — a row range a vector can't serve,
+        // an allocation that fails — releases what its predecessors retained rather than stranding it.
+        return mutableListOf<ArrowBuf>().closeAllOnCatch { buffers ->
+            for (v in vectors) v.unloadPage(nodes, buffers, startIdx, len)
 
-        return ArrowRecordBatch(
-            len, nodes, buffers, NoCompressionCodec.DEFAULT_BODY_COMPRESSION,
-            /* alignBuffers = */ true, /* retainBuffers = */ false
-        )
+            ArrowRecordBatch(
+                len, nodes, buffers, NoCompressionCodec.DEFAULT_BODY_COMPRESSION,
+                /* alignBuffers = */ true, /* retainBuffers = */ false
+            )
+        }
     }
 
     fun openSlice(al: BufferAllocator): RelationReader =
