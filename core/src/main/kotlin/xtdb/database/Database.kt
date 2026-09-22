@@ -180,9 +180,20 @@ class Database(
         return Xtdb.SubmittedTx(meta.msgId)
     }
 
-    fun sendFlushBlockMessage(): Log.MessageMetadata = runBlocking {
-        sourceLog.appendMessage(SourceMessage.FlushBlock(tableCatalog.currentBlockIndex ?: -1))
+    /**
+     * Asks [partition] to cut a block, against the block index that partition has reached — partitions
+     * block on their own cadence, so one index does not serve them all.
+     */
+    fun sendFlushBlockMessage(partition: Int): Log.MessageMetadata = runBlocking {
+        val part = partitions[partition]
+        part.storage.sourceLog.appendMessage(
+            SourceMessage.FlushBlock(part.tableCatalog.currentBlockIndex ?: -1)
+        )
     }
+
+    /** Asks every partition to cut a block — "cut one for this database", which is what an operator means. */
+    fun sendFlushBlockMessage(): List<Log.MessageMetadata> =
+        partitions.indices.map { sendFlushBlockMessage(it) }
 
     fun sendAttachDbMessage(dbName: DatabaseName, config: Config): Log.MessageMetadata = runBlocking {
         sourceLog.appendMessage(SourceMessage.AttachDatabase(dbName, config))

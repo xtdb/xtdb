@@ -70,7 +70,7 @@ class MultiPartitionTest {
                 node.attach("parts", source, partitions = 3)
 
                 val primary = (node as XtdbInternal).dbCatalog.primary
-                val flush = primary.sendFlushBlockMessage()
+                val flush = primary.sendFlushBlockMessage(0)
                 runBlocking { withTimeout(10.seconds) { primary.partitions.single().watchers.awaitSource(flush.msgId) } }
 
                 assertNull(primary.ingestionError)
@@ -144,6 +144,26 @@ class MultiPartitionTest {
         Xtdb.openNode().use { node ->
             val db = (node as XtdbInternal).dbCatalog.databaseOrNull("xtdb")!!
             assertEquals(TableRef("xt", "txs"), db.partitions.single().state.txsTable)
+        }
+    }
+
+    @Test
+    fun `a flush cuts the block of the partition it names, and no other`() = runBlocking {
+        InMemoryExternalSource(partitions = 3).use { source ->
+            Xtdb.openNode().use { node ->
+                val db = node.attach("parts", source, partitions = 3)
+                val partitions = db.partitions
+
+                for (p in 0..2) source.publish(partition = p)
+                withTimeout(10.seconds) { partitions.forEach { it.watchers.awaitTx(0) } }
+
+                val flush = db.sendFlushBlockMessage(1)
+                withTimeout(10.seconds) { partitions[1].watchers.awaitSource(flush.msgId) }
+
+                assertEquals(0L, partitions[1].tableCatalog.currentBlockIndex)
+                assertNull(partitions[0].tableCatalog.currentBlockIndex, "partition 0 did not cut")
+                assertNull(partitions[2].tableCatalog.currentBlockIndex, "partition 2 did not cut")
+            }
         }
     }
 }

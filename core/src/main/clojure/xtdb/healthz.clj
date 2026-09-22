@@ -14,7 +14,6 @@
            [java.net InetAddress]
            (org.eclipse.jetty.server NetworkConnector Server)
            (xtdb.api Xtdb$Config)
-           (xtdb.api.log SourceMessage$FlushBlock)
            (xtdb.api.metrics Healthz HealthzConfig)
            xtdb.api.Xtdb$Config
            (xtdb.database Database Database$Catalog)
@@ -133,8 +132,7 @@
                                                              (all-databases db-cat))]
                                                    (try
                                                      (doseq [^Database db dbs]
-                                                       (let [flush-msg (SourceMessage$FlushBlock. (or (.getCurrentBlockIndex (.getTableCatalog db)) -1))]
-                                                         (.appendMessageBlocking (.getSourceLog db) flush-msg 0)))
+                                                       (.sendFlushBlockMessage db))
                                                      {:status 200,
                                                       :body (format "Block flush message sent to %d database(s)." (count dbs))}
                                                      (catch Exception e
