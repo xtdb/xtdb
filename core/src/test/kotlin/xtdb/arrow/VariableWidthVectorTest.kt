@@ -37,6 +37,22 @@ class VariableWidthVectorTest {
     }
 
     @Test
+    fun `a slice appends after the values it already holds`() {
+        Utf8Vector(allocator, "v", false).use { vec ->
+            vec.writeObject("abc")
+            vec.writeObject("de")
+
+            vec.openSlice(allocator).use { slice ->
+                slice.writeObject("fgh")
+
+                assertEquals(listOf("abc", "de", "fgh"), slice.asList)
+            }
+
+            assertEquals(listOf("abc", "de"), vec.asList, "the vector it was taken from is unchanged")
+        }
+    }
+
+    @Test
     fun `from null into string vector - 3726`() {
         NullVector("v1" ).use { nullVector ->
             nullVector.writeNull()

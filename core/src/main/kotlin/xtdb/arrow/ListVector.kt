@@ -43,7 +43,8 @@ class ListVector private constructor(
 
     override val vectors get() = listOf(elVector)
 
-    private var lastOffset: Int = 0
+    /** The element index the last list written ends at — seeded as [VariableWidthVector.lastOffset] is. */
+    private var lastOffset = if (valueCount == 0) 0 else offsetBuffer.getInt(valueCount)
 
     override fun isNull(idx: Int) = nullable && !validityBuffer!!.getBoolean(idx)
 

@@ -25,6 +25,22 @@ class ListVectorTest {
     }
 
     @Test
+    fun `a slice appends after the lists it already holds`() {
+        ListVector(allocator, "list", false, NullVector($$"$data$")).use { listVec ->
+            listVec.writeObject(listOf(1, 2))
+            listVec.writeObject(listOf(3))
+
+            listVec.openSlice(allocator).use { slice ->
+                slice.writeObject(listOf(4, 5))
+
+                assertEquals(listOf(listOf(1, 2), listOf(3), listOf(4, 5)), slice.asList)
+            }
+
+            assertEquals(listOf(listOf(1, 2), listOf(3)), listVec.asList, "the vector it was taken from is unchanged")
+        }
+    }
+
+    @Test
     fun `promotes el-vector`() {
         ListVector(allocator, "list", false, NullVector($$"$data$")).use { listVec ->
             listVec.writeObject(listOf(1, 2, 3))

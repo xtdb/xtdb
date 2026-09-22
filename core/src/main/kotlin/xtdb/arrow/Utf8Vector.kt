@@ -18,6 +18,8 @@ class Utf8Vector private constructor(
     constructor(al: BufferAllocator, name: String, nullable: Boolean) :
             this(al, name, 0, if (nullable) BitBuffer(al) else null, ExtensibleBuffer(al), ExtensibleBuffer(al))
 
+    override var lastOffset = if (valueCount == 0) 0 else offsetBuffer.getInt(valueCount)
+
     override val arrowType: ArrowType = UTF8_TYPE
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>): String = getByteArray(idx).toString(Charsets.UTF_8)

@@ -29,7 +29,15 @@ abstract class VariableWidthVector : MonoVector() {
                 BitBuffer(al).also { validityBuffer = it }.writeOnes(valueCount)
         }
 
-    private var lastOffset: Int = 0
+    /**
+     * The end offset of the last value written — held rather than read back, because this is the per-value
+     * write path.
+     *
+     * Abstract so that it is seeded where [offsetBuffer] is: a vector constructed over buffers that already
+     * hold values, from [openSlice] or a loaded page, has to continue their offsets, where starting at zero
+     * gives every value it goes on to write an end offset below its own start.
+     */
+    protected abstract var lastOffset: Int
 
     override fun isNull(idx: Int) = nullable && !validityBuffer!!.getBoolean(idx)
 
