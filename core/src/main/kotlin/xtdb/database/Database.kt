@@ -284,7 +284,12 @@ class Database(
                 PartitionStores(
                     bufferPool,
                     open { PageMetadata.factory(allocator, bufferPool) },
-                    open { PartitionState.open(allocator, bufferPool, indexerConfig) },
+                    open {
+                        PartitionState.open(
+                            allocator, bufferPool, indexerConfig,
+                            PartitionState.txsTableFor(partition, partitionCount)
+                        )
+                    },
                 )
             }
         }

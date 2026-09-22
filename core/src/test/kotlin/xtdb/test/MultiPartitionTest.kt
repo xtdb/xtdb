@@ -1,15 +1,22 @@
 package xtdb.test
 
+import clojure.lang.Keyword
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotSame
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import xtdb.XtdbInternal
+import xtdb.api.TableRef
 import xtdb.api.Xtdb
+import xtdb.api.error.Incorrect
 import xtdb.api.log.Log
 import xtdb.api.storage.Storage
+import xtdb.tx.TxOp
 import xtdb.database.Database
 import kotlin.time.Duration.Companion.seconds
 
@@ -86,6 +93,57 @@ class MultiPartitionTest {
                 assertNull(partitions[0].liveIndex.latestCompletedTx, "partition 0 indexed nothing")
                 assertNull(partitions[2].liveIndex.latestCompletedTx, "partition 2 indexed nothing")
             }
+        }
+    }
+
+    @Test
+    fun `partitions record their transactions in separate tx tables`() = runBlocking {
+        InMemoryExternalSource(partitions = 3).use { source ->
+            Xtdb.openNode().use { node ->
+                val partitions = node.attach("parts", source, partitions = 3).partitions
+
+                // both are tx 0 of their own partition — one table would read these as one entity at two times
+                source.publish(partition = 1)
+                source.publish(partition = 2)
+                withTimeout(10.seconds) {
+                    partitions[1].watchers.awaitTx(0)
+                    partitions[2].watchers.awaitTx(0)
+                }
+
+                assertEquals(TableRef("xt", "txs_1"), partitions[1].state.txsTable)
+                assertEquals(TableRef("xt", "txs_2"), partitions[2].state.txsTable)
+
+                assertTrue(
+                    TableRef("xt", "txs_1") in partitions[1].liveIndex.openSnapshot(null).use { it.tableInfo },
+                    "partition 1's tx row went to its own table"
+                )
+                assertFalse(
+                    TableRef("xt", "txs_1") in partitions[2].liveIndex.openSnapshot(null).use { it.tableInfo },
+                    "and not into partition 2's live index"
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `a transaction executed against an external-source database is refused before its tx table is read`() {
+        InMemoryExternalSource(partitions = 3).use { source ->
+            Xtdb.openNode().use { node ->
+                node.attach("parts", source, partitions = 3)
+
+                val ex = assertThrows<Incorrect> {
+                    node.connect("parts").use { it.executeTx(listOf(TxOp.Sql("INSERT INTO docs (_id) VALUES (1)"))) }
+                }
+                assertEquals(Keyword.intern("xtdb", "submit-tx-to-external-source-db"), ex.data.valAt(Keyword.intern("xtdb.error", "code")))
+            }
+        }
+    }
+
+    @Test
+    fun `a single-partition database keeps xt txs unchanged`() {
+        Xtdb.openNode().use { node ->
+            val db = (node as XtdbInternal).dbCatalog.databaseOrNull("xtdb")!!
+            assertEquals(TableRef("xt", "txs"), db.partitions.single().state.txsTable)
         }
     }
 }

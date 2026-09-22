@@ -137,7 +137,7 @@ class OpenTx
         val txId = txKey.txId
         val systemTimeMicros = txKey.systemTime.asMicros
 
-        val liveTable = table(TableRef("xt", "txs"))
+        val liveTable = table(partitionState.txsTable)
         val docWriter = liveTable.putDocWriter
 
         liveTable.writeId(txId)
