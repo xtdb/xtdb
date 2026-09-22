@@ -181,7 +181,8 @@ class StructVector private constructor(
         val colNames = (src.childWriters.keys + childWriters.keys)
 
         val childCopiers = colNames.map { colName ->
-            val srcVec = src.vectorForOrNull(colName) ?: NullVector(colName, true, src.valueCount)
+            // zero rows means no values seen, so this must not widen the destination (#6100)
+            val srcVec = src.vectorForOrNull(colName) ?: NullVector(colName, src.valueCount > 0, src.valueCount)
             srcVec.rowCopier(vectorFor(colName, srcVec.arrowType, srcVec.nullable))
         }
 

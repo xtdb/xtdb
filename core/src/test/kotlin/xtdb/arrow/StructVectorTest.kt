@@ -386,4 +386,30 @@ class StructVectorTest {
             assertEquals(VectorType.Null, structVec.vectorFor("a").type, "a non-null row pads with writeNull()")
         }
     }
+
+    @Test
+    fun `taking a copier from an empty source leaves the destination alone`() {
+        StructVector(allocator, "dest", false, linkedMapOf("name" to Utf8Vector(allocator, "name", false)))
+            .use { dest ->
+                StructVector(allocator, "src", false).use { src ->
+                    src.rowCopier(dest)
+
+                    assertEquals(UTF8, dest.vectorFor("name").type)
+                }
+            }
+    }
+
+    @Test
+    fun `taking a copier from a source with rows widens the destination`() {
+        StructVector(allocator, "dest", false, linkedMapOf("name" to Utf8Vector(allocator, "name", false)))
+            .use { dest ->
+                StructVector(allocator, "src", false).use { src ->
+                    src.endStruct()
+
+                    src.rowCopier(dest)
+
+                    assertEquals(maybe(UTF8), dest.vectorFor("name").type)
+                }
+            }
+    }
 }
