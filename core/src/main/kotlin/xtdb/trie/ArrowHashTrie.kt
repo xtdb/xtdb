@@ -44,7 +44,8 @@ class ArrowHashTrie @JvmOverloads constructor(
             else -> error("unknown leg: ${nodesVec.getLeg(idx)}")
         }
 
-    override val rootNode get() = forIndex(ByteArray(0), nodesVec.valueCount - 1)
+    override val rootNode
+        get() = if (nodesVec.valueCount == 0) null else forIndex(ByteArray(0), nodesVec.valueCount - 1)
 
     override fun close() {
         if (closeNodesVec) nodesVec.close()
