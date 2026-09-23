@@ -34,7 +34,7 @@
 (defn- with-cursor
   "Opens a read-only query cursor at the connection's basis and calls `(f cursor)`, closing the
   statement and cursor afterwards. The connection is borrowed, never closed."
-  [^Xtdb$Connection conn sql args {:keys [await-token snapshot-token snapshot-time current-time default-tz]} f]
+  [^Xtdb$Connection conn, ^String sql, args {:keys [await-token snapshot-token snapshot-time current-time default-tz]} f]
   ;; only advance the connection's await-basis when the caller supplied one; its own writes already
   ;; sit in `awaitToken`. `prepare` awaits it, so seed it before opening the statement.
   (when await-token
