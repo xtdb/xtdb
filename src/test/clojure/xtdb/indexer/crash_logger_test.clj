@@ -60,7 +60,7 @@
                    (let [path (util/->path (format "crashes/%s/1970-01-01T00:00:00Z/live-trie.binpb" node-id))]
                      (trie/<-MemoryHashTrie (MemoryHashTrie/fromProto (.getByteArray bp path) (NullVector. "_iid" true 0))))))
 
-          (t/is (= {:tree [:leaf [0]], :page-limit 1024, :log-limit 64}
+          (t/is (= {:tree [:leaf [1 0]], :page-limit 1024, :log-limit 64}
                    (let [path (util/->path (format "crashes/%s/1970-01-01T00:00:00Z/open-tx-trie.binpb" node-id))]
                      (trie/<-MemoryHashTrie (MemoryHashTrie/fromProto (.getByteArray bp path) (NullVector. "_iid" true 0))))))
 
@@ -76,12 +76,16 @@
                        (->> (.getAsMaps rel)
                             (mapv #(dissoc % :xt/iid)))))))
 
-          ;; Transaction-scoped data
+          ;; The table as the open tx sees it — the committed rows it resolved behind, then its own
           (let [open-tx-table-path (util/->path (format "crashes/%s/1970-01-01T00:00:00Z/open-tx-table.arrow" node-id))
                 footer (.getFooter bp open-tx-table-path)]
             (with-open [rb (.getRecordBatchSync bp open-tx-table-path 0)
                         rel (Relation/fromRecordBatch al (.getSchema footer) rb)]
-              (t/is (= [{:xt/system-from #xt/zdt "1970-01-01T00:00Z[UTC]",
+              (t/is (= [{:xt/system-from (time/->zdt #inst "2020"),
+                         :xt/valid-from (time/->zdt #inst "2020"),
+                         :xt/valid-to (time/->zdt time/end-of-time)
+                         :op #xt/tagged [:put {:xt/id 2}]}
+                        {:xt/system-from #xt/zdt "1970-01-01T00:00Z[UTC]",
                          :xt/valid-from #xt/zdt "1970-01-01T00:00Z[UTC]",
                          :xt/valid-to #xt/zdt "1970-01-01T00:00Z[UTC]",
                          :op #xt/tagged [:put {:xt/id 3, :version 0}]}]

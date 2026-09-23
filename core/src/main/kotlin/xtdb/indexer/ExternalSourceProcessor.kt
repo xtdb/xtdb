@@ -60,7 +60,7 @@ internal class ExternalSourceProcessor(
     )
 
     private suspend fun appendTx(resolvedTx: ResolvedTx): Boolean {
-        blockCutter.addRows(resolvedTx)
+        blockCutter.txResolved(resolvedTx)
 
         replicaAppender.append(TxItem(resolvedTx, leaderTerm))
 

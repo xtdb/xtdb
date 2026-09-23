@@ -1,8 +1,13 @@
 package xtdb.arrow
 
 import clojure.lang.*
+import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
+import org.apache.arrow.vector.compression.NoCompressionCodec
+import org.apache.arrow.vector.ipc.message.ArrowFieldNode
+import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
 import org.apache.arrow.vector.types.pojo.Schema
+import xtdb.InternalApi
 import xtdb.api.query.IKeyFn
 import xtdb.api.query.IKeyFn.KeyFn.KEBAB_CASE_KEYWORD
 import xtdb.util.closeAll
@@ -22,6 +27,39 @@ interface RelationReader : ILookup, Seqable, Counted, AutoCloseable {
 
     operator fun get(idx: Int, keyFn: IKeyFn<*> = KEBAB_CASE_KEYWORD): Map<*, Any?> =
         vectors.associate { keyFn.denormalize(it.name) to it.getObject(idx, keyFn) }
+
+    // Kotlin's parameter defaults are call-site substitutions, so they generate no JVM overload, and
+    // `@JvmOverloads` is rejected on an interface member. Clojure can only reach the no-arg form if it
+    // exists in its own right - `xtdb.flight-sql-test` calls it.
+    fun openArrowRecordBatch(): ArrowRecordBatch = openArrowRecordBatch(0)
+
+    /**
+     * Opens a record batch over the rows `[startIdx, startIdx + len)`, sharing this relation's memory
+     * rather than copying it, [len] defaulting to the rest of the relation.
+     *
+     * Every buffer in the batch carries exactly one reference, which closing the batch releases:
+     * [VectorReader.unloadPage] retains a vector's own buffers on the way in, so the batch is built with
+     * `retainBuffers = false` and a buffer the unload had to allocate — rebased offsets, unaligned
+     * validity — needs no other owner.
+     *
+     * The batch may therefore outlive the relation, so long as it is closed.
+     */
+    @OptIn(InternalApi::class)
+    fun openArrowRecordBatch(startIdx: Int = 0, len: Int = rowCount - startIdx): ArrowRecordBatch {
+        val nodes = mutableListOf<ArrowFieldNode>()
+
+        // The list owns each reference from the moment `unloadPage` puts it there until the batch takes
+        // them all, so a vector part-way through the fan-out throwing — a row range a vector can't serve,
+        // an allocation that fails — releases what its predecessors retained rather than stranding it.
+        return mutableListOf<ArrowBuf>().closeAllOnCatch { buffers ->
+            for (v in vectors) v.unloadPage(nodes, buffers, startIdx, len)
+
+            ArrowRecordBatch(
+                len, nodes, buffers, NoCompressionCodec.DEFAULT_BODY_COMPRESSION,
+                /* alignBuffers = */ true, /* retainBuffers = */ false
+            )
+        }
+    }
 
     fun openSlice(al: BufferAllocator): RelationReader =
         vectors

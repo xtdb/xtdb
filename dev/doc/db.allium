@@ -101,8 +101,8 @@ entity LiveIndex {
     latest_completed_tx: TransactionKey?
     is_full: Boolean
 
-    -- Rows already applied into the currently-open block.
-    -- Seeds a new leader's block gauge, so a leader inheriting a partially-filled block cuts it where the previous one would have.
+    -- Rows APPLIED into the currently-open block, and the gauge the leader cuts on.
+    -- A leader inheriting a partially-filled block reads the rows already in it, and so cuts it where the previous one would have.
     block_row_count: Integer
 
     -- Derived
@@ -177,11 +177,6 @@ variant Leader : LogProcessor {
     -- The last non-null external-source token seen on the resolve side.
     -- Carried onto a block boundary so that the persisted block holds a live resume point.
     last_resolved_ext_token: ExternalSourceToken?
-
-    -- RESOLVE-side block gauge: rows resolved into the currently-open block.
-    -- The boundary is cut off this rather than off live_index.is_full, which lags, reflecting only APPLIED transactions.
-    -- Seeded from live_index.block_row_count; reset when a boundary is injected.
-    rows_since_block: Integer
 
     -- A block cut is in progress: the boundary has been appended and its upload has not been read back.
     -- Resolution is PAUSED while true, so no transaction interleaves between the boundary and the adopt that closes its block, and the buffer of held records stays empty.
@@ -548,7 +543,7 @@ config {
 --
 -- A block is filled, cut, produced and adopted, and the leader term that holds the cycle runs it for this term's own blocks and for the one a promotion inherited alike.
 -- Resolution is armed only while filling, so nothing is resolved between a boundary and the adopt that closes its block.
--- Leader.rows_since_block and Leader.block_in_progress are the coarser view this spec's rules take of that cycle.
+-- live_index.block_row_count and Leader.block_in_progress are the coarser view this spec's rules take of that cycle.
 --
 -- A cut is TWO operations — the block is PRODUCED on the boundary and ADOPTED on the confirmation coming back — which is also how a follower reads the same pair of messages.
 --
@@ -630,14 +625,13 @@ rule TransitionToLeader {
 
         -- Take the leader role.
         -- It resumes the SOURCE log from the durable watermark, and the replica read continues on this node from where the follower left off.
-        -- Its resolver is seeded at the durable head, and its block gauge from the rows already in the open block, so it cuts this block where the previous leader would have.
+        -- Its resolver is seeded at the durable head, and it cuts on the rows already in the open block, so it cuts this block where the previous leader would have.
         log_processor.mode = Leader.created(
             -- The database's own source, borrowed for the length of this term, so this leader is externally fed iff the database is.
             external_source: database.external_source,
             leader_term: term,
             last_resolved_src_msg_id: watchers.latest_source_msg_id,
             last_resolved_ext_token: watchers.external_source_token,
-            rows_since_block: live_index.block_row_count,
             -- True where this term inherits a block to produce: resolution stays paused until it has adopted it.
             block_in_progress: pending_block != null
         )
@@ -781,17 +775,18 @@ rule AppendTx {
 
     ensures:
         log_processor.last_resolved_src_msg_id = src_msg_id
-        log_processor.rows_since_block = log_processor.rows_since_block + resolved.row_count
         AppendReplicaMessage(resolved)
 
-        if log_processor.rows_since_block >= config.rows_per_block:
+        -- Read off the applied rows, so a transaction resolved by a term that ends before it applies leaves nothing behind in the gauge.
+        -- It therefore trails what is staged, and a block runs over by whatever is in flight when the count crosses.
+        if live_index.block_row_count >= config.rows_per_block:
             LeaderCutsBlock(log_processor.last_resolved_src_msg_id, log_processor.last_resolved_ext_token)
 }
 
 rule LeaderCutsBlock {
     -- Inject the boundary in RESOLUTION order, so that it lands after this block's transactions and before the next block's, and PAUSE resolution until it is read back and its block uploaded.
-    -- The pause is what keeps the set of records held behind an open block empty.
-    -- Deliberately the status quo — block double-buffering is separate work (#4495).
+    -- The pause is what keeps the set of records held behind an open block empty, and what keeps a transaction from resolving across the cut — one resolving there holds a transient over a relation the adopt removes.
+    -- Block double-buffering (#4495) has to keep the pause, or replace what it buys.
     --
     -- The same event as live-index.allium's CutBlock, from the db side: this is where the boundary MESSAGE is built, because its fields come from here — the next block index off the table catalog, the resolve-side source watermark, the resume token — and live-index holds neither the watermark nor the external source.
     --
@@ -810,7 +805,6 @@ rule LeaderCutsBlock {
             external_source_token: external_source_token
         ))
         log_processor.block_in_progress = true
-        log_processor.rows_since_block = 0
 }
 
 rule LeaderProcessesFlushBlock {

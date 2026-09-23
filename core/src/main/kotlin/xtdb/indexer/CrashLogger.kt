@@ -72,16 +72,16 @@ class CrashLogger @JvmOverloads constructor(
 
         bufferPool.putObjectSync(
             crashDir.resolve("live-trie.binpb"),
-            ByteBuffer.wrap(liveTable.liveTrie.asProto)
+            ByteBuffer.wrap(liveTable.trie.asProto)
         )
 
-        liveTable.liveRelation
+        liveTable.relation
             .takeIf { it.rowCount > 0 }
             ?.let { writeArrow(crashDir.resolve("live-table.arrow"), it) }
 
-        writeArrow(crashDir.resolve("open-tx-table.arrow"), openTxTable.txRelation)
+        writeArrow(crashDir.resolve("open-tx-table.arrow"), openTxTable.tx.relation)
 
-        bufferPool.putObjectSync(crashDir.resolve("open-tx-trie.binpb"), ByteBuffer.wrap(openTxTable.trie.asProto))
+        bufferPool.putObjectSync(crashDir.resolve("open-tx-trie.binpb"), ByteBuffer.wrap(openTxTable.tx.trie.asProto))
 
         queryRel?.let { writeArrow(crashDir.resolve("query-rel.arrow"), it) }
         txOpsRdr?.let { writeTxOpsToArrow(crashDir.resolve("tx-ops.arrow"), it) }

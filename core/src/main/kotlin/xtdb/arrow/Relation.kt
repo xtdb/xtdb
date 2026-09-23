@@ -8,7 +8,6 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.VectorLoader
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.ipc.ReadChannel
-import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
 import org.apache.arrow.vector.ipc.message.MessageChannelReader
 import org.apache.arrow.vector.ipc.message.MessageSerializer
@@ -68,15 +67,6 @@ class Relation(
         rowCount = root.rowCount
     }
 
-    fun openArrowRecordBatch(): ArrowRecordBatch {
-        val nodes = mutableListOf<ArrowFieldNode>()
-        val buffers = mutableListOf<ArrowBuf>()
-        for (v in vecs.values)
-            v.unloadPage(nodes, buffers)
-
-        return ArrowRecordBatch(rowCount, nodes, buffers)
-    }
-
     fun openAsRoot(al: BufferAllocator): VectorSchemaRoot =
         VectorSchemaRoot.create(schema, al)
             .also { vsr ->
@@ -94,9 +84,12 @@ class Relation(
      */
     inner class RelationUnloader(private val arrowUnloader: ArrowUnloader) : AutoCloseable {
 
-        fun writePage() {
+        fun writePage() = writePage(0, rowCount)
+
+        /** Writes rows `[startIdx, startIdx + len)` as one page — see [openArrowRecordBatch]. */
+        fun writePage(startIdx: Int, len: Int) {
             try {
-                openArrowRecordBatch().use { arrowUnloader.writeBatch(it) }
+                openArrowRecordBatch(startIdx, len).use { arrowUnloader.writeBatch(it) }
             } catch (_: ClosedByInterruptException) {
                 throw InterruptedException()
             }
@@ -114,16 +107,21 @@ class Relation(
     fun startUnload(path: Path, mode: Mode = FILE) =
         path.openWritableChannel().closeOnCatch { ch -> startUnload(ch, mode) }
 
-    val asArrowStream: ByteArray
-        get() {
-            val baos = ByteArrayOutputStream()
-            startUnload(Channels.newChannel(baos), STREAM).use { unl ->
-                unl.writePage()
-                unl.end()
-            }
+    val asArrowStream: ByteArray get() = asArrowStream(0, rowCount)
 
-            return baos.toByteArray()
+    /**
+     * Rows `[startIdx, startIdx + len)` as a one-page Arrow IPC stream, carrying this relation's whole
+     * schema — so a relation several transactions write into serialises each one's rows on their own.
+     */
+    fun asArrowStream(startIdx: Int, len: Int): ByteArray {
+        val baos = ByteArrayOutputStream()
+        startUnload(Channels.newChannel(baos), STREAM).use { unl ->
+            unl.writePage(startIdx, len)
+            unl.end()
         }
+
+        return baos.toByteArray()
+    }
 
     val asArrowFile: ByteArray
         get() {

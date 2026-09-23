@@ -67,14 +67,7 @@ internal class BlockCutter(
 
     private sealed interface BlockState
 
-    /**
-     * Accumulating rows towards the cut, [rows] of them so far.
-     *
-     * The boundary is cut off this rather than `liveIndex.isFull()`, which lags — it reflects only APPLIED
-     * (consume-back) txs. Seeded from the rows already applied into the open block, because a new leader
-     * inherits a partially-filled block from replay and must cut it where the old leader would have, or
-     * block sizes drift across restarts (the #5817 stop/start off-by-one).
-     */
+    /** Accumulating rows towards the cut, [rows] of them so far. */
     private class Filling(val rows: Long) : BlockState
 
     private data object Cut : BlockState
@@ -114,18 +107,36 @@ internal class BlockCutter(
 
     val acceptingResolution get() = blockState is Filling
 
+    /**
+     * Whether the rows resolved into this block have reached the threshold.
+     *
+     * Ahead of [LiveIndex.blockRowCount], which moves only as transactions apply: the boundary is injected
+     * in resolution order, so it is the resolved rows that decide where it falls. Seeded from the rows
+     * already applied into the open block, because a leader promoted mid-block must cut where the previous
+     * one would have or block sizes drift across restarts (the #5817 stop/start off-by-one).
+     *
+     * The count rides on the state rather than on the live index, which outlives every term — so a term
+     * ending with transactions resolved and never applied takes their rows with it, where a gauge the
+     * database owned would carry them into the next term's block and cut it short.
+     */
     val isFull get() = (blockState as? Filling)?.let { it.rows > 0 && it.rows >= rowsPerBlock } == true
 
-    fun addRows(rows: Long) {
+    /**
+     * Records that a transaction of [rows] rows resolved into this block.
+     *
+     * Nothing may resolve between the cut and the block being adopted: a transaction that did would hold a
+     * transient over a relation [LiveIndex.nextBlock] removes, and apply one block's rows into a table
+     * re-created at the next block index.
+     */
+    fun txResolved(rows: Long) {
         blockState = when (val state = blockState) {
             is Filling -> Filling(state.rows + rows)
             Cut, is Uploading -> error("[$dbName] tx resolved during a block cut")
         }
     }
 
-    fun addRows(resolvedTx: ResolvedTx) {
-        addRows(resolvedTx.allTables.sumOf { it.relation.rowCount.toLong() })
-    }
+    fun txResolved(resolvedTx: ResolvedTx) =
+        txResolved(resolvedTx.allTables.sumOf { it.rowCount.toLong() })
 
     /**
      * Cut the block: inject a boundary covering the source log up to [latestProcessedMsgId] and the

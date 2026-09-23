@@ -5,6 +5,7 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
+import xtdb.InternalApi
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.VectorType.Companion.BOOL
 import xtdb.arrow.metadata.MetadataFlavour
@@ -93,14 +94,17 @@ class BitVector private constructor(
         }
     }
 
-    override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
-        nodes.add(ArrowFieldNode(valueCount.toLong(), if (nullable) -1 else 0))
+    @InternalApi
+    override fun unloadPage(
+        nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>, startIdx: Int, len: Int
+    ) {
+        nodes.add(ArrowFieldNode(len.toLong(), if (nullable) -1 else 0))
         if (nullable) {
-            validityBuffer?.unloadBuffer(buffers)
+            validityBuffer?.unloadBuffer(buffers, startIdx, len)
         } else {
             buffers.add(al.empty)
         }
-        dataBuffer.unloadBuffer(buffers)
+        dataBuffer.unloadBuffer(buffers, startIdx, len)
     }
 
     override fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {

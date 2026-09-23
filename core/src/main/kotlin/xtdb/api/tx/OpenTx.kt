@@ -18,6 +18,7 @@ import xtdb.database.PartitionStorage
 import xtdb.api.error.Conflict
 import xtdb.api.error.Incorrect
 import xtdb.indexer.DatabaseSnapshot
+import xtdb.indexer.LiveTable
 import xtdb.indexer.ResolvedTx
 import xtdb.query.IQuerySource
 import xtdb.api.query.PrepareOpts
@@ -32,11 +33,12 @@ import xtdb.api.TableRef
 import xtdb.time.InstantUtil.asMicros
 import xtdb.time.InstantUtil.fromMicros
 import xtdb.time.microsAsInstant
-import xtdb.trie.MemoryHashTrie
 import xtdb.trie.Trie
 import xtdb.types.ClojureForm
 import xtdb.util.asIid
 import xtdb.util.closeAll
+import xtdb.util.closeAllOnCatch
+import xtdb.util.closeOnCatch
 import xtdb.util.logger
 import xtdb.util.warn
 import java.nio.ByteBuffer
@@ -81,7 +83,10 @@ class OpenTx
 
     private val tableTxs = HashMap<TableRef, Table>()
 
-    internal fun table(table: TableRef): Table = tableTxs.getOrPut(table) { Table(table) }
+    internal fun table(table: TableRef): Table =
+        tableTxs[table] ?: openTableTx(table).closeOnCatch { tx ->
+            Table(table, tx).also { tableTxs[table] = it }
+        }
 
     /**
      * The staging area for writes to [table] in this tx, created on first access.
@@ -95,15 +100,38 @@ class OpenTx
     internal val tables: Iterable<Map.Entry<TableRef, Table>> get() = tableTxs.entries
 
     /**
-     * Transfers ownership of every table's written rows (relation + iid trie, which already points at
-     * the relation's `_iid` vector) out of this tx, so they outlive it — the resolver stages them and
-     * closes the OpenTx immediately after. Ownership is presence in the table map: sealing empties it,
-     * so [close] frees exactly the un-sealed tables — an aborted or faulted tx that never seals still
-     * frees everything, with no transferred-ness flag to guard.
+     * Commits every table's transient into the value that table takes if this tx applies, and moves it
+     * out of this tx so it outlives it — the resolver stages the results and closes the OpenTx
+     * immediately after.
+     *
+     * Ownership is presence in the table map, so [close] frees exactly the tables still in it and an
+     * aborted or faulted tx that never seals still frees everything, with no transferred-ness flag to
+     * guard. A table leaves the map only once its sealed value is in hand, so a throw part-way through
+     * leaves each table owned by exactly one side of the transfer rather than by neither.
      */
     internal fun sealTables(): List<ResolvedTx.Table> =
-        tableTxs.map { (ref, table) -> ResolvedTx.Table(ref, table.txRelation, table.trie) }
-            .also { tableTxs.clear() }
+        mutableListOf<ResolvedTx.Table>().closeAllOnCatch { sealed ->
+            val iter = tableTxs.iterator()
+            while (iter.hasNext()) {
+                val (ref, table) = iter.next()
+
+                // Everything that can fail here is in the first statement, and fails before `sealed`
+                // holds anything — so at the instant of a throw the table is still `tableTxs`', and the
+                // removal that hands it over cannot itself fail. A committed value and the transient it
+                // came from share a relation, so this order is what keeps them from both closing it.
+                sealed += ResolvedTx.Table(ref, table.tx.commit(), table.tx.startRowIdx)
+                iter.remove()
+            }
+            sealed
+        }
+
+    /**
+     * The value this tx writes [ref] on top of: the newest staged one among the predecessors it resolves
+     * behind, else the live index's — which is also what opens a table none of them has written.
+     */
+    private fun openTableTx(ref: TableRef): LiveTable.Tx =
+        resolvedTxs.asReversed().firstNotNullOfOrNull { it.liveTable(ref) }?.openTx(systemTimeMicros)
+            ?: partitionState.liveIndex.openTable(ref, systemTimeMicros)
 
     internal fun writeTxRow(error: Throwable?, userMetadata: Map<*, *>?) {
         val txId = txKey.txId
@@ -414,7 +442,7 @@ class OpenTx
      *
      * In any event, you must write all the batch's row data before calling the corresponding `end` methods.
      */
-    inner class Table internal constructor(val ref: TableRef) : AutoCloseable {
+    inner class Table internal constructor(val ref: TableRef, internal val tx: LiveTable.Tx) : AutoCloseable {
 
         private fun checkValidTimes(validFrom: Long, validTo: Long) {
             if (validFrom >= validTo) {
@@ -426,13 +454,10 @@ class OpenTx
             }
         }
 
-        internal val txRelation: Relation = Trie.openLogDataWriter(allocator)
-
-        private val iidVec = txRelation["_iid"]
-        private val systemFromVec = txRelation["_system_from"]
-        private val validFromVec = txRelation["_valid_from"]
-        private val validToVec = txRelation["_valid_to"]
-        private val opVec = txRelation["op"]
+        private val iidVec = tx.iidVec
+        private val validFromVec = tx.validFromVec
+        private val validToVec = tx.validToVec
+        private val opVec = tx.opVec
         private val putVec by lazy(LazyThreadSafetyMode.NONE) { opVec.vectorFor("put", STRUCT_TYPE, false) }
         private val deleteVec = opVec["delete"]
         private val eraseVec = opVec["erase"]
@@ -443,9 +468,6 @@ class OpenTx
         internal fun declareColumns(colNames: List<String>) {
             for (colName in colNames) putDocWriter.vectorFor(colName, NULL_TYPE, false)
         }
-
-        internal var trie: MemoryHashTrie = MemoryHashTrie.emptyTrie(iidVec)
-            private set
 
         internal fun writeIid(iid: ByteBuffer) = iidVec.writeBytes(iid)
         internal fun writeIid(iid: ByteArray) = iidVec.writeBytes(iid)
@@ -467,15 +489,7 @@ class OpenTx
                 if (validTo != null) validTo.asMicros else MAX_LONG
             )
 
-        private fun endOps(count: Int) {
-            val pos = txRelation.rowCount
-
-            repeat(count) { systemFromVec.writeLong(systemTimeMicros) }
-
-            txRelation.endRows(count)
-
-            trie = trie.addRange(pos, count)
-        }
+        private fun endOps(count: Int) = tx.endOps(count)
 
         fun endPuts(count: Int) = endOps(count)
         fun endPut() = endPuts(1)
@@ -695,7 +709,7 @@ class OpenTx
             patchDocs(docs, validFrom?.asMicros ?: systemTimeMicros, validTo?.asMicros ?: MAX_LONG)
 
         override fun close() {
-            txRelation.close()
+            tx.close()
         }
     }
 }

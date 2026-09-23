@@ -6,6 +6,7 @@ import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.vector.BaseFixedWidthVector
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
+import xtdb.InternalApi
 import org.apache.arrow.vector.types.TimeUnit
 import xtdb.arrow.VectorIndirection.Companion.Selection
 import xtdb.arrow.VectorIndirection.Companion.Slice
@@ -214,10 +215,13 @@ sealed class FixedWidthVector : MonoVector() {
         }
     }
 
-    final override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
-        nodes.add(ArrowFieldNode(valueCount.toLong(), if (nullable) -1 else 0))
-        if (nullable) validityBuffer?.unloadBuffer(buffers) else buffers.add(al.empty)
-        dataBuffer.unloadBuffer(buffers)
+    @InternalApi
+    final override fun unloadPage(
+        nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>, startIdx: Int, len: Int
+    ) {
+        nodes.add(ArrowFieldNode(len.toLong(), if (nullable) -1 else 0))
+        if (nullable) validityBuffer?.unloadBuffer(buffers, startIdx, len) else buffers.add(al.empty)
+        dataBuffer.unloadBuffer(buffers, startIdx.toLong() * byteWidth, len.toLong() * byteWidth)
     }
 
     final override fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {

@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import xtdb.util.closeAllOnCatch
 import xtdb.NodeBase
 import xtdb.NodeBase.Companion.openBase
 import xtdb.TestPartition
@@ -68,7 +69,8 @@ class LiveIndexTest {
 
         fun commitTx(openTx: OpenTx) {
             openTx.writeTxRow(null, null)
-            liveIndex.commitTx(openTx.txKey, openTx.tables.associate { (ref, t) -> ref to t.txRelation })
+            openTx.sealTables().associateTo(mutableMapOf()) { it.ref to it.liveTable }
+                .closeAllOnCatch { liveIndex.applyTx(openTx.txKey, it) }
         }
 
         override fun close() {
@@ -99,12 +101,10 @@ class LiveIndexTest {
             db.openTx(1, Instant.parse("2020-01-02T00:00:00Z")).use { tx2 ->
                 tx2.put(table, UUID.randomUUID())
 
-                // the tx snapshot sees both the committed live table and its own uncommitted write,
-                // as two separate entries: live (committed) + tx (uncommitted).
                 db.liveIndex.openSnapshot(emptyList(), tx2).use { snap ->
                     val tableSnaps = snap.table(table)
-                    assertEquals(2, tableSnaps.size)
-                    assertEquals(listOf(1, 1), tableSnaps.map { it.relation.rowCount })
+                    assertEquals(1, tableSnaps.size, "the tx's own view subsumes the committed one")
+                    assertEquals(listOf(2), tableSnaps.map { it.relation.rowCount })
                 }
             }
         }
@@ -447,5 +447,47 @@ class LiveIndexTest {
         assertEquals(3.toByte(), bucketer.bucketFor(iid, 18))
         assertEquals(0.toByte(), bucketer.bucketFor(iid, 30))
         assertEquals(3.toByte(), bucketer.bucketFor(iid, 63))
+    }
+
+    // Ownership across the hand-over to the live index. The fixture's `allocator.close()` is the
+    // assertion that matters in both: a table owned by neither side at the end fails the run there,
+    // whatever these bodies assert.
+
+    @Test
+    fun `apply takes every table out of the map it is handed`() {
+        TestDb().use { db ->
+            db.openTx(0, Instant.parse("2020-01-01T00:00:00Z")).use { tx ->
+                tx.put(TableRef("public", "docs"), UUID.randomUUID())
+                tx.writeTxRow(null, null)
+
+                val tables = tx.sealTables().associateTo(mutableMapOf()) { it.ref to it.liveTable }
+                assertTrue(tables.isNotEmpty())
+
+                db.liveIndex.applyTx(tx.txKey, tables)
+
+                assertTrue(
+                    tables.isEmpty(),
+                    "drained as it installs, so what is left after a throw is exactly what never landed"
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `a tx whose apply faults frees every table it staged`() {
+        TestDb().use { db ->
+            db.openTx(0, Instant.parse("2020-01-01T00:00:00Z")).use { tx ->
+                tx.put(TableRef("public", "docs"), UUID.randomUUID())
+                tx.put(TableRef("public", "more_docs"), UUID.randomUUID())
+                tx.writeTxRow(null, null)
+
+                assertThrows<IllegalStateException> {
+                    tx.sealTables().associateTo(mutableMapOf()) { it.ref to it.liveTable }
+                        .closeAllOnCatch { error("apply faulted") }
+                }
+
+                assertNull(db.liveIndex.table(TableRef("public", "docs")), "nothing half-installed")
+            }
+        }
     }
 }

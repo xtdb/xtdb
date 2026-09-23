@@ -5,6 +5,7 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
+import xtdb.InternalApi
 import xtdb.TaggedValue
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.VectorType.Companion.fromLegs
@@ -13,6 +14,7 @@ import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.api.error.Unsupported
 import xtdb.kw
 import xtdb.util.Hasher
+import xtdb.util.closeOnCatch
 import xtdb.util.safeMap
 import xtdb.util.safelyOpening
 import java.nio.ByteBuffer
@@ -394,12 +396,62 @@ class DenseUnionVector private constructor(
         }
     }
 
-    override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
-        nodes.add(ArrowFieldNode(valueCount.toLong(), -1))
-        typeBuffer.unloadBuffer(buffers)
-        offsetBuffer.unloadBuffer(buffers)
+    @InternalApi
+    override fun unloadPage(
+        nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>, startIdx: Int, len: Int
+    ) {
+        nodes.add(ArrowFieldNode(len.toLong(), -1))
 
-        legVectors.forEach { it.unloadPage(nodes, buffers) }
+        typeBuffer.unloadBuffer(buffers, startIdx.toLong(), len.toLong())
+
+        // the whole vector is every leg's whole self, so it needs none of the scan below - worth the branch
+        // because this is the common case and the scan is per-row where the rest of an unload is per-buffer
+        if (startIdx == 0 && len == valueCount) {
+            offsetBuffer.unloadBuffer(buffers)
+            legVectors.forEach { it.unloadPage(nodes, buffers) }
+            return
+        }
+
+        // every write to a leg appends to it (`LegVector.writeValueThen`), so a leg's offsets ascend by one
+        // each time it appears, and its rows within a row range are themselves a row range of that leg
+        val legStarts = IntArray(legVectors.size) { -1 }
+        val legLens = IntArray(legVectors.size)
+
+        for (idx in startIdx until startIdx + len) {
+            val typeId = getTypeId(idx).toInt()
+            if (typeId < 0) continue
+
+            val offset = getOffset(idx)
+            if (legStarts[typeId] < 0) legStarts[typeId] = offset
+
+            check(offset == legStarts[typeId] + legLens[typeId]) {
+                "non-contiguous DUV leg offsets: leg ${legVectors[typeId].name}, row $idx"
+            }
+
+            legLens[typeId]++
+        }
+
+        val offsetBytes = len.toLong() * Int.SIZE_BYTES
+
+        // a range starting at row zero starts every leg at its own row zero, and an absent row already
+        // holds the zero this would write (`writeUndefined`), so the offsets are already what we'd rebase to
+        if (startIdx == 0)
+            offsetBuffer.unloadBuffer(buffers, 0, offsetBytes)
+        else
+            buffers.add(
+                allocator.buffer(offsetBytes).closeOnCatch { out ->
+                    for (i in 0 until len) {
+                        val typeId = getTypeId(startIdx + i).toInt()
+                        val rebased = if (typeId < 0) 0 else getOffset(startIdx + i) - legStarts[typeId]
+                        out.setInt(i.toLong() * Int.SIZE_BYTES, rebased)
+                    }
+                    out.writerIndex(offsetBytes)
+                }
+            )
+
+        legVectors.forEachIndexed { typeId, leg ->
+            leg.unloadPage(nodes, buffers, legStarts[typeId].coerceAtLeast(0), legLens[typeId])
+        }
     }
 
     override fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {

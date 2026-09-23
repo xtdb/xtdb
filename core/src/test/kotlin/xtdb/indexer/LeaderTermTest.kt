@@ -67,6 +67,15 @@ internal abstract class LeaderTermTest {
     // and freed before `allocator` closes.
     private val leadersToClose = mutableListOf<AutoCloseable>()
 
+    // Closed after the leaders, as `DatabasePartition.close` closes the log processor before the partition
+    // state: a resolver holds staged live tables whose buffers belong to the live index, so the index has
+    // to outlive the term that wrote into it. A subclass `@AfterEach` would run first and invert that.
+    private val afterTerm = mutableListOf<AutoCloseable>()
+
+    protected fun closeAfterTerm(closeable: AutoCloseable) {
+        afterTerm += closeable
+    }
+
     @BeforeEach
     fun setUpTerm() {
         nodeBase = NodeBase.openBase(openMeterRegistry = false)
@@ -76,6 +85,7 @@ internal abstract class LeaderTermTest {
     @AfterEach
     fun tearDownTerm() {
         leadersToClose.closeAll()
+        afterTerm.closeAll()
         allocator.close()
         nodeBase.close()
     }

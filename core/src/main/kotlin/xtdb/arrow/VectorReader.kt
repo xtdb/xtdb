@@ -1,11 +1,14 @@
 package xtdb.arrow
 
 import clojure.lang.ILookup
+import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ArrowBufPointer
+import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
+import xtdb.InternalApi
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.Vector.Companion.openVector
 import xtdb.arrow.VectorIndirection.Companion.selection
@@ -95,6 +98,33 @@ interface VectorReader : ILookup, AutoCloseable {
     fun getLeg(idx: Int): String? = unsupported("getLeg")
 
     fun valueReader(): ValueReader = ValueReader.ForVector(this)
+
+    /**
+     * Appends rows `[startIdx, startIdx + len)` of this vector to an Arrow page under construction, [len]
+     * defaulting to the rest of the vector.
+     *
+     * Each buffer it adds carries one reference for the page to release
+     * — see [RelationReader.openArrowRecordBatch].
+     *
+     * The range applies to the whole subtree, so the tree has to be in step: a child shorter than its parent
+     * is an error here, where writing each vector at its own length would quietly emit a short buffer against
+     * a longer field node.
+     *
+     * An implementation is expected to recognise its whole self and take whatever cheaper path it has for
+     * that, so `unloadPage(nodes, buffers, 0)` costs no more than handing the buffers over wholesale.
+     *
+     * Unsupported on a reader that cannot address a contiguous row range — a selection, or an encoding whose
+     * runs span rows.
+     *
+     * @suppress
+     */
+    // `@InternalApi` rather than `internal` because Kotlin doesn't admit `internal` on an interface member.
+    // It can go back to `internal` on `Vector` once nothing unloads a reader that isn't one.
+    @InternalApi
+    fun unloadPage(
+        nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>,
+        startIdx: Int = 0, len: Int = valueCount - startIdx
+    ): Unit = unsupported("unloadPage")
 
     fun openSlice(al: BufferAllocator): VectorReader
 

@@ -12,7 +12,6 @@ import kotlinx.coroutines.job
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
-import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -45,12 +44,9 @@ internal class ExternalSourceTest : LeaderTermTest() {
     fun openRealIndex() {
         bufferPool = MemoryStorage(allocator, 0)
         liveIndex = LiveIndex.open(allocator, TableCatalog(bufferPool), createTrieCatalog())
-    }
 
-    @AfterEach
-    fun closeRealIndex() {
-        liveIndex.close()
-        bufferPool.close()
+        closeAfterTerm(liveIndex)
+        closeAfterTerm(bufferPool)
     }
 
     /**
@@ -324,7 +320,10 @@ internal class ExternalSourceTest : LeaderTermTest() {
         assertTrue(ex.message!!.contains("external source"), "message mentions external source")
     }
 
+    // Both apply paths: a tx this term resolved is applied by `applyTx`, one read back without having been
+    // staged by `commitTx`, and these tests drive the former.
     private fun faultingLiveIndex() = mockk<LiveIndex>(relaxed = true) {
+        every { applyTx(any(), any()) } throws RuntimeException("commit pipeline fault")
         every { commitTx(any(), any()) } throws RuntimeException("commit pipeline fault")
     }
 }

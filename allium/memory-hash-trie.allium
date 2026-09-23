@@ -15,6 +15,11 @@
 --   - Single-writer: all mutations create new immutable trie instances
 --   - Multiple concurrent readers: immutable structure allows safe concurrent reads
 --   - Writers never block readers: persistent data structure semantics
+--   - A derived trie never disturbs the one it came from: a holder sees exactly the entries its own
+--     value carries, whether the trie derived from it is then kept or discarded.
+--     This holds across a transaction boundary as well as within one — a trie derived for a transaction
+--     that is never applied leaves the trie it came from as it was, and the entries it added are free to
+--     be reused by the next transaction.
 --
 -- Critical invariants:
 --   - The trie stores INTEGER INDICES, not actual row data

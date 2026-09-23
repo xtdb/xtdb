@@ -8,6 +8,7 @@ import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.complex.NonNullableStructVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
+import xtdb.InternalApi
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.VectorIndirection.Companion.Slice
 import xtdb.arrow.metadata.MetadataFlavour
@@ -204,11 +205,14 @@ class StructVector private constructor(
         }
     }
 
-    override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
-        nodes.add(ArrowFieldNode(valueCount.toLong(), if (nullable) -1 else 0))
-        if (nullable) validityBuffer?.unloadBuffer(buffers) else buffers.add(allocator.empty)
+    @InternalApi
+    override fun unloadPage(
+        nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>, startIdx: Int, len: Int
+    ) {
+        nodes.add(ArrowFieldNode(len.toLong(), if (nullable) -1 else 0))
+        if (nullable) validityBuffer?.unloadBuffer(buffers, startIdx, len) else buffers.add(allocator.empty)
 
-        childWriters.sequencedValues().forEach { it.unloadPage(nodes, buffers) }
+        childWriters.sequencedValues().forEach { it.unloadPage(nodes, buffers, startIdx, len) }
     }
 
     override fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {

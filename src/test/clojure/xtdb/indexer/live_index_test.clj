@@ -37,10 +37,10 @@
       (xt/execute-tx tu/*node* (for [iid iids] [:put-docs :docs {:xt/id iid, :some :doc}]))
 
       (let [live-table (.table live-index #xt/table docs)
-            live-rel (.getLiveRelation live-table)
+            live-rel (.getRelation live-table)
             iid-vec (.vectorFor live-rel "_iid")
 
-            trie (.getLiveTrie live-table)]
+            trie (.getTrie live-table)]
 
         (t/is (= iid-bytes
                  (->> (.getLeaves (.compactLogs trie))

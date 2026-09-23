@@ -5,6 +5,7 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
+import xtdb.InternalApi
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.VectorType.*
 import xtdb.arrow.agg.VectorSummer
@@ -86,8 +87,11 @@ class NullVector(
 
     override fun rowCopier0(src: VectorReader) = RowCopier { writeNull() }
 
-    override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
-        nodes.add(ArrowFieldNode(valueCount.toLong(), valueCount.toLong()))
+    @InternalApi
+    override fun unloadPage(
+        nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>, startIdx: Int, len: Int
+    ) {
+        nodes.add(ArrowFieldNode(len.toLong(), len.toLong()))
     }
 
     override fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
