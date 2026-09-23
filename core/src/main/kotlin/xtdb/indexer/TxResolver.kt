@@ -129,8 +129,13 @@ internal class TxResolver(
 
     private val queue = ArrayDeque<ResolvedTx>()
 
-    /** Queued predecessors for resolution layering (read-your-writes), oldest→newest. */
-    private val resolvedTxs: List<ResolvedTx> get() = queue.toList()
+    /**
+     * Queued predecessors for resolution layering (read-your-writes), oldest→newest.
+     *
+     * The queue itself rather than a copy, so it is only valid while one tx resolves: [stage] and
+     * [removeHead] change it between resolves.
+     */
+    private val resolvedTxs: List<ResolvedTx> get() = queue
 
     /**
      * The last dbOp queued against [dbName], if any — the same layering as [resolvedTxs], read for the
