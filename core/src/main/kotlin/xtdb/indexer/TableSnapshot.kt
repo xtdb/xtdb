@@ -35,9 +35,7 @@ class TableSnapshot(
      */
     val types: Map<ColumnName, VectorType> get() = columnTypes
 
-    override fun close() {
-        segment.rel.close()
-    }
+    override fun close() = segment.close()
 
     companion object {
         @JvmStatic

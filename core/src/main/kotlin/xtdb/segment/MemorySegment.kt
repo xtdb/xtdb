@@ -8,9 +8,6 @@ import xtdb.segment.Segment.PageMeta.Companion.pageMeta
 import xtdb.trie.HashTrie
 import xtdb.trie.MemoryHashTrie
 
-/**
- * @param rel NOTE: borrows `rel`, doesn't close it.
- */
 class MemorySegment(val trie: MemoryHashTrie, val rel: RelationReader) : Segment<MemoryHashTrie.Leaf> {
     override val part = null
 
@@ -31,5 +28,5 @@ class MemorySegment(val trie: MemoryHashTrie, val rel: RelationReader) : Segment
 
     override suspend fun loadDataPage(al: BufferAllocator, leaf: MemoryHashTrie.Leaf) = rel.select(leaf.mergeSort(trie))
 
-    override fun close() = Unit
+    override fun close() = rel.close()
 }

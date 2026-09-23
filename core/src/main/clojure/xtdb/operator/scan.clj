@@ -227,16 +227,15 @@
           (doseq [{:keys [^String trie-key]} filtered-tries]
             (.add !segments (BufferPoolSegment. allocator buffer-pool metadata-mgr slug trie-key metadata-pred))))
 
-        (doseq [^TableSnapshot live-table-snap (.table snapshot table)]
-          (.add !segments (.getSegment live-table-snap)))
-
-        (let [count-pages (fn [pages]
+        (let [live-segments (for [^TableSnapshot live-table-snap (.table snapshot table)]
+                              (.getSegment live-table-snap))
+              count-pages (fn [pages]
                             (let [survivors (trie/filter-pages pages filter-opts)]
                               (.addPages metrics
                                          (long (- (count pages) (count survivors)))
                                          (long (count survivors)))
                               survivors))
-              merge-tasks (MergePlanner/planSync !segments (->path-pred iid-set) count-pages)]
+              merge-tasks (MergePlanner/planSync (into (vec !segments) live-segments) (->path-pred iid-set) count-pages)]
 
           (ScanCursor. allocator (vec col-names) col-preds
                        temporal-bounds (boolean (:clamp-valid-time? scan-opts))

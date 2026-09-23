@@ -23,7 +23,7 @@ class ScanCursor(
     private val colNames: List<ColumnName>, private val colPreds: Map<ColumnName, SelectionSpec>,
     private val temporalBounds: TemporalBounds, private val clampValidTime: Boolean,
 
-    private val segments: List<Segment<*>>,
+    private val ownedSegments: List<Segment<*>>,
     private val mergeTasks: Iterator<MergeTask>,
 
     private val schema: Map<String, Any>, private val args: RelationReader,
@@ -105,6 +105,6 @@ class ScanCursor(
     override fun close() {
         bufferedRels.apply { closeAll(); clear() }
         bufferedRels.clear()
-        segments.closeAll()
+        ownedSegments.closeAll()
     }
 }

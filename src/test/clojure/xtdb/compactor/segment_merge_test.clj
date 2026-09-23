@@ -5,6 +5,7 @@
             [xtdb.time :as time]
             [xtdb.util :as util])
   (:import [java.nio ByteBuffer]
+           (xtdb.indexer LiveTable)
            (xtdb.compactor SegmentMerge SegmentMerge$RecencyPartitioning$Partition SegmentMerge$RecencyPartitioning$Preserve SegmentMerge$Result)
            [xtdb.segment MemorySegment]))
 
@@ -29,11 +30,11 @@
                     [{:xt/id "foo", :v 2}
                      {:xt/id "bar", :v 2}])
 
-      (let [live-rel0 (.getLiveRelation lt0)
-            live-rel1 (.getLiveRelation lt1)
-
-            segments [(MemorySegment. (.compactLogs (.getLiveTrie lt0)) live-rel0)
-                      (MemorySegment. (.compactLogs (.getLiveTrie lt1)) live-rel1)]]
+      (util/with-open [segments (util/safe-mapv (fn [^LiveTable lt]
+                                                  (util/with-close-on-catch [rel (.openSlice (.getLiveRelation lt) tu/*allocator*)]
+                                                    (MemorySegment. (.withIidReader (.compactLogs (.getLiveTrie lt)) (.vectorFor rel "_iid"))
+                                                                    rel)))
+                                                [lt0 lt1])]
 
         (t/testing "merge segments"
           (util/with-open [results (.mergeSegmentsSync seg-merge segments nil (SegmentMerge$RecencyPartitioning$Preserve. nil))]
