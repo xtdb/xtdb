@@ -15,7 +15,8 @@ import xtdb.arrow.VectorType.Companion.listTypeOf
 import xtdb.arrow.VectorType.Companion.maybe
 import xtdb.arrow.VectorType.Companion.structOf
 import xtdb.arrow.schema
-import xtdb.indexer.TrieMetadataCalculator
+import xtdb.indexer.update
+import xtdb.log.proto.TemporalMetadata
 import xtdb.log.proto.TrieMetadata
 import xtdb.metadata.ColumnMetadata
 import xtdb.storage.BufferPool
@@ -25,7 +26,7 @@ class MetadataFileWriter(
     al: BufferAllocator, private val bp: BufferPool,
     private val slug: TableSlug, private val trieKey: TrieKey,
     private val dataRel: RelationReader,
-    calculateBlooms: Boolean, writeTrieMetadata: Boolean
+    calculateBlooms: Boolean
 ) : AutoCloseable {
     companion object {
 
@@ -68,8 +69,8 @@ class MetadataFileWriter(
 
     private var pageIdx = 0
 
-    private val trieMetaCalc =
-        if (writeTrieMetadata) TrieMetadataCalculator(validFromVec, validToVec, systemFromVec) else null
+    private var rowCount = 0
+    private val temporalMetaBuilder = TemporalMetadata.newBuilder()
 
     fun writeNull(): RowIndex {
         val pos = nodeWtr.valueCount
@@ -97,7 +98,8 @@ class MetadataFileWriter(
         colMetaWriter.writeMetadata(validToVec)
         colMetaWriter.writeMetadata(systemFromVec)
 
-        trieMetaCalc?.update(0, dataRel.rowCount)
+        rowCount += dataRel.rowCount
+        temporalMetaBuilder?.update(validFromVec, validToVec, systemFromVec)
 
         for (contentCol in putReader?.keyNames?.mapNotNull { putReader.vectorForOrNull(it) }.orEmpty()) {
             colMetaWriter.writeMetadata(contentCol)
@@ -119,7 +121,10 @@ class MetadataFileWriter(
                 metaFileWriter.end()
             }
 
-        return trieMetaCalc?.build()?.takeIf { it.rowCount > 0 } ?: TrieMetadata.newBuilder().build()
+        return TrieMetadata.newBuilder()
+            .also { if (rowCount > 0) it.setTemporalMetadata(temporalMetaBuilder) }
+            .setRowCount(rowCount.toLong())
+            .build()
     }
 
     override fun close() = metaRel.close()

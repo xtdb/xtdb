@@ -89,7 +89,7 @@ interface Compactor : AutoCloseable {
                         private fun Job.trieDetails(
                             trieKey: TrieKey,
                             dataFileSize: FileSize,
-                            trieMetadata: TrieMetadata?
+                            trieMetadata: TrieMetadata
                         ) =
                             TrieDetails.newBuilder()
                                 .setTableName(table.sym.toString())

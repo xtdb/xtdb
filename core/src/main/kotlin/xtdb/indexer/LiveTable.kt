@@ -32,26 +32,15 @@ class LiveTable @JvmOverloads constructor(
     }
 
     val liveRelation: Relation = Trie.openLogDataWriter(al)
-
-    private val iidVec = liveRelation["_iid"]
-    private val systemFromVec = liveRelation["_system_from"]
-    private val validFromVec = liveRelation["_valid_from"]
-    private val validToVec = liveRelation["_valid_to"]
-
-    var liveTrie: MemoryHashTrie = liveTrieFactory(iidVec)
+    var liveTrie: MemoryHashTrie = liveTrieFactory(liveRelation["_iid"])
 
     private val opVec = liveRelation["op"]
-
-    private val trieMetadataCalculator = TrieMetadataCalculator(
-        validFromVec, validToVec, systemFromVec
-    )
 
     fun importData(data: RelationReader) {
         val offset = liveRelation.rowCount
         val count = data.rowCount
         liveRelation.append(data)
         liveTrie = liveTrie.addRange(offset, count)
-        trieMetadataCalculator.update(offset, offset + count)
         rowCounter.addRows(count)
     }
 
@@ -106,7 +95,7 @@ class LiveTable @JvmOverloads constructor(
 
         return liveRelation.openDirectSlice(al).use { dataRel ->
             val trieWriter = LiveTrieWriter(al, bp, calculateBlooms = false)
-            val dataFileSize = trieWriter.writeLiveTrie(slug, trieKey, liveTrie, dataRel)
+            val (dataFileSize, trieMetadata) = trieWriter.writeLiveTrie(slug, trieKey, liveTrie, dataRel)
             FinishedBlock(
                 vecTypes = vecTypes,
                 rowCount = rowCount,
@@ -114,7 +103,7 @@ class LiveTable @JvmOverloads constructor(
                 writtenTrie = FinishedBlock.WrittenTrie(
                     trieKey = trieKey,
                     dataFileSize = dataFileSize,
-                    trieMetadata = trieMetadataCalculator.build()
+                    trieMetadata = trieMetadata
                 )
             )
         }

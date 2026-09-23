@@ -53,14 +53,14 @@ class PageTrieWriter(
         table: TableSlug, trieKey: TrieKey,
         loader: Relation.Loader, pageTree: PageTree?,
         pageSize: Int
-    ): Pair<FileSize, TrieMetadata?> =
+    ): Pair<FileSize, TrieMetadata> =
         DataFileWriter(al, bp, table, trieKey, loader.schema).use { dataFileWriter ->
             val dataRel = dataFileWriter.dataRel
 
             val startPtr = ArrowBufPointer()
             val endPtr = ArrowBufPointer()
 
-            MetadataFileWriter(al, bp, table, trieKey, dataFileWriter.dataRel, calculateBlooms, true)
+            MetadataFileWriter(al, bp, table, trieKey, dataFileWriter.dataRel, calculateBlooms)
                 .use { metaFileWriter ->
                     Relation(al, loader.schema).use { inRel ->
                         val iidReader = inRel["_iid"]
