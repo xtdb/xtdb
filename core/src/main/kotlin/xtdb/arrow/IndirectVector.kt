@@ -1,9 +1,7 @@
 package xtdb.arrow
 
-import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ArrowBufPointer
-import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import xtdb.InternalApi
@@ -52,15 +50,6 @@ class IndirectVector(private val inner: VectorReader, private val sel: VectorInd
     override val mapValues: VectorReader get() = inner.mapValues
 
     override fun hashCode(idx: Int, hasher: Hasher) = inner.hashCode(sel[idx], hasher)
-
-    @InternalApi
-    override fun unloadPage(
-        nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>, startIdx: Int, len: Int
-    ) {
-        if (sel !is Slice) unsupported("unloadPage over a selection")
-
-        inner.unloadPage(nodes, buffers, sel.startIdx + startIdx, len)
-    }
 
     @InternalApi
     override fun write(out: PageOutput, startIdx: Int, len: Int) {

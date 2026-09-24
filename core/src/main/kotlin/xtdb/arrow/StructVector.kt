@@ -205,14 +205,11 @@ class StructVector private constructor(
         }
     }
 
-    @InternalApi
-    override fun unloadPage(
-        nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>, startIdx: Int, len: Int
-    ) {
-        nodes.add(ArrowFieldNode(len.toLong(), if (nullable) -1 else 0))
-        if (nullable) validityBuffer?.unloadBuffer(buffers, startIdx, len) else buffers.add(allocator.empty)
+    override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
+        nodes.add(ArrowFieldNode(valueCount.toLong(), if (nullable) -1 else 0))
+        if (nullable) validityBuffer?.unloadBuffer(buffers) else buffers.add(allocator.empty)
 
-        childWriters.sequencedValues().forEach { it.unloadPage(nodes, buffers, startIdx, len) }
+        childWriters.sequencedValues().forEach { it.unloadPage(nodes, buffers) }
     }
 
     @InternalApi

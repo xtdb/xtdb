@@ -49,10 +49,8 @@ abstract class ExtensionVector : MonoVector() {
 
     override fun hashCode0(idx: Int, hasher: Hasher) = inner.hashCode0(idx, hasher)
 
-    @InternalApi
-    override fun unloadPage(
-        nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>, startIdx: Int, len: Int
-    ) = inner.unloadPage(nodes, buffers, startIdx, len)
+    override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) =
+        inner.unloadPage(nodes, buffers)
 
     @InternalApi
     override fun write(out: PageOutput, startIdx: Int, len: Int) = inner.write(out, startIdx, len)

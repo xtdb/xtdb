@@ -238,15 +238,8 @@ class RunEndEncodedVector private constructor(
         RunEndEncodedVector(name, runEndsSlice, valuesSlice, valueCount)
     }
 
-    // An REE parent carries no buffers of its own - the encoding lives entirely in its two children, which
-    // are indexed by run rather than by row. A proper sub-range would have to split the runs at either end,
-    // and nothing asks for one.
-    @InternalApi
-    override fun unloadPage(
-        nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>, startIdx: Int, len: Int
-    ) {
-        if (startIdx != 0 || len != valueCount) unsupported("unloadPage over a row range")
-
+    // An REE parent carries no buffers of its own - the encoding lives entirely in its two children.
+    override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         nodes.add(ArrowFieldNode(valueCount.toLong(), 0))
 
         runEndsVector.unloadPage(nodes, buffers)

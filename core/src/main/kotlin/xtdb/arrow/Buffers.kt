@@ -7,7 +7,6 @@ import org.apache.arrow.memory.util.hash.ArrowBufHasher
 import org.apache.arrow.vector.util.DecimalUtility
 import xtdb.arrow.ArrowUtil.toByteBuffer
 import xtdb.util.Hasher
-import xtdb.util.closeOnCatch
 import java.math.BigDecimal
 import java.nio.ByteBuffer
 import kotlin.math.max
@@ -174,42 +173,8 @@ internal class ExtensibleBuffer private constructor(private val allocator: Buffe
         }
     }
 
-    /**
-     * Adds this buffer to an Arrow page under construction, passing it one reference to release
-     * — see [RelationReader.openArrowRecordBatch].
-     */
     internal fun unloadBuffer(buffers: MutableList<ArrowBuf>) =
-        buffers.add(buf.readerIndex(0).also { it.referenceManager.retain() })
-
-    /** Adds the bytes `[startByte, startByte + byteLen)` of this buffer, zero-copy, as above. */
-    internal fun unloadBuffer(buffers: MutableList<ArrowBuf>, startByte: Long, byteLen: Long) =
-        if (startByte == 0L && byteLen == buf.writerIndex()) unloadBuffer(buffers)
-        else buffers.add(buf.slice(startByte, byteLen).also { it.referenceManager.retain() })
-
-    /**
-     * Adds the offsets for rows `[startIdx, startIdx + len)`, rebased so that the first is zero, as above.
-     *
-     * A page carries no row offset for a reader to add back, so a page over a row range needs offsets of
-     * its own — [len] + 1 of them, as Arrow requires. Rebasing is O([len]); a range starting at row zero
-     * is already based there, so it hands over the prefix zero-copy instead.
-     */
-    internal fun unloadRebasedOffsets(buffers: MutableList<ArrowBuf>, startIdx: Int, len: Int) {
-        val byteLen = (len + 1).toLong() * Int.SIZE_BYTES
-
-        if (startIdx == 0) {
-            unloadBuffer(buffers, 0, byteLen)
-            return
-        }
-
-        val base = getInt(startIdx)
-
-        buffers.add(
-            allocator.buffer(byteLen).closeOnCatch { out ->
-                for (i in 0..len) out.setInt(i.toLong() * Int.SIZE_BYTES, getInt(startIdx + i) - base)
-                out.writerIndex(byteLen)
-            }
-        )
-    }
+        buffers.add(buf.readerIndex(0))
 
     internal fun loadBuffer(arrowBuf: ArrowBuf, writerIndex: Long = arrowBuf.writerIndex()) {
         buf.close()
