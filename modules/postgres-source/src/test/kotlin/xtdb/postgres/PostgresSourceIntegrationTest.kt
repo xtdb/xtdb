@@ -95,6 +95,7 @@ class PostgresSourceIntegrationTest {
         sourceTopic: String,
         pgContainer: PostgreSQLContainer = postgres,
         pgPassword: String = pgContainer.password,
+        pgStatusInterval: Duration? = null,
     ): Xtdb = Xtdb.openNode {
         server { port = 0 }; flightSql = null
         logCluster("kafka", KafkaCluster.ClusterFactory(kafka.bootstrapServers))
@@ -104,6 +105,7 @@ class PostgresSourceIntegrationTest {
             database = pgContainer.databaseName,
             username = pgContainer.username,
             password = pgPassword,
+            statusInterval = pgStatusInterval,
         ))
         log(KafkaCluster.LogFactory("kafka", sourceTopic))
     }
@@ -884,7 +886,7 @@ class PostgresSourceIntegrationTest {
                 "CREATE PUBLICATION $pubName FOR TABLE pg_stream_kill",
             )
 
-            openNode(sourceTopic, pgContainer = dedicatedPg).use { node ->
+            openNode(sourceTopic, pgContainer = dedicatedPg, pgStatusInterval = 1.seconds).use { node ->
                 attachPostgresSource(node, slotName = slotName, publicationName = pubName)
 
                 // Snapshot completes, then a streamed insert proves the replication
