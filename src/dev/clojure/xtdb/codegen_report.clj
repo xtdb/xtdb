@@ -19,7 +19,7 @@
 ;; `t/test-vars` honours no JUnit tags, so nothing here inherits the exclusions `test` applies
 ;; in build.gradle.kts - a var carrying one of these would run, and some of them want Docker.
 (def ^:private excluded-var-tags
-  [:integration :property :jdbc :timescale :s3 :minio :slt :docker :azure :google-cloud])
+  [:integration :property :jdbc :timescale :s3 :slt :docker :azure :google-cloud])
 
 (def ^:private warning-pattern
   #"^(Reflection|Boxed math) warning, (\S+?):\d+:\d+ - (.+)$")

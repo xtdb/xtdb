@@ -138,7 +138,7 @@ Those locks block rather than fail, so a run that stalls early — typically rep
 ## Test tasks
 
 - `./gradlew test` — unit tests.
-  Excludes the `integration`, `property`, `jdbc`, `timescale`, `s3`, `minio`, `slt`, `docker`, `azure` and `google-cloud` tags.
+  Excludes the `integration`, `property`, `jdbc`, `timescale`, `s3`, `slt`, `docker`, `azure` and `google-cloud` tags.
 - `./gradlew integration-test` — integration tests, longer running.
 - `./gradlew property-test` — property-based and simulation tests.
 - `./gradlew kafka-test` — tests needing Kafka; requires `docker-compose up`.

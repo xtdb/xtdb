@@ -20,31 +20,6 @@ services:
       - KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1
       - CLUSTER_ID=q1Sh-9_ISia_zwGINzRvyQ
 
-  minio:
-    image: quay.io/minio/minio:latest
-    container_name: minio
-    ports:
-      - "9000:9000"
-      - "9001:9001" # MinIO Console
-    environment:
-      MINIO_ROOT_USER: myadmin
-      MINIO_ROOT_PASSWORD: mypassword
-    command: server /data --console-address ":9001"
-
-  minio-setup:
-    image: quay.io/minio/mc:latest
-    depends_on:
-      - minio
-    entrypoint: >
-      /bin/sh -c "
-      sleep 5;
-      mc alias set myminio http://minio:9000 myadmin mypassword;
-      mc mb myminio/xtdb;
-      mc policy set public myminio/xtdb;
-      mc admin user add myminio xtdb test-password;
-      mc admin policy attach myminio readwrite --user xtdb;
-      "
-
   keycloak:
     image: quay.io/keycloak/keycloak:24.0
     ports:

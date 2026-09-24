@@ -194,7 +194,7 @@ allprojects {
             // To stub an AWS region
             environment("AWS_REGION", "eu-west-1")
             useJUnitPlatform {
-                excludeTags("integration", "property", "jdbc", "timescale", "s3", "minio", "slt", "docker", "azure", "google-cloud")
+                excludeTags("integration", "property", "jdbc", "timescale", "s3", "slt", "docker", "azure", "google-cloud")
             }
 
             /*
@@ -297,7 +297,6 @@ allprojects {
             testImplementation(libs.testcontainers)
             testImplementation(libs.testcontainers.kafka)
             testImplementation(libs.testcontainers.keycloak)
-            testImplementation(libs.testcontainers.minio)
             testImplementation(libs.clojure.test.check)
         }
 
@@ -634,7 +633,6 @@ dependencies {
     api(libs.testcontainers)
     api(libs.testcontainers.kafka)
     api(libs.testcontainers.keycloak)
-    api(libs.testcontainers.minio)
 
     // honeysql
     api(libs.honeysql)
@@ -660,8 +658,15 @@ dependencies {
     devImplementation(libs.aws.sso)
     devImplementation(libs.aws.ssooidc)
 
-    testImplementation(libs.testcontainers.minio)
-    testImplementation(libs.minio)
+    testImplementation(libs.s3proxy) {
+        exclude(group = "ch.qos.logback")
+        exclude(group = "com.azure")
+        exclude(group = "com.google.cloud", module = "google-cloud-storage")
+        exclude(group = "com.github.openstack4j.core")
+        exclude(group = "com.github.openstack4j.core.connectors")
+        exclude(group = "org.apache.sshd")
+        exclude(group = "org.slf4j", module = "jcl-over-slf4j")
+    }
 
     // hato uses cheshire for application/json encoding
     testImplementation(libs.cheshire)

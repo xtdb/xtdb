@@ -69,4 +69,4 @@ The `gh` OAuth token is long-lived, so this only needs redoing if you `gh auth l
 
 == Docker compose setup
 
-There is a docker compose setup under link:docker-compose[docker-compose]. It uses https://min.io/[minio] for object storage and confluence kafka (with KRaft, so no Zookeper needed). It uses the `xtdb-aws` image but hooks in a tweaked config especially for `minio`. It should then be as simple as running `docker-compose up` in the `docker-compose` folder. When shutting down or restarting from scratch it is likely useful to run `docker-compose down --volumes --rmi all --remove-orphans` to remove any dangling dependencies.
+There is a docker compose setup under link:docker-compose[docker-compose]. It uses https://github.com/gaul/s3proxy[S3Proxy] for object storage and confluence kafka (with KRaft, so no Zookeper needed). It uses the `xtdb-aws` image but hooks in a tweaked config pointing it at S3Proxy. It should then be as simple as running `docker-compose up` in the `docker-compose` folder. When shutting down or restarting from scratch it is likely useful to run `docker-compose down --volumes --rmi all --remove-orphans` to remove any dangling dependencies.
