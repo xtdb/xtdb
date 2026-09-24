@@ -44,6 +44,7 @@ For any reasonable scale you'll want to create a txs file beforehand - they take
 See datasets -> `xtdb.tsbs`.
 
 Add a YourKit snapshot with `-Pyourkit` - you should see a snapshot appear in your snapshot directory (default `~/Snapshots`) when the application shuts down.
+For a Java Flight Recorder profile, use `-Pjfr` - the recording is dumped to `~/Snapshots/xtdb-<bench>-<timestamp>.jfr` on shutdown.
 
 
 In case you want to save the JSON benchmark log records to file you can append `-PbenchLogFile=tpch-0.01.log` to the command.

@@ -157,6 +157,9 @@ To attach YourKit:
 +
 This assumes YourKit is installed under `/opt/yourkit` (as it does from the AUR) - feel free to adapt the property (or even use its value) if you have it installed elsewhere.
 
+To record a Java Flight Recorder profile instead, pass `-Pjfr`.
+The recording runs for the life of the JVM and is dumped to `~/Snapshots/xtdb-<timestamp>.jfr` when it exits.
+
 == Debugging Arrow memory leaks
 
 Invoke the `arrow-leaks` skill (`.claude/skills/arrow-leaks/`) — the debug allocator flag that `build.gradle.kts` pins,

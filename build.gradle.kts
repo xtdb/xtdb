@@ -349,6 +349,10 @@ allprojects {
                         jvmArgs += "-agentpath:/opt/yourkit/bin/linux-x86-64/libyjpagent.so=app_name=xtdb"
                     }
 
+                    if (project.hasProperty("jfr")) {
+                        jvmArgs += "-XX:StartFlightRecording=settings=profile,dumponexit=true,filename=${System.getProperty("user.home")}/Snapshots/xtdb-%t.jfr"
+                    }
+
                     if (project.hasProperty("debugJvm")) {
                         jvmArgs += "-Xdebug"
                         jvmArgs += "-Xrunjdwp:transport=dt_socket,server=y,suspend=n,address=5005"
@@ -812,6 +816,9 @@ fun createBench(benchName: String, properties: Map<String, String>, defaultArgs:
 
         if (project.hasProperty("yourkit"))
             jvmArgs("-agentpath:/opt/yourkit/bin/linux-x86-64/libyjpagent.so=on_exit=snapshot,async_sampling_cpu,app_name=xtdb-$benchName")
+
+        if (project.hasProperty("jfr"))
+            jvmArgs("-XX:StartFlightRecording=settings=profile,dumponexit=true,filename=${System.getProperty("user.home")}/Snapshots/xtdb-$benchName-%t.jfr")
 
         this.args = args
     }
