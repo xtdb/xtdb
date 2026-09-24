@@ -13,6 +13,7 @@ import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.subclass
 import org.postgresql.replication.LogSequenceNumber
 import org.postgresql.util.PSQLException
+import org.postgresql.util.PSQLState
 import xtdb.api.tx.TxIndexer
 import xtdb.api.Remote
 import xtdb.api.RemoteAlias
@@ -30,7 +31,9 @@ import xtdb.postgres.PostgresSource.Assignment.Assigned
 import xtdb.postgres.PostgresSource.Assignment.Unassigned
 import xtdb.util.*
 import java.net.SocketException
+import java.time.Duration
 import java.time.Instant
+import java.time.InstantSource
 import java.util.concurrent.atomic.AtomicReference
 import com.google.protobuf.Any as ProtoAny
 
@@ -38,12 +41,20 @@ private val LOG = PostgresSource::class.logger
 
 private const val PROTO_TAG_PREFIX = "proto.xtdb.com"
 
+internal const val RECONNECT_MAX_ATTEMPTS = 7
+private const val RECONNECT_BASE_DELAY_MS = 1000L
+
+// A stream that outlived the longest backoff was a working connection rather than a flap, whether or not
+// it happened to carry anything.
+internal const val RECONNECT_HEALTHY_STREAM_MS = RECONNECT_BASE_DELAY_MS shl (RECONNECT_MAX_ATTEMPTS - 1)
+
 class PostgresSource(
     private val dbName: String,
     private val driver: PostgresDriver,
     private val slotName: String,
     private val indexer: PgIndexer,
     private val meterRegistry: MeterRegistry? = null,
+    private val instantSource: InstantSource = InstantSource.system(),
 ) : ExternalSource {
 
     private val tags = listOf(
@@ -333,83 +344,132 @@ class PostgresSource(
 
         // held_lsn — opens at startLsn per SourceOpensStream, not at nothing.
         var heldLsn = startLsn
+        var attempt = 0
 
-        // Submitted to the indexer but not yet applied, in submission (= LSN) order. We submit ahead
-        // so back-to-back CDC txs pipeline through the double-buffered indexer; `submitTx`'s bounded
-        // hand-off buffer suspends us under backpressure, keeping this bounded.
-        val awaitingApply = ArrayDeque<Pair<PostgresDriver.Transaction, Deferred<TransactionResult>>>()
+        while (true) {
+            val attemptStartLsn = heldLsn
 
-        driver.openStream(heldLsn).use { stream ->
-            assigned.streaming = true
+            // null until the stream opens — an attempt that never got a connection is not a working one
+            var streamOpenedAt: Instant? = null
 
-            // A lower bound on slot.confirmed_lsn, per SourceConfirmsPosition's @guidance.
-            var confirmedLsn = 0L
+            // Submitted to the indexer but not yet applied, in submission (= LSN) order. We submit ahead
+            // so back-to-back CDC txs pipeline through the double-buffered indexer; `submitTx`'s bounded
+            // hand-off buffer suspends us under backpressure, keeping this bounded.
+            val awaitingApply = ArrayDeque<Pair<PostgresDriver.Transaction, Deferred<TransactionResult>>>()
 
-            fun durableLsn(): Long? =
-                txIndexer.latestBlock.value?.externalSourceToken
-                    ?.let { PostgresSourceToken.parseFrom(it).latestCommittedLsn }
-
-            fun confirmableLsn(): Long {
-                val durable = durableLsn()
-                return if (durable == null || durable >= heldLsn) stream.walEnd else durable
+            // `await()` rethrows an ingest failure — ImportFailureTearsDownStream. The metrics land here
+            // rather than at submit, so a re-delivered tx isn't counted twice.
+            suspend fun applyHead() {
+                val (tx, handle) = awaitingApply.removeFirst()
+                handle.await()
+                eventsCounter?.increment(tx.ops.size.toDouble())
+                commitsCounter?.increment()
+                assigned.lastEventEpochSeconds = tx.commitTime.epochSecond
+                commitLag?.record(
+                    (Instant.now().toEpochMilli() - tx.commitTime.toEpochMilli()) / 1000.0,
+                )
             }
 
-            suspend fun confirm() {
-                val lsn = confirmableLsn()
-                if (lsn > confirmedLsn) {
-                    stream.acknowledge(lsn)
-                    confirmedLsn = lsn
-                }
-            }
-
-            // Drains the completed prefix rather than awaiting the head, so a slow tx can't stall the poll
-            // loop. `await()` rethrows an ingest failure, which unwinds past `use` — ImportFailureTearsDownStream.
-            // The metrics land here so a re-delivered tx isn't counted twice.
+            // Drains the completed prefix rather than awaiting the head, so a slow tx can't stall the poll loop.
             suspend fun drainApplied() {
-                while (awaitingApply.firstOrNull()?.second?.isCompleted == true) {
-                    val (tx, handle) = awaitingApply.removeFirst()
-                    handle.await()
-                    eventsCounter?.increment(tx.ops.size.toDouble())
-                    commitsCounter?.increment()
-                    assigned.lastEventEpochSeconds = tx.commitTime.epochSecond
-                    commitLag?.record(
-                        (Instant.now().toEpochMilli() - tx.commitTime.toEpochMilli()) / 1000.0,
-                    )
-                }
+                while (awaitingApply.firstOrNull()?.second?.isCompleted == true) applyHead()
+            }
+
+            // Drained before reopening: an ingest failure is cheap to find and fatal, where a reconnect is
+            // expensive and would be discarded along with these handles.
+            suspend fun drainToEmpty() {
+                while (awaitingApply.isNotEmpty()) applyHead()
             }
 
             try {
-                while (currentCoroutineContext().isActive) {
-                    // SourceConfirmsPosition. Ahead of the first poll too: per ResendsFromConfirmed the
-                    // re-delivery window is measured from the confirmed position, so the sooner the better.
-                    confirm()
+                driver.openStream(heldLsn).use { stream ->
+                    assigned.streaming = true
+                    streamOpenedAt = instantSource.instant()
 
-                    // SourceReceivesTransaction.
-                    stream.poll()?.let { tx ->
-                        if (tx.lsn <= heldLsn) {
-                            LOG.debug { "[$dbName] Skipping re-delivered tx at LSN ${LogSequenceNumber.valueOf(tx.lsn)} (<= held LSN)" }
-                            return@let
-                        }
+                    // A lower bound on slot.confirmed_lsn, per SourceConfirmsPosition's @guidance.
+                    var confirmedLsn = 0L
 
-                        val token = postgresSourceToken {
-                            latestCommittedLsn = tx.lsn
-                            snapshotCompleted = true
-                        }.toByteArray()
+                    fun durableLsn(): Long? =
+                        txIndexer.latestBlock.value?.externalSourceToken
+                            ?.let { PostgresSourceToken.parseFrom(it).latestCommittedLsn }
 
-                        val handle = txIndexer.submitTx(token, systemTime = tx.commitTime) { openTx ->
-                            indexer.indexTx(tx, openTx)
-                            TxResult.Committed()
-                        }
-                        awaitingApply.addLast(tx to handle)
-                        heldLsn = tx.lsn
+                    fun confirmableLsn(): Long {
+                        val durable = durableLsn()
+                        return if (durable == null || durable >= heldLsn) stream.walEnd else durable
                     }
 
-                    drainApplied()
+                    suspend fun confirm() {
+                        val lsn = confirmableLsn()
+                        if (lsn > confirmedLsn) {
+                            stream.acknowledge(lsn)
+                            confirmedLsn = lsn
+                        }
+                    }
+
+                    try {
+                        while (currentCoroutineContext().isActive) {
+                            // SourceConfirmsPosition. Ahead of the first poll too: per ResendsFromConfirmed the
+                            // re-delivery window is measured from the confirmed position, so the sooner the better.
+                            confirm()
+
+                            // SourceReceivesTransaction.
+                            stream.poll()?.let { tx ->
+                                if (tx.lsn <= heldLsn) {
+                                    LOG.debug { "[$dbName] Skipping re-delivered tx at LSN ${LogSequenceNumber.valueOf(tx.lsn)} (<= held LSN)" }
+                                    return@let
+                                }
+
+                                val token = postgresSourceToken {
+                                    latestCommittedLsn = tx.lsn
+                                    snapshotCompleted = true
+                                }.toByteArray()
+
+                                val handle = txIndexer.submitTx(token, systemTime = tx.commitTime) { openTx ->
+                                    indexer.indexTx(tx, openTx)
+                                    TxResult.Committed()
+                                }
+                                awaitingApply.addLast(tx to handle)
+                                heldLsn = tx.lsn
+                            }
+
+                            drainApplied()
+                        }
+
+                        throw CancellationException("[$dbName] Streaming stood down")
+                    } finally {
+                        assigned.streaming = false
+                    }
+                }
+            } catch (e: PSQLException) {
+                // A stand-down racing the failure makes this a cancellation, whatever the exception says. Our
+                // own teardown raises connection failures of its own, and nothing below may outlive the term.
+                currentCoroutineContext().ensureActive()
+
+                if (!PSQLState.isConnectionError(e.sqlState)) throw e
+
+                drainToEmpty()
+
+                // Counting a run of fruitless attempts, so that a source which reconnects successfully every
+                // few hours never accumulates its way to the bound. A connection that delivered transactions
+                // worked; so did one that simply stayed up longer than we would ever wait to retry, which is
+                // what keeps a quiet upstream from looking like a flapping one.
+                val worked = heldLsn > attemptStartLsn ||
+                    streamOpenedAt?.let {
+                        Duration.between(it, instantSource.instant()).toMillis() >= RECONNECT_HEALTHY_STREAM_MS
+                    } == true
+
+                attempt = if (worked) 1 else attempt + 1
+
+                if (attempt > RECONNECT_MAX_ATTEMPTS) {
+                    LOG.error(e, "[$dbName] Replication connection lost $attempt times without progress; giving up")
+                    throw e
                 }
 
-                throw CancellationException("[$dbName] Streaming stood down")
-            } finally {
-                assigned.streaming = false
+                val baseDelay = RECONNECT_BASE_DELAY_MS shl (attempt - 1)
+                val delayMs = baseDelay + (baseDelay * 0.5 * Math.random()).toLong()
+
+                LOG.warn(e, "[$dbName] Replication connection lost (attempt $attempt/$RECONNECT_MAX_ATTEMPTS); reopening from LSN ${LogSequenceNumber.valueOf(heldLsn)} in ${delayMs}ms")
+                delay(delayMs)
             }
         }
     }
