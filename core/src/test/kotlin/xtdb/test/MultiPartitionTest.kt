@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import org.junit.jupiter.api.io.TempDir
 import xtdb.XtdbInternal
 import xtdb.api.TableRef
 import xtdb.api.Xtdb
@@ -19,6 +20,8 @@ import xtdb.api.log.Log
 import xtdb.api.storage.Storage
 import xtdb.tx.TxOp
 import xtdb.database.Database
+import java.nio.file.Files
+import java.nio.file.Path
 import kotlin.time.Duration.Companion.seconds
 
 class MultiPartitionTest {
@@ -197,6 +200,35 @@ class MultiPartitionTest {
                     db.partitions[2].watchers.latestSourceMsgId >= flush.msgId,
                     "partition 2 processed the flush that sync was waiting for"
                 )
+            }
+        }
+    }
+
+    @Test
+    fun `a partition's data lands in its own storage subtree`(@TempDir storagePath: Path) = runBlocking {
+        InMemoryExternalSource(partitions = 3).use { source ->
+            Xtdb.openNode().use { node ->
+                val db = node.attach(
+                    "parts", source, partitions = 3,
+                    config = Database.Config(log = Log.inMemoryLog, storage = Storage.local(storagePath)),
+                )
+
+                // an empty transaction still writes its own xt.txs row, which is what the cut then persists
+                for (p in 0..2) source.publish(partition = p)
+                withTimeout(10.seconds) { db.partitions.forEach { it.watchers.awaitTx(0) } }
+
+                db.sendFlushBlockMessage()
+                withTimeout(10.seconds) { db.sync() }
+
+                // every partition's root is created at open, so only files tell them apart
+                val files = Files.walk(storagePath).use { paths ->
+                    paths.filter(Files::isRegularFile).map { storagePath.relativize(it).toString() }.toList()
+                }
+
+                // each under its own: three partitions writing to one root would leave the other two empty
+                for (p in 0..2) {
+                    assertTrue(files.any { it.startsWith("parts/$p/") }, "partition $p wrote under its own root: $files")
+                }
             }
         }
     }
