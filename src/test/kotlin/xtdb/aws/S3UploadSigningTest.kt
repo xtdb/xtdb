@@ -23,7 +23,7 @@ import kotlin.test.fail
 
 /**
  * The signer only skips payload signing over HTTPS - over plain HTTP it hashes the payload regardless of
- * configuration - so this stands in a fake transport rather than pointing at the HTTP MinIO the other S3
+ * configuration - so this stands in a fake transport rather than pointing at the HTTP S3Proxy the other S3
  * tests use, which would exercise a different branch from production.
  */
 class S3UploadSigningTest {

@@ -109,7 +109,6 @@ ring-jetty9-adapter = { group = "info.sunng", name = "ring-jetty9-adapter", vers
 
 testcontainers = { group = "org.testcontainers", name = "testcontainers", version.ref = "testcontainers" }
 testcontainers-kafka = { group = "org.testcontainers", name = "testcontainers-kafka", version.ref = "testcontainers" }
-testcontainers-minio = { group = "org.testcontainers", name = "testcontainers-minio", version.ref = "testcontainers" }
 testcontainers-postgresql = { group = "org.testcontainers", name = "testcontainers-postgresql", version.ref = "testcontainers" }
 testcontainers-keycloak = { group = "com.github.dasniko", name = "testcontainers-keycloak", version = "4.3.1" }
 
@@ -177,7 +176,7 @@ clj-kondo = { group = "clj-kondo", name = "clj-kondo", version = "2023.12.15" }
 pg2-core = { group = "com.github.igrishaev", name = "pg2-core", version = "0.1.33" }
 codox = { group = "codox", name = "codox", version = "0.10.8" }
 clj-http = { group = "clj-http", name = "clj-http", version = "3.13.1" }
-minio = { group = "io.minio", name = "minio", version = "8.5.17" }
+s3proxy = { group = "org.gaul", name = "s3proxy", version = "4.1.1" }
 cheshire = { group = "cheshire", name = "cheshire", version = "5.13.0" }
 scope-capture = { group = "vvvvalvalval", name = "scope-capture", version = "0.3.3" }
 deep-diff2 = { group = "lambdaisland", name = "deep-diff2", version = "2.12.219" }
