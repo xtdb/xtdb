@@ -878,6 +878,16 @@ createBench("patch", mapOf("docCount" to "--doc-count", "patchCount" to "--patch
 
 createBench("ingestTxOverhead", mapOf("docCount" to "--doc-count", "batchSizes" to "--batch-sizes"))
 
+createBench(
+    "ext-source-tx-overhead",
+    mapOf(
+        "docCount" to "--doc-count",
+        "batchSizes" to "--batch-sizes",
+        "replicaLog" to "--log",
+        "bootstrapServers" to "--bootstrap-servers"
+    )
+)
+
 createBench("clickbench", mapOf("limit" to "--limit", "size" to "--size"))
 
 createBench(
