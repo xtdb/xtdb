@@ -133,7 +133,7 @@ contract Election {
         --   A claim written by a node predating positions carries none, and the term it wins is unsequenced: nothing in it is checked.
 
     @invariant ClaimFollowsObservation
-        -- A node claims only from something it has read: a read of its own that came back empty, or the absence of any term in the state it started from.
+        -- A node claims only from something it has read: a read of its own that came back empty, a record that voided the term it holds, or the absence of any term in the state it started from.
         --   A claim fences the incumbent whether or not it wins, so a node that could claim without reading would supersede a leader it cannot see, fail to confirm its own claim, and supersede the next leader in turn.
 
     @invariant ClaimsRiseAboveWhatWasRead
@@ -265,12 +265,26 @@ entity LogProcessor {
 ------------------------------------------------------------
 -- Rules: claim leadership
 --
--- Two observations admit a claim, and both are the node's own.
+-- Three observations admit a claim, and all are the node's own.
 ------------------------------------------------------------
 
 rule ClaimOnEmptyRead {
     -- A read of this node's own returned nothing, so the log is at its tip and whoever last led it has stopped writing.
     when: ReadReturnedEmpty(processor)
+
+    requires: processor.state = following
+    requires: processor.may_lead
+    requires: processor.claim_pos = null
+
+    ensures:
+        processor.claim_pos = ClaimAppended(term: processor.highest_term_read + 1, term_seq: 0)
+}
+
+rule ClaimOnVoidedTerm {
+    -- A voided term confirms nothing further, so there is no incumbent to wait out: the node claims on the record that voided it rather than on a later empty read.
+    -- Every reader meets the void at the same record, so the claims tend to land together at the same term, and the log's order settles them like any others.
+    -- A leader meeting its own term voided claims once ResignOnVoidedTerm has re-opened it as a follower.
+    when: TermVoided(processor, term)
 
     requires: processor.state = following
     requires: processor.may_lead

@@ -339,6 +339,23 @@ class LogProcessorTest {
     }
 
     @Test
+    fun `a follower that reads a gap claims the next term without waiting out an election`() = runTest {
+        withFreshLogs { sourceLog, replicaLog ->
+            replicaLog.appendMessage(ReplicaMessage.NoOp(termId = 1, termSeq = 0))
+            replicaLog.appendMessage(tx(1, termId = 1, termSeq = 1))
+
+            TestNode(sourceLog, replicaLog, electionDriver = noElectionTimeout()).use { node ->
+                awaitFence(node, 1)
+
+                replicaLog.appendMessage(tx(3, termId = 1, termSeq = 3))
+
+                awaitLeadership(node, expected = true)
+                assertEquals(2L, node.logProc.highestTermSeen)
+            }
+        }
+    }
+
+    @Test
     fun `a term won by a claim with no position is not checked`() = runTest {
         withFreshLogs { sourceLog, replicaLog ->
             TestNode(sourceLog, replicaLog, readOnly = true).use { node ->
@@ -381,16 +398,16 @@ class LogProcessorTest {
     }
 
     @Test
-    fun `a leader that reads back a gap in its own term stands down`() = runTest {
+    fun `a leader that reads back a gap in its own term stands down and claims the next`() = runTest {
         withFreshLogs { sourceLog, replicaLog ->
             TestNode(sourceLog, replicaLog, electionDriver = noElectionTimeout()).use { node ->
                 awaitLeadership(node, expected = true)
 
-                val gap = replicaLog.appendMessage(ReplicaMessage.NoOp(termId = 1, termSeq = 5))
+                replicaLog.appendMessage(ReplicaMessage.NoOp(termId = 1, termSeq = 5))
 
-                awaitLeadership(node, expected = false)
-                awaitReplicaMsg(node, gap.msgId)
-                assertEquals(1L, node.logProc.highestTermSeen, "voiding a term doesn't leave it")
+                awaitFence(node, 2)
+                awaitLeadership(node, expected = true)
+                assertEquals(2L, node.logProc.highestTermSeen, "the only node leads again, at the term above the voided one")
             }
         }
     }

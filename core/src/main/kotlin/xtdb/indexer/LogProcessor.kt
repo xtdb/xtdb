@@ -311,6 +311,9 @@ class LogProcessor(
                     role.job.cancelAndJoin()
                     reopenFollower()
                 }
+
+                // Rather than waiting for an empty read: a voided term confirms nothing further, so there is no incumbent to wait out.
+                claimLeadership()
             }
 
             // A role ending cancels the handle mid-record, so the record is re-offered to whatever replaces that role.
