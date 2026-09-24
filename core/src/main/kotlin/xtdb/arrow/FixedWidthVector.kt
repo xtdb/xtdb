@@ -224,6 +224,13 @@ sealed class FixedWidthVector : MonoVector() {
         dataBuffer.unloadBuffer(buffers, startIdx.toLong() * byteWidth, len.toLong() * byteWidth)
     }
 
+    @InternalApi
+    final override fun write(out: PageOutput, startIdx: Int, len: Int) {
+        out.writeNode(len, if (nullable) -1 else 0)
+        if (nullable) validityBuffer?.writePage(out, startIdx, len) else out.writeEmptyBuffer()
+        dataBuffer.writePage(out, startIdx.toLong() * byteWidth, len.toLong() * byteWidth)
+    }
+
     final override fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         val node = nodes.removeFirstOrNull() ?: throw IllegalStateException("missing node")
         valueCount = node.length

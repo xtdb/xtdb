@@ -102,6 +102,9 @@ class MapVector(private val listVector: ListVector, private val keysSorted: Bool
         nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>, startIdx: Int, len: Int
     ) = listVector.unloadPage(nodes, buffers, startIdx, len)
 
+    @InternalApi
+    override fun write(out: PageOutput, startIdx: Int, len: Int) = listVector.write(out, startIdx, len)
+
     override fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) =
         listVector.loadPage(nodes, buffers)
 

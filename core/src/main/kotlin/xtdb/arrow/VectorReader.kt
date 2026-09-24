@@ -126,6 +126,22 @@ interface VectorReader : ILookup, AutoCloseable {
         startIdx: Int = 0, len: Int = valueCount - startIdx
     ): Unit = unsupported("unloadPage")
 
+    /**
+     * Writes rows `[startIdx, startIdx + len)` of this vector into [out] as part of one page, [len] defaulting
+     * to the rest of the vector — see [RelationReader.toArrowStream].
+     *
+     * Writes its node, then its own buffers, then its children, which is Arrow's depth-first order.
+     * The range applies to the whole subtree, so the tree has to be in step: a child shorter than its parent
+     * is an error here.
+     *
+     * Unsupported on a reader that cannot address a contiguous row range — a selection, or an encoding whose
+     * runs span rows.
+     *
+     * @suppress
+     */
+    @InternalApi
+    fun write(out: PageOutput, startIdx: Int = 0, len: Int = valueCount - startIdx): Unit = unsupported("write")
+
     fun openSlice(al: BufferAllocator): VectorReader
 
     fun openDirectSlice(al: BufferAllocator): Vector =

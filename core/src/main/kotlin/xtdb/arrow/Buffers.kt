@@ -159,6 +159,21 @@ internal class ExtensibleBuffer private constructor(private val allocator: Buffe
     fun getPointer(idx: Int, len: Int, reuse: ArrowBufPointer? = null) =
         (reuse ?: ArrowBufPointer()).apply { set(this@ExtensibleBuffer.buf, idx.toLong(), len.toLong()) }
 
+    internal fun writePage(out: PageOutput) = out.writeBuffer(buf, 0, buf.writerIndex())
+
+    internal fun writePage(out: PageOutput, startByte: Long, byteLen: Long) = out.writeBuffer(buf, startByte, byteLen)
+
+    internal fun writeRebasedOffsets(out: PageOutput, startIdx: Int, len: Int) {
+        val byteLen = (len + 1).toLong() * Int.SIZE_BYTES
+
+        if (startIdx == 0) return writePage(out, 0, byteLen)
+
+        val base = getInt(startIdx)
+        out.writeBuffer(byteLen) { dst ->
+            for (i in 0..len) dst.setIntLE(i * Int.SIZE_BYTES, getInt(startIdx + i) - base)
+        }
+    }
+
     /**
      * Adds this buffer to an Arrow page under construction, passing it one reference to release
      * — see [RelationReader.openArrowRecordBatch].

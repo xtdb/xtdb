@@ -1,6 +1,7 @@
 package xtdb.arrow
 
 import clojure.lang.*
+import com.google.protobuf.ByteString
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.compression.NoCompressionCodec
@@ -60,6 +61,18 @@ interface RelationReader : ILookup, Seqable, Counted, AutoCloseable {
             )
         }
     }
+
+    /**
+     * The rows `[startIdx, startIdx + len)` as a one-page Arrow IPC stream, carrying this relation's whole
+     * schema, [len] defaulting to the rest of the relation.
+     *
+     * The bytes are copied out of this relation's memory, so the result may outlive it.
+     */
+    @OptIn(InternalApi::class)
+    fun toArrowStream(startIdx: Int = 0, len: Int = rowCount - startIdx): ByteString =
+        PageOutput()
+            .also { out -> for (v in vectors) v.write(out, startIdx, len) }
+            .toArrowStream(schema, len)
 
     fun openSlice(al: BufferAllocator): RelationReader =
         vectors

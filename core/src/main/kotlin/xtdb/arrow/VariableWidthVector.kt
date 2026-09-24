@@ -190,6 +190,23 @@ abstract class VariableWidthVector : MonoVector() {
         }
     }
 
+    @InternalApi
+    override fun write(out: PageOutput, startIdx: Int, len: Int) {
+        out.writeNode(len, if (nullable) -1 else 0)
+        if (nullable) validityBuffer?.writePage(out, startIdx, len) else out.writeEmptyBuffer()
+
+        if (valueCount == 0) {
+            // nothing has been written, so there isn't even the leading zero offset to rebase from
+            offsetBuffer.writePage(out)
+            dataBuffer.writePage(out)
+        } else {
+            val dataStart = offsetBuffer.getInt(startIdx)
+            val dataLen = offsetBuffer.getInt(startIdx + len) - dataStart
+            offsetBuffer.writeRebasedOffsets(out, startIdx, len)
+            dataBuffer.writePage(out, dataStart.toLong(), dataLen.toLong())
+        }
+    }
+
     override fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         val node = nodes.removeFirstOrNull() ?: error("missing node")
         valueCount = node.length

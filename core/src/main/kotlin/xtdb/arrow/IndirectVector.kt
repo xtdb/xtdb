@@ -62,6 +62,13 @@ class IndirectVector(private val inner: VectorReader, private val sel: VectorInd
         inner.unloadPage(nodes, buffers, sel.startIdx + startIdx, len)
     }
 
+    @InternalApi
+    override fun write(out: PageOutput, startIdx: Int, len: Int) {
+        if (sel !is Slice) unsupported("write over a selection")
+
+        inner.write(out, sel.startIdx + startIdx, len)
+    }
+
     override fun openSlice(al: BufferAllocator) = IndirectVector(inner.openSlice(al), sel)
 
     override fun select(idxs: IntArray): VectorReader =

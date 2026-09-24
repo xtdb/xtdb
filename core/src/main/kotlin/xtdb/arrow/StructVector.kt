@@ -215,6 +215,14 @@ class StructVector private constructor(
         childWriters.sequencedValues().forEach { it.unloadPage(nodes, buffers, startIdx, len) }
     }
 
+    @InternalApi
+    override fun write(out: PageOutput, startIdx: Int, len: Int) {
+        out.writeNode(len, if (nullable) -1 else 0)
+        if (nullable) validityBuffer?.writePage(out, startIdx, len) else out.writeEmptyBuffer()
+
+        childWriters.sequencedValues().forEach { it.write(out, startIdx, len) }
+    }
+
     override fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         val node = nodes.removeFirstOrNull() ?: error("missing node")
         valueCount = node.length

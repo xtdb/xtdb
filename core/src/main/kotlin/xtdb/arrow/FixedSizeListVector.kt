@@ -151,6 +151,13 @@ class FixedSizeListVector private constructor(
         elVector.unloadPage(nodes, buffers, startIdx * listSize, len * listSize)
     }
 
+    @InternalApi
+    override fun write(out: PageOutput, startIdx: Int, len: Int) {
+        out.writeNode(len, if (nullable) -1 else 0)
+        if (nullable) validityBuffer?.writePage(out, startIdx, len) else out.writeEmptyBuffer()
+        elVector.write(out, startIdx * listSize, len * listSize)
+    }
+
     override fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         val node = nodes.removeFirst()
         valueCount = node.length

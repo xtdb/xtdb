@@ -36,6 +36,7 @@ import xtdb.util.debug
 import xtdb.util.logger
 import xtdb.util.warn
 import java.nio.ByteBuffer
+import java.nio.channels.Channels
 import java.time.Instant
 import java.time.InstantSource
 import java.time.ZoneId
@@ -280,7 +281,7 @@ internal class TxResolver(
     fun indexTx(msgId: MessageId, msgTimestamp: Instant, msg: SourceMessage.Tx): ResolvedTx {
         if (msgId in skipTxs) return indexSkippedTx(msgId, msgTimestamp, msg.encode())
 
-        return msg.txOps.asChannel.use { ch ->
+        return Channels.newChannel(msg.txOps.newInput()).use { ch ->
             Relation.StreamLoader(allocator, ch).use { loader ->
                 Relation(allocator, loader.schema).use { rel ->
                     loader.loadNextPage(rel)

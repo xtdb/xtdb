@@ -454,6 +454,59 @@ class DenseUnionVector private constructor(
         }
     }
 
+    @InternalApi
+    override fun write(out: PageOutput, startIdx: Int, len: Int) {
+        out.writeNode(len, -1)
+
+        typeBuffer.writePage(out, startIdx.toLong(), len.toLong())
+
+        // the whole vector is every leg's whole self, so it needs none of the scan below - worth the branch
+        // because this is the common case and the scan is per-row where the rest of a page is per-buffer
+        if (startIdx == 0 && len == valueCount) {
+            offsetBuffer.writePage(out)
+            legVectors.forEach { it.write(out) }
+            return
+        }
+
+        // every write to a leg appends to it (`LegVector.writeValueThen`), so a leg's offsets ascend by one
+        // each time it appears, and its rows within a row range are themselves a row range of that leg
+        val legStarts = IntArray(legVectors.size) { -1 }
+        val legLens = IntArray(legVectors.size)
+
+        for (idx in startIdx until startIdx + len) {
+            val typeId = getTypeId(idx).toInt()
+            if (typeId < 0) continue
+
+            val offset = getOffset(idx)
+            if (legStarts[typeId] < 0) legStarts[typeId] = offset
+
+            check(offset == legStarts[typeId] + legLens[typeId]) {
+                "non-contiguous DUV leg offsets: leg ${legVectors[typeId].name}, row $idx"
+            }
+
+            legLens[typeId]++
+        }
+
+        val offsetBytes = len.toLong() * Int.SIZE_BYTES
+
+        // a range starting at row zero starts every leg at its own row zero, and an absent row already
+        // holds the zero this would write (`writeUndefined`), so the offsets are already what we'd rebase to
+        if (startIdx == 0)
+            offsetBuffer.writePage(out, 0, offsetBytes)
+        else
+            out.writeBuffer(offsetBytes) { dst ->
+                for (i in 0 until len) {
+                    val typeId = getTypeId(startIdx + i).toInt()
+                    val rebased = if (typeId < 0) 0 else getOffset(startIdx + i) - legStarts[typeId]
+                    dst.setIntLE(i * Int.SIZE_BYTES, rebased)
+                }
+            }
+
+        legVectors.forEachIndexed { typeId, leg ->
+            leg.write(out, legStarts[typeId].coerceAtLeast(0), legLens[typeId])
+        }
+    }
+
     override fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         val node = nodes.removeFirstOrNull() ?: throw IllegalStateException("missing node")
 

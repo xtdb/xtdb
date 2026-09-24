@@ -174,6 +174,23 @@ class ListVector private constructor(
         }
     }
 
+    @InternalApi
+    override fun write(out: PageOutput, startIdx: Int, len: Int) {
+        out.writeNode(len, if (nullable) -1 else 0)
+        if (nullable) validityBuffer?.writePage(out, startIdx, len) else out.writeEmptyBuffer()
+
+        if (valueCount == 0) {
+            // nothing has been written, so there isn't even the leading zero offset to rebase from
+            offsetBuffer.writePage(out)
+            elVector.write(out)
+        } else {
+            val elStart = offsetBuffer.getInt(startIdx)
+            val elLen = offsetBuffer.getInt(startIdx + len) - elStart
+            offsetBuffer.writeRebasedOffsets(out, startIdx, len)
+            elVector.write(out, elStart, elLen)
+        }
+    }
+
     override fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         val node = nodes.removeFirstOrNull() ?: error("missing node")
         valueCount = node.length

@@ -183,7 +183,7 @@
                "msg_type" (source-msg-type msg)
                "msg" (source-msg->edn msg)
                "tx_ops" (when (and decode-tx-ops? (instance? SourceMessage$Tx msg))
-                          (decode-tx-ops allocator (.getTxOps ^SourceMessage$Tx msg)))}))
+                          (decode-tx-ops allocator (.toByteArray (.getTxOps ^SourceMessage$Tx msg))))}))
           records)
     (mapv (fn [^Log$Record rec]
             (let [msg (.getMessage rec)]

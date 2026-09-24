@@ -94,6 +94,9 @@ class NullVector(
         nodes.add(ArrowFieldNode(len.toLong(), len.toLong()))
     }
 
+    @InternalApi
+    override fun write(out: PageOutput, startIdx: Int, len: Int) = out.writeNode(len, len)
+
     override fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         val node = nodes.removeFirst()
         valueCount = node.length

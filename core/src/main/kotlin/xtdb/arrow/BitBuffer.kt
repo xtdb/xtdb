@@ -173,6 +173,41 @@ internal class BitBuffer private constructor(
     }
 
     /**
+     * Writes the bits `[startBit, startBit + bitLen)` to [out] as one buffer, shifted down where [startBit]
+     * falls mid-byte, because an Arrow page's validity starts at bit zero.
+     */
+    internal fun writePage(out: PageOutput, startBit: Int, bitLen: Int) {
+        val byteLen = bufferSize(bitLen)
+        val shift = startBit % 8
+
+        when {
+            bitLen == 0 -> out.writeEmptyBuffer()
+
+            shift == 0 -> out.writeBuffer(buf, (startBit / 8).toLong(), byteLen)
+
+            else -> out.writeBuffer(byteLen) { dst ->
+                val srcByte = (startBit / 8).toLong()
+                val lastByte = byteLen.toInt() - 1
+
+                for (j in 0..lastByte) {
+                    val lo = (buf.getByte(srcByte + j).toInt() and 0xff) ushr shift
+                    val hiByte = srcByte + j + 1
+                    val hi =
+                        if (hiByte < buf.capacity()) (buf.getByte(hiByte).toInt() and 0xff) shl (8 - shift)
+                        else 0
+
+                    dst[j] = (lo or hi).toByte()
+                }
+
+                // without this the trailing bits are whatever followed the range, so a page's bytes
+                // would depend on rows it doesn't contain
+                val tailBits = bitLen % 8
+                if (tailBits != 0) dst[lastByte] = (dst[lastByte].toInt() and ((1 shl tailBits) - 1)).toByte()
+            }
+        }
+    }
+
+    /**
      * Adds this buffer to an Arrow page under construction, passing it one reference to release
      * — see [RelationReader.openArrowRecordBatch].
      */

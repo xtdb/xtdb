@@ -1,5 +1,6 @@
 package xtdb.indexer
 
+import com.google.protobuf.ByteString
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -243,7 +244,7 @@ internal class SourceLogProcessorTest : LeaderTermTest() {
             // A token-less source-log tx (msgId 10; skipTxs covers it, so no Arrow payload needed, and its
             // txId must exceed the ext tx's for watchers' monotonicity). It resolves behind the ext tx.
             lp.srcLogProc.processRecords(listOf(
-                Log.Record(0, 10, Instant.now(), SourceMessage.Tx(ByteArray(0), null, ZoneId.of("UTC"), null, null))
+                Log.Record(0, 10, Instant.now(), SourceMessage.Tx(ByteString.EMPTY, null, ZoneId.of("UTC"), null, null))
             ))
 
             lp.srcLogProc.processRecords(listOf(

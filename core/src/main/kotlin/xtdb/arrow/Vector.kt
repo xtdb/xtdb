@@ -103,6 +103,9 @@ sealed class Vector : VectorReader, VectorWriter {
         nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>, startIdx: Int, len: Int
     )
 
+    @InternalApi
+    abstract override fun write(out: PageOutput, startIdx: Int, len: Int)
+
     internal abstract fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>)
     internal abstract fun loadFromArrow(vec: ValueVector)
 

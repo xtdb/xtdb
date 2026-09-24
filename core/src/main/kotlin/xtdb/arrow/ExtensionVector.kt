@@ -54,6 +54,9 @@ abstract class ExtensionVector : MonoVector() {
         nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>, startIdx: Int, len: Int
     ) = inner.unloadPage(nodes, buffers, startIdx, len)
 
+    @InternalApi
+    override fun write(out: PageOutput, startIdx: Int, len: Int) = inner.write(out, startIdx, len)
+
     override fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) =
         inner.loadPage(nodes, buffers)
 

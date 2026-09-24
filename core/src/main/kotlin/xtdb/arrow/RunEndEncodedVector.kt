@@ -253,6 +253,16 @@ class RunEndEncodedVector private constructor(
         valuesVector.unloadPage(nodes, buffers)
     }
 
+    @InternalApi
+    override fun write(out: PageOutput, startIdx: Int, len: Int) {
+        if (startIdx != 0 || len != valueCount) unsupported("write over a row range")
+
+        out.writeNode(valueCount, 0)
+
+        runEndsVector.write(out)
+        valuesVector.write(out)
+    }
+
     override fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         val node = nodes.removeFirstOrNull() ?: error("missing node")
         valueCount = node.length
