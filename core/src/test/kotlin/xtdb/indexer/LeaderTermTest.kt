@@ -162,10 +162,6 @@ internal abstract class LeaderTermTest {
             leadersToClose += it
             val replicaMsgs = Channel<ReplicaApply>()
 
-            // A sibling of the term, as `cutOverToLeader` launches it: a term that ends hands its cause
-            // to the source through the task channel, which a source cancelled with the term never reads.
-            launch { proc.extSrcProc?.run() }
-
             launch {
                 val reader = launch {
                     partitionStorage.replicaLog.tailAll(-1) { records ->

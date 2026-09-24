@@ -41,10 +41,10 @@
 (defn- map->vec-types [m]
   (update-vals m types/->type))
 
-(defn schema-info->col-rows [schema-info]
+(defn schema-info->col-rows [schema-info ^TableRef txs-table]
   (for [[^TableRef table cols] schema-info
         :let [cols (into (when-not (and (contains? #{"pg_catalog" "information_schema" "xt"} (.getSchemaName table))
-                                        (not= 'xt/txs (table/ref->schema+table table)))
+                                        (not= txs-table table))
                            (-> '{"_valid_from" :instant
                                  "_valid_to" [:? :instant]
                                  "_system_from" :instant
@@ -554,7 +554,7 @@
 
           (.writeRows out-rel (->> (case (table/ref->schema+table table)
                                      information_schema/tables (tables db-name table-refs)
-                                     information_schema/columns (columns db-name (schema-info->col-rows @schema-info))
+                                     information_schema/columns (columns db-name (schema-info->col-rows @schema-info (.getTxsTable db-state)))
                                      information_schema/schemata (schemas db-name)
                                      information_schema/table_constraints nil
                                      information_schema/key_column_usage nil
@@ -565,7 +565,7 @@
                                      pg_catalog/pg_description nil
                                      pg_catalog/pg_views nil
                                      pg_catalog/pg_matviews nil
-                                     pg_catalog/pg_attribute (pg-attribute oid-by-table (schema-info->col-rows @schema-info))
+                                     pg_catalog/pg_attribute (pg-attribute oid-by-table (schema-info->col-rows @schema-info (.getTxsTable db-state)))
                                      pg_catalog/pg_namespace (pg-namespace)
                                      pg_catalog/pg_proc (pg-proc)
                                      pg_catalog/pg_database (pg-database (.getDatabaseNames db-cat))

@@ -19,6 +19,15 @@ class PartitionState(
     val tableCatalogOrNull: TableCatalog?,
     val trieCatalogOrNull: TrieCatalog?,
     val liveIndexOrNull: LiveIndex?,
+
+    /**
+     * Where this partition records its transactions.
+     *
+     * Tx-ids are per-partition counters, so at more than one partition every partition would write
+     * `_id = 0, 1, 2…` into one table and XTDB would read those as one entity at several times. Resolved
+     * by whoever knows the partition count — see [txsTableFor].
+     */
+    val txsTable: TableRef = TXS,
 ) : AutoCloseable {
     val tableCatalog: TableCatalog get() = tableCatalogOrNull ?: error("no table-catalog")
     val trieCatalog: TrieCatalog get() = trieCatalogOrNull ?: error("no trie-catalog")
@@ -49,12 +58,23 @@ class PartitionState(
         private val trieCatalogFactory =
             requiringResolve("xtdb.trie-catalog/->factory").invoke() as TrieCatalog.Factory
 
+        private val TXS = TableRef("xt", "txs")
+
+        /**
+         * A single-partition database keeps `xt.txs` exactly as it is, so an existing user's
+         * `SELECT * FROM xt.txs` survives an upgrade with no migration (#5836).
+         */
+        @JvmStatic
+        fun txsTableFor(partition: Int, partitionCount: Int) =
+            if (partitionCount == 1) TXS else TableRef("xt", "txs_$partition")
+
         @JvmStatic
         @JvmOverloads
         fun open(
             allocator: BufferAllocator,
             bufferPool: BufferPool,
             indexerConfig: IndexerConfig = IndexerConfig(),
+            txsTable: TableRef = TXS,
         ): PartitionState = safelyOpening {
             val tableCatalog = TableCatalog(bufferPool, bufferPool.latestBlock).also {
                 it.loadTables()
@@ -62,7 +82,7 @@ class PartitionState(
                 // until the first transaction / GRANT. Seed them (as empty CREATE TABLEs) so they're
                 // always resolvable - the columns mirror `OpenTx.writeTxRow` / the GRANT path. On a node
                 // that already has these tables, the loaded types win (no-op seed).
-                it.seedTable(TableRef("xt", "txs"), listOf("_id", "system_time", "committed", "user_metadata", "error"))
+                it.seedTable(txsTable, listOf("_id", "system_time", "committed", "user_metadata", "error"))
                 it.seedTable(TableRef("xt", "role_membership"), listOf("user", "role"))
             }
 
@@ -70,7 +90,7 @@ class PartitionState(
 
             val liveIndex = open { LiveIndex.open(allocator, tableCatalog, trieCatalog, indexerConfig) }
 
-            PartitionState(tableCatalog, trieCatalog, liveIndex)
+            PartitionState(tableCatalog, trieCatalog, liveIndex, txsTable)
         }
     }
 }

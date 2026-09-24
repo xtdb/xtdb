@@ -4,6 +4,7 @@ import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.serialization.modules.PolymorphicModuleBuilder
 import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.polymorphic
+import xtdb.InternalApi
 import xtdb.api.error.Unsupported
 import xtdb.api.Remote
 import xtdb.api.RemoteAlias
@@ -26,10 +27,11 @@ typealias ExternalSourceToken = ByteArray
  * One instance per database on each node that could lead it, opened and closed with the database there. A
  * node that indexes nothing, or holds the database read-only, can never lead and so opens no source at all.
  *
- * That instance spans every leader term the node serves, so [onPartitionAssigned] may be called repeatedly
- * (sequentially, never concurrently). State belonging to one term therefore MUST live inside that
- * call, not in a field: the upstream connection is torn down on cancellation and there is no [close] in
- * between to reset anything.
+ * That instance spans every leader term the node serves, so [onPartitionAssigned] may be called repeatedly:
+ * one call at a time for a given partition, and concurrently across partitions when the database has more
+ * than one. State belonging to one term therefore MUST live inside that call, not in a field: the upstream
+ * connection is torn down on cancellation and there is no [close] in between to reset anything. State the
+ * instance does hold is shared by every partition's assignments, and MUST be safe under concurrent ones.
  *
  * A source that also *confirms* progress upstream — advancing a Postgres replication slot, committing a
  * consumer-group offset — must gate that on [TxIndexer.latestBlock] rather than on a transaction's own
@@ -65,18 +67,37 @@ interface ExternalSource : AutoCloseable {
             meterRegistry: MeterRegistry? = null,
         ): ExternalSource
 
+        /**
+         * The most partitions this source can drive; a database configured with more is refused at attach.
+         *
+         * A pure declaration from the factory's own config: attach decides a transaction's outcome from it, so it
+         * must reach the same verdict on every node, with no call to the upstream behind it.
+         *
+         * Only XTDB's own test sources override this. Above one partition, queries read partition 0 alone until
+         * #5835.
+         * Public, with a settled encoding, at #5837.
+         *
+         * @suppress
+         */
+        @InternalApi
+        val maxPartitions: Int get() = 1
+
         companion object {
-            private val registrations = ServiceLoader.load(Registration::class.java).toList()
-            private val registrationsByTag = registrations.associateBy { it.protoTag }
-            private val registrationsByClass = registrations.associateBy { it.factoryClass }
+            // lazy: building these asks each registered factory class for its serializer, so eagerly it's a
+            // class-initialisation cycle whenever a factory class is set up before this interface
+            private val registrations by lazy { ServiceLoader.load(Registration::class.java).toList() }
+            private val registrationsByTag by lazy { registrations.associateBy { it.protoTag } }
+            private val registrationsByClass by lazy { registrations.associateBy { it.factoryClass } }
 
-            val serializersModule = SerializersModule {
-                for (reg in registrations)
-                    include(reg.serializersModule)
-
-                polymorphic(Factory::class) {
+            val serializersModule by lazy {
+                SerializersModule {
                     for (reg in registrations)
-                        reg.registerSerde(this)
+                        include(reg.serializersModule)
+
+                    polymorphic(Factory::class) {
+                        for (reg in registrations)
+                            reg.registerSerde(this)
+                    }
                 }
             }
 

@@ -7,8 +7,9 @@
             [xtdb.information-schema :as i-s]
             [xtdb.pgwire-test :as pgw-test]
             [xtdb.test-util :as tu]
-            [xtdb.time :as time])
-  (:import xtdb.api.Xtdb
+            [xtdb.time :as time]
+            [xtdb.types :as types])
+  (:import (xtdb.api TableRef Xtdb)
            xtdb.arrow.Relation))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-allocator tu/with-node)
@@ -628,3 +629,11 @@
     (xt/execute-tx tu/*node* [[:put-docs :unrelated {:xt/id 1}]])
 
     (t/is (= before (->oid)))))
+
+(deftest a-partitions-txs-table-reports-its-temporal-columns
+  (let [txs-table (TableRef. "xt" "txs_1")
+        ->col-names (fn [table]
+                      (->> (i-s/schema-info->col-rows {table {"_id" (types/->type :i64)}} txs-table)
+                           (mapv :name)))]
+    (t/is (= ["_id" "_system_from" "_system_to" "_valid_from" "_valid_to"] (->col-names txs-table)))
+    (t/is (= ["_id"] (->col-names (TableRef. "xt" "txs_2"))) "another partition's is another table")))

@@ -397,7 +397,7 @@ class LogProcessorSimTest : SimulationTestBase() {
 
     /**
      * Only a leader writes anything but a claim, so every non-`NoOp` record stamped with one term came
-     * from one node (ExactlyOneConfirmedLeaderPerDatabase).
+     * from one node (ExactlyOneConfirmedLeaderPerPartition).
      *
      * `NoOp` is excluded because a claim is one, and two nodes claiming at the same term is exactly what
      * the log is there to settle: both records land, and position decides which of them confers.

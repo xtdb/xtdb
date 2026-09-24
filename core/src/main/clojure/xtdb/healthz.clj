@@ -14,7 +14,6 @@
            [java.net InetAddress]
            (org.eclipse.jetty.server NetworkConnector Server)
            (xtdb.api Xtdb$Config)
-           (xtdb.api.log SourceMessage$FlushBlock)
            (xtdb.api.metrics Healthz HealthzConfig)
            xtdb.api.Xtdb$Config
            (xtdb.database Database Database$Catalog)
@@ -64,16 +63,18 @@
                                             (let [catching-up (for [[^String db-name, target-msg-ids] initial-target-message-ids
                                                                     :let [^Database db (.databaseOrNull db-cat db-name)]
                                                                     :when (and db (.isCritical db))
-                                                                    :let [lpm-id (.getLatestProcessedMsgId db)]
-                                                                    :when (some #(< lpm-id (long %)) target-msg-ids)]
-                                                                {:db db-name, :current lpm-id, :targets target-msg-ids})]
+                                                                    :let [lpm-ids (vec (.getLatestProcessedMsgIds db))]
+                                                                    ;; each partition against its own target — they index the
+                                                                    ;; same log slices, so the comparison is positional
+                                                                    :when (some true? (map #(< (long %1) (long %2)) lpm-ids target-msg-ids))]
+                                                                {:db db-name, :current lpm-ids, :targets target-msg-ids})]
                                               (if (seq catching-up)
                                                 {:status 503,
                                                  :headers {"X-XTDB-Databases-Catching-Up" (str (count catching-up))}
                                                  :body (str "Catching up: "
                                                             (->> catching-up
                                                                  (map (fn [{:keys [db current targets]}]
-                                                                        (format "%s (at: %d, targets: %s)" db current targets)))
+                                                                        (format "%s (at: %s, targets: %s)" db current targets)))
                                                                  (str/join ", ")))}
 
                                                 {:status 200,
@@ -133,8 +134,7 @@
                                                              (all-databases db-cat))]
                                                    (try
                                                      (doseq [^Database db dbs]
-                                                       (let [flush-msg (SourceMessage$FlushBlock. (or (.getCurrentBlockIndex (.getTableCatalog db)) -1))]
-                                                         (.appendMessageBlocking (.getSourceLog db) flush-msg 0)))
+                                                       (.sendFlushBlockMessage db))
                                                      {:status 200,
                                                       :body (format "Block flush message sent to %d database(s)." (count dbs))}
                                                      (catch Exception e
@@ -177,7 +177,7 @@
                                           (for [^String db-name (.getDatabaseNames db-cat)
                                                 :let [^Database db (.databaseOrNull db-cat db-name)]
                                                 :when db]
-                                            [db-name [(.latestSubmittedMsgId (.getSourceLog db) 0)]]))
+                                            [db-name (vec (.getLatestSubmittedMsgIds db))]))
 
          ^Server server (-> (handler (merge {:meter-registry (.getMeterRegistry base)
                                              :db-cat db-cat

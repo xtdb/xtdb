@@ -6,7 +6,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.job
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -27,6 +26,7 @@ import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
 import xtdb.indexer.LeaderTermTest
 import xtdb.indexer.LiveIndex
+import xtdb.test.InMemoryExternalSource
 import xtdb.indexer.LogProcessor.LogsDriver
 import xtdb.indexer.supersede
 import xtdb.storage.MemoryStorage
@@ -47,30 +47,6 @@ internal class ExternalSourceTest : LeaderTermTest() {
 
         closeAfterTerm(liveIndex)
         closeAfterTerm(bufferPool)
-    }
-
-    /**
-     * Simple in-memory ExternalSource for testing.
-     * Send signals to [channel]; each signal submits a tx via [index] (by default the blocking
-     * [xtdb.api.tx.TxIndexer.executeTx]; pass a `submit`-based [index] to drive the fire-and-forget path).
-     */
-    class InMemoryExternalSource(
-        val channel: Channel<ExternalSourceToken?> = Channel(100),
-        private val index: suspend TxIndexer.(ExternalSourceToken?) -> Unit = {
-            executeTx(it) { TxResult.Committed() }
-        },
-    ) : ExternalSource {
-
-        override suspend fun onPartitionAssigned(
-            partition: Int, afterToken: ExternalSourceToken?, txIndexer: TxIndexer
-        ) {
-            for (token in channel) {
-                txIndexer.index(token)
-            }
-        }
-
-        override fun close() {
-        }
     }
 
     private class ExtTerm(
@@ -125,9 +101,9 @@ internal class ExternalSourceTest : LeaderTermTest() {
     @Test
     fun `execute appends ResolvedTx to replica log`() = runTest {
         val extSource = InMemoryExternalSource()
-        val term = extTerm(extSource)
+        val term = extTerm(extSource.open())
 
-        extSource.channel.send(null)
+        extSource.publish()
         term.watchers.awaitTx(0)
 
         val resolved = term.resolvedTxs().single()
@@ -142,10 +118,10 @@ internal class ExternalSourceTest : LeaderTermTest() {
     @Test
     fun `successive external events appear in the replica log with monotonic txIds`() = runTest {
         val extSource = InMemoryExternalSource()
-        val term = extTerm(extSource)
+        val term = extTerm(extSource.open())
 
-        extSource.channel.send(null)
-        extSource.channel.send(null)
+        extSource.publish()
+        extSource.publish()
         term.watchers.awaitTx(1)
 
         val resolvedTxs = term.resolvedTxs()
@@ -156,10 +132,9 @@ internal class ExternalSourceTest : LeaderTermTest() {
     @Test
     fun `execute threads resumeToken to watchers`() = runTest {
         val extSource = InMemoryExternalSource()
-        val term = extTerm(extSource)
+        val term = extTerm(extSource.open())
 
-        val token = "kafka-offset:42".toByteArray()
-        extSource.channel.send(token)
+        val token = extSource.publish()
         term.watchers.awaitTx(0)
 
         assertArrayEquals(token, term.watchers.externalSourceToken)
@@ -187,9 +162,9 @@ internal class ExternalSourceTest : LeaderTermTest() {
     @Test
     fun `fault in the commit pipeline tips watchers into Failed`() = runTest {
         val extSource = InMemoryExternalSource()
-        val term = extTerm(extSource, liveIndex = faultingLiveIndex())
+        val term = extTerm(extSource.open(), liveIndex = faultingLiveIndex())
 
-        extSource.channel.send(null)
+        extSource.publish()
 
         val failure = term.awaitFailure()
         assertTrue(
@@ -200,11 +175,11 @@ internal class ExternalSourceTest : LeaderTermTest() {
 
     @Test
     fun `submit applies txs fire-and-forget with monotonic txIds`() = runTest {
-        val extSource = InMemoryExternalSource(index = { submitTx(it) { TxResult.Committed() } })
-        val term = extTerm(extSource)
+        val extSource = InMemoryExternalSource(index = { submitTx(it.token, writer = it.writer) })
+        val term = extTerm(extSource.open())
 
-        extSource.channel.send(null)
-        extSource.channel.send(null)
+        extSource.publish()
+        extSource.publish()
         term.watchers.awaitTx(1)
 
         val resolvedTxs = term.resolvedTxs()
@@ -282,9 +257,9 @@ internal class ExternalSourceTest : LeaderTermTest() {
         }
 
         val extSource = InMemoryExternalSource()
-        val term = extTerm(extSource, wrapDriver = failingDriver)
+        val term = extTerm(extSource.open(), wrapDriver = failingDriver)
 
-        extSource.channel.send(null)
+        extSource.publish()
 
         val failure = term.awaitFailure()
         assertTrue(

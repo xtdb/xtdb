@@ -3,7 +3,10 @@ package xtdb.postgres
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import xtdb.api.nodeConfig
+import xtdb.api.tx.ExternalSource
 import xtdb.database.Database
+import java.io.File
+import java.net.URLClassLoader
 
 class PostgresSourceFactoryTest {
 
@@ -150,5 +153,29 @@ class PostgresSourceFactoryTest {
 
         assertTrue(nodeRemote is PostgresRemote.Factory, "node remote should resolve to PostgresRemote.Factory")
         assertTrue(extSource is PostgresSource.Factory, "external source should resolve to PostgresSource.Factory")
+    }
+
+    @Test
+    fun `the factory class can be set up before the external-source registry`() {
+        val classpath = System.getProperty("java.class.path").split(File.pathSeparator)
+            .map { File(it).toURI().toURL() }.toTypedArray()
+
+        // a loader with nothing set up yet, so this runs first whatever the test order
+        URLClassLoader(classpath, ClassLoader.getPlatformClassLoader()).use { loader ->
+            val thread = Thread.currentThread()
+            val testLoader = thread.contextClassLoader
+
+            // ServiceLoader finds registrations through the context loader
+            thread.contextClassLoader = loader
+            try {
+                Class.forName(PostgresSource.Factory::class.java.name, true, loader)
+
+                val registry = Class.forName(ExternalSource.Factory::class.java.name, true, loader)
+                    .getField("Companion").get(null)
+                assertNotNull(registry.javaClass.getMethod("getSerializersModule").invoke(registry))
+            } finally {
+                thread.contextClassLoader = testLoader
+            }
+        }
     }
 }
