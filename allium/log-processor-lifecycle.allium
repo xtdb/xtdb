@@ -1,9 +1,13 @@
 -- allium: 3
 -- log-processor-lifecycle.allium
 --
--- Scope: leader election for one database on one node.
--- A node reading a database's replica log claims leadership in that same log, leads as the sole writer of it for its term, and stands down when a higher term supersedes it.
--- Includes: the Following/Leading state machine; how a claim is made and adjudicated; the term fence that keeps at most one CONFIRMED leader per database; the obligations the replica log itself has to meet for a term to mean anything.
+-- Scope: leader election for one partition of a database on one node.
+-- A node reading a partition's slice of the replica log claims leadership in that same slice, leads as the sole writer of it for its term, and stands down when a higher term supersedes it.
+-- Includes: the Following/Leading state machine; how a claim is made and adjudicated; the term fence that keeps at most one CONFIRMED leader per partition; the obligations the replica log itself has to meet for a term to mean anything.
+--
+-- Each partition of a database is elected independently: its own role, its own term fence, its own claims and its own replica read, so different partitions of one database may be led by different nodes.
+-- A database of one partition is elected exactly as the partition is.
+-- A database has more than one partition only through an external source whose declared maximum partition count allows it; every shipped source declares one.
 -- Excludes: record processing and the block lifecycle (db.allium), the live index (live-index.allium), the external source.
 --
 -- live-index.allium treats WHICH role owns the live index as a given.
@@ -14,9 +18,16 @@
 ------------------------------------------------------------
 
 external entity Database {
-    -- The database whose replica log this node reads.
-    -- Its lifecycle governs the terms below: tearing the database down ends whichever term is live.
+    -- The database whose partitions this node reads.
+    -- Its lifecycle governs the terms below: tearing the database down ends whichever term is live in each of its partitions.
     name: String
+}
+
+external entity Partition {
+    -- One partition of a database, with its own slice of the source and replica logs (db.allium).
+    -- The unit leadership is elected for.
+    database: Database
+    index: Integer
 }
 
 external entity FollowerTerm {
@@ -47,7 +58,7 @@ external entity LeaderTerm {
 }
 
 external entity ReplicaLog {
-    -- The database's replica log: the durable, totally-ordered sequence of records a follower replays to build local state, and a leader writes and reads back.
+    -- One partition's slice of its database's replica log: the durable, totally-ordered sequence of records a follower replays to build local state, and a leader writes and reads back.
     -- It is also where leadership is settled, and it takes no part in settling it: who leads is a function of its contents, which every reader computes alike.
 }
 
@@ -135,8 +146,8 @@ contract Election {
         --   Each read's length is drawn afresh, so nodes that claimed together next claim at different moments.
         --   A losing claim is a record, so reading it back ends the loser's read and redraws it.
 
-    @invariant ExactlyOneConfirmedLeaderPerDatabase
-        -- At most one leader's writes are ever CONFIRMED per database, enforced by the term fence on consume-back — Raft's ReadIndex, with no transactional append.
+    @invariant ExactlyOneConfirmedLeaderPerPartition
+        -- At most one leader's writes are ever CONFIRMED per partition, enforced by the term fence on consume-back — Raft's ReadIndex, with no transactional append.
         -- Each leader stamps its replica writes with its own term.
         -- A leader confirms — and so acknowledges — a write only when it reads that write back at its OWN term; reading back a HIGHER term means a newer leader has superseded it, so it stands down without confirming its outstanding writes.
         -- Two nodes may therefore briefly both believe themselves leader and both append, but only the newer term's writes are ever confirmed, and the older leader's are discarded.
@@ -145,21 +156,22 @@ contract Election {
         -- A leader writes to the replica log within a bounded interval of its last write, whether or not it has work.
         --   - With traffic: met by the writes it is making anyway.
         --   - Idle: a no-op stamped with its own term.
-        --   Otherwise a quiet database and a leaderless one are the same log to a reader.
+        --   Otherwise a quiet partition and a leaderless one are the same log to a reader.
 
     @invariant StandingDownLeavesTheDatabaseReadable
         -- A node that stands down for a higher term leaves its database queryable on that node.
-        --   The end of a term reaches everything it was driving, the external source included, each of which reports a role that has changed rather than a database that has failed.
+        --   The end of a term reaches everything it was driving, the external source's assignment of that partition included, each of which reports a role that has changed rather than a database that has failed.
 
     @invariant ARefusedClaimLeavesTheDatabaseReadable
         -- A node whose claim the replica log will not accept goes on following, indexing and answering queries.
         --   A claim is speculative, so the node forfeits nothing it held, and its next quiet read claims again.
         --   Every follower claims when its read comes back empty, so a log that has stopped accepting writes is one every follower meets at once: treating the refusal as this node's fault would stop the readers of every one of them, over a write none of them had to make.
 
-    @invariant OneReplicaReaderPerDatabase
-        -- One read of the replica log serves whichever role is live; the leader additionally consumes the source log.
+    @invariant OneReplicaReaderPerPartition
+        -- One read of the partition's slice of the replica log serves whichever role is live; the leader additionally consumes the source log.
         --   So a role change continues from the position that read has reached, and no replica record is skipped across one.
         --   It outlives every term it drives, a promotion that failed to start one included, so reading ends only with the database's membership.
+        --   Each partition has its own, so one partition's role change moves no other partition's read.
 
     @invariant RoleIsAlwaysBackedByALiveTerm
         -- No record is ever applied through a term that has ended.
@@ -169,10 +181,10 @@ contract Election {
     @invariant APendingBlockOutlivesTheRoleHoldingIt
         -- A block produced and not adopted MUST reach the role that replaces the one holding it, in either direction.
         --   The adopt is what moves this node's catalog past the block, so that a confirmation of it does not read as stale.
-        --   A role that holds no block to match a confirmation against stops the node's replica reading, and the database with it.
+        --   A role that holds no block to match a confirmation against stops the partition's replica reading, and the database with it.
 
-    @invariant HeldRecordsAreAppliedOrTheDatabaseStops
-        -- A role that has adopted a block applies every record held behind that block, or the database stops on this node.
+    @invariant HeldRecordsAreAppliedOrThePartitionStops
+        -- A role that has adopted a block applies every record held behind that block, or its partition stops on this node and the database reports the failure.
         --   Reading advanced past those records while they were held, so they are consumed off the log before the adopt and nothing re-reads them.
         --   The adopt is what moves this node's catalog past the block, so from that point the block's confirmation reads as stale and a role re-opened afterwards discards it — taking the records held behind it with it.
         --   A node carrying on from there would answer queries for a database missing transactions the log holds and every other node has.
@@ -184,12 +196,12 @@ contract Election {
 ------------------------------------------------------------
 
 entity LogProcessor {
-    -- One database's role on one node, and the read that drives it. Starts Following.
+    -- One partition's role on one node, and the read that drives it. Starts Following.
     --
-    -- That read is the only writer of the role, so a role change needs no coordination with anything else on the node.
-    database: Database
+    -- That read is the only writer of the role, so a role change needs no coordination with anything else on the node, the other partitions of its database included.
+    partition: Partition
 
-    -- The log this processor reads, claims in, and is fenced against.
+    -- The partition's slice of the replica log: the one this processor reads, claims in, and is fenced against.
     replica_log: ReplicaLog
 
     -- Reading the replica log belongs to the node rather than to either term: one read feeds whichever role is live, a follower building state and a leader confirming its own writes alike.
@@ -209,7 +221,7 @@ entity LogProcessor {
 
     -- The highest term this node has read.
     -- Every election question is asked of this one: a claim carries the term one above it, confers exactly when the record it is read back at carries a term above it, and a record below it is discarded.
-    -- Scoped to the database for the node's whole life rather than to a role: seeded once from the persisted block boundary, and monotonic from there.
+    -- Scoped to the partition for the node's whole life rather than to a role: seeded once from the partition's persisted block boundary, and monotonic from there.
     -- Held per role it would be reseeded from that boundary at every role change, forgetting every term written since the last block flush — so the same term could be admitted twice, once either side of a role change.
     highest_term_read: Integer
 
@@ -225,7 +237,7 @@ entity LogProcessor {
     -- The live leader term, present while Leading.
     leader_term: LeaderTerm when state = leading
 
-    -- Derived: this node is the leader for its database, and holds a live term to lead with.
+    -- Derived: this node is the leader for its partition, and holds a live term to lead with.
     is_leading: state = leading and leader_term.is_live
 }
 
@@ -250,7 +262,7 @@ rule ClaimOnEmptyRead {
 rule ClaimWhenNoTermHasLed {
     -- Nothing this node starts from names a term, so a claim at the bottom of the ordering is what settles whether anyone has led.
     -- Against a log that turns out to carry a term, the claim is read back behind it and confers nothing (ClaimConferredNothing), leaving the node holding the term it must now claim above.
-    -- Against one that does not, nothing can precede it, so it confers at once and spares a database nobody has ever led an election before its first write.
+    -- Against one that does not, nothing can precede it, so it confers at once and spares a partition nobody has ever led an election before its first write.
     when: ProcessorStarted(processor)
 
     requires: processor.state = following
@@ -380,9 +392,9 @@ invariant OnlyAnEligibleNodeHoldsAClaim {
 ------------------------------------------------------------
 
 actor Node {
-    -- The node this processor runs on. It opens the processor and reads its replica log, which is where every event below comes from.
-    -- Identified by the database it is reading.
-    identified_by: Database where name != ""
+    -- The node this processor runs on. It opens the processor and reads its partition's replica log, which is where every event below comes from.
+    -- Identified by the partition it is reading.
+    identified_by: Partition where index >= 0
 }
 
 ------------------------------------------------------------
@@ -421,14 +433,14 @@ surface ReplicaLogReading {
         fulfils Election
 
     @guarantee LeadershipMovesWithoutCoordination
-        -- Leadership moves between nodes with nothing exchanged between them, and nothing outside the database's own replica log consulted.
-        --   So two deployments sharing a log cluster are isolated by their log names, and a database's leadership changes disturb no other database.
+        -- Leadership moves between nodes with nothing exchanged between them, and nothing outside the partition's own slice of the replica log consulted.
+        --   So two deployments sharing a log cluster are isolated by their log names, and a partition's leadership changes disturb no other partition, of its own database or another.
 
     @guarantee LeadershipPlacementIsUnbalanced
-        -- Which node leads which database is whichever claimed first, and leadership moves only when a term ends.
-        --   One node may lead several databases while another leads none, and the distribution does not even out on its own.
+        -- Which node leads which partition is whichever claimed first, and leadership moves only when a term ends.
+        --   One node may lead several partitions while another leads none, the partitions of one database may be led by different nodes, and the distribution does not even out on its own.
 
     @guarantee OneConfirmedLeaderViaTermFence
-        -- At most one leader's writes are ever confirmed per database, enforced by the term fence on consume-back rather than by anything at this boundary.
+        -- At most one leader's writes are ever confirmed per partition, enforced by the term fence on consume-back rather than by anything at this boundary.
         --   Which is why the log's own obligations are stated in this module at all: the fence is nothing but readers agreeing on which term the log has reached, so it holds exactly as far as DurableTotalOrder does and no further.
 }
