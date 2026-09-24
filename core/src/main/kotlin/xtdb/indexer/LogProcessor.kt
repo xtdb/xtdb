@@ -95,6 +95,7 @@ class LogProcessor(
         OffloadingLogsDriver(RealLogsDriver(partitionStorage), partitionStorage, partitionState),
     private val electionDriver: ElectionDriver = RealElectionDriver(partitionStorage.logs.replicaLog),
     private val readOnly: Boolean = false,
+    private val pipelinedReplicaAppends: Boolean = false,
 ) : AutoCloseable {
 
     /** The partition's log appends, behind one seam, so that a test can fail or stall one. */
@@ -446,7 +447,7 @@ class LogProcessor(
                 pendingBlock = following.proc.pendingBlock
             }
 
-            val replicaAppender = ReplicaLogAppender(logsDriver, termId, electionDriver)
+            val replicaAppender = ReplicaLogAppender(logsDriver, termId, electionDriver, pipelinedReplicaAppends)
 
             val blockCutter =
                 BlockCutter(

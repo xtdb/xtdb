@@ -212,7 +212,7 @@ internal abstract class LeaderTermTest {
         val driver = wrapDriver(RealLogsDriver(partitionStorage))
 
         val termScope = backgroundScope + termJob
-        val replicaAppender = ReplicaLogAppender(driver, leaderTerm, NoAssertElectionDriver)
+        val replicaAppender = ReplicaLogAppender(driver, leaderTerm, NoAssertElectionDriver, pipelined = false)
         val blockCutter =
             BlockCutter(
                 partitionStorage, partitionState, dbName, leaderTerm, replicaAppender, compactor,
@@ -250,7 +250,7 @@ internal abstract class LeaderTermTest {
             PartitionState(TableCatalog(bufferPool), createTrieCatalog(), liveIndexMock())
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
         val logsDriver = driver(RealLogsDriver(partitionStorage))
-        val appender = ReplicaLogAppender(logsDriver, leaderTerm = 1, NoAssertElectionDriver)
+        val appender = ReplicaLogAppender(logsDriver, leaderTerm = 1, NoAssertElectionDriver, pipelined = false)
         val blockCutter =
             BlockCutter(
                 partitionStorage, partitionState, "test", 1, appender, mockk(relaxed = true),

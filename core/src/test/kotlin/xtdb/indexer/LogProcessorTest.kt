@@ -61,6 +61,7 @@ class LogProcessorTest {
         electionDriver: ElectionDriver = RealElectionDriver(assertInterval = 25.milliseconds),
         val bufferPool: MemoryStorage = MemoryStorage(allocator, epoch = 0),
         logsDriver: (LogProcessor.LogsDriver) -> LogProcessor.LogsDriver = { it },
+        pipelined: Boolean = false,
     ) : AutoCloseable {
         private val partition = TestPartition(
             allocator, bufferPool, sourceLog, replicaLog,
@@ -87,6 +88,7 @@ class LogProcessorTest {
             logsDriver = logsDriver(LogProcessor.RealLogsDriver(partition.storage)),
             electionDriver = electionDriver,
             readOnly = readOnly,
+            pipelinedReplicaAppends = pipelined,
         )
 
         /** Write the block file a [ReplicaMessage.BlockUploaded] for [blockIndex] sends a reader to read. */
@@ -554,6 +556,32 @@ class LogProcessorTest {
                 assertFalse(node.logProc.isLeader)
                 assertEquals(1L, node.watchers.latestTxId, "a node that cannot claim still indexes what the log holds")
                 assertNull(node.watchers.exception, "and stays queryable, having lost nothing it held")
+            }
+        }
+    }
+
+    @Test
+    fun `a pipelined leader whose record is lost in flight stands down from that term and leads the next`() = runTest {
+        withFreshLogs { sourceLog, replicaLog ->
+            // Loses the leader's first record after its claim; everything else lands behind it, as it would from Kafka's idempotent producer.
+            val losesOne = { inner: LogProcessor.LogsDriver ->
+                object : LogProcessor.LogsDriver by inner {
+                    var lost = false
+
+                    override suspend fun enqueueToReplica(msg: ReplicaMessage): Deferred<Log.MessageMetadata> =
+                        if (!lost && msg.termSeq == 1L) {
+                            lost = true
+                            CompletableDeferred<Log.MessageMetadata>().apply { completeExceptionally(IOException("lost in flight")) }
+                        } else inner.enqueueToReplica(msg)
+                }
+            }
+
+            TestNode(sourceLog, replicaLog, logsDriver = losesOne, pipelined = true).use { node ->
+                awaitFence(node, 2)
+                awaitLeadership(node, expected = true)
+
+                assertEquals(2L, node.logProc.highestTermSeen)
+                assertNull(node.watchers.exception, "a lost record costs the term, not the database")
             }
         }
     }

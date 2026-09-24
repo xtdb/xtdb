@@ -498,6 +498,9 @@ config {
     -- The worst-case interval over which an external source's upstream must retain its log, so the value bounds more than block cadence.
     flush_timeout: Duration = 15.minutes
     rows_per_block: Integer = 102400
+
+    -- Node-level switch: whether AppendReplicaMessage waits for a record's durability before sending the term's next one.
+    pipelined_replica_appends: Boolean = false
 }
 
 ---- Rules: Role Transitions
@@ -880,7 +883,13 @@ rule AppendReplicaMessage {
     -- Every record the term writes goes through this one ordered path, the block upload included, so the term's positions follow the log's order.
     --
     -- Nothing here is atomic across messages and nothing needs to be: a superseded leader is fenced by the term its records carry, checked when it reads them back, not by an append that fails.
-    -- An append fault ends the term.
+    --
+    -- The append fixes the record's position in the log's order when it returns; its durability is reported separately, and config.pipelined_replica_appends decides whether this rule waits for it before the term's next append.
+    -- Off, it waits: a fault here ends the term.
+    -- The block upload waits either way, its caller needing the append's result.
+    -- On, it does not wait, and a record lost in flight is not reported here — the term's later records still land behind it.
+    -- Every reader, this leader's own read-back included, meets the missing record as a gap in the term's positions and voids the rest of the term, the fold log-processor-lifecycle.allium already carries (VOIDED, ResignOnVoidedTerm, ClaimOnVoidedTerm).
+    -- A lost record with nothing behind it is voided once something is appended after it, which the leader's next idle assertion supplies if no other traffic already did, taking the position right after the loss.
     when: AppendReplicaMessage(msg)
 
     requires: log_processor.mode = Leader

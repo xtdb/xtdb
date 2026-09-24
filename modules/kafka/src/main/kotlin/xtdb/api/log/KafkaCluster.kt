@@ -28,6 +28,7 @@ import org.apache.kafka.common.serialization.ByteArraySerializer
 import org.apache.kafka.common.serialization.Deserializer
 import org.apache.kafka.common.serialization.Serializer
 import xtdb.DurationSerde
+import xtdb.api.IndexerConfig
 import xtdb.api.PathSerde
 import xtdb.api.Remote
 import xtdb.api.RemoteAlias
@@ -81,14 +82,16 @@ private object UnitDeserializer : Deserializer<Unit> {
  * written twice, and a duplicated term-stamped no-op is inert, because a reader takes the highest term it
  * has seen and a second copy of one it already holds moves nothing.
  */
-internal fun KafkaConfigMap.producerConfig(): KafkaConfigMap =
+internal fun KafkaConfigMap.producerConfig(pipelined: Boolean): KafkaConfigMap =
     mapOf(
         "enable.idempotence" to "true",
         "compression.type" to "snappy",
-        "linger.ms" to "0",
-    ) + this + mapOf("acks" to "all")
+    ) +
+        // Lingering only pays off with more than one record in flight to batch; an awaited append would just wait it out (#5452).
+        (if (pipelined) emptyMap() else mapOf("linger.ms" to "0")) +
+        this + mapOf("acks" to "all")
 
-private fun KafkaConfigMap.openProducer(): KafkaProducer<Unit, ByteArray> {
+private fun KafkaConfigMap.openProducer(pipelined: Boolean): KafkaProducer<Unit, ByteArray> {
     // -1 is Kafka's synonym for all, and asks for the same thing.
     this["acks"]?.takeUnless { it == "all" || it == "-1" }?.let {
         LOG.warn(
@@ -98,7 +101,7 @@ private fun KafkaConfigMap.openProducer(): KafkaProducer<Unit, ByteArray> {
         )
     }
 
-    return KafkaProducer(producerConfig(), UnitSerializer, ByteArraySerializer())
+    return KafkaProducer(producerConfig(pipelined), UnitSerializer, ByteArraySerializer())
 }
 
 private fun KafkaConsumer<*, *>.seekToAfterMsgId(tp: TopicPartition, epoch: Int, afterMsgId: MessageId) {
@@ -201,12 +204,20 @@ class KafkaCluster(
     val schemaRegistryUrl: String? = null,
     coroutineContext: CoroutineContext = Dispatchers.Default
 ) : Remote {
-    val producer = kafkaConfigMap.openProducer()
+    val producer = kafkaConfigMap.openProducer(pipelined = false)
+
+    // Only a pipelining leader's replica-log appends go unawaited, so only they get a producer that lingers to batch them.
+    private val replicaProducer = lazy {
+        if (System.getenv(IndexerConfig.PIPELINED_REPLICA_APPENDS_ENV) != null) kafkaConfigMap.openProducer(pipelined = true)
+        else producer
+    }
+
     val scope = CoroutineScope(SupervisorJob() + coroutineContext)
 
 
     override fun close() {
         runBlocking { withTimeout(5.seconds) { scope.coroutineContext.job.cancelAndJoin() } }
+        if (replicaProducer.isInitialized() && replicaProducer.value !== producer) replicaProducer.value.close()
         producer.close()
     }
 
@@ -244,6 +255,7 @@ class KafkaCluster(
         private val codec: MessageCodec<M>,
         private val topic: String,
         override val epoch: Int,
+        private val producer: KafkaProducer<Unit, ByteArray>,
     ) : Log<M> {
 
         private fun readLatestSubmittedMessage(kafkaConfigMap: KafkaConfigMap): LogOffset =
@@ -400,7 +412,7 @@ class KafkaCluster(
                 admin.ensureTopicExists(topic, autoCreateTopic)
             }
 
-            return cluster.KafkaLog(SourceMessage.Codec, topic, epoch)
+            return cluster.KafkaLog(SourceMessage.Codec, topic, epoch, cluster.producer)
         }
 
         override fun openReadOnlySourceLog(remotes: Map<RemoteAlias, Remote>, partitions: Int) =
@@ -418,7 +430,7 @@ class KafkaCluster(
                 admin.ensureTopicExists(replicaTopic, autoCreateTopic)
             }
 
-            return cluster.KafkaLog(ReplicaMessage.Codec, replicaTopic, epoch)
+            return cluster.KafkaLog(ReplicaMessage.Codec, replicaTopic, epoch, cluster.replicaProducer.value)
         }
 
         override fun openReadOnlyReplicaLog(remotes: Map<RemoteAlias, Remote>, partitions: Int) =
