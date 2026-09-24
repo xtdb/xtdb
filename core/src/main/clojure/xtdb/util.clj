@@ -507,13 +507,14 @@
 (defn used-netty-memory []
   (io.netty.util.internal.PlatformDependent/usedDirectMemory))
 
-(defn manifest-version []
+(defn manifest-attribute [^String k]
   (let [manifest (-> (ClassLoader/getSystemResource "META-INF/MANIFEST.MF")
                      .openStream
-                     java.util.jar.Manifest.)
-        attributes (.getMainAttributes manifest)]
-    (when attributes
-      (.getValue attributes "Implementation-Version"))))
+                     java.util.jar.Manifest.)]
+    (.getValue (.getMainAttributes manifest) k)))
+
+(defn manifest-version []
+  (manifest-attribute "Implementation-Version"))
 
 (def ^:private !xtdb-version
   (delay (or (some-> (System/getenv "XTDB_VERSION") str/trim not-empty)
@@ -523,8 +524,14 @@
 (defn xtdb-version []
   @!xtdb-version)
 
+(defn normalize-git-sha [sha]
+  (when-let [sha (not-empty (str/trim (str sha)))]
+    (when-not (= sha "unknown") ; the no-git-checkout build fallback, not a real sha
+      (subs sha 0 (min 7 (count sha))))))
+
 (def ^:private !xtdb-git-sha
-  (delay (or (some-> (System/getenv "GIT_SHA") str/trim not-empty (subs 0 7))
+  (delay (or (normalize-git-sha (System/getenv "GIT_SHA"))
+             (normalize-git-sha (manifest-attribute "Scm-Revision"))
              (when-let [{:keys [out ^long exit]} (try
                                                    (sh/sh "git" "rev-parse" "--short" "HEAD")
                                                    (catch IOException _))] ; couldn't start git
