@@ -358,6 +358,7 @@ class Database(
                     skipTxs = indexerConfig.skipTxs.toSet(),
                     flushTimeout = indexerConfig.flushDuration,
                     readOnly = readOnly,
+                    pipelinedReplicaAppends = indexerConfig.pipelinedReplicaAppends,
                 )
                     .also { lp ->
                         // job.cancelAndJoin joins the term *and* the partition's replica-log reader.

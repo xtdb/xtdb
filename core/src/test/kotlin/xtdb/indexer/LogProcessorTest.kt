@@ -61,6 +61,7 @@ class LogProcessorTest {
         electionDriver: ElectionDriver = RealElectionDriver(assertInterval = 25.milliseconds),
         val bufferPool: MemoryStorage = MemoryStorage(allocator, epoch = 0),
         logsDriver: (LogProcessor.LogsDriver) -> LogProcessor.LogsDriver = { it },
+        pipelined: Boolean = false,
     ) : AutoCloseable {
         private val partition = TestPartition(
             allocator, bufferPool, sourceLog, replicaLog,
@@ -87,6 +88,7 @@ class LogProcessorTest {
             logsDriver = logsDriver(LogProcessor.RealLogsDriver(partition.storage)),
             electionDriver = electionDriver,
             readOnly = readOnly,
+            pipelinedReplicaAppends = pipelined,
         )
 
         /** Write the block file a [ReplicaMessage.BlockUploaded] for [blockIndex] sends a reader to read. */
@@ -538,7 +540,7 @@ class LogProcessorTest {
         withFreshLogs { sourceLog, replicaLog ->
             TestNode(sourceLog, replicaLog, logsDriver = { inner ->
                 object : LogProcessor.LogsDriver by inner {
-                    override suspend fun appendToReplica(msg: ReplicaMessage): Log.MessageMetadata =
+                    override suspend fun enqueueToReplica(msg: ReplicaMessage): Deferred<Log.MessageMetadata> =
                         throw IOException("the replica log refused the write")
                 }
             }).use { node ->
@@ -559,6 +561,32 @@ class LogProcessorTest {
     }
 
     @Test
+    fun `a pipelined leader whose record is lost in flight stands down from that term and leads the next`() = runTest {
+        withFreshLogs { sourceLog, replicaLog ->
+            // Loses the leader's first record after its claim; everything else lands behind it, as it would from Kafka's idempotent producer.
+            val losesOne = { inner: LogProcessor.LogsDriver ->
+                object : LogProcessor.LogsDriver by inner {
+                    var lost = false
+
+                    override suspend fun enqueueToReplica(msg: ReplicaMessage): Deferred<Log.MessageMetadata> =
+                        if (!lost && msg.termSeq == 1L) {
+                            lost = true
+                            CompletableDeferred<Log.MessageMetadata>().apply { completeExceptionally(IOException("lost in flight")) }
+                        } else inner.enqueueToReplica(msg)
+                }
+            }
+
+            TestNode(sourceLog, replicaLog, logsDriver = losesOne, pipelined = true).use { node ->
+                awaitFence(node, 2)
+                awaitLeadership(node, expected = true)
+
+                assertEquals(2L, node.logProc.highestTermSeen)
+                assertNull(node.watchers.exception, "a lost record costs the term, not the database")
+            }
+        }
+    }
+
+    @Test
     fun `a promotion that fails leaves a follower holding the block it produced`() = runTest {
         withFreshLogs { sourceLog, replicaLog ->
             val cutter = 4L
@@ -571,9 +599,9 @@ class LogProcessorTest {
             // stopping the follower and publishing the leader.
             TestNode(sourceLog, replicaLog, logsDriver = { inner ->
                 object : LogProcessor.LogsDriver by inner {
-                    override suspend fun appendToReplica(msg: ReplicaMessage): Log.MessageMetadata =
+                    override suspend fun enqueueToReplica(msg: ReplicaMessage): Deferred<Log.MessageMetadata> =
                         if (msg is ReplicaMessage.BlockUploaded) throw IOException("the replica log refused the upload")
-                        else inner.appendToReplica(msg)
+                        else inner.enqueueToReplica(msg)
                 }
             }).use { node ->
                 awaitFence(node, cutter + 1)
@@ -615,11 +643,11 @@ class LogProcessorTest {
             // while still holding the block it has just produced.
             TestNode(sourceLog, replicaLog, logsDriver = { inner ->
                 object : LogProcessor.LogsDriver by inner {
-                    override suspend fun appendToReplica(msg: ReplicaMessage): Log.MessageMetadata {
+                    override suspend fun enqueueToReplica(msg: ReplicaMessage): Deferred<Log.MessageMetadata> {
                         if (msg is ReplicaMessage.BlockUploaded)
                             inner.appendToReplica(ReplicaMessage.NoOp(termId = superseding))
 
-                        return inner.appendToReplica(msg)
+                        return inner.enqueueToReplica(msg)
                     }
                 }
             }).use { node ->
@@ -655,11 +683,11 @@ class LogProcessorTest {
 
             TestNode(sourceLog, replicaLog, logsDriver = { inner ->
                 object : LogProcessor.LogsDriver by inner {
-                    override suspend fun appendToReplica(msg: ReplicaMessage): Log.MessageMetadata {
+                    override suspend fun enqueueToReplica(msg: ReplicaMessage): Deferred<Log.MessageMetadata> {
                         // The term this node is superseding cut the same boundary, so it produced this block too — and its upload lands ahead of ours, having started first.
                         if (msg is ReplicaMessage.BlockUploaded) inner.appendToReplica(msg.copy(termId = cutter))
 
-                        return inner.appendToReplica(msg)
+                        return inner.enqueueToReplica(msg)
                     }
                 }
             }).use { node ->

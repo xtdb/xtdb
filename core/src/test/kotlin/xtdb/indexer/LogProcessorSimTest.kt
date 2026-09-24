@@ -57,8 +57,14 @@ private val LOG = LogProcessorSimTest::class.logger
 private class NodeReplicaLog(private val log: Log<ReplicaMessage>) : Log<ReplicaMessage> by log {
     val appendedOffsets = mutableSetOf<LogOffset>()
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override suspend fun enqueueMessage(message: ReplicaMessage, partition: Int) =
+        log.enqueueMessage(message, partition).also { enqueued ->
+            enqueued.invokeOnCompletion { if (it == null) appendedOffsets += enqueued.getCompleted().logOffset }
+        }
+
     override suspend fun appendMessage(message: ReplicaMessage, partition: Int) =
-        log.appendMessage(message, partition).also { appendedOffsets += it.logOffset }
+        enqueueMessage(message, partition).await()
 }
 
 @Tag("property")
@@ -169,6 +175,7 @@ class LogProcessorSimTest : SimulationTestBase() {
         private val indexerConfig: IndexerConfig,
         private val simExtSource: SimExtSource,
         private val readOnly: Boolean = false,
+        private val pipelined: Boolean = false,
     ) : AutoCloseable {
 
         val tableCatalog = TableCatalog(bp)
@@ -216,6 +223,7 @@ class LogProcessorSimTest : SimulationTestBase() {
                 // A real `onTimeout` would schedule on kotlinx's own timer thread, which DeterministicDispatcher checks against — a real clock firing into a seeded harness.
                 electionDriver = electionDriver,
                 readOnly = readOnly,
+                pipelinedReplicaAppends = pipelined,
             ).also { logProcessor = it }
 
         override fun close() {
@@ -247,22 +255,44 @@ class LogProcessorSimTest : SimulationTestBase() {
     private fun List<SimNode>.requestAsserts() = forEach { it.requestAssert() }
 
     /**
-     * The replica records every reader applies — the raw log minus what the term fence discards.
+     * The replica records every reader applies — the raw log minus what the term fence and term positions discard.
      *
      * A superseded leader learns it has lost only by reading the winning claim back, so it goes on
      * appending behind that claim; those records reach the log and every reader folds them out again.
-     * The invariants below are about what was applied, so they fold the same way.
+     * A record lost in flight leaves a gap in its term's positions, and everything after the gap in that term is voided.
+     * The invariants below are about what was applied, so they fold the same way — written out again here
+     * from `log-processor-lifecycle.allium` rather than borrowed from the processor, so that the two can disagree.
      */
     private fun appliedMessages(): List<ReplicaMessage> {
-        var highestSeen = 0L
+        var term = 0L
+        // null: nothing in the term is checked; Long.MAX_VALUE: the term is voided.
+        var next: Long? = null
 
         return replicaLog.topic.mapNotNull { rec ->
-            val term = rec.message.termId
+            val msg = rec.message
+            val seq = msg.termSeq
 
-            if (term < highestSeen) null
-            else {
-                highestSeen = term
-                rec.message
+            when {
+                msg.termId < term -> null
+
+                msg.termId > term -> {
+                    term = msg.termId
+                    next = when (seq) {
+                        null -> null
+                        0L -> 1
+                        else -> Long.MAX_VALUE
+                    }
+                    msg.takeIf { next != Long.MAX_VALUE }
+                }
+
+                else -> when (val expected = next) {
+                    null -> msg
+                    else -> when {
+                        seq == expected -> msg.also { next = expected + 1 }
+                        seq != null && seq > expected -> null.also { next = Long.MAX_VALUE }
+                        else -> null
+                    }
+                }
             }
         }
     }
@@ -752,11 +782,79 @@ class LogProcessorSimTest : SimulationTestBase() {
      * node that goes on to lead would fail its term on the first assertion, which is a different invariant.
      */
     private class ClaimRefusingDriver(private val inner: LogProcessor.LogsDriver) : LogProcessor.LogsDriver by inner {
-        override suspend fun appendToReplica(msg: ReplicaMessage): Log.MessageMetadata =
+        override suspend fun enqueueToReplica(msg: ReplicaMessage): Deferred<Log.MessageMetadata> =
             if (msg is NoOp && msg.srcMsgId == null)
                 throw IOException("[sim] the replica log will not accept a claim")
-            else inner.appendToReplica(msg)
+            else inner.enqueueToReplica(msg)
     }
+
+    /**
+     * Loses a leader's records in flight, as Kafka's idempotent producer can while landing what follows.
+     *
+     * Only the records a pipelined leader doesn't await: a lost claim or block upload fails the append that
+     * awaits it, which is a different path from the one under test.
+     */
+    private inner class LosingDriver(private val inner: LogProcessor.LogsDriver) : LogProcessor.LogsDriver by inner {
+        override suspend fun enqueueToReplica(msg: ReplicaMessage): Deferred<Log.MessageMetadata> =
+            if (msg !is ReplicaMessage.BlockUploaded && msg.termSeq != 0L && rand.nextInt(100) < 5)
+                CompletableDeferred<Log.MessageMetadata>().apply { completeExceptionally(IOException("[sim] lost in flight")) }
+            else inner.enqueueToReplica(msg)
+    }
+
+    @RepeatableSimulationTest
+    fun `pipelined leaders losing records in flight lose no transactions`() =
+        runTest(timeout = 5.seconds) {
+            val indexerConfig = IndexerConfig(rowsPerBlock = rand.nextLong(15, 25))
+            val totalActions = rand.nextInt(30, 60)
+            val simExtSource = SimExtSource(buildActions(rand, totalActions))
+            val srcLogEventCount = rand.nextInt(20, 40)
+
+            MemoryStorage(allocator, epoch = 0).use { bp ->
+                SimNode("test-db", bp, indexerConfig, simExtSource, pipelined = true).use { nodeA ->
+                    SimNode("test-db", bp, indexerConfig, simExtSource, pipelined = true).use { nodeB ->
+                        val nodes = listOf(nodeA, nodeB)
+                        var leadersAtQuiescence = -1
+
+                        launch(dispatcher) {
+                            nodes.forEach { it.openLogProcessor(this) { inner -> LosingDriver(inner) } }
+
+                            launch {
+                                repeat(srcLogEventCount) { event ->
+                                    yield()
+                                    if (event == 0 || rand.nextInt(100) < 50) replicaLog.reportTip()
+                                    else srcLog.appendMessage(SourceMessage.FlushBlock(null))
+                                    if (rand.nextInt(100) < 30) nodes.requestAsserts()
+                                }
+
+                                // A leader's last record, lost, is only voided by the assertion that lands behind it.
+                                val asserting = launch {
+                                    while (true) {
+                                        yield()
+                                        nodes.requestAsserts()
+                                    }
+                                }
+
+                                simExtSource.awaitQuiescence()
+                                replicaLog.awaitAllDelivered()
+                                nodes.awaitTx(lastAppliedTxId())
+                                asserting.cancel()
+                                awaitIdle()
+
+                                leadersAtQuiescence = nodes.leaderCount()
+                            }.invokeOnCompletion { cancel() }
+                        }.join()
+
+                        assertInvariants(nodes)
+
+                        assertEquals(
+                            totalActions, replicaTxIds().size,
+                            "every action is applied once, however many of its records were lost (seed=$currentSeed)"
+                        )
+                        assertEquals(1, leadersAtQuiescence, "and one node leads at the end (seed=$currentSeed)")
+                    }
+                }
+            }
+        }
 
     @RepeatableSimulationTest
     fun `a node whose claims the log refuses goes on following and indexing`() =

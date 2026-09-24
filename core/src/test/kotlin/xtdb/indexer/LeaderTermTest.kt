@@ -5,6 +5,7 @@ import io.mockk.mockk
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -139,10 +140,10 @@ internal abstract class LeaderTermTest {
         fun open() = gate.complete(Unit)
 
         fun wrap(inner: LogsDriver): LogsDriver = object : LogsDriver by inner {
-            override suspend fun appendToReplica(msg: ReplicaMessage): Log.MessageMetadata {
+            override suspend fun enqueueToReplica(msg: ReplicaMessage): Deferred<Log.MessageMetadata> {
                 started.complete(Unit)
                 gate.await()
-                return inner.appendToReplica(msg)
+                return inner.enqueueToReplica(msg)
             }
         }
     }
@@ -211,7 +212,7 @@ internal abstract class LeaderTermTest {
         val driver = wrapDriver(RealLogsDriver(partitionStorage))
 
         val termScope = backgroundScope + termJob
-        val replicaAppender = ReplicaLogAppender(driver, leaderTerm, NoAssertElectionDriver)
+        val replicaAppender = ReplicaLogAppender(driver, leaderTerm, NoAssertElectionDriver, pipelined = false)
         val blockCutter =
             BlockCutter(
                 partitionStorage, partitionState, dbName, leaderTerm, replicaAppender, compactor,
@@ -249,7 +250,7 @@ internal abstract class LeaderTermTest {
             PartitionState(TableCatalog(bufferPool), createTrieCatalog(), liveIndexMock())
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
         val logsDriver = driver(RealLogsDriver(partitionStorage))
-        val appender = ReplicaLogAppender(logsDriver, leaderTerm = 1, NoAssertElectionDriver)
+        val appender = ReplicaLogAppender(logsDriver, leaderTerm = 1, NoAssertElectionDriver, pipelined = false)
         val blockCutter =
             BlockCutter(
                 partitionStorage, partitionState, "test", 1, appender, mockk(relaxed = true),

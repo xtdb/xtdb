@@ -86,7 +86,7 @@ internal class BlockCutterTest {
         private val partitionStorage get() = partition.storage
 
         private val driver = RecordingLogsDriver()
-        val appender = ReplicaLogAppender(driver, leaderTerm = 1, NoAssertElectionDriver)
+        val appender = ReplicaLogAppender(driver, leaderTerm = 1, NoAssertElectionDriver, pipelined = false)
 
         val appended get() = driver.appended.toList()
 
