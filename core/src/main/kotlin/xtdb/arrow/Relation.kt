@@ -20,7 +20,6 @@ import xtdb.arrow.ArrowUnloader.Mode.FILE
 import xtdb.arrow.ArrowUnloader.Mode.STREAM
 import xtdb.arrow.Vector.Companion.openVector
 import xtdb.util.*
-import java.io.ByteArrayOutputStream
 import java.nio.channels.*
 import java.nio.file.Files
 import java.nio.file.Path
@@ -114,24 +113,24 @@ class Relation(
      * schema — so a relation several transactions write into serialises each one's rows on their own.
      */
     fun asArrowStream(startIdx: Int, len: Int): ByteArray {
-        val baos = ByteArrayOutputStream()
-        startUnload(Channels.newChannel(baos), STREAM).use { unl ->
+        val ch = ByteArrayChannel()
+        startUnload(ch, STREAM).use { unl ->
             unl.writePage(startIdx, len)
             unl.end()
         }
 
-        return baos.toByteArray()
+        return ch.toByteArray()
     }
 
     val asArrowFile: ByteArray
         get() {
-            val baos = ByteArrayOutputStream()
-            startUnload(Channels.newChannel(baos), FILE).use { unl ->
+            val ch = ByteArrayChannel()
+            startUnload(ch, FILE).use { unl ->
                 unl.writePage()
                 unl.end()
             }
 
-            return baos.toByteArray()
+            return ch.toByteArray()
         }
 
     fun load(recordBatch: ArrowRecordBatch) {
