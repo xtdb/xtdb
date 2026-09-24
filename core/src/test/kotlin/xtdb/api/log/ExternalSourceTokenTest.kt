@@ -60,7 +60,8 @@ class ExternalSourceTokenTest {
             tables = emptySet(),
             secondaryDatabases = null,
             externalSourceToken = testToken,
-            termId = term
+            termId = term,
+            boundaryTermSeq = null
         )
 
         val parsed = Block.parseFrom(block.toByteArray())
@@ -82,7 +83,8 @@ class ExternalSourceTokenTest {
             tables = emptySet(),
             secondaryDatabases = null,
             externalSourceToken = testToken,
-            termId = term
+            termId = term,
+            boundaryTermSeq = null
         )
         tableCatalog.refresh(block)
 
@@ -100,7 +102,8 @@ class ExternalSourceTokenTest {
             boundaryReplicaMsgId = null,
             tables = emptySet(),
             secondaryDatabases = null,
-            termId = term
+            termId = term,
+            boundaryTermSeq = null
         )
         tableCatalog.refresh(block)
 

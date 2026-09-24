@@ -54,6 +54,7 @@ class LogProcessorTest {
         sourceLog: InMemoryLog<SourceMessage>,
         replicaLog: InMemoryLog<ReplicaMessage>,
         boundaryTermId: Long? = null,
+        boundaryTermSeq: Long? = null,
         readOnly: Boolean = false,
         // A quarter of the in-process scale, so a case turning on an empty poll settles within awaitLeadership's budget.
         // The 5-10x election range comes off this, as in production.
@@ -63,7 +64,13 @@ class LogProcessorTest {
     ) : AutoCloseable {
         private val partition = TestPartition(
             allocator, bufferPool, sourceLog, replicaLog,
-            block = boundaryTermId?.let { block { blockIndex = 0; termId = it } },
+            block = boundaryTermId?.let {
+                block {
+                    blockIndex = 0
+                    termId = it
+                    boundaryTermSeq?.let { seq -> this.boundaryTermSeq = seq }
+                }
+            },
         )
 
         val partitionState get() = partition.state
@@ -262,6 +269,149 @@ class LogProcessorTest {
         }
     }
 
+    private fun tx(txId: Long, termId: Long, termSeq: Long?) =
+        ReplicaMessage.ResolvedTx(
+            txId, Instant.now(), true, null, emptyMap(), srcMsgId = txId, termId = termId, termSeq = termSeq
+        )
+
+    @Test
+    fun `a record missing from a term voids the rest of that term, and the next term applies again`() = runTest {
+        withFreshLogs { sourceLog, replicaLog ->
+            TestNode(sourceLog, replicaLog, readOnly = true).use { node ->
+                replicaLog.appendMessage(ReplicaMessage.NoOp(termId = 1, termSeq = 0))
+                replicaLog.appendMessage(tx(1, termId = 1, termSeq = 1))
+                replicaLog.appendMessage(tx(3, termId = 1, termSeq = 3))
+                val voided = replicaLog.appendMessage(tx(4, termId = 1, termSeq = 4))
+
+                awaitReplicaMsg(node, voided.msgId)
+                assertEquals(1L, node.watchers.latestTxId, "nothing after the gap applied")
+
+                replicaLog.appendMessage(ReplicaMessage.NoOp(termId = 2, termSeq = 0))
+                val next = replicaLog.appendMessage(tx(5, termId = 2, termSeq = 1))
+
+                awaitReplicaMsg(node, next.msgId)
+                assertEquals(5L, node.watchers.latestTxId)
+            }
+        }
+    }
+
+    @Test
+    fun `a losing claim among the winning leader's records neither applies nor voids the term`() = runTest {
+        withFreshLogs { sourceLog, replicaLog ->
+            TestNode(sourceLog, replicaLog, readOnly = true).use { node ->
+                replicaLog.appendMessage(ReplicaMessage.NoOp(termId = 1, termSeq = 0))
+                replicaLog.appendMessage(tx(1, termId = 1, termSeq = 1))
+                replicaLog.appendMessage(ReplicaMessage.NoOp(termId = 1, termSeq = 0))
+                // A losing claim from a node predating term positions.
+                replicaLog.appendMessage(ReplicaMessage.NoOp(termId = 1))
+                val last = replicaLog.appendMessage(tx(2, termId = 1, termSeq = 2))
+
+                awaitReplicaMsg(node, last.msgId)
+                assertEquals(2L, node.watchers.latestTxId)
+            }
+        }
+    }
+
+    @Test
+    fun `a reader resuming after a block checks the term from the position after its boundary`() = runTest {
+        withFreshLogs { sourceLog, replicaLog ->
+            TestNode(sourceLog, replicaLog, boundaryTermId = 3, boundaryTermSeq = 5, readOnly = true).use { node ->
+                replicaLog.appendMessage(tx(1, termId = 3, termSeq = 6))
+                val voided = replicaLog.appendMessage(tx(2, termId = 3, termSeq = 8))
+
+                awaitReplicaMsg(node, voided.msgId)
+                assertEquals(1L, node.watchers.latestTxId)
+            }
+        }
+    }
+
+    @Test
+    fun `a new term whose claim is missing is voided from its first record`() = runTest {
+        withFreshLogs { sourceLog, replicaLog ->
+            TestNode(sourceLog, replicaLog, readOnly = true).use { node ->
+                replicaLog.appendMessage(tx(1, termId = 1, termSeq = 1))
+                val last = replicaLog.appendMessage(tx(2, termId = 1, termSeq = 2))
+
+                awaitReplicaMsg(node, last.msgId)
+                assertEquals(-1L, node.watchers.latestTxId)
+            }
+        }
+    }
+
+    @Test
+    fun `a follower that reads a gap claims the next term without waiting out an election`() = runTest {
+        withFreshLogs { sourceLog, replicaLog ->
+            replicaLog.appendMessage(ReplicaMessage.NoOp(termId = 1, termSeq = 0))
+            replicaLog.appendMessage(tx(1, termId = 1, termSeq = 1))
+
+            TestNode(sourceLog, replicaLog, electionDriver = noElectionTimeout()).use { node ->
+                awaitFence(node, 1)
+
+                replicaLog.appendMessage(tx(3, termId = 1, termSeq = 3))
+
+                awaitLeadership(node, expected = true)
+                assertEquals(2L, node.logProc.highestTermSeen)
+            }
+        }
+    }
+
+    @Test
+    fun `a term won by a claim with no position is not checked`() = runTest {
+        withFreshLogs { sourceLog, replicaLog ->
+            TestNode(sourceLog, replicaLog, readOnly = true).use { node ->
+                replicaLog.appendMessage(ReplicaMessage.NoOp(termId = 1))
+                replicaLog.appendMessage(tx(1, termId = 1, termSeq = null))
+                val last = replicaLog.appendMessage(tx(2, termId = 1, termSeq = 7))
+
+                awaitReplicaMsg(node, last.msgId)
+                assertEquals(2L, node.watchers.latestTxId)
+            }
+        }
+    }
+
+    @Test
+    fun `a reader resuming after a boundary with no position takes the next record's as given`() = runTest {
+        withFreshLogs { sourceLog, replicaLog ->
+            TestNode(sourceLog, replicaLog, boundaryTermId = 3, readOnly = true).use { node ->
+                replicaLog.appendMessage(tx(1, termId = 3, termSeq = 9))
+                replicaLog.appendMessage(tx(2, termId = 3, termSeq = 10))
+                val voided = replicaLog.appendMessage(tx(3, termId = 3, termSeq = 12))
+
+                awaitReplicaMsg(node, voided.msgId)
+                assertEquals(2L, node.watchers.latestTxId)
+            }
+        }
+    }
+
+    @Test
+    fun `a losing claim read after a boundary with no position leaves the term's mode to its leader's records`() = runTest {
+        withFreshLogs { sourceLog, replicaLog ->
+            TestNode(sourceLog, replicaLog, boundaryTermId = 3, readOnly = true).use { node ->
+                replicaLog.appendMessage(ReplicaMessage.NoOp(termId = 3, termSeq = 0))
+                replicaLog.appendMessage(tx(1, termId = 3, termSeq = null))
+                val last = replicaLog.appendMessage(tx(2, termId = 3, termSeq = null))
+
+                awaitReplicaMsg(node, last.msgId)
+                assertEquals(2L, node.watchers.latestTxId)
+            }
+        }
+    }
+
+    @Test
+    fun `a leader that reads back a gap in its own term stands down and claims the next`() = runTest {
+        withFreshLogs { sourceLog, replicaLog ->
+            TestNode(sourceLog, replicaLog, electionDriver = noElectionTimeout()).use { node ->
+                awaitLeadership(node, expected = true)
+
+                replicaLog.appendMessage(ReplicaMessage.NoOp(termId = 1, termSeq = 5))
+
+                awaitFence(node, 2)
+                awaitLeadership(node, expected = true)
+                assertEquals(2L, node.logProc.highestTermSeen, "the only node leads again, at the term above the voided one")
+            }
+        }
+    }
+
     @Test
     fun `a node applies the messages already on the log, then claims`() = runTest {
         withFreshLogs { sourceLog, replicaLog ->
@@ -435,7 +585,7 @@ class LogProcessorTest {
                 // Whoever leads next produces the same block, which the re-opened follower is still holding.
                 val reUpload = replicaLog.appendMessage(
                     ReplicaMessage.BlockUploaded(
-                        Storage.VERSION, 0, 0, 1, emptyList(), termId = cutter + 1
+                        Storage.VERSION, 0, 0, 1, emptyList(), termId = cutter + 1, termSeq = 1
                     )
                 )
 

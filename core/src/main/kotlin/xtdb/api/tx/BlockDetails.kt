@@ -21,6 +21,8 @@ data class BlockDetails(
     // the leader term that produced this block's boundary; 0 for blocks written before
     // term-fencing (see #5817)
     val termId: Long,
+    // the boundary message's position within [termId]; null where the boundary carried none (see #6105)
+    val boundaryTermSeq: Long?,
     val externalSourceToken: ExternalSourceToken?,
     /** The tables this block records — so, the tables with a per-table block file beside it. */
     val tables: List<TableEntry>,

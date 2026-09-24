@@ -27,6 +27,16 @@ import java.util.concurrent.atomic.AtomicLong
 
 private val LOG = LogProcessor::class.logger
 
+// Sentinels for `nextTermSeq`: the leader numbers its records from 1, so none of them is a real position.
+/** The term was won by a claim carrying no position, so nothing in it is checked. */
+private const val UNSEQUENCED = -1L
+
+/** Resumed from a block whose boundary carried no position: the next record's is taken as given. */
+private const val UNKNOWN_TERM_SEQ = 0L
+
+/** A record of this term never reached the log: every later record of the term falls behind it. */
+private const val VOIDED = Long.MAX_VALUE
+
 // Shutdown, not a fault. MUST NOT reach `Watchers.notifyError`: `Failed` is absorbing, so a clean
 // resignation or a node teardown would leave the database unqueryable until the process restarts.
 internal val Throwable.isShutdownSignal
@@ -108,10 +118,10 @@ class LogProcessor(
     private val hasExternalSource = externalSource != null
 
     /**
-     * The highest leader term seen on this partition's replica log.
+     * Where this partition's replica-log reader stands: the highest leader term seen, and its position in it.
      *
-     * The partition's, not a role's. A role change opens a fresh follower, and a high-water seeded afresh
-     * from the persisted block boundary would forget every term written since the last block flush — so the
+     * The partition's, not a role's. A role change opens a fresh follower, and a position seeded afresh from
+     * the persisted block boundary would forget every term written since the last block flush — so the
      * same term could be admitted twice, once either side of a demote.
      *
      * Written by the reader coroutine alone. Volatile because tests read it from another thread.
@@ -119,6 +129,62 @@ class LogProcessor(
     @Volatile
     internal var highestTermSeen: Long = partitionState.tableCatalogOrNull?.boundaryTermId ?: 0
         private set
+
+    /** The position the next record of [highestTermSeen] has to carry, or one of the sentinels above. */
+    private var nextTermSeq: Long =
+        partitionState.tableCatalogOrNull?.boundaryTermSeq?.let { it + 1 }
+            ?: if (highestTermSeen == 0L) UNSEQUENCED else UNKNOWN_TERM_SEQ
+
+    private enum class Verdict {
+        APPLY,
+
+        /** Below the highest term seen: written by a leader the log has moved past. */
+        FENCED,
+
+        /** Behind this term's position: a losing claim, or a duplicate. */
+        DISCARDED,
+
+        /** This record's predecessor in its term is missing, so it and the rest of the term are voided. */
+        VOIDED,
+    }
+
+    /**
+     * Folds one record into this reader's place in the log's terms.
+     *
+     * Every reader folds the same records and so reaches the same verdict on each, whatever its version,
+     * role or starting point — see `allium/log-processor-lifecycle.allium`.
+     */
+    private fun admit(msgTerm: Long, termSeq: Long?): Verdict {
+        if (msgTerm < highestTermSeen) return Verdict.FENCED
+
+        // Claims open a term at position 0, so a new term starting anywhere else has lost its start.
+        if (msgTerm > highestTermSeen) {
+            highestTermSeen = msgTerm
+            return when (termSeq) {
+                null -> Verdict.APPLY.also { nextTermSeq = UNSEQUENCED }
+                0L -> Verdict.APPLY.also { nextTermSeq = 1 }
+                else -> Verdict.VOIDED.also { nextTermSeq = VOIDED }
+            }
+        }
+
+        return when (val next = nextTermSeq) {
+            UNSEQUENCED -> Verdict.APPLY
+
+            // The winning claim precedes the boundary, so a claim read after it has lost, and says nothing about the term.
+            UNKNOWN_TERM_SEQ -> when (termSeq) {
+                null -> Verdict.APPLY.also { nextTermSeq = UNSEQUENCED }
+                0L -> Verdict.DISCARDED
+                else -> Verdict.APPLY.also { nextTermSeq = termSeq + 1 }
+            }
+
+            // A record with no position in a sequenced term can only be a losing claim from a node predating positions.
+            else -> when {
+                termSeq == null || termSeq < next -> Verdict.DISCARDED
+                termSeq == next -> Verdict.APPLY.also { nextTermSeq = next + 1 }
+                else -> Verdict.VOIDED.also { nextTermSeq = VOIDED }
+            }
+        }
+    }
 
     /** Volatile: the tail is the only writer, but tests read it from another thread. */
     @Volatile
@@ -208,7 +274,7 @@ class LogProcessor(
         val termId = highestTermSeen + 1
 
         try {
-            following.claimMsgId = logsDriver.appendToReplica(NoOp(termId = termId)).msgId
+            following.claimMsgId = logsDriver.appendToReplica(NoOp(termId = termId, termSeq = 0)).msgId
         } catch (e: Throwable) {
             if (e.isShutdownSignal) throw e
 
@@ -223,44 +289,62 @@ class LogProcessor(
     private suspend fun handleRecord(polled: Log.Record<ReplicaMessage>) {
         val record = bufferPool.resolveOversized(polled)
         val msgTerm = record.message.termId
+        val msgSeq = record.message.termSeq
 
         // Read before the fold, because a claim confers only where it is above every term that precedes it.
         val seenBefore = highestTermSeen
 
-        // Below the high-water: written by a leader the log has moved past, so every reader discards it.
-        if (msgTerm < seenBefore)
-            LOG.debug { "[$dbName] discarding fenced record ${record.msgId} (term $msgTerm < $seenBefore)" }
-        else {
-            highestTermSeen = msgTerm
+        when (admit(msgTerm, msgSeq)) {
+            Verdict.FENCED ->
+                LOG.debug { "[$dbName] discarding fenced record ${record.msgId} (term $msgTerm < $seenBefore)" }
+
+            Verdict.DISCARDED ->
+                LOG.debug { "[$dbName] discarding record ${record.msgId} behind term $msgTerm's position (at $msgSeq)" }
+
+            Verdict.VOIDED -> {
+                LOG.warn("[$dbName] replica record ${record.msgId} (term $msgTerm, position $msgSeq) follows a record that never reached the log — voiding the rest of term $msgTerm")
+
+                // Fencing leaves a leader nothing further to read back at or below this term.
+                val role = state
+                if (role is Leading) {
+                    LOG.info("[$dbName] term $msgTerm voided — resigning")
+                    role.job.cancelAndJoin()
+                    reopenFollower()
+                }
+
+                // Rather than waiting for an empty read: a voided term confirms nothing further, so there is no incumbent to wait out.
+                claimLeadership()
+            }
 
             // A role ending cancels the handle mid-record, so the record is re-offered to whatever replaces that role.
-            while (true) {
-                currentCoroutineContext().ensureActive()
+            Verdict.APPLY ->
+                while (true) {
+                    currentCoroutineContext().ensureActive()
 
-                val role = state
+                    val role = state
 
-                try {
-                    if (role is Leading && msgTerm > role.leaderTerm) {
-                        LOG.info("[$dbName] superseded by term $msgTerm — resigning")
-                        role.job.cancelAndJoin()
+                    try {
+                        if (role is Leading && msgTerm > role.leaderTerm) {
+                            LOG.info("[$dbName] superseded by term $msgTerm — resigning")
+                            role.job.cancelAndJoin()
+                            reopenFollower()
+                            continue
+                        }
+
+                        role.handleReplicaMessage(record)
+                        break
+                    } catch (_: CancellationException) {
+                        // The cancel came from that role ending, so join before replacing it, or `openFollower` would race the teardown it is seeded from.
+                        role.job.join()
                         reopenFollower()
-                        continue
+                    } catch (e: Throwable) {
+                        LOG.error(
+                            e,
+                            "[$dbName] failed to process replica record ${record.msgId} (${record.message::class.simpleName})"
+                        )
+                        throw e
                     }
-
-                    role.handleReplicaMessage(record)
-                    break
-                } catch (_: CancellationException) {
-                    // The cancel came from that role ending, so join before replacing it, or `openFollower` would race the teardown it is seeded from.
-                    role.job.join()
-                    reopenFollower()
-                } catch (e: Throwable) {
-                    LOG.error(
-                        e,
-                        "[$dbName] failed to process replica record ${record.msgId} (${record.message::class.simpleName})"
-                    )
-                    throw e
                 }
-            }
         }
 
         // Below the apply: a role ending mid-record leaves the position short, which is what re-offers the record.
@@ -356,7 +440,7 @@ class LogProcessor(
 
             val blockCutter =
                 BlockCutter(
-                    partitionStorage, partitionState, dbName, termId, replicaAppender, logsDriver,
+                    partitionStorage, partitionState, dbName, termId, replicaAppender,
                     compactor, dbCatalog, base.meterRegistry, lastBlockUploadEpochSeconds, scope,
                     ioDispatcher
                 )

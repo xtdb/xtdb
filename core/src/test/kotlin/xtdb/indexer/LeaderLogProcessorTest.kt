@@ -1,5 +1,6 @@
 package xtdb.indexer
 
+import clojure.lang.Keyword
 import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.CancellationException
@@ -20,6 +21,7 @@ import org.junit.jupiter.api.assertThrows
 import xtdb.api.DatabaseName
 import xtdb.api.TableRef
 import xtdb.api.TransactionResult
+import xtdb.api.error.Fault
 import xtdb.api.log.InMemoryLog
 import xtdb.api.log.Log
 import xtdb.api.log.ReplicaMessage
@@ -126,7 +128,7 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
         val proc = unstartedTerm(watchers, extSource = mockk(relaxed = true)).proc
 
-        // Not in the resolver's queue, so it is re-materialised from the record — the path a promotion's
+        // Written by the previous term, so it is re-materialised from the record — the path a promotion's
         // replay takes for every record the follower buffered.
         //
         // srcMsgId is null only on a pre-#5586 record, and a CDC tx's txId is a per-database counter
@@ -136,11 +138,32 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
         proc.applyReplicaMessage(
             Log.Record(
                 0, 0, Instant.now(),
-                ReplicaMessage.ResolvedTx(0, Instant.now(), true, null, emptyMap(), srcMsgId = null, termId = 1)
+                ReplicaMessage.ResolvedTx(0, Instant.now(), true, null, emptyMap(), srcMsgId = null, termId = 0)
             )
         )
 
         assertEquals(-1L, watchers.latestSourceMsgId)
+    }
+
+    @Test
+    fun `a tx of the leader's own term that it did not resolve next fails rather than applying`() = runTest {
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+        val proc = unstartedTerm(watchers).proc
+
+        val fault = assertThrows<Fault> {
+            proc.applyReplicaMessage(
+                Log.Record(
+                    0, 0, Instant.now(),
+                    ReplicaMessage.ResolvedTx(0, Instant.now(), true, null, emptyMap(), srcMsgId = 0, termId = 1)
+                )
+            )
+        }
+
+        assertEquals(
+            Keyword.intern("xtdb.indexer", "leader-read-back-mismatch"),
+            fault.data.valAt(Keyword.intern("xtdb.error", "code")),
+        )
+        assertEquals(-1L, watchers.latestTxId, "nothing was applied")
     }
 
     private fun record(msgId: Long, msg: ReplicaMessage) = Log.Record(0, msgId, Instant.now(), msg)
@@ -186,12 +209,12 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
         val (proc, _, _) = unstartedTerm(watchers)
 
-        proc.applyReplicaMessage(record(0, ReplicaMessage.BlockBoundary(0, 5, termId = 1)))
+        proc.applyReplicaMessage(record(0, ReplicaMessage.BlockBoundary(0, 5, termId = 0)))
 
         proc.applyReplicaMessage(
             record(
                 1,
-                ReplicaMessage.ResolvedTx(7, Instant.now(), true, null, emptyMap(), srcMsgId = 6, termId = 1)
+                ReplicaMessage.ResolvedTx(7, Instant.now(), true, null, emptyMap(), srcMsgId = 6, termId = 0)
             )
         )
 

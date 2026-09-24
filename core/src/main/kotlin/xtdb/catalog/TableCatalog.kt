@@ -67,6 +67,7 @@ private fun Block.asBlockDetails() = BlockDetails(
     latestProcessedMsgId = latestProcessedMsgId.takeIf { hasLatestProcessedMsgId() },
     boundaryReplicaMsgId = boundaryReplicaMsgId.takeIf { hasBoundaryReplicaMsgId() },
     termId = termId,
+    boundaryTermSeq = boundaryTermSeq.takeIf { hasBoundaryTermSeq() },
     externalSourceToken = takeIf { it.hasExternalSourceToken() }?.externalSourceToken?.toByteArray(),
     tables = tableEntries(),
     secondaryDatabases = secondaryDatabasesMap,
@@ -192,6 +193,8 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
     // fence from here. Default 0 (plain scalar) for blocks written before term-fencing. See #5817.
     val boundaryTermId: Long get() = snap().block?.termId ?: 0
 
+    val boundaryTermSeq: Long? get() = snap().block?.boundaryTermSeq
+
     val externalSourceToken: ExternalSourceToken? get() = snap().block?.externalSourceToken
 
     val allTables: List<TableRef> get() = snap().entries.map { it.table }
@@ -307,6 +310,7 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
         secondaryDatabases: Map<String, DatabaseConfig>?,
         externalSourceToken: ExternalSourceToken? = null,
         termId: Long,
+        boundaryTermSeq: Long?,
     ): Block {
         val currentBlockIndex = this.currentBlockIndex
         check(currentBlockIndex == null || currentBlockIndex < blockIndex) {
@@ -330,6 +334,7 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
             secondaryDatabases?.let { this.secondaryDatabases.putAll(it) }
             externalSourceToken?.let { this.externalSourceToken = ByteString.copyFrom(it) }
             this.termId = termId
+            boundaryTermSeq?.let { this.boundaryTermSeq = it }
         }
     }
 

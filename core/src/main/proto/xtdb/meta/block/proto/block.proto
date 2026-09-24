@@ -70,4 +70,9 @@ message Block {
     int64 term_id = 8;
 
     repeated TableEntry tables = 9;
+
+    // the term_seq of this block's BlockBoundary message, so a reader resuming after the
+    // boundary knows the next position its term expects. Absent for blocks written before
+    // this field, or whose boundary carried none. See #6105.
+    int64 boundary_term_seq = 10;
 }

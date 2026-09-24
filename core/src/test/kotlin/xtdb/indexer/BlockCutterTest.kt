@@ -113,7 +113,7 @@ internal class BlockCutterTest {
         fun cutter(scope: CoroutineScope) =
             BlockCutter(
                 partitionStorage, partitionState, "test", leaderTerm = 1, replicaAppender = appender,
-                logsDriver = driver, compactor = mockk(relaxed = true), dbCatalog = null,
+                compactor = mockk(relaxed = true), dbCatalog = null,
                 meterRegistry = null, lastUploadEpochSeconds = AtomicLong(0), scope = scope,
                 ioDispatcher = ioDispatcher
             )

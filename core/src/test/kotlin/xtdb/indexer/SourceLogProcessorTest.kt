@@ -99,7 +99,7 @@ internal class SourceLogProcessorTest : LeaderTermTest() {
 
         val blockCutter = BlockCutter(
             partitionStorage, partitionState, dbName, leaderTerm = 1, replicaAppender = appender,
-            logsDriver = driver, compactor = mockk(relaxed = true), dbCatalog = null, meterRegistry = null,
+            compactor = mockk(relaxed = true), dbCatalog = null, meterRegistry = null,
             lastUploadEpochSeconds = AtomicLong(0), scope = backgroundScope,
             ioDispatcher = StandardTestDispatcher(testScheduler)
         )

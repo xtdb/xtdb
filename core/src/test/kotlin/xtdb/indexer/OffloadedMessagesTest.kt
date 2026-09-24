@@ -65,12 +65,13 @@ class OffloadedMessagesTest {
         runTest {
             MemoryStorage(al, 0).use { bufferPool ->
                 val declining = DecliningDriver(maxBytes = 1024)
-                val declined = bigTriesAdded()
+                val declined = bigTriesAdded().withTermSeq(4)
 
                 offloading(bufferPool, declining, blockIndex = 7).appendToReplica(declined)
 
                 val ref = assertInstanceOf(ReplicaMessage.OversizedMessage::class.java, declining.appended.single())
                 assertEquals(declined.termId, ref.termId, "the envelope carries the declined message's term")
+                assertEquals(declined.termSeq, ref.termSeq, "and its position in that term")
                 assertEquals(8L, ref.blockIndex, "keyed under the open block, not the last completed one")
 
                 val record = Log.Record(0, 0, Instant.EPOCH, ref as ReplicaMessage)
