@@ -7,8 +7,14 @@
 -- Scope: one database (e.g. "xtdb" or a secondary).
 -- External: the multi-database orchestration layer (attach/detach), and leader election (log-processor-lifecycle.allium).
 --
+-- Partitions:
+--   A database is one or more PARTITIONS, held as a list whose index is the partition.
+--   Each partition is its own pipeline — log processor, watchers, table catalog, live index, trie catalog and storage subtree — over its own slice of the database's source and replica logs.
+--   What a database holds for all of its partitions is its config, its two logs and its external source.
+--   The rules below run for one partition unless they say otherwise; the database-level operations are fan-outs over its partitions (see Rules: Database-level operations).
+--
 -- Source and replica are always separate logs — an invariant, not a convention.
--- One node holds one role per database at a time, leading or following, and one live index shared between them.
+-- One node holds one role per partition at a time, leading or following, and one live index shared between them.
 -- A leader feeds that index from its own replica-log READ-BACK; a follower feeds it from the replica messages it reads.
 -- The compactor writes L1+ tries to the source log, and the leader forwards them to the replica log.
 --
@@ -49,6 +55,7 @@ use "./compaction.allium" as compaction
 
 given {
     database: Database
+    partition: Partition               -- the partition these rules run for; the instances below are its own
     log_processor: LogProcessor
     tx_resolver: TxResolver?           -- leader-only; absent while following
     live_index: LiveIndex              -- shared across both roles
@@ -71,6 +78,12 @@ external entity Throwable {
 external entity Log {
     -- An ordered, append-only message stream.
     -- Two separate instances per database: source_log and replica_log, which MUST be distinct logs rather than aliases for one.
+    -- Partition-indexed: each of a database's partitions reads and appends to its own slice of each (see LogSlice).
+}
+
+external entity LogSlice {
+    -- One partition's slice of a partition-indexed Log, ordered and append-only in its own right.
+    -- A partition's pipeline reads and appends to its own slices only.
 }
 
 external entity ObjectStore {
@@ -78,13 +91,14 @@ external entity ObjectStore {
 }
 
 external entity Compactor {
-    -- Compacts a database's tries. A peer of the log processor rather than a part of it: it is signalled at block boundaries and otherwise runs on its own.
+    -- Compacts one partition's tries. A peer of the log processor rather than a part of it: it is signalled at block boundaries and otherwise runs on its own.
     -- See: compaction.allium.
 }
 
 external entity ExternalSource {
     -- A system outside XTDB that feeds a database by change data capture, e.g. Postgres logical replication.
-    -- On assignment it is handed an indexing callback and an opaque resume token to start after, and feeds transactions in directly.
+    -- One per database on each node that could lead it, shared by every partition's leader.
+    -- On each partition's assignment it is handed that partition, an indexing callback and an opaque resume token to start after, and feeds that partition's transactions in directly.
     -- An external-source database assigns its own monotonically increasing tx_id off the RESOLVED head rather than taking it from the source-log position.
     -- A client submit is rejected for such a database: transactions enter only through the source.
 }
@@ -110,22 +124,59 @@ entity LiveIndex {
 }
 
 entity Database {
+    config: DatabaseConfig
     source_log: Log
     replica_log: Log
 
-    -- The configured external source, if any.
-    -- This — not this node's role — is what rejects a client submit: the source log is shared, so any node's submit path has to reach the same decision whether or not it happens to be the leader.
-    -- Opened and closed with the database on each node that could lead it, so one source spans every leader term that node serves.
+    -- The external source this node has opened, if any.
+    -- Opened and closed with the database on each node that could lead it, so one source spans every leader term that node serves, for every partition.
     -- A node that indexes nothing, or holds the database read-only, can never lead and opens no source.
     external_source: ExternalSource?
+
+    -- One per configured partition, in index order: position in the list IS the partition, and a read basis names each partition by the same position.
+    partitions: List<Partition>
+
+    -- Database-level views, one answer drawn from every partition:
+    --   the latest processed source msg_ids are one per partition, each off that partition's watchers;
+    --   the latest submitted source msg_ids are one per partition, each the head of that partition's slice of the source log;
+    --   the ingestion error is any partition's, one stopped partition being enough to make the database unusable.
 
     invariant DistinctLogs {
         source_log != replica_log
     }
+
+    invariant OnePartitionPerConfiguredPartition {
+        partitions.count = config.partitions
+    }
+
+    -- Above one partition is reachable only through an external source whose declared max_partitions allows it.
+    -- Every shipped source declares 1, and a database with no external source is capped at 1, so every shipped configuration has exactly one partition.
+    invariant PartitionsWithinSourceCap {
+        config.partitions >= 1 and config.partitions <= config.max_partitions
+    }
+}
+
+entity Partition {
+    -- One partition of a database on this node: a pipeline of its own over its own slice of each of the database's logs.
+    -- Its trie catalog and its subtree of the database's storage are its own too, so its blocks and tries land apart from every other partition's.
+    database: Database
+    index: Integer
+    source_log: LogSlice
+    replica_log: LogSlice
+    -- Absent on a node that indexes nothing, where there is no pipeline to run.
+    log_processor: LogProcessor?
+    watchers: Watchers
+    table_catalog: TableCatalog
+    live_index: LiveIndex
+
+    -- Where this partition records its transactions: xt.txs at one partition, xt.txs_<index> above.
+    -- tx_ids are per-partition counters, so one shared table would hold the same _id for several unrelated transactions.
+    txs_table: trie_cat/TableRef
 }
 
 entity LogProcessor {
-    -- This node's participation in one database. Starts following, and is always in exactly one role.
+    -- This node's participation in one partition of a database.
+    -- Starts following, and is always in exactly one role.
     -- log-processor-lifecycle.allium owns the role state machine and the transitions; `mode` here is the coarser view this spec's rules need.
     --
     -- latest_replica_msg_id: the position this node's single replica read has reached — the last record it finished with, applied or discarded.
@@ -142,7 +193,7 @@ entity LogProcessor {
     --   A record BELOW it was written by a superseded leader and is discarded (see Fencing).
     --   Folded and tested by this node's replica read, before either role acts on the record: records are read one at a time and awaited, so the fence has a single caller at any moment.
     --   Seeded from the last persisted block's term so that it survives restart.
-    --   Scoped to the database on this node for its whole life rather than to a role — log-processor-lifecycle.allium's LeaderTerm carries why.
+    --   Scoped to the partition on this node for its whole life rather than to a role — log-processor-lifecycle.allium's LeaderTerm carries why.
     --
     -- pending_block: the block cut and not yet adopted, holding whatever arrived behind its boundary — absent unless one is in flight.
     --   Whichever role is live holds it: a follower that read the boundary, or a leader that produced the block and is waiting to read its own confirmation back.
@@ -155,7 +206,7 @@ entity LogProcessor {
 }
 
 variant Leader : LogProcessor {
-    -- The sole writer of this database's replica log for its term.
+    -- The sole writer of this partition's slice of the replica log for its term.
     -- Resolves source-log messages and external-source transactions, appends them stamped with its term, reads them back and applies them.
     -- Also owns the block cycle, and the trie and block garbage collectors.
     --
@@ -164,6 +215,7 @@ variant Leader : LogProcessor {
     --   The records the follower was holding drain at the adopt, each having met the fence at its own position in the log on the way in.
     --
     -- external_source is present iff the database has one configured; it makes this leader externally fed rather than client-driven.
+    -- It is the database's one source, which every partition's leader on this node borrows at once.
     external_source: ExternalSource?
 
     -- This leader's fencing term: one above the highest term this node had read when it claimed (see log-processor-lifecycle.allium).
@@ -206,7 +258,7 @@ entity TxResolver {
 }
 
 entity TableCatalog {
-    -- What one database knows about its tables on this node, and the block that knowledge is current to.
+    -- What one partition knows about its tables on this node, and the block that knowledge is current to.
     -- The two are one value, replaced wholesale, so a reader sees a block index against that block's table metadata and never against the previous block's.
     --
     -- A block's per-table metadata folds in exactly once, on the adopt.
@@ -223,7 +275,7 @@ entity TableCatalog {
 }
 
 entity Watchers {
-    -- The DURABLE watermarks for one database, plus the external-source resume token where it has one.
+    -- The DURABLE watermarks for one partition, plus the external-source resume token where it has one.
     -- Whichever role is live advances them only once a message has been applied.
     -- Clients await a tx_id to learn a transaction's result; a promotion reads a source position from here to resume from.
     --
@@ -263,6 +315,7 @@ value ExternalSourceToken {
 
 value TransactionKey {
     -- tx_id is monotonically increasing, assigned by the source log or off the RESOLVED head for an external-source database.
+    -- It is a per-partition counter, so a bare tx_id names a transaction only within one partition.
     -- system_time is strictly increasing across a partition's committed transactions.
     -- A client MAY specify one, and a specified system_time that does not advance on the latest completed transaction aborts the transaction.
     -- Strictness is what lets a read basis name a transaction by its system_time — see snapshot_token.
@@ -318,6 +371,18 @@ value TableMetadata {
     row_count: Integer?
 }
 
+value DatabaseConfig {
+    -- A database's configuration, opaque here but for the fields the partition and submit rules read.
+    partitions: Integer
+
+    -- Whether an external source is configured — the same on every node, where Database.external_source is only what this node has opened.
+    has_external_source: Boolean
+
+    -- The most partitions the configured external source declares it can drive, and 1 where none is configured.
+    -- A pure declaration of the source's own config, with no call to its upstream behind it, so every node reads the same value off the same config.
+    max_partitions: Integer
+}
+
 value DbOp {
     -- A database-level side-effect carried within a resolved transaction.
     kind: Attach | Detach
@@ -334,7 +399,10 @@ variant Detach : DbOp {
 
 ---- Source Log Messages
 
--- Messages on the source log. Written by clients, by the leader (flush-block), and by the block upload and the compactor (tries-added).
+-- Messages on the source log.
+-- Written by clients, by the leader and by an operator requesting a flush (flush-block), and by the block upload and the compactor (tries-added).
+-- A flush-block or tries-added lands on one partition's slice and is resolved by that partition's leader.
+-- Attach and detach land on partition 0, the only partition of the primary database that carries them.
 
 entity SourceMessage {
     msg_id: MessageId
@@ -358,7 +426,9 @@ variant LegacyTxMessage : SourceMessage {
 }
 
 variant FlushBlockMessage : SourceMessage {
-    -- The leader sends this to itself to trigger a block flush on timeout, so that the cut goes through resolution in log order like any other boundary trigger.
+    -- A request that one partition cut a block, so that the cut goes through resolution in log order like any other boundary trigger.
+    -- Sent by that partition's leader to itself on timeout (LeaderFlushTimeout), or on a caller's request (FlushBlockRequestedForPartition).
+    -- expected_block_idx is the partition's own current block index when sent: partitions block on their own cadence, so one index does not serve them all.
     expected_block_idx: Integer?
 }
 
@@ -381,7 +451,7 @@ variant DetachDbMessage : SourceMessage {
 
 ---- Replica Log Messages
 
--- Messages on the replica log, written by the leader for its term.
+-- Messages on the replica log, each on one partition's slice, written by that partition's leader for its term.
 -- Consumed by every node, the leader itself included on read-back, and by its own follower after a demote.
 
 entity ReplicaMessage {
@@ -489,7 +559,7 @@ config {
 
 -- == Fencing ==
 --
--- There is at most one CONFIRMED leader per database, enforced by a TERM on the read side.
+-- There is at most one CONFIRMED leader per partition, enforced by a TERM on the read side of that partition's slice of the replica log.
 -- There is no write-time fence.
 --
 -- Every replica record carries the term of the leader that created it.
@@ -497,7 +567,7 @@ config {
 --
 -- The fence is applied ONCE to every record, on this node's replica read and before either role acts on it: a record below the highest term seen so far is DISCARDED, and one at or above it folds that high-water upward and is handed on.
 -- Records are read one at a time, handed to the live role and awaited, so the fence has a single caller at any moment.
--- The high-water belongs to the database on this node, seeded from the last persisted block, so the fence survives restart.
+-- The high-water belongs to the partition on this node, seeded from the last persisted block, so the fence survives restart.
 -- A discarded record still advances the read position, so the read never stalls on one and a claim behind one is still reached.
 --
 -- The fold belongs to the RECORD rather than to the role that acts on it, so it happens on admission, whichever role ends up taking the record.
@@ -607,9 +677,9 @@ config {
 -- An upload reaching the comparison with no block in flight is one this node has already adopted, and is stale by block index; an index the catalog has NOT reached is a fault.
 
 rule TransitionToLeader {
-    -- db.allium's view of a promotion: what it means for THIS database's pipeline.
+    -- db.allium's view of a promotion: what it means for THIS partition's pipeline.
     -- log-processor-lifecycle.allium owns the ordered steps and the recovery path; they are not duplicated here.
-    when: ClaimConferredLeadership(database, term)
+    when: ClaimConferredLeadership(partition, term)
     requires: log_processor.mode = Follower
 
     ensures:
@@ -627,7 +697,7 @@ rule TransitionToLeader {
         -- It resumes the SOURCE log from the durable watermark, and the replica read continues on this node from where the follower left off.
         -- Its resolver is seeded at the durable head, and it cuts on the rows already in the open block, so it cuts this block where the previous leader would have.
         log_processor.mode = Leader.created(
-            -- The database's own source, borrowed for the length of this term, so this leader is externally fed iff the database is.
+            -- The database's own source, borrowed for the length of this term alongside every other partition's leader, so this leader is externally fed iff the database is.
             external_source: database.external_source,
             leader_term: term,
             last_resolved_src_msg_id: watchers.latest_source_msg_id,
@@ -649,13 +719,16 @@ rule TransitionToLeader {
 
         SourceDeliveryResumed(after: watchers.latest_source_msg_id)
 
+        if database.external_source != null:
+            PartitionAssigned(partition)
+
     @guidance
         -- ReplayEquivalence: the live index state after a promotion is identical regardless of how much work the follower had already done.
 }
 
 rule TransitionToFollower {
     -- A term ends itself — superseded on read-back, or failed — and this node re-opens a follower when it finds the term over.
-    when: LeaderTermEnded(database)
+    when: LeaderTermEnded(partition)
     requires: log_processor.mode = Leader
 
     ensures:
@@ -677,7 +750,8 @@ rule ClientSubmitsTransaction {
     -- A client submits a transaction: it is appended to the SOURCE log, which every node shares, so this succeeds whether or not this node happens to be the leader.
     when: ClientSubmitsTx(client, database, tx_ops, opts)
 
-    requires: database.external_source = null
+    -- The configuration — not this node's role, nor whether it has opened a source — is what rejects a submit: the source log is shared, so every node's submit path has to reach the same decision.
+    requires: not database.config.has_external_source
 
     ensures:
         let msg = TxMessage.created(
@@ -686,7 +760,8 @@ rule ClientSubmitsTransaction {
             user: opts.user,
             user_metadata: opts.user_metadata
         )
-        msg appended to database.source_log
+        -- A database with no external source has exactly one partition (PartitionsWithinSourceCap), so the submit lands on that partition's slice.
+        msg appended to database.partitions.first.source_log
 }
 
 rule ClientSubmitsTransactionToExternalSourceDb {
@@ -860,7 +935,7 @@ rule AppendReplicaMessage {
 
     ensures:
         msg.term_id = log_processor.leader_term
-        msg appended to database.replica_log
+        msg appended to partition.replica_log
 }
 
 ---- Rules: Leader Mode — read back and apply
@@ -943,7 +1018,7 @@ rule LeaderAdoptsOwnBlock {
 
         -- The block is durable and this node is on it.
         -- Announcing that as its own event is what lets an external source confirm its upstream position without reaching into the block cycle.
-        BlockBecameDurable(database, record.external_source_token)
+        BlockBecameDurable(partition, record.external_source_token)
 
         watchers.notifyMsg(record.latest_processed_msg_id)
 
@@ -1010,9 +1085,10 @@ rule LeaderAppliesOwnNoOp {
 ---- Rules: Leader Flush Timeout
 
 rule LeaderFlushTimeout {
-    -- Checked at the start of each source batch: where the current block's latest tx_id has not advanced since the previous check after flush_timeout, and this transaction has not already been flushed, the leader writes a flush to the SOURCE log.
+    -- Checked at the start of each source batch: where the current block's latest tx_id has not advanced since the previous check after flush_timeout, and this transaction has not already been flushed, the leader writes a flush to its own partition's slice of the SOURCE log.
+    -- Each partition's leader runs its own timeout, against its own block.
     -- To the source log, so that the cut goes through resolution in log order like any other boundary trigger, rather than being applied out of band.
-    when: BlockFlushTimeoutElapsed(database)
+    when: BlockFlushTimeoutElapsed(partition)
     requires: log_processor.mode = Leader
 
     requires: live_index.has_data
@@ -1020,26 +1096,53 @@ rule LeaderFlushTimeout {
     ensures:
         FlushBlockMessage.created(
             expected_block_idx: table_catalog.current_block_index ?? -1
-        ) appended to database.source_log
+        ) appended to partition.source_log
+}
+
+---- Rules: Flush Requested by a Caller
+
+rule FlushBlockRequestedForPartition {
+    -- A caller asks one partition to cut a block, against the block index that partition's table catalog has reached on this node.
+    -- The request is only a message on the source log, so it can be sent from any node, and the partition's leader resolves it like any other flush (LeaderProcessesFlushBlock).
+    when: FlushBlockRequested(caller, database, target)
+    requires: target in database.partitions
+
+    ensures:
+        FlushBlockMessage.created(
+            expected_block_idx: target.table_catalog.current_block_index ?? -1
+        ) appended to target.source_log
+}
+
+rule FlushBlockRequestedForDatabase {
+    -- A caller asks the database to cut a block: one request per partition, each against that partition's own block index.
+    -- healthz's finish-block endpoint sends this form, for the database its `db` parameter names, or for every database on the node without one.
+    when: DatabaseFlushBlockRequested(caller, database)
+
+    ensures:
+        for target in database.partitions:
+            FlushBlockRequested(caller, database, target)
 }
 
 ---- Rules: External Source
 
 -- An external-source leader does NOT take transactions from the source log.
--- The source is handed an indexing callback on assignment and feeds transactions in directly.
+-- The source is handed an indexing callback on each partition's assignment and feeds that partition's transactions in directly.
 -- Flush and tries coordination still use the source log, so the leader also reads it — but transaction, attach and detach messages MUST NOT appear there, being rejected at submit time (ClientSubmitsTransactionToExternalSourceDb).
 
 rule ExternalSourceAssigned {
-    -- On assignment the external source receives an indexing callback and the resume token to start after.
-    -- The token comes from the watchers, which reflect the replay of the replica log and so may be ahead of the last persisted block.
-    -- A node that leads, is demoted, then leads again is assigned again on the same source, so state belonging to one assignment lives inside the assignment rather than on the source.
-    when: PartitionsAssigned(database)
+    -- When a leader term for a partition begins on this node, the database's one external source is assigned that partition: it receives the partition's index, an indexing callback into this term, and the resume token to start after.
+    -- The token comes from this partition's watchers, which reflect the replay of the replica log and so may be ahead of the last persisted block.
+    -- A partition that leads, is demoted, then leads again is assigned again on the same source, and one partition's assignments run one after another.
+    -- Assignments of different partitions run concurrently on that one instance.
+    -- State belonging to one assignment therefore lives inside the assignment rather than on the source.
+    when: PartitionAssigned(partition)
     requires: log_processor.mode = Leader
     requires: database.external_source != null
 
     ensures:
         ExternalSourceStarted(
             source: log_processor.external_source,
+            partition: partition.index,
             after_token: watchers.external_source_token
         )
 }
@@ -1094,7 +1197,7 @@ rule LogProcessorDispatchesRecord {
             -- A record above the term a leader is leading has superseded that term (see Fencing).
             -- The term ends where the record is read, and the record is then offered to the follower that replaces it.
             if log_processor.mode = Leader and record.term_id > log_processor.leader_term:
-                LeaderTermEnded(database)
+                LeaderTermEnded(partition)
 
             HandleReplicaMessage(record)
 
@@ -1138,7 +1241,7 @@ rule HandleReplicaMessage {
             -- On an older record it is absent, and the fallback differs by database: an external-source tx_id is an independent counter, so it says nothing about the source log and the tracked watermark has to stand in; a source-log tx_id IS a source-log position.
             let effective_src_msg_id =
                 msg.src_msg_id
-                    ?? (if database.external_source != null:
+                    ?? (if database.config.has_external_source:
                             watchers.latest_source_msg_id
                         else: msg.tx_id)
             watchers.notifyTx(msg.result, effective_src_msg_id, msg.external_source_token)
@@ -1213,7 +1316,7 @@ rule CompactionJobWritesOutput {
     ensures:
         -- The data file is uploaded first; the meta file's presence is the completion marker.
         -- The tries go to the source log, and the leader forwards them to the replica log.
-        TriesAddedMessage.created(tries: job.output_tries) appended to database.source_log
+        TriesAddedMessage.created(tries: job.output_tries) appended to partition.source_log
 }
 
 rule CompactionJobConfirmed {
@@ -1227,11 +1330,49 @@ rule CompactionJobConfirmed {
 rule ClientOpensSnapshot {
     -- External queries open at the DURABLE head, never the resolved head.
     -- A query must never see a transaction that could vanish if the leader crashed before its replica-log write landed, nor one a newer-term leader superseded.
+    -- A database snapshot holds one snapshot per partition, each at that partition's own durable head.
+    -- The query path reads partition 0's alone, until the partition-aware read path (#5835) reads all of them.
     when: ClientOpensSnapshot(client, database)
 
     ensures:
-        Snapshot.created(
-            as_of: live_index.latest_completed_tx
+        for p in database.partitions:
+            Snapshot.created(
+                as_of: p.live_index.latest_completed_tx
+            )
+}
+
+---- Rules: Database-level operations
+
+-- Operations on a database as a whole, each a fan-out over its partitions.
+
+rule DatabaseSyncs {
+    -- Waits until every partition has caught up with everything submitted to its own slice of the source log, so a database is caught up only once its slowest partition is.
+    when: DatabaseSyncRequested(caller, database)
+
+    ensures:
+        for p in database.partitions:
+            SourceAwaited(p.watchers, latest_submitted_msg_id(p.source_log))
+}
+
+rule ClientAwaitsTx {
+    -- A bare tx_id is awaited on the one partition's watchers.
+    -- A bare source msg_id is awaited on partition 0's watchers alone, whatever the partition count, until #5839 decides what a source position means across partitions.
+    when: ClientAwaitsTx(client, database, tx_id)
+    requires: database.partitions.count = 1
+
+    ensures:
+        TxAwaited(database.partitions.first.watchers, tx_id)
+}
+
+rule ClientAwaitsTxAboveOnePartition {
+    -- Refused as unsupported: tx_ids are per-partition counters, so above one partition a bare tx_id names no one transaction.
+    when: ClientAwaitsTx(client, database, tx_id)
+    requires: database.partitions.count > 1
+
+    ensures:
+        AwaitTxRejected(
+            error_code: `xtdb/await-tx-multi-partition`,
+            db_name: database.name
         )
 }
 
@@ -1246,7 +1387,7 @@ rule ExternalSourceLearnsDurableExtent {
     --
     -- The gap this opens is the block cadence: a database whose blocks stop landing pins the upstream's log while ingestion and queries stay healthy.
     -- That is a monitoring obligation, not a correctness one (#5867).
-    when: BlockBecameDurable(database, external_source_token)
+    when: BlockBecameDurable(partition, external_source_token)
     requires: log_processor.mode = Leader
     requires: database.external_source != null
     requires: external_source_token != null
@@ -1262,6 +1403,7 @@ rule ExternalSourceLearnsDurableExtent {
 
 rule ProcessingErrorHaltsNode {
     -- A genuine ingestion fault: the watchers move to a failed state, and every subsequent await throws.
+    -- They are this partition's watchers, and one failed partition is the whole database's ingestion error.
     --
     -- A SUPERSESSION is not one of these, and neither is an interruption of the term: see LeaderSuperseded.
     -- Poisoning the watchers on a routine leadership handover would surface it to queries as a failed database.
@@ -1342,7 +1484,8 @@ surface TransactionSubmission {
 
     provides:
         ClientSubmitsTx(caller, db, tx_ops, opts)
-            when db.external_source = null
+            when not db.config.has_external_source
+        ClientAwaitsTx(caller, db, tx_id)
 
     @guarantee OrderedProcessing
         -- Transactions are processed in the order they appear in the source log.
@@ -1370,6 +1513,19 @@ surface QueryAccess {
         -- An execution spanning several databases holds one such snapshot per database.
 }
 
+surface DatabaseAdministration {
+    -- The database-level operations an operator or API caller drives, healthz's endpoints among them.
+    facing caller: ClientActor
+
+    context db: Database
+
+    provides:
+        DatabaseSyncRequested(caller, db)
+        DatabaseFlushBlockRequested(caller, db)
+        for p in db.partitions:
+            FlushBlockRequested(caller, db, p)
+}
+
 ---- Deferred Specifications
 
 deferred ResolveTx
@@ -1385,6 +1541,8 @@ deferred ResolveFailedDbOp
   -- Resolve an attach or detach that would be refused, as an ABORTED transaction carrying the caller fault that refused it.
 deferred CheckCanAttach
   -- Whether an attach would be refused, and with which caller fault.
+  -- A config is refused (Incorrect, xtdb/multi-partition-not-yet-enabled) where its partitions exceed its max_partitions — the configured external source's declared cap, 1 without one.
+  -- That cap is a pure declaration of the source's config, so this check reaches the same verdict on every node, which attach deciding a transaction's outcome from it requires.
   -- Answered from the catalog's own records folded together with the database operations the resolver still holds: the last one queued for a name says what will be there when this attach applies, and with none the catalog's own records stand.
   -- Reaches its verdict without changing anything.
 deferred CheckCanDetach
