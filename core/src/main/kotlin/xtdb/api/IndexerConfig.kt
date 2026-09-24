@@ -19,7 +19,7 @@ data class IndexerConfig(
     /**
      * Whether a leader sends each replica-log record without waiting for the one before it to be durable.
      *
-     * Temporary: pipelining becomes unconditional in the next release, and this goes with it.
+     * Temporary: pipelining becomes unconditional in a later release, and this goes with it.
      * Enable it only once every node of the database runs this release — an older node would apply
      * straight through a record lost in flight.
      * Defaults to whether [PIPELINED_REPLICA_APPENDS_ENV] is set, which also lets the Kafka producer linger.

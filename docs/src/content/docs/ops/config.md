@@ -257,22 +257,6 @@ indexer:
   # Defaults to the `XTDB_SKIP_TXS` environment variable (a comma-separated list
   # of transaction ids, e.g. "12,15,16") if set, otherwise empty.
   skipTxs: []
-
-  # (v2.4+) Whether a leader sends each transaction to the replica log without
-  # waiting for the previous one to be durable, lifting the cap of one log
-  # round-trip per transaction.
-  #
-  # Temporary: this becomes the only behaviour in the next release, and the
-  # option is removed.
-  #
-  # Only enable it once every node of the database runs v2.4 or later - an older
-  # node would apply straight through a transaction lost in flight.
-  #
-  # Defaults to whether the `XTDB_PIPELINED_REPLICA_APPENDS` environment variable
-  # is set. On Kafka, setting the variable also gives replica-log appends their
-  # own producer, which lingers (Kafka's default `linger.ms`) so that pipelined
-  # records batch; set it rather than this key if you use Kafka.
-  pipelinedReplicaAppends: false # default
 ```
 
 ### Garbage Collector
