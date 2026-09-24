@@ -55,16 +55,12 @@ class BitBufferTest {
 
                 val unloaded = mutableListOf<ArrowBuf>()
                 srcBuf.unloadBuffer(unloaded)
-                try {
-                    BitBuffer(al).use { destBuf ->
-                        val unloadedBuf = unloaded.first()
-                        unloadedBuf.writerIndex() shouldBe divideBy8Ceil(srcBits.size)
-                        destBuf.loadBuffer(unloadedBuf, srcBits.size)
+                BitBuffer(al).use { destBuf ->
+                    val unloadedBuf = unloaded.first()
+                    unloadedBuf.writerIndex() shouldBe divideBy8Ceil(srcBits.size)
+                    destBuf.loadBuffer(unloadedBuf, srcBits.size)
 
-                        destBuf.asBooleans shouldBe srcBits
-                    }
-                } finally {
-                    unloaded.forEach { it.referenceManager.release() }
+                    destBuf.asBooleans shouldBe srcBits
                 }
             }
         }

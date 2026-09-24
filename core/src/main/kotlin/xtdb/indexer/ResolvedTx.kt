@@ -101,7 +101,7 @@ class ResolvedTx private constructor(
             txKey.txId, txKey.systemTime, committed, error,
             tableData = tables.entries.associate { (ref, table) ->
                 ref.schemaAndTable to
-                        table.liveTable.relation.asArrowStream(table.rowsFrom, table.rowCount)
+                        table.liveTable.relation.toArrowStream(table.rowsFrom, table.rowCount)
             },
             dbOp = dbOp,
             externalSourceToken = externalSourceToken,

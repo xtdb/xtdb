@@ -74,7 +74,7 @@ sealed interface ReplicaMessage {
                                 it.error.toByteArray().let { bs ->
                                     if (bs.isEmpty()) null else readTransit(bs, MSGPACK) as Throwable
                                 },
-                                it.tableDataMap.mapValues { (_, v) -> v.toByteArray() },
+                                it.tableDataMap,
                                 dbOp,
                                 it.externalSourceToken.takeIf { _ -> it.hasExternalSourceToken() }?.toByteArray(),
                                 if (it.hasSrcMsgId()) it.srcMsgId else null,
@@ -126,13 +126,8 @@ sealed interface ReplicaMessage {
         abstract fun toLogMessage(): ReplicaLogMessage
 
         final override fun encode(): ByteArray =
-            toLogMessage().toBuilder().setTermId(termId).apply { this@ProtobufMessage.termSeq?.let { setTermSeq(it) } }.build().let {
-                ByteBuffer.allocate(1 + it.serializedSize).apply {
-                    put(PROTOBUF_HEADER)
-                    put(it.toByteArray())
-                    flip()
-                }.array()
-            }
+            toLogMessage().toBuilder().setTermId(termId).apply { this@ProtobufMessage.termSeq?.let { setTermSeq(it) } }.build()
+                .toHeaderedBytes(PROTOBUF_HEADER)
     }
 
     data class ResolvedTx(
@@ -140,7 +135,7 @@ sealed interface ReplicaMessage {
         val systemTime: Instant,
         val committed: Boolean,
         val error: Throwable?,
-        val tableData: Map<String, ByteArray>,
+        val tableData: Map<String, ByteString>,
         val dbOp: DbOp? = null,
         val externalSourceToken: ExternalSourceToken? = null,
         // The source-log watermark when this record was produced: for a source-log tx, its own
@@ -159,9 +154,7 @@ sealed interface ReplicaMessage {
                 this.systemTimeMicros = this@ResolvedTx.systemTime.asMicros
                 this.committed = this@ResolvedTx.committed
                 this.error = this@ResolvedTx.error?.let { ByteString.copyFrom(writeTransit(it, MSGPACK)) } ?: ByteString.EMPTY
-                this@ResolvedTx.tableData.forEach { (k, v) ->
-                    this.tableData[k] = ByteString.copyFrom(v)
-                }
+                this.tableData.putAll(this@ResolvedTx.tableData)
                 when (val op = this@ResolvedTx.dbOp) {
                     is DbOp.Attach -> attachDatabase = attachDatabase {
                         this.dbName = op.dbName

@@ -1,6 +1,7 @@
 package xtdb.indexer
 
 import clojure.lang.Keyword
+import com.google.protobuf.ByteString
 import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.CancellationException
@@ -172,7 +173,7 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
     private fun sourceRecord(msgId: Long, msg: SourceMessage) = Log.Record(0, msgId, Instant.now(), msg)
 
     private fun txRecord(msgId: Long) =
-        sourceRecord(msgId, SourceMessage.Tx(ByteArray(0), null, ZoneId.of("UTC"), null, null))
+        sourceRecord(msgId, SourceMessage.Tx(ByteString.EMPTY, null, ZoneId.of("UTC"), null, null))
 
     /** A committing external-source tx, optionally parking in [writer] while the leader's persister holds it. */
     private suspend fun LeaderLogProcessor.commitTx(writer: suspend () -> Unit = {}) =

@@ -1,5 +1,6 @@
 package xtdb.indexer
 
+import com.google.protobuf.ByteString
 import io.mockk.mockk
 import kotlinx.coroutines.*
 import kotlinx.coroutines.test.runTest
@@ -501,7 +502,7 @@ class LogProcessorTest {
             replicaLog.appendMessage(ReplicaMessage.BlockBoundary(0, 1, termId = cutter))
             replicaLog.appendMessage(
                 ReplicaMessage.ResolvedTx(
-                    1, Instant.now(), true, null, mapOf("public/docs" to byteArrayOf(1, 2, 3)),
+                    1, Instant.now(), true, null, mapOf("public/docs" to ByteString.copyFrom(byteArrayOf(1, 2, 3))),
                     srcMsgId = 1, termId = cutter
                 )
             )

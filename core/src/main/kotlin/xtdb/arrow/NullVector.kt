@@ -87,12 +87,12 @@ class NullVector(
 
     override fun rowCopier0(src: VectorReader) = RowCopier { writeNull() }
 
-    @InternalApi
-    override fun unloadPage(
-        nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>, startIdx: Int, len: Int
-    ) {
-        nodes.add(ArrowFieldNode(len.toLong(), len.toLong()))
+    override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
+        nodes.add(ArrowFieldNode(valueCount.toLong(), valueCount.toLong()))
     }
+
+    @InternalApi
+    override fun write(out: PageOutput, startIdx: Int, len: Int) = out.writeNode(len, len)
 
     override fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         val node = nodes.removeFirst()

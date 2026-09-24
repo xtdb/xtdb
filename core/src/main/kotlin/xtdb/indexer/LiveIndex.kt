@@ -24,7 +24,6 @@ import xtdb.util.closeOnCatch
 import xtdb.util.logger
 import xtdb.util.safelyOpening
 import xtdb.util.warn
-import java.io.ByteArrayInputStream
 import java.nio.channels.Channels
 import java.time.Duration
 import java.time.Instant
@@ -41,7 +40,7 @@ private val LOG = LiveIndex::class.logger
 internal fun ReplicaMessage.ResolvedTx.loadTableData(al: BufferAllocator): Map<TableRef, Relation> =
     mutableMapOf<TableRef, Relation>().closeAllOnCatch { rels ->
         for ((schemaAndTable, ipcBytes) in tableData) {
-            Relation.StreamLoader(al, Channels.newChannel(ByteArrayInputStream(ipcBytes))).use { loader ->
+            Relation.StreamLoader(al, Channels.newChannel(ipcBytes.newInput())).use { loader ->
                 Relation(al, loader.schema).closeOnCatch { rel ->
                     loader.loadNextPage(rel)
                     rels[fromSchemaAndTable(schemaAndTable)] = rel

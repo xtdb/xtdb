@@ -142,13 +142,17 @@ class FixedSizeListVector private constructor(
         }
     }
 
+    override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
+        nodes.add(ArrowFieldNode(valueCount.toLong(), if (nullable) -1 else 0))
+        if (nullable) validityBuffer?.unloadBuffer(buffers) else buffers.add(al.empty)
+        elVector.unloadPage(nodes, buffers)
+    }
+
     @InternalApi
-    override fun unloadPage(
-        nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>, startIdx: Int, len: Int
-    ) {
-        nodes.add(ArrowFieldNode(len.toLong(), if (nullable) -1 else 0))
-        if (nullable) validityBuffer?.unloadBuffer(buffers, startIdx, len) else buffers.add(al.empty)
-        elVector.unloadPage(nodes, buffers, startIdx * listSize, len * listSize)
+    override fun write(out: PageOutput, startIdx: Int, len: Int) {
+        out.writeNode(len, if (nullable) -1 else 0)
+        if (nullable) validityBuffer?.writePage(out, startIdx, len) else out.writeEmptyBuffer()
+        elVector.write(out, startIdx * listSize, len * listSize)
     }
 
     override fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {

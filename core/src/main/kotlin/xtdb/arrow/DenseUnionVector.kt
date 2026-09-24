@@ -14,7 +14,6 @@ import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.api.error.Unsupported
 import xtdb.kw
 import xtdb.util.Hasher
-import xtdb.util.closeOnCatch
 import xtdb.util.safeMap
 import xtdb.util.safelyOpening
 import java.nio.ByteBuffer
@@ -396,19 +395,25 @@ class DenseUnionVector private constructor(
         }
     }
 
-    @InternalApi
-    override fun unloadPage(
-        nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>, startIdx: Int, len: Int
-    ) {
-        nodes.add(ArrowFieldNode(len.toLong(), -1))
+    override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
+        nodes.add(ArrowFieldNode(valueCount.toLong(), -1))
+        typeBuffer.unloadBuffer(buffers)
+        offsetBuffer.unloadBuffer(buffers)
 
-        typeBuffer.unloadBuffer(buffers, startIdx.toLong(), len.toLong())
+        legVectors.forEach { it.unloadPage(nodes, buffers) }
+    }
+
+    @InternalApi
+    override fun write(out: PageOutput, startIdx: Int, len: Int) {
+        out.writeNode(len, -1)
+
+        typeBuffer.writePage(out, startIdx.toLong(), len.toLong())
 
         // the whole vector is every leg's whole self, so it needs none of the scan below - worth the branch
-        // because this is the common case and the scan is per-row where the rest of an unload is per-buffer
+        // because this is the common case and the scan is per-row where the rest of a page is per-buffer
         if (startIdx == 0 && len == valueCount) {
-            offsetBuffer.unloadBuffer(buffers)
-            legVectors.forEach { it.unloadPage(nodes, buffers) }
+            offsetBuffer.writePage(out)
+            legVectors.forEach { it.write(out) }
             return
         }
 
@@ -436,21 +441,18 @@ class DenseUnionVector private constructor(
         // a range starting at row zero starts every leg at its own row zero, and an absent row already
         // holds the zero this would write (`writeUndefined`), so the offsets are already what we'd rebase to
         if (startIdx == 0)
-            offsetBuffer.unloadBuffer(buffers, 0, offsetBytes)
+            offsetBuffer.writePage(out, 0, offsetBytes)
         else
-            buffers.add(
-                allocator.buffer(offsetBytes).closeOnCatch { out ->
-                    for (i in 0 until len) {
-                        val typeId = getTypeId(startIdx + i).toInt()
-                        val rebased = if (typeId < 0) 0 else getOffset(startIdx + i) - legStarts[typeId]
-                        out.setInt(i.toLong() * Int.SIZE_BYTES, rebased)
-                    }
-                    out.writerIndex(offsetBytes)
+            out.writeBuffer(offsetBytes) { dst ->
+                for (i in 0 until len) {
+                    val typeId = getTypeId(startIdx + i).toInt()
+                    val rebased = if (typeId < 0) 0 else getOffset(startIdx + i) - legStarts[typeId]
+                    dst.setIntLE(i * Int.SIZE_BYTES, rebased)
                 }
-            )
+            }
 
         legVectors.forEachIndexed { typeId, leg ->
-            leg.unloadPage(nodes, buffers, legStarts[typeId].coerceAtLeast(0), legLens[typeId])
+            leg.write(out, legStarts[typeId].coerceAtLeast(0), legLens[typeId])
         }
     }
 

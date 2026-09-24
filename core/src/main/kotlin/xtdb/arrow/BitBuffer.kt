@@ -173,59 +173,43 @@ internal class BitBuffer private constructor(
     }
 
     /**
-     * Adds this buffer to an Arrow page under construction, passing it one reference to release
-     * — see [RelationReader.openArrowRecordBatch].
+     * Writes the bits `[startBit, startBit + bitLen)` to [out] as one buffer, shifted down where [startBit]
+     * falls mid-byte, because an Arrow page's validity starts at bit zero.
      */
-    internal fun unloadBuffer(buffers: MutableList<ArrowBuf>) {
-        val writerByteIndex = bufferSize(writerBitIndex)
-        buffers.add(buf.readerIndex(0).writerIndex(writerByteIndex).also { it.referenceManager.retain() })
-    }
-
-    /**
-     * Adds the bits `[startBit, startBit + bitLen)` of this buffer, as above.
-     *
-     * Zero-copy where [startBit] falls on a byte boundary; otherwise the bits are shifted down into a
-     * fresh buffer, because an Arrow page's validity starts at bit zero.
-     */
-    internal fun unloadBuffer(buffers: MutableList<ArrowBuf>, startBit: Int, bitLen: Int) {
+    internal fun writePage(out: PageOutput, startBit: Int, bitLen: Int) {
         val byteLen = bufferSize(bitLen)
         val shift = startBit % 8
 
         when {
-            startBit == 0 && bitLen == writerBitIndex -> unloadBuffer(buffers)
+            bitLen == 0 -> out.writeEmptyBuffer()
 
-            bitLen == 0 -> buffers.add(allocator.empty)
+            shift == 0 -> out.writeBuffer(buf, (startBit / 8).toLong(), byteLen)
 
-            shift == 0 ->
-                buffers.add(buf.slice((startBit / 8).toLong(), byteLen).also { it.referenceManager.retain() })
-
-            else -> {
+            else -> out.writeBuffer(byteLen) { dst ->
                 val srcByte = (startBit / 8).toLong()
-                val lastByte = byteLen - 1
+                val lastByte = byteLen.toInt() - 1
 
-                buffers.add(
-                    allocator.buffer(byteLen).also { out ->
-                        for (j in 0..lastByte) {
-                            val lo = (buf.getByte(srcByte + j).toInt() and 0xff) ushr shift
-                            val hiByte = srcByte + j + 1
-                            val hi =
-                                if (hiByte < buf.capacity()) (buf.getByte(hiByte).toInt() and 0xff) shl (8 - shift)
-                                else 0
+                for (j in 0..lastByte) {
+                    val lo = (buf.getByte(srcByte + j).toInt() and 0xff) ushr shift
+                    val hiByte = srcByte + j + 1
+                    val hi =
+                        if (hiByte < buf.capacity()) (buf.getByte(hiByte).toInt() and 0xff) shl (8 - shift)
+                        else 0
 
-                            out.setByte(j, lo or hi)
-                        }
+                    dst[j] = (lo or hi).toByte()
+                }
 
-                        // without this the trailing bits are whatever followed the range, so a page's bytes
-                        // would depend on rows it doesn't contain
-                        val tailBits = bitLen % 8
-                        if (tailBits != 0)
-                            out.setByte(lastByte, out.getByte(lastByte).toInt() and ((1 shl tailBits) - 1))
-
-                        out.writerIndex(byteLen)
-                    }
-                )
+                // without this the trailing bits are whatever followed the range, so a page's bytes
+                // would depend on rows it doesn't contain
+                val tailBits = bitLen % 8
+                if (tailBits != 0) dst[lastByte] = (dst[lastByte].toInt() and ((1 shl tailBits) - 1)).toByte()
             }
         }
+    }
+
+    internal fun unloadBuffer(buffers: MutableList<ArrowBuf>) {
+        val writerByteIndex = bufferSize(writerBitIndex)
+        buffers.add(buf.readerIndex(0).writerIndex(writerByteIndex))
     }
 
     internal fun loadBuffer(arrowBuf: ArrowBuf, bitCount: Int) {

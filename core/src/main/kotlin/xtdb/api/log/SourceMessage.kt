@@ -51,14 +51,7 @@ sealed interface SourceMessage {
     sealed class ProtobufMessage : SourceMessage {
         abstract fun toLogMessage(): SourceLogMessage
 
-        final override fun encode(): ByteArray =
-            toLogMessage().let {
-                ByteBuffer.allocate(1 + it.serializedSize).apply {
-                    put(PROTOBUF_HEADER)
-                    put(it.toByteArray())
-                    flip()
-                }.array()
-            }
+        final override fun encode(): ByteArray = toLogMessage().toHeaderedBytes(PROTOBUF_HEADER)
 
         companion object {
             fun parse(buffer: ByteBuffer): SourceMessage? =
@@ -83,11 +76,11 @@ sealed interface SourceMessage {
 
                             SourceLogMessage.MessageCase.TX -> msg.tx.let {
                                 Tx(
-                                    txOps = it.txOps.toByteArray(),
+                                    txOps = it.txOps,
                                     systemTime = if (it.hasSystemTimeMicros()) InstantUtil.fromMicros(it.systemTimeMicros) else null,
                                     defaultTz = ZoneId.of(it.defaultTz),
                                     user = if (it.hasUser()) it.user else null,
-                                    userMetadata = if (it.userMetadata.isEmpty) null else it.userMetadata.toByteArray(),
+                                    userMetadata = if (it.userMetadata.isEmpty) null else it.userMetadata,
                                     externalSourceToken = it.externalSourceToken.takeIf { _ -> it.hasExternalSourceToken() }?.toByteArray()
                                 )
                             }
@@ -99,39 +92,39 @@ sealed interface SourceMessage {
     }
 
     data class Tx(
-        val txOps: ByteArray,
+        val txOps: ByteString,
         val systemTime: Instant?,
         val defaultTz: ZoneId,
         val user: String?,
-        val userMetadata: ByteArray?,
+        val userMetadata: ByteString?,
         val externalSourceToken: ExternalSourceToken? = null
     ) : ProtobufMessage() {
         override fun toLogMessage() = sourceLogMessage {
             tx = tx {
-                txOps = ByteString.copyFrom(this@Tx.txOps)
+                txOps = this@Tx.txOps
                 this@Tx.systemTime?.let { systemTimeMicros = it.asMicros }
                 defaultTz = this@Tx.defaultTz.id
                 this@Tx.user?.let { user = it }
-                this@Tx.userMetadata?.let { userMetadata = ByteString.copyFrom(it) }
+                this@Tx.userMetadata?.let { userMetadata = it }
                 this@Tx.externalSourceToken?.let { externalSourceToken = ByteString.copyFrom(it) }
             }
         }
 
         override fun equals(other: Any?): Boolean =
             this === other || (other is Tx
-                && txOps.contentEquals(other.txOps)
+                && txOps == other.txOps
                 && systemTime == other.systemTime
                 && defaultTz == other.defaultTz
                 && user == other.user
-                && userMetadata.contentEquals(other.userMetadata)
+                && userMetadata == other.userMetadata
                 && externalSourceToken.contentEquals(other.externalSourceToken))
 
         override fun hashCode(): Int {
-            var result = txOps.contentHashCode()
+            var result = txOps.hashCode()
             result = 31 * result + (systemTime?.hashCode() ?: 0)
             result = 31 * result + defaultTz.hashCode()
             result = 31 * result + (user?.hashCode() ?: 0)
-            result = 31 * result + (userMetadata?.contentHashCode() ?: 0)
+            result = 31 * result + (userMetadata?.hashCode() ?: 0)
             result = 31 * result + (externalSourceToken?.contentHashCode() ?: 0)
             return result
         }

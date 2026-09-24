@@ -2,9 +2,9 @@
 
 package xtdb.tx
 
+import com.google.protobuf.ByteString
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.arrow.*
-import xtdb.arrow.asChannel
 import xtdb.arrow.IID_TYPE
 import xtdb.arrow.INSTANT_TYPE
 import xtdb.arrow.LIST_TYPE
@@ -23,6 +23,7 @@ import xtdb.api.error.Incorrect
 import xtdb.api.SchemaName
 import xtdb.api.TableName
 import xtdb.util.asIid
+import java.nio.channels.Channels
 import java.time.Instant
 import java.time.ZoneId
 
@@ -62,7 +63,7 @@ private class SqlWriter(val al: BufferAllocator, ops: VectorWriter) {
     fun writeOp(op: TxOp.Sql) {
         queryVec.writeObject(op.sql)
         op.args?.let { args ->
-            args.openDirectSlice(al).use { argsVec.writeObject(it.asArrowStream) }
+            args.openDirectSlice(al).use { argsVec.writeObject(it.toArrowStream().toByteArray()) }
         }
         sqlVec.endStruct()
     }
@@ -230,10 +231,10 @@ private fun List<TxOp>.writeOpsInto(al: BufferAllocator, rel: Relation) {
     }
 }
 
-fun List<TxOp>.toArrowBytes(al: BufferAllocator): ByteArray =
+fun List<TxOp>.toArrowBytes(al: BufferAllocator): ByteString =
     Relation(al, flatTxOpsSchema).use { rel ->
         writeOpsInto(al, rel)
-        rel.asArrowStream
+        rel.toArrowStream()
     }
 
 @Deprecated("legacy format - use toArrowBytes for the flat protobuf Tx format")
@@ -275,18 +276,18 @@ fun List<TxOp>.toLegacyBytes(al: BufferAllocator, opts: TxOpts): ByteArray =
 
         rel.endRow()
 
-        rel.asArrowStream
+        rel.toArrowStream().toByteArray()
     }
 
-fun serializeUserMetadata(al: BufferAllocator, metadata: Map<*, *>): ByteArray =
+fun serializeUserMetadata(al: BufferAllocator, metadata: Map<*, *>): ByteString =
     Relation(al, userMetadataSchema).use { rel ->
         rel["user-metadata"].writeObject(metadata)
         rel.endRow()
-        rel.asArrowStream
+        rel.toArrowStream()
     }
 
-fun deserializeUserMetadata(al: BufferAllocator, bytes: ByteArray): Any? =
-    bytes.asChannel.use { ch ->
+fun deserializeUserMetadata(al: BufferAllocator, bytes: ByteString): Any? =
+    Channels.newChannel(bytes.newInput()).use { ch ->
         Relation.StreamLoader(al, ch).use { loader ->
             Relation(al, loader.schema).use { rel ->
                 loader.loadNextPage(rel)

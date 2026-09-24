@@ -215,13 +215,17 @@ sealed class FixedWidthVector : MonoVector() {
         }
     }
 
+    final override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
+        nodes.add(ArrowFieldNode(valueCount.toLong(), if (nullable) -1 else 0))
+        if (nullable) validityBuffer?.unloadBuffer(buffers) else buffers.add(al.empty)
+        dataBuffer.unloadBuffer(buffers)
+    }
+
     @InternalApi
-    final override fun unloadPage(
-        nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>, startIdx: Int, len: Int
-    ) {
-        nodes.add(ArrowFieldNode(len.toLong(), if (nullable) -1 else 0))
-        if (nullable) validityBuffer?.unloadBuffer(buffers, startIdx, len) else buffers.add(al.empty)
-        dataBuffer.unloadBuffer(buffers, startIdx.toLong() * byteWidth, len.toLong() * byteWidth)
+    final override fun write(out: PageOutput, startIdx: Int, len: Int) {
+        out.writeNode(len, if (nullable) -1 else 0)
+        if (nullable) validityBuffer?.writePage(out, startIdx, len) else out.writeEmptyBuffer()
+        dataBuffer.writePage(out, startIdx.toLong() * byteWidth, len.toLong() * byteWidth)
     }
 
     final override fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {

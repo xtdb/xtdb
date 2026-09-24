@@ -155,22 +155,27 @@ class ListVector private constructor(
         }
     }
 
+    override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
+        nodes.add(ArrowFieldNode(valueCount.toLong(), if (nullable) -1 else 0))
+        if (nullable) validityBuffer?.unloadBuffer(buffers) else buffers.add(al.empty)
+        offsetBuffer.unloadBuffer(buffers)
+        elVector.unloadPage(nodes, buffers)
+    }
+
     @InternalApi
-    override fun unloadPage(
-        nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>, startIdx: Int, len: Int
-    ) {
-        nodes.add(ArrowFieldNode(len.toLong(), if (nullable) -1 else 0))
-        if (nullable) validityBuffer?.unloadBuffer(buffers, startIdx, len) else buffers.add(al.empty)
+    override fun write(out: PageOutput, startIdx: Int, len: Int) {
+        out.writeNode(len, if (nullable) -1 else 0)
+        if (nullable) validityBuffer?.writePage(out, startIdx, len) else out.writeEmptyBuffer()
 
         if (valueCount == 0) {
             // nothing has been written, so there isn't even the leading zero offset to rebase from
-            offsetBuffer.unloadBuffer(buffers)
-            elVector.unloadPage(nodes, buffers)
+            offsetBuffer.writePage(out)
+            elVector.write(out)
         } else {
             val elStart = offsetBuffer.getInt(startIdx)
             val elLen = offsetBuffer.getInt(startIdx + len) - elStart
-            offsetBuffer.unloadRebasedOffsets(buffers, startIdx, len)
-            elVector.unloadPage(nodes, buffers, elStart, elLen)
+            offsetBuffer.writeRebasedOffsets(out, startIdx, len)
+            elVector.write(out, elStart, elLen)
         }
     }
 

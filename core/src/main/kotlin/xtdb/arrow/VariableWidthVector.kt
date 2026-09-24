@@ -171,22 +171,27 @@ abstract class VariableWidthVector : MonoVector() {
         }
     }
 
+    override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
+        nodes.add(ArrowFieldNode(valueCount.toLong(), if (nullable) -1 else 0))
+        if (nullable) validityBuffer?.unloadBuffer(buffers) else buffers.add(al.empty)
+        offsetBuffer.unloadBuffer(buffers)
+        dataBuffer.unloadBuffer(buffers)
+    }
+
     @InternalApi
-    override fun unloadPage(
-        nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>, startIdx: Int, len: Int
-    ) {
-        nodes.add(ArrowFieldNode(len.toLong(), if (nullable) -1 else 0))
-        if (nullable) validityBuffer?.unloadBuffer(buffers, startIdx, len) else buffers.add(al.empty)
+    override fun write(out: PageOutput, startIdx: Int, len: Int) {
+        out.writeNode(len, if (nullable) -1 else 0)
+        if (nullable) validityBuffer?.writePage(out, startIdx, len) else out.writeEmptyBuffer()
 
         if (valueCount == 0) {
             // nothing has been written, so there isn't even the leading zero offset to rebase from
-            offsetBuffer.unloadBuffer(buffers)
-            dataBuffer.unloadBuffer(buffers)
+            offsetBuffer.writePage(out)
+            dataBuffer.writePage(out)
         } else {
             val dataStart = offsetBuffer.getInt(startIdx)
             val dataLen = offsetBuffer.getInt(startIdx + len) - dataStart
-            offsetBuffer.unloadRebasedOffsets(buffers, startIdx, len)
-            dataBuffer.unloadBuffer(buffers, dataStart.toLong(), dataLen.toLong())
+            offsetBuffer.writeRebasedOffsets(out, startIdx, len)
+            dataBuffer.writePage(out, dataStart.toLong(), dataLen.toLong())
         }
     }
 
