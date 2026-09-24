@@ -85,6 +85,48 @@ class MultiPartitionTest {
     }
 
     @Test
+    fun `a multi-partition database survives a restart, and each partition resumes after its own token`(
+        @TempDir dir: Path,
+    ) = runBlocking {
+        fun openNode() = Xtdb.openNode {
+            log(Log.localLog(dir.resolve("log")))
+            storage(Storage.local(dir.resolve("storage")))
+        }
+
+        InMemoryExternalSource(partitions = 3).use { source ->
+            openNode().use { node ->
+                node.attach(
+                    "parts", source, partitions = 3,
+                    config = Database.Config(
+                        log = Log.localLog(dir.resolve("parts-log")),
+                        storage = Storage.local(dir.resolve("parts-storage")),
+                    ),
+                )
+
+                source.publish(partition = 1)
+                val parts = (node as XtdbInternal).dbCatalog.databaseOrNull("parts")!!
+                withTimeout(10.seconds) { parts.partitions[1].watchers.awaitTx(0) }
+
+                val primary = node.dbCatalog.primary
+                val flush = primary.sendFlushBlockMessage(0)
+                withTimeout(10.seconds) { primary.partitions.single().watchers.awaitSource(flush.msgId) }
+            }
+
+            source.publish(partition = 2)
+
+            openNode().use { node ->
+                val parts = (node as XtdbInternal).dbCatalog.databaseOrNull("parts")!!
+                assertEquals(3, parts.partitions.size)
+
+                withTimeout(10.seconds) { parts.partitions[2].watchers.awaitTx(0) }
+
+                assertEquals(0L, parts.partitions[1].liveIndex.latestCompletedTx?.txId, "partition 1 didn't re-index its message")
+                assertEquals(0L, parts.partitions[2].liveIndex.latestCompletedTx?.txId)
+            }
+        }
+    }
+
+    @Test
     fun `a message published to a partition is indexed by that partition alone`() = runBlocking {
         InMemoryExternalSource(partitions = 3).use { source ->
             Xtdb.openNode().use { node ->
