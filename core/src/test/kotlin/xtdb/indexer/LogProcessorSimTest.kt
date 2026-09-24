@@ -758,10 +758,10 @@ class LogProcessorSimTest : SimulationTestBase() {
      * node that goes on to lead would fail its term on the first assertion, which is a different invariant.
      */
     private class ClaimRefusingDriver(private val inner: LogProcessor.LogsDriver) : LogProcessor.LogsDriver by inner {
-        override suspend fun appendToReplica(msg: ReplicaMessage): Log.MessageMetadata =
+        override suspend fun enqueueToReplica(msg: ReplicaMessage): Deferred<Log.MessageMetadata> =
             if (msg is NoOp && msg.srcMsgId == null)
                 throw IOException("[sim] the replica log will not accept a claim")
-            else inner.appendToReplica(msg)
+            else inner.enqueueToReplica(msg)
     }
 
     @RepeatableSimulationTest

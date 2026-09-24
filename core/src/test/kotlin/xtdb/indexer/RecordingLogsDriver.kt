@@ -1,5 +1,7 @@
 package xtdb.indexer
 
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Deferred
 import xtdb.api.log.Log
 import xtdb.api.log.ReplicaMessage
 import java.time.Instant
@@ -16,9 +18,9 @@ internal class RecordingLogsDriver : LogProcessor.LogsDriver {
 
     val appended = mutableListOf<ReplicaMessage>()
 
-    override suspend fun appendToReplica(msg: ReplicaMessage): Log.MessageMetadata {
+    override suspend fun enqueueToReplica(msg: ReplicaMessage): Deferred<Log.MessageMetadata> {
         appended += msg
-        return Log.MessageMetadata(0, appended.size - 1L, Instant.now())
+        return CompletableDeferred(Log.MessageMetadata(0, appended.size - 1L, Instant.now()))
     }
 
     override suspend fun requestFlushBlock(expectedBlockIdx: Long) =

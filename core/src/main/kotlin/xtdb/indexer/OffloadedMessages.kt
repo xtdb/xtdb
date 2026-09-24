@@ -1,5 +1,6 @@
 package xtdb.indexer
 
+import kotlinx.coroutines.Deferred
 import xtdb.api.log.Log
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.storage.Storage
@@ -26,9 +27,9 @@ internal class OffloadingLogsDriver(
 
     override suspend fun requestFlushBlock(expectedBlockIdx: Long) = delegate.requestFlushBlock(expectedBlockIdx)
 
-    override suspend fun appendToReplica(msg: ReplicaMessage): Log.MessageMetadata =
+    override suspend fun enqueueToReplica(msg: ReplicaMessage): Deferred<Log.MessageMetadata> =
         try {
-            delegate.appendToReplica(msg)
+            delegate.enqueueToReplica(msg)
         } catch (e: Log.MessageTooLargeException) {
             val bufferPool = partitionStorage.bufferPoolOrNull ?: throw e
 
@@ -41,7 +42,7 @@ internal class OffloadingLogsDriver(
 
             bufferPool.putObject(ref.path, ByteBuffer.wrap(msg.encode()))
 
-            delegate.appendToReplica(ref)
+            delegate.enqueueToReplica(ref)
         }
 }
 

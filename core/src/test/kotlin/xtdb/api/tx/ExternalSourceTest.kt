@@ -4,6 +4,7 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
@@ -276,7 +277,7 @@ internal class ExternalSourceTest : LeaderTermTest() {
     fun `a replica-log append fault fails the term rather than wedging it`() = runTest {
         val failingDriver = { inner: LogsDriver ->
             object : LogsDriver by inner {
-                override suspend fun appendToReplica(msg: ReplicaMessage): Log.MessageMetadata =
+                override suspend fun enqueueToReplica(msg: ReplicaMessage): Deferred<Log.MessageMetadata> =
                     throw RuntimeException("replica-log append fault")
             }
         }

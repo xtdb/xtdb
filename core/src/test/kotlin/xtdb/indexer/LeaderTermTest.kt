@@ -5,6 +5,7 @@ import io.mockk.mockk
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -139,10 +140,10 @@ internal abstract class LeaderTermTest {
         fun open() = gate.complete(Unit)
 
         fun wrap(inner: LogsDriver): LogsDriver = object : LogsDriver by inner {
-            override suspend fun appendToReplica(msg: ReplicaMessage): Log.MessageMetadata {
+            override suspend fun enqueueToReplica(msg: ReplicaMessage): Deferred<Log.MessageMetadata> {
                 started.complete(Unit)
                 gate.await()
-                return inner.appendToReplica(msg)
+                return inner.enqueueToReplica(msg)
             }
         }
     }
