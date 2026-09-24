@@ -9,10 +9,13 @@ import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.RepeatedTest
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.io.TempDir
 import xtdb.api.log.Log.Record
+import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.InstantSource
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
@@ -212,6 +215,57 @@ class LocalLogTest {
 
             // N=1 keeps the pre-#5557 layout — a plain file at rootPath.
             assertTrue(Files.isRegularFile(root.resolve("LOG")), "root/LOG should be a file at N=1")
+        }
+    }
+
+    private class FailsOn(private val id: Byte) : MessageCodec<SourceMessage> {
+        override fun encode(message: SourceMessage): ByteArray {
+            val payload = (message as SourceMessage.LegacyTx).payload
+            if (payload.size > 1 && payload[1] == id) throw IOException("write failed")
+            return SourceMessage.Codec.encode(message)
+        }
+
+        override fun decode(bytes: ByteArray) = SourceMessage.Codec.decode(bytes)
+    }
+
+    private fun logFailingOn(id: Byte, partitions: Int = 1) =
+        LocalLog(
+            tempDir.resolve("log"), FailsOn(id), InstantSource.system(),
+            epoch = 0, useInstantSourceForNonTx = false, partitions = partitions
+        )
+
+    private fun Throwable.causedByWriteFailure() = generateSequence(this) { it.cause }.any { it is IOException }
+
+    @Test
+    fun `no message lands after a write fails`() = runTest(timeout = 5.seconds) {
+        logFailingOn(2).use { log ->
+            log.appendMessage(txMessage(1))
+
+            assertTrue(assertThrows<Throwable> { log.appendMessage(txMessage(2)) }.causedByWriteFailure())
+            assertTrue(assertThrows<Throwable> { log.appendMessage(txMessage(3)) }.causedByWriteFailure())
+
+            assertArrayEquals(byteArrayOf(-1, 1), (log.readLastMessage() as SourceMessage.LegacyTx).payload)
+        }
+    }
+
+    @Test
+    fun `a write failure nobody awaits fails later appends rather than hanging them`() = runTest(timeout = 10.seconds) {
+        logFailingOn(2).use { log ->
+            log.appendMessage(txMessage(1))
+            backgroundScope.launch { runCatching { log.appendMessage(txMessage(2)) } }
+
+            assertThrows<Throwable> { repeat(1000) { log.appendMessage(txMessage(3)) } }
+            assertTrue(assertThrows<Throwable> { log.appendMessage(txMessage(4)) }.causedByWriteFailure())
+        }
+    }
+
+    @Test
+    fun `a partition's write failure does not stop its siblings`() = runTest(timeout = 5.seconds) {
+        logFailingOn(1, partitions = 2).use { log ->
+            assertThrows<Throwable> { log.appendMessage(txMessage(1), partition = 0) }
+
+            log.appendMessage(txMessage(2), partition = 1)
+            assertArrayEquals(byteArrayOf(-1, 2), (log.readLastMessage(1) as SourceMessage.LegacyTx).payload)
         }
     }
 

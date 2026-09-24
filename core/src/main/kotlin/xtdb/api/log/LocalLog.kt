@@ -202,7 +202,20 @@ class LocalLog<M> @JvmOverloads constructor(
                         msgs.add(ps.appendCh.tryReceive().getOrNull() ?: break)
                     }
 
-                    val records = ps.writeMessages(msgs)
+                    val records = try {
+                        ps.writeMessages(msgs)
+                    } catch (t: Throwable) {
+                        if (t is CancellationException) throw t
+
+                        // This coroutine is the only thing that completes a handle, so every queued one fails here rather than hanging its awaiter.
+                        // Closed rather than cancelled, so that `send` raises the write failure from then on and the queue can still be drained.
+                        ps.appendCh.close(t)
+                        msgs.forEach { it.onCommit.completeExceptionally(t) }
+                        while (true) (ps.appendCh.tryReceive().getOrNull() ?: break).onCommit.completeExceptionally(t)
+
+                        // Returning rather than rethrowing: the partitions' writers share one scope, so a throw would stop every sibling too.
+                        return@launch
+                    }
 
                     ps.committedOffset.value = records.last().logOffset
                     msgs.forEachIndexed { idx, msg ->
@@ -218,10 +231,14 @@ class LocalLog<M> @JvmOverloads constructor(
         return CompletableDeferred<MessageMetadata>()
             .also { res ->
                 scope.launch {
-                    val onCommit = CompletableDeferred<Record<M>>()
-                    ps.appendCh.send(NewMessage(message, onCommit))
-                    val record = onCommit.await()
-                    res.complete(MessageMetadata(epoch, record.logOffset, record.logTimestamp))
+                    try {
+                        val onCommit = CompletableDeferred<Record<M>>()
+                        ps.appendCh.send(NewMessage(message, onCommit))
+                        val record = onCommit.await()
+                        res.complete(MessageMetadata(epoch, record.logOffset, record.logTimestamp))
+                    } catch (t: Throwable) {
+                        res.completeExceptionally(t)
+                    }
                 }
             }
             .await()
