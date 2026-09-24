@@ -66,6 +66,23 @@ class IngestNodeTest {
         )
 
     @Test
+    fun `a multi-partition database is refused`() {
+        val source = CountingExternalSource.Factory(rows = 0, indexed = CountDownLatch(0), leaderFor = ConcurrentLinkedQueue())
+
+        val ex = assertThrows(Incorrect::class.java) {
+            IngestNode.Config()
+                .database("orders", extDbConfig(source).partitions(4))
+                .open()
+                .close()
+        }
+
+        assertTrue(
+            ex.message!!.contains("multi-partition external-source databases are not yet enabled"),
+            "got: ${ex.message}"
+        )
+    }
+
+    @Test
     fun `opens, runs the source on leadership, and closes cleanly — no catalog, no primary`() {
         val indexed = CountDownLatch(2)
         val leaderFor = ConcurrentLinkedQueue<String>()

@@ -4,6 +4,7 @@ import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.serialization.modules.PolymorphicModuleBuilder
 import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.polymorphic
+import xtdb.InternalApi
 import xtdb.api.error.Unsupported
 import xtdb.api.Remote
 import xtdb.api.RemoteAlias
@@ -65,18 +66,37 @@ interface ExternalSource : AutoCloseable {
             meterRegistry: MeterRegistry? = null,
         ): ExternalSource
 
+        /**
+         * The most partitions this source can drive; a database configured with more is refused at attach.
+         *
+         * A pure declaration from the factory's own config: attach decides a transaction's outcome from it, so it
+         * must reach the same verdict on every node, with no call to the upstream behind it.
+         *
+         * Only XTDB's own test sources override this. Above one partition, queries read partition 0 alone until
+         * #5835, and [onPartitionAssigned] runs concurrently, once per partition, on the one instance.
+         * Public, with a settled encoding, at #5837.
+         *
+         * @suppress
+         */
+        @InternalApi
+        val maxPartitions: Int get() = 1
+
         companion object {
-            private val registrations = ServiceLoader.load(Registration::class.java).toList()
-            private val registrationsByTag = registrations.associateBy { it.protoTag }
-            private val registrationsByClass = registrations.associateBy { it.factoryClass }
+            // lazy: building these asks each registered factory class for its serializer, so eagerly it's a
+            // class-initialisation cycle whenever a factory class is set up before this interface
+            private val registrations by lazy { ServiceLoader.load(Registration::class.java).toList() }
+            private val registrationsByTag by lazy { registrations.associateBy { it.protoTag } }
+            private val registrationsByClass by lazy { registrations.associateBy { it.factoryClass } }
 
-            val serializersModule = SerializersModule {
-                for (reg in registrations)
-                    include(reg.serializersModule)
-
-                polymorphic(Factory::class) {
+            val serializersModule by lazy {
+                SerializersModule {
                     for (reg in registrations)
-                        reg.registerSerde(this)
+                        include(reg.serializersModule)
+
+                    polymorphic(Factory::class) {
+                        for (reg in registrations)
+                            reg.registerSerde(this)
+                    }
                 }
             }
 

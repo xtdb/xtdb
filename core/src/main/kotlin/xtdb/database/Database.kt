@@ -9,6 +9,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import org.apache.arrow.memory.BufferAllocator
+import xtdb.InternalApi
 import xtdb.NodeBase
 import xtdb.api.IndexerConfig
 import xtdb.api.TransactionKey
@@ -523,10 +524,9 @@ class Database(
          * node: whether a database's storage or log can actually be reached is local to the node that
          * tries, and a database the cluster agrees exists is one this node may still fail to open.
          */
+        @OptIn(InternalApi::class)
         fun checkValid(dbName: DatabaseName) {
-            // The type signatures admit N throughout, but TableCatalog wrappers + UNION-at-scan (#5835)
-            // and xt.txs_$partition naming (#5836) haven't landed. Lifting this gate is #5837.
-            if (partitions > 1)
+            if (partitions > (externalSource?.maxPartitions ?: 1))
                 throw Incorrect(
                     "multi-partition external-source databases are not yet enabled " +
                             "(config declared partitions=$partitions)",
