@@ -123,8 +123,14 @@ class Database(
 
     val compactor: Compactor.ForDatabase get() = partition0.compactor
 
-    val latestProcessedMsgId: MessageId get() = watchers.latestSourceMsgId
-    val ingestionError: IngestionStoppedException? get() = watchers.exception
+    val latestProcessedMsgIds: List<MessageId> get() = partitions.map { it.watchers.latestSourceMsgId }
+
+    val latestSubmittedMsgIds: List<MessageId>
+        get() = partitions.indices.map { sourceLog.latestSubmittedMsgId(it) }
+
+    /** Whichever partition has stopped, if any has: one is enough to make the database unusable. */
+    val ingestionError: IngestionStoppedException?
+        get() = partitions.firstNotNullOfOrNull { it.watchers.exception }
 
     /** Whether an ingestion error here should take the whole node out of service. */
     val isCritical: Boolean get() = name == "xtdb" || config.critical
@@ -695,9 +701,7 @@ class Database(
 
         fun latestSubmittedMsgIds(): Map<DatabaseName, List<MessageId>> =
             databaseNames.mapNotNull { dbName ->
-                databaseOrNull(dbName)?.let { db ->
-                    dbName to db.partitions.indices.map { db.sourceLog.latestSubmittedMsgId(it) }
-                }
+                databaseOrNull(dbName)?.let { db -> dbName to db.latestSubmittedMsgIds }
             }.toMap()
 
         /**
@@ -735,7 +739,7 @@ class Database(
                         .filter { it.isIndexing }
                         .joinToString("\n") { db ->
                             val awaiting = basis[db.name]?.first()
-                            val current = db.latestProcessedMsgId
+                            val current = db.latestProcessedMsgIds
                             val error = db.ingestionError != null
                             "  db=${db.name}: awaiting=$awaiting, current=$current, ingestionError=$error"
                         }
