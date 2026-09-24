@@ -21,7 +21,7 @@ class ReplicaLogAppenderTest {
         election.trigger.send(Unit)
 
         assertEquals(
-            NoOp(termId = 7), logsDriver.appended.first(),
+            NoOp(termId = 7, termSeq = 1), logsDriver.appended.first(),
             "a stale leader's assertions have to be fenced like its writes"
         )
     }
@@ -38,8 +38,28 @@ class ReplicaLogAppenderTest {
         election.trigger.send(Unit)
 
         assertEquals(
-            listOf(NoOp(srcMsgId = 42, termId = 1), NoOp(termId = 1)), logsDriver.appended,
+            listOf(NoOp(srcMsgId = 42, termId = 1, termSeq = 1), NoOp(termId = 1, termSeq = 2)), logsDriver.appended,
             "the queued append is taken first, and the assertion only once nothing is queued"
         )
+    }
+
+    @Test
+    fun `direct and queued appends share one run of positions from 1, direct ones needing no pump`() = runTest {
+        val logsDriver = RecordingLogsDriver()
+        val appender = ReplicaLogAppender(logsDriver, leaderTerm = 4, TriggeredElectionDriver())
+
+        val direct = appender.appendNow(NoOp(srcMsgId = 1, termId = 4))
+
+        appender.append(ControlItem(NoOp(srcMsgId = 2, termId = 4)))
+        backgroundScope.launch { appender.run() }
+        testScheduler.runCurrent()
+
+        appender.appendNow(NoOp(srcMsgId = 3, termId = 4))
+        appender.append(ControlItem(NoOp(srcMsgId = 4, termId = 4)))
+        testScheduler.runCurrent()
+
+        assertEquals(listOf(1L, 2L, 3L, 4L), logsDriver.appended.map { it.termSeq })
+        assertEquals(listOf(1L, 2L, 3L, 4L), logsDriver.appended.map { (it as NoOp).srcMsgId })
+        assertEquals(0L, direct.logOffset, "a direct append returns where the log put it")
     }
 }

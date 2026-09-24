@@ -39,7 +39,6 @@ internal class BlockCutter(
     private val dbName: DatabaseName,
     private val leaderTerm: Long,
     private val replicaAppender: ReplicaLogAppender,
-    private val logsDriver: LogProcessor.LogsDriver,
     private val compactor: Compactor.ForDatabase,
     private val dbCatalog: Database.Catalog?,
     private val meterRegistry: MeterRegistry?,
@@ -231,7 +230,8 @@ internal class BlockCutter(
             blockIdx, liveIndex.latestCompletedTx, latestProcessedMsgId,
             boundaryReplicaMsgId, entries.values, secondaryDatabasesForBlock,
             externalSourceToken,
-            boundary.termId // not leaderTerm - #6059
+            boundary.termId, // not leaderTerm - #6059
+            boundary.termSeq,
         )
 
         bufferPool.putObject(TableCatalog.blockFilePath(blockIdx), ByteBuffer.wrap(block.toByteArray()))
@@ -239,9 +239,10 @@ internal class BlockCutter(
 
         // Awaited, and not through the append pump: this is the message the whole cluster is waiting on
         // to close the block, this node now included. Queued, a term ending in between would drop it —
-        // the pump's shutdown discards whatever it still holds. Awaited, a failure to append reaches the
-        // term instead, which leaves the boundary unapplied for the next role to pick up and re-produce.
-        val uploadedMsgId = logsDriver.appendToReplica(
+        // the pump's shutdown discards whatever it still holds — and a promotion produces the block it
+        // inherits before its term's pump is running. Awaited, a failure to append reaches the term
+        // instead, which leaves the boundary unapplied for the next role to pick up and re-produce.
+        val uploadedMsgId = replicaAppender.appendNow(
             BlockUploaded(
                 Storage.VERSION, bufferPool.epoch,
                 blockIdx, latestProcessedMsgId,

@@ -21,6 +21,11 @@ message ReplicaLogMessage {
     // discard any message below the max term they've seen. Default 0 on messages
     // written before this field existed. See #5817.
     int64 term_id = 7;
+
+    // This message's position within its term: 0 for the leadership claim that opens the
+    // term, then consecutive from 1 for everything its leader writes. Absent on messages
+    // written before this field existed. See #6105.
+    int64 term_seq = 9;
 }
 
 message TriesDeleted {

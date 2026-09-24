@@ -12,6 +12,7 @@ import xtdb.NodeBase
 import xtdb.api.DatabaseName
 import xtdb.api.TransactionKey
 import xtdb.api.TransactionResult
+import xtdb.api.error.Fault
 import xtdb.api.log.DbOp
 import xtdb.api.log.Log
 import xtdb.api.log.ReplicaMessage
@@ -116,6 +117,14 @@ internal class LeaderLogProcessor(
         watchers.notifyApplied(effectiveSrcMsgId, result, msg.externalSourceToken)
     }
 
+    private fun readBackMismatch(
+        record: Log.Record<ReplicaMessage>, msg: ReplicaMessage.ResolvedTx, resolvedTxId: MessageId?,
+    ) = Fault(
+        "[$dbName] read back tx ${msg.txId} at ${record.msgId}, but the next tx this term resolved is ${resolvedTxId ?: "none"}",
+        "xtdb.indexer/leader-read-back-mismatch",
+        mapOf("replica-msg-id" to record.msgId, "tx-id" to msg.txId, "resolved-tx-id" to resolvedTxId),
+    )
+
     private fun applyResolvedTx(tx: ResolvedTx) {
         try {
             tx.sealTables().closeAllOnCatch { liveIndex.applyTx(tx.txKey, it) }
@@ -167,11 +176,19 @@ internal class LeaderLogProcessor(
                 // Nothing to guard on `committed`: a refused dbOp resolves to an abort carrying no dbOp.
                 applyDbOp(msg.dbOp)
 
-                txResolver.removeHead(msg.txId).use { tx ->
-                    if (tx != null) {
+                // Below this term: a previous leader's, replayed from the block this term inherited, so never resolved here.
+                if (msg.termId < leaderTerm) {
+                    applyResolvedTx(msg)
+                } else {
+                    val head = txResolver.removeHead()
+                        ?: throw readBackMismatch(record, msg, resolvedTxId = null)
+
+                    head.use { tx ->
+                        if (tx.txKey.txId != msg.txId)
+                            throw readBackMismatch(record, msg, tx.txKey.txId)
+                                .also { tx.pending?.completeExceptionally(it) }
+
                         applyResolvedTx(tx)
-                    } else {
-                        applyResolvedTx(msg)
                     }
                 }
             }

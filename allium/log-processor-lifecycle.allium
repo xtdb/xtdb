@@ -35,6 +35,9 @@ external entity LeaderTerm {
     --
     -- The fence is applied on CONSUME-BACK rather than at write time: reading back a record whose term exceeds this one means a newer leader has superseded us, and this node stands down where it reads it.
     -- So there is no fencing token and no write-time failure — the term stamp plus the consume-back check is the whole fence.
+    --
+    -- Every record the term writes also carries its position within the term.
+    -- The claim that opened the term is position 0, and its leader numbers everything it writes after that consecutively from 1, in the one order it appends them.
     term: Integer
 
     -- A term ends itself — superseded, or failed — so it is over before the node has reconciled the role it still holds.
@@ -88,6 +91,8 @@ contract DurableTotalOrder {
         --   Independent of OneOrderSeenByEveryReader, which fixes where each record sits rather than the order a reader meets them in.
         --   Because the fence is applied on consume-back, a leader silently handed a gap can miss the higher-term record that supersedes it and confirm writes every other reader discards.
         --   A read that would skip a position has to fail rather than proceed.
+        --   Within a term, a record the log lost while later records of that term landed is caught by every reader as a gap in the term's positions, and voids the rest of the term (VoidTermOpenedPastItsStart, VoidTermOnGap).
+        --   A loss with nothing later from its own term behind it leaves no gap to catch, and neither does any loss in an unsequenced term.
 
     @invariant EmptyReadMeansTheTipWasReached
         -- A read returns empty only when the reader that issued it has reached the log's tip.
@@ -121,6 +126,11 @@ contract Election {
         -- A claim confers leadership exactly when nothing at or above its term precedes it in the log.
         --   The claim's position is the whole of the answer, so every node computes the same one from the same prefix and nothing passes between nodes.
         --   Two claims at the same term are settled by which of them the log put first.
+        --   A claim's position within its term, 0, plays no part in adjudicating it.
+
+    @invariant ATermIsSequencedIffItsClaimIs
+        -- A term's records are checked against their positions exactly when the claim that won it carries one.
+        --   A claim written by a node predating positions carries none, and the term it wins is unsequenced: nothing in it is checked.
 
     @invariant ClaimFollowsObservation
         -- A node claims only from something it has read: a read of its own that came back empty, or the absence of any term in the state it started from.
@@ -213,6 +223,29 @@ entity LogProcessor {
     -- Held per role it would be reseeded from that boundary at every role change, forgetting every term written since the last block flush — so the same term could be admitted twice, once either side of a role change.
     highest_term_read: Integer
 
+    -- How far through the highest term read this node has got.
+    --   unsequenced -- the term was opened by a record carrying no position, so nothing in it is checked.
+    --   unknown     -- resumed from a block boundary carrying no position, so the next record's position is taken as given, unless it is a claim, which has lost.
+    --   expecting   -- the term's next record has to carry next_term_seq.
+    --   voided      -- a record of this term never reached the log, so nothing further in it applies.
+    -- Scoped and seeded with highest_term_read, and for the same reason.
+    -- Seeded from the persisted block boundary: expecting the boundary's position + 1 in the boundary's term; unknown where the block carries no boundary position; unsequenced at term 0.
+    term_position: unsequenced | unknown | expecting | voided
+    next_term_seq: Integer when term_position = expecting
+
+    transitions term_position {
+        unknown -> unsequenced      -- resumed, and the next record carries no position
+        unknown -> expecting        -- resumed, and the next record's position, other than 0, taken as given; or a higher term opened by its claim
+        unknown -> voided           -- a higher term opened past its claim
+        unsequenced -> expecting    -- a higher term opened by its claim
+        unsequenced -> voided       -- a higher term opened past its claim
+        expecting -> unsequenced    -- a higher term opened with no position
+        expecting -> voided         -- a gap in this term, or a higher term opened past its claim
+        voided -> expecting         -- a higher term opened by its claim
+        voided -> unsequenced       -- a higher term opened with no position
+        -- No terminal state: a higher term always re-opens the position.
+    }
+
     -- Whether this node is permitted to lead at all. Fixed for its life: a read-only database is reconfigured by replacing it.
     may_lead: Boolean
 
@@ -244,7 +277,7 @@ rule ClaimOnEmptyRead {
     requires: processor.claim_pos = null
 
     ensures:
-        processor.claim_pos = ClaimAppended(term: processor.highest_term_read + 1)
+        processor.claim_pos = ClaimAppended(term: processor.highest_term_read + 1, term_seq: 0)
 }
 
 rule ClaimWhenNoTermHasLed {
@@ -258,7 +291,145 @@ rule ClaimWhenNoTermHasLed {
     requires: processor.highest_term_read = 0
 
     ensures:
-        processor.claim_pos = ClaimAppended(term: 1)
+        processor.claim_pos = ClaimAppended(term: 1, term_seq: 0)
+}
+
+------------------------------------------------------------
+-- Rules: fold a record into the term position
+--
+-- Every reader folds every record through these before either role acts on it, so every reader reaches the same verdict on each whatever its role.
+-- A record these neither discard nor void is applied, which is db.allium's.
+-- Claim adjudication reads highest_term_read as it stood before the claim's own fold.
+------------------------------------------------------------
+
+rule DiscardRecordBelowTheFence {
+    -- A record written by a leader the log has moved past.
+    --   Application is suppressed; consumption is not, so a reader catching up never stalls on one.
+    when: RecordRead(processor, pos, term, term_seq)
+
+    requires: term < processor.highest_term_read
+
+    ensures:
+        processor.replica_pos = pos
+}
+
+rule OpenTermAtItsClaim {
+    -- A higher term, opened by the claim that won it.
+    when: RecordRead(processor, pos, term, term_seq)
+
+    requires: term > processor.highest_term_read
+    requires: term_seq = 0
+
+    ensures:
+        processor.highest_term_read = term
+        processor.term_position = expecting
+        processor.next_term_seq = 1
+}
+
+rule OpenUnsequencedTerm {
+    -- A higher term, opened by a record carrying no position: written by a node predating positions.
+    when: RecordRead(processor, pos, term, term_seq)
+
+    requires: term > processor.highest_term_read
+    requires: term_seq = null
+
+    ensures:
+        processor.highest_term_read = term
+        processor.term_position = unsequenced
+}
+
+rule VoidTermOpenedPastItsStart {
+    -- A higher term whose first record here is not its claim: the records before it never reached the log.
+    --   The term is voided from that first record, which is consumed and never applied.
+    when: RecordRead(processor, pos, term, term_seq)
+
+    requires: term > processor.highest_term_read
+    requires: term_seq != null and term_seq != 0
+
+    ensures:
+        processor.highest_term_read = term
+        processor.term_position = voided
+        processor.replica_pos = pos
+        TermVoided(processor: processor, term: term)
+}
+
+rule TakeResumedPositionAsGiven {
+    -- A record of the boundary's term, after resuming from a block that carries no boundary position.
+    -- One carrying no position makes the term unsequenced; any position but 0 is taken as given.
+    when: RecordRead(processor, pos, term, term_seq)
+
+    requires: term = processor.highest_term_read
+    requires: processor.term_position = unknown
+    requires: term_seq != 0
+
+    ensures:
+        if term_seq = null:
+            processor.term_position = unsequenced
+        else:
+            processor.term_position = expecting
+            processor.next_term_seq = term_seq + 1
+}
+
+rule DiscardClaimAfterResumedBoundary {
+    -- A claim at the boundary's term, read after resuming from a block that carries no boundary position.
+    --   The term's winning claim precedes the boundary, so this one has lost: it is discarded, and the position stays unknown.
+    when: RecordRead(processor, pos, term, term_seq)
+
+    requires: term = processor.highest_term_read
+    requires: processor.term_position = unknown
+    requires: term_seq = 0
+
+    ensures:
+        processor.replica_pos = pos
+}
+
+rule AdmitNextInTerm {
+    when: RecordRead(processor, pos, term, term_seq)
+
+    requires: term = processor.highest_term_read
+    requires: processor.term_position = expecting
+    requires: term_seq = processor.next_term_seq
+
+    ensures:
+        processor.next_term_seq = processor.next_term_seq + 1
+}
+
+rule DiscardBehindTermPosition {
+    -- A losing claim at this term, or a duplicate.
+    --   In a sequenced term a record carrying no position can only be a losing claim from a node predating positions.
+    when: RecordRead(processor, pos, term, term_seq)
+
+    requires: term = processor.highest_term_read
+    requires: processor.term_position = expecting
+    requires: term_seq = null or term_seq < processor.next_term_seq
+
+    ensures:
+        processor.replica_pos = pos
+}
+
+rule VoidTermOnGap {
+    -- A record ahead of the position this term expects: the one between never reached the log.
+    --   The rest of the term is voided, this record included: consumed, and never applied.
+    when: RecordRead(processor, pos, term, term_seq)
+
+    requires: term = processor.highest_term_read
+    requires: processor.term_position = expecting
+    requires: term_seq != null and term_seq > processor.next_term_seq
+
+    ensures:
+        processor.term_position = voided
+        processor.replica_pos = pos
+        TermVoided(processor: processor, term: term)
+}
+
+rule DiscardInVoidedTerm {
+    when: RecordRead(processor, pos, term, term_seq)
+
+    requires: term = processor.highest_term_read
+    requires: processor.term_position = voided
+
+    ensures:
+        processor.replica_pos = pos
 }
 
 ------------------------------------------------------------
@@ -268,7 +439,7 @@ rule ClaimWhenNoTermHasLed {
 ------------------------------------------------------------
 
 rule ClaimConferredLeadership {
-    when: RecordRead(processor, pos, term)
+    when: RecordRead(processor, pos, term, term_seq)
 
     requires: processor.state = following
     requires: pos = processor.claim_pos
@@ -301,7 +472,7 @@ rule ClaimConferredLeadership {
 
 rule ClaimConferredNothing {
     -- A claim the log put behind a term at or above it. The claimant keeps following, and is free to claim again from what it has now read.
-    when: RecordRead(processor, pos, term)
+    when: RecordRead(processor, pos, term, term_seq)
 
     requires: processor.state = following
     requires: pos = processor.claim_pos
@@ -310,17 +481,6 @@ rule ClaimConferredNothing {
     ensures:
         processor.claim_pos = null
         processor.state = following
-}
-
-rule DiscardRecordBelowTheFence {
-    -- A record written by a leader the log has moved past.
-    --   Application is suppressed; consumption is not, so a reader catching up never stalls on one.
-    when: RecordRead(processor, pos, term)
-
-    requires: term < processor.highest_term_read
-
-    ensures:
-        processor.replica_pos = pos
 }
 
 ------------------------------------------------------------
@@ -341,6 +501,17 @@ rule ReopenFollowerOnTermEnded {
         processor.follower_term = FollowerTerm.created(mid_block: processor.leader_term.mid_block)
         processor.leader_term = null
         processor.state = following
+}
+
+rule ResignOnVoidedTerm {
+    -- A leader that meets a voided term has nothing further to read back at or below it, so its term ends where the record is read, without confirming its outstanding writes.
+    when: TermVoided(processor, term)
+
+    requires: processor.state = leading
+
+    ensures:
+        processor.leader_term.is_live = false
+        LeaderTermEnded(processor: processor)
 }
 
 rule RecoverFollowerOnFailedPromotion {
@@ -408,8 +579,8 @@ surface ReplicaLogReading {
         -- A read of this node's own came back empty, so it has reached the log's tip.
         ReadReturnedEmpty(node, processor) when processor.state = following
 
-        -- A record was delivered at a position, carrying a term.
-        RecordRead(node, processor, pos, term)
+        -- A record was delivered at a position, carrying a term and its position within that term, absent where the node that wrote it predates positions.
+        RecordRead(node, processor, pos, term, term_seq)
 
         -- The leader term ended — superseded by a higher term, or failed.
         LeaderTermEnded(node, processor) when processor.state = leading
@@ -430,5 +601,5 @@ surface ReplicaLogReading {
 
     @guarantee OneConfirmedLeaderViaTermFence
         -- At most one leader's writes are ever confirmed per database, enforced by the term fence on consume-back rather than by anything at this boundary.
-        --   Which is why the log's own obligations are stated in this module at all: the fence is nothing but readers agreeing on which term the log has reached, so it holds exactly as far as DurableTotalOrder does and no further.
+        --   Which is why the log's own obligations are stated in this module at all: the fence is nothing but readers agreeing on which term the log has reached and how far through it, so it holds exactly as far as DurableTotalOrder does and no further.
 }

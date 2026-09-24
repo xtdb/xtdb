@@ -15,7 +15,7 @@
 -- Leader pipelining — resolve, append, read back, apply:
 --   The leader applies its OWN writes only once it has read them BACK off its own replica log at its own TERM — Raft's ReadIndex.
 --   That read-back IS the fence.
---   Four stages: RESOLVE a transaction against what the leader already holds and stage it; APPEND it to the replica log, stamped with the term; READ BACK, this node's own replica read delivering each record to whichever role is live; APPLY what the fence admits.
+--   Four stages: RESOLVE a transaction against what the leader already holds and stage it; APPEND it to the replica log, stamped with the term and its position within the term; READ BACK, this node's own replica read delivering each record to whichever role is live; APPLY what the fence admits.
 --   Resolution and apply never interleave, so a transaction is never half-applied.
 --   Staging, ownership and the durability handles: live-index.allium. The role lifecycle, the claim and the term: log-processor-lifecycle.allium.
 --
@@ -143,6 +143,7 @@ entity LogProcessor {
     --   Folded and tested by this node's replica read, before either role acts on the record: records are read one at a time and awaited, so the fence has a single caller at any moment.
     --   Seeded from the last persisted block's term so that it survives restart.
     --   Scoped to the database on this node for its whole life rather than to a role — log-processor-lifecycle.allium's LeaderTerm carries why.
+    --   Beside it, and folded by the same read, is how far through that term this node has got: log-processor-lifecycle.allium's term_position, seeded from the same block's boundary position.
     --
     -- pending_block: the block cut and not yet adopted, holding whatever arrived behind its boundary — absent unless one is in flight.
     --   Whichever role is live holds it: a follower that read the boundary, or a leader that produced the block and is waiting to read its own confirmation back.
@@ -169,6 +170,10 @@ variant Leader : LogProcessor {
     -- This leader's fencing term: one above the highest term this node had read when it claimed (see log-processor-lifecycle.allium).
     -- Stamped onto every replica record this term writes, and checked on read-back.
     leader_term: Integer
+
+    -- The position within this term of the last record the term appended: 0, the claim that opened it, at promotion.
+    -- Each append takes the next, so the term's records carry consecutive positions from 1 in the one order the term appends them.
+    last_term_seq: Integer
 
     -- RESOLVE-side source watermark: the source-log position as of the last-resolved transaction, and what is stamped onto each replica record.
     -- Leads the durable watermark on the watchers, which advances only on apply, and for a block's covered position only on the adopt.
@@ -220,6 +225,8 @@ entity TableCatalog {
     boundary_replica_msg_id: latest_block?.boundary_replica_msg_id
     -- Seeds the fence's high-water, which is what makes it survive restart.
     boundary_term_id: latest_block?.term_id ?? 0
+    -- Seeds the term position: the boundary's term expects its next record one above this, and where it is absent the next record's position is taken as given.
+    boundary_term_seq: latest_block?.boundary_term_seq
 }
 
 entity Watchers {
@@ -284,9 +291,12 @@ value Block {
     latest_processed_msg_id: MessageId           -- source log
     boundary_replica_msg_id: MessageId?          -- replica log: the position of this block's boundary
     external_source_token: ExternalSourceToken?  -- the last token seen at block time
-    -- The term that APPENDED this block's upload.
-    -- Persisting it is what makes the read-side fence survive a restart: the fence's high-water is seeded from here, so a leader claiming a regressed election counter is refused rather than silently ignored (see log-processor-lifecycle.allium, ClaimUnfenced).
+    -- The term that wrote this block's boundary.
+    -- Persisting it is what makes the read-side fence survive a restart: the fence's high-water is seeded from here.
     term_id: Integer
+    -- The boundary's position within that term, which seeds the term position a restarted reader resumes at.
+    -- Absent on a block written before positions existed, or whose boundary carried none.
+    boundary_term_seq: Integer?
     -- Every table this block covers, and where each one's files live. See contract TableEntries.
     tables: List<TableEntry>
 }
@@ -393,6 +403,11 @@ entity ReplicaMessage {
     -- This field is the whole fence: there is no fencing token and no write-time failure.
     term_id: Integer
 
+    -- This message's position within its term: 0 on the claim that opens the term, then consecutive from 1 for everything the term's leader writes, in the order it appends them.
+    -- Absent on a record written by a node predating positions, which is distinct from 0.
+    -- Stamped by the APPEND rather than by the creator, because the position is the order the term's one append path puts its records in.
+    term_seq: Integer?
+
     kind: ResolvedTxMessage | BlockBoundaryMessage | BlockUploadedMessage
          | TriesAddedMessage | TriesDeletedMessage | NoOpMessage
          | OversizedMessage
@@ -458,7 +473,7 @@ variant TriesDeletedMessage : ReplicaMessage {
 
 variant NoOpMessage : ReplicaMessage {
     -- Carries no effect of its own, and is used for three things.
-    --   1. A leadership claim. A node appends one stamped with a term above the highest it has read; whether that claim confers leadership is settled by where the log put it (see log-processor-lifecycle.allium).
+    --   1. A leadership claim. A node appends one stamped with a term above the highest it has read, at position 0 in that term; whether that claim confers leadership is settled by where the log put it (see log-processor-lifecycle.allium).
     --   2. A leader's assertion that it is still there, on a database with no traffic to write. A leader with work needs none, its own writes carrying the same term.
     --   3. Carrying the leader's source watermark forward where no other record would — a flush whose CAS fails, and which therefore finishes no block.
     src_msg_id: MessageId?   -- null on a claim and on an assertion
@@ -468,7 +483,7 @@ variant OversizedMessage : ReplicaMessage {
     -- Stands in for a message the log declined for its size.
     -- The declined message's own encoding is in the object store and this names it, so the indirection is a property of the envelope rather than of any one kind: resolved transactions, tries-added and block-uploaded are all unbounded and all offload through it.
     -- Written by the leader only, and only on a refused append — the log is asked first, and this is what happens when it says no.
-    -- term_id on the envelope is the DECLINED message's, so read-side fencing decides without fetching the payload.
+    -- term_id and term_seq on the envelope are the DECLINED message's, so read-side fencing decides without fetching the payload.
     -- Readers resolve it as the record is read, ahead of both the pending-block hold and the staleness check: an offloaded upload closes a block, and one left unresolved would be held behind the block it closes.
     -- block_index is the block the standing-in record lands in — the open one, not the last completed — because block-gc.allium collects on it.
     storage_version: Integer
@@ -495,10 +510,18 @@ config {
 -- Every replica record carries the term of the leader that created it.
 -- The term is taken from the log itself — a node claims one above the highest it has read — so the terms being compared come from the same durable record every reader is fenced against.
 --
--- The fence is applied ONCE to every record, on this node's replica read and before either role acts on it: a record below the highest term seen so far is DISCARDED, and one at or above it folds that high-water upward and is handed on.
+-- The fence is applied ONCE to every record, on this node's replica read and before either role acts on it: a record below the highest term seen so far is DISCARDED, and one at or above it folds that high-water upward and, unless its position within the term discards or voids it, is handed on.
 -- Records are read one at a time, handed to the live role and awaited, so the fence has a single caller at any moment.
 -- The high-water belongs to the database on this node, seeded from the last persisted block, so the fence survives restart.
 -- A discarded record still advances the read position, so the read never stalls on one and a claim behind one is still reached.
+--
+-- The same read folds each record's position within its term; log-processor-lifecycle.allium owns the rule.
+-- A term opened by a claim at position 0 is sequenced, and its records have to arrive at consecutive positions from 1.
+-- One behind the expected position, or carrying none, is a losing claim or a duplicate, and is DISCARDED.
+-- One ahead of it means a record of the term never reached the log, and the rest of the term is VOIDED: consumed, and never applied.
+-- A higher term whose first record here is not at position 0 is voided from that record; one opened by a record carrying no position is unsequenced, and nothing in it is checked.
+-- A voided record advances the read position as a discarded one does.
+-- A LEADER that meets a voided term ends its term where it reads the record, without acknowledging its outstanding writes.
 --
 -- The fold belongs to the RECORD rather than to the role that acts on it, so it happens on admission, whichever role ends up taking the record.
 --
@@ -553,9 +576,10 @@ config {
 --   2. Compute the trie layout those L0 tries imply, which is what the per-table block files record and what the trie catalog will hold once the adopt has added them.
 --   3. Build the per-table block files and upload one for EVERY table the table catalog knows, not only the tables from step 1.
 --      Block GC's per-table sweep depends on this — see block-gc.allium, EveryTableBlockAtCurrentIndex.
---   4. Build and persist the block file, carrying this term, which is what seeds a restarted node's fence, and stamp the database's last-upload time.
+--   4. Build and persist the block file, carrying the boundary's term and its position within that term, which are what seed a restarted node's fence and term position, and stamp the database's last-upload time.
 --   5. Append the upload to the replica log and await it.
---      This is the message the whole cluster closes the block on, this node included, so it is appended directly rather than behind whatever else is queued, a term ending in between dropping the rest.
+--      This is the message the whole cluster closes the block on, this node included.
+--      It is appended in its turn behind whatever the term has already queued, through the one ordered path every record the term writes takes, and a term ending while it is queued fails the wait.
 --   The block, its L0 tries and its boundary are held from here until the adopt.
 --   What is NOT installed here is the table catalog's metadata fold and the trie catalog's state, and the live index is not rolled — so a term dying between the two operations leaves the block RE-PRODUCIBLE, a second attempt at an index the catalog already holds being refused.
 --   Table entries the produce DOES allocate, minting one for a table new in this block: the per-table file paths of step 3 and the block file of step 4 both record them, so they cannot wait for the adopt.
@@ -630,6 +654,8 @@ rule TransitionToLeader {
             -- The database's own source, borrowed for the length of this term, so this leader is externally fed iff the database is.
             external_source: database.external_source,
             leader_term: term,
+            -- The claim that conferred this term is position 0 in it.
+            last_term_seq: 0,
             last_resolved_src_msg_id: watchers.latest_source_msg_id,
             last_resolved_ext_token: watchers.external_source_token,
             -- True where this term inherits a block to produce: resolution stays paused until it has adopted it.
@@ -850,7 +876,8 @@ rule LeaderProcessesTriesAdded {
 ---- Rules: Leader Mode — append
 
 rule AppendReplicaMessage {
-    -- Append the message to the replica log, in resolution order, STAMPED with this leader's term.
+    -- Append the message to the replica log, in resolution order, STAMPED with this leader's term and the next position within it.
+    -- Every record the term writes goes through this one ordered path, the block upload included, so the term's positions follow the log's order.
     --
     -- Nothing here is atomic across messages and nothing needs to be: a superseded leader is fenced by the term its records carry, checked when it reads them back, not by an append that fails.
     -- An append fault ends the term.
@@ -860,6 +887,8 @@ rule AppendReplicaMessage {
 
     ensures:
         msg.term_id = log_processor.leader_term
+        msg.term_seq = log_processor.last_term_seq + 1
+        log_processor.last_term_seq = log_processor.last_term_seq + 1
         msg appended to database.replica_log
 }
 
@@ -870,8 +899,8 @@ rule AppendReplicaMessage {
 
 rule LeaderAppliesRecord {
     -- Apply one record read back off our own replica log, fenced by TERM.
-    -- The record carries this term's own term: the fence discards anything below it and ends this term on anything above it, so there is nothing left here to compare.
-    -- The exception is a rival's losing claim, which carries this same term — a bare no-op, which applies nothing.
+    -- The fence discards anything below this term, ends this term on anything above it, and discards a rival's losing claim at this same term, its position being behind this term's.
+    -- So a record reaching here carries this term, unless it was held behind the block this term inherited and drained at the adopt, having met the fence at its own position under a lower term.
     when: HandleReplicaMessage(record)
     requires: log_processor.mode = Leader
 
@@ -893,13 +922,14 @@ rule LeaderAppliesRecord {
 rule LeaderAppliesOwnTx {
     -- The leader reads its own staged transaction back at its own term and IMPORTS it, from the resolver's QUEUE HEAD.
     -- The head still holds the transaction's rows, so nothing is re-read from the replica record; that record's only job was to confirm durability and term.
-    -- A head whose tx_id doesn't match the record just read back is a fault.
+    -- A head whose tx_id doesn't match the record just read back, or no head at all, is a fault (xtdb.indexer/leader-read-back-mismatch).
     --
     -- This is the point at which the transaction becomes queryable: the DURABLE head advances here, the watchers advance here, and an external caller's durability handle completes here — after, not before, the transaction is durable.
     --
     -- The database operation it carries is applied here, as a follower applies it on its own read — before the durability handle completes, so a caller that submitted an attach can use the database the moment its transaction returns.
     when: ApplyOwnRecord(record)
     requires: record.kind = ResolvedTxMessage
+    requires: record.term_id >= log_processor.leader_term
 
     -- Take the head FIRST, then check it.
     -- Taking it first is what makes the failure path safe: once off the queue, the end of the term can no longer reach it, so this rule owns failing its durability handle on ANY throw here, the tx_id mismatch included.
@@ -913,6 +943,19 @@ rule LeaderAppliesOwnTx {
         if record.committed and record.db_op != null:
             ApplyDbOpToCatalog(database.catalog, record.db_op)
         watchers.notifyTx(head.tx_result, head.src_msg_id, head.external_source_token)
+}
+
+rule LeaderAppliesInheritedTx {
+    -- A resolved transaction below this term: a previous leader's, held behind the block this term inherited and drained at the adopt.
+    -- This term never resolved it, so it applies from the RECORD, as a follower applies it, and takes nothing off the resolver.
+    when: ApplyOwnRecord(record)
+    requires: record.kind = ResolvedTxMessage
+    requires: record.term_id < log_processor.leader_term
+
+    ensures:
+        if record.committed and record.db_op != null:
+            ApplyDbOpToCatalog(database.catalog, record.db_op)
+        ApplyResolvedTxFromRecord(record)
 }
 
 rule LeaderUploadsBlockOnBoundary {
@@ -1085,12 +1128,22 @@ rule LogProcessorDispatchesRecord {
     when: ReplicaMessageReceived(record)
 
     ensures:
-        if record.term_id < log_processor.max_leader_term:
+        -- log-processor-lifecycle.allium's fold, which every reader runs alike: it folds max_leader_term upward and this node's position within that term, and returns the record's verdict.
+        let verdict = FoldIntoTermPosition(log_processor, record)
+
+        if verdict = fenced:
             -- Written by a leader the log has since moved past, so every reader discards it.
             RecordDiscarded(record)
-        else:
-            log_processor.max_leader_term = record.term_id
-
+        if verdict = discarded:
+            -- Behind its term's position: a losing claim, or a duplicate.
+            RecordDiscarded(record)
+        if verdict = voided:
+            -- A record of its term never reached the log, so this one and the rest of that term are consumed and never applied.
+            RecordDiscarded(record)
+            -- A leader has nothing further to read back at or below the voided term, so its term ends here.
+            if log_processor.mode = Leader:
+                LeaderTermEnded(database)
+        if verdict = admitted:
             -- A record above the term a leader is leading has superseded that term (see Fencing).
             -- The term ends where the record is read, and the record is then offered to the follower that replaces it.
             if log_processor.mode = Leader and record.term_id > log_processor.leader_term:
@@ -1400,8 +1453,13 @@ deferred ApplyResolvedTx
   -- Apply on read-back: import the head's rows into the durable live tables, advance the DURABLE head to it, and complete its durability handle.
   -- See: live-index.allium ApplyResolvedTx
 deferred ProduceBlock
-  -- Produce the block a boundary cut: finish the live index's block, build and upload the per-table block files and the block file under this term, and append the upload.
+  -- Produce the block a boundary cut: finish the live index's block, build and upload the per-table block files and the block file, and append the upload under this term.
   -- See: The block cycle, above.
 deferred AdoptBlock
   -- Adopt a block a confirmation names: add its L0 tries to the trie catalog, refresh the table catalog onto the block, and roll the live index onto the block behind it.
   -- See: Adopting a block, above.
+deferred ApplyResolvedTxFromRecord
+  -- Apply a resolved transaction this term did not resolve: import the record's rows into the durable live tables, advance the DURABLE head to it, and report it to the watchers from the record.
+deferred FoldIntoTermPosition
+  -- Fold one record into this node's highest term read and its position within that term, and return the verdict: fenced, discarded, voided or admitted.
+  -- See: log-processor-lifecycle.allium, Rules: fold a record into the term position

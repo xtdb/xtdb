@@ -214,7 +214,7 @@ internal abstract class LeaderTermTest {
         val replicaAppender = ReplicaLogAppender(driver, leaderTerm, NoAssertElectionDriver)
         val blockCutter =
             BlockCutter(
-                partitionStorage, partitionState, dbName, leaderTerm, replicaAppender, driver, compactor,
+                partitionStorage, partitionState, dbName, leaderTerm, replicaAppender, compactor,
                 dbCatalog = null, meterRegistry = null, lastUploadEpochSeconds = AtomicLong(0),
                 scope = backgroundScope, ioDispatcher = ioDispatcher
             )
@@ -252,7 +252,7 @@ internal abstract class LeaderTermTest {
         val appender = ReplicaLogAppender(logsDriver, leaderTerm = 1, NoAssertElectionDriver)
         val blockCutter =
             BlockCutter(
-                partitionStorage, partitionState, "test", 1, appender, logsDriver, mockk(relaxed = true),
+                partitionStorage, partitionState, "test", 1, appender, mockk(relaxed = true),
                 dbCatalog = null, meterRegistry = null, lastUploadEpochSeconds = AtomicLong(0),
                 scope = backgroundScope, ioDispatcher = StandardTestDispatcher(testScheduler)
             )

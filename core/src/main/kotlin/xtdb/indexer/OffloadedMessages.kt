@@ -36,7 +36,7 @@ internal class OffloadingLogsDriver(
                 Storage.VERSION, bufferPool.epoch,
                 (partitionState.tableCatalogOrNull?.currentBlockIndex ?: -1) + 1,
                 randomUUID().toString(),
-                termId = msg.termId,
+                termId = msg.termId, termSeq = msg.termSeq,
             )
 
             bufferPool.putObject(ref.path, ByteBuffer.wrap(msg.encode()))

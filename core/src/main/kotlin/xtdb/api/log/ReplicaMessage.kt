@@ -37,6 +37,13 @@ sealed interface ReplicaMessage {
     // before terms existed, where proto3's scalar default supplies it. See #5817.
     val termId: Long
 
+    // This message's position within its term: 0 for the claim that opens it, then consecutive from 1 for
+    // what its leader writes. Null on a record written before positions existed. See #6105.
+    val termSeq: Long?
+
+    /** This message at [termSeq] — stamped by the term's append pump, which alone knows the position. */
+    fun withTermSeq(termSeq: Long): ReplicaMessage
+
     fun encode(): ByteArray
 
     companion object Codec : MessageCodec<ReplicaMessage> {
@@ -49,6 +56,8 @@ sealed interface ReplicaMessage {
         fun parse(buffer: ByteBuffer): ReplicaMessage? =
             ReplicaLogMessage.parseFrom(buffer.duplicate().position(1))
                 .let { msg ->
+                    val termSeq = if (msg.hasTermSeq()) msg.termSeq else null
+
                     when (msg.messageCase) {
                         ReplicaLogMessage.MessageCase.RESOLVED_TX -> msg.resolvedTx.let {
                             val dbOp = when (it.dbOpCase) {
@@ -69,19 +78,19 @@ sealed interface ReplicaMessage {
                                 dbOp,
                                 it.externalSourceToken.takeIf { _ -> it.hasExternalSourceToken() }?.toByteArray(),
                                 if (it.hasSrcMsgId()) it.srcMsgId else null,
-                                termId = msg.termId,
+                                termId = msg.termId, termSeq = termSeq,
                             )
                         }
 
                         ReplicaLogMessage.MessageCase.TRIES_ADDED -> msg.triesAdded.let {
-                            TriesAdded(it.storageVersion, it.storageEpoch, it.triesList, it.sourceMsgId, termId = msg.termId)
+                            TriesAdded(it.storageVersion, it.storageEpoch, it.triesList, it.sourceMsgId, termId = msg.termId, termSeq = termSeq)
                         }
 
                         ReplicaLogMessage.MessageCase.BLOCK_BOUNDARY -> msg.blockBoundary.let {
                             BlockBoundary(
                                 it.blockIndex, it.latestProcessedMsgId,
                                 it.externalSourceToken.takeIf { _ -> it.hasExternalSourceToken() }?.toByteArray(),
-                                termId = msg.termId,
+                                termId = msg.termId, termSeq = termSeq,
                             )
                         }
 
@@ -89,22 +98,22 @@ sealed interface ReplicaMessage {
                             BlockUploaded(
                                 it.storageVersion, it.storageEpoch, it.blockIndex, it.latestProcessedMsgId, it.triesList,
                                 it.externalSourceToken.takeIf { _ -> it.hasExternalSourceToken() }?.toByteArray(),
-                                termId = msg.termId,
+                                termId = msg.termId, termSeq = termSeq,
                             )
                         }
 
                         ReplicaLogMessage.MessageCase.NO_OP -> msg.noOp.let {
-                            NoOp(if (it.hasSrcMsgId()) it.srcMsgId else null, termId = msg.termId)
+                            NoOp(if (it.hasSrcMsgId()) it.srcMsgId else null, termId = msg.termId, termSeq = termSeq)
                         }
 
                         ReplicaLogMessage.MessageCase.TRIES_DELETED -> msg.triesDeleted.let {
-                            TriesDeleted(it.tableName, it.trieKeysList.toSet(), termId = msg.termId)
+                            TriesDeleted(it.tableName, it.trieKeysList.toSet(), termId = msg.termId, termSeq = termSeq)
                         }
 
                         ReplicaLogMessage.MessageCase.OVERSIZED_MESSAGE -> msg.oversizedMessage.let {
                             OversizedMessage(
                                 it.storageVersion, it.storageEpoch, it.blockIndex, it.payloadId,
-                                termId = msg.termId,
+                                termId = msg.termId, termSeq = termSeq,
                             )
                         }
 
@@ -117,7 +126,7 @@ sealed interface ReplicaMessage {
         abstract fun toLogMessage(): ReplicaLogMessage
 
         final override fun encode(): ByteArray =
-            toLogMessage().toBuilder().setTermId(termId).build().let {
+            toLogMessage().toBuilder().setTermId(termId).apply { this@ProtobufMessage.termSeq?.let { setTermSeq(it) } }.build().let {
                 ByteBuffer.allocate(1 + it.serializedSize).apply {
                     put(PROTOBUF_HEADER)
                     put(it.toByteArray())
@@ -140,7 +149,10 @@ sealed interface ReplicaMessage {
         // written before this field existed (see #5586).
         val srcMsgId: MessageId? = null,
         override val termId: Long,
+        override val termSeq: Long? = null,
     ) : ProtobufMessage() {
+        override fun withTermSeq(termSeq: Long) = copy(termSeq = termSeq)
+
         override fun toLogMessage() = replicaLogMessage {
             resolvedTx = resolvedTx {
                 this.txId = this@ResolvedTx.txId
@@ -172,7 +184,10 @@ sealed interface ReplicaMessage {
         val storageVersion: Int, val storageEpoch: StorageEpoch, val tries: List<TrieDetails>,
         val sourceMsgId: MessageId,
         override val termId: Long,
+        override val termSeq: Long? = null,
     ) : ProtobufMessage() {
+        override fun withTermSeq(termSeq: Long) = copy(termSeq = termSeq)
+
         override fun toLogMessage() = replicaLogMessage {
             triesAdded = triesAdded {
                 storageVersion = this@TriesAdded.storageVersion
@@ -187,7 +202,10 @@ sealed interface ReplicaMessage {
         val blockIndex: BlockIndex, val latestProcessedMsgId: MessageId,
         val externalSourceToken: ExternalSourceToken? = null,
         override val termId: Long,
+        override val termSeq: Long? = null,
     ) : ProtobufMessage() {
+        override fun withTermSeq(termSeq: Long) = copy(termSeq = termSeq)
+
         override fun toLogMessage() = replicaLogMessage {
             blockBoundary = blockBoundary {
                 this.blockIndex = this@BlockBoundary.blockIndex
@@ -203,7 +221,10 @@ sealed interface ReplicaMessage {
         val tries: List<TrieDetails>,
         val externalSourceToken: ExternalSourceToken? = null,
         override val termId: Long,
+        override val termSeq: Long? = null,
     ) : ProtobufMessage() {
+        override fun withTermSeq(termSeq: Long) = copy(termSeq = termSeq)
+
         override fun toLogMessage() = replicaLogMessage {
             blockUploaded = blockUploaded {
                 this.storageVersion = this@BlockUploaded.storageVersion
@@ -219,7 +240,13 @@ sealed interface ReplicaMessage {
     // `srcMsgId` carries the leader's source-log watermark when no other record propagates it
     // (a FlushBlock that finishes no block); followers advance `latestSourceMsgId` on it. Null
     // when used purely as a transition replay-target marker.
-    data class NoOp(val srcMsgId: MessageId? = null, override val termId: Long) : ProtobufMessage() {
+    data class NoOp(
+        val srcMsgId: MessageId? = null,
+        override val termId: Long,
+        override val termSeq: Long? = null,
+    ) : ProtobufMessage() {
+        override fun withTermSeq(termSeq: Long) = copy(termSeq = termSeq)
+
         override fun toLogMessage() = replicaLogMessage {
             noOp = noOp { this@NoOp.srcMsgId?.let { srcMsgId = it } }
         }
@@ -229,7 +256,10 @@ sealed interface ReplicaMessage {
         val tableName: String,
         val trieKeys: Set<TrieKey>,
         override val termId: Long,
+        override val termSeq: Long? = null,
     ) : ProtobufMessage() {
+        override fun withTermSeq(termSeq: Long) = copy(termSeq = termSeq)
+
         override fun toLogMessage() = replicaLogMessage {
             triesDeleted = triesDeleted {
                 tableName = this@TriesDeleted.tableName
@@ -253,7 +283,10 @@ sealed interface ReplicaMessage {
         val storageVersion: Int, val storageEpoch: StorageEpoch,
         val blockIndex: BlockIndex, val payloadId: String,
         override val termId: Long,
+        override val termSeq: Long? = null,
     ) : ProtobufMessage() {
+        override fun withTermSeq(termSeq: Long) = copy(termSeq = termSeq)
+
         val path: Path get() = oversizedDir.resolve("b${blockIndex.asLexHex}-$payloadId.binpb")
 
         override fun toLogMessage() = replicaLogMessage {
