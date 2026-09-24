@@ -33,14 +33,27 @@
 (defmacro with-log-level [ns level & body]
   `(with-log-levels {~ns ~level} ~@body))
 
-(defn- env-var->log-ns [env-var]
-  (when-let [[_ extras] (re-matches #"xtdb_logging_level(?:_([a-z\-]+(?:_[a-z\-]+)*))?" (str/lower-case env-var))]
-    (->> (into ["xtdb"] (some-> extras (str/split #"_")))
-         (str/join ".")
-         symbol)))
+(defn- env-var->logger-names [env-var]
+  (condp re-matches env-var
+    #"(?i)XTDB_LOGGER_LEVEL_([_a-z\-]+)"
+    :>> (fn [[_ logger-name]]
+          (let [decoded (str/replace logger-name #"_{1,2}" #(if (= % "__") "_" "."))]
+            (distinct [(symbol decoded)
+                       (symbol (str/replace decoded "_" "-"))])))
+
+    ; legacy option
+    #"(?i)XTDB_LOGGING_LEVEL(?:_([a-z\-]+(?:_[a-z\-]+)*))?"
+    :>> (fn [[_ extras]]
+          [(->> (into ["xtdb"] (some-> extras (str/split #"_")))
+                (map str/lower-case)
+                (str/join ".")
+                symbol)])
+
+    nil))
 
 (defn set-from-env! [env]
-  (doseq [[k v] env]
-    (when-let [log-ns (env-var->log-ns k)]
-      (set-log-level! log-ns v))))
+  (doseq [[k v] env
+          logger-name (env-var->logger-names k)]
+    (log/info "Custom logger level:" logger-name "=" v)
+    (set-log-level! logger-name v)))
 
