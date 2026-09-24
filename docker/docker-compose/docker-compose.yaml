@@ -1,33 +1,30 @@
 version: '3'
 services:
-  minio:
-    image: quay.io/minio/minio
+  s3proxy:
+    image: andrewgaul/s3proxy:4.1.1@sha256:87662b2a5afcdfa5f478a1c61650bae4c87bbd15f6ff2823236bcfd66ef7fe04
     ports:
       - "9000:9000"
-      - "8090:8090"
     environment:
-      - MINIO_ROOT_USER=minioadmin
-      - MINIO_ROOT_PASSWORD=minioadmin
+      - S3PROXY_ENDPOINT=http://0.0.0.0:9000
+      - S3PROXY_IDENTITY=xtdb
+      - S3PROXY_CREDENTIAL=xtdb-secret-key
     volumes:
-      - minio_data:/data
-    command: server /data --console-address ":8090"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 5s
-      timeout: 5s
-      retries: 3
+      - s3proxy_data:/data
 
   # a service simply to create the bucket
-  minio-setup:
-    image: quay.io/minio/mc
+  s3proxy-setup:
+    image: amazon/aws-cli:2.37.1
     depends_on:
-      minio:
+      s3proxy:
         condition: service_healthy
+    environment:
+      - AWS_ACCESS_KEY_ID=xtdb
+      - AWS_SECRET_ACCESS_KEY=xtdb-secret-key
+      - AWS_REGION=us-east-1
     entrypoint: >
       /bin/sh -c "
-      mc alias set myminio http://minio:9000 minioadmin minioadmin &&
-      mc mb --ignore-existing myminio/xtdb-bucket &&
-      echo 'MinIO bucket created successfully!'"
+      aws --endpoint-url http://s3proxy:9000 s3api head-bucket --bucket xtdb-bucket 2>/dev/null ||
+      aws --endpoint-url http://s3proxy:9000 s3api create-bucket --bucket xtdb-bucket"
 
   kafka:
     image: confluentinc/cp-kafka:7.7.1
@@ -54,9 +51,10 @@ services:
   xtdb:
     image: ghcr.io/xtdb/xtdb-aws:edge
     depends_on:
-      - kafka
-      - minio
-      - minio-setup
+      kafka:
+        condition: service_started
+      s3proxy-setup:
+        condition: service_completed_successfully
     expose:
       - 8080
       - 5432
@@ -73,12 +71,12 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: "kafka:29092"
       XTDB_LOG_TOPIC: "xt_log"
       XTDB_S3_BUCKET: "xtdb-bucket"
-      XTDB_S3_ENDPOINT: "http://minio:9000"
-      ACCESS_KEY: "minioadmin"
-      SECRET_KEY: "minioadmin"
+      XTDB_S3_ENDPOINT: "http://s3proxy:9000"
+      ACCESS_KEY: "xtdb"
+      SECRET_KEY: "xtdb-secret-key"
     command: ["-f", "/config/dc_config.yaml"]
     volumes:
       - ./dc_config.yaml:/config/dc_config.yaml
 
 volumes:
-  minio_data:
+  s3proxy_data:
