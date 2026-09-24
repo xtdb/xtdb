@@ -168,7 +168,7 @@ class PostgresSource(
 
             val driver = PgWireDriver(
                 dbName, pg.hostname, pg.port, pg.database, pg.username, pg.password,
-                slotName, publicationName,
+                slotName, publicationName, pg.statusInterval,
             )
 
             return PostgresSource(dbName, driver, slotName, indexer.open(), meterRegistry)

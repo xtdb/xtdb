@@ -24,6 +24,8 @@ import java.sql.Connection
 import java.sql.DriverManager
 import java.time.Instant
 import java.util.*
+import java.util.concurrent.TimeUnit
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 
 private val LOG = PgWireDriver::class.logger
@@ -102,6 +104,7 @@ class PgWireDriver(
     private val password: String,
     private val slotName: String,
     private val publicationName: String,
+    private val statusInterval: Duration?,
 ) : PostgresDriver {
 
     private data class ColumnInfo(val name: String, val typeOid: Int)
@@ -371,6 +374,7 @@ class PgWireDriver(
                     // extent and is exactly what must not be confirmed over. SoleConfirmer in
                     // dev/doc/pgsrc.allium; #5975.
                     .withAutomaticFlush(false)
+                    .also { b -> statusInterval?.let { b.withStatusInterval(it.inWholeMilliseconds.toInt(), TimeUnit.MILLISECONDS) } }
                     .start()
 
                 if (attempt > 1)
