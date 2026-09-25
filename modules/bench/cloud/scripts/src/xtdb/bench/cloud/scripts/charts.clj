@@ -47,7 +47,7 @@
                                   :title x-label
                                   :axis {:labelAngle -45
                                          :labelExpr "utcFormat(toDate(datum.value), '%d %b')"}}}
-                   :layer [{:mark {:type "bar" :width {:band 0.6} :cornerRadius 2}
+                   :layer [{:mark {:type "bar" :width {:band 0.6}}
                             :encoding {:y {:field "open"
                                            :type "quantitative"
                                            :title y-label
