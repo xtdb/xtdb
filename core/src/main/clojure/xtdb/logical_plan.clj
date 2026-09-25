@@ -1282,6 +1282,49 @@
        (when (every? symbol? projections)
          [:group-by c dependent-relation]))))
 
+(defn- fusable-sorts? [outer-opts inner-opts]
+  (and (empty? (:order-specs outer-opts))
+       (nil? (:limit inner-opts))
+       (not (and (:skip outer-opts) (:skip inner-opts)))))
+
+(defn- numbers-rows? [projections]
+  (some #{'row-number 'local-row-number}
+        (tree-seq coll? seq projections)))
+
+(defn- fusable-sort-beneath? [outer-opts relation]
+  (case (first relation)
+    :sort (fusable-sorts? outer-opts (second relation))
+    (:project :map) (and (not (numbers-rows? (:projections (second relation))))
+                         (recur outer-opts (last relation)))
+    :rename (recur outer-opts (last relation))
+    false))
+
+(defn- push-sort-bounds-down-towards-sort [z]
+  (letfn [(push-down [sort-opts op op-opts relation]
+            (when (and (empty? (:order-specs sort-opts))
+                       (fusable-sort-beneath? sort-opts [op op-opts relation]))
+              [op op-opts [:sort sort-opts relation]]))]
+    (r/zmatch z
+      [:sort sort-opts [:project project-opts relation]]
+      ;;=>
+      (push-down sort-opts :project project-opts relation)
+
+      [:sort sort-opts [:map map-opts relation]]
+      ;;=>
+      (push-down sort-opts :map map-opts relation)
+
+      [:sort sort-opts [:rename rename-opts relation]]
+      ;;=>
+      (push-down sort-opts :rename rename-opts relation))))
+
+(defn- fuse-sorts [z]
+  (r/zmatch z
+    [:sort outer-opts [:sort inner-opts relation]]
+    ;;=>
+    (when (fusable-sorts? outer-opts inner-opts)
+      [:sort (into inner-opts (filter val) (select-keys outer-opts [:skip :limit]))
+       relation])))
+
 (defn push-semi-and-anti-joins-down [z]
   (r/zmatch
     z
@@ -1458,7 +1501,9 @@
    #'remove-superseded-projects
    #'merge-selections-around-scan
    #'push-semi-and-anti-joins-down
-   #'add-selection-to-scan-predicate])
+   #'add-selection-to-scan-predicate
+   #'push-sort-bounds-down-towards-sort
+   #'fuse-sorts])
 
 (def ^:private decorrelate-plan-rules
   [#'remove-superseded-projects
