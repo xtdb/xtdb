@@ -3,6 +3,22 @@ package xtdb.postgres
 import clojure.lang.ILookup
 import clojure.lang.Keyword
 import io.micrometer.core.instrument.MeterRegistry
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.flow.MutableStateFlow
+import xtdb.api.TransactionKey
+import xtdb.api.TransactionResult
+import xtdb.api.tx.BlockDetails
+import xtdb.api.tx.ExternalSourceToken
+import xtdb.api.tx.OpenTx
+import xtdb.api.tx.TxIndexer
+import xtdb.postgres.proto.postgresSourceToken
+import java.time.Instant
+import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.*
@@ -13,6 +29,8 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assertions.fail
 import xtdb.postgres.proto.PostgresSourceToken
+import org.postgresql.PGConnection
+import org.postgresql.PGProperty
 import org.postgresql.replication.LogSequenceNumber
 import org.testcontainers.containers.Network
 import org.testcontainers.kafka.ConfluentKafkaContainer
@@ -26,12 +44,14 @@ import xtdb.time.Interval
 import java.math.BigDecimal
 import java.nio.file.Files
 import java.nio.file.Path
+import java.sql.Connection
 import java.sql.DriverManager
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
+import java.util.Properties
 import java.util.UUID
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
@@ -289,6 +309,109 @@ class PostgresSourceIntegrationTest {
             assertEquals("Bob", rows[1]["name"])
             assertEquals("Charlie", rows[2]["name"])
         }
+    }
+
+    @Test
+    fun `a stream start that finds the slot still held waits it out`() = runTest(timeout = 120.seconds) {
+        val pubName = "test_pub_${UUID.randomUUID().toString().replace("-", "_")}"
+        val slotName = "test_slot_${UUID.randomUUID().toString().replace("-", "_")}"
+
+        pgExecute(
+            "CREATE TABLE IF NOT EXISTS pg_held (_id INT PRIMARY KEY, name TEXT)",
+            "CREATE PUBLICATION $pubName FOR TABLE pg_held",
+        )
+        val slotLsn = createSlot(slotName)
+        pgExecute("INSERT INTO pg_held (_id, name) VALUES (1, 'Alice')")
+
+        val resumeToken = postgresSourceToken {
+            latestCommittedLsn = slotLsn
+            snapshotCompleted = true
+        }.toByteArray()
+
+        val indexer = RecordingIndexer()
+
+        try {
+            PostgresSource("cdc", sourceDriver(slotName, pubName), slotName, DirectMirror()).use { source ->
+                holdSlot(slotName, pubName).use { holder ->
+                    val assignment = CoroutineScope(Dispatchers.Default).async {
+                        runCatching { source.onPartitionAssigned(0, resumeToken, indexer) }
+                    }
+
+                    try {
+                        runInterruptible { Thread.sleep(1_000) }
+                        assertFalse(assignment.isCompleted, "a held slot must not fail the source, got: ${assignment.takeIf { it.isCompleted }?.getCompleted()}")
+
+                        holder.close()
+
+                        eventually(30.seconds) {
+                            assertTrue(indexer.submittedLsns.any { it > slotLsn }, "Alice streams once the slot is released")
+                        }
+                    } finally {
+                        assignment.cancelAndJoin()
+                    }
+                }
+            }
+        } finally {
+            eventually(10.seconds) { pgExecute("SELECT pg_drop_replication_slot('$slotName')") }
+        }
+    }
+
+    private fun sourceDriver(slotName: String, pubName: String): PostgresDriver =
+        PgWireDriver(
+            "cdc", postgres.host, postgres.getMappedPort(5432), postgres.databaseName,
+            postgres.username, postgres.password, slotName, pubName, null,
+        )
+
+    private fun createSlot(slotName: String): Long =
+        DriverManager.getConnection(postgres.jdbcUrl, postgres.username, postgres.password).use { conn ->
+            conn.createStatement().use { stmt ->
+                stmt.executeQuery("SELECT lsn FROM pg_create_logical_replication_slot('$slotName', 'pgoutput', failover => true)").use { rs ->
+                    rs.next()
+                    LogSequenceNumber.valueOf(rs.getString("lsn")).asLong()
+                }
+            }
+        }
+
+    /** Commits nothing; records the resume position of each transaction it is handed. */
+    private class RecordingIndexer : TxIndexer {
+        val submittedLsns = CopyOnWriteArrayList<Long>()
+
+        override val latestBlock = MutableStateFlow<BlockDetails?>(null)
+
+        private val txKey = object : TransactionKey {
+            override val txId = 1L
+            override val systemTime: Instant = Instant.EPOCH
+        }
+
+        override suspend fun executeTx(
+            externalSourceToken: ExternalSourceToken?, systemTime: Instant?,
+            writer: suspend (OpenTx) -> TxIndexer.TxResult,
+        ): TransactionResult = TransactionResult.Committed(txKey)
+
+        override suspend fun submitTx(
+            externalSourceToken: ExternalSourceToken?, systemTime: Instant?,
+            writer: suspend (OpenTx) -> TxIndexer.TxResult,
+        ): Deferred<TransactionResult> {
+            externalSourceToken?.let { submittedLsns += PostgresSourceToken.parseFrom(it).latestCommittedLsn }
+            return CompletableDeferred(TransactionResult.Committed(txKey))
+        }
+    }
+
+    private fun holdSlot(slotName: String, pubName: String): Connection {
+        val conn = DriverManager.getConnection(postgres.jdbcUrl, Properties().also {
+            PGProperty.USER.set(it, postgres.username)
+            PGProperty.PASSWORD.set(it, postgres.password)
+            PGProperty.ASSUME_MIN_SERVER_VERSION.set(it, "15")
+            PGProperty.REPLICATION.set(it, "database")
+            PGProperty.PREFER_QUERY_MODE.set(it, "simple")
+        })
+        conn.unwrap(PGConnection::class.java).replicationAPI.replicationStream().logical()
+            .withSlotName(slotName)
+            .withSlotOption("proto_version", "1")
+            .withSlotOption("publication_names", pubName)
+            .withAutomaticFlush(false)
+            .start()
+        return conn
     }
 
     @Test
