@@ -51,7 +51,7 @@
                             :encoding {:y {:field "open"
                                            :type "quantitative"
                                            :title y-label
-                                           :scale {:zero false}}
+                                           :scale {:zero true}}
                                        :y2 {:field "value"}
                                        :color {:field "direction"
                                                :type "nominal"
