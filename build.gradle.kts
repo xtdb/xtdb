@@ -147,7 +147,24 @@ allprojects {
         }
     }
 
+    // Clojure only loads an AOT `__init.class` when it is strictly newer than its `.clj`,
+    // so under Gradle's constant reproducible timestamp every jarred namespace would load from source.
+    tasks.withType<AbstractArchiveTask>().configureEach {
+        isPreserveFileTimestamps = true
+    }
+
     tasks.withType<ShadowJar> {
+        // Shadow's default EXCLUDE drops duplicates before the transformers see them,
+        // so every path a transformer merges has to opt back in or only its first copy survives.
+        filesMatching(
+            listOf(
+                "META-INF/services/**",
+                "data_readers.clj",
+                "META-INF/org/apache/logging/log4j/core/config/plugins/Log4j2Plugins.dat",
+            )
+        ) {
+            duplicatesStrategy = DuplicatesStrategy.INCLUDE
+        }
         transform(Log4j2PluginsCacheFileTransformer())
     }
 
