@@ -11,6 +11,7 @@ import java.sql.Connection
 import java.sql.DriverManager
 import java.sql.PreparedStatement
 import java.util.UUID
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlin.test.assertTrue
 import io.kotest.assertions.nondeterministic.eventually
@@ -59,6 +60,7 @@ abstract class PostgresSourceTestBase {
         logDir: Path, storageDir: Path,
         pgHost: String, pgPort: Int,
         username: String = "testuser", password: String = "testpass",
+        statusInterval: Duration? = null,
     ): Xtdb = Xtdb.openNode {
         server { port = 0 }
         log(localLog(logDir))
@@ -66,6 +68,7 @@ abstract class PostgresSourceTestBase {
         remote("pg", PostgresRemote.Factory(
             hostname = pgHost, port = pgPort,
             database = "testdb", username = username, password = password,
+            statusInterval = statusInterval,
         ))
     }
 

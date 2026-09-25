@@ -166,9 +166,12 @@ class PostgresSource(
                     data = mapOf("alias" to remote, "actualType" to actualType),
                 )
 
-            val driver = PgWireDriver(
-                dbName, pg.hostname, pg.port, pg.database, pg.username, pg.password,
-                slotName, publicationName, pg.statusInterval,
+            val driver = ResilientDriver(
+                dbName,
+                PgWireDriver(
+                    dbName, pg.hostname, pg.port, pg.database, pg.username, pg.password,
+                    slotName, publicationName, pg.statusInterval,
+                ),
             )
 
             return PostgresSource(dbName, driver, slotName, indexer.open(), meterRegistry)

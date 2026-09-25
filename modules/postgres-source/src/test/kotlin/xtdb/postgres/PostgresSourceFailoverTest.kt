@@ -62,6 +62,7 @@ class PostgresSourceFailoverTest : PostgresSourceTestBase() {
 
         val standby: GenericContainer<*> = GenericContainer(image)
             .withNetwork(network)
+            .withNetworkAliases("standby")
             .withEnv("HA_ROLE", "standby")
             .withEnv("HA_PRIMARY_HOST", "primary")
             .withEnv("HA_REPLICATION_USER", "testuser")
@@ -156,101 +157,6 @@ class PostgresSourceFailoverTest : PostgresSourceTestBase() {
     }
 
     @Test
-    fun `resuming against a promoted standby surfaces an ingestion error`() = runTest(timeout = 600.seconds) {
-        val slot = unique("xtdb_slot")
-        val pub = unique("xtdb_pub")
-        val logDir = Files.createTempDirectory("ha-log")
-        val storageDir = Files.createTempDirectory("ha-storage")
-        val cdcLog = Files.createTempDirectory("ha-cdc-log")
-        val cdcStorage = Files.createTempDirectory("ha-cdc-storage")
-
-        HaPair(haImage).use { ha ->
-            ha.start()
-
-            pgExecute(
-                ha.primary,
-                "CREATE TABLE widgets (_id INT PRIMARY KEY, name TEXT)",
-                "INSERT INTO widgets (_id, name) VALUES (1, 'snapshot-row')",
-                "CREATE PUBLICATION $pub FOR TABLE widgets",
-            )
-
-            eventually(60.seconds) {
-                assertEquals(
-                    listOf("t"), pgColumn(ha.standbyHost, ha.standbyPort, "SELECT pg_is_in_recovery()"),
-                    "standby is up and in recovery",
-                )
-            }
-
-            openNode(logDir, storageDir, ha.primaryHost, ha.primaryPort).use { node ->
-                attachCdc(node, "cdc", cdcLog, cdcStorage, slot, pub)
-                awaitStreaming(node)
-
-                // advances the token past the snapshot's consistent point, so the reopen below
-                // takes the resume path rather than re-snapshotting
-                pgExecute(ha.primary, "INSERT INTO widgets (_id, name) VALUES (2, 'streamed-row')")
-                eventually(30.seconds) {
-                    assertTrue(
-                        xtQuery(node, "cdc", "SELECT _id FROM public.widgets WHERE _id = 2").isNotEmpty(),
-                        "streamed row mirrored",
-                    )
-                }
-
-                assertEquals(
-                    listOf("t"),
-                    pgColumn(ha.primaryHost, ha.primaryPort, "SELECT failover FROM pg_replication_slots WHERE slot_name = '$slot'"),
-                    "test precondition: the source creates a failover slot",
-                )
-                assertTrue(latestToken(node)?.snapshotCompleted == true, "test precondition: resume path")
-
-                // the one difference from `a failover slot survives promotion`: the slot is never
-                // synced, so the standby holds no copy of it
-                ha.promote()
-                ha.primary.stop()
-            }
-
-            // asserted so the test can't pass off the back of a different failure — a missing
-            // publication throws `Incorrect` from another path and would look the same outside
-            assertEquals(listOf("f"), pgColumn(ha.standbyHost, ha.standbyPort, "SELECT pg_is_in_recovery()"))
-            assertEquals(
-                listOf("1", "2"),
-                pgColumn(ha.standbyHost, ha.standbyPort, "SELECT _id FROM widgets ORDER BY _id"),
-                "rows survive the failover — Postgres loses no committed data",
-            )
-            assertEquals(
-                listOf("1"),
-                pgColumn(ha.standbyHost, ha.standbyPort, "SELECT count(*) FROM pg_publication WHERE pubname = '$pub'"),
-                "the publication survives — ordinary catalog, physically replicated",
-            )
-            assertEquals(
-                emptyList<String?>(),
-                pgColumn(ha.standbyHost, ha.standbyPort, "SELECT slot_name FROM pg_replication_slots"),
-                "but no slot does — pg_replslot is neither WAL-logged nor base-backed-up",
-            )
-
-            openNode(logDir, storageDir, ha.standbyHost, ha.standbyPort).use { node ->
-                val dbs = (node as XtdbInternal).dbCatalog
-
-                // the disabled `slot recreation silently drops changes` in
-                // PostgresSourceIntegrationTest is what failing loudly here protects against
-                val error = eventually(60.seconds) {
-                    assertNotNull(
-                        dbs["cdc"]?.ingestionError,
-                        "a missing slot must stop ingestion, not resume from the new server's position",
-                    )
-                }
-
-                val rendered = error.stackTraceToString()
-                assertTrue(
-                    rendered.contains(slot) && rendered.contains("does not exist"),
-                    "expected the failure to name the missing slot '$slot', got: $rendered",
-                )
-
-                assertPrimaryDbHealthy(node)
-            }
-        }
-    }
-
-    @Test
     fun `a failover slot survives promotion`() = runTest(timeout = 600.seconds) {
         val slot = unique("xtdb_slot")
         val pub = unique("xtdb_pub")
@@ -318,7 +224,6 @@ class PostgresSourceFailoverTest : PostgresSourceTestBase() {
             openNode(logDir, storageDir, ha.standbyHost, ha.standbyPort).use { node ->
                 pgExec(ha.standbyHost, ha.standbyPort, "INSERT INTO widgets (_id, name) VALUES (3, 'after-failover')")
 
-                // the point of the whole exercise: writes to the new primary still reach XT
                 eventually(90.seconds) {
                     assertTrue(
                         xtQuery(node, "cdc", "SELECT _id FROM public.widgets WHERE _id = 3").isNotEmpty(),
@@ -331,6 +236,75 @@ class PostgresSourceFailoverTest : PostgresSourceTestBase() {
                     "the source resumed cleanly against the promoted standby",
                 )
                 assertPrimaryDbHealthy(node)
+            }
+        }
+    }
+
+    @Test
+    fun `a running source follows its upstream through a failover`() = runTest(timeout = 600.seconds) {
+        val slot = unique("xtdb_slot")
+        val pub = unique("xtdb_pub")
+        val logDir = Files.createTempDirectory("ha-log")
+        val storageDir = Files.createTempDirectory("ha-storage")
+        val cdcLog = Files.createTempDirectory("ha-cdc-log")
+        val cdcStorage = Files.createTempDirectory("ha-cdc-storage")
+
+        HaPair(haImage).use { ha ->
+            ha.start()
+
+            pgExecute(
+                ha.primary,
+                "CREATE TABLE widgets (_id INT PRIMARY KEY, name TEXT)",
+                "INSERT INTO widgets (_id, name) VALUES (1, 'snapshot-row')",
+                "CREATE PUBLICATION $pub FOR TABLE widgets",
+            )
+
+            eventually(60.seconds) {
+                assertEquals(
+                    listOf("t"), pgColumn(ha.standbyHost, ha.standbyPort, "SELECT pg_is_in_recovery()"),
+                    "standby is up and in recovery",
+                )
+            }
+
+            PgProxy(ha.network, "primary").use { proxy ->
+                openNode(
+                    logDir, storageDir, proxy.host, proxy.port,
+                    statusInterval = 1.seconds,
+                ).use { node ->
+                    attachCdc(node, "cdc", cdcLog, cdcStorage, slot, pub)
+                    awaitStreaming(node)
+
+                    pgExecute(ha.primary, "INSERT INTO widgets (_id, name) VALUES (2, 'streamed-row')")
+                    eventually(30.seconds) {
+                        assertTrue(
+                            xtQuery(node, "cdc", "SELECT _id FROM public.widgets WHERE _id = 2").isNotEmpty(),
+                            "streamed row mirrored",
+                        )
+                    }
+
+                    eventually(60.seconds) {
+                        assertEquals(listOf(slot), ha.syncSlots(), "slot copied to the standby")
+                    }
+
+                    ha.promote()
+                    ha.primary.stop()
+                    proxy.pointAt("standby")
+
+                    pgExec(ha.standbyHost, ha.standbyPort, "INSERT INTO widgets (_id, name) VALUES (3, 'after-failover')")
+
+                    eventually(90.seconds) {
+                        assertNull(
+                            (node as XtdbInternal).dbCatalog["cdc"]?.ingestionError,
+                            "the source rides out the failover rather than stopping",
+                        )
+                        assertTrue(
+                            xtQuery(node, "cdc", "SELECT _id FROM public.widgets WHERE _id = 3").isNotEmpty(),
+                            "a row written to the promoted primary reaches XT without a node restart",
+                        )
+                    }
+
+                    assertPrimaryDbHealthy(node)
+                }
             }
         }
     }

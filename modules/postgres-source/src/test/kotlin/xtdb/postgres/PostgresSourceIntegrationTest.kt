@@ -54,6 +54,7 @@ import java.time.ZonedDateTime
 import java.util.Properties
 import java.util.UUID
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import io.kotest.assertions.nondeterministic.continually
 import io.kotest.assertions.nondeterministic.eventually
@@ -115,7 +116,6 @@ class PostgresSourceIntegrationTest {
         sourceTopic: String,
         pgContainer: PostgreSQLContainer = postgres,
         pgPassword: String = pgContainer.password,
-        pgStatusInterval: Duration? = null,
     ): Xtdb = Xtdb.openNode {
         server { port = 0 }; flightSql = null
         logCluster("kafka", KafkaCluster.ClusterFactory(kafka.bootstrapServers))
@@ -125,7 +125,6 @@ class PostgresSourceIntegrationTest {
             database = pgContainer.databaseName,
             username = pgContainer.username,
             password = pgPassword,
-            statusInterval = pgStatusInterval,
         ))
         log(KafkaCluster.LogFactory("kafka", sourceTopic))
     }
@@ -357,9 +356,13 @@ class PostgresSourceIntegrationTest {
     }
 
     private fun sourceDriver(slotName: String, pubName: String): PostgresDriver =
-        PgWireDriver(
-            "cdc", postgres.host, postgres.getMappedPort(5432), postgres.databaseName,
-            postgres.username, postgres.password, slotName, pubName, null,
+        ResilientDriver(
+            "cdc",
+            PgWireDriver(
+                "cdc", postgres.host, postgres.getMappedPort(5432), postgres.databaseName,
+                postgres.username, postgres.password, slotName, pubName, null,
+            ),
+            ReconnectPolicy(initialDelay = 100.milliseconds, maxDelay = 500.milliseconds),
         )
 
     private fun createSlot(slotName: String): Long =
@@ -986,48 +989,6 @@ class PostgresSourceIntegrationTest {
 
                 assertFalse(latestPostgresToken(node).snapshotCompleted,
                     "must catch PG mid-snapshot; snapshot completed before kill")
-
-                assertPrimaryDbHealthy(node)
-            }
-        } finally {
-            runCatching { dedicatedPg.stop() }
-        }
-    }
-
-    @Test
-    fun `source surfaces ingestion error when postgres connection is lost mid-stream`() = runTest(timeout = 180.seconds) {
-        val pubName = "test_pub_${UUID.randomUUID().toString().replace("-", "_")}"
-        val slotName = "test_slot_${UUID.randomUUID().toString().replace("-", "_")}"
-        val sourceTopic = "test-topic-${UUID.randomUUID()}"
-        val dedicatedPg = newDedicatedPostgres()
-        Startables.deepStart(dedicatedPg).join()
-
-        try {
-            dedicatedPg.executeSql(
-                "CREATE TABLE pg_stream_kill (_id INT PRIMARY KEY, name TEXT)",
-                "INSERT INTO pg_stream_kill (_id, name) VALUES (1, 'Alice')",
-                "CREATE PUBLICATION $pubName FOR TABLE pg_stream_kill",
-            )
-
-            openNode(sourceTopic, pgContainer = dedicatedPg, pgStatusInterval = 1.seconds).use { node ->
-                attachPostgresSource(node, slotName = slotName, publicationName = pubName)
-
-                // Snapshot completes, then a streamed insert proves the replication
-                // stream is live before we kill the upstream.
-                awaitTxs(node, 2, db = "cdc")
-                dedicatedPg.executeSql("INSERT INTO pg_stream_kill (_id, name) VALUES (2, 'Bob')")
-                eventually(30.seconds) {
-                    assertTrue(xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_stream_kill WHERE _id = 2").isNotEmpty(), "streamed row visible")
-                }
-
-                dedicatedPg.stop()
-
-                val cdc = (node as XtdbInternal).dbCatalog
-                eventually(60.seconds) {
-                    assertTrue(cdc["cdc"]?.ingestionError != null, "cdc surfaces ingestionError when PG dies mid-stream")
-                }
-                assertNotNull(cdc["cdc"]?.ingestionError,
-                    "stream failure must surface IngestionStoppedException, not silently exit")
 
                 assertPrimaryDbHealthy(node)
             }

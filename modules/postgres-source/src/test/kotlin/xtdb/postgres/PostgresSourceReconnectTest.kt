@@ -86,7 +86,7 @@ class PostgresSourceReconnectTest {
         snapshotCompleted = true
     }.toByteArray()
 
-    private fun openSource(driver: PostgresDriver) = PostgresSource("xtdb", driver, "test_slot", DirectMirror())
+    private fun openSource(driver: PostgresDriver) = PostgresSource("xtdb", ResilientDriver("xtdb", driver), "test_slot", DirectMirror())
 
     @Test
     fun `a stand-down between polls cancels rather than reopening`() = runTest {
