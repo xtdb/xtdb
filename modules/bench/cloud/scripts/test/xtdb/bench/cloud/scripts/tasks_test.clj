@@ -1063,3 +1063,11 @@
                     charts/plot-timeseries-vega (fn [& _] nil)]
         (charts/plot-benchmark-timeseries "tpch" {})
         (is (= 1.0 (:filter-value @captured-opts)))))))
+
+(deftest plot-benchmark-timeseries-direction-test
+  (doseq [[bench-type better] [["tpch" :lower] ["fusion" :higher] ["auctionmark" :higher]]]
+    (let [captured-opts (atom nil)]
+      (with-redefs [azure/fetch-azure-benchmark-timeseries (constantly [{:timestamp "2024-01-01" :value 1000}])
+                    charts/plot-timeseries-vega (fn [_ opts] (reset! captured-opts opts))]
+        (charts/plot-benchmark-timeseries bench-type {})
+        (is (= better (:better @captured-opts)) bench-type)))))

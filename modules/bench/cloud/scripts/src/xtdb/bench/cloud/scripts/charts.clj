@@ -5,7 +5,8 @@
             [xtdb.bench.cloud.scripts.azure :as azure]))
 
 (defn plot-timeseries-vega
-  "Plot a timeseries line chart and save to SVG using Vega-Lite.
+  "Plot a timeseries as a candle chart and save to SVG using Vega-Lite.
+  Each candle runs from the previous run's value to this run's: green where it improved, red where it regressed.
 
   Requires vega-cli to be installed:
     npm install -g vega vega-lite vega-cli
@@ -15,43 +16,55 @@
                {:timestamp \"2025-01-16T11:00:00Z\" :value 1150.2}]
 
   opts: {:output-path \"chart.svg\"       ; where to save
+         :better :lower                   ; :higher or :lower - which direction is an improvement (required)
          :title \"Benchmark Performance\"  ; chart title
          :x-label \"Date\"                 ; x-axis label (default: \"Time\")
          :y-label \"Duration (ms)\"        ; y-axis label (default: \"Value\")
          :width 800                       ; image width (default: 800)
          :height 600}                     ; image height (default: 600)"
-  [data {:keys [output-path title x-label y-label width height]
+  [data {:keys [output-path better title x-label y-label width height]
          :or {x-label "Time"
               y-label "Value"
               width 800
               height 600}}]
-  (let [;; Transform data for Vega-Lite (timestamp as string, value as number)
-        ;; Ensure values are coerced to doubles
-        vega-data (mapv (fn [{:keys [timestamp value]}]
-                          {:timestamp timestamp :value (double value)})
-                        data)
-
-        ;; Calculate y-axis range (min - 2, max + 2 for padding)
-        values (map :value vega-data)
-        y-min (- (apply min values) 2.0)
-        y-max (+ (apply max values) 2.0)
-
-        ;; Create Vega-Lite spec
-        vega-spec {:$schema "https://vega.github.io/schema/vega-lite/v5.json"
+  (let [vega-spec {:$schema "https://vega.github.io/schema/vega-lite/v5.json"
                    :title title
                    :width width
                    :height height
-                   :data {:values vega-data}
-                   :mark {:type "line" :point true}
+                   :background "white"
+                   :data {:values (mapv (fn [{:keys [timestamp value]}]
+                                          {:timestamp timestamp :value (double value)})
+                                        data)}
+                   :transform [{:sort [{:field "timestamp"}]
+                                :window [{:op "lag" :field "value" :as "open"}]}
+                               {:filter "datum.open != null"}
+                               {:calculate "(datum.value - datum.open) / datum.open" :as "change"}
+                               {:calculate (format "datum.value == datum.open ? 'unchanged' : datum.value %s datum.open ? 'improved' : 'regressed'"
+                                                   (case better :higher ">" :lower "<"))
+                                :as "direction"}]
                    :encoding {:x {:field "timestamp"
-                                  :type "temporal"
+                                  :type "ordinal"
                                   :title x-label
-                                  :axis {:labelAngle -45}}
-                              :y {:field "value"
-                                  :type "quantitative"
-                                  :title y-label
-                                  :scale {:domain [y-min y-max]
-                                          :reverse false}}}}
+                                  :axis {:labelAngle -45
+                                         :labelExpr "utcFormat(toDate(datum.value), '%d %b')"}}}
+                   :layer [{:mark {:type "bar" :width {:band 0.6} :cornerRadius 2}
+                            :encoding {:y {:field "open"
+                                           :type "quantitative"
+                                           :title y-label
+                                           :scale {:zero false}}
+                                       :y2 {:field "value"}
+                                       :color {:field "direction"
+                                               :type "nominal"
+                                               :title nil
+                                               :scale {:domain ["improved" "regressed" "unchanged"]
+                                                       :range ["#0ca30c" "#d03b3b" "#888888"]}
+                                               :legend {:orient "top" :direction "horizontal"}}}}
+                           {:mark {:type "text"
+                                   :fontSize 11
+                                   :color "#444444"
+                                   :dy {:expr "datum.value >= datum.open ? -8 : 12"}}
+                            :encoding {:y {:field "value" :type "quantitative"}
+                                       :text {:field "change" :type "quantitative" :format "+.1%"}}}]}
 
         ;; Write spec to temporary file
         temp-spec-file (str (java.io.File/createTempFile "vega-spec" ".json"))
@@ -191,6 +204,7 @@
                        (str title " (" filter-param "=" actual-filter-value ")")
                        title)]
      (plot-timeseries-vega data {:output-path output-path
+                                 :better (if duration-metric? :lower :higher)
                                  :title chart-title
                                  :x-label "Time"
                                  :y-label y-label})
