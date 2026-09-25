@@ -5,7 +5,8 @@
 --   Confirming is an instruction to discard, not a progress report, so the only
 --   question is which positions are safe to give.
 -- Includes: the positions tracked and their ordering; the confirmation rule;
---   the re-delivery skip; the effect of a failed import.
+--   the re-delivery skip; the effect of a failed import; the reopening of a
+--   lost stream.
 -- Excludes: XTDB's processing model (see db.allium); row and type mapping;
 --   TOAST and replica-identity constraints; slot and publication creation.
 --
@@ -134,6 +135,14 @@ entity PgSource {
     -- commit and below the commit of a transaction still arriving.
     received_lsn: Integer
 
+    -- Losses of the upstream since it last delivered a transaction or went quiet.
+    reopen_attempts: Integer
+
+    -- When the next reopen is due; null while none is pending.
+    reopen_at: Timestamp?
+
+    last_reopened_at: Timestamp?
+
     -- Everything the target holds is on the far side of an existing recovery point.
     all_held_durable: xtdb.durable_lsn != null and held_lsn <= xtdb.durable_lsn
 
@@ -170,6 +179,14 @@ entity PgSource {
     }
 }
 
+---- Config
+
+config {
+    reopen_initial_delay: Duration
+    reopen_max_delay: Duration
+    reopen_reset_after: Duration
+}
+
 ---- Rules
 
 rule SourceOpensStream {
@@ -195,6 +212,7 @@ rule SourceReceivesTransaction {
 
     ensures:
         source.received_lsn = tx_lsn
+        source.reopen_attempts = 0
 
         -- Skipped below start_lsn: per ResendsFromConfirmed the upstream may
         -- re-send what we already hold, and re-importing would record a second
@@ -238,6 +256,41 @@ rule ImportFailureTearsDownStream {
         StreamTornDown(source)
 }
 
+rule UpstreamLossReopensStream {
+    when: UpstreamStreamLost(upstream, source, error)
+
+    let attempt = source.reopen_attempts + 1
+
+    ensures:
+        StreamTornDown(source)
+        source.reopen_attempts = attempt
+        source.reopen_at = now + reopen_delay(attempt, config.reopen_initial_delay, config.reopen_max_delay)
+
+    @guidance
+        -- reopen_delay grows exponentially with the attempt, up to reopen_max_delay, and is jittered.
+}
+
+rule SourceReopensStream {
+    when: source: PgSource.reopen_at <= now
+    requires: source.reopen_at != null
+
+    ensures:
+        source.reopen_at = null
+        source.last_reopened_at = now
+        StreamReopenRequested(source)
+}
+
+rule QuietUpstreamResetsReopenAttempts {
+    when: source: PgSource.last_reopened_at + config.reopen_reset_after <= now
+    requires: source.reopen_attempts > 0
+
+    ensures:
+        source.reopen_attempts = 0
+
+    @guidance
+        -- reopen_reset_after of about 10 minutes.
+}
+
 ---- Invariants
 
 invariant DurableExtentIsWithinHeld {
@@ -266,6 +319,7 @@ surface UpstreamReplication {
         StreamOpened(upstream, source, resume_lsn)
         PgTransactionReceived(upstream, source, tx_lsn)
         PgKeepaliveReceived(upstream, source, upstream_lsn)
+        UpstreamStreamLost(upstream, source, error)
 
     contracts:
         demands UpstreamWalSemantics
@@ -291,6 +345,14 @@ surface UpstreamReplication {
     @guarantee NoGapOnFailure
         -- No failure path advances the confirmed position past a transaction the
         -- target did not import.
+
+    @guarantee ReopenResumes
+        -- A reopened stream opens at the target's recovered position, through SourceOpensStream, on the slot it lost.
+        -- - A missing slot therefore holds the source at the reopen until an operator steps in.
+
+    @guarantee ReopensOnlyWhileAssigned
+        -- A source whose leader term has ended does not reopen its stream.
+        -- - Otherwise a demoted leader would confirm alongside its successor, against SoleConfirmer.
 }
 
 surface TargetIngestion {
@@ -312,5 +374,7 @@ surface TargetIngestion {
 ---- Open Questions
 
 open question "Is ReceivedTrailsUndeliveredCommits true on the server side — can a keepalive carry a position ahead of a commit still being decoded for our publication? The client half holds: pgjdbc sets the receive position from each record's own header, which for a transaction in flight is below its commit. If the server half fails, the received branch of confirmable_lsn is unsafe; if Postgres instead recycles unrelated WAL unasked, the branch is unnecessary and confirmable_lsn collapses to the durable extent."
+
+open question "Which upstream errors, if any, should end the source rather than reopen it? Every loss reopens until real deployments show which errors recur (#5878)."
 
 open question "Is TargetDurability.NoDurableExtentMeansResnapshot true — with no block, does the target re-snapshot rather than recover incrementally from a log that outlived its storage? If it recovers incrementally, no_incremental_recovery loses transactions and the bound must be nothing-confirmable until the first block."
