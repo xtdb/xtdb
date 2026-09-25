@@ -108,6 +108,13 @@ This requires XTDB to be pointed at the primary, and the following configuration
 - On the primary
   - `synchronized_standby_slots = '<standby's physical slot>'` - to hold decoding back until it confirms receipt
 
+The source's `!Postgres` remote has to point at an address that moves to the new primary, since XTDB reconnects to the address it was configured with.
+
+When the replication connection drops, the source reopens it, and keeps trying until it reconnects.
+Ingestion pauses while it retries, and each attempt is logged as a warning.
+The database stays queryable.
+See [troubleshooting](/ops/external-sources/postgres/troubleshooting#ingestion-has-paused-and-the-logs-repeat-replication-stream-failed) for a source that doesn't come back.
+
 
 ## Indexers
 

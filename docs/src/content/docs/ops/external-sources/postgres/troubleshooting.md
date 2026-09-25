@@ -67,6 +67,35 @@ Delete everything under the location set in the `storage` block of the `ATTACH` 
 
 6. Re-run the [setup guide](/ops/external-sources/postgres/setup) from the beginning
 
+## Ingestion has paused and the logs repeat `Replication stream failed`
+
+**Symptom:**
+New rows stop reaching XTDB, the database reports no ingestion error, and the node logs a warning like this on every attempt:
+
+```
+[pg_test_db] Replication stream failed (failure 7 since it last made progress); reopening from LSN LSN{0/193DEC0} in 30s
+```
+
+**Cause:**
+The source lost its replication connection and is retrying it.
+It carries on retrying until it reconnects, so if the cause clears by itself, for example a restart, a failover or a network blip, you don't need to do anything.
+The exception attached to the warning says which cause it is:
+
+- `replication slot "…" is active for PID …`: a previous connection still holds the slot. Postgres releases it within `wal_sender_timeout` (60s by default).
+- a connection error against the configured host: the upstream is down, or the `!Postgres` remote still points at the old primary.
+- an authentication or permission error: the role's credentials or privileges changed.
+- `replication slot "…" does not exist`: the server XTDB reconnected to has no copy of the slot, typically a promoted standby that wasn't synchronising it (see [surviving a Postgres failover](/ops/external-sources/postgres/reference#surviving-a-postgres-failover)).
+
+**Resolution:**
+
+1. For a connection, credential or permission error, fix the upstream or the remote's configuration; the source reconnects on its next attempt.
+
+2. For a missing slot, don't create a new one under the same name.
+   A new slot starts from the server's current position, so XTDB would resume with a gap.
+   Reset the source as in [recovering from a failed initial snapshot](#recovering-from-a-failed-initial-snapshot).
+
+3. To stop the retries, make the database dormant. This needs a node restart; see [Skipping Databases](/ops/troubleshooting#skipping-databases-v22).
+
 ## The replication slot keeps growing
 
 **Symptom:**
