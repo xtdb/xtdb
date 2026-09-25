@@ -1,7 +1,7 @@
 [:project
  {:projections
   [{o_orderpriority o.1/o_orderpriority} {order_count order_count}]}
- [:order-by
+ [:sort
   {:order-specs
    [[o.1/o_orderpriority
      {:direction :asc, :null-ordering :nulls-last}]]}
@@ -16,7 +16,8 @@
       [:rename
        {:prefix o.1}
        [:scan
-        {:db-name "xtdb", :table #xt/table orders,
+        {:db-name "xtdb",
+         :table #xt/table orders,
          :columns
          [o_orderpriority
           _id
@@ -52,7 +53,8 @@
         [:select
          {:predicate (< l_commitdate l_receiptdate)}
          [:scan
-          {:db-name "xtdb", :table #xt/table lineitem,
+          {:db-name "xtdb",
+           :table #xt/table lineitem,
            :columns
            [l_linestatus
             l_receiptdate

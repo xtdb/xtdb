@@ -1,6 +1,6 @@
 [:project
  {:projections [{y y}]}
- [:order-by
+ [:sort
   {:order-specs [[_ob2 {:direction :asc, :null-ordering :nulls-last}]]}
   [:map
    {:projections [{_ob2 (* y 2)}]}

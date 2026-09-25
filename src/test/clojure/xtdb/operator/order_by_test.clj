@@ -16,7 +16,7 @@
              {:a 12, :b 10}
              {:a 83, :b 100}
              {:a 100, :b 83}]]
-           (tu/query-ra [:order-by {:order-specs '[[a]]}
+           (tu/query-ra [:sort {:order-specs '[[a]]}
                          [::tu/pages
                           [[{:a 12, :b 10}
                             {:a 0, :b 15}]
@@ -28,7 +28,7 @@
             {:a 12.4, :b 10}
             {:a 83.0, :b 100}
             {:a 100, :b 83}]
-           (tu/query-ra '[:order-by {:order-specs [[a]]}
+           (tu/query-ra '[:sort {:order-specs [[a]]}
                           [:table {:rows [{:a 12.4, :b 10}
                                           {:a 0, :b 15}
                                           {:a 100, :b 83}
@@ -37,7 +37,7 @@
         "mixed numeric types")
 
   (t/is (= []
-           (tu/query-ra '[:order-by {:order-specs [[a]]}
+           (tu/query-ra '[:sort {:order-specs [[a]]}
                           [::tu/pages
                            [[] []]]]
                         {}))
@@ -46,19 +46,19 @@
 (t/deftest test-order-by-with-nulls
   (let [table-with-nil [{:a 12.4, :b 10}, {:a nil, :b 15}, {:a 100, :b 83}, {:a 83.0, :b 100}]]
     (t/is (= [{:b 15}, {:a 12.4, :b 10}, {:a 83.0, :b 100}, {:a 100, :b 83}]
-             (tu/query-ra '[:order-by {:order-specs [[a {:null-ordering :nulls-first}]]}
+             (tu/query-ra '[:sort {:order-specs [[a {:null-ordering :nulls-first}]]}
                             [:table {:param ?table}]]
                           {:args {:table table-with-nil}}))
           "nulls first")
 
     (t/is (= [{:a 12.4, :b 10}, {:a 83.0, :b 100}, {:a 100, :b 83}, {:b 15}]
-             (tu/query-ra '[:order-by {:order-specs [[a {:null-ordering :nulls-last}]]}
+             (tu/query-ra '[:sort {:order-specs [[a {:null-ordering :nulls-last}]]}
                             [:table {:param ?table}]]
                           {:args {:table table-with-nil}}))
           "nulls last")
 
     (t/is (= [{:a 12.4, :b 10}, {:a 83.0, :b 100}, {:a 100, :b 83}, {:b 15}]
-             (tu/query-ra '[:order-by {:order-specs [[a]]}
+             (tu/query-ra '[:sort {:order-specs [[a]]}
                             [:table {:param ?table}]]
                           {:args {:table table-with-nil}}))
           "default nulls last")))
@@ -69,10 +69,16 @@
           batches (mapv vec (partition-all 13 data))
           sorted (sort-by (juxt :a :b) data)]
       (t/is (= sorted
-               (tu/query-ra [:order-by {:order-specs '[[a] [b]]}
+               (tu/query-ra [:sort {:order-specs '[[a] [b]]}
                              [::tu/pages batches]]
                             {}))
-            "spilling to disk"))))
+            "spilling to disk")
+
+      (t/is (= (->> sorted (drop 25) (take 30))
+               (tu/query-ra [:sort {:order-specs '[[a] [b]], :skip 25, :limit 30}
+                             [::tu/pages batches]]
+                            {}))
+            "spilling to disk, with skip and limit"))))
 
 (t/deftest test-order-by-spill-cleans-up
   (let [parent (Files/createTempDirectory "test-spill-" (make-array FileAttribute 0))]
@@ -86,16 +92,15 @@
                 batches (mapv vec (partition-all 13 data))]
 
             (t/testing "happy path — loader fully drained"
-              (tu/query-ra [:order-by {:order-specs '[[a] [b]]}
+              (tu/query-ra [:sort {:order-specs '[[a] [b]]}
                             [::tu/pages batches]]
                            {})
               (t/is (empty? (.list (.toFile parent)))
                     "spill dir cleaned up after full drain"))
 
             (t/testing "early close — LIMIT 1 closes cursor before loader exhausts"
-              (tu/query-ra [:top {:limit 1}
-                            [:order-by {:order-specs '[[a] [b]]}
-                             [::tu/pages batches]]]
+              (tu/query-ra [:sort {:order-specs '[[a] [b]], :limit 1}
+                            [::tu/pages batches]]
                            {})
               (t/is (empty? (.list (.toFile parent)))
                     "spill dir cleaned up after early cursor close")))))

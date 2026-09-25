@@ -11,7 +11,8 @@
     [:rename
      {:prefix l.1}
      [:scan
-      {:db-name "xtdb", :table #xt/table lineitem,
+      {:db-name "xtdb",
+       :table #xt/table lineitem,
        :columns
        [{l_shipdate
          (and
@@ -31,7 +32,7 @@
     {s_address s.5/s_address}
     {s_phone s.5/s_phone}
     {total_revenue revenue.6/total_revenue}]}
-  [:order-by
+  [:sort
    {:order-specs
     [[s_suppkey {:direction :asc, :null-ordering :nulls-last}]]}
    [:map
@@ -45,7 +46,8 @@
        [[:rename
          {:prefix s.5}
          [:scan
-          {:db-name "xtdb", :table #xt/table supplier,
+          {:db-name "xtdb",
+           :table #xt/table supplier,
            :columns [s_name s_address s_phone _id]}]]
         [:rename
          {:prefix revenue.6}

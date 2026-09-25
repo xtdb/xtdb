@@ -2363,7 +2363,7 @@
         [:map {:projections in-projs} plan]
         plan)
 
-      [:order-by {:order-specs (mapv :order-by-spec ob-specs)}
+      [:sort {:order-specs (mapv :order-by-spec ob-specs)}
        plan]
 
       (if in-projs
@@ -2385,7 +2385,7 @@
         [:map {:projections in-projs} plan]
         plan)
 
-      [:order-by {:order-specs (mapv :order-by-spec ob-specs)}
+      [:sort {:order-specs (mapv :order-by-spec ob-specs)}
        plan]
 
       [:project {:projections (mapv :col-sym projected-cols)} plan])))
@@ -2750,14 +2750,12 @@
             (or offset-clause limit-clause)
             (update :plan (fn [plan]
                             (let [expr-visitor (->ExprPlanVisitor env scope)]
-                              [:top {:skip (some-> offset-clause
-                                                   (.offsetRowCount)
-                                                   (.accept expr-visitor))
-
-                                     :limit (when limit-clause
-                                              (or (some-> (.fetchFirstRowCount limit-clause)
-                                                          (.accept expr-visitor))
-                                                  1))}
+                              [:sort (cond-> {}
+                                       offset-clause (assoc :skip (-> (.offsetRowCount offset-clause)
+                                                                      (.accept expr-visitor)))
+                                       limit-clause (assoc :limit (or (some-> (.fetchFirstRowCount limit-clause)
+                                                                              (.accept expr-visitor))
+                                                                      1)))
                                plan]))))))))
 
   (visitQueryBodyTerm [this ctx] (.accept (.queryTerm ctx) this))
@@ -3095,7 +3093,7 @@
         [:patch-gaps {:valid-from ~valid-from, :valid-to ~valid-to}
          [:project {:projections [_iid _valid_from _valid_to
                                   {doc ~(into {} (map (juxt keyword identity)) known-cols)}]}
-          [:order-by {:order-specs [[_iid] [_valid_from]]}
+          [:sort {:order-specs [[_iid] [_valid_from]]}
            [:scan {:db-name ~db-name
                    :table ~table
                    :for-valid-time [:in ~valid-from ~valid-to]

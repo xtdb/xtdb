@@ -1,8 +1,8 @@
-[:top
- {:skip nil, :limit 100}
+[:sort
+ {:limit 100}
  [:project
   {:projections [{s_name s.1/s_name} {numwait numwait}]}
-  [:order-by
+  [:sort
    {:order-specs
     [[numwait {:direction :desc, :null-ordering :nulls-first}]
      [s.1/s_name {:direction :asc, :null-ordering :nulls-last}]]}
@@ -22,17 +22,20 @@
         [[:rename
           {:prefix n.4}
           [:scan
-           {:db-name "xtdb", :table #xt/table nation,
+           {:db-name "xtdb",
+            :table #xt/table nation,
             :columns [_id {n_name (== n_name "SAUDI ARABIA")}]}]]
          [:rename
           {:prefix o.3}
           [:scan
-           {:db-name "xtdb", :table #xt/table orders,
+           {:db-name "xtdb",
+            :table #xt/table orders,
             :columns [{o_orderstatus (== o_orderstatus "F")} _id]}]]
          [:rename
           {:prefix s.1}
           [:scan
-           {:db-name "xtdb", :table #xt/table supplier,
+           {:db-name "xtdb",
+            :table #xt/table supplier,
             :columns [s_name _id s_nationkey]}]]
          [:semi-join
           {:conditions
@@ -47,7 +50,8 @@
             [:select
              {:predicate (> l_receiptdate l_commitdate)}
              [:scan
-              {:db-name "xtdb", :table #xt/table lineitem,
+              {:db-name "xtdb",
+               :table #xt/table lineitem,
                :columns
                [l_receiptdate l_commitdate l_orderkey l_suppkey]}]]]
            [:project
@@ -74,7 +78,8 @@
              [:select
               {:predicate (> l_receiptdate l_commitdate)}
               [:scan
-               {:db-name "xtdb", :table #xt/table lineitem,
+               {:db-name "xtdb",
+                :table #xt/table lineitem,
                 :columns
                 [l_linestatus
                  l_receiptdate
@@ -115,7 +120,8 @@
            [:rename
             {:prefix l2.6}
             [:scan
-             {:db-name "xtdb", :table #xt/table lineitem,
+             {:db-name "xtdb",
+              :table #xt/table lineitem,
               :columns
               [l_linestatus
                l_receiptdate

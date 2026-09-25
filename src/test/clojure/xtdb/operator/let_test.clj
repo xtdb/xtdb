@@ -59,7 +59,7 @@
                           [::tu/pages
                            [[{:a 12}, {:a 0}]
                             [{:a 12}, {:a 100}]]]
-                          [:order-by {:order-specs [[a]]}
+                          [:sort {:order-specs [[a]]}
                            [:union-all {}
                             [:relation {:cte-id Foo :col-names [a]}]
                             [:relation {:cte-id Foo :col-names [a]}]]]]))

@@ -47,7 +47,7 @@
   (let [batches [[{:idx 0}, {:idx 1}]
                  [{:idx 2}, {:idx 3}]]]
     (letfn [(top [offset length]
-              (tu/query-ra [:top (->> {:skip offset, :limit length}
+              (tu/query-ra [:sort (->> {:skip offset, :limit length}
                                       (into {} (filter (comp some? val))))
                             [::tu/pages '{idx #xt/type :i64} batches]]
                            {:preserve-pages? true}))]
@@ -77,14 +77,14 @@
                    [{:idx 2}, {:idx 3}]]]]
 
     (t/is (= [{:idx 1}, {:idx 2}]
-             (tu/query-ra [:top '{:skip ?_0, :limit ?_1} batches]
+             (tu/query-ra [:sort '{:skip ?_0, :limit ?_1} batches]
                           {:args [1 2]})))
 
     (t/is (anomalous? [:incorrect nil #"Expected: number, got: null"]
-                      (tu/query-ra [:top '{:skip ?_0, :limit ?_1} batches]))
+                      (tu/query-ra [:sort '{:skip ?_0, :limit ?_1} batches]))
           "missing args")
 
     (t/is (anomalous? [:incorrect nil #"Expected: number, got: 1"]
-                      (tu/query-ra [:top '{:limit ?_0} batches]
+                      (tu/query-ra [:sort '{:limit ?_0} batches]
                                    {:args ["1"]}))
           "got a string")))
