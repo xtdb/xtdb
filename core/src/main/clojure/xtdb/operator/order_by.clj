@@ -8,7 +8,7 @@
            (java.nio.channels Channels)
            java.nio.file.Path
            (java.util HashMap List Map PriorityQueue)
-           (java.util Comparator)
+           (java.util Arrays Comparator)
            java.util.stream.IntStream
            (org.apache.arrow.memory BufferAllocator)
            (xtdb.arrow ArrowUnloader$Mode Relation Relation$Loader RelationReader RowCopier Vector)
@@ -55,7 +55,13 @@
       (.mapToInt identity)
       (.toArray)))
 
-(defn- write-out-rels [allocator ^ICursor in-cursor, order-specs tmp-dir first-filename]
+(defn- top-idxs ^ints [^RelationReader read-rel, order-specs, ^long row-limit]
+  (let [idxs (sorted-idxs read-rel order-specs)]
+    (if (< row-limit (alength idxs))
+      (Arrays/copyOf idxs (int row-limit))
+      idxs)))
+
+(defn- write-out-rels [allocator ^ICursor in-cursor, order-specs, row-limit, tmp-dir first-filename]
   (loop [filenames [first-filename]
          ;; file-idx 1 as first-filename contains 0
          file-idx 1]
@@ -67,7 +73,7 @@
                         (when (pos? (.getRowCount out-rel))
                           (let [out-filename (->file tmp-dir 0 file-idx)]
                             (with-open [os (io/output-stream out-filename)]
-                              (write-rel allocator (.select out-rel (sorted-idxs out-rel order-specs)) os)
+                              (write-rel allocator (.select out-rel (top-idxs out-rel order-specs row-limit)) os)
                               out-filename))))]
       (recur (conj filenames filename) (inc file-idx))
       (mapv io/file filenames))))
@@ -91,8 +97,9 @@
           nil
           order-specs))
 
-(defn k-way-merge [^BufferAllocator allocator filenames order-specs vec-types tmp-dir batch-idx file-idx]
+(defn k-way-merge [^BufferAllocator allocator filenames order-specs row-limit vec-types tmp-dir batch-idx file-idx]
   (let [k (count filenames)
+        row-limit (long row-limit)
         out-file (->file tmp-dir batch-idx file-idx)]
 
     (util/with-open [loaders (mapv (fn [file-name]
@@ -136,21 +143,23 @@
                   (when (pos? (.getRowCount rel))
                     (.add pq i))))
 
-              (while (not (.isEmpty pq))
-                (let [^long i (.poll pq)
-                      pos (aget positions i)]
-                  (aset positions i (inc pos))
-                  (.copyRow ^RowCopier (aget copiers i) pos)
+              (loop [copied 0]
+                (when (and (< copied row-limit) (not (.isEmpty pq)))
+                  (let [^long i (.poll pq)
+                        pos (aget positions i)]
+                    (aset positions i (inc pos))
+                    (.copyRow ^RowCopier (aget copiers i) pos)
 
-                  (if (< (inc pos) (.getRowCount ^Relation (nth rels i)))
-                    (.add pq i)
-                    (when (load-next-rel i)
-                      (.add pq i)))
+                    (if (< (inc pos) (.getRowCount ^Relation (nth rels i)))
+                      (.add pq i)
+                      (when (load-next-rel i)
+                        (.add pq i)))
 
-                  ;; spill next block
-                  (when (< ^int *block-size* (.getRowCount out-rel))
-                    (.writePage out-unl)
-                    (.clear out-rel)))))
+                    ;; spill next block
+                    (when (< ^int *block-size* (.getRowCount out-rel))
+                      (.writePage out-unl)
+                      (.clear out-rel)))
+                  (recur (inc copied)))))
 
             ;; spill remaining rows
             (when (pos? (.getRowCount out-rel))
@@ -160,8 +169,8 @@
 
 (def ^:private k-way-constant 4)
 
-(defn- external-sort [allocator in-cursor order-specs vec-types tmp-dir first-filename]
-  (let [batches (write-out-rels allocator in-cursor order-specs tmp-dir first-filename)]
+(defn- external-sort [allocator in-cursor order-specs row-limit vec-types tmp-dir first-filename]
+  (let [batches (write-out-rels allocator in-cursor order-specs row-limit tmp-dir first-filename)]
     (loop [batches batches
            batch-idx 1]
       (if-not (< 1 (count batches))
@@ -170,7 +179,7 @@
          (loop [batches batches new-batches [] file-idx 0]
            (if-let [files (seq (take k-way-constant batches))]
              (let [new-batch (try
-                               (k-way-merge allocator files order-specs vec-types tmp-dir batch-idx file-idx)
+                               (k-way-merge allocator files order-specs row-limit vec-types tmp-dir batch-idx file-idx)
                                (finally
                                  (run! io/delete-file files)))]
 
@@ -184,6 +193,7 @@
                         ^ICursor in-cursor
                         static-vec-types
                         order-specs
+                        ^long row-limit
                         ^:unsynchronized-mutable ^boolean consumed?
                         ^:unsynchronized-mutable ^Path sort-dir
                         ^:unsynchronized-mutable ^Relation$Loader loader
@@ -215,7 +225,12 @@
             (while (and (<= (.getRowCount acc-rel) ^int *block-size*)
                         (.tryAdvance in-cursor
                                      (fn [^RelationReader src-rel]
-                                       (.append acc-rel src-rel)))))
+                                       (.append acc-rel src-rel))))
+              (when (and (<= row-limit (quot ^int *block-size* 2))
+                         (< ^int *block-size* (.getRowCount acc-rel)))
+                (util/with-open [top-rel (.openDirectSlice (.select acc-rel (top-idxs acc-rel order-specs row-limit)) allocator)]
+                  (.clear acc-rel)
+                  (.append acc-rel top-rel))))
 
             (let [pos (.getRowCount acc-rel)]
               (if (<= pos ^int *block-size*)
@@ -226,7 +241,7 @@
                     false)
 
                   (do
-                    (.accept c (.select acc-rel (sorted-idxs acc-rel order-specs)))
+                    (.accept c (.select acc-rel (top-idxs acc-rel order-specs row-limit)))
                     (set! (.consumed? this) true)
                     true))
 
@@ -236,11 +251,11 @@
                       first-filename (->file tmp-dir 0 0)]
                   (set! (.sort-dir this) sort-dir)
                   (.mkdirs tmp-dir)
-                  (let [out-rel (.select acc-rel (sorted-idxs acc-rel order-specs))]
+                  (let [out-rel (.select acc-rel (top-idxs acc-rel order-specs row-limit))]
                     (with-open [os (io/output-stream first-filename)]
                       (write-rel allocator out-rel os)))
 
-                  (let [sorted-file (external-sort allocator in-cursor order-specs static-vec-types tmp-dir first-filename)]
+                  (let [sorted-file (external-sort allocator in-cursor order-specs row-limit static-vec-types tmp-dir first-filename)]
                     (set! (.sorted-file this) sorted-file)
                     (let [loader (Relation/loader allocator (util/->file-channel (util/->path sorted-file)))]
                       (set! (.loader this) loader)
