@@ -44,10 +44,12 @@ jobs:
           CLUSTER_ID: q1Sh-9_ISia_zwGINzRvyQ
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v5
-      - name: Set up JDK 21
+      - name: Set up JDKs 25 and 21
         uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
-          java-version: '21'
+          java-version: |
+            25
+            21
           distribution: 'temurin'
       - id: 'google-cloud-auth'
         name: 'Authenticate to Google Cloud'

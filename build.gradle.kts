@@ -40,6 +40,8 @@ val defaultJvmArgs = listOf(
     "--add-opens=java.base/java.nio=ALL-UNNAMED",
     "--enable-native-access=ALL-UNNAMED",
     "-Dio.netty.tryReflectionSetAccessible=true",
+    // Netty turns Unsafe off by default from JDK 25, and Arrow's allocator can't start without it.
+    "-Dio.netty.noUnsafe=false",
     "-Djdk.attach.allowAttachSelf",
     "-Darrow.memory.debug.allocator=false",
     "-XX:-OmitStackTraceInFastThrow",
@@ -99,10 +101,16 @@ val buildCustomJre = jlinkBuild.task(":buildCustomJre")
 val customJreDir = jlinkBuild.projectDir.resolve("build/custom-jre")
 val useCustomJre = !rootProj.hasProperty("fullJdk")
 
+// build-logic/jlink reads the same property, so the custom JRE is linked from this JDK too.
+val testJavaVersion: JavaLanguageVersion =
+    JavaLanguageVersion.of(rootProj.findProperty("testJavaVersion")?.toString() ?: "25")
+
+fun Project.testJavaLauncher(): Provider<JavaLauncher> =
+    extensions.getByType(JavaToolchainService::class.java)
+        .launcherFor { languageVersion.set(testJavaVersion) }
+
 fun Project.customJreLauncher(): Provider<JavaLauncher> {
-    val toolchainLauncher = extensions.getByType(JavaToolchainService::class.java)
-        .launcherFor(java.toolchain)
-    return toolchainLauncher.map { existing ->
+    return testJavaLauncher().map { existing ->
         object : JavaLauncher {
             override fun getExecutablePath() =
                 layout.projectDirectory.file(customJreDir.resolve("bin/java").absolutePath)
@@ -289,6 +297,12 @@ allprojects {
                     javaLauncher.set(customLauncher)
                 }
             }
+        } else {
+            val testLauncher = proj.testJavaLauncher()
+
+            tasks.withType<Test> { javaLauncher.set(testLauncher) }
+
+            tasks.withType<JavaExec> { javaLauncher.set(testLauncher) }
         }
 
         dependencies {
@@ -336,6 +350,8 @@ allprojects {
                 if (useCustomJre) {
                     dependsOn(buildCustomJre)
                     javaLauncher.set(proj.customJreLauncher())
+                } else {
+                    javaLauncher.set(proj.testJavaLauncher())
                 }
 
                 doFirst {

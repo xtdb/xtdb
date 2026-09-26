@@ -32,7 +32,7 @@ The `jlink` stage of `docker/Dockerfile` is pre-built and published as `ghcr.io/
 
 The builder content depends only on:
 
-* the JDK base image (`eclipse-temurin:21-jdk-alpine` in `docker/builder.Dockerfile`)
+* the JDK base image (`eclipse-temurin:25-jdk-alpine` in `docker/builder.Dockerfile`)
 * `build-logic/jlink/` (the jlink module list and gradle wrapper inputs)
 
 When either changes, bump the tag and rebuild (from the repo root):

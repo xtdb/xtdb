@@ -6,7 +6,7 @@ COPY modules/datasets/lib/tsbs /tsbs
 RUN make generators
 
 # Runtime image
-FROM eclipse-temurin:21
+FROM eclipse-temurin:25
 
 WORKDIR /opt/xtdb
 
@@ -22,6 +22,7 @@ ENTRYPOINT [ \
     "--add-opens=java.base/java.nio=ALL-UNNAMED", \
     "--enable-native-access=ALL-UNNAMED", \
     "-Dio.netty.tryReflectionSetAccessible=true", \
+    "-Dio.netty.noUnsafe=false", \
     "-Darrow.memory.debug.allocator=false", \
     "clojure.main", "-m", "xtdb.bench"]
 

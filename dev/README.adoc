@@ -13,7 +13,8 @@ All of the below commands should be run in the *root* of the XT2 repo.
 
 == Prerequisites
 
-You will need at least JDK 21 installed.
+You will need JDKs 21 and 25 installed.
+We compile for 21, which is still our minimum, but test on 25 — what the Docker images ship.
 
 === Optional: AI Coding Assistant Tools
 
@@ -63,6 +64,12 @@ If you hit missing-module errors (e.g. `ClassNotFoundException` for something in
 
 * *Escape hatch:* add `-PfullJdk` to your Gradle command — e.g. `./gradlew :clojureRepl -PfullJdk`
 * *Fix forward:* add the missing module to the `jlinkModules` list in `build-logic/jlink/build.gradle.kts` and rebuild.
+
+== Running on another JDK
+
+`Test`, `JavaExec` and `clojureRepl` tasks run on JDK 25 by default; `-PtestJavaVersion=21` runs them on 21 instead — linking the custom JRE from it, or launching it directly under `-PfullJdk`.
+Compilation targets 21 either way, so this is how to check that nothing has crept in that 21 can't run.
+Gradle detects JDKs in the usual install locations, and additionally from `JAVA_HOME_21_X64` / `JAVA_HOME_25_X64` (see `gradle.properties`), which is how CI's `setup-java` hands them over.
 
 == XTDB 'playground'
 

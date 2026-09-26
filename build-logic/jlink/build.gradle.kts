@@ -4,7 +4,8 @@ plugins {
 
 java {
     toolchain {
-        languageVersion.set(JavaLanguageVersion.of(21))
+        // -PtestJavaVersion - see the root build.
+        languageVersion.set(JavaLanguageVersion.of(findProperty("testJavaVersion")?.toString() ?: "25"))
     }
 }
 
@@ -14,7 +15,7 @@ java {
 //
 //   ./gradlew :docker:standalone:shadowJar :docker:aws:shadowJar :docker:azure:shadowJar :docker:google-cloud:shadowJar
 //   for v in standalone aws azure google-cloud; do
-//     jdeps --ignore-missing-deps --multi-release 21 --print-module-deps \
+//     jdeps --ignore-missing-deps --multi-release 25 --print-module-deps \
 //       docker/$v/build/libs/xtdb-$v.jar
 //   done
 //

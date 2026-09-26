@@ -68,7 +68,8 @@ You can run XTDB nodes either in-process, or connect to a remote XTDB server via
  ;; JVM options required for in-process node
  :aliases {:xtdb {:jvm-opts ["--add-opens=java.base/java.nio=ALL-UNNAMED"
                              "--enable-native-access=ALL-UNNAMED"
-                             "-Dio.netty.tryReflectionSetAccessible=true"]}}}
+                             "-Dio.netty.tryReflectionSetAccessible=true"
+                             "-Dio.netty.noUnsafe=false"]}}}
 ```
 
 For Maven (pom.xml) or Gradle (build.gradle.kts), see the [Java getting-started guide](/drivers/java).
@@ -85,6 +86,7 @@ In-process XTDB is particularly useful for testing and interactive development -
    - `--add-opens=java.base/java.nio=ALL-UNNAMED`
    - `--enable-native-access=ALL-UNNAMED`
    - `-Dio.netty.tryReflectionSetAccessible=true`
+   - `-Dio.netty.noUnsafe=false` — required on JDK 25+, where Netty otherwise turns off the `sun.misc.Unsafe` access Arrow's allocator depends on.
 3. Once you have a REPL (started with `clj -A:xtdb` this time), you can create an in-memory XTDB node with:
 
 ``` clojure

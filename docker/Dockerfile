@@ -1,6 +1,6 @@
 # Pre-built custom JRE — see docker/builder.Dockerfile and the repo-root docker-bake.hcl.
 # Bump the default (and the matching TAG in the bake file) when build-logic/jlink/ or the JDK base image changes.
-ARG BUILDER_IMAGE=ghcr.io/xtdb/xtdb-builder:20260817-1
+ARG BUILDER_IMAGE=ghcr.io/xtdb/xtdb-builder:20260926-1
 FROM ${BUILDER_IMAGE} AS jlink
 
 # Runtime
@@ -34,6 +34,7 @@ ENTRYPOINT ["java", \
     "--add-opens=java.base/java.nio=ALL-UNNAMED", \
     "--enable-native-access=ALL-UNNAMED", \
     "-Dio.netty.tryReflectionSetAccessible=true", \
+    "-Dio.netty.noUnsafe=false", \
     "-Dlog4j2.contextSelector=org.apache.logging.log4j.core.selector.BasicContextSelector", \
     "-cp","xtdb.jar:lib/*", \
     "clojure.main", "-m", "xtdb.main"]

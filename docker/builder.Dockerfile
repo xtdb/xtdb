@@ -6,7 +6,7 @@
 #   docker buildx bake builder --push
 # from the repo root. See docker/README.adoc for full instructions.
 
-FROM eclipse-temurin:21-jdk-alpine AS jlink
+FROM eclipse-temurin:25-jdk-alpine AS jlink
 WORKDIR /build
 COPY gradlew gradlew
 COPY gradle/wrapper gradle/wrapper
