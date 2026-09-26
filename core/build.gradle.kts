@@ -124,10 +124,9 @@ tasks.compileTestKotlin {
 tasks.generateGrammarSource {
     arguments = listOf(
         "-visitor", "-no-listener",
-        "-package", "xtdb.antlr",
         "-Xexact-output-dir",
     )
-    outputDirectory = file("${layout.buildDirectory.get().asFile}/generated-src/antlr/main/xtdb/antlr")
+    packageName = "xtdb.antlr"
 }
 
 protobuf {

@@ -17,8 +17,8 @@ kotlin = "2.4.20"
 kotlin-coroutines = "1.11.0"
 dokka = "2.2.0"
 clojurephant = "0.9.1"
-shadow = "8.3.6"
-freefair-javadoc = "8.13.1"
+shadow = "9.6.1"
+freefair-javadoc = "9.7.0"
 junit = "5.13.0"
 junit-launcher = "1.12.2"
 netty = "4.2.2.Final"
@@ -201,4 +201,4 @@ shadow = { id = "com.gradleup.shadow", version.ref = "shadow" }
 freefair-javadoc = { id = "io.freefair.aggregate-javadoc-legacy", version.ref = "freefair-javadoc" }
 protobuf = { id = "com.google.protobuf", version.ref = "protobuf-plugin" }
 jreleaser = { id = "org.jreleaser", version = "1.26.0" }
-ben-manes-versions = { id = "com.github.ben-manes.versions", version = "0.51.0" }
+ben-manes-versions = { id = "com.github.ben-manes.versions", version = "0.54.0" }

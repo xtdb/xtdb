@@ -1,6 +1,6 @@
 plugins {
     `kotlin-dsl`
-    id("com.gradleup.shadow") version "8.3.6"
+    id("com.gradleup.shadow") version "9.6.1"
 }
 
 repositories {
@@ -11,7 +11,7 @@ repositories {
 dependencies {
     implementation("org.clojure:clojure:1.12.0")
     implementation(gradleApi())
-    implementation("com.gradleup.shadow:shadow-gradle-plugin:8.3.6")
+    implementation("com.gradleup.shadow:shadow-gradle-plugin:9.6.1")
     implementation("org.apache.ant:ant:1.10.15") // eugh. _all_ of Ant for the DataReaderTransformer?
 
     // this one because jreleaser depends on Jackson 2.15+

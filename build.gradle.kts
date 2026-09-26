@@ -147,7 +147,24 @@ allprojects {
         }
     }
 
+    // Clojure only loads an AOT `__init.class` when it is strictly newer than its `.clj`,
+    // so under Gradle's constant reproducible timestamp every jarred namespace would load from source.
+    tasks.withType<AbstractArchiveTask>().configureEach {
+        isPreserveFileTimestamps = true
+    }
+
     tasks.withType<ShadowJar> {
+        // Shadow's default EXCLUDE drops duplicates before the transformers see them,
+        // so every path a transformer merges has to opt back in or only its first copy survives.
+        filesMatching(
+            listOf(
+                "META-INF/services/**",
+                "data_readers.clj",
+                "META-INF/org/apache/logging/log4j/core/config/plugins/Log4j2Plugins.dat",
+            )
+        ) {
+            duplicatesStrategy = DuplicatesStrategy.INCLUDE
+        }
         transform(Log4j2PluginsCacheFileTransformer())
     }
 
@@ -479,8 +496,8 @@ jreleaser {
     deploy.maven {
         fun MavenDeployer.setup() {
             // set these up in your `~/.gradle/gradle.properties`
-            username = properties["centralUsername"] as? String
-            password = properties["centralPassword"] as? String
+            username = findProperty("centralUsername") as? String
+            password = findProperty("centralPassword") as? String
 
             rootProj.allprojects {
                 val proj = this
@@ -765,17 +782,17 @@ createSltTask(
 createSltTask(
     "slt-test-dir",
     maxFailures = if (project.hasProperty("testMaxFailures")) {
-        val testMaxFailures: String by project
+        val testMaxFailures = project.property("testMaxFailures") as String
         if (testMaxFailures.isEmpty()) 0 else testMaxFailures.toLong()
     } else 0,
 
     maxErrors = if (project.hasProperty("testMaxErrors")) {
-        val testMaxErrors: String by project
+        val testMaxErrors = project.property("testMaxErrors") as String
         if (testMaxErrors.isEmpty()) 0 else testMaxErrors.toLong()
     } else 0,
 
     testFiles = if (project.hasProperty("testDir")) {
-        val testDir: String by project
+        val testDir = project.property("testDir") as String
         listOf(testDir)
     } else emptyList(),
 
@@ -808,7 +825,7 @@ fun createBench(benchName: String, properties: Map<String, String>, defaultArgs:
         extraProps.forEach { (k, v) ->
             if (project.hasProperty(k)) {
                 args.add(v)
-                args.add(project.properties[k] as String)
+                args.add(project.property(k) as String)
             }
         }
 
