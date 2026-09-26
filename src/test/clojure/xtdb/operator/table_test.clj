@@ -87,7 +87,7 @@
 
 (t/deftest test-table-handles-symbols
   (t/is (= '[{:x50 true}]
-           (tu/query-ra '[:top {:limit 1}
+           (tu/query-ra '[:sort {:limit 1}
                           [:union-all {}
                            [:project
                             {:projections [{x50 true}]}
@@ -96,7 +96,7 @@
                         {:args {:x53 "AIR"}})))
 
   (t/is (= '[{:x50 true}]
-           (tu/query-ra '[:top {:limit 1}
+           (tu/query-ra '[:sort {:limit 1}
                           [:union-all {}
                            [:project
                             {:projections [{x50 true}]}
@@ -105,7 +105,7 @@
                         {:args {:x53 "AIR REG"}})))
 
   (t/is (= '[{:x50 false}]
-           (tu/query-ra '[:top {:limit 1}
+           (tu/query-ra '[:sort {:limit 1}
                           [:union-all {}
                            [:project
                             {:projections [{x50 true}]}

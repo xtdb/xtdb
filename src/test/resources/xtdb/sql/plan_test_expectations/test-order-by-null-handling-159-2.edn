@@ -1,6 +1,6 @@
 [:project
  {:projections [{a foo.1/a}]}
- [:order-by
+ [:sort
   {:order-specs
    [[foo.1/a {:direction :asc, :null-ordering :nulls-last}]]}
   [:rename

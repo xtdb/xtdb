@@ -3,7 +3,7 @@
   [{nation profit.7/nation}
    {o_year profit.7/o_year}
    {sum_profit sum_profit}]}
- [:order-by
+ [:sort
   {:order-specs
    [[profit.7/nation {:direction :asc, :null-ordering :nulls-last}]
     [profit.7/o_year {:direction :desc, :null-ordering :nulls-first}]]}
@@ -34,19 +34,27 @@
          {p.1/_id l.3/l_partkey}]}
        [[:rename
          {:prefix n.6}
-         [:scan {:db-name "xtdb", :table #xt/table nation, :columns [_id n_name]}]]
+         [:scan
+          {:db-name "xtdb",
+           :table #xt/table nation,
+           :columns [_id n_name]}]]
         [:rename
          {:prefix o.5}
-         [:scan {:db-name "xtdb", :table #xt/table orders, :columns [_id o_orderdate]}]]
+         [:scan
+          {:db-name "xtdb",
+           :table #xt/table orders,
+           :columns [_id o_orderdate]}]]
         [:rename
          {:prefix ps.4}
          [:scan
-          {:db-name "xtdb", :table #xt/table partsupp,
+          {:db-name "xtdb",
+           :table #xt/table partsupp,
            :columns [ps_partkey ps_supplycost ps_suppkey]}]]
         [:rename
          {:prefix l.3}
          [:scan
-          {:db-name "xtdb", :table #xt/table lineitem,
+          {:db-name "xtdb",
+           :table #xt/table lineitem,
            :columns
            [l_orderkey
             l_extendedprice
@@ -57,10 +65,12 @@
         [:rename
          {:prefix p.1}
          [:scan
-          {:db-name "xtdb", :table #xt/table part,
+          {:db-name "xtdb",
+           :table #xt/table part,
            :columns [_id {p_name (like p_name "%green%")}]}]]
         [:rename
          {:prefix s.2}
          [:scan
-          {:db-name "xtdb", :table #xt/table supplier,
+          {:db-name "xtdb",
+           :table #xt/table supplier,
            :columns [_id s_nationkey]}]]]]]]]]]]

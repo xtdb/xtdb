@@ -1,9 +1,11 @@
 [:project
  {:projections [{_column_1 _column_1}]}
- [:order-by
-  {:order-specs [[_column_1 {:direction :asc, :null-ordering :nulls-last}]]}
+ [:sort
+  {:order-specs
+   [[_column_1 {:direction :asc, :null-ordering :nulls-last}]]}
   [:map
    {:projections [{_column_1 (== si.1/year "foo")}]}
    [:rename
     {:prefix si.1}
-    [:scan {:db-name "xtdb", :table #xt/table stars_in, :columns [year]}]]]]]
+    [:scan
+     {:db-name "xtdb", :table #xt/table stars_in, :columns [year]}]]]]]

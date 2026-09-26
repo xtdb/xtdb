@@ -18,7 +18,7 @@
         "explicit exclusive")
 
   (t/is (= [{:a 1} {:a 2} {:a 3} {:a 4} {:a 5}]
-           (tu/query-ra [:top {:limit 5}
+           (tu/query-ra [:sort {:limit 5}
                          [:list {:columns '{a (generate_series 1 2000000000 1)}}]]))
         "large generate_series with limit")
 
@@ -27,7 +27,7 @@
             {:a 1000000003}
             {:a 1000000004}
             {:a 1000000005}]
-           (tu/query-ra [:top {:skip 1000000000
+           (tu/query-ra [:sort {:skip 1000000000
                                :limit 5}
                          [:list {:columns '{a (generate_series 1 2000000000 1)}}]]))
         "large generate_series with skip + limit")

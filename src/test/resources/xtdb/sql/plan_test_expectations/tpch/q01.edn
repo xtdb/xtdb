@@ -10,7 +10,7 @@
    {avg_price avg_price}
    {avg_disc avg_disc}
    {count_order count_order}]}
- [:order-by
+ [:sort
   {:order-specs
    [[l.1/l_returnflag {:direction :asc, :null-ordering :nulls-last}]
     [l.1/l_linestatus {:direction :asc, :null-ordering :nulls-last}]]}
@@ -46,7 +46,8 @@
      [:rename
       {:prefix l.1}
       [:scan
-       {:db-name "xtdb", :table #xt/table lineitem,
+       {:db-name "xtdb",
+        :table #xt/table lineitem,
         :columns
         [l_linestatus
          l_tax

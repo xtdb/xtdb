@@ -22,11 +22,6 @@
                                     (s/nonconforming))
                                 :kind vector?))
 
-(defmethod lp/ra-expr :order-by [_]
-  (s/cat :op '#{:τ :tau :order-by order-by}
-         :opts (s/keys :req-un [::order-specs])
-         :relation ::lp/ra-expression))
-
 (set! *unchecked-math* :warn-on-boxed)
 
 (def ^:dynamic *block-size* (int 102400))
@@ -258,15 +253,3 @@
     (util/try-close loader)
     (util/try-close in-cursor)
     (when sort-dir (util/delete-dir sort-dir))))
-
-(defmethod lp/emit-expr :order-by [{:keys [opts relation]} args]
-  (let [{:keys [order-specs]} opts]
-    (lp/unary-expr (lp/emit-expr relation args)
-      (fn [{:keys [vec-types], :as rel}]
-        {:op :order-by
-         :children [rel]
-         :explain {:order-specs (pr-str order-specs)}
-         :vec-types vec-types
-         :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]} in-cursor]
-                     (cond-> (OrderByCursor. allocator in-cursor vec-types order-specs false nil nil nil nil)
-                       (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))}))))
