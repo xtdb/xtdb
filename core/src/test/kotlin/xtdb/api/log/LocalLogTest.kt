@@ -12,7 +12,10 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.io.TempDir
 import xtdb.api.log.Log.Record
+import java.io.ByteArrayOutputStream
 import java.io.IOException
+import java.nio.ByteBuffer
+import java.nio.channels.WritableByteChannel
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.InstantSource
@@ -290,4 +293,47 @@ class LocalLogTest {
         }
     }
 
+    /**
+     * Scripts a channel's `write` results: each call accepts at most its budget's worth of bytes, or throws
+     * where the budget is [FAIL] - the sequence a file on a filling disk produces. Unscripted calls accept all.
+     */
+    private class ScriptedChannel(vararg budgets: Int) : WritableByteChannel {
+        companion object {
+            const val FAIL = -1
+        }
+
+        private val budgets = ArrayDeque(budgets.toList())
+        val written = ByteArrayOutputStream()
+
+        override fun write(src: ByteBuffer): Int {
+            val budget = budgets.removeFirstOrNull() ?: Int.MAX_VALUE
+            if (budget == FAIL) throw IOException("No space left on device")
+
+            val bytes = ByteArray(minOf(budget, src.remaining())).also { src.get(it) }
+            written.write(bytes)
+            return bytes.size
+        }
+
+        override fun isOpen() = true
+        override fun close() = Unit
+    }
+
+    @Test
+    fun `writeFully drains a buffer across short writes`() {
+        val ch = ScriptedChannel(3, 3, 3)
+        val payload = ByteArray(20) { it.toByte() }
+
+        ch.writeFully(ByteBuffer.wrap(payload))
+
+        assertArrayEquals(payload, ch.written.toByteArray())
+    }
+
+    @Test
+    fun `writeFully surfaces the failure that follows a short write`() {
+        // the first call returns having written part of the record; ENOSPC only arrives on the next
+        val ch = ScriptedChannel(5, ScriptedChannel.FAIL)
+
+        assertThrows<IOException> { ch.writeFully(ByteBuffer.wrap(ByteArray(20))) }
+        assertEquals(5, ch.written.size())
+    }
 }
