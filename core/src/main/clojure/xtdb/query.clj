@@ -17,15 +17,14 @@
             xtdb.operator.join
             xtdb.operator.let
             xtdb.operator.list
-            xtdb.operator.order-by
             xtdb.operator.patch
             xtdb.operator.project
             xtdb.operator.rename
             [xtdb.operator.scan :as scan]
             xtdb.operator.select
             xtdb.operator.set
+            xtdb.operator.sort
             xtdb.operator.table
-            xtdb.operator.top
             xtdb.operator.unnest
             xtdb.operator.window
             [xtdb.sql :as sql]

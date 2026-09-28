@@ -1,12 +1,12 @@
-[:top
- {:skip nil, :limit 10}
+[:sort
+ {:limit 10}
  [:project
   {:projections
    [{l_orderkey l.3/l_orderkey}
     {revenue revenue}
     {o_orderdate o.2/o_orderdate}
     {o_shippriority o.2/o_shippriority}]}
-  [:order-by
+  [:sort
    {:order-specs
     [[revenue {:direction :desc, :null-ordering :nulls-first}]
      [o.2/o_orderdate {:direction :asc, :null-ordering :nulls-last}]]}
@@ -26,7 +26,8 @@
        [[:rename
          {:prefix l.3}
          [:scan
-          {:db-name "xtdb", :table #xt/table lineitem,
+          {:db-name "xtdb",
+           :table #xt/table lineitem,
            :columns
            [l_orderkey
             {l_shipdate (> l_shipdate #xt/date "1995-03-15")}
@@ -35,13 +36,15 @@
         [:rename
          {:prefix c.1}
          [:scan
-          {:db-name "xtdb", :table #xt/table customer,
+          {:db-name "xtdb",
+           :table #xt/table customer,
            :columns
            [_id {c_mktsegment (== c_mktsegment "BUILDING")}]}]]
         [:rename
          {:prefix o.2}
          [:scan
-          {:db-name "xtdb", :table #xt/table orders,
+          {:db-name "xtdb",
+           :table #xt/table orders,
            :columns
            [_id
             {o_orderdate (< o_orderdate #xt/date "1995-03-15")}

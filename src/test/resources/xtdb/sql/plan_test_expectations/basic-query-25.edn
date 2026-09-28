@@ -1,9 +1,12 @@
 [:project
  {:projections [{movie_title si.1/movie_title}]}
- [:order-by
+ [:sort
   {:order-specs
    [[si.1/movie_title
      {:direction :desc, :null-ordering :nulls-first}]]}
   [:rename
    {:prefix si.1}
-   [:scan {:db-name "xtdb", :table #xt/table stars_in, :columns [movie_title]}]]]]
+   [:scan
+    {:db-name "xtdb",
+     :table #xt/table stars_in,
+     :columns [movie_title]}]]]]

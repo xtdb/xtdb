@@ -270,10 +270,7 @@
     [:select _opts relation]
     (relation-columns relation)
 
-    [:order-by _opts relation]
-    (relation-columns relation)
-
-    [:top _ relation]
+    [:sort _opts relation]
     (relation-columns relation)
 
     [:distinct _opts relation]

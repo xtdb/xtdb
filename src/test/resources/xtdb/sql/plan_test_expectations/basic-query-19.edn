@@ -1,4 +1,4 @@
-[:order-by
+[:sort
  {:order-specs [[name {:direction :asc, :null-ordering :nulls-last}]]}
  [:distinct {}
   [:union-all {}
