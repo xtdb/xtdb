@@ -133,3 +133,46 @@
             (let [results (xt/q node "FROM docs FOR VALID_TIME ALL SELECT _id, _valid_from ORDER BY _valid_from DESC")]
               (t/is (= (rseq expected-vfs)
                        (mapv :xt/valid-from results))))))))))
+
+(t/deftest test-top-k-within-block-doesnt-spill
+  (let [!spills (atom 0)
+        tmp-dir util/tmp-dir]
+    (with-redefs [util/tmp-dir (fn [& args]
+                                 (swap! !spills inc)
+                                 (apply tmp-dir args))]
+      (binding [order-by/*block-size* 10]
+        (let [data (map-indexed (fn [i d] {:a d :b i}) (repeatedly 1000 #(rand-int 1000000)))
+              batches (mapv vec (partition-all 13 data))
+              sorted (sort-by (juxt :a :b) data)]
+          (t/is (= (->> sorted (drop 1) (take 3))
+                   (tu/query-ra [:sort {:order-specs '[[a] [b]], :skip 1, :limit 3}
+                                 [::tu/pages batches]]
+                                {})))
+
+          (t/is (= (take 5 sorted)
+                   (tu/query-ra [:sort {:order-specs '[[a] [b]], :limit 5}
+                                 [::tu/pages batches]]
+                                {}))
+                "skip + limit at half the block size")
+
+          (t/is (zero? @!spills))
+
+          (t/is (= (->> sorted (drop 2) (take 4))
+                   (tu/query-ra [:sort {:order-specs '[[a] [b]], :skip 2, :limit 4}
+                                 [::tu/pages batches]]
+                                {}))
+                "skip + limit just over half the block size")
+
+          (t/is (pos? @!spills)))))))
+
+(t/deftest test-top-k-with-param-bounds
+  (binding [order-by/*block-size* 10]
+    (let [data (map-indexed (fn [i d] {:a d :b i}) (repeatedly 200 #(rand-int 1000000)))
+          batches (mapv vec (partition-all 7 data))
+          sorted (sort-by (juxt :a :b) data)]
+      (doseq [[skip limit] [[0 0] [0 1] [2 3] [4 6] [30 20] [190 50] [250 5]]]
+        (t/is (= (->> sorted (drop skip) (take limit))
+                 (tu/query-ra [:sort '{:order-specs [[a] [b]], :skip ?skip, :limit ?limit}
+                               [::tu/pages batches]]
+                              {:args {:skip skip, :limit limit}}))
+              (str "skip " skip ", limit " limit))))))

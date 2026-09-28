@@ -39,6 +39,11 @@
     :param (read-param args arg)
     nil default))
 
+(defn- row-limit ^long [^long skip, ^long limit]
+  (if (< (- Long/MAX_VALUE skip) limit)
+    Long/MAX_VALUE
+    (+ skip limit)))
+
 (defmethod lp/emit-expr :sort [{{:keys [order-specs skip limit]} :opts, :keys [relation]} args]
   (lp/unary-expr (lp/emit-expr relation args)
     (fn [{:keys [vec-types], :as inner-rel}]
@@ -55,7 +60,8 @@
                      (cond-> (SortCursor. in-cursor
                                           (as-> in-cursor cursor
                                             (if (seq order-specs)
-                                              (OrderByCursor. allocator cursor vec-types order-specs false nil nil nil nil)
+                                              (OrderByCursor. allocator cursor vec-types order-specs (row-limit skip-n limit-n)
+                                                              false nil nil nil nil)
                                               cursor)
                                             (if (or skip limit)
                                               (TopCursor. cursor skip-n limit-n 0)
