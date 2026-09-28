@@ -219,3 +219,55 @@
           {:mode :semi-join, :columns {}}
           [:scan {:db-name "xtdb", :table #xt/table foo, :columns [~(sql/->col-sym 'x)]}]
           [:scan {:db-name "xtdb", :table #xt/table bar, :columns [~(sql/->col-sym 'y)]}]]]))))))
+
+(t/deftest test-fuse-sorts
+  (t/is (= '[:project {:projections [a]}
+             [:sort {:order-specs [[b]], :skip 2, :limit 3}
+              [:table {:rows [{:a 1, :b 2}]}]]]
+           (lp/rewrite-plan '[:sort {:limit 3}
+                              [:sort {:skip 2}
+                               [:project {:projections [a]}
+                                [:sort {:order-specs [[b]]}
+                                 [:table {:rows [{:a 1, :b 2}]}]]]]]))
+        "XTQL-shaped order-by, offset, limit fuse through the project")
+
+  (t/is (= '[:sort {:limit 3}
+             [:sort {:limit 5}
+              [:table {:rows [{:a 1}]}]]]
+           (lp/rewrite-plan '[:sort {:limit 3}
+                              [:sort {:limit 5}
+                               [:table {:rows [{:a 1}]}]]]))
+        "an inner limit is not overridden by an outer one")
+
+  (t/is (= '[:sort {:skip 1}
+             [:sort {:order-specs [[a]], :skip 2}
+              [:table {:rows [{:a 1}]}]]]
+           (lp/rewrite-plan '[:sort {:skip 1}
+                              [:sort {:order-specs [[a]], :skip 2}
+                               [:table {:rows [{:a 1}]}]]]))
+        "two skips stay separate")
+
+  (t/is (= '[:sort {:limit 3}
+             [:map {:projections [{rn (row-number)}]}
+              [:sort {:order-specs [[a]]}
+               [:table {:rows [{:a 1}]}]]]]
+           (lp/rewrite-plan '[:sort {:limit 3}
+                              [:map {:projections [{rn (row-number)}]}
+                               [:sort {:order-specs [[a]]}
+                                [:table {:rows [{:a 1}]}]]]]))
+        "bounds aren't pushed past a row-numbering map"))
+
+(t/deftest test-order-by-offset-limit-results
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1, :a 5} {:xt/id 2, :a 3} {:xt/id 3, :a 4}
+                             {:xt/id 4, :a 1} {:xt/id 5, :a 2}]])
+
+  (t/is (= [{:a 2} {:a 3}]
+           (xt/q tu/*node* "SELECT a FROM docs ORDER BY a OFFSET 1 LIMIT 2")))
+
+  (t/is (= [{:a 2} {:a 3}]
+           (xt/q tu/*node* '(-> (from :docs [a]) (order-by a) (offset 1) (limit 2))))
+        "XTQL")
+
+  (t/is (= [{:a 4} {:a 3}]
+           (xt/q tu/*node* ["SELECT a FROM docs ORDER BY a DESC OFFSET ? LIMIT ?" 1 2]))
+        "params"))
