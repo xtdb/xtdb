@@ -88,8 +88,8 @@ class PostgresSource(
         data object Unassigned : Assignment
 
         data class Assigned(
-            /** True for the length of the replication stream; false while snapshotting. */
-            @Volatile var streaming: Boolean = false,
+            /** The replication stream, for as long as it lasts; null while snapshotting. */
+            @Volatile var stream: PostgresDriver.ChangeStream? = null,
             /** Epoch seconds of the latest applied commit; 0 until this assignment's first event. */
             @Volatile var lastEventEpochSeconds: Long = 0,
         ) : Assignment
@@ -122,7 +122,7 @@ class PostgresSource(
                 .register(reg),
 
             Gauge.builder("xtdb.postgres_source.connection_state", assignment) {
-                if ((it.get() as? Assigned)?.streaming == true) 1.0 else 0.0
+                if ((it.get() as? Assigned)?.stream?.connected == true) 1.0 else 0.0
             }
                 .description("1 if a replication stream is currently open, 0 otherwise")
                 .tags(tags)
@@ -343,7 +343,7 @@ class PostgresSource(
         val awaitingApply = ArrayDeque<Pair<PostgresDriver.Transaction, Deferred<TransactionResult>>>()
 
         driver.openStream(heldLsn).use { stream ->
-            assigned.streaming = true
+            assigned.stream = stream
 
             // A lower bound on slot.confirmed_lsn, per SourceConfirmsPosition's @guidance.
             var confirmedLsn = 0L
@@ -412,7 +412,7 @@ class PostgresSource(
 
                 throw CancellationException("[$dbName] Streaming stood down")
             } finally {
-                assigned.streaming = false
+                assigned.stream = null
             }
         }
     }

@@ -29,6 +29,8 @@ class PostgresSourceMetricsTest {
     ) : PostgresDriver.ChangeStream {
         val parked = CompletableDeferred<Unit>()
 
+        @Volatile override var connected = true
+
         override val walEnd get() = 0L
         override suspend fun acknowledge(lsn: Long) = Unit
 
@@ -162,6 +164,23 @@ class PostgresSourceMetricsTest {
 
             assertTrue(reg.walLag().isNaN(), "demoted — back to another node's slot")
             assertEquals(0.0, reg.connectionState())
+        }
+    }
+
+    @Test
+    fun `connection state follows whether the stream is connected`() = runTest {
+        val reg = SimpleMeterRegistry()
+        val stream = StubStream()
+
+        openSource(reg, StubDriver(ArrayDeque(listOf(stream)))).use { source ->
+            val assignment = launch { source.onPartitionAssigned(0, resumeToken, StubIndexer) }
+            stream.parked.await()
+            assertEquals(1.0, reg.connectionState())
+
+            stream.connected = false
+            assertEquals(0.0, reg.connectionState(), "a stream that has lost its connection")
+
+            assignment.cancelAndJoin()
         }
     }
 

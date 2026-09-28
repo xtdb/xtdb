@@ -36,6 +36,7 @@ class PostgresSourceReconnectTest {
      */
     private class StandDownStream(private val standDown: CoroutineScope) : PostgresDriver.ChangeStream {
         override val walEnd get() = 0L
+        override val connected get() = true
         override suspend fun acknowledge(lsn: Long) = Unit
         override fun close() = Unit
 

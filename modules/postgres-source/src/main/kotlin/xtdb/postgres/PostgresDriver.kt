@@ -67,6 +67,11 @@ interface PostgresDriver : AutoCloseable {
         val walEnd: Long
 
         /**
+         * Whether the replication connection is up right now. Safe to read from any thread.
+         */
+        val connected: Boolean
+
+        /**
          * Advances the slot's confirmed-flush LSN to [lsn] and sends a standby status update. PG recycles WAL up to
          * it, so [lsn] MUST NOT exceed a position the caller can recover to without the upstream.
          */

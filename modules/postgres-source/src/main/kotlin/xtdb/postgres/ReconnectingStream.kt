@@ -47,7 +47,7 @@ class ReconnectingStream private constructor(
         class Open(val stream: PostgresDriver.ChangeStream, val openedAt: TimeMark) : Conn
     }
 
-    private var conn: Conn = Conn.Down
+    @Volatile private var conn: Conn = Conn.Down
 
     private var presentedLsn = startLsn
 
@@ -106,6 +106,8 @@ class ReconnectingStream private constructor(
             is Conn.Open -> c.stream.walEnd
             Conn.Down -> presentedLsn
         }
+
+    override val connected: Boolean get() = conn is Conn.Open
 
     override suspend fun acknowledge(lsn: Long) = withStream { it.acknowledge(lsn) }
 

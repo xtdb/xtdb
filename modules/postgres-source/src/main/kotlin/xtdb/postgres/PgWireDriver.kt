@@ -265,6 +265,8 @@ class PgWireDriver(
         // durability (see [PostgresDriver.ChangeStream.walEnd]).
         override val walEnd: Long get() = stream.lastReceiveLSN.asLong()
 
+        override val connected: Boolean get() = !replConn.isClosed
+
         override suspend fun poll(): PostgresDriver.Transaction? {
             while (currentCoroutineContext().isActive) {
                 val msg = withContext(Dispatchers.IO) { stream.readPending() }
