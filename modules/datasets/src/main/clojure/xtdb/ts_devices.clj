@@ -84,8 +84,8 @@
   ;; ORDER BY time DESC
   ;; LIMIT 10;
 
-  '[:top {:limit 10}
-    [:order-by {:order-specs [[time {:direction :desc}]]}
+  '[:sort {:limit 10}
+    [:sort {:order-specs [[time {:direction :desc}]]}
      [:project {:projections [time device-id battery-temperature]}
       [:scan {:db-name "xtdb", :table device-readings
               :columns [time device-id battery-temperature
@@ -101,8 +101,8 @@
   ;; ORDER BY cpu_avg_1min DESC, time DESC
   ;; LIMIT 5;
 
-  '[:top {:limit 5}
-    [:order-by {:order-specs [[cpu-avg-1min {:direction :desc}]
+  '[:sort {:limit 5}
+    [:sort {:order-specs [[cpu-avg-1min {:direction :desc}]
                 [time {:direction :desc}]]}
      [:join {:conditions [{device-id device-id}]}
       [:scan {:db-name "xtdb", :table device-readings
@@ -124,8 +124,8 @@
   ;; ORDER BY "hour" ASC
   ;; LIMIT 12;
 
-  '[:top {:limit 12}
-    [:order-by {:order-specs [[hour]]}
+  '[:sort {:limit 12}
+    [:sort {:order-specs [[hour]]}
      [:group-by {:columns [hour
                  {min-battery-level (min battery-level)}
                  {max-battery-level (max battery-level)}]}

@@ -4,7 +4,7 @@
    {cust_nation shipping.7/cust_nation}
    {l_year shipping.7/l_year}
    {revenue revenue}]}
- [:order-by
+ [:sort
   {:order-specs
    [[shipping.7/supp_nation
      {:direction :asc, :null-ordering :nulls-last}]
@@ -39,25 +39,39 @@
          {s.1/_id l.2/l_suppkey}]}
        [[:rename
          {:prefix n2.6}
-         [:scan {:db-name "xtdb", :table #xt/table nation, :columns [_id n_name]}]]
+         [:scan
+          {:db-name "xtdb",
+           :table #xt/table nation,
+           :columns [_id n_name]}]]
         [:rename
          {:prefix n1.5}
-         [:scan {:db-name "xtdb", :table #xt/table nation, :columns [_id n_name]}]]
+         [:scan
+          {:db-name "xtdb",
+           :table #xt/table nation,
+           :columns [_id n_name]}]]
         [:rename
          {:prefix c.4}
          [:scan
-          {:db-name "xtdb", :table #xt/table customer, :columns [c_nationkey _id]}]]
+          {:db-name "xtdb",
+           :table #xt/table customer,
+           :columns [c_nationkey _id]}]]
         [:rename
          {:prefix o.3}
-         [:scan {:db-name "xtdb", :table #xt/table orders, :columns [_id o_custkey]}]]
+         [:scan
+          {:db-name "xtdb",
+           :table #xt/table orders,
+           :columns [_id o_custkey]}]]
         [:rename
          {:prefix s.1}
          [:scan
-          {:db-name "xtdb", :table #xt/table supplier, :columns [_id s_nationkey]}]]
+          {:db-name "xtdb",
+           :table #xt/table supplier,
+           :columns [_id s_nationkey]}]]
         [:rename
          {:prefix l.2}
          [:scan
-          {:db-name "xtdb", :table #xt/table lineitem,
+          {:db-name "xtdb",
+           :table #xt/table lineitem,
            :columns
            [l_orderkey
             {l_shipdate

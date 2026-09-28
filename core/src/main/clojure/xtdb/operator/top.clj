@@ -1,19 +1,7 @@
 (ns xtdb.operator.top
-  (:require [clojure.spec.alpha :as s]
-            [xtdb.error :as err]
-            [xtdb.logical-plan :as lp]
-            [xtdb.types :as types])
   (:import java.util.stream.IntStream
            (xtdb.api ICursor)
            xtdb.arrow.RelationReader))
-
-(s/def ::skip (s/nilable (s/or :literal nat-int?, :param ::lp/param)))
-(s/def ::limit (s/nilable (s/or :literal nat-int?, :param ::lp/param)))
-
-(defmethod lp/ra-expr :top [_]
-  (s/cat :op #{:λ :top}
-         :top (s/keys :opt-un [::skip ::limit])
-         :relation ::lp/ra-expression))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -52,32 +40,3 @@
 
   (close [_]
     (.close in-cursor)))
-
-(defn- read-param [^RelationReader args param]
-  (let [v (some-> args (.vectorForOrNull (str param)) (.getObject 0))]
-    (if (nat-int? v)
-      v
-      (throw (err/incorrect :xtdb/expected-number (format "Expected: number, got: %s" v)
-                            {:v v, :param param})))))
-
-(defmethod lp/emit-expr :top [{:keys [relation], {[skip-tag skip-arg] :skip, [limit-tag limit-arg] :limit} :top} args]
-  (lp/unary-expr (lp/emit-expr relation args)
-    (fn [{vec-types :vec-types :as inner-rel}]
-      {:op :top
-       :children [inner-rel]
-       :explain (->> {:skip (some-> skip-arg pr-str),
-                      :limit (some-> limit-arg pr-str)}
-                     (into {} (filter val)))
-       :vec-types vec-types
-       :->cursor (fn [{:keys [args explain-analyze? tracer query-span]} in-cursor]
-                   (cond-> (TopCursor. in-cursor
-                                       (case skip-tag
-                                         :literal skip-arg
-                                         :param (read-param args skip-arg)
-                                         nil 0)
-                                       (case limit-tag
-                                         :literal limit-arg
-                                         :param (read-param args limit-arg)
-                                         nil Long/MAX_VALUE)
-                                       0)
-                     (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))})))

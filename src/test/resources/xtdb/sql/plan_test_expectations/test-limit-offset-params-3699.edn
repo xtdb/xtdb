@@ -1,4 +1,4 @@
-[:top
+[:sort
  {:skip ?_0, :limit ?_1}
  [:project
   {:projections [{a foo.1/a}]}

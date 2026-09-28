@@ -809,7 +809,7 @@
   (plan-query-tail [{:keys [order-specs]} {:keys [ra-plan provided-vars]}]
     ;;TODO Change order specs to use keywords
     (let [planned-specs (mapv plan-order-spec order-specs)]
-      {:ra-plan [:order-by {:order-specs (mapv :order-spec planned-specs)}
+      {:ra-plan [:sort {:order-specs (mapv :order-spec planned-specs)}
                  ra-plan]
        :provided-vars provided-vars}))
 
@@ -875,7 +875,7 @@
               :xtql/invalid-limit
               "Limit must be a non-negative integer literal or parameter"
               {:limit (str limit)})))
-    {:ra-plan [:top {:limit (plan-expr limit)} ra-plan]
+    {:ra-plan [:sort {:limit (plan-expr limit)} ra-plan]
      :provided-vars provided-vars})
 
   Offset
@@ -886,7 +886,7 @@
               :xtql/invalid-offset
               "Offset must be a non-negative integer literal or parameter"
               {:offset (str offset)})))
-    {:ra-plan [:top {:skip (plan-expr offset)} ra-plan]
+    {:ra-plan [:sort {:skip (plan-expr offset)} ra-plan]
      :provided-vars provided-vars}))
 
 (defn compile-query [query {:keys [table-info]}]

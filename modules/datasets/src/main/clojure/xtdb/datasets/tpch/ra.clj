@@ -5,7 +5,7 @@
   (vary-meta q assoc ::args args))
 
 (def q1-pricing-summary-report
-  (-> '[:order-by {:order-specs [[l_returnflag] [l_linestatus]]}
+  (-> '[:sort {:order-specs [[l_returnflag] [l_linestatus]]}
         [:group-by {:columns [l_returnflag l_linestatus
                     {sum_qty (sum l_quantity)}
                     {sum_base_price (sum l_extendedprice)}
@@ -33,8 +33,8 @@
            [:rename {:columns {_id r_regionkey}} [:scan {:db-name "xtdb", :table #xt/table region, :columns [_id {r_name (== r_name ?region)}]}]]]
           [:rename {:columns {_id s_suppkey}} [:scan {:db-name "xtdb", :table #xt/table supplier, :columns [_id s_nationkey s_acctbal s_name s_address s_phone s_comment]}]]]
          [:scan {:db-name "xtdb", :table #xt/table partsupp, :columns [ps_suppkey ps_partkey ps_supplycost]}]]
-        [:top {:limit 100}
-         [:order-by {:order-specs [[s_acctbal {:direction :desc}] [n_name] [s_name] [p_partkey]]}
+        [:sort {:limit 100}
+         [:sort {:order-specs [[s_acctbal {:direction :desc}] [n_name] [s_name] [p_partkey]]}
           [:project {:projections [s_acctbal s_name n_name p_partkey p_mfgr s_address s_phone s_comment]}
            [:join {:conditions [{ps_partkey ps_partkey} {ps_supplycost min_ps_supplycost}]}
             [:join {:conditions [{ps_partkey p_partkey}]}
@@ -47,8 +47,8 @@
                   :size 15})))
 
 (def q3-shipping-priority
-  (-> '[:top {:limit 10}
-        [:order-by {:order-specs [[revenue {:direction :desc}] [o_orderdate {:direction :desc}]]}
+  (-> '[:sort {:limit 10}
+        [:sort {:order-specs [[revenue {:direction :desc}] [o_orderdate {:direction :desc}]]}
          [:group-by {:columns [l_orderkey
                      {revenue (sum disc_price)}
                      o_orderdate
@@ -66,7 +66,7 @@
                   :date (LocalDate/parse "1995-03-15")})))
 
 (def q4-order-priority-checking
-  (-> '[:order-by {:order-specs [[o_orderpriority]]}
+  (-> '[:sort {:order-specs [[o_orderpriority]]}
         [:group-by {:columns [o_orderpriority {order_count (row-count)}]}
          [:semi-join {:conditions [{o_orderkey l_orderkey}]}
           [:rename {:columns {_id o_orderkey}} [:scan {:db-name "xtdb", :table #xt/table orders, :columns [o_orderpriority _id
@@ -79,7 +79,7 @@
                   :end-date (LocalDate/parse "1993-10-01")})))
 
 (def q5-local-supplier-volume
-  (-> '[:order-by {:order-specs [[revenue {:direction :desc}]]}
+  (-> '[:sort {:order-specs [[revenue {:direction :desc}]]}
         [:group-by {:columns [n_name {revenue (sum disc_price)}]}
          [:project {:projections [n_name {disc_price (* l_extendedprice (- 1 l_discount))}]}
           [:join {:conditions [{o_orderkey l_orderkey} {s_suppkey l_suppkey}]}
@@ -113,7 +113,7 @@
                   :max-discount 0.07})))
 
 (def q7-volume-shipping
-  (-> '[:order-by {:order-specs [[supp_nation] [cust_nation] [l_year]]}
+  (-> '[:sort {:order-specs [[supp_nation] [cust_nation] [l_year]]}
         [:group-by {:columns [supp_nation cust_nation l_year {revenue (sum volume)}]}
          [:project {:projections [supp_nation cust_nation
                                    {l_year (extract "YEAR" l_shipdate)}
@@ -141,7 +141,7 @@
                   :end-date (LocalDate/parse "1996-12-31")})))
 
 (def q8-national-market-share
-  (-> '[:order-by {:order-specs [[o_year]]}
+  (-> '[:sort {:order-specs [[o_year]]}
         [:project {:projections [o_year {mkt_share (/ brazil_revenue revenue)}]}
          [:group-by {:columns [o_year {brazil_revenue (sum brazil_volume)} {revenue (sum volume)}]}
           [:project {:projections [{o_year (extract "YEAR" o_orderdate)}
@@ -174,7 +174,7 @@
                   :end-date (LocalDate/parse "1996-12-31")})))
 
 (def q9-product-type-profit-measure
-  (-> '[:order-by {:order-specs [[nation] [o_year {:direction :desc}]]}
+  (-> '[:sort {:order-specs [[nation] [o_year {:direction :desc}]]}
         [:group-by {:columns [nation o_year {sum_profit (sum amount)}]}
          [:rename {:columns {n_name nation}} [:project {:projections [n_name
                                     {o_year (extract "YEAR" o_orderdate)}
@@ -194,8 +194,8 @@
       #_(with-params {:color "green"})))
 
 (def q10-returned-item-reporting
-  (-> '[:top {:limit 20}
-        [:order-by {:order-specs [[revenue {:direction :desc}]]}
+  (-> '[:sort {:limit 20}
+        [:sort {:order-specs [[revenue {:direction :desc}]]}
          [:group-by {:columns [c_custkey c_name c_acctbal c_phone n_name c_address c_comment
                      {revenue (sum disc_price)}]}
           [:project {:projections [c_custkey c_name c_acctbal c_phone n_name c_address c_comment
@@ -220,7 +220,7 @@
            [:rename {:columns {_id n_nationkey}} [:scan {:db-name "xtdb", :table #xt/table nation, :columns [_id {n_name (== n_name ?nation)}]}]]
            [:rename {:columns {_id s_suppkey}} [:scan {:db-name "xtdb", :table #xt/table supplier, :columns [_id s_nationkey]}]]]
           [:scan {:db-name "xtdb", :table #xt/table partsupp, :columns [ps_partkey ps_suppkey ps_supplycost ps_availqty]}]]]
-        [:order-by {:order-specs [[value {:direction :desc}]]}
+        [:sort {:order-specs [[value {:direction :desc}]]}
          [:project {:projections [ps_partkey value]}
           [:join {:conditions [(> value total)]}
            [:group-by {:columns [ps_partkey {value (sum value)}]}
@@ -232,7 +232,7 @@
                   :fraction 0.0001})))
 
 (def q12-shipping-modes-and-order-priority
-  (-> '[:order-by {:order-specs [[l_shipmode]]}
+  (-> '[:sort {:order-specs [[l_shipmode]]}
         [:group-by {:columns [l_shipmode
                     {high_line_count (sum high_line)}
                     {low_line_count (sum low_line)}]}
@@ -260,7 +260,7 @@
                   :end-date (LocalDate/parse "1995-01-01")})))
 
 (def q13-customer-distribution
-  (-> '[:order-by {:order-specs [[custdist {:direction :desc}] [c_count {:direction :desc}]]}
+  (-> '[:sort {:order-specs [[custdist {:direction :desc}] [c_count {:direction :desc}]]}
         [:group-by {:columns [c_count {custdist (row-count)}]}
          [:group-by {:columns [c_custkey {c_count (count o_comment)}]}
           [:left-outer-join {:conditions [{c_custkey o_custkey}]}
@@ -303,7 +303,7 @@
                   :end-date (LocalDate/parse "1996-04-01")})))
 
 (def q16-part-supplier-relationship
-  (-> '[:order-by {:order-specs [[supplier_cnt {:direction :desc}] [p_brand] [p_type] [p_size]]}
+  (-> '[:sort {:order-specs [[supplier_cnt {:direction :desc}] [p_brand] [p_type] [p_size]]}
         [:group-by {:columns [p_brand p_type p_size {supplier_cnt (count ps_suppkey)}]}
          [:distinct {}
           [:project {:projections [p_brand p_type p_size ps_suppkey]}
@@ -340,8 +340,8 @@
                   :container "MED_BOX"})))
 
 (def q18-large-volume-customer
-  (-> '[:top {:limit 100}
-        [:order-by {:order-specs [[o_totalprice {:direction :desc}] [o_orderdate {:direction :desc}]]}
+  (-> '[:sort {:limit 100}
+        [:sort {:order-specs [[o_totalprice {:direction :desc}] [o_orderdate {:direction :desc}]]}
          [:group-by {:columns [c_name c_custkey o_orderkey o_orderdate o_totalprice {sum_qty (sum l_quantity)}]}
           [:join {:conditions [{o_orderkey l_orderkey}]}
            [:join {:conditions [{o_custkey c_custkey}]}
@@ -393,7 +393,7 @@
                   :brand1 "Brand#12", :brand2 "Brand23", :brand3 "Brand#34"})))
 
 (def q20-potential-part-promotion
-  (-> '[:order-by {:order-specs [[s_name]]}
+  (-> '[:sort {:order-specs [[s_name]]}
         [:project {:projections [s_name s_address]}
          [:semi-join {:conditions [{s_suppkey ps_suppkey}]}
           [:join {:conditions [{n_nationkey s_nationkey}]}
@@ -425,8 +425,8 @@
            [:rename {:columns {_id s_suppkey}} [:scan {:db-name "xtdb", :for-valid-time [:at :now], :table #xt/table supplier, :columns [_id s_nationkey s_name]}]]
            [:rename {:columns {_id n_nationkey}} [:scan {:db-name "xtdb", :for-valid-time [:at :now], :table #xt/table nation, :columns [_id {n_name (== n_name ?nation)}]}]]]]
          [:rename {:prefix l2} [:scan {:db-name "xtdb", :for-valid-time [:at :now], :table #xt/table lineitem, :columns [l_orderkey l_suppkey]}]]]
-        [:top {:limit 100}
-         [:order-by {:order-specs [[numwait {:direction :desc}] [s_name]]}
+        [:sort {:limit 100}
+         [:sort {:order-specs [[numwait {:direction :desc}] [s_name]]}
           [:group-by {:columns [s_name {numwait (row-count)}]}
            [:distinct {}
             [:project {:projections [s_name l1/l_orderkey]}
@@ -444,7 +444,7 @@
          [:project {:projections [c_custkey {cntrycode (substring c_phone 1 2)} c_acctbal]}
           [:rename {:columns {_id c_custkey}} [:scan {:db-name "xtdb", :for-valid-time [:at :now], :table #xt/table customer, :columns [_id c_phone c_acctbal]}]]]
          [:table {:param ?cntrycodes}]]
-        [:order-by {:order-specs [[cntrycode]]}
+        [:sort {:order-specs [[cntrycode]]}
          [:group-by {:columns [cntrycode {numcust (row-count)} {totacctbal (sum c_acctbal)}]}
           [:anti-join {:conditions [{c_custkey o_custkey}]}
            [:join {:conditions [(> c_acctbal avg_acctbal)]}
