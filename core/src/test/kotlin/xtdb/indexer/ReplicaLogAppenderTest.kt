@@ -17,7 +17,7 @@ class ReplicaLogAppenderTest {
     fun `an idle leader asserts, stamped with its own term`() = runTest {
         val logsDriver = RecordingLogsDriver()
         val election = TriggeredElectionDriver()
-        val appender = ReplicaLogAppender(logsDriver, leaderTerm = 7, election, pipelined = false)
+        val appender = ReplicaLogAppender(logsDriver, leaderTerm = 7, election)
 
         backgroundScope.launch { appender.run() }
 
@@ -35,7 +35,7 @@ class ReplicaLogAppenderTest {
     fun `a leader with traffic to append does not assert`() = runTest {
         val logsDriver = RecordingLogsDriver()
         val election = TriggeredElectionDriver()
-        val appender = ReplicaLogAppender(logsDriver, leaderTerm = 1, election, pipelined = false)
+        val appender = ReplicaLogAppender(logsDriver, leaderTerm = 1, election)
 
         appender.append(ControlItem(NoOp(srcMsgId = 42, termId = 1)))
 
@@ -51,7 +51,7 @@ class ReplicaLogAppenderTest {
     @Test
     fun `direct and queued appends share one run of positions from 1, direct ones needing no pump`() = runTest {
         val logsDriver = RecordingLogsDriver()
-        val appender = ReplicaLogAppender(logsDriver, leaderTerm = 4, TriggeredElectionDriver(), pipelined = false)
+        val appender = ReplicaLogAppender(logsDriver, leaderTerm = 4, TriggeredElectionDriver())
 
         val direct = appender.appendNow(NoOp(srcMsgId = 1, termId = 4))
 
@@ -81,27 +81,9 @@ class ReplicaLogAppenderTest {
     }
 
     @Test
-    fun `an awaiting leader sends nothing further until its last record is durable`() = runTest {
+    fun `a leader sends each record without waiting for the last to be durable`() = runTest {
         val logsDriver = HeldLogsDriver()
-        val appender = ReplicaLogAppender(logsDriver, leaderTerm = 1, TriggeredElectionDriver(), pipelined = false)
-
-        appender.append(ControlItem(NoOp(srcMsgId = 1, termId = 1)))
-        appender.append(ControlItem(NoOp(srcMsgId = 2, termId = 1)))
-        backgroundScope.launch { appender.run() }
-        testScheduler.runCurrent()
-
-        assertEquals(1, logsDriver.enqueued.size)
-
-        logsDriver.handles.single().complete(Log.MessageMetadata(0, 0, Instant.EPOCH))
-        testScheduler.runCurrent()
-
-        assertEquals(2, logsDriver.enqueued.size)
-    }
-
-    @Test
-    fun `a pipelined leader sends each record without waiting for the last to be durable`() = runTest {
-        val logsDriver = HeldLogsDriver()
-        val appender = ReplicaLogAppender(logsDriver, leaderTerm = 1, TriggeredElectionDriver(), pipelined = true)
+        val appender = ReplicaLogAppender(logsDriver, leaderTerm = 1, TriggeredElectionDriver())
 
         appender.append(ControlItem(NoOp(srcMsgId = 1, termId = 1)))
         appender.append(ControlItem(NoOp(srcMsgId = 2, termId = 1)))

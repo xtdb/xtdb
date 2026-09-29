@@ -62,7 +62,6 @@ class LogProcessorTest {
         electionDriver: ElectionDriver = RealElectionDriver(assertInterval = 25.milliseconds),
         val bufferPool: MemoryStorage = MemoryStorage(allocator, epoch = 0),
         logsDriver: (LogProcessor.LogsDriver) -> LogProcessor.LogsDriver = { it },
-        pipelined: Boolean = false,
     ) : AutoCloseable {
         private val partition = TestPartition(
             allocator, bufferPool, sourceLog, replicaLog,
@@ -89,7 +88,6 @@ class LogProcessorTest {
             logsDriver = logsDriver(LogProcessor.RealLogsDriver(partition.storage)),
             electionDriver = electionDriver,
             readOnly = readOnly,
-            pipelinedReplicaAppends = pipelined,
         )
 
         /** Write the block file a [ReplicaMessage.BlockUploaded] for [blockIndex] sends a reader to read. */
@@ -562,7 +560,7 @@ class LogProcessorTest {
     }
 
     @Test
-    fun `a pipelined leader whose record is lost in flight stands down from that term and leads the next`() = runTest {
+    fun `a leader whose record is lost in flight stands down from that term and leads the next`() = runTest {
         withFreshLogs { sourceLog, replicaLog ->
             // Loses the leader's first record after its claim; everything else lands behind it, as it would from Kafka's idempotent producer.
             val losesOne = { inner: LogProcessor.LogsDriver ->
@@ -577,7 +575,7 @@ class LogProcessorTest {
                 }
             }
 
-            TestNode(sourceLog, replicaLog, logsDriver = losesOne, pipelined = true).use { node ->
+            TestNode(sourceLog, replicaLog, logsDriver = losesOne).use { node ->
                 awaitFence(node, 2)
                 awaitLeadership(node, expected = true)
 

@@ -175,7 +175,6 @@ class LogProcessorSimTest : SimulationTestBase() {
         private val indexerConfig: IndexerConfig,
         private val simExtSource: SimExtSource,
         private val readOnly: Boolean = false,
-        private val pipelined: Boolean = false,
     ) : AutoCloseable {
 
         val tableCatalog = TableCatalog(bp)
@@ -223,7 +222,6 @@ class LogProcessorSimTest : SimulationTestBase() {
                 // A real `onTimeout` would schedule on kotlinx's own timer thread, which DeterministicDispatcher checks against — a real clock firing into a seeded harness.
                 electionDriver = electionDriver,
                 readOnly = readOnly,
-                pipelinedReplicaAppends = pipelined,
             ).also { logProcessor = it }
 
         override fun close() {
@@ -791,7 +789,7 @@ class LogProcessorSimTest : SimulationTestBase() {
     /**
      * Loses a leader's records in flight, as Kafka's idempotent producer can while landing what follows.
      *
-     * Only the records a pipelined leader doesn't await: a lost claim or block upload fails the append that
+     * Only the records a leader doesn't await: a lost claim or block upload fails the append that
      * awaits it, which is a different path from the one under test.
      */
     private inner class LosingDriver(private val inner: LogProcessor.LogsDriver) : LogProcessor.LogsDriver by inner {
@@ -802,7 +800,7 @@ class LogProcessorSimTest : SimulationTestBase() {
     }
 
     @RepeatableSimulationTest
-    fun `pipelined leaders losing records in flight lose no transactions`() =
+    fun `leaders losing records in flight lose no transactions`() =
         runTest(timeout = 5.seconds) {
             val indexerConfig = IndexerConfig(rowsPerBlock = rand.nextLong(15, 25))
             val totalActions = rand.nextInt(30, 60)
@@ -810,8 +808,8 @@ class LogProcessorSimTest : SimulationTestBase() {
             val srcLogEventCount = rand.nextInt(20, 40)
 
             MemoryStorage(allocator, epoch = 0).use { bp ->
-                SimNode("test-db", bp, indexerConfig, simExtSource, pipelined = true).use { nodeA ->
-                    SimNode("test-db", bp, indexerConfig, simExtSource, pipelined = true).use { nodeB ->
+                SimNode("test-db", bp, indexerConfig, simExtSource).use { nodeA ->
+                    SimNode("test-db", bp, indexerConfig, simExtSource).use { nodeB ->
                         val nodes = listOf(nodeA, nodeB)
                         var leadersAtQuiescence = -1
 

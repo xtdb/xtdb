@@ -90,7 +90,7 @@ internal class SourceLogProcessorTest : LeaderTermTest() {
         )
 
         val driver = RecordingLogsDriver()
-        val appender = ReplicaLogAppender(driver, leaderTerm = 1, NoAssertElectionDriver, pipelined = false)
+        val appender = ReplicaLogAppender(driver, leaderTerm = 1, NoAssertElectionDriver)
         backgroundScope.launch { appender.run() }
 
         val txResolver = TxResolver(

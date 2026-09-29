@@ -28,7 +28,6 @@ import org.apache.kafka.common.serialization.ByteArraySerializer
 import org.apache.kafka.common.serialization.Deserializer
 import org.apache.kafka.common.serialization.Serializer
 import xtdb.DurationSerde
-import xtdb.api.IndexerConfig
 import xtdb.api.PathSerde
 import xtdb.api.Remote
 import xtdb.api.RemoteAlias
@@ -206,18 +205,15 @@ class KafkaCluster(
 ) : Remote {
     val producer = kafkaConfigMap.openProducer(pipelined = false)
 
-    // Only a pipelining leader's replica-log appends go unawaited, so only they get a producer that lingers to batch them.
-    private val replicaProducer = lazy {
-        if (System.getenv(IndexerConfig.PIPELINED_REPLICA_APPENDS_ENV) != null) kafkaConfigMap.openProducer(pipelined = true)
-        else producer
-    }
+    // Only a leader's replica-log appends go unawaited, so only they get a producer that lingers to batch them.
+    private val replicaProducer = lazy { kafkaConfigMap.openProducer(pipelined = true) }
 
     val scope = CoroutineScope(SupervisorJob() + coroutineContext)
 
 
     override fun close() {
         runBlocking { withTimeout(5.seconds) { scope.coroutineContext.job.cancelAndJoin() } }
-        if (replicaProducer.isInitialized() && replicaProducer.value !== producer) replicaProducer.value.close()
+        if (replicaProducer.isInitialized()) replicaProducer.value.close()
         producer.close()
     }
 

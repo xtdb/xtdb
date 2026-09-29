@@ -35,7 +35,6 @@ internal class ReplicaLogAppender(
     private val logsDriver: LogProcessor.LogsDriver,
     private val leaderTerm: Long,
     private val electionDriver: ElectionDriver,
-    private val pipelined: Boolean,
 ) {
 
     // Unbounded: the term queues here from the same coroutine that services its consume-back, so a bounded
@@ -66,10 +65,8 @@ internal class ReplicaLogAppender(
                     electionDriver.run { onAssertTimeout { ControlItem(NoOp(termId = leaderTerm)) } }
                 }
 
-                val durable = enqueueNow(item.toReplicaMessage())
-
-                // Pipelined, a lost record reaches the term as the gap its read-back voids (#6105), not through this handle.
-                if (!pipelined) durable.await()
+                // A lost record reaches the term as the gap its read-back voids (#6105), not through this handle.
+                enqueueNow(item.toReplicaMessage())
             }
         } finally {
             queue.cancel()
