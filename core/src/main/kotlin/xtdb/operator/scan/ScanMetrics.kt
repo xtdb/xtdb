@@ -1,5 +1,7 @@
 package xtdb.operator.scan
 
+import xtdb.query.ExplainAnalyze.ScanAttributes
+
 /**
  * Per-scan explain-analyze counters. Identity (db, source) is known when the scan is planned;
  * the file/page counts accrue during planning as tries and pages are pruned vs kept; rows-read
@@ -19,11 +21,5 @@ class ScanMetrics(private val scanDb: String, private val scanSource: String) {
     fun addPages(pruned: Long, used: Long) { pagesPruned += pruned; pagesUsed += used }
     fun addRowsRead(rows: Long) { rowsRead += rows }
 
-    fun toMap(): Map<String, Any> =
-        mapOf(
-            "scan_db" to scanDb, "scan_source" to scanSource,
-            "scan_files_pruned" to filesPruned, "scan_files_used" to filesUsed,
-            "scan_pages_pruned" to pagesPruned, "scan_pages_used" to pagesUsed,
-            "scan_rows_read" to rowsRead,
-        )
+    fun snapshot() = ScanAttributes(scanDb, scanSource, filesPruned, filesUsed, pagesPruned, pagesUsed, rowsRead)
 }

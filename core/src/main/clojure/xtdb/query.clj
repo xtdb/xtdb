@@ -262,7 +262,7 @@
   (letfn [(->results [^ICursor cursor, depth]
             (lazy-seq
              (if-let [ea (.getExplainAnalyze cursor)]
-               (cons (let [attrs (.getCursorAttributes ea)]
+               (cons (let [attrs (some-> (.getCursorAttributes ea) (.toMap))]
                        {:depth (str (str/join (repeat depth "  ")) "->")
                         :op (keyword (.getCursorType cursor))
                         :attributes (not-empty (into {} attrs))

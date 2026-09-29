@@ -29,7 +29,7 @@ interface ICursor : Spliterator<RelationReader>, AutoCloseable {
     val explainAnalyze: ExplainAnalyze? get() = null
 
     /** Operator-specific explain-analyze values, evaluated when read (after consumption), so they can include runtime counters. */
-    val cursorAttributes: Map<String, Any>? get() = null
+    val cursorAttributes: ExplainAnalyze.ScanAttributes? get() = null
 
     override fun tryAdvance(c: Consumer<in RelationReader>): Boolean
     override fun trySplit(): Spliterator<RelationReader>? = null
@@ -102,7 +102,7 @@ interface ICursor : Spliterator<RelationReader>, AutoCloseable {
                     }
                     s.tag("cursor.page_count", pageCount.toString())
                     s.tag("cursor.row_count", rowCount.toString())
-                    attrs?.forEach { (k, v) -> s.tag(k, v.toString()) }
+                    attrs?.toMap()?.forEach { (k, v) -> s.tag(k, v.toString()) }
                     s.end(endTime.asMicros, TimeUnit.MICROSECONDS)
                 }
             }

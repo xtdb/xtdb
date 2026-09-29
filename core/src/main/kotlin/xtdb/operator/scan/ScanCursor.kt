@@ -33,7 +33,7 @@ class ScanCursor(
 
     override val cursorType get() = "scan"
     override val childCursors get() = emptyList<ICursor>()
-    override val cursorAttributes get() = metrics.toMap()
+    override val cursorAttributes get() = metrics.snapshot()
 
     private fun openResolver(): EntityResolver =
         if (temporalBounds.validTime.isPoint && temporalBounds.systemTime.isPoint)
