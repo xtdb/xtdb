@@ -216,11 +216,11 @@ fieldDefinition : fieldName=identifier dataType ;
 expr
     : expr 'IS' NOT? booleanValue #IsBooleanValueExpr
     | expr compOp expr # ComparisonPredicate
-    | numericExpr NOT? 'BETWEEN' (ASYMMETRIC | SYMMETRIC)? numericExpr 'AND' numericExpr # BetweenPredicate
+    | commonValueExpr NOT? 'BETWEEN' (ASYMMETRIC | SYMMETRIC)? commonValueExpr 'AND' commonValueExpr # BetweenPredicate
     | expr NOT? 'IN' inPredicateValue # InPredicate
-    | expr 'NOT'? 'LIKE' likePattern=exprPrimary ('ESCAPE' likeEscape=exprPrimary)? # LikePredicate
-    | expr 'NOT'? 'LIKE_REGEX' xqueryPattern=exprPrimary ('FLAG' xqueryOptionFlag=exprPrimary)? # LikeRegexPredicate
-    | expr postgresRegexOperator xqueryPattern=exprPrimary # PostgresRegexPredicate
+    | expr 'NOT'? 'LIKE' likePattern=commonValueExpr ('ESCAPE' likeEscape=commonValueExpr)? # LikePredicate
+    | expr 'NOT'? 'LIKE_REGEX' xqueryPattern=commonValueExpr ('FLAG' xqueryOptionFlag=commonValueExpr)? # LikeRegexPredicate
+    | expr postgresRegexOperator xqueryPattern=commonValueExpr # PostgresRegexPredicate
     | expr 'IS' 'NOT'? 'NULL' # NullPredicate
     | expr 'IS' 'NOT'? 'DISTINCT' 'FROM' expr # DistinctFromPredicate
 
@@ -248,33 +248,31 @@ expr
     | expr 'AND' expr #AndExpr
     | expr 'OR' expr #OrExpr
 
-    | numericExpr #NumericExpr0
+    | commonValueExpr #CommonValueExpr0
     ;
 
-numericExpr
-    : '+' numericExpr #UnaryPlusExpr
-    | '-' numericExpr #UnaryMinusExpr
-    | numericExpr (SOLIDUS | ASTERISK | PERCENT) numericExpr #NumericFactorExpr
-    | numericExpr (PLUS | MINUS) numericExpr #NumericTermExpr
-    | TILDE numericExpr #NumericBitwiseNotExpr
-    | numericExpr AMPERSAND numericExpr #NumericBitwiseAndExpr
-    | numericExpr (BITWISE_OR | BITWISE_XOR) numericExpr #NumericBitwiseOrExpr
-    | numericExpr (BITWISE_SHIFT_LEFT | BITWISE_SHIFT_RIGHT) numericExpr #NumericBitwiseShiftExpr
-    | exprPrimary #ExprPrimary1
-    ;
-
-exprPrimary
+// SQL:2011's <common value expression>: no boolean or predicate operator at its top level, so that
+// `BETWEEN`'s bounds and `LIKE`'s pattern can't swallow a following `AND`.
+commonValueExpr
     : subquery # ScalarSubqueryExpr
     | '(' expr ')' #WrappedExpr
     | literal # LiteralExpr
-    | exprPrimary '.' fieldName=identifier #FieldAccess
-    | exprPrimary '[' expr ']' #ArrayAccess
-    | exprPrimary '::' dataType #PostgresCastExpr
-    | exprPrimary '||' exprPrimary #ConcatExpr
-    | obj=exprPrimary JSON_ARROW field=exprPrimary #JsonArrowExpr
-    | obj=exprPrimary JSON_ARROW_TEXT field=exprPrimary #JsonArrowTextExpr
-    | obj=exprPrimary JSON_PATH path=exprPrimary #JsonPathExpr
-    | obj=exprPrimary JSON_PATH_TEXT path=exprPrimary #JsonPathTextExpr
+    | commonValueExpr '.' fieldName=identifier #FieldAccess
+    | commonValueExpr '[' expr ']' #ArrayAccess
+    | commonValueExpr '::' dataType #PostgresCastExpr
+    | commonValueExpr '||' commonValueExpr #ConcatExpr
+    | obj=commonValueExpr JSON_ARROW field=commonValueExpr #JsonArrowExpr
+    | obj=commonValueExpr JSON_ARROW_TEXT field=commonValueExpr #JsonArrowTextExpr
+    | obj=commonValueExpr JSON_PATH path=commonValueExpr #JsonPathExpr
+    | obj=commonValueExpr JSON_PATH_TEXT path=commonValueExpr #JsonPathTextExpr
+    | '+' commonValueExpr #UnaryPlusExpr
+    | '-' commonValueExpr #UnaryMinusExpr
+    | commonValueExpr (SOLIDUS | ASTERISK | PERCENT) commonValueExpr #NumericFactorExpr
+    | commonValueExpr (PLUS | MINUS) commonValueExpr #NumericTermExpr
+    | TILDE commonValueExpr #NumericBitwiseNotExpr
+    | commonValueExpr AMPERSAND commonValueExpr #NumericBitwiseAndExpr
+    | commonValueExpr (BITWISE_OR | BITWISE_XOR) commonValueExpr #NumericBitwiseOrExpr
+    | commonValueExpr (BITWISE_SHIFT_LEFT | BITWISE_SHIFT_RIGHT) commonValueExpr #NumericBitwiseShiftExpr
 
     | parameterSpecification # ParamExpr
     | columnReference # ColumnExpr
@@ -718,9 +716,9 @@ predicatePart2
     : compOp expr # ComparisonPredicatePart2
     | NOT? 'BETWEEN' (ASYMMETRIC | SYMMETRIC)? expr 'AND' expr # BetweenPredicatePart2
     | NOT? 'IN' inPredicateValue # InPredicatePart2
-    | 'NOT'? 'LIKE' likePattern=exprPrimary ('ESCAPE' likeEscape=exprPrimary)? # LikePredicatePart2
-    | 'NOT'? 'LIKE_REGEX' xqueryPattern=exprPrimary ('FLAG' xqueryOptionFlag=exprPrimary)? # LikeRegexPredicatePart2
-    | postgresRegexOperator xqueryPattern=exprPrimary # PostgresRegexPredicatePart2
+    | 'NOT'? 'LIKE' likePattern=commonValueExpr ('ESCAPE' likeEscape=commonValueExpr)? # LikePredicatePart2
+    | 'NOT'? 'LIKE_REGEX' xqueryPattern=commonValueExpr ('FLAG' xqueryOptionFlag=commonValueExpr)? # LikeRegexPredicatePart2
+    | postgresRegexOperator xqueryPattern=commonValueExpr # PostgresRegexPredicatePart2
     | 'IS' 'NOT'? 'NULL' # NullPredicatePart2
     | 'IS' 'NOT'? 'DISTINCT' 'FROM' expr # DistinctFromPredicatePart2
     | compOp quantifier quantifiedComparisonPredicatePart3 # QuantifiedComparisonPredicatePart2
