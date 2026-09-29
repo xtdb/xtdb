@@ -9,7 +9,8 @@
             [xtdb.util :as util])
   (:import (clojure.lang MapEntry Var)
            java.time.temporal.Temporal
-           java.util.Date))
+           java.util.Date
+           xtdb.api.ICursor))
 
 (defn ->col-sym
   ([n]
@@ -127,7 +128,7 @@
   (-> (f inner-rel)
       (update :->cursor (fn [->cursor]
                           (fn [opts]
-                            (util/with-close-on-catch [inner (->inner-cursor opts)]
+                            (util/with-close-on-catch [inner (ICursor/wrapInterruptible (->inner-cursor opts))]
                               (->cursor opts inner)))))))
 
 (defn with-col-mapping
@@ -147,8 +148,8 @@
   (-> (f left right)
       (update :->cursor (fn [->cursor]
                           (fn [opts]
-                            (util/with-close-on-catch [left (->left-cursor opts)
-                                                       right (->right-cursor opts)]
+                            (util/with-close-on-catch [left (ICursor/wrapInterruptible (->left-cursor opts))
+                                                       right (ICursor/wrapInterruptible (->right-cursor opts))]
                               (->cursor opts left right)))))))
 
 ;;;; Rewriting of logical plan.

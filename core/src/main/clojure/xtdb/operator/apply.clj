@@ -98,13 +98,14 @@
                          (cond-> (ApplyCursor. allocator mode-strat independent-cursor out-dep-vec-types
                                                (reify DependentCursorFactory
                                                  (open [_this in-rel idx]
-                                                   (open-dependent-cursor (-> query-opts
-                                                                              (update :args
-                                                                                      (fn [^RelationReader args]
-                                                                                        (RelationReader/from (concat args
-                                                                                                                     (for [[ik dk] columns]
-                                                                                                                       (-> (.vectorForOrNull in-rel (str ik))
-                                                                                                                           (.select (int-array [idx]))
-                                                                                                                           (.withName (str dk)))))
-                                                                                                             1))))))))
+                                                   (ICursor/wrapInterruptible
+                                                    (open-dependent-cursor (-> query-opts
+                                                                               (update :args
+                                                                                       (fn [^RelationReader args]
+                                                                                         (RelationReader/from (concat args
+                                                                                                                      (for [[ik dk] columns]
+                                                                                                                        (-> (.vectorForOrNull in-rel (str ik))
+                                                                                                                            (.select (int-array [idx]))
+                                                                                                                            (.withName (str dk)))))
+                                                                                                              1)))))))))
                            (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span))))})))))

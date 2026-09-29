@@ -117,6 +117,27 @@ interface ICursor : Spliterator<RelationReader>, AutoCloseable {
             override fun getComparator(): Comparator<in RelationReader>? = inner.comparator
         }
 
+        private class InterruptibleCursor(private val inner: ICursor) : ICursor by inner {
+            override fun tryAdvance(c: Consumer<in RelationReader>): Boolean {
+                if (Thread.interrupted()) throw InterruptedException()
+                return inner.tryAdvance(c)
+            }
+
+            @Suppress("RedundantOverride")
+            override fun forEachRemaining(action: Consumer<in RelationReader>?) = super.forEachRemaining(action)
+            override fun getExactSizeIfKnown(): Long = inner.exactSizeIfKnown
+            override fun hasCharacteristics(characteristics: Int): Boolean = inner.hasCharacteristics(characteristics)
+            override fun getComparator(): Comparator<in RelationReader>? = inner.comparator
+        }
+
+        /**
+         * Throws [InterruptedException] from [tryAdvance] if the calling thread has been interrupted, before pulling from this cursor.
+         *
+         * Wrap a child cursor with this where its parent pulls from it, so that a cancelled query stops at the next batch boundary.
+         */
+        @JvmStatic
+        fun ICursor.wrapInterruptible(): ICursor = InterruptibleCursor(this)
+
         @JvmStatic
         fun ICursor.wrapTracing(tracer: Tracer?, span: Span?): ICursor = TracingCursor(this, tracer, span)
 
