@@ -132,7 +132,6 @@ internal class SegmentMerge(private val al: BufferAllocator) : AutoCloseable {
         }
     }
 
-    // for clojure test
     fun Result.openAllAsRelation() =
         Relation.loader(al, openForRead()).use { inLoader ->
             val schema = inLoader.schema
