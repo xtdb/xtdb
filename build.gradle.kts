@@ -232,6 +232,8 @@ allprojects {
         }
 
         tasks.register("integration-test", Test::class) {
+            testClassesDirs = tasks.test.get().testClassesDirs
+            classpath = tasks.test.get().classpath
             jvmArgs(defaultJvmArgs + twelveGBJvmArgs)
             useJUnitPlatform {
                 includeTags("integration")
@@ -239,6 +241,8 @@ allprojects {
         }
 
         tasks.register("nightly-test", Test::class) {
+            testClassesDirs = tasks.test.get().testClassesDirs
+            classpath = tasks.test.get().classpath
             jvmArgs(defaultJvmArgs + sixGBJvmArgs)
             useJUnitPlatform {
                 includeTags("s3", "google-cloud", "azure")
@@ -246,6 +250,8 @@ allprojects {
         }
 
         tasks.register("property-test", Test::class) {
+            testClassesDirs = tasks.test.get().testClassesDirs
+            classpath = tasks.test.get().classpath
             jvmArgs(defaultJvmArgs + twelveGBJvmArgs)
 
             val iterations = project.findProperty("iterations")?.toString() ?: "100"
