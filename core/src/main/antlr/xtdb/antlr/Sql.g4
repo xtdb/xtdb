@@ -213,16 +213,14 @@ fieldDefinition : fieldName=identifier dataType ;
 
 /// §6.3 <value expression primary>
 
+// Alternative order is precedence, tightest first, following PostgreSQL's operator precedence table:
+// predicates, then comparisons, then IS, NOT, AND, OR.
 expr
-    : expr 'IS' NOT? booleanValue #IsBooleanValueExpr
-    | expr compOp expr # ComparisonPredicate
-    | commonValueExpr NOT? 'BETWEEN' (ASYMMETRIC | SYMMETRIC)? commonValueExpr 'AND' commonValueExpr # BetweenPredicate
+    : commonValueExpr NOT? 'BETWEEN' (ASYMMETRIC | SYMMETRIC)? commonValueExpr 'AND' commonValueExpr # BetweenPredicate
     | expr NOT? 'IN' inPredicateValue # InPredicate
     | expr 'NOT'? 'LIKE' likePattern=commonValueExpr ('ESCAPE' likeEscape=commonValueExpr)? # LikePredicate
     | expr 'NOT'? 'LIKE_REGEX' xqueryPattern=commonValueExpr ('FLAG' xqueryOptionFlag=commonValueExpr)? # LikeRegexPredicate
     | expr postgresRegexOperator xqueryPattern=commonValueExpr # PostgresRegexPredicate
-    | expr 'IS' 'NOT'? 'NULL' # NullPredicate
-    | expr 'IS' 'NOT'? 'DISTINCT' 'FROM' expr # DistinctFromPredicate
 
     // period predicates
     | expr 'OVERLAPS' expr # PeriodOverlapsPredicate
@@ -243,7 +241,13 @@ expr
     | expr 'STRICTLY' 'LEADS' expr # PeriodStrictlyLeadsPredicate
     | expr 'IMMEDIATELY' 'LEADS' expr # PeriodImmediatelyLeadsPredicate
 
+    | expr compOp expr # ComparisonPredicate
     | expr compOp quantifier quantifiedComparisonPredicatePart3 # QuantifiedComparisonPredicate
+
+    | expr 'IS' NOT? booleanValue #IsBooleanValueExpr
+    | expr 'IS' 'NOT'? 'NULL' # NullPredicate
+    | expr 'IS' 'NOT'? 'DISTINCT' 'FROM' expr # DistinctFromPredicate
+
     | 'NOT' expr #UnaryNotExpr
     | expr 'AND' expr #AndExpr
     | expr 'OR' expr #OrExpr
@@ -253,6 +257,9 @@ expr
 
 // SQL:2011's <common value expression>: no boolean or predicate operator at its top level, so that
 // `BETWEEN`'s bounds and `LIKE`'s pattern can't swallow a following `AND`.
+//
+// Alternative order is precedence, as for `expr`. Operators sharing a precedence level have to share an
+// alternative - ANTLR gives each alternative a level of its own.
 commonValueExpr
     : subquery # ScalarSubqueryExpr
     | '(' expr ')' #WrappedExpr
@@ -260,19 +267,13 @@ commonValueExpr
     | commonValueExpr '.' fieldName=identifier #FieldAccess
     | commonValueExpr '[' expr ']' #ArrayAccess
     | commonValueExpr '::' dataType #PostgresCastExpr
-    | commonValueExpr '||' commonValueExpr #ConcatExpr
-    | obj=commonValueExpr JSON_ARROW field=commonValueExpr #JsonArrowExpr
-    | obj=commonValueExpr JSON_ARROW_TEXT field=commonValueExpr #JsonArrowTextExpr
-    | obj=commonValueExpr JSON_PATH path=commonValueExpr #JsonPathExpr
-    | obj=commonValueExpr JSON_PATH_TEXT path=commonValueExpr #JsonPathTextExpr
+    | obj=commonValueExpr op=(JSON_ARROW | JSON_ARROW_TEXT | JSON_PATH | JSON_PATH_TEXT) arg=commonValueExpr #JsonAccessExpr
     | '+' commonValueExpr #UnaryPlusExpr
     | '-' commonValueExpr #UnaryMinusExpr
     | commonValueExpr (SOLIDUS | ASTERISK | PERCENT) commonValueExpr #NumericFactorExpr
     | commonValueExpr (PLUS | MINUS) commonValueExpr #NumericTermExpr
     | TILDE commonValueExpr #NumericBitwiseNotExpr
-    | commonValueExpr AMPERSAND commonValueExpr #NumericBitwiseAndExpr
-    | commonValueExpr (BITWISE_OR | BITWISE_XOR) commonValueExpr #NumericBitwiseOrExpr
-    | commonValueExpr (BITWISE_SHIFT_LEFT | BITWISE_SHIFT_RIGHT) commonValueExpr #NumericBitwiseShiftExpr
+    | commonValueExpr op=(CONCAT | AMPERSAND | BITWISE_OR | BITWISE_XOR | BITWISE_SHIFT_LEFT | BITWISE_SHIFT_RIGHT) commonValueExpr #ConcatOrBitwiseExpr
 
     | parameterSpecification # ParamExpr
     | columnReference # ColumnExpr
@@ -714,7 +715,7 @@ subquery : '(' queryExpression ')' ;
 
 predicatePart2
     : compOp expr # ComparisonPredicatePart2
-    | NOT? 'BETWEEN' (ASYMMETRIC | SYMMETRIC)? expr 'AND' expr # BetweenPredicatePart2
+    | NOT? 'BETWEEN' (ASYMMETRIC | SYMMETRIC)? commonValueExpr 'AND' commonValueExpr # BetweenPredicatePart2
     | NOT? 'IN' inPredicateValue # InPredicatePart2
     | 'NOT'? 'LIKE' likePattern=commonValueExpr ('ESCAPE' likeEscape=commonValueExpr)? # LikePredicatePart2
     | 'NOT'? 'LIKE_REGEX' xqueryPattern=commonValueExpr ('FLAG' xqueryOptionFlag=commonValueExpr)? # LikeRegexPredicatePart2

@@ -157,7 +157,11 @@
 (t/deftest test-concat-expr
   (t/is (= '(concat f/a f/b) (plan-expr-with-foo "foo.a || foo.b")))
   (t/is (= '(concat "a" f/b) (plan-expr-with-foo "'a' || foo.b")))
-  (t/is (= '(concat (concat f/a "a") "b") (plan-expr-with-foo "foo.a || 'a' || 'b'"))))
+  (t/is (= '(concat (concat f/a "a") "b") (plan-expr-with-foo "foo.a || 'a' || 'b'")))
+
+  (t/is (= '(concat "a" (+ f/a 1)) (plan-expr-with-foo "'a' || foo.a + 1"))
+        "arithmetic binds tighter than concatenation")
+  (t/is (= '(concat (* f/a 2) "a") (plan-expr-with-foo "foo.a * 2 || 'a'"))))
 
 (t/deftest test-concat-function-expr
   (t/testing "CONCAT function planning - transforms to use coalesce and str for NULL handling"

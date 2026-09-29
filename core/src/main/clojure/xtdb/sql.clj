@@ -1405,37 +1405,23 @@
                       (dec n)
                       (list '- n 1)))))
 
-  ;; PostgreSQL -> operator: extracts field/element (preserves type)
-  (visitJsonArrowExpr [this ctx]
-    (json-field-access (-> (.obj ctx) (.accept this))
-                       (-> (.field ctx) (.accept this))))
-
-  ;; PostgreSQL ->> operator: extracts field/element as text
-  (visitJsonArrowTextExpr [this ctx]
-    (let [result (json-field-access (-> (.obj ctx) (.accept this))
-                                    (-> (.field ctx) (.accept this)))]
-      (list 'cast result #xt/type :utf8)))
-
-  ;; PostgreSQL #> operator: extracts nested field by path (preserves type)
-  (visitJsonPathExpr [this ctx]
-    (let [obj-expr (-> (.obj ctx) (.accept this))
-          path-expr (-> (.path ctx) (.accept this))]
-      (if-not (vector? path-expr)
-        (throw (err/unsupported ::non-literal-json-path
-                                "PostgreSQL #> operator currently only supports literal array paths"
-                                {:obj-expr obj-expr :path-expr path-expr}))
-        (reduce json-field-access obj-expr path-expr))))
-
-  ;; PostgreSQL #>> operator: extracts nested field by path as text
-  (visitJsonPathTextExpr [this ctx]
-    (let [obj-expr (-> (.obj ctx) (.accept this))
-          path-expr (-> (.path ctx) (.accept this))]
-      (if-not (vector? path-expr)
-        (throw (err/unsupported ::non-literal-json-path
-                                "PostgreSQL #>> operator currently only supports literal array paths"
-                                {:obj-expr obj-expr :path-expr path-expr}))
-        (let [result (reduce json-field-access obj-expr path-expr)]
-          (list 'cast result #xt/type :utf8)))))
+  ;; PostgreSQL's -> / ->> extract a field or element, #> / #>> a nested one by path;
+  ;; the `>>` forms cast the result to text
+  (visitJsonAccessExpr [this ctx]
+    (let [op (.getType (.op ctx))
+          obj-expr (-> (.obj ctx) (.accept this))
+          arg-expr (-> (.arg ctx) (.accept this))
+          result (if (or (= op SqlLexer/JSON_ARROW) (= op SqlLexer/JSON_ARROW_TEXT))
+                   (json-field-access obj-expr arg-expr)
+                   (if-not (vector? arg-expr)
+                     (throw (err/unsupported ::non-literal-json-path
+                                             (format "PostgreSQL %s operator currently only supports literal array paths"
+                                                     (.getText (.op ctx)))
+                                             {:obj-expr obj-expr :path-expr arg-expr}))
+                     (reduce json-field-access obj-expr arg-expr)))]
+      (if (or (= op SqlLexer/JSON_ARROW_TEXT) (= op SqlLexer/JSON_PATH_TEXT))
+        (list 'cast result #xt/type :utf8)
+        result)))
 
   (visitUnaryPlusExpr [this ctx] (-> (.commonValueExpr ctx) (.accept this)))
 
@@ -1470,29 +1456,14 @@
     (list 'bit_not
           (-> (.commonValueExpr ctx) (.accept this))))
 
-  (visitNumericBitwiseAndExpr [this ctx]
-    (list 'bit_and
-          (-> (.commonValueExpr ctx 0) (.accept this))
-          (-> (.commonValueExpr ctx 1) (.accept this))))
-
-  (visitNumericBitwiseOrExpr [this ctx]
-    (list (cond
-            (.BITWISE_OR ctx) 'bit_or
-            (.BITWISE_XOR ctx) 'bit_xor
-            :else (throw (IllegalStateException.)))
-          (-> (.commonValueExpr ctx 0) (.accept this))
-          (-> (.commonValueExpr ctx 1) (.accept this))))
-
-  (visitNumericBitwiseShiftExpr [this ctx]
-    (list (cond
-            (.BITWISE_SHIFT_LEFT ctx) 'bit_shift_left
-            (.BITWISE_SHIFT_RIGHT ctx) 'bit_shift_right
-            :else (throw (IllegalStateException.)))
-          (-> (.commonValueExpr ctx 0) (.accept this))
-          (-> (.commonValueExpr ctx 1) (.accept this))))
-
-  (visitConcatExpr [this ctx]
-    (list 'concat
+  (visitConcatOrBitwiseExpr [this ctx]
+    (list (condp = (.getType (.op ctx))
+            SqlLexer/CONCAT 'concat
+            SqlLexer/AMPERSAND 'bit_and
+            SqlLexer/BITWISE_OR 'bit_or
+            SqlLexer/BITWISE_XOR 'bit_xor
+            SqlLexer/BITWISE_SHIFT_LEFT 'bit_shift_left
+            SqlLexer/BITWISE_SHIFT_RIGHT 'bit_shift_right)
           (-> (.commonValueExpr ctx 0) (.accept this))
           (-> (.commonValueExpr ctx 1) (.accept this))))
 
@@ -1612,8 +1583,8 @@
                                (.ASYMMETRIC ctx) 'between
                                :else 'between)
                              pt1
-                             (-> (.expr ctx 0) (.accept this))
-                             (-> (.expr ctx 1) (.accept this)))]
+                             (-> (.commonValueExpr ctx 0) (.accept this))
+                             (-> (.commonValueExpr ctx 1) (.accept this)))]
       (if (.NOT ctx)
         (list 'not between-expr)
         between-expr)))
