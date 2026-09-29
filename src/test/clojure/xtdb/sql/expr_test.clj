@@ -713,42 +713,42 @@
                  {:default-tz #xt/zone "Europe/Berlin"})))
 
   (t/is (= [{:timestamp #xt/date-time "2021-10-21T12:34:00"}]
-           (xt/q tu/*node* "SELECT CAST('2021-10-21T12:34:00' AS TIMESTAMP) as \"timestamp\"")))
+           (xt/q tu/*node* "SELECT CAST('2021-10-21T12:34:00' AS TIMESTAMP) as timestamp")))
 
   (t/is (= [{:timestamp #xt/date-time "2021-10-21T12:34:00"}]
-           (xt/q tu/*node* "SELECT CAST('2021-10-21T12:34:00' AS TIMESTAMP WITHOUT TIME ZONE) as \"timestamp\"")))
+           (xt/q tu/*node* "SELECT CAST('2021-10-21T12:34:00' AS TIMESTAMP WITHOUT TIME ZONE) as timestamp")))
 
   (t/testing "CAST timestamp with timezone to TIMESTAMP (Metabase compatibility)"
     (t/is (= [{:timestamp #xt/date-time "2021-10-21T12:34:00"}]
-             (xt/q tu/*node* "SELECT CAST('2021-10-21T12:34:00Z' AS TIMESTAMP) as \"timestamp\""))
+             (xt/q tu/*node* "SELECT CAST('2021-10-21T12:34:00Z' AS TIMESTAMP) as timestamp"))
           "ignores Z suffix with CAST")
     (t/is (= [{:timestamp #xt/date-time "2021-10-21T12:34:00"}]
-             (xt/q tu/*node* "SELECT CAST('2021-10-21T12:34:00+01:00' AS TIMESTAMP) as \"timestamp\""))
+             (xt/q tu/*node* "SELECT CAST('2021-10-21T12:34:00+01:00' AS TIMESTAMP) as timestamp"))
           "ignores timezone offset with CAST")
     (t/is (= [{:timestamp #xt/date-time "2021-10-21T12:34:00"}]
-             (xt/q tu/*node* "SELECT '2021-10-21T12:34:00Z'::timestamp as \"timestamp\""))
+             (xt/q tu/*node* "SELECT '2021-10-21T12:34:00Z'::timestamp as timestamp"))
           "ignores Z suffix with ::")
     (t/is (= [{:timestamp #xt/date-time "2021-10-21T12:34:00"}]
-             (xt/q tu/*node* "SELECT '2021-10-21T12:34:00+01:00'::timestamp as \"timestamp\""))
+             (xt/q tu/*node* "SELECT '2021-10-21T12:34:00+01:00'::timestamp as timestamp"))
           "ignores timezone offset with ::"))
 
   (t/is (= [{:date #xt/date "2021-10-21"}]
-           (xt/q tu/*node* "SELECT CAST('2021-10-21' AS DATE) as \"date\"")))
+           (xt/q tu/*node* "SELECT CAST('2021-10-21' AS DATE) as date")))
 
   (t/is (= [{:time #xt/time "12:00:01"}]
-           (xt/q tu/*node* "SELECT CAST('12:00:01' AS TIME) as \"time\"")))
+           (xt/q tu/*node* "SELECT CAST('12:00:01' AS TIME) as time")))
 
   (t/is (= [{:duration #xt/duration "PT13M56.123456S"}]
-           (xt/q tu/*node* "SELECT CAST('PT13M56.123456789S' AS DURATION) as \"duration\"")))
+           (xt/q tu/*node* "SELECT CAST('PT13M56.123456789S' AS DURATION) as duration")))
 
   (t/is (= [{:duration #xt/duration "PT13M56.123456789S"}]
-           (xt/q tu/*node* "SELECT CAST('PT13M56.123456789S' AS DURATION(9)) as \"duration\"")))
+           (xt/q tu/*node* "SELECT CAST('PT13M56.123456789S' AS DURATION(9)) as duration")))
 
   (t/is (= [{:time #xt/time "12:00:01.1234"}]
-           (xt/q tu/*node* "SELECT CAST('12:00:01.123456' AS TIME(4)) as \"time\"")))
+           (xt/q tu/*node* "SELECT CAST('12:00:01.123456' AS TIME(4)) as time")))
 
   (t/is (= [{:timestamp #xt/date-time "2021-10-21T12:34:00.1234567"}]
-           (xt/q tu/*node* "SELECT CAST('2021-10-21T12:34:00.123456789' AS TIMESTAMP(7)) as \"timestamp\"")))
+           (xt/q tu/*node* "SELECT CAST('2021-10-21T12:34:00.123456789' AS TIMESTAMP(7)) as timestamp")))
 
   (t/is (= [{:timestamp-tz #xt/zoned-date-time "2021-10-21T14:34:00.12+02:00[Europe/Berlin]"}]
            (xt/q tu/*node* "SELECT CAST('2021-10-21T12:34:00.123Z' AS TIMESTAMP(2) WITH TIME ZONE) as timestamp_tz"
@@ -777,14 +777,14 @@
 
 (t/deftest test-cast-interval-to-duration
   (t/is (= [{:duration #xt/duration "PT13M56S"}]
-           (xt/q tu/*node* "SELECT CAST(INTERVAL '13:56' MINUTE TO SECOND AS DURATION) as \"duration\"")))
+           (xt/q tu/*node* "SELECT CAST(INTERVAL '13:56' MINUTE TO SECOND AS DURATION) as duration")))
 
   (t/is (= [{:duration #xt/duration "PT13M56.123456S"}]
-           (xt/q tu/*node* "SELECT CAST(INTERVAL '13:56.123456' MINUTE TO SECOND AS DURATION) as \"duration\"")))
+           (xt/q tu/*node* "SELECT CAST(INTERVAL '13:56.123456' MINUTE TO SECOND AS DURATION) as duration")))
   ;;
   ;;TODO add interval(9) syntax?
   #_(t/is (= [{:duration #xt/duration "PT13M56.123456789S"}]
-             (xt/q tu/*node* "SELECT CAST(INTERVAL '13:56.123456789' MINUTE TO SECOND AS DURATION(9)) as \"duration\""))))
+             (xt/q tu/*node* "SELECT CAST(INTERVAL '13:56.123456789' MINUTE TO SECOND AS DURATION(9)) as duration"))))
 
 (t/deftest test-cast-duration-to-interval
 
@@ -995,16 +995,16 @@
 
 (t/deftest duration-literal-query
   (t/is (= [{:duration #xt/duration "PT24H"}]
-           (xt/q tu/*node* "SELECT DURATION 'P1D' as \"duration\"")))
+           (xt/q tu/*node* "SELECT DURATION 'P1D' as duration")))
 
   (t/is (= [{:duration #xt/duration "PT1H"}]
-           (xt/q tu/*node* "SELECT DURATION 'PT1H' as \"duration\"")))
+           (xt/q tu/*node* "SELECT DURATION 'PT1H' as duration")))
 
   (t/is (= [{:duration #xt/duration "PT26H"}]
-           (xt/q tu/*node* "SELECT DURATION 'P1DT2H' as \"duration\"")))
+           (xt/q tu/*node* "SELECT DURATION 'P1DT2H' as duration")))
 
   (t/is (= [{:duration #xt/duration "PT-22H"}]
-           (xt/q tu/*node* "SELECT DURATION 'P-1DT2H' as \"duration\""))))
+           (xt/q tu/*node* "SELECT DURATION 'P-1DT2H' as duration"))))
 
 (t/deftest test-date-trunc-plan
   (t/testing "TIMESTAMP behaviour"
@@ -1081,43 +1081,43 @@
 
 (t/deftest test-date-trunc-query
   (t/is (= [{:timestamp #xt/zoned-date-time "2021-10-21T12:34:00Z"}]
-           (xt/q tu/*node* "SELECT DATE_TRUNC(MINUTE, TIMESTAMP '2021-10-21T12:34:56Z') as \"timestamp\"")))
+           (xt/q tu/*node* "SELECT DATE_TRUNC(MINUTE, TIMESTAMP '2021-10-21T12:34:56Z') as timestamp")))
 
   (t/is (= [{:timestamp #xt/zoned-date-time "2021-10-21T12:00:00Z"}]
-           (xt/q tu/*node* "select date_trunc(hour, timestamp '2021-10-21T12:34:56Z') as \"timestamp\"")))
+           (xt/q tu/*node* "select date_trunc(hour, timestamp '2021-10-21T12:34:56Z') as timestamp")))
 
   (t/is (= [{:timestamp #xt/date "2001-01-01"}]
-           (xt/q tu/*node* "select date_trunc(year, DATE '2001-11-27') as \"timestamp\"")))
+           (xt/q tu/*node* "select date_trunc(year, DATE '2001-11-27') as timestamp")))
 
   (t/is (= [{:timestamp #xt/date-time "2021-10-21T12:00:00"}]
-           (xt/q tu/*node* "select date_trunc(hour, timestamp '2021-10-21T12:34:56') as \"timestamp\"")))
+           (xt/q tu/*node* "select date_trunc(hour, timestamp '2021-10-21T12:34:56') as timestamp")))
 
   (t/testing "quoted precision string"
     (t/is (= [{:timestamp #xt/zoned-date-time "2021-10-21T12:34:00Z"}]
-             (xt/q tu/*node* "SELECT DATE_TRUNC('minute', TIMESTAMP '2021-10-21T12:34:56Z') as \"timestamp\"")))
+             (xt/q tu/*node* "SELECT DATE_TRUNC('minute', TIMESTAMP '2021-10-21T12:34:56Z') as timestamp")))
     (t/is (= [{:timestamp #xt/zoned-date-time "2021-10-21T12:00:00Z"}]
-             (xt/q tu/*node* "SELECT DATE_TRUNC('HOUR', TIMESTAMP '2021-10-21T12:34:56Z') as \"timestamp\"")))))
+             (xt/q tu/*node* "SELECT DATE_TRUNC('HOUR', TIMESTAMP '2021-10-21T12:34:56Z') as timestamp")))))
 
 (t/deftest test-date-trunc-with-timezone-query
   (t/is (= [{:timestamp #xt/zoned-date-time "2001-02-16T08:00-05:00"}]
-           (xt/q tu/*node* "select date_trunc(day, TIMESTAMP '2001-02-16 15:38:11-05:00', 'Australia/Sydney') as \"timestamp\"")))
+           (xt/q tu/*node* "select date_trunc(day, TIMESTAMP '2001-02-16 15:38:11-05:00', 'Australia/Sydney') as timestamp")))
 
   (t/is (anomalous? [:incorrect ::expr/invalid-timezone
                      #"Unknown time-zone ID: NotRealRegion"]
-                    (xt/q tu/*node* "select date_trunc(hour, TIMESTAMP '2000-01-02 00:43:11+00:00', 'NotRealRegion') as \"timestamp\""))))
+                    (xt/q tu/*node* "select date_trunc(hour, TIMESTAMP '2000-01-02 00:43:11+00:00', 'NotRealRegion') as timestamp"))))
 
 (t/deftest test-date-trunc-with-interval-query
   (t/is (= [{:interval #xt/interval "P3Y"}]
-           (xt/q tu/*node* "SELECT DATE_TRUNC(YEAR, INTERVAL '3' YEAR + INTERVAL 'P3M') as \"interval\"")))
+           (xt/q tu/*node* "SELECT DATE_TRUNC(YEAR, INTERVAL '3' YEAR + INTERVAL 'P3M') as interval")))
 
   (t/is (= [{:interval #xt/interval "P3M4DT2S"}]
-           (xt/q tu/*node* "SELECT DATE_TRUNC(SECOND, INTERVAL '3' MONTH + INTERVAL 'P4DT2S') as `interval`")))
+           (xt/q tu/*node* "SELECT DATE_TRUNC(SECOND, INTERVAL '3' MONTH + INTERVAL 'P4DT2S') as interval")))
 
   (t/is (= [{:interval #xt/interval "P3M4D"}]
-           (xt/q tu/*node* "SELECT DATE_TRUNC(DAY, INTERVAL 'P3M' + INTERVAL '4' DAY + INTERVAL '2' SECOND) as \"interval\"")))
+           (xt/q tu/*node* "SELECT DATE_TRUNC(DAY, INTERVAL 'P3M' + INTERVAL '4' DAY + INTERVAL '2' SECOND) as interval")))
 
   (t/is (= [{:interval #xt/interval "P3M"}]
-           (xt/q tu/*node* "SELECT DATE_TRUNC(MONTH, INTERVAL '3' MONTH + INTERVAL 'P4D' + INTERVAL '2' SECOND) as \"interval\""))))
+           (xt/q tu/*node* "SELECT DATE_TRUNC(MONTH, INTERVAL '3' MONTH + INTERVAL 'P4D' + INTERVAL '2' SECOND) as interval"))))
 
 (t/deftest test-date-bin
   (t/is (= [#:xt{:column-1 #xt/zoned-date-time "2020-01-01T00:00Z[UTC]",

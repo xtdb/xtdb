@@ -84,19 +84,19 @@
 
   (t/is (=plan-file
          "basic-query-5"
-         (sql/plan "SELECT si.movie_title FROM movie AS m JOIN stars_in AS si ON m.title = si.movie_title AND si.`year` = m.movie_year"
+         (sql/plan "SELECT si.movie_title FROM movie AS m JOIN stars_in AS si ON m.title = si.movie_title AND si.year = m.movie_year"
                    {:table-info {#xt/table movie #{"title" "movie_year"}
                                  #xt/table stars_in #{"movie_title" "year"}}})))
 
   (t/is (=plan-file
          "basic-query-6"
-         (sql/plan "SELECT si.movie_title FROM movie AS m LEFT JOIN stars_in AS si ON m.title = si.movie_title AND si.`year` = m.movie_year"
+         (sql/plan "SELECT si.movie_title FROM movie AS m LEFT JOIN stars_in AS si ON m.title = si.movie_title AND si.year = m.movie_year"
                    {:table-info {#xt/table movie #{"title" "movie_year"}
                                  #xt/table stars_in #{"movie_title" "year"}}})))
 
   (t/is (=plan-file
          "basic-query-9"
-         (sql/plan "SELECT me.name, SUM(m.`length`) FROM movie_exec AS me, movie AS m WHERE me.cert = m.producer GROUP BY me.name HAVING MIN(m.`year`) < 1930"
+         (sql/plan "SELECT me.name, SUM(m.`length`) FROM movie_exec AS me, movie AS m WHERE me.cert = m.producer GROUP BY me.name HAVING MIN(m.year) < 1930"
                    {:table-info {#xt/table movie_exec #{"name" "cert"}
                                  #xt/table movie #{"producer" "year" "length"}}})))
 
@@ -286,12 +286,12 @@
 
   (t/is (=plan-file
          "basic-query-27"
-         (sql/plan "SELECT si.movie_title FROM stars_in AS si ORDER BY si.`year`"
+         (sql/plan "SELECT si.movie_title FROM stars_in AS si ORDER BY si.year"
                    {:table-info {#xt/table stars_in #{"movie_title" "year"}}})))
 
   (t/is (=plan-file
          "basic-query-28"
-         (sql/plan "SELECT si.`year` = 'foo' FROM stars_in AS si ORDER BY si.`year` = 'foo'"
+         (sql/plan "SELECT si.year = 'foo' FROM stars_in AS si ORDER BY si.year = 'foo'"
                    {:table-info {#xt/table stars_in #{"year"}}}))))
 
 (t/deftest test-limit-offset-params-3699

@@ -40,13 +40,13 @@
     (t/is (= [{:date #xt/date-time "2020-01-01T00:00"}
               {:date #xt/date-time "2020-01-03T00:00"}
               {:date #xt/date-time "2020-01-05T00:00"}]
-             (xt/q tu/*node* "FROM range(DATE '2020-01-01', DATE '2020-01-07', INTERVAL 'P2D') dates (`date`)"))
+             (xt/q tu/*node* "FROM range(DATE '2020-01-01', DATE '2020-01-07', INTERVAL 'P2D') dates (date)"))
           "multi-day interval")
 
     (t/is (= [{:date #xt/date-time "2020-01-01T00:00", :idx 1}
               {:date #xt/date-time "2020-01-03T00:00", :idx 2}
               {:date #xt/date-time "2020-01-05T00:00", :idx 3}]
-             (xt/q tu/*node* "FROM range(DATE '2020-01-01', DATE '2020-01-07', INTERVAL 'P2D') WITH ORDINALITY dates (`date`, idx)"))
+             (xt/q tu/*node* "FROM range(DATE '2020-01-01', DATE '2020-01-07', INTERVAL 'P2D') WITH ORDINALITY dates (date, idx)"))
           "multi-day interval, WITH ORDINALITY")
 
     (t/is (= [{:dates [#xt/date "2020-01-01", #xt/date "2020-02-01", #xt/date "2020-03-01"]}]
@@ -60,11 +60,11 @@
           "monthly interval")
 
     (t/is (= [{:date #xt/date "2020-01-01"} {:date #xt/date "2021-01-01"}]
-             (xt/q tu/*node* "FROM range(DATE '2020-01-01', DATE '2022-01-01', INTERVAL 'P1Y') dates (`date`)"))
+             (xt/q tu/*node* "FROM range(DATE '2020-01-01', DATE '2022-01-01', INTERVAL 'P1Y') dates (date)"))
           "yearly interval")
 
     (t/is (= [{:date #xt/date "2020-01-01"} {:date #xt/date "2021-01-01"}]
-             (xt/q tu/*node* "FROM range(DATE '2020-01-01', DATE '2022-01-01', INTERVAL '1' YEAR) dates (`date`)"))
+             (xt/q tu/*node* "FROM range(DATE '2020-01-01', DATE '2022-01-01', INTERVAL '1' YEAR) dates (date)"))
           "yearly interval")
 
     (t/is (= [{:dates [#xt/date-time "2020-01-01T00:00"
@@ -183,7 +183,7 @@
               {:date #xt/date-time "2020-01-03T00:00"}
               {:date #xt/date-time "2020-01-05T00:00"}
               {:date #xt/date-time "2020-01-07T00:00"}]
-             (xt/q tu/*node* "FROM generate_series(DATE '2020-01-01', DATE '2020-01-07', INTERVAL 'P2D') dates (`date`)"))
+             (xt/q tu/*node* "FROM generate_series(DATE '2020-01-01', DATE '2020-01-07', INTERVAL 'P2D') dates (date)"))
           "multi-day interval")
 
     (t/is (= [{:dates [#xt/date "2020-01-01", #xt/date "2020-02-01", #xt/date "2020-03-01", #xt/date "2020-04-01"]}]
@@ -191,7 +191,7 @@
           "monthly interval")
 
     (t/is (= [{:date #xt/date "2020-01-01"} {:date #xt/date "2021-01-01"} {:date #xt/date "2022-01-01"}]
-             (xt/q tu/*node* "FROM generate_series(DATE '2020-01-01', DATE '2022-01-01', INTERVAL 'P1Y') dates (`date`)"))
+             (xt/q tu/*node* "FROM generate_series(DATE '2020-01-01', DATE '2022-01-01', INTERVAL 'P1Y') dates (date)"))
           "yearly interval")
 
     (t/is (= [{:dates [#xt/date-time "2020-01-01T00:00"

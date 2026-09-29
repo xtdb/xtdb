@@ -137,27 +137,38 @@ singleDatetimeField : nonSecondPrimaryDatetimeField | 'SECOND' ( '(' intervalFra
 identifierChain : identifier ( '.' identifier )* ;
 
 identifier
-    : (REGULAR_IDENTIFIER
-        | 'START' | 'END'
-        | 'COMMITTED' | 'UNCOMMITTED'
-        | 'TIMEZONE'
-        | 'VERSION'
-        | 'SYSTEM_TIME' | 'VALID_TIME'
-        | 'SELECT' | 'INSERT' | 'UPDATE' | 'DELETE' | 'ERASE'
-        | 'SETTING'
-        | 'ROLE'
-        | 'USER' | 'PASSWORD'
-        | 'VARBINARY' | 'BYTEA'
-        | 'URI' | 'OID'
-        | 'COPY' | 'FORMAT'
-        | 'ATTACH' | 'DETACH' | 'DATABASE' | 'LEVEL'
-        | 'FILTER'
-        | 'TABLE'
-        | METADATA
-        | SYNC
-        | setFunctionType )
-        # RegularIdentifier
+    : (REGULAR_IDENTIFIER | nonReservedKeyword) # RegularIdentifier
     | DELIMITED_IDENTIFIER # DelimitedIdentifier
+    ;
+
+// Where one of these also opens a construct - `PERIOD(a, b)`, `ROW(1, 2)`, `DATE '2020-01-01'` - the input
+// fits both, and ANTLR takes the earlier alternative, so the construct's alternative has to come first.
+nonReservedKeyword
+    : START | END
+    | COMMITTED | UNCOMMITTED
+    | TIMEZONE
+    | VERSION
+    | SYSTEM_TIME | VALID_TIME
+    | SELECT | INSERT | UPDATE | DELETE | ERASE
+    | SETTING
+    | ROLE
+    | USER | PASSWORD
+    | VARBINARY | BYTEA
+    | URI | OID
+    | COPY | FORMAT
+    | ATTACH | DETACH | DATABASE | LEVEL
+    | FILTER
+    | TABLE
+    | METADATA
+    | SYNC
+    | setFunctionType
+    | primaryDatetimeField
+    | pgExtractField
+    | rankFunctionType
+    | AT | BETWEEN | BY | CURRENT | FIRST | LAST | NEXT | OF | POSITION
+    | BIGINT | BOOLEAN | CHAR | DATE | DEC | DECIMAL | DOUBLE | DURATION | FLOAT | INT | INTEGER
+    | INTERVAL | KEYWORD | NUMERIC | OBJECT | PERIOD | PRECISION | REAL | RECORD | REGCLASS
+    | REGPROC | ROW | SMALLINT | TEXT | TIME | TIMESTAMP | TIMESTAMPTZ | TSTZRANGE | UUID | VARCHAR
     ;
 
 columnName : identifier ;
@@ -320,6 +331,7 @@ commonValueExpr
     | 'POSITION' '(' expr 'IN' expr ( 'USING' charLengthUnits )? ')' # PositionFunction
     | 'EXTRACT' '(' extractField 'FROM' extractSource=expr ')' # ExtractFunction
     | ('CHAR_LENGTH' | 'CHARACTER_LENGTH') '(' expr ('USING' charLengthUnits)? ')' # CharacterLengthFunction
+    | ('PERIOD' | 'TSTZRANGE') '(' expr ',' expr ')' # TsTzRangeConstructor
     | fn=identifier '(' ( expr (',' expr)* )? ')' # FunctionCall
 
     // string value functions
@@ -368,7 +380,6 @@ commonValueExpr
     | 'DATE_BIN' '(' intervalLiteral ',' dateBinSource=expr (',' dateBinOrigin=expr)? ')' # DateBinFunction
     | 'RANGE_BINS' '(' intervalLiteral ',' rangeBinsSource=expr (',' dateBinOrigin=expr)? ')' #RangeBinsFunction
     | 'OVERLAPS' '(' expr ( ',' expr )+ ')' # OverlapsFunction
-    | ('PERIOD' | 'TSTZRANGE') '(' expr ',' expr ')' # TsTzRangeConstructor
 
     | 'TRIM_ARRAY' '(' expr ',' expr ')' # TrimArrayFunction
     ;
@@ -511,9 +522,9 @@ arrayValueConstructor
 /// §7.1 <row value constructor>
 
 rowValueConstructor
-    : expr # SingleExprRowConstructor
+    : 'ROW' '(' ( expr (',' expr)* )? ')' # MultiExprRowConstructor
+    | expr # SingleExprRowConstructor
     | '(' ( expr (',' expr)+ )? ')'  # MultiExprRowConstructor
-    | 'ROW' '(' ( expr (',' expr)* )? ')' # MultiExprRowConstructor
     ;
 
 /// §7.3 <table value constructor>

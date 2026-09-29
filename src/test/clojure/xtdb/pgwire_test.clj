@@ -2887,7 +2887,7 @@ ORDER BY 1,2;")
       (t/is (= [{:_id 1, :dec 1.01M} {:_id 2, :dec 1.012M}]
                (jdbc/execute! conn ["SELECT * FROM decimals ORDER BY _id"]))))
 
-    (with-open [stmt (jdbc/prepare conn ["INSERT INTO decimals2 SELECT ? _id, ? AS `dec`"])]
+    (with-open [stmt (jdbc/prepare conn ["INSERT INTO decimals2 SELECT ? _id, ? AS dec"])]
       (jdbc/execute-batch! stmt [[1 1.01M]
                                  [2 1.012M]])
 
