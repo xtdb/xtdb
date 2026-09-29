@@ -185,17 +185,22 @@
                 (.add col-pushdown-iids (if iid-col? v (util/->iid v)))))
             (.add pushdown-bloom ^ints (BloomUtils/bloomHashes build-col build-idx))))))))
 
+(defn- ->child-cursors [build-plan-side build-cursor probe-cursors]
+  (if (= build-plan-side :left)
+    (into [build-cursor] probe-cursors)
+    (conj (vec probe-cursors) build-cursor)))
+
 (deftype JoinCursor [^BufferAllocator allocator,
-                     ^BuildSide build-side, ^ICursor build-cursor,
+                     ^BuildSide build-side, ^ICursor build-cursor, build-plan-side
                      probe-vec-types probe-key-cols ->probe-cursor
                      ^:unsynchronized-mutable ^ICursor hash-join-cursor
                      pushdown-blooms, ^Set pushdown-iids
                      ^ComparatorFactory cmp-factory, ^JoinType join-type]
   ICursor
   (getCursorType [_] (.getJoinTypeName join-type))
-  (getChildCursors [_] 
-    (cond-> [build-cursor]
-      hash-join-cursor (into (.getChildCursors hash-join-cursor))))
+  (getChildCursors [_]
+    (->child-cursors build-plan-side build-cursor
+                     (when hash-join-cursor (.getChildCursors hash-join-cursor))))
 
   (tryAdvance [this c]
     (when-not hash-join-cursor
@@ -228,7 +233,7 @@
     (util/try-close build-cursor)))
 
 (deftype MarkJoinCursor [^BufferAllocator allocator,
-                         ^BuildSide build-side, ^ICursor build-cursor,
+                         ^BuildSide build-side, ^ICursor build-cursor, build-plan-side
                          ->probe-cursor, probe-key-col-names, ^ComparatorFactory cmp-factory,
                          ^:unsynchronized-mutable ^ICursor probe-cursor
                          mark-col-name
@@ -236,8 +241,8 @@
   ICursor
   (getCursorType [_] "mark-join")
   (getChildCursors [_]
-    (cond-> [build-cursor]
-      probe-cursor (conj probe-cursor)))
+    (->child-cursors build-plan-side build-cursor
+                     (when probe-cursor [probe-cursor])))
 
   (tryAdvance [this c]
     (when-not probe-cursor
@@ -327,7 +332,8 @@
 (defn- emit-join-expr {:style/indent 2}
   [{:keys [condition left right]}
    {:keys [param-types]}
-   {:keys [build-side merge-vec-types-fn join-type
+   {build-plan-side :build-side
+    :keys [merge-vec-types-fn join-type
            with-nil-row? pushdown-blooms? track-unmatched-build-idxs? mark-col-name]}]
   (let [{left-vec-types :vec-types, ->left-cursor :->cursor} left
         {right-vec-types :vec-types, ->right-cursor :->cursor} right
@@ -361,7 +367,7 @@
 
         [build-vec-types build-key-col-names ->build-cursor
          probe-vec-types probe-key-col-names ->probe-cursor]
-        (case build-side
+        (case build-plan-side
           :left [left-vec-types-proj left-key-col-names ->left-project-cursor
                  right-vec-types-proj right-key-col-names ->right-project-cursor]
           :right [right-vec-types-proj right-key-col-names ->right-project-cursor
@@ -417,10 +423,10 @@
                                                        :args args})]
                        (project/->project-cursor opts
                                                  (cond-> (if (= join-type ::mark-join)
-                                                           (MarkJoinCursor. allocator build-side build-cursor
+                                                           (MarkJoinCursor. allocator build-side build-cursor build-plan-side
                                                                             ->probe-cursor-with-pushdowns (map str probe-key-col-names) cmp-factory nil
                                                                             mark-col-name pushdown-blooms)
-                                                           (JoinCursor. allocator build-side build-cursor
+                                                           (JoinCursor. allocator build-side build-cursor build-plan-side
                                                                         probe-vec-types probe-key-col-names
                                                                         ->probe-cursor-with-pushdowns nil
                                                                         pushdown-blooms pushdown-iids cmp-factory

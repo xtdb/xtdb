@@ -554,13 +554,14 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
                            [:put-docs :docs {:xt/id 8 :name "eight"}]])
 
   (letfn [(nodes [prefix q]
-            ;; frequencies rather than the sequence: a join cursor reports its build side first, where the plan reports left first
-            (frequencies (map (juxt :depth :op) (xt/q tu/*node* (str prefix q)))))]
+            (mapv (juxt :depth :op) (xt/q tu/*node* (str prefix q))))]
 
     (doseq [q ["SELECT d._id FROM docs d WHERE d._id IN (SELECT v.x FROM (VALUES (1),(7)) v(x)) OR d.name IS NULL"
                "WITH MATERIALIZED shared AS (SELECT _id, name FROM docs WHERE name IS NOT NULL) SELECT a._id FROM shared a JOIN shared b ON a._id = b._id"
                "SELECT d._id FROM docs d WHERE d._id IN (SELECT _id FROM docs)"
-               "SELECT d._id FROM docs d JOIN docs e ON d._id = e._id"]]
+               "SELECT d._id FROM docs d JOIN docs e ON d._id = e._id"
+               "SELECT d._id FROM docs d LEFT JOIN docs e ON d._id = e._id"
+               "SELECT d._id FROM docs d WHERE NOT EXISTS (SELECT 1 FROM docs e WHERE e._id = d._id)"]]
       (t/is (= (nodes "EXPLAIN " q) (nodes "EXPLAIN ANALYZE " q)) q))))
 
 (t/deftest test-explain-analyze-of-an-unadvanced-plan
