@@ -7,7 +7,8 @@
 // once with `docker buildx create --use --bootstrap` (and QEMU, if not already installed).
 
 target "bench" {
-  context = "modules/bench"
+  context = "."
+  dockerfile = "modules/bench/Dockerfile"
   tags = ["ghcr.io/xtdb/xtdb-bench:latest"]
 }
 
