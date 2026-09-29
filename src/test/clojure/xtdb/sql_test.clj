@@ -2156,7 +2156,10 @@
                            [:put-docs :t3 {:xt/id 1 :x 3}]])
 
   (t/is (= [{:x 1} {:x 3}]
-           (xt/q tu/*node* "SELECT x FROM t1 INTERSECT SELECT x FROM t2 UNION SELECT x FROM t3"))))
+           (xt/q tu/*node* "SELECT x FROM t1 INTERSECT SELECT x FROM t2 UNION SELECT x FROM t3")))
+
+  (t/is (= #{{:x 1} {:x 3}}
+           (set (xt/q tu/*node* "SELECT x FROM t3 UNION SELECT x FROM t1 INTERSECT SELECT x FROM t2")))))
 
 (t/deftest test-set-operations-with-different-column-names
   (t/testing "Union"

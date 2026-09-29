@@ -672,19 +672,16 @@ withClause : 'WITH' RECURSIVE? withListElement (',' withListElement)* ;
 withListElement : MATERIALIZED? queryName=identifier ('(' columnNameList ')')? 'AS' subquery ;
 
 queryExpressionBody
-    : queryTerm # QueryBodyTerm
-    | queryExpressionBody 'UNION' (ALL | DISTINCT)? queryTerm # UnionQuery
-    | queryExpressionBody 'EXCEPT' (ALL | DISTINCT)? queryTerm # ExceptQuery
-    ;
-
-queryTerm
     : selectClause fromClause? whereClause? groupByClause? havingClause? windowClause? # QuerySpecification
     | fromClause queryTail* windowClause? # QuerySpecification
     | tableValueConstructor # ValuesQuery
     | recordsValueConstructor # RecordsQuery
     | '(' queryExpressionNoWith ')' # WrappedQuery
     | 'XTQL' ( xtqlQuery=characterString | '(' xtqlQuery=characterString xtqlParams ')' ) # XtqlQuery
-    | queryTerm 'INTERSECT' (ALL | DISTINCT)? queryTerm # IntersectQuery
+
+    // INTERSECT binds tighter; UNION and EXCEPT share one alternative so they share a precedence level
+    | left=queryExpressionBody INTERSECT (ALL | DISTINCT)? right=queryExpressionBody # IntersectQuery
+    | left=queryExpressionBody (UNION | EXCEPT) (ALL | DISTINCT)? right=queryExpressionBody # UnionOrExceptQuery
     ;
 
 xtqlParams : ( ',' parameterSpecification )* ;

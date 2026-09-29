@@ -27,7 +27,7 @@
            (org.apache.arrow.vector.types.pojo Field)
            (org.apache.commons.codec.binary Hex)
            (xtdb.tx TxOp$PatchDocs TxOp$PutDocs)
-           (xtdb.antlr Sql$DirectlyExecutableStatementContext Sql$DynamicParameterContext Sql$XtqlQueryContext Sql$GroupByClauseContext Sql$HavingClauseContext Sql$JoinSpecificationContext Sql$JoinTypeContext Sql$ObjectNameAndValueContext Sql$OrderByClauseContext Sql$QualifiedRenameColumnContext Sql$QueryBodyTermContext Sql$QuerySpecificationContext Sql$QueryTailContext Sql$RenameColumnContext Sql$SearchedWhenClauseContext Sql$SelectClauseContext Sql$SetClauseContext Sql$SimpleWhenClauseContext Sql$SortSpecificationContext Sql$SortSpecificationListContext Sql$WhenOperandContext Sql$WhereClauseContext Sql$WithTimeZoneContext SqlLexer SqlVisitor)
+           (xtdb.antlr Sql$DirectlyExecutableStatementContext Sql$DynamicParameterContext Sql$XtqlQueryContext Sql$GroupByClauseContext Sql$HavingClauseContext Sql$JoinSpecificationContext Sql$JoinTypeContext Sql$ObjectNameAndValueContext Sql$OrderByClauseContext Sql$QualifiedRenameColumnContext Sql$QuerySpecificationContext Sql$QueryTailContext Sql$RenameColumnContext Sql$SearchedWhenClauseContext Sql$SelectClauseContext Sql$SetClauseContext Sql$SimpleWhenClauseContext Sql$SortSpecificationContext Sql$SortSpecificationListContext Sql$WhenOperandContext Sql$WhereClauseContext Sql$WithTimeZoneContext SqlLexer SqlVisitor)
            (xtdb.arrow RelationReader VectorReader)
            (xtdb.query DmlCacheKey ParsedStatement$Dml SqlParser SqlPlanner)
            (xtdb.xtql QueryWithParams)
@@ -2723,12 +2723,10 @@
           qeb-ctx (.queryExpressionBody ctx)
 
           ;; see SQL:2011 §7.13, syntax rule 28c
-          simple-table-query? (when (instance? Sql$QueryBodyTermContext qeb-ctx)
-                                (let [term (.queryTerm ^Sql$QueryBodyTermContext qeb-ctx)]
-                                  (when (instance? Sql$QuerySpecificationContext term)
-                                    (let [^Sql$QuerySpecificationContext qs-ctx term]
-                                      (or (.selectClause qs-ctx)
-                                          (seq (.queryTail qs-ctx)))))))]
+          simple-table-query? (when (instance? Sql$QuerySpecificationContext qeb-ctx)
+                                (let [^Sql$QuerySpecificationContext qs-ctx qeb-ctx]
+                                  (or (.selectClause qs-ctx)
+                                      (seq (.queryTail qs-ctx)))))]
 
       (as-> (.accept qeb-ctx (cond-> (assoc this :scope scope)
                                simple-table-query? (assoc :order-by-ctx order-by-ctx)))
@@ -2758,35 +2756,17 @@
                                                                       1)))
                                plan]))))))))
 
-  (visitQueryBodyTerm [this ctx] (.accept (.queryTerm ctx) this))
+  (visitUnionOrExceptQuery [this ctx]
+    (let [union? (some? (.UNION ctx))
 
-  (visitUnionQuery [this ctx]
-    (let [{l-plan :plan, l-col-syms :col-syms} (-> (.queryExpressionBody ctx) (.accept this)
+          {l-plan :plan, l-col-syms :col-syms} (-> (.left ctx) (.accept this)
                                                    (remove-ns-qualifiers env))
 
-          {r-plan :plan, r-col-syms :col-syms} (-> (.queryTerm ctx) (.accept this)
-                                                   (remove-ns-qualifiers env))
-
-          _ (when-not (= (count l-col-syms) (count r-col-syms))
-              (add-err! env (->SetOperationColumnCountMismatch "UNION" (count l-col-syms) (count r-col-syms))))
-
-          rename-col-syms (fn [plan]
-                            (if (not= l-col-syms r-col-syms)
-                              [:rename {:columns (zipmap r-col-syms l-col-syms)} plan]
-                              plan))
-
-          plan [:union-all {} l-plan (rename-col-syms r-plan)]]
-      (->QueryExpr (if-not (.ALL ctx) [:distinct {} plan] plan) l-col-syms)))
-
-  (visitExceptQuery [this ctx]
-    (let [{l-plan :plan, l-col-syms :col-syms} (-> (.queryExpressionBody ctx) (.accept this)
-                                                   (remove-ns-qualifiers env))
-
-          {r-plan :plan, r-col-syms :col-syms} (-> (.queryTerm ctx) (.accept this)
+          {r-plan :plan, r-col-syms :col-syms} (-> (.right ctx) (.accept this)
                                                    (remove-ns-qualifiers env))
 
           _ (when-not (= (count l-col-syms) (count r-col-syms))
-              (add-err! env (->SetOperationColumnCountMismatch "EXCEPT" (count l-col-syms) (count r-col-syms))))
+              (add-err! env (->SetOperationColumnCountMismatch (if union? "UNION" "EXCEPT") (count l-col-syms) (count r-col-syms))))
 
           rename-col-syms (fn [plan]
                             (if (not= l-col-syms r-col-syms)
@@ -2798,16 +2778,18 @@
                             [:distinct {} plan]
                             plan))]
 
-      (->QueryExpr [:difference {}
-                    (wrap-distinct l-plan)
-                    (rename-col-syms (wrap-distinct r-plan))]
+      (->QueryExpr (if union?
+                     (wrap-distinct [:union-all {} l-plan (rename-col-syms r-plan)])
+                     [:difference {}
+                      (wrap-distinct l-plan)
+                      (rename-col-syms (wrap-distinct r-plan))])
                    l-col-syms)))
 
   (visitIntersectQuery [this ctx]
-    (let [{l-plan :plan, l-col-syms :col-syms} (-> (.queryTerm ctx 0) (.accept this)
+    (let [{l-plan :plan, l-col-syms :col-syms} (-> (.left ctx) (.accept this)
                                                    (remove-ns-qualifiers env))
 
-          {r-plan :plan, r-col-syms :col-syms} (-> (.queryTerm ctx 1) (.accept this)
+          {r-plan :plan, r-col-syms :col-syms} (-> (.right ctx) (.accept this)
                                                    (remove-ns-qualifiers env))
 
           _ (when-not (= (count l-col-syms) (count r-col-syms))
