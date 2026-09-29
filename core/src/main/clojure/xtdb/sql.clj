@@ -27,7 +27,7 @@
            (org.apache.arrow.vector.types.pojo Field)
            (org.apache.commons.codec.binary Hex)
            (xtdb.tx TxOp$PatchDocs TxOp$PutDocs)
-           (xtdb.antlr Sql$DirectlyExecutableStatementContext Sql$DynamicParameterContext Sql$XtqlQueryContext Sql$GroupByClauseContext Sql$HavingClauseContext Sql$JoinSpecificationContext Sql$JoinTypeContext Sql$ObjectNameAndValueContext Sql$OrderByClauseContext Sql$QualifiedRenameColumnContext Sql$QueryBodyTermContext Sql$QuerySpecificationContext Sql$QueryTailContext Sql$RenameColumnContext Sql$SearchedWhenClauseContext Sql$SelectClauseContext Sql$SetClauseContext Sql$SimpleWhenClauseContext Sql$SortSpecificationContext Sql$SortSpecificationListContext Sql$WhenOperandContext Sql$WhereClauseContext Sql$WithTimeZoneContext SqlLexer SqlVisitor)
+           (xtdb.antlr Sql$DirectlyExecutableStatementContext Sql$DynamicParameterContext Sql$XtqlQueryContext Sql$GroupByClauseContext Sql$HavingClauseContext Sql$JoinSpecificationContext Sql$JoinTypeContext Sql$ObjectNameAndValueContext Sql$OrderByClauseContext Sql$QualifiedRenameColumnContext Sql$QuerySpecificationContext Sql$QueryTailContext Sql$RenameColumnContext Sql$SearchedWhenClauseContext Sql$SelectClauseContext Sql$SetClauseContext Sql$SimpleWhenClauseContext Sql$SortSpecificationContext Sql$SortSpecificationListContext Sql$WhenOperandContext Sql$WhereClauseContext Sql$WithTimeZoneContext SqlLexer SqlVisitor)
            (xtdb.arrow RelationReader VectorReader)
            (xtdb.query DmlCacheKey ParsedStatement$Dml SqlParser SqlPlanner)
            (xtdb.xtql QueryWithParams)
@@ -1305,8 +1305,7 @@
 (defrecord ExprPlanVisitor [env scope]
   SqlVisitor
   (visitSearchCondition [this ctx] (list* 'and (mapv (partial accept-visitor this) (.expr ctx))))
-  (visitExprPrimary1 [this ctx] (-> (.exprPrimary ctx) (.accept this)))
-  (visitNumericExpr0 [this ctx] (-> (.numericExpr ctx) (.accept this)))
+  (visitCommonValueExpr0 [this ctx] (-> (.commonValueExpr ctx) (.accept this)))
   (visitWrappedExpr [this ctx] (-> (.expr ctx) (.accept this)))
 
   (visitLiteralExpr [this ctx] (-> (.literal ctx) (.accept this)))
@@ -1394,57 +1393,43 @@
   (visitStaticParam [this ctx] (-> (.parameterSpecification ctx) (.accept this)))
 
   (visitFieldAccess [this ctx]
-    (let [ve (-> (.exprPrimary ctx) (.accept this))
+    (let [ve (-> (.commonValueExpr ctx) (.accept this))
           field-name (identifier-sym (.fieldName ctx))]
       (-> (list '. ve (keyword field-name))
           (vary-meta assoc :identifier (->col-sym field-name)))))
 
   (visitArrayAccess [this ctx]
-    (let [ve (-> (.exprPrimary ctx) (.accept this))
+    (let [ve (-> (.commonValueExpr ctx) (.accept this))
           n (-> (.expr ctx) (.accept this))]
       (list 'nth ve (if (integer? n)
                       (dec n)
                       (list '- n 1)))))
 
-  ;; PostgreSQL -> operator: extracts field/element (preserves type)
-  (visitJsonArrowExpr [this ctx]
-    (json-field-access (-> (.obj ctx) (.accept this))
-                       (-> (.field ctx) (.accept this))))
+  ;; PostgreSQL's -> / ->> extract a field or element, #> / #>> a nested one by path;
+  ;; the `>>` forms cast the result to text
+  (visitJsonAccessExpr [this ctx]
+    (let [op (.getType (.op ctx))
+          obj-expr (-> (.obj ctx) (.accept this))
+          arg-expr (-> (.arg ctx) (.accept this))
+          result (if (or (= op SqlLexer/JSON_ARROW) (= op SqlLexer/JSON_ARROW_TEXT))
+                   (json-field-access obj-expr arg-expr)
+                   (if-not (vector? arg-expr)
+                     (throw (err/unsupported ::non-literal-json-path
+                                             (format "PostgreSQL %s operator currently only supports literal array paths"
+                                                     (.getText (.op ctx)))
+                                             {:obj-expr obj-expr :path-expr arg-expr}))
+                     (reduce json-field-access obj-expr arg-expr)))]
+      (if (or (= op SqlLexer/JSON_ARROW_TEXT) (= op SqlLexer/JSON_PATH_TEXT))
+        (list 'cast result #xt/type :utf8)
+        result)))
 
-  ;; PostgreSQL ->> operator: extracts field/element as text
-  (visitJsonArrowTextExpr [this ctx]
-    (let [result (json-field-access (-> (.obj ctx) (.accept this))
-                                    (-> (.field ctx) (.accept this)))]
-      (list 'cast result #xt/type :utf8)))
-
-  ;; PostgreSQL #> operator: extracts nested field by path (preserves type)
-  (visitJsonPathExpr [this ctx]
-    (let [obj-expr (-> (.obj ctx) (.accept this))
-          path-expr (-> (.path ctx) (.accept this))]
-      (if-not (vector? path-expr)
-        (throw (err/unsupported ::non-literal-json-path
-                                "PostgreSQL #> operator currently only supports literal array paths"
-                                {:obj-expr obj-expr :path-expr path-expr}))
-        (reduce json-field-access obj-expr path-expr))))
-
-  ;; PostgreSQL #>> operator: extracts nested field by path as text
-  (visitJsonPathTextExpr [this ctx]
-    (let [obj-expr (-> (.obj ctx) (.accept this))
-          path-expr (-> (.path ctx) (.accept this))]
-      (if-not (vector? path-expr)
-        (throw (err/unsupported ::non-literal-json-path
-                                "PostgreSQL #>> operator currently only supports literal array paths"
-                                {:obj-expr obj-expr :path-expr path-expr}))
-        (let [result (reduce json-field-access obj-expr path-expr)]
-          (list 'cast result #xt/type :utf8)))))
-
-  (visitUnaryPlusExpr [this ctx] (-> (.numericExpr ctx) (.accept this)))
+  (visitUnaryPlusExpr [this ctx] (-> (.commonValueExpr ctx) (.accept this)))
 
   (visitUnaryMinusExpr [this ctx]
     (if (= (.getText ctx) (str Long/MIN_VALUE))
       Long/MIN_VALUE
 
-      (let [expr (-> (.numericExpr ctx)
+      (let [expr (-> (.commonValueExpr ctx)
                      (.accept this))]
         (if (number? expr)
           (- expr)
@@ -1455,8 +1440,8 @@
             (.PLUS ctx) '+
             (.MINUS ctx) '-
             :else (throw (IllegalStateException.)))
-          (-> (.numericExpr ctx 0) (.accept this))
-          (-> (.numericExpr ctx 1) (.accept this))))
+          (-> (.commonValueExpr ctx 0) (.accept this))
+          (-> (.commonValueExpr ctx 1) (.accept this))))
 
   (visitNumericFactorExpr [this ctx]
     (list (cond
@@ -1464,38 +1449,23 @@
             (.SOLIDUS ctx) '/
             (.PERCENT ctx) 'mod
             :else (throw (IllegalStateException.)))
-          (-> (.numericExpr ctx 0) (.accept this))
-          (-> (.numericExpr ctx 1) (.accept this))))
+          (-> (.commonValueExpr ctx 0) (.accept this))
+          (-> (.commonValueExpr ctx 1) (.accept this))))
 
   (visitNumericBitwiseNotExpr [this ctx]
     (list 'bit_not
-          (-> (.numericExpr ctx) (.accept this))))
+          (-> (.commonValueExpr ctx) (.accept this))))
 
-  (visitNumericBitwiseAndExpr [this ctx]
-    (list 'bit_and
-          (-> (.numericExpr ctx 0) (.accept this))
-          (-> (.numericExpr ctx 1) (.accept this))))
-
-  (visitNumericBitwiseOrExpr [this ctx]
-    (list (cond
-            (.BITWISE_OR ctx) 'bit_or
-            (.BITWISE_XOR ctx) 'bit_xor
-            :else (throw (IllegalStateException.)))
-          (-> (.numericExpr ctx 0) (.accept this))
-          (-> (.numericExpr ctx 1) (.accept this))))
-
-  (visitNumericBitwiseShiftExpr [this ctx]
-    (list (cond
-            (.BITWISE_SHIFT_LEFT ctx) 'bit_shift_left
-            (.BITWISE_SHIFT_RIGHT ctx) 'bit_shift_right
-            :else (throw (IllegalStateException.)))
-          (-> (.numericExpr ctx 0) (.accept this))
-          (-> (.numericExpr ctx 1) (.accept this))))
-
-  (visitConcatExpr [this ctx]
-    (list 'concat
-          (-> (.exprPrimary ctx 0) (.accept this))
-          (-> (.exprPrimary ctx 1) (.accept this))))
+  (visitConcatOrBitwiseExpr [this ctx]
+    (list (condp = (.getType (.op ctx))
+            SqlLexer/CONCAT 'concat
+            SqlLexer/AMPERSAND 'bit_and
+            SqlLexer/BITWISE_OR 'bit_or
+            SqlLexer/BITWISE_XOR 'bit_xor
+            SqlLexer/BITWISE_SHIFT_LEFT 'bit_shift_left
+            SqlLexer/BITWISE_SHIFT_RIGHT 'bit_shift_right)
+          (-> (.commonValueExpr ctx 0) (.accept this))
+          (-> (.commonValueExpr ctx 1) (.accept this))))
 
   (visitFunctionCall [this ctx]
     (plan-fn env
@@ -1600,9 +1570,9 @@
                                (.SYMMETRIC ctx) 'between-symmetric
                                (.ASYMMETRIC ctx) 'between
                                :else 'between)
-                             (-> (.numericExpr ctx 0) (.accept this))
-                             (-> (.numericExpr ctx 1) (.accept this))
-                             (-> (.numericExpr ctx 2) (.accept this)))]
+                             (-> (.commonValueExpr ctx 0) (.accept this))
+                             (-> (.commonValueExpr ctx 1) (.accept this))
+                             (-> (.commonValueExpr ctx 2) (.accept this)))]
       (if (.NOT ctx)
         (list 'not between-expr)
         between-expr)))
@@ -1613,8 +1583,8 @@
                                (.ASYMMETRIC ctx) 'between
                                :else 'between)
                              pt1
-                             (-> (.expr ctx 0) (.accept this))
-                             (-> (.expr ctx 1) (.accept this)))]
+                             (-> (.commonValueExpr ctx 0) (.accept this))
+                             (-> (.commonValueExpr ctx 1) (.accept this)))]
       (if (.NOT ctx)
         (list 'not between-expr)
         between-expr)))
@@ -1992,7 +1962,7 @@
       (handle-cast-expr ve data-type)))
 
   (visitPostgresCastExpr [this ctx]
-    (let [ve (-> (.exprPrimary ctx) (.accept this))
+    (let [ve (-> (.commonValueExpr ctx) (.accept this))
           data-type (-> (.dataType ctx) (.accept (->CastArgsVisitor env)))]
       (handle-cast-expr ve data-type)))
 
@@ -2723,12 +2693,10 @@
           qeb-ctx (.queryExpressionBody ctx)
 
           ;; see SQL:2011 §7.13, syntax rule 28c
-          simple-table-query? (when (instance? Sql$QueryBodyTermContext qeb-ctx)
-                                (let [term (.queryTerm ^Sql$QueryBodyTermContext qeb-ctx)]
-                                  (when (instance? Sql$QuerySpecificationContext term)
-                                    (let [^Sql$QuerySpecificationContext qs-ctx term]
-                                      (or (.selectClause qs-ctx)
-                                          (seq (.queryTail qs-ctx)))))))]
+          simple-table-query? (when (instance? Sql$QuerySpecificationContext qeb-ctx)
+                                (let [^Sql$QuerySpecificationContext qs-ctx qeb-ctx]
+                                  (or (.selectClause qs-ctx)
+                                      (seq (.queryTail qs-ctx)))))]
 
       (as-> (.accept qeb-ctx (cond-> (assoc this :scope scope)
                                simple-table-query? (assoc :order-by-ctx order-by-ctx)))
@@ -2758,35 +2726,17 @@
                                                                       1)))
                                plan]))))))))
 
-  (visitQueryBodyTerm [this ctx] (.accept (.queryTerm ctx) this))
+  (visitUnionOrExceptQuery [this ctx]
+    (let [union? (some? (.UNION ctx))
 
-  (visitUnionQuery [this ctx]
-    (let [{l-plan :plan, l-col-syms :col-syms} (-> (.queryExpressionBody ctx) (.accept this)
+          {l-plan :plan, l-col-syms :col-syms} (-> (.left ctx) (.accept this)
                                                    (remove-ns-qualifiers env))
 
-          {r-plan :plan, r-col-syms :col-syms} (-> (.queryTerm ctx) (.accept this)
-                                                   (remove-ns-qualifiers env))
-
-          _ (when-not (= (count l-col-syms) (count r-col-syms))
-              (add-err! env (->SetOperationColumnCountMismatch "UNION" (count l-col-syms) (count r-col-syms))))
-
-          rename-col-syms (fn [plan]
-                            (if (not= l-col-syms r-col-syms)
-                              [:rename {:columns (zipmap r-col-syms l-col-syms)} plan]
-                              plan))
-
-          plan [:union-all {} l-plan (rename-col-syms r-plan)]]
-      (->QueryExpr (if-not (.ALL ctx) [:distinct {} plan] plan) l-col-syms)))
-
-  (visitExceptQuery [this ctx]
-    (let [{l-plan :plan, l-col-syms :col-syms} (-> (.queryExpressionBody ctx) (.accept this)
-                                                   (remove-ns-qualifiers env))
-
-          {r-plan :plan, r-col-syms :col-syms} (-> (.queryTerm ctx) (.accept this)
+          {r-plan :plan, r-col-syms :col-syms} (-> (.right ctx) (.accept this)
                                                    (remove-ns-qualifiers env))
 
           _ (when-not (= (count l-col-syms) (count r-col-syms))
-              (add-err! env (->SetOperationColumnCountMismatch "EXCEPT" (count l-col-syms) (count r-col-syms))))
+              (add-err! env (->SetOperationColumnCountMismatch (if union? "UNION" "EXCEPT") (count l-col-syms) (count r-col-syms))))
 
           rename-col-syms (fn [plan]
                             (if (not= l-col-syms r-col-syms)
@@ -2798,16 +2748,18 @@
                             [:distinct {} plan]
                             plan))]
 
-      (->QueryExpr [:difference {}
-                    (wrap-distinct l-plan)
-                    (rename-col-syms (wrap-distinct r-plan))]
+      (->QueryExpr (if union?
+                     (wrap-distinct [:union-all {} l-plan (rename-col-syms r-plan)])
+                     [:difference {}
+                      (wrap-distinct l-plan)
+                      (rename-col-syms (wrap-distinct r-plan))])
                    l-col-syms)))
 
   (visitIntersectQuery [this ctx]
-    (let [{l-plan :plan, l-col-syms :col-syms} (-> (.queryTerm ctx 0) (.accept this)
+    (let [{l-plan :plan, l-col-syms :col-syms} (-> (.left ctx) (.accept this)
                                                    (remove-ns-qualifiers env))
 
-          {r-plan :plan, r-col-syms :col-syms} (-> (.queryTerm ctx 1) (.accept this)
+          {r-plan :plan, r-col-syms :col-syms} (-> (.right ctx) (.accept this)
                                                    (remove-ns-qualifiers env))
 
           _ (when-not (= (count l-col-syms) (count r-col-syms))
