@@ -5,10 +5,10 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ipc.SeekableReadChannel
 import org.apache.arrow.vector.ipc.message.ArrowFooter
 import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
-import org.apache.arrow.vector.ipc.message.MessageSerializer
 import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.arrow.ArrowUtil.arrowBufToRecordBatch
 import xtdb.arrow.ArrowUtil.readArrowFooter
+import java.io.IOException
 import java.nio.channels.SeekableByteChannel
 
 sealed interface ArrowFileLoader : AutoCloseable {
@@ -37,9 +37,17 @@ sealed interface ArrowFileLoader : AutoCloseable {
         override fun openPage(idx: Int): ArrowRecordBatch {
             val block = footer.recordBatches[idx]
             ch.setPosition(block.offset)
+            val len = block.metadataLength + block.bodyLength
 
-            return MessageSerializer.deserializeRecordBatch(ch, block, al)
-                ?: error("Failed to deserialize record batch $idx, offset ${block.offset}")
+            // not `MessageSerializer.deserializeRecordBatch(ch, block, al)`: Arrow 19.0.0 leaks its buffer if the read throws
+            return al.buffer(len).use { buf ->
+                if (ch.readFully(buf, len) != len) throw IOException("Unexpected end of input reading record batch $idx")
+
+                buf.arrowBufToRecordBatch(
+                    0, block.metadataLength, block.bodyLength,
+                    "Failed to deserialize record batch $idx, offset ${block.offset}"
+                )
+            }
         }
 
         override fun close() = ch.close()

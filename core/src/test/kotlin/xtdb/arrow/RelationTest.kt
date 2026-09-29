@@ -6,6 +6,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import xtdb.api.query.IKeyFn.KeyFn.SNAKE_CASE_STRING
 import xtdb.arrow.Relation.Companion.loader
 import xtdb.kw
@@ -14,7 +15,10 @@ import xtdb.arrow.VectorType.Companion.listTypeOf
 import xtdb.arrow.VectorType.Companion.maybe
 import xtdb.arrow.VectorType.Companion.ofType
 import java.io.ByteArrayOutputStream
+import java.nio.ByteBuffer
 import java.nio.channels.Channels
+import java.nio.channels.ClosedByInterruptException
+import java.nio.channels.SeekableByteChannel
 
 class RelationTest {
 
@@ -188,6 +192,37 @@ class RelationTest {
                 assertEquals(duvValues, rel["duv"].asList)
             }
         }
+    }
+
+    @Test
+    fun `a page read that fails mid-channel releases its buffer`() {
+        val buf = ByteArrayOutputStream()
+
+        IntVector.open(allocator, "i32", false).use { i32 ->
+            val rel = Relation(allocator, listOf(i32), 0)
+            rel.startUnload(Channels.newChannel(buf)).use { unloader ->
+                i32.writeInt(1)
+                rel.endRow()
+                unloader.writePage()
+                unloader.end()
+            }
+        }
+
+        val inner = buf.toByteArray().asChannel
+        var interrupted = false
+        val ch = object : SeekableByteChannel by inner {
+            override fun read(dst: ByteBuffer): Int =
+                if (interrupted) throw ClosedByInterruptException() else inner.read(dst)
+        }
+
+        loader(allocator, ch).use { loader ->
+            interrupted = true
+            Relation(allocator, loader.schema).use { rel ->
+                assertThrows<ClosedByInterruptException> { loader.loadPage(0, rel) }
+            }
+        }
+
+        assertEquals(0, allocator.allocatedMemory)
     }
 
     @Test
