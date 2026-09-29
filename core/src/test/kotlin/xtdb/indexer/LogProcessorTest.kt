@@ -469,9 +469,10 @@ class LogProcessorTest {
             // The leader that cut b0 died before uploading it, so the follower still holds the block and the tx behind it.
             // That tx carries the boundary's own source position: a block cut pauses resolution, so nothing can land between a boundary and its upload.
             val cutter = 4L
-            replicaLog.appendMessage(ReplicaMessage.BlockBoundary(0, 1, termId = cutter))
+            val boundarySrcMsgId = sourceLog.latestSubmittedMsgId()
+            replicaLog.appendMessage(ReplicaMessage.BlockBoundary(0, boundarySrcMsgId, termId = cutter))
             replicaLog.appendMessage(
-                ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap(), srcMsgId = 1, termId = cutter)
+                ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap(), srcMsgId = boundarySrcMsgId, termId = cutter)
             )
 
             TestNode(sourceLog, replicaLog).use { node ->
@@ -497,11 +498,12 @@ class LogProcessorTest {
         withFreshLogs { sourceLog, replicaLog ->
             // As above, except the held tx carries table data that will not load — so the drain throws once the adopt has consumed the record.
             val cutter = 4L
-            replicaLog.appendMessage(ReplicaMessage.BlockBoundary(0, 1, termId = cutter))
+            val boundarySrcMsgId = sourceLog.latestSubmittedMsgId()
+            replicaLog.appendMessage(ReplicaMessage.BlockBoundary(0, boundarySrcMsgId, termId = cutter))
             replicaLog.appendMessage(
                 ReplicaMessage.ResolvedTx(
                     1, Instant.now(), true, null, mapOf("public/docs" to ByteString.copyFrom(byteArrayOf(1, 2, 3))),
-                    srcMsgId = 1, termId = cutter
+                    srcMsgId = boundarySrcMsgId, termId = cutter
                 )
             )
 
@@ -589,9 +591,10 @@ class LogProcessorTest {
     fun `a promotion that fails leaves a follower holding the block it produced`() = runTest {
         withFreshLogs { sourceLog, replicaLog ->
             val cutter = 4L
-            replicaLog.appendMessage(ReplicaMessage.BlockBoundary(0, 1, termId = cutter))
+            val boundarySrcMsgId = sourceLog.latestSubmittedMsgId()
+            replicaLog.appendMessage(ReplicaMessage.BlockBoundary(0, boundarySrcMsgId, termId = cutter))
             val held = replicaLog.appendMessage(
-                ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap(), srcMsgId = 1, termId = cutter)
+                ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap(), srcMsgId = boundarySrcMsgId, termId = cutter)
             )
 
             // The promotion writes the block's files and then cannot announce it, which is the window between
@@ -612,7 +615,7 @@ class LogProcessorTest {
                 // Whoever leads next produces the same block, which the re-opened follower is still holding.
                 val reUpload = replicaLog.appendMessage(
                     ReplicaMessage.BlockUploaded(
-                        Storage.VERSION, 0, 0, 1, emptyList(), termId = cutter + 1, termSeq = 1
+                        Storage.VERSION, 0, 0, boundarySrcMsgId, emptyList(), termId = cutter + 1, termSeq = 1
                     )
                 )
 
@@ -631,9 +634,10 @@ class LogProcessorTest {
     fun `a leader superseded mid-block hands that block to the follower replacing it`() = runTest {
         withFreshLogs { sourceLog, replicaLog ->
             val cutter = 4L
-            replicaLog.appendMessage(ReplicaMessage.BlockBoundary(0, 1, termId = cutter))
+            val boundarySrcMsgId = sourceLog.latestSubmittedMsgId()
+            replicaLog.appendMessage(ReplicaMessage.BlockBoundary(0, boundarySrcMsgId, termId = cutter))
             replicaLog.appendMessage(
-                ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap(), srcMsgId = 1, termId = cutter)
+                ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap(), srcMsgId = boundarySrcMsgId, termId = cutter)
             )
 
             val superseding = 99L
@@ -656,7 +660,7 @@ class LogProcessorTest {
                 // The rival produces the same block; the block this node holds has to survive the resignation
                 // to close on it, or the upload reaches a role with nothing to match it against.
                 val reUpload = replicaLog.appendMessage(
-                    ReplicaMessage.BlockUploaded(Storage.VERSION, 0, 0, 1, emptyList(), termId = superseding)
+                    ReplicaMessage.BlockUploaded(Storage.VERSION, 0, 0, boundarySrcMsgId, emptyList(), termId = superseding)
                 )
 
                 awaitReplicaMsg(node, reUpload.msgId)
@@ -675,9 +679,10 @@ class LogProcessorTest {
     fun `an upload from the term this one superseded is dropped`() = runTest {
         withFreshLogs { sourceLog, replicaLog ->
             val cutter = 4L
-            replicaLog.appendMessage(ReplicaMessage.BlockBoundary(0, 1, termId = cutter))
+            val boundarySrcMsgId = sourceLog.latestSubmittedMsgId()
+            replicaLog.appendMessage(ReplicaMessage.BlockBoundary(0, boundarySrcMsgId, termId = cutter))
             replicaLog.appendMessage(
-                ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap(), srcMsgId = 1, termId = cutter)
+                ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap(), srcMsgId = boundarySrcMsgId, termId = cutter)
             )
 
             TestNode(sourceLog, replicaLog, logsDriver = { inner ->
