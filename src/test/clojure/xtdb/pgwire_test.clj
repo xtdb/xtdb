@@ -615,7 +615,9 @@
   (util/with-open [server (serve {:num-threads 10})]
     (let [parse-sql @#'pgw/parse-sql
           {:keys [!closing?]} server
-          latch (CountDownLatch. 10)]
+          latch (CountDownLatch. 10)
+          server-closing (promise)]
+      (add-watch !closing? ::server-closing (fn [_ _ _ closing?] (when closing? (deliver server-closing true))))
       ;; redefine parse to block when we ping
       (with-redefs [pgw/parse-sql
                     (fn [query]
@@ -623,13 +625,7 @@
                         (parse-sql query)
                         (do
                           (.countDown latch)
-                          ;; delay until we see a draining state
-                          ;; yield to avoid pinning virtual thread carriers
-                          (loop [wait-until (+ (System/currentTimeMillis) 5000)]
-                            (when (and (< (System/currentTimeMillis) wait-until)
-                                       (not @!closing?))
-                              (Thread/yield)
-                              (recur wait-until)))
+                          (deref server-closing 5000 nil)
                           (parse-sql query))))]
         (let [spawn (fn spawn [] (future (with-open [conn (jdbc-conn)] (ping conn))))
               futs (vec (repeatedly 10 spawn))]
