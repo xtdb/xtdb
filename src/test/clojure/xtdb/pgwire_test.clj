@@ -26,7 +26,7 @@
            (java.time Clock Instant LocalDate LocalDateTime LocalTime OffsetDateTime ZoneId ZoneOffset ZonedDateTime)
            (java.time.temporal Temporal)
            (java.util Arrays Calendar List TimeZone)
-           (java.util.concurrent CountDownLatch TimeUnit)
+           (java.util.concurrent CountDownLatch Executor TimeUnit)
            (org.postgresql.util PGobject PSQLException)
            (xtdb.pgwire PgType)
            (xtdb JsonSerde JsonLdSerde)
@@ -529,6 +529,24 @@
     (.close client-conn)
     (is (wait-for-close server-conn 500))
     (check-conn-resources-freed server-conn)))
+
+(deftest client-disconnecting-mid-query-cancels-the-query
+  (with-open [^Connection client-conn (jdbc-conn)
+              server-conn (get-last-conn)]
+    (let [query (future
+                  (try
+                    (jdbc/execute! client-conn ["SELECT pg_sleep(30.0)"])
+                    (catch Exception _)))]
+      (is (loop [n 0]
+            (cond
+              (:cancel-query! @(:conn-state server-conn)) true
+              (< n 100) (do (Thread/sleep 50) (recur (inc n)))
+              :else false))
+          "query in flight")
+      (.abort client-conn (reify Executor (execute [_ r] (.run r))))
+      (is (wait-for-close server-conn 2000))
+      (check-conn-resources-freed server-conn)
+      (future-cancel query))))
 
 (deftest server-close-closes-idle-conns-test
   (with-open [^Server server (serve {:drain-wait 0})]

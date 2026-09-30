@@ -95,18 +95,21 @@
 (defn- cross-product ^xtdb.arrow.RelationReader [^RelationReader left-rel, ^RelationReader right-rel]
   (let [left-row-count (.getRowCount left-rel)
         right-row-count (.getRowCount right-rel)
-        row-count (* left-row-count right-row-count)]
-    (RelationReader/concatCols (.select left-rel
-                                        (let [idxs (int-array row-count)]
-                                          (dotimes [idx row-count]
-                                            (aset idxs idx ^long (quot idx right-row-count)))
-                                          idxs))
+        row-count (* left-row-count right-row-count)
+        left-idxs (int-array row-count)
+        right-idxs (int-array row-count)]
+    (dotimes [left-idx left-row-count]
+      (when (Thread/interrupted)
+        (throw (InterruptedException.)))
 
-                               (.select right-rel
-                                        (let [idxs (int-array row-count)]
-                                          (dotimes [idx row-count]
-                                            (aset idxs idx ^long (rem idx right-row-count)))
-                                          idxs)))))
+      (let [offset (* left-idx right-row-count)]
+        (dotimes [right-idx right-row-count]
+          (let [idx (+ offset right-idx)]
+            (aset left-idxs idx left-idx)
+            (aset right-idxs idx right-idx)))))
+
+    (RelationReader/concatCols (.select left-rel left-idxs)
+                               (.select right-rel right-idxs))))
 
 (deftype CrossJoinCursor [^BufferAllocator allocator
                           ^ICursor left-cursor
@@ -362,8 +365,8 @@
         left-key-col-names (mapv (comp :key-col-name :left) equi-specs)
         right-key-col-names (mapv (comp :key-col-name :right) equi-specs)
 
-        ->left-project-cursor (fn [opts] (project/->project-cursor opts (->left-cursor opts) left-projections))
-        ->right-project-cursor (fn [opts] (project/->project-cursor opts (->right-cursor opts) right-projections))
+        ->left-project-cursor (fn [opts] (project/->project-cursor opts (ICursor/wrapInterruptible (->left-cursor opts)) left-projections))
+        ->right-project-cursor (fn [opts] (project/->project-cursor opts (ICursor/wrapInterruptible (->right-cursor opts)) right-projections))
 
         [build-vec-types build-key-col-names ->build-cursor
          probe-vec-types probe-key-col-names ->probe-cursor]

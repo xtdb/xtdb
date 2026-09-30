@@ -23,7 +23,7 @@
      :vec-types body-vec-types
      :stats (:stats emitted-body-rel)
      :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span] :as opts}]
-                 (cond-> (util/with-close-on-catch [bound-cursor (->bound-cursor opts)
+                 (cond-> (util/with-close-on-catch [bound-cursor (ICursor/wrapInterruptible (->bound-cursor opts))
                                                     factory (LetCursorFactory. allocator bound-cursor)
                                                     body-cursor (->body-cursor (assoc-in opts [:let-bindings binding-sym] factory))]
                            (.wrapBodyCursor factory body-cursor))

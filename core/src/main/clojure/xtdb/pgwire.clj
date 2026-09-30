@@ -29,7 +29,7 @@
            [java.nio.file Path]
            [java.security KeyStore]
            [java.time Clock Duration ZoneId]
-           [java.util.concurrent ExecutorService Future$State FutureTask LinkedBlockingQueue RejectedExecutionException ThreadPoolExecutor TimeUnit]
+           [java.util.concurrent ArrayBlockingQueue BlockingQueue ExecutorService Future$State FutureTask LinkedBlockingQueue RejectedExecutionException ThreadPoolExecutor TimeUnit]
            [javax.net.ssl KeyManagerFactory SSLContext]
            (org.apache.arrow.memory BufferAllocator)
            org.apache.arrow.vector.types.pojo.Field
@@ -1126,9 +1126,11 @@
                                              (visitCreateTable [_ _] "CREATE TABLE")))})))
 
 (defn run-cancellable-query! [{:keys [conn-state] :as _conn} f]
-  (let [task (FutureTask. f)] ; FutureTask used for cancellation
-    (swap! conn-state assoc :cancel-query! #(when (.cancel task true)
-                                              (log/debug "Query cancelled")))
+  (let [task (FutureTask. f) ; FutureTask used for cancellation
+        cancel-query! #(when (.cancel task true)
+                         (log/debug "Query cancelled"))]
+    (when (:client-gone? (swap! conn-state assoc :cancel-query! cancel-query!))
+      (cancel-query!))
     (try
       (.run task) ; in-thread execution
       (finally
@@ -1546,38 +1548,76 @@
 
       (send-ex conn e))))
 
+(defn- client-gone! [conn-state]
+  (when-let [cancel-query! (:cancel-query! (swap! conn-state assoc :client-gone? true))]
+    (cancel-query!)))
+
+(def ^:private client-msg-buffer-size 64)
+
+(defn- start-client-reader!
+  "Reads the client's messages onto `msgs` until the client terminates or the socket fails, then puts the failure, if any, after them.
+  Either end cancels the connection's running query - while one runs, this is the only thread still reading the socket."
+  ^Thread [{:keys [cid conn-state frontend]} ^BlockingQueue msgs]
+  (-> (Thread/ofVirtual)
+      (.name (str "pgwire-client-reader-" cid))
+      (.uncaughtExceptionHandler util/uncaught-exception-handler)
+      (.start (fn []
+                (try
+                  (loop []
+                    (let [{:keys [msg-name] :as msg} (pgio/read-client-msg! frontend pgio/max-msg-length)]
+                      (if (= :msg-terminate msg-name)
+                        (do (client-gone! conn-state)
+                            (.put msgs msg))
+                        (do (.put msgs msg)
+                            (recur)))))
+                  (catch InterruptedException _)
+                  (catch Throwable t
+                    (client-gone! conn-state)
+                    (try
+                      (.put msgs t)
+                      (catch InterruptedException _))))))))
+
 (defn- conn-loop [{:keys [cid, server, conn-state],
                    {:keys [^Socket socket] :as frontend} :frontend,
                    !conn-closing? :!closing?,
                    :as conn}]
-  (let [{:keys [port], !server-closing? :!closing?} server]
-    (loop []
-      (cond
-        @!conn-closing?
-        (log/trace "Connection loop exiting (closing)" {:port port, :cid cid})
+  (let [{:keys [port], !server-closing? :!closing?} server
+        msgs (ArrayBlockingQueue. (int client-msg-buffer-size))
+        reader (start-client-reader! conn msgs)]
+    (try
+      (loop []
+        (cond
+          @!conn-closing?
+          (log/trace "Connection loop exiting (closing)" {:port port, :cid cid})
 
-        (and @!server-closing?
-             (not= :extended (:protocol @conn-state))
-             ;; for now we allow buffered commands to be run
-             ;; before closing - there probably needs to be limits to this
-             ;; (for huge queries / result sets)
-             (empty? (:cmd-buf @conn-state)))
-        (do (log/trace "Connection loop exiting (draining)" {:port port, :cid cid})
-            ;; TODO I think I should send an error, but if I do it causes a crash on the client?
-            #_(throw (err-admin-shutdown "draining connections"))
-            (reset! !conn-closing? true))
+          (and @!server-closing?
+               (not= :extended (:protocol @conn-state))
+               ;; for now we allow buffered commands to be run
+               ;; before closing - there probably needs to be limits to this
+               ;; (for huge queries / result sets)
+               (empty? (:cmd-buf @conn-state)))
+          (do (log/trace "Connection loop exiting (draining)" {:port port, :cid cid})
+              ;; TODO I think I should send an error, but if I do it causes a crash on the client?
+              #_(throw (err-admin-shutdown "draining connections"))
+              (reset! !conn-closing? true))
 
-        ;; well, it won't have been us, as we would drain first
-        (.isClosed socket)
-        (do (log/trace "Connection closed unexpectedly" {:port port, :cid cid})
-            (reset! !conn-closing? true))
+          ;; well, it won't have been us, as we would drain first
+          (.isClosed socket)
+          (do (log/trace "Connection closed unexpectedly" {:port port, :cid cid})
+              (reset! !conn-closing? true))
 
-        ;; go idle until we receive another msg from the client
-        :else (do
-                (when-let [msg (pgio/read-client-msg! frontend pgio/max-msg-length)]
-                  (handle-msg conn msg))
+          ;; go idle until we receive another msg from the client
+          :else (let [msg (.take msgs)]
+                  (if (instance? Throwable msg)
+                    (throw msg)
+                    (handle-msg conn msg))
 
-                (recur))))))
+                  (recur))))
+
+      (finally
+        (util/close frontend)
+        (.interrupt reader)
+        (.join reader)))))
 
 (defn- connect
   "Starts and runs a connection on the current thread until it closes.
