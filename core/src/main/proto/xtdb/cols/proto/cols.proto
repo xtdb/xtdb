@@ -122,5 +122,8 @@ message VecType {
 message ColumnMeta {
   VecType type = 1;
   bytes hll = 2;
+  // the name a user sees. Absent on a block written before the two were distinguishable, where the key
+  // it is held under is also its name. See #4038.
+  string name = 3;
 }
 
