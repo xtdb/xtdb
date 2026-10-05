@@ -602,41 +602,53 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             override fun close() = ops.forEach { it.close() }
         }
 
-        // resolved on the first statement: a query makes it read-only, DML makes it read-write. In XTDB a
-        // "read-write" tx is write-only — queries are rejected in a DML tx, DML in a read-only one.
-        private sealed interface AccessMode : AutoCloseable
+        private class ReadBasis(val snapshotToken: String?, val snapshotTime: Instant?, val currentTime: Instant)
 
-        private data object ReadOnly : AccessMode {
+        // Pending until the first statement resolves it: a query makes it Reading, DML makes it Writing. In XTDB a
+        // "read-write" tx is write-only — queries are rejected in a DML tx, DML in a read-only one.
+        private sealed interface Phase : AutoCloseable {
             override fun close() {}
         }
 
-        private inner class ReadWrite(
+        private class Pending(val basis: ReadBasis) : Phase
+
+        // [awaitToken] is a tx-scoped BEGIN ... WITH (AWAIT_TOKEN) override.
+        private class Reading(val basis: ReadBasis, val awaitToken: String? = null) : Phase
+
+        // [basis] is set only when a bare BEGIN's first statement was a write: SHOW and unchecked queries still
+        // read at what that BEGIN pinned.
+        private inner class Writing(
             val systemTime: Instant? = null,
             val userMetadata: Map<*, *>? = null,
             val async: Boolean = false,
-        ) : AccessMode {
+            val basis: ReadBasis? = null,
+        ) : Phase {
             val buffer = DmlBuffer(allocator)
 
             override fun close() = buffer.close()
         }
 
-        // The read basis pinned at BEGIN and observed by every query in the transaction — the lever for
-        // cross-query snapshot isolation. Carried by an unresolved tx and a ReadOnly one (resolving the
-        // former to the latter inherits it unchanged); a ReadWrite tx has none — writes don't read.
-        private class ReadBasis(val snapshotToken: String?, val snapshotTime: Instant?, val currentTime: Instant)
-
         // [txDefaultTz] anchors this tx's DML and reads; [sessionDefaultTz] is copied back to the connection on
         // COMMIT. SET TIME ZONE writes both (a session operator); `WITH (TIMEZONE)` writes only [txDefaultTz], so
-        // the override stays tx-scoped. [awaitToken] is a tx-scoped BEGIN ... WITH (AWAIT_TOKEN) override.
-        private class Transaction(
-            var mode: AccessMode? = null, val readBasis: ReadBasis? = null,
-            var txDefaultTz: ZoneId, var sessionDefaultTz: ZoneId, val awaitToken: String? = null
-        ) : AutoCloseable {
+        // the override stays tx-scoped.
+        private class Transaction(var phase: Phase, var txDefaultTz: ZoneId, var sessionDefaultTz: ZoneId) :
+            AutoCloseable {
             var failed: Throwable? = null
 
-            override fun close() {
-                mode?.close()
-            }
+            val basis: ReadBasis?
+                get() = when (val p = phase) {
+                    is Pending -> p.basis
+                    is Reading -> p.basis
+                    is Writing -> p.basis
+                }
+
+            val awaitToken: String?
+                get() = when (val p = phase) {
+                    is Reading -> p.awaitToken
+                    is Pending, is Writing -> null
+                }
+
+            override fun close() = phase.close()
         }
 
         // Pin the begin-time read basis: await this connection's own writes, then snapshot the data
@@ -649,25 +661,11 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             return ReadBasis(snapshotToken ?: dbCat.snapshotToken(), snapshotTime, currentTime ?: clock.instant())
         }
 
-        // Open an explicit transaction (SQL BEGIN). [accessMode] fixes the mode — READ ONLY rejects writes,
-        // READ WRITE buffers them; a bare BEGIN leaves it unresolved until the first statement resolves it.
-        // [readBasis] pins the begin-time read snapshot (null for an explicit READ WRITE — writes don't read).
         // Coexists with autoCommit — an open tx captures subsequent DML (see executeTxOp) until COMMIT/ROLLBACK.
-        private fun beginTx(
-            accessMode: AccessMode?,
-            readBasis: ReadBasis?,
-            tz: ZoneId = defaultTz,
-            awaitToken: String? = null
-        ) {
+        private fun beginTx(phase: Phase, tz: ZoneId = defaultTz) {
             if (tx != null) throw Incorrect("transaction already started", "xtdb/tx-already-open")
 
-            tx = Transaction(
-                accessMode,
-                readBasis,
-                txDefaultTz = tz,
-                sessionDefaultTz = defaultTz,
-                awaitToken = awaitToken
-            )
+            tx = Transaction(phase, txDefaultTz = tz, sessionDefaultTz = defaultTz)
         }
 
         // the default access mode a bare BEGIN (explicit or implicit) takes; set by SET SESSION CHARACTERISTICS.
@@ -684,14 +682,14 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             tz: ZoneId = defaultTz, snapshotToken: String? = null, snapshotTime: Instant? = null,
             currentTime: Instant? = null
         ) =
-            beginTx(ReadOnly, pinReadBasis(snapshotToken, snapshotTime, currentTime), tz)
+            beginTx(Reading(pinReadBasis(snapshotToken, snapshotTime, currentTime)), tz)
 
         @JvmOverloads
         fun beginWriteOnly(
             systemTime: Instant? = null, userMetadata: Map<*, *>? = null, async: Boolean = false,
             tz: ZoneId = defaultTz
         ) =
-            beginTx(ReadWrite(systemTime, userMetadata, async), null, tz)
+            beginTx(Writing(systemTime, userMetadata, async), tz)
 
         // tx status for the frontend's ready-state + commit/abort decisions. A failed tx rejects further work
         // until ROLLBACK (Postgres' "current transaction is aborted").
@@ -707,17 +705,17 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         // checks read these to keep their own error messages + special-cases (e.g. pgwire's pgjdbc type query).
         /** @suppress */
         @InternalApi
-        val isTxReadWrite: Boolean get() = tx?.mode is ReadWrite
+        val isTxReadWrite: Boolean get() = tx?.phase is Writing
 
         /** @suppress */
         @InternalApi
-        val isTxReadOnly: Boolean get() = tx?.mode is ReadOnly
+        val isTxReadOnly: Boolean get() = tx?.phase is Reading
 
         // the begin-time async flag (WITH (ASYNC)) of the open write tx; false when unset / not a write tx.
         // A bare COMMIT (no SYNC/ASYNC) and the programmatic commit() commit through it.
         /** @suppress */
         @InternalApi
-        val isTxAsync: Boolean get() = (tx?.mode as? ReadWrite)?.async ?: false
+        val isTxAsync: Boolean get() = (tx?.phase as? Writing)?.async ?: false
 
         // mark the open tx failed (first error wins), driven by the frontend when a statement throws mid-tx.
         /** @suppress */
@@ -771,7 +769,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         // buffered ops: those ops captured temporal literals under the old zone, so changing it mid-buffer would be
         // inconsistent.
         fun setTimeZone(zone: ZoneId) {
-            (tx?.mode as? ReadWrite)?.let {
+            (tx?.phase as? Writing)?.let {
                 if (!it.buffer.isEmpty) throw Incorrect(
                     "Cannot SET TIME ZONE in a read-write transaction with buffered writes",
                     "xtdb/set-tz-in-write-tx"
@@ -805,13 +803,13 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                     val snapshotTime = coerceInstant(opts.snapshotTime?.let { sqlPlanner.evalLiteral(it, args) }, tz)
                     val currentTime = coerceInstant(opts.clockTime?.let { sqlPlanner.evalLiteral(it, args) }, tz)
 
-                    beginTx(ReadOnly, pinReadBasis(snapshotToken, snapshotTime, currentTime, awaitTok), tz, awaitTok)
+                    beginTx(Reading(pinReadBasis(snapshotToken, snapshotTime, currentTime, awaitTok), awaitTok), tz)
                 }
 
                 null -> when (defaultAccessMode) {
                     ParsedStatement.AccessMode.READ_ONLY -> beginReadOnly(tz)
                     ParsedStatement.AccessMode.READ_WRITE -> beginWriteOnly(tz = tz)
-                    null -> beginTx(null, pinReadBasis(), tz)
+                    null -> beginTx(Pending(pinReadBasis()), tz)
                 }
             }
         }
@@ -820,14 +818,14 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             val tx = tx ?: return null
             this.tx = null
             defaultTz = tx.sessionDefaultTz   // a mid-tx SET TIME ZONE persists; a WITH (TIMEZONE) override doesn't
-            val mode = tx.mode as? ReadWrite ?: return null
+            val writing = tx.phase as? Writing ?: return null
             val opts = TxOpts(
-                systemTime = mode.systemTime,
+                systemTime = writing.systemTime,
                 user = user,
-                userMetadata = mode.userMetadata,
+                userMetadata = writing.userMetadata,
                 defaultTz = tx.txDefaultTz
             )
-            return expandStaticOps(mode.buffer.drain(), tx.txDefaultTz) to opts
+            return expandStaticOps(writing.buffer.drain(), tx.txDefaultTz) to opts
         }
 
         fun commitAsync(): SubmittedTx? =
@@ -871,12 +869,12 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                 return
             }
 
-            val tx = tx ?: Transaction(txDefaultTz = defaultTz, sessionDefaultTz = defaultTz).also { tx = it }
+            val tx = tx ?: Transaction(Writing(), txDefaultTz = defaultTz, sessionDefaultTz = defaultTz).also { tx = it }
 
-            when (val mode = tx.mode) {
-                is ReadWrite -> mode.buffer.add(op)
-                null -> ReadWrite().also { tx.mode = it }.buffer.add(op)
-                is ReadOnly -> {
+            when (val phase = tx.phase) {
+                is Writing -> phase.buffer.add(op)
+                is Pending -> Writing(basis = phase.basis).also { tx.phase = it }.buffer.add(op)
+                is Reading -> {
                     op.close()
                     throw Incorrect("Cannot write in a read-only transaction", "xtdb/read-only-tx")
                 }
@@ -894,21 +892,21 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                 // tx — the query reads latest at the connection's current basis, unchanged.
                 if (!autoCommit)
                     this.tx =
-                        Transaction(ReadOnly, pinReadBasis(), txDefaultTz = defaultTz, sessionDefaultTz = defaultTz)
+                        Transaction(Reading(pinReadBasis()), txDefaultTz = defaultTz, sessionDefaultTz = defaultTz)
                 return
             }
-            when (tx.mode) {
-                is ReadWrite -> throw Incorrect(
+            when (val phase = tx.phase) {
+                is Writing -> throw Incorrect(
                     "Queries are unsupported in a DML transaction", "xtdb/queries-in-read-write-tx"
                 )
 
-                is ReadOnly -> {}
-                null -> tx.mode = ReadOnly
+                is Reading -> {}
+                is Pending -> tx.phase = Reading(phase.basis)
             }
         }
 
         private fun queryBasis() = tx.let { t ->
-            val b = t?.readBasis
+            val b = t?.basis
             // Resolve the read basis: a tx's pinned begin-time token, else (autocommit) latest-completed now —
             // the statement's prepare() already awaited this connection's writes, so latest reflects them. Read
             // directly (not via pinReadBasis) so we don't re-await / decode the AWAIT_TOKEN here. This token both
