@@ -34,6 +34,7 @@ import xtdb.database.Database
 import xtdb.database.encodeTimeBasisToken
 import xtdb.test.flushBlock
 import java.time.Instant
+import java.time.InstantSource
 import java.util.UUID
 
 class InProcessAdbcTest {
@@ -309,7 +310,7 @@ class InProcessAdbcTest {
 
             assertEquals(
                 listOf(mapOf("_id" to 0L)), conn.select("SELECT _id FROM foo ORDER BY _id"),
-                "the concurrent write is invisible within the begin-pinned snapshot"
+                "the concurrent write is invisible within the snapshot the first read pinned"
             )
 
             conn.update("COMMIT")
@@ -345,7 +346,45 @@ class InProcessAdbcTest {
             conn.update("BEGIN READ ONLY")
             val first = conn.select("SELECT CURRENT_TIMESTAMP ts")
             val second = conn.select("SELECT CURRENT_TIMESTAMP ts")
-            assertEquals(first, second, "current_timestamp is fixed at BEGIN, identical across reads in the tx")
+            assertEquals(first, second, "current_timestamp is identical across reads in the tx")
+            conn.update("COMMIT")
+        }
+    }
+
+    @Test
+    fun `a write between BEGIN and the first read is visible to the transaction`() {
+        insertData("INSERT INTO foo RECORDS {_id: 0}")
+
+        for (begin in listOf("BEGIN", "BEGIN READ ONLY")) {
+            xtdb.connect().use { conn ->
+                conn.update(begin)
+                insertData("INSERT INTO foo RECORDS {_id: 1}")
+
+                assertEquals(
+                    listOf(mapOf("_id" to 0L), mapOf("_id" to 1L)), conn.select("SELECT _id FROM foo ORDER BY _id"),
+                    "$begin: the snapshot is pinned at the first read"
+                )
+                conn.update("ROLLBACK")
+            }
+
+            insertData("DELETE FROM foo WHERE _id = 1")
+        }
+    }
+
+    @Test
+    fun `current_timestamp is the clock at the first read, not at BEGIN`() {
+        val atBegin = Instant.parse("2021-01-01T00:00:00Z")
+        val atFirstRead = Instant.parse("2022-01-01T00:00:00Z")
+
+        xtdb.connect().use { conn ->
+            conn.clock = InstantSource.fixed(atBegin)
+            conn.update("BEGIN READ ONLY")
+            conn.clock = InstantSource.fixed(atFirstRead)
+
+            assertEquals(
+                listOf(mapOf("in_2022" to true)),
+                conn.select("SELECT CURRENT_TIMESTAMP = TIMESTAMP '2022-01-01T00:00:00Z' in_2022")
+            )
             conn.update("COMMIT")
         }
     }

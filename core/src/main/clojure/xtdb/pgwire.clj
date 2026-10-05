@@ -391,8 +391,7 @@
         user (get startup-opts "user")
         node-conn (let [^Xtdb$Connection node-conn (.connect ^Xtdb node db-name)]
                     ;; seed the connection's clock from the server's, when set (tests pin a fixed clock there);
-                    ;; otherwise the connection keeps its own. It owns the clock thereafter, pinning
-                    ;; current-time off it at BEGIN.
+                    ;; otherwise the connection keeps its own.
                     (when-let [clock (:clock @(:server-state server))]
                       (.setClock node-conn clock))
                     node-conn)
@@ -554,7 +553,7 @@
 (defn- begin-implicit
   "Open an implicit transaction — one pgwire started itself (no client BEGIN), so pgwire will auto-commit it.
   [access-mode] is :read-only / :read-write / nil (bare — the connection takes its session default access mode).
-  The connection pins the read basis (awaiting this connection's own writes) at BEGIN."
+  The connection pins the read basis (awaiting this connection's own writes) at the transaction's first query."
   [{:keys [conn-state]} access-mode]
   (let [^Xtdb$Connection node-conn (:node-conn @conn-state)]
     (case access-mode

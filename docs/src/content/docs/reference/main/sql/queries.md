@@ -2,6 +2,21 @@
 title: SQL Queries
 ---
 
+<details>
+<summary>Changelog (last updated v2.2)</summary>
+
+v2.2: a transaction's basis is fixed at its first query
+
+: A transaction's snapshot and clock time are fixed when its first query runs, as are any of its [`BEGIN`](#begin--commit--rollback) or [`SET TRANSACTION`](#set-transaction-v22) options that bear on them.
+
+  Previously, `BEGIN` awaited the connection's writes, captured the snapshot and fixed the clock itself.
+  A transaction's characteristics can now arrive after `BEGIN`, through `SET TRANSACTION`, so the basis waits until they have all landed - as a Postgres repeatable-read transaction takes its snapshot at its first statement.
+  A transaction now sees a write that another connection makes between its `BEGIN` and its first query, and `CURRENT_TIMESTAMP` is the clock at that first query.
+
+  To keep a basis fixed at `BEGIN`, issue the transaction's first query straight after it, or pin the basis explicitly with `BEGIN READ ONLY WITH (SNAPSHOT_TOKEN = ..., CLOCK_TIME = ...)`.
+
+</details>
+
 For examples on how to run SQL queries in each client library, see the [individual driver documentation](/drivers).
 
 ## Top-level queries
@@ -372,7 +387,8 @@ Queries in XTDB run against a 'basis', which consists of:
 1. a 'snapshot' - an upper bound on the transactions that are visible to the query.
 2. a 'clock time' - used for any function calls that reference the current time (e.g. `CURRENT_TIMESTAMP`)
 
-These can be set either on a per-query basis, using `SETTING`, or at the start of a transaction, using `BEGIN`:
+These can be set either on a per-query basis, using `SETTING`, or for a transaction, using `BEGIN`.
+A transaction's basis is fixed when its first query runs, and every query in the transaction shares it.
 
 ### SETTING
 
@@ -393,7 +409,7 @@ return rr.Diagram(rr.Sequence(rr.Optional(setting, "skip"), "<query>"))
   If not provided, this defaults to the latest-completed transaction on the queried node.
 * Setting the `CLOCK_TIME` defines a fixed value for any functions that depend on the current time - e.g. `CURRENT_TIMESTAMP`.
   It also defines the default valid-time selection for any tables in `FROM` clauses that don't otherwise have a valid-time specification.
-  If not provided, it defaults to the clock-time fixed at the start of the transaction.
+  If not provided, it defaults to the clock-time fixed at the transaction's first query.
   
 ### BEGIN / COMMIT / ROLLBACK
 
@@ -425,7 +441,7 @@ return rr.Diagram(rr.Choice(0, begin, 'COMMIT', 'ROLLBACK'))
   Transactions must not mix query statements and [DML](https://en.wikipedia.org/wiki/Data_manipulation_language) statements.
 * Additionally, for read-only transactions:
   * `SNAPSHOT_TOKEN` and `CLOCK_TIME` behave the same as in [`SETTING`](#setting).
-  * `AWAIT_TOKEN` may be provided to wait for a specific transaction to be visible on the queried node before starting the transaction.
+  * `AWAIT_TOKEN` may be provided to wait for a specific transaction to be visible on the queried node before the transaction's first query runs.
     If not provided, it defaults to waiting for the latest-submitted transaction on the current connection.
   * `TIMEZONE` sets the time zone for the duration of the transaction, affecting any time zone-aware date/time literals and functions.
     If not provided, it defaults to the time-zone of the connection.

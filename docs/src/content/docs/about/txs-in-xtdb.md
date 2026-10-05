@@ -82,9 +82,9 @@ For more details, see the ['basis' reference documentation](/reference/main/sql/
 ### Snapshots
 
 No matter what else is going on in the database at the time, your query will only see a consistent state of the database as of that precise snapshot.
-This snapshot is fixed at the start of your transaction - all queries within a given transaction use the same snapshot.
+This snapshot is fixed at your transaction's first query - all queries within a given transaction use the same snapshot.
 
-It defaults to including all of the processed transactions on the queried node at the start of the transaction - but (advanced) you can also explicitly specify a 'snapshot token', either as part of your `BEGIN` statement, or at the start of a specific query.
+It defaults to including all of the processed transactions on the queried node at that first query - but (advanced) you can also explicitly specify a 'snapshot token', either as part of your `BEGIN` statement, or at the start of a specific query.
 
   ```sql
   -- retrieve a snapshot token from an earlier transaction
