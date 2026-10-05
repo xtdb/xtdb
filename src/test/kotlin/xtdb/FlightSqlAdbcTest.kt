@@ -8,6 +8,7 @@ import org.apache.arrow.adbc.core.AdbcConnection
 import org.apache.arrow.adbc.core.AdbcConnection.GetObjectsDepth
 import org.apache.arrow.adbc.core.AdbcDatabase
 import org.apache.arrow.adbc.driver.flightsql.FlightSqlDriver
+import org.apache.arrow.flight.Action
 import org.apache.arrow.flight.AsyncPutListener
 import org.apache.arrow.flight.CallOption
 import org.apache.arrow.flight.FlightClient
@@ -61,6 +62,7 @@ import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import xtdb.api.Xtdb
+import xtdb.flight_sql.XtdbProducer
 import xtdb.util.XtdbVersion
 import xtdb.database.Database
 import xtdb.api.query.IKeyFn.KeyFn.SNAKE_CASE_STRING
@@ -540,6 +542,78 @@ class FlightSqlAdbcTest {
             "the second read shares the snapshot the first one pinned"
         )
         fsqlClient.rollback(txn, *emptyCallOpts)
+    }
+
+    private fun commitWithOutcome(txn: FlightSqlClient.Transaction): Pair<List<Map<*, *>>, FlightRuntimeException?> {
+        val outcomes = mutableListOf<Map<*, *>>()
+        val err = try {
+            flightClient.doAction(Action(XtdbProducer.COMMIT_TRANSACTION_ACTION, txn.transactionId), *emptyCallOpts)
+                .forEach { outcomes += decode(String(it.body)) as Map<*, *> }
+            null
+        } catch (e: FlightRuntimeException) {
+            e
+        }
+        return outcomes to err
+    }
+
+    @Test
+    fun `the XTDB commit action returns the committed transaction's outcome`() {
+        val txn = fsqlClient.beginTransaction(*emptyCallOpts)
+        fsqlClient.executeUpdate("INSERT INTO users (_id, n) VALUES (1, 'a')", txn, *emptyCallOpts)
+
+        val (outcomes, err) = commitWithOutcome(txn)
+        assertNull(err)
+
+        val outcome = outcomes.single()
+        assertEquals(0L, outcome["txId"])
+        assertEquals(true, outcome["committed"])
+        assertNotNull(outcome["systemTime"])
+        assertNull(outcome["error"])
+        assertNotNull(outcome["awaitToken"])
+    }
+
+    @Test
+    fun `the XTDB commit action returns an aborted transaction's outcome ahead of its error`() {
+        val txn = fsqlClient.beginTransaction(*emptyCallOpts)
+        fsqlClient.executeUpdate("ASSERT FALSE", txn, *emptyCallOpts)
+
+        val (outcomes, err) = commitWithOutcome(txn)
+        assertNotNull(err)
+
+        val outcome = outcomes.single()
+        assertEquals(false, outcome["committed"])
+        assertEquals("conflict", (outcome["error"] as Map<*, *>)["category"])
+    }
+
+    @Test
+    fun `the XTDB commit action returns no outcome for a transaction that wrote nothing`() {
+        val txn = fsqlClient.beginTransaction(*emptyCallOpts)
+        fsqlClient.execute("SELECT 1 one", txn, *emptyCallOpts).readRows()
+
+        assertEquals(emptyList<Map<*, *>>() to null, commitWithOutcome(txn))
+    }
+
+    @Test
+    fun `the XTDB commit action on an ended transaction is NOT_FOUND`() {
+        val txn = fsqlClient.beginTransaction(*emptyCallOpts)
+        fsqlClient.commit(txn, *emptyCallOpts)
+
+        assertEquals(FlightStatusCode.NOT_FOUND, commitWithOutcome(txn).second?.status()?.code())
+    }
+
+    @Test
+    fun `a transaction takes its session's time zone`() {
+        cookieAwareClient().use { session ->
+            session.setSessionOptions(catalogOpt("xtdb"), *emptyCallOpts)
+            session.executeUpdate("SET TIME ZONE 'America/New_York'", *emptyCallOpts)
+
+            val txn = session.beginTransaction(*emptyCallOpts)
+            assertEquals(
+                listOf(mapOf("timezone" to "America/New_York")),
+                session.execute("SHOW TIME ZONE", txn, *emptyCallOpts).readRows(session)
+            )
+            session.rollback(txn, *emptyCallOpts)
+        }
     }
 
     @Test

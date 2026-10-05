@@ -1,6 +1,7 @@
 package xtdb.flight_sql
 
 import xtdb.InternalApi
+import xtdb.encodeToBytes
 import xtdb.query.ParsedStatement
 import com.google.protobuf.Any as ProtoAny
 import com.google.protobuf.ByteString
@@ -102,6 +103,15 @@ private fun Throwable.asFlightException(): FlightRuntimeException =
         }
         status.withDescription(anom.message ?: anom.toString()).withCause(anom).toRuntimeException()
     }
+
+private fun Xtdb.Connection.LastSubmittedTx.toCommitResult(awaitToken: String?) = Result(
+    encodeToBytes(
+        mapOf(
+            "txId" to txId, "systemTime" to systemTime, "committed" to committed, "error" to error,
+            "awaitToken" to awaitToken
+        )
+    )
+)
 
 /** Run [block], rethrowing any error as a [FlightRuntimeException] (see [asFlightException]). */
 private inline fun <R> flightCall(block: () -> R): R =
@@ -682,10 +692,28 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         }
     }
 
-    private companion object {
+    companion object {
         // GET_SQL_INFO `value` dense-union leg type ids (FlightSqlProducer.Schemas.GET_SQL_INFO_SCHEMA).
-        const val STRING_LEG: Byte = 0
-        const val INT32_BITMASK_LEG: Byte = 3
+        private const val STRING_LEG: Byte = 0
+        private const val INT32_BITMASK_LEG: Byte = 3
+
+        /**
+         * An XTDB-specific action committing a Flight SQL transaction, as `EndTransaction` does, but returning the
+         * commit's outcome: Flight SQL's `EndTransaction` returns nothing.
+         *
+         * The body is the transaction handle `BeginTransaction` returned.
+         * A commit that submits a transaction sends one result, ahead of completion or of the commit's error, as a
+         * JSON object:
+         * - `txId`;
+         * - `systemTime` and `committed`, both null for an async commit, which doesn't wait for the outcome;
+         * - `error`, null unless the transaction aborted: its `category` (an anomaly category, or `error` for any
+         *   other throwable), and `code`, `message` and `data` where present;
+         * - `awaitToken`, which bounds a read to one that sees this transaction.
+         *
+         * A commit that submits nothing sends no result.
+         * A handle that is unknown, already ended, or begun under another session fails with `NOT_FOUND`.
+         */
+        const val COMMIT_TRANSACTION_ACTION = "xtdb.CommitTransaction"
     }
 
     override fun getFlightInfoCatalogs(
@@ -805,8 +833,13 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         listener: StreamListener<ActionBeginTransactionResult>
     ) = listener.reportingErrors {
         val txHandle = newHandle()
-        val conn = (node.connect()).also { it.setCurrentCatalog(resolveDb(ctx)) }
-        conn.setAutoCommit(false)
+        val dbName = resolveDb(ctx)
+        val session = connectionFor(ctx, dbName)
+        val conn = newConnection(dbName).apply {
+            awaitToken = session.awaitToken
+            defaultTz = session.defaultTz
+            setAutoCommit(false)
+        }
         txConns[txHandle] = TxConn(currentSessionId(ctx), conn)
 
         listener.onNext(
@@ -818,28 +851,38 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         listener.onCompleted()
     }
 
+    // resolve under the calling session only, then claim it atomically (remove(k,v) lets
+    // exactly one concurrent ender win) - a wrong-session caller never reaches the remove.
+    private fun claimTx(ctx: CallContext?, txHandle: TxHandle): Xtdb.Connection {
+        val tx = txConnFor(ctx, txHandle)
+        if (!txConns.remove(txHandle, tx))
+            throw CallStatus.NOT_FOUND.withDescription("unknown transaction").toRuntimeException()
+        return tx.conn
+    }
+
     override fun endTransaction(
         req: ActionEndTransactionRequest,
         ctx: CallContext?,
         listener: StreamListener<Result>
-    ) {
-        val txHandle = req.transactionId
-        // resolve under the calling session only, then claim it atomically (remove(k,v) lets
-        // exactly one concurrent ender win) - a wrong-session caller never reaches the remove.
-        val tx = txConnFor(ctx, txHandle)
-        if (!txConns.remove(txHandle, tx))
-            return listener.onError(
-                CallStatus.NOT_FOUND.withDescription("unknown transaction").toRuntimeException()
-            )
-        val conn = tx.conn
-
-        try {
+    ) = listener.reportingErrors {
+        claimTx(ctx, req.transactionId).use { conn ->
             if (req.action == EndTransaction.END_TRANSACTION_COMMIT) conn.commit() else conn.rollback()
+        }
+        listener.onCompleted()
+    }
+
+    override fun doAction(context: CallContext, action: Action, listener: StreamListener<Result>) {
+        if (action.type != COMMIT_TRANSACTION_ACTION) return super.doAction(context, action, listener)
+
+        listener.reportingErrors {
+            claimTx(context, ByteString.copyFrom(action.body)).use { conn ->
+                try {
+                    conn.commit()
+                } finally {
+                    conn.lastSubmittedTx?.let { listener.onNext(it.toCommitResult(conn.awaitToken)) }
+                }
+            }
             listener.onCompleted()
-        } catch (t: Throwable) {
-            listener.onError(t.asFlightException())
-        } finally {
-            conn.close()
         }
     }
 }

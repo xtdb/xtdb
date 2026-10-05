@@ -4,8 +4,7 @@
 
   The client is a `xtdb.protocols/Connectable`, so `xt/q`, `xt/submit-tx`, `xt/execute-tx` and
   `xt/status` work against it exactly as they do against a node, a JDBC connection or an in-process
-  `Xtdb.Connection`. Every operation is expressed as SQL and parameter binding — the only two things
-  FlightSQL carries — mirroring the statement sequence the pgwire path sends."
+  `Xtdb.Connection`. Every operation is expressed as SQL, parameter binding and FlightSQL transactions."
   (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
             [integrant.core :as ig]
@@ -19,13 +18,17 @@
             [xtdb.vector.writer :as vw])
   (:import (clojure.lang IReduceInit)
            (java.io Closeable)
+           (java.nio.charset StandardCharsets)
+           (java.util Iterator)
            (java.util.concurrent ExecutionException)
-           (org.apache.arrow.flight CallOption FlightClient FlightEndpoint FlightInfo FlightRuntimeException FlightStatusCode Location SetSessionOptionsRequest SessionOptionValueFactory)
+           (org.apache.arrow.flight Action CallOption FlightClient FlightEndpoint FlightInfo FlightRuntimeException FlightStatusCode Location Result SetSessionOptionsRequest SessionOptionValueFactory)
            (org.apache.arrow.flight.client ClientCookieMiddleware$Factory)
-           (org.apache.arrow.flight.sql FlightSqlClient)
+           (org.apache.arrow.flight.sql FlightSqlClient FlightSqlClient$Transaction)
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            (org.apache.arrow.vector VectorSchemaRoot)
+           (xtdb JsonSerde)
            (xtdb.api FlightSql FlightSqlConfig Xtdb$Config)
+           (xtdb.flight_sql XtdbProducer)
            (xtdb.arrow Relation)))
 
 (defmethod xtn/apply-config! :flight-sql [^Xtdb$Config config _ {:keys [host port]}]
@@ -81,8 +84,8 @@
 
 ;; -- SQL literals --
 ;;
-;; BEGIN and SET aren't preparable statements, so their options can't be bound as parameters the way
-;; the pgwire path binds them — they're rendered into the statement text instead.
+;; SET TRANSACTION and SET AWAIT_TOKEN aren't preparable statements, so their options can't be bound as
+;; parameters — they're rendered into the statement text instead.
 
 (defn- str-literal [s]
   (str \' (str/replace (str s) "'" "''") \'))
@@ -90,28 +93,26 @@
 (defn- ts-literal [t default-tz]
   (format "TIMESTAMP %s" (str-literal (str (time/->instant t {:default-tz default-tz})))))
 
-(defn- begin-ro-sql [{:keys [default-tz await-token snapshot-token snapshot-time current-time]}]
+(defn- set-tx-ro-sql [{:keys [default-tz await-token snapshot-token snapshot-time current-time]}]
   (let [opts (cond-> []
                default-tz (conj (str "TIMEZONE = " (str-literal default-tz)))
                snapshot-token (conj (str "SNAPSHOT_TOKEN = " (str-literal snapshot-token)))
                snapshot-time (conj (str "SNAPSHOT_TIME = " (ts-literal snapshot-time default-tz)))
                current-time (conj (str "CLOCK_TIME = " (ts-literal current-time default-tz)))
                await-token (conj (str "AWAIT_TOKEN = " (str-literal await-token))))]
-    ;; without overrides we don't open a tx at all: the query then reads at the connection's own
-    ;; basis, which already awaits this connection's writes.
+    ;; without overrides we don't open a tx at all: the query then reads at the session's own basis.
     (when (seq opts)
-      (format "BEGIN READ ONLY WITH (%s)" (str/join ", " opts)))))
+      (str/join ", " (cons "SET TRANSACTION READ ONLY" opts)))))
 
-(defn- begin-rw-sql [{:keys [system-time default-tz metadata async?]}]
+(defn- set-tx-rw-sql [{:keys [system-time default-tz metadata async?]}]
   (when metadata
     (throw (err/unsupported :xtdb.flight-sql/metadata-unsupported
-                            "`:metadata` is not supported over FlightSQL: BEGIN can't be parameterised, and a metadata map has no faithful SQL-literal rendering"
+                            "`:metadata` is not supported over FlightSQL: SET TRANSACTION can't be parameterised, and a metadata map has no faithful SQL-literal rendering"
                             {:metadata metadata})))
 
-  (format "BEGIN READ WRITE WITH (%s)"
-          (str/join ", " (cond-> [(str "ASYNC = " (boolean async?))]
-                           default-tz (conj (str "TIMEZONE = " (str-literal default-tz)))
-                           system-time (conj (str "SYSTEM_TIME = " (ts-literal system-time default-tz)))))))
+  (str/join ", " (cond-> ["SET TRANSACTION READ WRITE" (str "ASYNC = " (boolean async?))]
+                   default-tz (conj (str "TIMEZONE = " (str-literal default-tz)))
+                   system-time (conj (str "SYSTEM_TIME = " (ts-literal system-time default-tz))))))
 
 ;; -- tx ops --
 
@@ -178,13 +179,18 @@
     (.openAsRoot rel allocator)))
 
 (defn- exec-update!
-  "Runs a statement that returns no rows. The prepared statement takes ownership of the parameter root."
-  [^BufferAllocator allocator ^FlightSqlClient client ^String sql arg-rows]
+  "Runs a statement that returns no rows, inside [tx] if it's non-nil. The prepared statement takes ownership of
+  the parameter root."
+  [^BufferAllocator allocator ^FlightSqlClient client ^FlightSqlClient$Transaction tx ^String sql arg-rows]
   (if (nil? arg-rows)
-    (.executeUpdate client sql no-call-opts)
+    (if tx
+      (.executeUpdate client sql tx no-call-opts)
+      (.executeUpdate client sql no-call-opts))
 
     (when (seq arg-rows)
-      (with-open [ps (.prepare client sql no-call-opts)]
+      (with-open [ps (if tx
+                       (.prepare client sql tx no-call-opts)
+                       (.prepare client sql no-call-opts))]
         (.setParameters ps (->param-root allocator arg-rows))
         (.executeUpdate ps no-call-opts)))))
 
@@ -200,59 +206,104 @@
                 (.loadFromArrow rel root)
                 (recur (adbc/reduce-page f acc rel key-fn))))))))))
 
-(defn- exec-query! [^BufferAllocator allocator ^FlightSqlClient client ^String sql args key-fn f start]
+(defn- exec-query! [^BufferAllocator allocator ^FlightSqlClient client ^FlightSqlClient$Transaction tx ^String sql args key-fn f start]
   (if (seq args)
     ;; a query binds one row of positional params, so it needs the prepared path
-    (with-open [ps (.prepare client sql no-call-opts)]
+    (with-open [ps (if tx
+                     (.prepare client sql tx no-call-opts)
+                     (.prepare client sql no-call-opts))]
       (.setParameters ps (->param-root allocator [(vec args)]))
       (reduce-stream allocator client (.execute ps no-call-opts) key-fn f start))
 
-    (reduce-stream allocator client (.execute client sql no-call-opts) key-fn f start)))
+    (reduce-stream allocator client
+                   (if tx
+                     (.execute client sql tx no-call-opts)
+                     (.execute client sql no-call-opts))
+                   key-fn f start)))
 
 (defn- rollback!
   "Best-effort: a rollback that fails mustn't mask the failure that provoked it."
-  [allocator client]
+  [^FlightSqlClient client ^FlightSqlClient$Transaction tx]
   (try
-    (exec-update! allocator client "ROLLBACK" nil)
+    (.rollback client tx no-call-opts)
     (catch Throwable t
       (log/warn t "couldn't roll back the FlightSQL transaction"))))
+
+(defn- ->anomaly [{:strs [category code message data]}]
+  (let [code (some-> code keyword)
+        data (update-keys (into {} data) keyword)]
+    (case category
+      "incorrect" (err/incorrect code message data)
+      "conflict" (err/conflict code message data)
+      "unsupported" (err/unsupported code message data)
+      "interrupted" (err/interrupted code message data)
+      "not-found" (err/not-found code message data)
+      "forbidden" (err/forbidden code message data)
+      "busy" (err/busy code message data)
+      "unavailable" (err/unavailable code message data)
+      (err/fault code message data))))
+
+(defn- ->commit-outcome [^Result result]
+  (let [{:strs [txId systemTime error awaitToken]} (JsonSerde/decode (String. (.getBody result) StandardCharsets/UTF_8))]
+    {:tx-id txId
+     :system-time (some-> systemTime time/->instant)
+     :error (some-> error ->anomaly)
+     :await-token awaitToken}))
+
+(defn- commit!
+  "Commits [tx], returning the commit's outcome, or nil if it submitted nothing.
+  An aborted tx's outcome carries its error, which the server sends after the outcome."
+  [^FlightClient flight-client ^FlightSqlClient$Transaction tx]
+  (let [^Iterator results (.doAction flight-client
+                                     (Action. XtdbProducer/COMMIT_TRANSACTION_ACTION (.getTransactionId tx))
+                                     no-call-opts)
+        !outcome (volatile! nil)]
+    (try
+      (while (.hasNext results)
+        (vreset! !outcome (->commit-outcome (.next results))))
+      @!outcome
+      (catch FlightRuntimeException e
+        (or @!outcome (throw e))))))
 
 (defn- plan-q ^clojure.lang.IReduceInit [^BufferAllocator allocator ^FlightSqlClient client sql args {:keys [key-fn] :as opts}]
   (let [key-fn (serde/read-key-fn (or key-fn :kebab-case-keyword))]
     (reify IReduceInit
       (reduce [_ f start]
         (err/wrap-anomaly {:sql sql}
-          (let [begin-sql (begin-ro-sql opts)]
-            (when begin-sql
-              (exec-update! allocator client begin-sql nil))
-            (try
-              (exec-query! allocator client sql args key-fn f start)
-              (finally
-                (when begin-sql
-                  (rollback! allocator client))))))))))
+          (if-let [set-tx-sql (set-tx-ro-sql opts)]
+            (let [tx (.beginTransaction client no-call-opts)]
+              (try
+                (exec-update! allocator client tx set-tx-sql nil)
+                (exec-query! allocator client tx sql args key-fn f start)
+                (finally
+                  (rollback! client tx))))
+
+            (exec-query! allocator client nil sql args key-fn f start)))))))
 
 (defn- submit-tx*
-  "Runs the ops between BEGIN and COMMIT on the session's connection, then reads the tx back off it —
-  the same statement sequence the pgwire path sends, and the only way to learn the tx key: a FlightSQL
-  transaction runs on a connection the server discards at commit."
-  [^BufferAllocator allocator ^FlightSqlClient client tx-ops tx-opts]
+  "Runs the ops in a FlightSQL transaction and commits it, returning the commit's outcome.
+
+  An async commit returns before the tx is indexed, so the session takes the tx's await token: its later reads then
+  see the write."
+  [^BufferAllocator allocator ^FlightSqlClient client ^FlightClient flight-client tx-ops {:keys [async?] :as tx-opts}]
   (err/wrap-anomaly {}
-    (exec-update! allocator client (begin-rw-sql tx-opts) nil)
-    (try
-      (doseq [tx-op tx-ops
-              {:keys [sql arg-rows]} (op->stmts tx-op)]
-        (err/wrap-anomaly {:sql sql}
-          (exec-update! allocator client sql arg-rows)))
+    (let [tx (.beginTransaction client no-call-opts)]
+      (try
+        (exec-update! allocator client tx (set-tx-rw-sql tx-opts) nil)
+        (doseq [tx-op tx-ops
+                {:keys [sql arg-rows]} (op->stmts tx-op)]
+          (err/wrap-anomaly {:sql sql}
+            (exec-update! allocator client tx sql arg-rows)))
+        (catch Throwable t
+          (rollback! client tx)
+          (throw t)))
 
-      (exec-update! allocator client "COMMIT" nil)
+      (let [{:keys [await-token] :as outcome} (commit! flight-client tx)]
+        (when (and async? await-token)
+          (exec-update! allocator client nil (str "SET AWAIT_TOKEN = " (str-literal await-token)) nil))
+        outcome))))
 
-      (catch Throwable t
-        (rollback! allocator client)
-        (throw t))))
-
-  (first (into [] (plan-q allocator client "SHOW LATEST_SUBMITTED_TX" nil {}))))
-
-(deftype FlightSqlConn [^BufferAllocator allocator, ^FlightSqlClient client]
+(deftype FlightSqlConn [^BufferAllocator allocator, ^FlightSqlClient client, ^FlightClient flight-client]
   xtp/Connectable
   ;; already bound to its database (chosen at open), so it rejects `:database` as the other
   ;; connection-level impls do.
@@ -262,19 +313,15 @@
 
   (-submit-tx [this tx-ops opts]
     (xtp/check-no-database this opts)
-    {:tx-id (:tx-id (submit-tx* allocator client tx-ops (assoc opts :async? true)))})
+    {:tx-id (:tx-id (submit-tx* allocator client flight-client tx-ops (assoc opts :async? true)))})
 
   (-execute-tx [this tx-ops opts]
     (xtp/check-no-database this opts)
-    (let [{:keys [tx-id system-time error]} (submit-tx* allocator client tx-ops (assoc opts :async? false))]
-      ;; a SQL COMMIT doesn't raise an aborted tx's error (pgwire reads it off the result itself), so
-      ;; we surface it from the tx we've just read back.
+    (let [{:keys [tx-id system-time error]} (submit-tx* allocator client flight-client tx-ops (assoc opts :async? false))]
       (when error
-        (throw (if (instance? Throwable error)
-                 error
-                 (err/fault :xtdb/tx-aborted "Transaction aborted" {:error error}))))
+        (throw error))
 
-      (serde/->TxKey tx-id (time/->instant system-time))))
+      (serde/->TxKey tx-id system-time)))
 
   (-status [this] (xtp/build-status this))
 
@@ -296,9 +343,10 @@
                        :or {host "127.0.0.1", dbname "xtdb"}}]
   (let [allocator (RootAllocator.)]
     (try
-      (let [client (FlightSqlClient. (-> (FlightClient/builder allocator (Location/forGrpcInsecure host port))
-                                         (.intercept (ClientCookieMiddleware$Factory.))
-                                         (.build)))]
+      (let [flight-client (-> (FlightClient/builder allocator (Location/forGrpcInsecure host port))
+                              (.intercept (ClientCookieMiddleware$Factory.))
+                              (.build))
+            client (FlightSqlClient. flight-client)]
         (try
           ;; mints the session (and hence the server-side connection), as well as selecting the database
           (let [res (.setSessionOptions client
@@ -308,7 +356,7 @@
             (when (.hasErrors res)
               (throw (err/incorrect :xtdb/unknown-db (str "Unknown database: " dbname) {:db-name dbname}))))
 
-          (->FlightSqlConn allocator client)
+          (->FlightSqlConn allocator client flight-client)
 
           (catch Throwable t
             (util/try-close client)
