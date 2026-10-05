@@ -8,6 +8,7 @@ import io.micrometer.core.instrument.Timer
 import io.micrometer.tracing.Tracer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
+import org.antlr.v4.runtime.ParserRuleContext
 import org.apache.arrow.adbc.core.*
 import org.apache.arrow.adbc.core.AdbcConnection.GetObjectsDepth
 import org.apache.arrow.adbc.core.AdbcStatement.QueryResult
@@ -48,6 +49,8 @@ import xtdb.api.error.Anomaly
 import xtdb.api.error.Fault
 import xtdb.api.error.Incorrect
 import xtdb.query.*
+import xtdb.query.ParsedStatement.TxOptionValue
+import xtdb.query.ParsedStatement.TxOptions
 import xtdb.time.asInstant
 import xtdb.tx.TxOp
 import xtdb.tx.TxOpts
@@ -228,7 +231,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         var lastSubmittedTx: LastSubmittedTx? = null
             private set
 
-        // the await-token a frontend should observe: an open tx's bound (from BEGIN ... WITH (AWAIT_TOKEN …))
+        // the await-token a frontend should observe: an open tx's bound (from READ ONLY, AWAIT_TOKEN = …)
         // shadows the connection's own, for SHOW AWAIT_TOKEN / LATEST_SUBMITTED_TX inside that tx.
         /** @suppress */
         @InternalApi
@@ -245,7 +248,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         private var autoCommit = true
         private var tx: Transaction? = null
 
-        // the tz a read/write actually runs under: an open tx's zone (a mid-tx SET TIME ZONE / WITH (TIMEZONE))
+        // the tz a read/write actually runs under: an open tx's zone (a mid-tx SET TIME ZONE / SET TRANSACTION TIMEZONE)
         // shadows the connection's own, mirroring [effectiveAwaitToken].
         /** @suppress */
         @InternalApi
@@ -561,7 +564,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                             coerceAwaitToken(sqlPlanner.evalLiteral(stmt.token, args))
 
                         is ParsedStatement.SetSessionCharacteristics -> defaultAccessMode = stmt.accessMode
-                        is ParsedStatement.SetTransaction -> {} // isolation is always serializable — accepted, no-op
+                        is ParsedStatement.SetTransaction -> setTransaction(stmt.txOptions, args)
                         is ParsedStatement.SetRole -> {} // accepted, no-op (as pgwire)
 
                         else -> throw Incorrect("not an update", "xtdb.adbc/not-an-update")
@@ -616,8 +619,6 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
         private data object Unspecified : Characteristics
 
-        // each null option defaults to the connection's own when the basis is pinned.
-        // [awaitToken] is a tx-scoped BEGIN ... WITH (AWAIT_TOKEN) override.
         private class ReadOnly(
             val snapshotToken: String?, val snapshotTime: Instant?, val clockTime: Instant?, val awaitToken: String?
         ) : Characteristics
@@ -637,7 +638,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         }
 
         // [txDefaultTz] anchors this tx's DML and reads; [sessionDefaultTz] is copied back to the connection on
-        // COMMIT. SET TIME ZONE writes both (a session operator); `WITH (TIMEZONE)` writes only [txDefaultTz], so
+        // COMMIT. SET TIME ZONE writes both (a session operator); SET TRANSACTION TIMEZONE writes only [txDefaultTz], so
         // the override stays tx-scoped.
         private class Transaction(var phase: Phase, var txDefaultTz: ZoneId, var sessionDefaultTz: ZoneId) :
             AutoCloseable {
@@ -659,11 +660,19 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                     is Writing -> false
                 }
 
+            fun replacePhase(next: Phase) {
+                phase.close()
+                phase = next
+            }
+
             override fun close() = phase.close()
         }
 
+        private val Phase.readOnly: ReadOnly
+            get() = (this as? Pending)?.characteristics as? ReadOnly ?: ReadOnly(null, null, null, null)
+
         // Pin the read basis: await this connection's own writes, then snapshot the data
-        // (latest-completed system-times) and the clock. A READ ONLY WITH clause overrides any of the three.
+        // (latest-completed system-times) and the clock. The transaction's READ ONLY options override any of the three.
         private fun pinReadBasis(
             snapshotToken: String? = null, snapshotTime: Instant? = null, currentTime: Instant? = null,
             awaitToken: String? = this.awaitToken
@@ -694,8 +703,8 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             defaultAccessMode = accessMode
         }
 
-        // the basis arguments are the programmatic form of READ ONLY WITH (SNAPSHOT_TOKEN = …, SNAPSHOT_TIME = …,
-        // CLOCK_TIME = …); each defaults to the connection's own, as a bare BEGIN READ ONLY does.
+        // the basis arguments are the programmatic form of READ ONLY, SNAPSHOT_TOKEN = …, SNAPSHOT_TIME = …,
+        // CLOCK_TIME = …; each defaults to the connection's own, as a bare BEGIN READ ONLY does.
         @JvmOverloads
         fun beginReadOnly(
             tz: ZoneId = defaultTz, snapshotToken: String? = null, snapshotTime: Instant? = null,
@@ -797,47 +806,165 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             tx?.let { it.txDefaultTz = zone; it.sessionDefaultTz = zone } ?: run { defaultTz = zone }
         }
 
-        fun begin() = begin(ParsedStatement.TxOptions())
+        /**
+         * Opens a transaction with the session's default access mode (SET SESSION CHARACTERISTICS), or none.
+         * [setTransactionReadOnly] and [setTransactionReadWrite] shape it until its first query or write.
+         *
+         * @throws Incorrect if a transaction is already open.
+         */
+        fun begin() = beginTx(
+            when (defaultAccessMode) {
+                ParsedStatement.AccessMode.READ_ONLY -> Pending(ReadOnly(null, null, null, null))
+                ParsedStatement.AccessMode.READ_WRITE -> Writing()
+                null -> Pending(Unspecified)
+            }
+        )
 
-        // Begin an explicit tx from parsed WITH options, evaluating each option expression via the injected
-        // SqlPlanner with the statement's bound args (null when unbound, e.g. the ADBC path, whose BEGIN options
-        // are literals; a bound arg lets a placeholder like AWAIT_TOKEN = $1 resolve). WITH (TIMEZONE) overrides
-        // the tx zone (tx-scoped); WITH (AWAIT_TOKEN) sets a READ ONLY tx's await bound.
-        private fun begin(opts: ParsedStatement.TxOptions, args: RelationReader? = null) {
-            val tz = opts.defaultTz?.let { coerceZoneId(sqlPlanner.evalLiteral(it, args)) } ?: defaultTz
+        /**
+         * Makes the open transaction read-only, as `SET TRANSACTION READ ONLY, …` does.
+         *
+         * A null argument leaves that option as it was; if the transaction wasn't read-only, it starts unset, and
+         * any read-write options are dropped.
+         * Each option still unset takes the connection's own when the transaction's first query pins its read basis.
+         * [awaitToken] bounds that pin in place of the connection's own await token.
+         *
+         * Under manual commit with no transaction open, opens one.
+         *
+         * @throws Incorrect outside a transaction under auto-commit, once the transaction has run a query or a write,
+         * or if [awaitToken] isn't a valid await token.
+         */
+        @JvmOverloads
+        fun setTransactionReadOnly(
+            snapshotToken: String? = null, snapshotTime: Instant? = null, clockTime: Instant? = null,
+            awaitToken: String? = null
+        ) {
+            awaitToken?.decodeTxBasisToken()
+            shapeTx { tx ->
+                val ro = tx.phase.readOnly
+                tx.replacePhase(
+                    Pending(
+                        ReadOnly(
+                            snapshotToken ?: ro.snapshotToken, snapshotTime ?: ro.snapshotTime,
+                            clockTime ?: ro.clockTime, awaitToken ?: ro.awaitToken
+                        )
+                    )
+                )
+            }
+        }
 
-            when (opts.accessMode) {
-                ParsedStatement.AccessMode.READ_WRITE -> {
-                    val systemTime = coerceInstant(opts.systemTime?.let { sqlPlanner.evalLiteral(it, args) }, tz)
-                    val userMetadata = opts.userMetadata?.let { sqlPlanner.evalLiteral(it, args) } as Map<*, *>?
-                    val async = (opts.async?.let { sqlPlanner.evalLiteral(it, args) } as Boolean?) ?: false
+        /**
+         * Makes the open transaction read-write, as `SET TRANSACTION READ WRITE, …` does.
+         *
+         * A null argument leaves that option as it was; if the transaction wasn't read-write, it starts unset, and
+         * any read-only options are dropped.
+         * [systemTime], [userMetadata] and [async] apply when the transaction commits; [async] defaults to false.
+         *
+         * Under manual commit with no transaction open, opens one.
+         *
+         * @throws Incorrect outside a transaction under auto-commit, or once the transaction has run a query or a write.
+         */
+        @JvmOverloads
+        fun setTransactionReadWrite(
+            systemTime: Instant? = null, userMetadata: Map<*, *>? = null, async: Boolean? = null
+        ) = shapeTx { tx ->
+            val w = tx.phase as? Writing
+            tx.replacePhase(
+                Writing(systemTime ?: w?.systemTime, userMetadata ?: w?.userMetadata, async ?: w?.async ?: false)
+            )
+        }
 
-                    beginWriteOnly(systemTime, userMetadata, async, tz)
+        /**
+         * Sets the open transaction's time zone, as `SET TRANSACTION TIMEZONE = …` does, for this transaction only.
+         * It's kept when the access mode changes.
+         *
+         * Under manual commit with no transaction open, opens one.
+         *
+         * @throws Incorrect outside a transaction under auto-commit, or once the transaction has run a query or a write.
+         */
+        fun setTransactionTimeZone(zone: ZoneId) = shapeTx { it.txDefaultTz = zone }
+
+        private fun shapeTx(shape: (Transaction) -> Unit) {
+            val openTx = tx
+            val tx = openTx
+                ?: if (autoCommit) throw Incorrect(
+                    "SET TRANSACTION can only be used in a transaction", "xtdb/set-transaction-outside-tx"
+                ) else Transaction(Pending(Unspecified), txDefaultTz = defaultTz, sessionDefaultTz = defaultTz)
+
+            when (val p = tx.phase) {
+                is Pending -> {}
+                is Writing -> if (!p.buffer.isEmpty) throw setTransactionAfterFirstStatement()
+                is Reading -> throw setTransactionAfterFirstStatement()
+            }
+
+            shape(tx)
+            if (openTx == null) this.tx = tx
+        }
+
+        private fun setTransactionAfterFirstStatement() = Incorrect(
+            "SET TRANSACTION must be called before any query or write", "xtdb/set-transaction-after-first-statement"
+        )
+
+        private fun <T> TxOptionValue?.resolve(current: T?, eval: (ParserRuleContext) -> T?): T? = when (this) {
+            null -> current
+            TxOptionValue.Default -> null
+            is TxOptionValue.Expr -> eval(expr)
+        }
+
+        private fun setTransaction(opts: TxOptions, args: RelationReader?) {
+            fun literal(expr: ParserRuleContext) = sqlPlanner.evalLiteral(expr, args)
+
+            // an isolation level only: XTDB is always serializable
+            if (opts.accessMode == null && opts.timeZone == null) return
+
+            shapeTx { tx -> applyTxOptions(tx, opts, ::literal) }
+        }
+
+        private fun applyTxOptions(tx: Transaction, opts: TxOptions, literal: (ParserRuleContext) -> Any?) {
+            val tz = opts.timeZone.resolve(tx.txDefaultTz) { coerceZoneId(literal(it)) } ?: tx.sessionDefaultTz
+
+            val next = when (val mode = opts.accessMode) {
+                is TxOptions.ReadOnly -> tx.phase.readOnly.let { ro ->
+                    Pending(
+                        ReadOnly(
+                            mode.snapshotToken.resolve(ro.snapshotToken) { literal(it) as String? },
+                            mode.snapshotTime.resolve(ro.snapshotTime) { coerceInstant(literal(it), tz) },
+                            mode.clockTime.resolve(ro.clockTime) { coerceInstant(literal(it), tz) },
+                            mode.awaitToken.resolve(ro.awaitToken) {
+                                coerceAwaitToken(literal(it))?.also { tok -> tok.decodeTxBasisToken() }
+                            }
+                        )
+                    )
                 }
 
-                ParsedStatement.AccessMode.READ_ONLY -> {
-                    val awaitTok = opts.awaitToken
-                        ?.let { coerceAwaitToken(sqlPlanner.evalLiteral(it, args)) }
-                        ?.also { it.decodeTxBasisToken() }
-                    val snapshotToken = opts.snapshotToken?.let { sqlPlanner.evalLiteral(it, args) } as String?
-                    val snapshotTime = coerceInstant(opts.snapshotTime?.let { sqlPlanner.evalLiteral(it, args) }, tz)
-                    val currentTime = coerceInstant(opts.clockTime?.let { sqlPlanner.evalLiteral(it, args) }, tz)
-
-                    beginTx(Pending(ReadOnly(snapshotToken, snapshotTime, currentTime, awaitTok)), tz)
+                is TxOptions.ReadWrite -> (tx.phase as? Writing).let { w ->
+                    Writing(
+                        mode.systemTime.resolve(w?.systemTime) { coerceInstant(literal(it), tz) },
+                        mode.userMetadata.resolve(w?.userMetadata) { literal(it) as Map<*, *>? },
+                        mode.async.resolve(w?.async) { literal(it) as Boolean? } ?: false
+                    )
                 }
 
-                null -> when (defaultAccessMode) {
-                    ParsedStatement.AccessMode.READ_ONLY -> beginReadOnly(tz)
-                    ParsedStatement.AccessMode.READ_WRITE -> beginWriteOnly(tz = tz)
-                    null -> beginTx(Pending(Unspecified), tz)
-                }
+                null -> null
+            }
+
+            next?.let { tx.replacePhase(it) }
+            tx.txDefaultTz = tz
+        }
+
+        private fun begin(opts: TxOptions, args: RelationReader?) {
+            begin()
+            try {
+                setTransaction(opts, args)
+            } catch (e: Throwable) {
+                rollbackTx()
+                throw e
             }
         }
 
         private fun drainWriteTx(): Pair<List<TxOp>, TxOpts>? {
             val tx = tx ?: return null
             this.tx = null
-            defaultTz = tx.sessionDefaultTz   // a mid-tx SET TIME ZONE persists; a WITH (TIMEZONE) override doesn't
+            defaultTz = tx.sessionDefaultTz   // a mid-tx SET TIME ZONE persists; a SET TRANSACTION TIMEZONE doesn't
             val writing = tx.phase as? Writing ?: return null
             val opts = TxOpts(
                 systemTime = writing.systemTime,

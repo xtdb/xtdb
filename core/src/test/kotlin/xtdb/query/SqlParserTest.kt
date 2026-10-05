@@ -4,6 +4,8 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
+import xtdb.api.error.Incorrect
 import xtdb.query.ParsedStatement.*
 
 class SqlParserTest {
@@ -45,12 +47,73 @@ class SqlParserTest {
         assertEquals(listOf("a", "b"), ct.colNames)
     }
 
+    private val TxOptionValue?.text get() = (this as? TxOptionValue.Expr)?.expr?.text
+
+    private fun setTx(sql: String) = (one(sql) as SetTransaction).txOptions
+
     @Test
     fun `transaction lifecycle and access mode`() {
-        assertEquals(AccessMode.READ_ONLY, (one("BEGIN READ ONLY") as Begin).txOptions.accessMode)
-        assertEquals(AccessMode.READ_WRITE, (one("BEGIN READ WRITE") as Begin).txOptions.accessMode)
+        assertTrue((one("BEGIN READ ONLY") as Begin).txOptions.accessMode is TxOptions.ReadOnly)
+        assertTrue((one("BEGIN READ WRITE") as Begin).txOptions.accessMode is TxOptions.ReadWrite)
         assertTrue(one("COMMIT") is Commit)
         assertTrue(one("ROLLBACK") is Rollback)
+    }
+
+    @Test
+    fun `SET TRANSACTION takes the access mode and its options as a list of modes`() {
+        val ro = setTx("SET TRANSACTION READ ONLY, SNAPSHOT_TOKEN = 'tok', AWAIT_TOKEN = \$1, TIMEZONE = 'UTC'")
+        val roMode = ro.accessMode as TxOptions.ReadOnly
+        assertEquals("'tok'", roMode.snapshotToken.text)
+        assertEquals("\$1", roMode.awaitToken.text)
+        assertNull(roMode.clockTime)
+        assertEquals("'UTC'", ro.timeZone.text)
+
+        val rw = setTx("SET TRANSACTION READ WRITE, ASYNC = TRUE, SYSTEM_TIME = DEFAULT").accessMode as TxOptions.ReadWrite
+        assertEquals("TRUE", rw.async.text)
+        assertEquals(TxOptionValue.Default, rw.systemTime)
+        assertNull(rw.userMetadata)
+    }
+
+    @Test
+    fun `the access mode may come anywhere in the list`() {
+        val opts = setTx("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, CLOCK_TIME = TIMESTAMP '2020-01-01Z', READ ONLY")
+        assertTrue((opts.accessMode as TxOptions.ReadOnly).clockTime is TxOptionValue.Expr)
+    }
+
+    @Test
+    fun `SET TRANSACTION without an access mode takes only an isolation level and a time zone`() {
+        assertNull(setTx("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE").accessMode)
+
+        val tz = setTx("SET TRANSACTION TIMEZONE = 'Europe/London'")
+        assertNull(tz.accessMode)
+        assertEquals("'Europe/London'", tz.timeZone.text)
+    }
+
+    @Test
+    fun `SET TRANSACTION rejects options without their access mode, mixed modes and WITH`() {
+        listOf(
+            "SET TRANSACTION SNAPSHOT_TOKEN = 'tok'",
+            "SET TRANSACTION READ WRITE, SNAPSHOT_TOKEN = 'tok'",
+            "SET TRANSACTION READ ONLY, SYSTEM_TIME = TIMESTAMP '2020-01-01Z'",
+            "SET TRANSACTION READ ONLY, READ WRITE",
+            "SET TRANSACTION READ ONLY SNAPSHOT_TOKEN = 'tok'",
+            "SET TRANSACTION READ ONLY WITH (SNAPSHOT_TOKEN = 'tok')",
+            "SET TRANSACTION DIAGNOSTICS SIZE 1",
+        ).forEach { sql ->
+            assertThrows<Incorrect>(sql) { parseStatements(sql) }
+        }
+    }
+
+    @Test
+    fun `BEGIN takes the list of modes, and its WITH form`() {
+        val list = (one("START TRANSACTION READ WRITE, SYSTEM_TIME = TIMESTAMP '2020-01-01Z'") as Begin).txOptions
+        assertTrue((list.accessMode as TxOptions.ReadWrite).systemTime is TxOptionValue.Expr)
+
+        val with = (one("BEGIN READ ONLY WITH (SNAPSHOT_TOKEN = 'tok', TIMEZONE = 'UTC')") as Begin).txOptions
+        assertEquals("'tok'", (with.accessMode as TxOptions.ReadOnly).snapshotToken.text)
+        assertEquals("'UTC'", with.timeZone.text)
+
+        assertNull((one("BEGIN") as Begin).txOptions.accessMode)
     }
 
     @Test

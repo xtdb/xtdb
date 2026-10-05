@@ -117,41 +117,72 @@ private fun copyFormat(ctx: Sql.CopyOptsContext?): CopyFormat? =
 
 private class ParsedStatementVisitor : SqlBaseVisitor<ParsedStatement>() {
 
-    private fun txOptions(ctx: Sql.TransactionCharacteristicsContext?): TxOptions {
-        var opts = TxOptions()
-        ctx?.transactionMode()?.forEach { mode ->
+    private fun Sql.TxOptionValueContext.value(): TxOptionValue =
+        expr()?.let { TxOptionValue.Expr(it) } ?: TxOptionValue.Default
+
+    private fun Sql.TxTzOptionContext.value() = txOptionValue().value()
+
+    private fun TxOptions.ReadOnly.with(opt: Sql.ReadOnlyTxOptionContext) = when (opt) {
+        is Sql.SnapshotTokenTxOptionContext -> copy(snapshotToken = opt.txOptionValue().value())
+        is Sql.SnapshotTimeTxOptionContext -> copy(snapshotTime = opt.txOptionValue().value())
+        is Sql.ClockTimeTxOptionContext -> copy(clockTime = opt.txOptionValue().value())
+        is Sql.AwaitTokenTxOptionContext -> copy(awaitToken = opt.txOptionValue().value())
+        else -> error("unknown read-only option: ${opt.javaClass}")
+    }
+
+    private fun TxOptions.ReadWrite.with(opt: Sql.ReadWriteTxOptionContext) = when (opt) {
+        is Sql.SystemTimeTxOptionContext -> copy(systemTime = opt.txOptionValue().value())
+        is Sql.AsyncTxOptionContext -> copy(async = opt.async?.let { TxOptionValue.Expr(it) } ?: TxOptionValue.Default)
+        is Sql.MetadataTxOptionContext -> copy(userMetadata = opt.txOptionValue().value())
+        else -> error("unknown read-write option: ${opt.javaClass}")
+    }
+
+    private val noReadOnlyOptions = TxOptions.ReadOnly(null, null, null, null)
+    private val noReadWriteOptions = TxOptions.ReadWrite(null, null, null)
+
+    private fun List<Sql.CommonTxModeContext>.timeZone() =
+        filterIsInstance<Sql.TxTzModeContext>().lastOrNull()?.txTzOption()?.value()
+
+    private fun txOptions(ctx: Sql.TransactionCharacteristicsContext): TxOptions = when (ctx) {
+        is Sql.ReadOnlyTxCharacteristicsContext -> ctx.readOnlyTxMode().let { modes ->
+            TxOptions(
+                modes.mapNotNull { it.readOnlyTxOption() }.fold(noReadOnlyOptions) { opts, opt -> opts.with(opt) },
+                modes.mapNotNull { it.commonTxMode() }.timeZone()
+            )
+        }
+
+        is Sql.ReadWriteTxCharacteristicsContext -> ctx.readWriteTxMode().let { modes ->
+            TxOptions(
+                modes.mapNotNull { it.readWriteTxOption() }.fold(noReadWriteOptions) { opts, opt -> opts.with(opt) },
+                modes.mapNotNull { it.commonTxMode() }.timeZone()
+            )
+        }
+
+        is Sql.CommonTxCharacteristicsContext -> TxOptions(null, ctx.commonTxMode().timeZone())
+        else -> error("unknown transaction characteristics: ${ctx.javaClass}")
+    }
+
+    private fun txOptions(ctx: Sql.BeginWithCharacteristicsContext): TxOptions =
+        ctx.beginWithMode().fold(TxOptions(null, null)) { txOpts, mode ->
             when (mode) {
-                is Sql.ReadOnlyTransactionContext -> {
-                    opts = opts.copy(accessMode = AccessMode.READ_ONLY)
-                    mode.readOnlyTxOption().filterNotNull().forEach { opt ->
-                        opts = when (opt) {
-                            is Sql.SnapshotTokenTxOptionContext -> opts.copy(snapshotToken = opt.snapshotToken)
-                            is Sql.SnapshotTimeTxOptionContext -> opts.copy(snapshotTime = opt.snapshotTime)
-                            is Sql.ClockTimeTxOptionContext -> opts.copy(clockTime = opt.clockTime)
-                            is Sql.AwaitTokenTxOptionContext -> opts.copy(awaitToken = opt.awaitToken)
-                            is Sql.TxTzOption0Context -> opts.copy(defaultTz = opt.txTzOption().tz)
-                            else -> opts
-                        }
-                    }
+                is Sql.BeginReadOnlyWithContext -> mode.beginReadOnlyOption().filterNotNull().let { opts ->
+                    TxOptions(
+                        opts.mapNotNull { it.readOnlyTxOption() }.fold(noReadOnlyOptions) { o, opt -> o.with(opt) },
+                        opts.mapNotNull { it.txTzOption() }.lastOrNull()?.value() ?: txOpts.timeZone
+                    )
                 }
 
-                is Sql.ReadWriteTransactionContext -> {
-                    opts = opts.copy(accessMode = AccessMode.READ_WRITE)
-                    mode.readWriteTxOption().filterNotNull().forEach { opt ->
-                        opts = when (opt) {
-                            is Sql.SystemTimeTxOptionContext -> opts.copy(systemTime = opt.systemTime)
-                            is Sql.AsyncTxOptionContext -> opts.copy(async = opt.async)
-                            is Sql.TxTzOption1Context -> opts.copy(defaultTz = opt.txTzOption().tz)
-                            is Sql.MetadataTxOptionContext -> opts.copy(userMetadata = opt.metadata)
-                            else -> opts
-                        }
-                    }
+                is Sql.BeginReadWriteWithContext -> mode.beginReadWriteOption().filterNotNull().let { opts ->
+                    TxOptions(
+                        opts.mapNotNull { it.readWriteTxOption() }.fold(noReadWriteOptions) { o, opt -> o.with(opt) },
+                        opts.mapNotNull { it.txTzOption() }.lastOrNull()?.value() ?: txOpts.timeZone
+                    )
                 }
-                // IsolationLevel — no-op for us
+
+                is Sql.BeginWithIsolationLevelContext -> txOpts
+                else -> error("unknown BEGIN mode: ${mode.javaClass}")
             }
         }
-        return opts
-    }
 
     override fun visitQueryExpr(ctx: Sql.QueryExprContext) = Query(ctx)
 
@@ -175,9 +206,15 @@ private class ParsedStatementVisitor : SqlBaseVisitor<ParsedStatement>() {
     }
 
     override fun visitStartTransactionStatement(ctx: Sql.StartTransactionStatementContext) =
-        Begin(ctx, txOptions(ctx.transactionCharacteristics()))
+        Begin(
+            ctx,
+            ctx.transactionCharacteristics()?.let { txOptions(it) }
+                ?: ctx.beginWithCharacteristics()?.let { txOptions(it) }
+                ?: TxOptions(null, null)
+        )
 
-    override fun visitSetTransactionStatement(ctx: Sql.SetTransactionStatementContext) = SetTransaction(ctx)
+    override fun visitSetTransactionStatement(ctx: Sql.SetTransactionStatementContext) =
+        SetTransaction(ctx, txOptions(ctx.transactionCharacteristics()))
     override fun visitCommitStatement(ctx: Sql.CommitStatementContext) =
         Commit(ctx, when {
             ctx.SYNC() != null -> CommitMode.SYNC

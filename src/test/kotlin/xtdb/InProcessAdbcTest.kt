@@ -12,6 +12,7 @@ import org.apache.arrow.vector.complex.ListVector
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
@@ -35,6 +36,7 @@ import xtdb.database.encodeTimeBasisToken
 import xtdb.test.flushBlock
 import java.time.Instant
 import java.time.InstantSource
+import java.time.ZoneId
 import java.util.UUID
 
 class InProcessAdbcTest {
@@ -842,6 +844,220 @@ class InProcessAdbcTest {
             )
             conn.update("COMMIT")
             assertEquals(listOf(mapOf("timezone" to "Asia/Tokyo")), conn.select("SHOW timezone"), "reverts after COMMIT")
+        }
+    }
+
+    @Test
+    fun `SET TRANSACTION READ ONLY shapes a bare BEGIN before its first statement`() {
+        xtdb.connect().use { conn ->
+            conn.update("BEGIN")
+            conn.update("SET TRANSACTION READ ONLY, CLOCK_TIME = TIMESTAMP '2021-07-01T00:00:00Z'")
+
+            assertThrows(Incorrect::class.java) { conn.update("INSERT INTO foo RECORDS {_id: 1}") }
+            assertEquals(
+                listOf(mapOf("at_clock" to true)),
+                conn.select("SELECT CURRENT_TIMESTAMP = TIMESTAMP '2021-07-01T00:00:00Z' at_clock")
+            )
+            conn.update("ROLLBACK")
+        }
+    }
+
+    @Test
+    fun `SET TRANSACTION READ WRITE shapes a bare BEGIN before its first statement`() {
+        xtdb.connect().use { conn ->
+            conn.update("BEGIN")
+            conn.update("SET TRANSACTION READ WRITE, SYSTEM_TIME = TIMESTAMP '2021-08-03T00:00:00Z'")
+            conn.update("INSERT INTO foo RECORDS {_id: 1}")
+            conn.update("COMMIT")
+
+            assertEquals(listOf("2021-08-03T00:00Z[UTC]"), conn.systemFroms())
+        }
+    }
+
+    private fun Xtdb.Connection.systemFroms() =
+        select("SELECT _system_from FROM foo").map { it["_system_from"].toString() }
+
+    @Test
+    fun `a later SET TRANSACTION in the same access mode keeps the options it doesn't name`() {
+        xtdb.connect().use { conn ->
+            conn.update("BEGIN")
+            conn.update("SET TRANSACTION READ WRITE, SYSTEM_TIME = TIMESTAMP '2021-08-03T00:00:00Z'")
+            conn.update("SET TRANSACTION READ WRITE, ASYNC = FALSE")
+            conn.update("INSERT INTO foo RECORDS {_id: 1}")
+            conn.update("COMMIT")
+
+            assertEquals(listOf("2021-08-03T00:00Z[UTC]"), conn.systemFroms())
+        }
+    }
+
+    @Test
+    fun `a later SET TRANSACTION READ ONLY keeps the read-only options it doesn't name`() {
+        xtdb.connect().use { conn ->
+            conn.update("BEGIN")
+            conn.update("SET TRANSACTION READ ONLY, CLOCK_TIME = TIMESTAMP '2021-07-01T00:00:00Z'")
+            conn.update("SET TRANSACTION READ ONLY, ISOLATION LEVEL SERIALIZABLE")
+            assertEquals(
+                listOf(mapOf("at_clock" to true)),
+                conn.select("SELECT CURRENT_TIMESTAMP = TIMESTAMP '2021-07-01T00:00:00Z' at_clock")
+            )
+            conn.update("ROLLBACK")
+        }
+    }
+
+    @Test
+    fun `a SET TRANSACTION whose options fail opens no transaction`() {
+        xtdb.connect().use { conn ->
+            conn.setAutoCommit(false)
+            assertThrows(Incorrect::class.java) {
+                conn.update("SET TRANSACTION READ ONLY, AWAIT_TOKEN = 'whatever'")
+            }
+            conn.begin()
+            conn.rollbackTx()
+        }
+    }
+
+    @Test
+    fun `SET TRANSACTION with DEFAULT clears an option`() {
+        xtdb.connect().use { conn ->
+            conn.update("BEGIN")
+            conn.update("SET TRANSACTION READ WRITE, SYSTEM_TIME = TIMESTAMP '2021-08-03T00:00:00Z'")
+            conn.update("SET TRANSACTION READ WRITE, SYSTEM_TIME = DEFAULT")
+            conn.update("INSERT INTO foo RECORDS {_id: 1}")
+            conn.update("COMMIT")
+
+            assertNotEquals(listOf("2021-08-03T00:00Z[UTC]"), conn.systemFroms())
+        }
+    }
+
+    @Test
+    fun `switching access mode drops the other mode's options`() {
+        xtdb.connect().use { conn ->
+            conn.update("BEGIN READ ONLY")
+            conn.update("SET TRANSACTION READ WRITE, SYSTEM_TIME = TIMESTAMP '2021-08-03T00:00:00Z'")
+            conn.update("SET TRANSACTION READ ONLY")
+            conn.update("SET TRANSACTION READ WRITE")
+            conn.update("INSERT INTO foo RECORDS {_id: 1}")
+            conn.update("COMMIT")
+
+            assertNotEquals(listOf("2021-08-03T00:00Z[UTC]"), conn.systemFroms())
+        }
+    }
+
+    @Test
+    fun `SET TRANSACTION after the first query or write is rejected`() {
+        xtdb.connect().use { conn ->
+            conn.update("BEGIN")
+            conn.select("SELECT 1 one")
+            assertEquals(
+                "SET TRANSACTION must be called before any query or write",
+                assertThrows(Incorrect::class.java) { conn.update("SET TRANSACTION READ ONLY") }.message
+            )
+            conn.update("ROLLBACK")
+
+            conn.update("BEGIN")
+            conn.update("INSERT INTO foo RECORDS {_id: 1}")
+            assertEquals(
+                "SET TRANSACTION must be called before any query or write",
+                assertThrows(Incorrect::class.java) { conn.update("SET TRANSACTION READ WRITE") }.message
+            )
+            conn.update("ROLLBACK")
+        }
+    }
+
+    @Test
+    fun `SET TRANSACTION isolation level is accepted anywhere`() {
+        xtdb.connect().use { conn ->
+            conn.update("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
+
+            conn.update("BEGIN")
+            conn.select("SELECT 1 one")
+            conn.update("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
+            conn.update("ROLLBACK")
+        }
+    }
+
+    @Test
+    fun `SET TRANSACTION outside a transaction is rejected under auto-commit and opens one under manual commit`() {
+        insertData("INSERT INTO foo RECORDS {_id: 0}")
+
+        xtdb.connect().use { conn ->
+            assertEquals(
+                "SET TRANSACTION can only be used in a transaction",
+                assertThrows(Incorrect::class.java) { conn.update("SET TRANSACTION READ ONLY") }.message
+            )
+
+            conn.setAutoCommit(false)
+            conn.update("SET TRANSACTION READ ONLY")
+            assertThrows(Incorrect::class.java) { conn.update("INSERT INTO foo RECORDS {_id: 1}") }
+            conn.rollback()
+        }
+    }
+
+    @Test
+    fun `SET TRANSACTION TIMEZONE holds for the transaction only`() {
+        xtdb.connect().use { conn ->
+            conn.update("SET TIME ZONE 'Asia/Tokyo'")
+
+            conn.update("BEGIN")
+            conn.update("SET TRANSACTION TIMEZONE = 'America/New_York'")
+            assertEquals(listOf(mapOf("timezone" to "America/New_York")), conn.select("SHOW timezone"))
+            conn.update("COMMIT")
+
+            assertEquals(listOf(mapOf("timezone" to "Asia/Tokyo")), conn.select("SHOW timezone"))
+        }
+    }
+
+    @Test
+    fun `a SET TRANSACTION time zone survives a later SET TRANSACTION, until DEFAULT`() {
+        xtdb.connect().use { conn ->
+            conn.update("SET TIME ZONE 'Asia/Tokyo'")
+
+            conn.update("BEGIN")
+            conn.update("SET TRANSACTION READ WRITE, TIMEZONE = 'America/New_York'")
+            conn.update("SET TRANSACTION READ ONLY")
+            assertEquals(listOf(mapOf("timezone" to "America/New_York")), conn.select("SHOW timezone"))
+            conn.update("ROLLBACK")
+
+            conn.update("BEGIN")
+            conn.update("SET TRANSACTION TIMEZONE = 'America/New_York'")
+            conn.update("SET TRANSACTION READ ONLY, TIMEZONE = DEFAULT")
+            assertEquals(listOf(mapOf("timezone" to "Asia/Tokyo")), conn.select("SHOW timezone"))
+            conn.update("ROLLBACK")
+        }
+    }
+
+    @Test
+    fun `the typed setters shape a transaction without SQL`() {
+        val clockTime = Instant.parse("2021-07-01T00:00:00Z")
+
+        xtdb.connect().use { conn ->
+            conn.begin()
+            conn.setTransactionReadOnly(clockTime = clockTime)
+            conn.setTransactionReadOnly(snapshotTime = null)
+            conn.setTransactionTimeZone(ZoneId.of("America/New_York"))
+            assertEquals(
+                listOf(mapOf("at_clock" to true)),
+                conn.select("SELECT CURRENT_TIMESTAMP = TIMESTAMP '2021-07-01T00:00:00Z' at_clock")
+            )
+            assertEquals(listOf(mapOf("timezone" to "America/New_York")), conn.select("SHOW timezone"))
+            conn.rollbackTx()
+
+            conn.begin()
+            conn.setTransactionReadWrite(systemTime = Instant.parse("2021-08-03T00:00:00Z"))
+            conn.setTransactionReadWrite(async = false)
+            conn.update("INSERT INTO foo RECORDS {_id: 1}")
+            conn.commitSync()
+
+            assertEquals(listOf("2021-08-03T00:00Z[UTC]"), conn.systemFroms())
+        }
+    }
+
+    @Test
+    fun `a BEGIN whose options fail leaves no transaction open`() {
+        xtdb.connect().use { conn ->
+            assertThrows(Incorrect::class.java) { conn.update("BEGIN READ ONLY WITH (AWAIT_TOKEN = 'whatever')") }
+            conn.update("BEGIN")
+            conn.update("ROLLBACK")
         }
     }
 

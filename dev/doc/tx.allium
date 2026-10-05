@@ -17,12 +17,9 @@
 -- Both protocol frontends — pgwire and ADBC / Flight SQL — reach this ENTIRE model
 -- through one shared Connection. There are two ways a client drives a transaction:
 --
---   1. tx-control-as-SQL: BEGIN [READ ONLY | READ WRITE] [WITH (...)],
---      COMMIT [SYNC | ASYNC], ROLLBACK
---      sent as SQL, classified by the SqlParser (Begin / Commit / Rollback) and handled
---      by the connection. This is the FULL surface — access mode, read basis and
---      commit-opts are all expressible here. An ADBC / Flight SQL client expresses the
---      whole model this way.
+--   1. tx-control-as-SQL: BEGIN [modes], SET TRANSACTION modes, COMMIT [SYNC | ASYNC] and ROLLBACK, sent as SQL, classified by the SqlParser (Begin / SetTransaction / Commit / Rollback) and handled by the connection.
+--      This is the FULL surface — access mode, read basis, commit-opts and the transaction's time zone are all expressible here.
+--      An ADBC / Flight SQL client expresses the whole model this way.
 --   2. programmatic basic-control: setAutoCommit / commit / rollback on the ADBC
 --      AdbcConnection surface. Retained for driver ergonomics; a strict subset of (1).
 --
@@ -117,7 +114,7 @@ value ReadBasis {
     -- snapshot_token to the resulting latest-completed snapshot and clock_time to the
     -- current-time at the pin; the ReadOnly characteristics declared at BEGIN override
     -- individual fields.
-    -- The WITH options are grammar-scoped to READ ONLY (readOnlyTxOption in the SQL grammar).
+    -- The options are grammar-scoped to READ ONLY (readOnlyTxOption in the SQL grammar).
     --   snapshot_token — the data snapshot's upper bound, a TimeBasisToken (per-database
     --                    latest-completed system-times). Distinct from the await_token, which
     --                    is a TxBasisToken of message-ids the read awaits before snapshotting.
@@ -133,11 +130,11 @@ value Unspecified {
 }
 
 value ReadOnly {
-    -- Characteristics declared by BEGIN READ ONLY [WITH (...)], evaluated at BEGIN and held
-    -- until the first query pins the read basis. Each absent option takes its default at the pin.
+    -- Characteristics declared by BEGIN or SET TRANSACTION READ ONLY, evaluated then and held until the first query pins the read basis.
+    -- Each absent option takes its default at the pin.
     --   snapshot_token / snapshot_time / clock_time — override the corresponding ReadBasis field.
     --   await_token — overrides the connection's await_token for this transaction's pin.
-    --                 Validated (decoded) at BEGIN; the await itself happens at the pin.
+    --                 Validated (decoded) when declared; the await itself happens at the pin.
     snapshot_token: TimeBasisToken?
     snapshot_time: Timestamp?
     clock_time: Timestamp?
@@ -146,9 +143,8 @@ value ReadOnly {
 
 value CommitOpts {
     -- Write-side options, grammar-scoped to READ WRITE (readWriteTxOption in the SQL
-    -- grammar). Their very presence implies the transaction is Writing. The transaction's
-    -- effective timezone is NOT a commit-opt: it is set at BEGIN as the tx's tx_default_tz
-    -- (see Transaction), not deferred to COMMIT.
+    -- grammar). Their very presence implies the transaction is Writing.
+    -- The transaction's effective timezone is NOT a commit-opt: it is set by BEGIN or SET TRANSACTION as the tx's tx_default_tz (see Transaction), not deferred to COMMIT.
     --   system_time   — the system-time to record the transaction at.
     --   user_metadata — opaque per-transaction metadata.
     --   async         — true: commit submits without awaiting; false: execute-and-await.
@@ -157,6 +153,27 @@ value CommitOpts {
     system_time: Timestamp?
     user_metadata: Bytes?
     async: Boolean
+}
+
+value OptionSetting {
+    -- One option as a SET TRANSACTION or BEGIN names it: the value its expression evaluates to, or null for DEFAULT, which clears the option.
+    -- An option the statement doesn't name has no OptionSetting at all.
+    value: Any?
+}
+
+value ReadOnlySettings {
+    -- The read-only options a READ ONLY statement names; each one it doesn't name is null.
+    snapshot_token: OptionSetting?
+    snapshot_time: OptionSetting?
+    clock_time: OptionSetting?
+    await_token: OptionSetting?
+}
+
+value ReadWriteSettings {
+    -- The read-write options a READ WRITE statement names; each one it doesn't name is null.
+    system_time: OptionSetting?
+    user_metadata: OptionSetting?
+    async: OptionSetting?
 }
 
 value TxOp {
@@ -174,10 +191,9 @@ enum StatementKind {
 }
 
 enum BeginAccessMode {
-    -- The access mode carried explicitly on a BEGIN. `read_only` / `read_write` fix the
-    -- mode at BEGIN; `none` opens Pending(Unspecified) (resolved on the first statement). This
-    -- is distinct from inferring the mode from non-null read options or commit-opts: it
-    -- lets `BEGIN READ ONLY` with no WITH clause still open Pending(ReadOnly).
+    -- The access mode carried explicitly on a BEGIN or SET TRANSACTION. `read_only` /
+    -- `read_write` fix the mode; `none` states no access mode (an isolation level or a time zone only), which leaves the mode as it was.
+    -- This is distinct from inferring the mode from non-null read options or commit-opts: it lets `READ ONLY` with no options still make the transaction Pending(ReadOnly).
     read_only | read_write | none
 }
 
@@ -229,7 +245,7 @@ entity Transaction {
     connection: Connection
     mode: Pending | Reading | Writing
     failed: Boolean
-    tx_default_tz: ZoneId            -- the tz this tx's DML and reads anchor in (WITH (TIMEZONE) override, else the connection default at BEGIN)
+    tx_default_tz: ZoneId            -- the tz this tx's DML and reads anchor in (the TIMEZONE BEGIN or SET TRANSACTION set, else the connection default at BEGIN)
     session_default_tz: ZoneId       -- the connection default_tz to write back to the connection on COMMIT
 }
 
@@ -270,96 +286,33 @@ entity DmlBuffer {
 -- An explicit SQL BEGIN opens a transaction regardless of auto_commit; the flag is left
 -- untouched and the explicit transaction coexists with it.
 --
--- No BEGIN pins a read basis: that happens at the transaction's first query. The phase opened
--- depends on the access mode carried on the BEGIN event (READ_ONLY | READ_WRITE | none — see
--- BeginAccessMode):
---   READ ONLY [WITH (read-options)] → Pending(ReadOnly), options evaluated at BEGIN
---   READ WRITE [WITH (commit-opts)] → Writing, empty buffer (no basis — writes don't read)
---   (no mode)                       → Pending(Unspecified), resolved by the first statement
+-- BEGIN / START TRANSACTION take the same list of modes as SET TRANSACTION.
+-- BEGIN also takes `READ ONLY WITH (...)` / `READ WRITE WITH (...)`, whose WITH list holds that access mode's options and TIMEZONE.
+-- Either way, BEGIN opens a transaction with the session default access mode, then applies SET TRANSACTION with BEGIN's characteristics (see Rules: Setting Transaction Characteristics).
+-- If applying them is rejected, the transaction is rolled back, so a failed BEGIN leaves none open.
 --
--- The mode comes from the explicit access_mode, NOT from inferring ReadOnly from non-null
--- read options: `BEGIN READ ONLY` with no WITH clause still opens Pending(ReadOnly).
+-- No BEGIN pins a read basis: that happens at the transaction's first query. The phase a
+-- BEGIN opens depends on the session default access mode:
+--   READ ONLY default  → Pending(ReadOnly with no options)
+--   READ WRITE default → Writing, empty buffer (no basis — writes don't read)
+--   no default         → Pending(Unspecified), resolved by the first statement
 
-rule BeginReadOnly {
-    -- BEGIN READ ONLY [WITH (snapshot-token | snapshot-time | clock-time | await-token)]. The
-    -- options are evaluated now and held as the tx's ReadOnly characteristics; the basis they
-    -- override is pinned at the first query (see FirstQueryPinsReadBasis). A malformed
-    -- AWAIT_TOKEN is rejected here; the await itself happens at the pin.
-    -- tx_default_tz is the WITH (TIMEZONE) override if present, else the connection's
-    -- default_tz; session_default_tz is the connection's default_tz. WITH (TIMEZONE) is
-    -- available on any access mode (READ ONLY as well as READ WRITE), so it sets the tx's
-    -- effective tz at BEGIN — it is not a Writing commit-opt.
+rule BeginOpensTransaction {
+    -- begin(): opens the transaction in the phase the session default access mode gives.
+    -- A connection with default_access_mode set (via SET SESSION CHARACTERISTICS) opens
+    -- Pending(ReadOnly with no options) / Writing directly; with no default set it opens
+    -- Pending(Unspecified), resolved by the first statement (the common case).
+    -- tx_default_tz and session_default_tz are the connection's default_tz.
+    -- BEGIN's own characteristics, if any, are then applied by SET TRANSACTION.
     when: BeginTransaction(frontend, connection, access_mode, read_only_opts, commit_opts, tz_override)
     requires: connection.tx = null
-    requires: access_mode = read_only
 
     ensures:
-        Pending.created(
-            connection: connection,
-            failed: false,
-            tx_default_tz: tz_override ?? connection.default_tz,
-            session_default_tz: connection.default_tz,
-            characteristics: ReadOnly(
-                snapshot_token: read_only_opts?.snapshot_token,
-                snapshot_time: read_only_opts?.snapshot_time,
-                clock_time: read_only_opts?.clock_time,
-                await_token: read_only_opts?.await_token
-            )
-        )
-}
-
-rule BeginReadWrite {
-    -- BEGIN READ WRITE [WITH (system-time | metadata | async | tz)]. A Writing tx carries
-    -- no read basis — writes don't read. commit_opts may be null (BEGIN READ WRITE with no
-    -- WITH clause); default commit-opts then apply at COMMIT.
-    --
-    -- The commit-opts values (system_time, user_metadata, async) are obtained by evaluating
-    -- their WITH-clause expressions through the SqlPlanner — it plans each option expression
-    -- (e.g. SYSTEM_TIME's `TIMESTAMP '…'`) and substitutes positional params to a runtime
-    -- value. The READ ONLY options (SNAPSHOT_TOKEN / SNAPSHOT_TIME / CLOCK_TIME / AWAIT_TOKEN)
-    -- and the WITH (TIMEZONE) override are evaluated likewise.
-    --
-    -- tx_default_tz is the WITH (TIMEZONE) override if present, else the connection's
-    -- default_tz; session_default_tz is the connection's default_tz.
-    when: BeginTransaction(frontend, connection, access_mode, read_only_opts, commit_opts, tz_override)
-    requires: connection.tx = null
-    requires: access_mode = read_write
-
-    ensures:
-        let buffer = DmlBuffer.created(ops: {})
-        Writing.created(
-            connection: connection,
-            failed: false,
-            tx_default_tz: tz_override ?? connection.default_tz,
-            session_default_tz: connection.default_tz,
-            buffer: buffer,
-            commit_opts: commit_opts ?? CommitOpts(
-                system_time: null,
-                user_metadata: null,
-                async: false
-            )
-        )
-}
-
-rule BeginUnspecified {
-    -- Bare BEGIN (no explicit access mode). The session default access mode decides the
-    -- phase: a connection with default_access_mode set (via SET SESSION CHARACTERISTICS)
-    -- opens Pending(ReadOnly with no options) / Writing directly; with no default set it
-    -- opens Pending(Unspecified), resolved by the first statement (the common case).
-    -- tx_default_tz is the WITH (TIMEZONE) override if present, else the connection's
-    -- default_tz; session_default_tz is the connection's default_tz. A bare
-    -- BEGIN WITH (TIMEZONE = ...) still carries the override into tx_default_tz.
-    when: BeginTransaction(frontend, connection, access_mode, read_only_opts, commit_opts, tz_override)
-    requires: connection.tx = null
-    requires: access_mode = none
-
-    ensures:
-        let tx_tz = tz_override ?? connection.default_tz
         if connection.default_access_mode = read_only:
             Pending.created(
                 connection: connection,
                 failed: false,
-                tx_default_tz: tx_tz,
+                tx_default_tz: connection.default_tz,
                 session_default_tz: connection.default_tz,
                 characteristics: ReadOnly(
                     snapshot_token: null,
@@ -373,7 +326,7 @@ rule BeginUnspecified {
             Writing.created(
                 connection: connection,
                 failed: false,
-                tx_default_tz: tx_tz,
+                tx_default_tz: connection.default_tz,
                 session_default_tz: connection.default_tz,
                 buffer: buffer,
                 commit_opts: CommitOpts(
@@ -386,10 +339,29 @@ rule BeginUnspecified {
             Pending.created(
                 connection: connection,
                 failed: false,
-                tx_default_tz: tx_tz,
+                tx_default_tz: connection.default_tz,
                 session_default_tz: connection.default_tz,
                 characteristics: Unspecified
             )
+        SetTransaction(
+            frontend: frontend,
+            connection: connection,
+            access_mode: access_mode,
+            read_only_opts: read_only_opts,
+            commit_opts: commit_opts,
+            tz_override: tz_override
+        )
+}
+
+rule BeginRollsBackOnRejectedCharacteristics {
+    -- BEGIN's SET TRANSACTION was rejected (for instance, a malformed AWAIT_TOKEN): the
+    -- transaction BEGIN opened is rolled back, so a failed BEGIN leaves no transaction open.
+    when: BeginCharacteristicsRejected(frontend, connection, error_code)
+    requires: connection.tx != null
+
+    ensures:
+        not exists connection.tx
+        BeginRejected(error_code: error_code)
 }
 
 rule BeginWhileOpenRejected {
@@ -399,6 +371,167 @@ rule BeginWhileOpenRejected {
 
     ensures:
         BeginRejected(error_code: `xtdb/tx-already-open`)
+}
+
+---- Rules: Setting Transaction Characteristics
+
+-- SET TRANSACTION takes a comma-separated list of transaction modes, the access mode anywhere in it:
+--   READ ONLY | READ WRITE — the access mode
+--   SNAPSHOT_TOKEN | SNAPSHOT_TIME | CLOCK_TIME | AWAIT_TOKEN = ... — read-only options
+--   SYSTEM_TIME | METADATA | ASYNC = ... — read-write options
+--   TIMEZONE = ... — the transaction's time zone
+--   ISOLATION LEVEL ... — accepted, with no effect: XTDB is always serializable
+-- A read-only or read-write option needs its access mode in the same statement, or the statement doesn't parse; TIMEZONE and ISOLATION LEVEL need none.
+-- The event carries the access mode (see BeginAccessMode), the options of that mode the statement names (read_only_opts as ReadOnlySettings, commit_opts as ReadWriteSettings), and the time zone if it names one (tz_override, an OptionSetting).
+-- Each option's value is an expression, evaluated through the SqlPlanner with the statement's bound args, or DEFAULT, which clears it.
+-- Instants without a zone are read in the transaction's time zone as this same statement resolves it.
+--
+-- A SET TRANSACTION merges into the characteristics set before it.
+-- Within the access mode the transaction already has, it sets only the options it names and keeps the rest; switching access mode drops the other mode's options.
+-- The time zone belongs to the transaction, not to its access mode: it is kept across a switch of access mode and across a SET TRANSACTION that doesn't name it, and TIMEZONE = DEFAULT resets it to session_default_tz.
+-- It sets the tx's tx_default_tz only, so it reverts at COMMIT and ROLLBACK as BEGIN's does.
+--
+-- A SET TRANSACTION naming an access mode or a time zone is accepted while the transaction is Pending, or Writing with an empty buffer.
+-- Once a query has pinned the read basis (Reading), or a Writing tx has buffered ops, it is rejected.
+-- One naming neither is accepted in any state and changes nothing.
+--
+-- Xtdb.Connection.setTransactionReadOnly / setTransactionReadWrite / setTransactionTimeZone are the same operation without SQL.
+-- Each argument sets its option, null meaning not given, so they cannot clear one.
+
+rule SetTransactionReadOnly {
+    -- READ ONLY makes the phase Pending(ReadOnly), with the options evaluated now and held until the first query pins the basis they override (see FirstQueryPinsReadBasis).
+    -- A Pending(ReadOnly) tx keeps the options this statement doesn't name; any other phase starts with none.
+    -- A malformed AWAIT_TOKEN is rejected here; the await itself happens at the pin.
+    when: SetTransaction(frontend, connection, access_mode, read_only_opts, commit_opts, tz_override)
+    requires: connection.tx != null
+    requires: connection.tx.mode = Pending or (connection.tx.mode = Writing and connection.tx.buffer.ops.count = 0)
+    requires: access_mode = read_only
+
+    ensures:
+        let prior =
+            if connection.tx.mode = Pending and connection.tx.characteristics = ReadOnly: connection.tx.characteristics
+            else: null
+        connection.tx.mode = Pending
+        connection.tx.characteristics = ReadOnly(
+            snapshot_token:
+                if read_only_opts?.snapshot_token != null: read_only_opts.snapshot_token.value
+                else: prior?.snapshot_token,
+            snapshot_time:
+                if read_only_opts?.snapshot_time != null: read_only_opts.snapshot_time.value
+                else: prior?.snapshot_time,
+            clock_time:
+                if read_only_opts?.clock_time != null: read_only_opts.clock_time.value
+                else: prior?.clock_time,
+            await_token:
+                if read_only_opts?.await_token != null: read_only_opts.await_token.value
+                else: prior?.await_token
+        )
+        connection.tx.tx_default_tz =
+            if tz_override != null: tz_override.value ?? connection.tx.session_default_tz
+            else: connection.tx.tx_default_tz
+}
+
+rule SetTransactionReadWrite {
+    -- READ WRITE makes the phase Writing with an empty buffer: a Writing tx carries no read basis, as writes don't read.
+    -- A Writing tx keeps the commit-opts this statement doesn't name; any other phase starts with the defaults (no system-time, no metadata, synchronous).
+    -- ASYNC = DEFAULT makes the commit synchronous.
+    when: SetTransaction(frontend, connection, access_mode, read_only_opts, commit_opts, tz_override)
+    requires: connection.tx != null
+    requires: connection.tx.mode = Pending or (connection.tx.mode = Writing and connection.tx.buffer.ops.count = 0)
+    requires: access_mode = read_write
+
+    ensures:
+        let prior =
+            if connection.tx.mode = Writing: connection.tx.commit_opts
+            else: null
+        let buffer = DmlBuffer.created(ops: {})
+        connection.tx.mode = Writing
+        connection.tx.buffer = buffer
+        connection.tx.commit_opts = CommitOpts(
+            system_time:
+                if commit_opts?.system_time != null: commit_opts.system_time.value
+                else: prior?.system_time,
+            user_metadata:
+                if commit_opts?.user_metadata != null: commit_opts.user_metadata.value
+                else: prior?.user_metadata,
+            async:
+                if commit_opts?.async != null: commit_opts.async.value ?? false
+                else: prior?.async ?? false
+        )
+        connection.tx.tx_default_tz =
+            if tz_override != null: tz_override.value ?? connection.tx.session_default_tz
+            else: connection.tx.tx_default_tz
+}
+
+rule SetTransactionTimeZoneOnly {
+    -- A SET TRANSACTION naming a time zone but no access mode sets the tx's tx_default_tz and leaves the phase and its options as they are.
+    when: SetTransaction(frontend, connection, access_mode, read_only_opts, commit_opts, tz_override)
+    requires: connection.tx != null
+    requires: connection.tx.mode = Pending or (connection.tx.mode = Writing and connection.tx.buffer.ops.count = 0)
+    requires: access_mode = none
+    requires: tz_override != null
+
+    ensures:
+        connection.tx.tx_default_tz = tz_override.value ?? connection.tx.session_default_tz
+}
+
+rule SetTransactionAfterFirstStatementRejected {
+    -- A Reading tx has pinned its basis, and a Writing tx with buffered ops has captured
+    -- its statements under the current characteristics: neither can be reshaped.
+    when: SetTransaction(frontend, connection, access_mode, read_only_opts, commit_opts, tz_override)
+    requires: connection.tx != null
+    requires: access_mode != none or tz_override != null
+    requires: connection.tx.mode = Reading or (connection.tx.mode = Writing and connection.tx.buffer.ops.count > 0)
+
+    ensures:
+        StatementRejected(error_code: `xtdb/set-transaction-after-first-statement`)
+}
+
+rule SetTransactionOutsideTxRejected {
+    -- Under auto-commit there is no transaction to set characteristics on.
+    when: SetTransaction(frontend, connection, access_mode, read_only_opts, commit_opts, tz_override)
+    requires: connection.tx = null
+    requires: access_mode != none or tz_override != null
+    requires: connection.auto_commit
+
+    ensures:
+        StatementRejected(error_code: `xtdb/set-transaction-outside-tx`)
+}
+
+rule SetTransactionOpensTransaction {
+    -- Under manual commit with no transaction open, SET TRANSACTION opens a Pending(Unspecified)
+    -- transaction first, then applies its characteristics by the rules above.
+    when: SetTransaction(frontend, connection, access_mode, read_only_opts, commit_opts, tz_override)
+    requires: connection.tx = null
+    requires: access_mode != none or tz_override != null
+    requires: not connection.auto_commit
+
+    ensures:
+        Pending.created(
+            connection: connection,
+            failed: false,
+            tx_default_tz: connection.default_tz,
+            session_default_tz: connection.default_tz,
+            characteristics: Unspecified
+        )
+        SetTransaction(
+            frontend: frontend,
+            connection: connection,
+            access_mode: access_mode,
+            read_only_opts: read_only_opts,
+            commit_opts: commit_opts,
+            tz_override: tz_override
+        )
+}
+
+rule SetTransactionIsolationOnly {
+    -- A SET TRANSACTION naming neither an access mode nor a time zone (an isolation level only) is accepted in any state and changes nothing: XTDB is always serializable.
+    when: SetTransaction(frontend, connection, access_mode, read_only_opts, commit_opts, tz_override)
+    requires: access_mode = none
+    requires: tz_override = null
+
+    ensures:
+        SetTransactionAccepted(connection: connection)
 }
 
 ---- Rules: Access-Mode Resolution
@@ -455,9 +588,8 @@ rule FirstStatementResolvesWriting {
 
 -- SET TIME ZONE is a session operator. This spec touches it only for its transaction
 -- scoping — the broader SET / SHOW session surface is out of frame (as with SET SESSION
--- CHARACTERISTICS, referenced only as a source of default_access_mode). WITH (TIMEZONE)
--- stays tx-scoped (it sets tx_default_tz at BEGIN, never session_default_tz); a mid-tx
--- SET TIME ZONE writes both, so it persists on COMMIT and reverts on ROLLBACK.
+-- CHARACTERISTICS, referenced only as a source of default_access_mode).
+-- A TIMEZONE on BEGIN or SET TRANSACTION stays tx-scoped (it sets tx_default_tz, never session_default_tz); a mid-tx SET TIME ZONE writes both, so it persists on COMMIT and reverts on ROLLBACK.
 
 rule SetTimeZoneInTx {
     -- Mid-transaction SET TIME ZONE writes BOTH the tx's tx_default_tz (so this tx's DML and
@@ -693,8 +825,7 @@ rule CommitWriting {
     -- boundary EVEN IF the buffer is empty: async commit submits (fire-and-forget),
     -- sync commit executes-and-awaits. The submit anchors in the tx's tx_default_tz. COMMIT
     -- also writes the tx's session_default_tz back to the connection, so a mid-tx SET TIME
-    -- ZONE persists past the tx while a WITH (TIMEZONE) override (which never touched
-    -- session_default_tz) does not.
+    -- ZONE persists past the tx while a BEGIN or SET TRANSACTION TIMEZONE (which never touches session_default_tz) does not.
     --
     -- The effective async choice: a commit-time COMMIT SYNC / COMMIT ASYNC (commit_mode) wins;
     -- otherwise the transaction's begin-time CommitOpts.async flag decides. Only the SOURCE of
@@ -857,6 +988,7 @@ surface TxControlAsSql {
     provides:
         BeginTransaction(frontend, conn, access_mode, read_only_opts, commit_opts, tz_override)
             when conn.tx = null
+        SetTransaction(frontend, conn, access_mode, read_only_opts, commit_opts, tz_override)
         ExecuteStatement(frontend, conn, kind, statement)
         SetTimeZone(frontend, conn, zone)
         CommitTransaction(frontend, conn, commit_mode)
