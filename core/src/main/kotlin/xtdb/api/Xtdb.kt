@@ -144,6 +144,27 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         fun executeSchema(paramFields: List<Field>): Schema
 
         fun bind(rel: RelationReader): Unit = unsupported("bind(RelationReader) not supported")
+
+        /**
+         * What [openQuery] would read at if called now: the open transaction's basis, else the latest, once this
+         * connection's own writes are visible.
+         * Resolves the transaction's access mode as [openQuery] does, so it throws wherever [openQuery] would.
+         *
+         * @suppress
+         */
+        // public only because an interface member can't be `internal`; the Flight SQL producer is the one caller
+        @InternalApi
+        fun queryBasis(): QueryBasis = unsupported("queryBasis() not supported")
+
+        /**
+         * Runs the query at [basis], whatever this connection's own basis or transaction.
+         *
+         * @suppress
+         */
+        // public only because an interface member can't be `internal`; the Flight SQL producer is the one caller
+        @InternalApi
+        fun executeQueryAt(basis: QueryBasis): QueryResult =
+            unsupported("executeQueryAt(QueryBasis) not supported")
     }
 
     /**
@@ -498,6 +519,14 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
                 override fun openQuery(opts: QueryOpts): ResultCursor =
                     ensurePrepared().openQuery(openQueryArgs(), opts)
+
+                override fun queryBasis(): QueryBasis {
+                    if (ensurePrepared().parsed !is ParsedStatement.ShowVariable) resolveForQuery()
+                    return this@Connection.queryBasis()
+                }
+
+                override fun executeQueryAt(basis: QueryBasis): QueryResult =
+                    QueryResult(-1, ensurePrepared().openQuery(openQueryArgs(), basis.toQueryOpts(tracer)).metered().toArrowReader())
 
                 override fun executeQuery(): QueryResult {
                     if (parsedStatement == null) throw Incorrect("SQL query not set", "xtdb.adbc/no-sql")

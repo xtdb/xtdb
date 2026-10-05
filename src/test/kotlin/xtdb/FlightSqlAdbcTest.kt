@@ -1,6 +1,9 @@
 package xtdb
 
 import com.google.protobuf.Any as ProtoAny
+import org.apache.arrow.flight.sql.impl.FlightSql.TicketStatementQuery
+import org.apache.arrow.flight.Ticket
+import com.google.protobuf.ByteString
 import org.apache.arrow.adbc.core.AdbcConnection
 import org.apache.arrow.adbc.core.AdbcConnection.GetObjectsDepth
 import org.apache.arrow.adbc.core.AdbcDatabase
@@ -1143,6 +1146,94 @@ class FlightSqlAdbcTest {
             mapOf("_id" to 3L, "n" to 30L),
             mapOf("_id" to 4L, "n" to 40L),
         ))
+    }
+
+    private fun FlightInfo.streamedSchema(): Schema =
+        fsqlClient.getStream(endpoints.first().ticket, *emptyCallOpts).use { it.schema }
+
+    private fun <R> withParams(vararg values: Long, f: (VectorSchemaRoot) -> R): R =
+        VectorSchemaRoot.create(
+            Schema(values.indices.map { Field.nullable("$it", ArrowType.Int(64, true)) }), al
+        ).use { root ->
+            values.forEachIndexed { idx, v -> (root.getVector(idx) as BigIntVector).setSafe(0, v) }
+            root.rowCount = 1
+            f(root)
+        }
+
+    @Test
+    fun `a ticket can be redeemed by a client that never saw its FlightInfo`() {
+        insertData("INSERT INTO foo RECORDS {_id: 1, n: 'a'}")
+
+        val info = fsqlClient.execute("SELECT _id, n FROM foo", *emptyCallOpts)
+
+        assertEquals(listOf(mapOf("_id" to 1L, "n" to "a")), info.readRows(plainClient()))
+    }
+
+    @Test
+    fun `a ticket reads at the basis it was planned at`() {
+        insertData("INSERT INTO foo RECORDS {_id: 1}")
+        val info = fsqlClient.execute("SELECT _id FROM foo ORDER BY _id", *emptyCallOpts)
+
+        insertData("INSERT INTO foo RECORDS {_id: 2}")
+
+        assertEquals(listOf(mapOf("_id" to 1L)), info.readRows())
+        assertEquals(
+            listOf(mapOf("_id" to 1L), mapOf("_id" to 2L)),
+            fsqlClient.execute("SELECT _id FROM foo ORDER BY _id", *emptyCallOpts).readRows()
+        )
+    }
+
+    @Test
+    fun `a ticket redeemed twice reads the same current time`() {
+        val info = fsqlClient.execute("SELECT CURRENT_TIMESTAMP AS ts", *emptyCallOpts)
+
+        val first = info.readRows()
+        Thread.sleep(5)
+        assertEquals(first, info.readRows(plainClient()))
+    }
+
+    @Test
+    fun `a ticket carries the parameters bound to a prepared statement`() {
+        fsqlClient.prepare("SELECT ? AS x, ? AS y", *emptyCallOpts).use { ps ->
+            val info = withParams(42, 43) { params ->
+                ps.setParameters(params)
+                ps.execute(*emptyCallOpts)
+            }
+
+            assertEquals(listOf(mapOf("x" to 42L, "y" to 43L)), info.readRows(plainClient()))
+        }
+    }
+
+    @Test
+    fun `the schema a FlightInfo reports is the schema its ticket streams`() {
+        insertData("INSERT INTO foo RECORDS {_id: 1, a: 'x'}, {_id: 2, a: 3}")
+
+        for (sql in listOf("SELECT * FROM foo", "SELECT _id FROM foo", "SELECT 1 AS one, 'two' AS two")) {
+            val info = fsqlClient.execute(sql, *emptyCallOpts)
+            assertEquals(info.schema, info.streamedSchema(), sql)
+        }
+
+        fsqlClient.prepare("SELECT ? AS x", *emptyCallOpts).use { ps ->
+            val info = withParams(42) { params ->
+                ps.setParameters(params)
+                ps.execute(*emptyCallOpts)
+            }
+            assertEquals(info.schema, info.streamedSchema())
+        }
+    }
+
+    @Test
+    fun `a ticket that isn't one of ours is rejected as an invalid argument`() {
+        val ticket = Ticket(
+            ProtoAny.pack(
+                TicketStatementQuery.newBuilder().setStatementHandle(ByteString.copyFromUtf8("not a ticket")).build()
+            ).toByteArray()
+        )
+
+        val ex = assertThrows(FlightRuntimeException::class.java) {
+            fsqlClient.getStream(ticket, *emptyCallOpts).use { it.next() }
+        }
+        assertEquals(FlightStatusCode.INVALID_ARGUMENT, ex.status().code())
     }
 
     // -- Error handling --

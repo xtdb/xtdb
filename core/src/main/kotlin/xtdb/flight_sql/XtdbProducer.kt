@@ -15,7 +15,6 @@ import org.apache.arrow.flight.sql.impl.FlightSql.CommandStatementIngest.TableDe
 import org.apache.arrow.flight.sql.impl.FlightSql.CommandStatementIngest.TableDefinitionOptions.TableNotExistOption
 import xtdb.database.DatabaseName
 import org.apache.arrow.adbc.core.AdbcConnection.GetObjectsDepth
-import org.apache.arrow.adbc.core.AdbcStatement
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.UInt4Vector
 import org.apache.arrow.vector.VarBinaryVector
@@ -27,6 +26,7 @@ import org.apache.arrow.vector.complex.DenseUnionVector
 import org.apache.arrow.vector.holders.NullableIntHolder
 import org.apache.arrow.vector.holders.NullableVarCharHolder
 import org.apache.arrow.vector.ipc.ArrowReader
+import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.Schema
 import org.apache.arrow.adbc.core.BulkIngestMode
 import xtdb.api.Xtdb
@@ -46,7 +46,6 @@ import java.util.concurrent.ConcurrentHashMap
 
 private typealias TxHandle = ByteString
 private typealias PreparedStatementHandle = ByteString
-private typealias TicketHandle = ByteString
 
 private val LOGGER = XtdbProducer::class.logger
 
@@ -128,18 +127,18 @@ private fun FlightStream.toRelation(allocator: BufferAllocator): Relation =
         acc
     }
 
-private val AdbcStatement.QueryResult.schema: Schema
-    get() = reader.vectorSchemaRoot.schema
+private class PreparedStatement(val dbName: DatabaseName, val sql: String, val xtdbStmt: Xtdb.Statement) : AutoCloseable {
+    @Volatile
+    var params: QueryParams? = null
 
-private class PreparedStatement(
-    val xtdbStmt: Xtdb.Statement,
-    var queryResult: AdbcStatement.QueryResult? = null
-) : AutoCloseable {
-    override fun close() {
-        queryResult?.close()
-        queryResult = null
-        xtdbStmt.close()
-    }
+    override fun close() = xtdbStmt.close()
+}
+
+private fun Xtdb.Statement.requireQuery() {
+    // see #5082 — Python ADBC's cursor.execute() routes DML through the query path
+    if (isDml) throw CallStatus.INVALID_ARGUMENT
+        .withDescription("DML statements should be submitted via executeUpdate, not executeQuery (in Python ADBC, use cursor.executescript())")
+        .toRuntimeException()
 }
 
 internal fun FlightServer.Builder.withErrorLoggingMiddleware(): FlightServer.Builder =
@@ -193,7 +192,6 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
     private data class TxConn(val sessionId: String?, val conn: Xtdb.Connection)
     private val txConns = ConcurrentHashMap<TxHandle, TxConn>()
     private val stmts = ConcurrentHashMap<PreparedStatementHandle, PreparedStatement>()
-    private val tickets = ConcurrentHashMap<TicketHandle, ArrowReader>()
 
     private fun newConnection(dbName: DatabaseName): Xtdb.Connection =
         (node.connect()).also { it.setCurrentCatalog(dbName) }
@@ -346,9 +344,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         ackStream.reportingErrors {
             val ps = requireNotNull(stmts[cmd.preparedStatementHandle]) { "invalid ps-id" }
             flightStream.next()
-            ps.queryResult?.close()
-            ps.xtdbStmt.bind(flightStream.root)
-            ps.queryResult = ps.xtdbStmt.executeQuery()
+            ps.params = QueryParams.of(flightStream.root)
             ackStream.onCompleted()
         }
     }
@@ -369,6 +365,25 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         }
     }
 
+    @OptIn(InternalApi::class)
+    private fun queryFlightInfo(
+        stmt: Xtdb.Statement, dbName: DatabaseName, sql: String, params: QueryParams?, descriptor: FlightDescriptor
+    ): FlightInfo {
+        val ticket = QueryTicket(dbName, sql, params, stmt.queryBasis())
+
+        val schema =
+            if (params == null) stmt.executeSchema()
+            else stmt.executeSchema(params.read(allocator) { root ->
+                root.schema.fields.mapIndexed { idx, f -> Field("?_$idx", f.fieldType, f.children) }
+            })
+
+        val flightTicket = Ticket(
+            ProtoAny.pack(TicketStatementQuery.newBuilder().setStatementHandle(ticket.encode()).build()).toByteArray()
+        )
+
+        return FlightInfo(schema, descriptor, listOf(FlightEndpoint(flightTicket)), /* bytes = */ -1, /* records = */ -1)
+    }
+
     override fun getFlightInfoStatement(
         cmd: CommandStatementQuery,
         ctx: CallContext?,
@@ -377,74 +392,33 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         val sql = cmd.queryBytes.toStringUtf8()
         val dbName = resolveDb(ctx)
 
-        val ticketHandle = newHandle()
-        val reader = connectionFor(ctx, dbName).createStatement().use { stmt ->
+        connectionFor(ctx, dbName).createStatement().use { stmt ->
             stmt.setSqlQuery(sql)
-
-            // see #5082 — Python ADBC's cursor.execute() routes DML through the query path
-            if (stmt.isDml) throw CallStatus.INVALID_ARGUMENT
-                .withDescription("DML statements should be submitted via executeUpdate, not executeQuery (in Python ADBC, use cursor.executescript())")
-                .toRuntimeException()
-
-            stmt.executeQuery().reader
-        }
-        reader.closeOnCatch { rdr ->
-            val ticket = Ticket(
-                ProtoAny.pack(
-                    TicketStatementQuery.newBuilder()
-                        .setStatementHandle(ticketHandle)
-                        .build()
-                ).toByteArray()
-            )
-            tickets[ticketHandle] = rdr
-            FlightInfo(
-                rdr.vectorSchemaRoot.schema,
-                descriptor,
-                listOf(FlightEndpoint(ticket)),
-                /* bytes = */ -1, /* records = */ -1
-            )
+            stmt.requireQuery()
+            queryFlightInfo(stmt, dbName, sql, null, descriptor)
         }
     }
 
+    @OptIn(InternalApi::class)
     override fun getStreamStatement(
         ticket: TicketStatementQuery, ctx: CallContext?, listener: ServerStreamListener
     ) = listener.reportingErrors {
-        val reader = requireNotNull(tickets.remove(ticket.statementHandle)) { "unknown ticket-id" }
-        streamArrowReader(reader, listener)
+        val t = QueryTicket.decode(ticket.statementHandle)
+
+        connectionFor(ctx, t.dbName).createStatement().use { stmt ->
+            stmt.setSqlQuery(t.sql)
+            stmt.requireQuery()
+            stmt.prepare()
+            t.params?.read(allocator) { stmt.bind(it) }
+            streamArrowReader(stmt.executeQueryAt(t.basis).reader, listener)
+        }
     }
 
     override fun getFlightInfoPreparedStatement(
         cmd: CommandPreparedStatementQuery, ctx: CallContext?, descriptor: FlightDescriptor
     ): FlightInfo = flightCall {
-        val psId = cmd.preparedStatementHandle
-        val ps = requireNotNull(stmts[psId]) { "invalid ps-id" }
-
-        val queryResult = ps.queryResult ?: ps.xtdbStmt.executeQuery().also { ps.queryResult = it }
-
-        val ticket = Ticket(
-            ProtoAny.pack(
-                CommandPreparedStatementQuery.newBuilder()
-                    .setPreparedStatementHandle(psId)
-                    .build()
-            ).toByteArray()
-        )
-
-        FlightInfo(
-            queryResult.schema,
-            descriptor,
-            listOf(FlightEndpoint(ticket)),
-            -1,
-            -1
-        )
-    }
-
-    override fun getStreamPreparedStatement(
-        ticket: CommandPreparedStatementQuery, ctx: CallContext?, listener: ServerStreamListener
-    ) = listener.reportingErrors {
-        val ps = requireNotNull(stmts[ticket.preparedStatementHandle]) { "invalid ps-id" }
-        val queryResult = checkNotNull(ps.queryResult) { "no cursor open for ps-id" }
-        ps.queryResult = null
-        streamArrowReader(queryResult.reader, listener)
+        val ps = requireNotNull(stmts[cmd.preparedStatementHandle]) { "invalid ps-id" }
+        queryFlightInfo(ps.xtdbStmt, ps.dbName, ps.sql, ps.params, descriptor)
     }
 
     override fun createPreparedStatement(
@@ -455,7 +429,8 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         val psId = newHandle()
         val sql = req.queryBytes.toStringUtf8()
         val txHandle = if (req.hasTransactionId()) req.transactionId else null
-        txOrSessionConnection(ctx, txHandle).createStatement().closeOnCatch { xtdbStmt ->
+        val conn = txOrSessionConnection(ctx, txHandle)
+        conn.createStatement().closeOnCatch { xtdbStmt ->
             xtdbStmt.setSqlQuery(sql)
             xtdbStmt.prepare()
 
@@ -471,7 +446,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
                 )
             }
 
-            stmts[psId] = PreparedStatement(xtdbStmt)
+            stmts[psId] = PreparedStatement(conn.dbName, sql, xtdbStmt)
             listener.onNext(packResult(resultBuilder.build()))
             listener.onCompleted()
         }
