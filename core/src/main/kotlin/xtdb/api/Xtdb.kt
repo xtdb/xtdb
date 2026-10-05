@@ -31,6 +31,7 @@ import xtdb.api.metrics.HealthzConfig
 import xtdb.api.metrics.TracerConfig
 import xtdb.api.module.XtdbModule
 import xtdb.api.query.PrepareOpts
+import xtdb.api.query.QueryBasis
 import xtdb.api.query.QueryOpts
 import xtdb.api.storage.Storage
 import xtdb.arrow.*
@@ -877,7 +878,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             }
         }
 
-        private fun queryOpts() = tx.let { t ->
+        private fun queryBasis() = tx.let { t ->
             val b = t?.readBasis
             // Resolve the read basis: a tx's pinned begin-time token, else (autocommit) latest-completed now —
             // the statement's prepare() already awaited this connection's writes, so latest reflects them. Read
@@ -885,11 +886,10 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             // gates the live snapshot (so a read sees this connection's writes) and is what SELECT SNAPSHOT_TOKEN
             // reports.
             val snapshotToken = b?.snapshotToken ?: dbCat.snapshotToken()
-            QueryOpts(
-                b?.currentTime ?: clock.instant(), t?.txDefaultTz ?: defaultTz,
-                snapshotToken, b?.snapshotTime, tracer
-            )
+            QueryBasis(b?.currentTime ?: clock.instant(), t?.txDefaultTz ?: defaultTz, snapshotToken, b?.snapshotTime)
         }
+
+        private fun queryOpts() = queryBasis().toQueryOpts(tracer)
 
         private class ShowPreparedQuery(
             override val parsed: ParsedStatement.ShowVariable,
