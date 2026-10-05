@@ -1,6 +1,6 @@
 ---
 name: xtdb-github
-description: XTDB-specific conventions for issues, PRs and the 2.x project board — what goes on the board, sub-issue parenting, the two tests a milestone has to pass, what to read and which edits to make when picking up a card, the cached project and field IDs, and driving all of it through chalk. Read this before opening an issue or PR, adding a card, setting a milestone or label, or picking up a card in this repo.
+description: XTDB-specific conventions for issues, PRs and the 2.x project board — what goes on the board, sub-issue parenting, the two tests a milestone has to pass, what to read and which edits to make when picking up a card, the cached project and field IDs, and driving all of it through chalk. Read this before opening an issue or PR, adding a card, setting a milestone or label, or picking up a card in this repo — invoke it whenever you pick a card up, alongside `chalk:pick-up`, which takes its tracker edits from here.
 ---
 
 # GitHub issues, PRs and the project board in XTDB
@@ -107,6 +107,8 @@ We don't make heavy use of labels, but two conventions matter for release notes:
   You MUST fetch the current list with `gh api '/repos/xtdb/xtdb/labels?per_page=100' --jq '.[].name'` rather than guessing at a name.
 
 ## Starting work on a card
+
+`chalk:pick-up` runs the steps of picking a card up; this section is what XTDB needs of them.
 
 ### Read the neighbourhood first
 
