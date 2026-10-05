@@ -818,7 +818,6 @@
                    (create-parsed))
                  ;; control statements executed through a Statement (see execute-portal) aren't preparable, so
                  ;; create rather than prepare — the args bind onto the statement at bind-stmt.
-                 (visitBegin [_ _] (create-parsed))
                  (visitSetTransaction [_ _] (create-parsed))
                  (visitSetAwaitToken [_ _] (create-parsed))
                  (visitSetTimeZone [_ _] (create-parsed))
@@ -1009,7 +1008,7 @@
 
                  ;; control statements bind their args onto the statement (created at prep) — the option exprs
                  ;; read them at executeUpdate, so they live on the statement, not loose on the portal.
-                 (visitBegin [_ _] (bind-parsed))
+                 (visitBegin [_ _] (assoc stmt :xt-args xt-args))
                  (visitSetTransaction [_ _] (bind-parsed))
                  (visitSetAwaitToken [_ _] (bind-parsed))
                  (visitSetTimeZone [_ _] (bind-parsed))
@@ -1262,10 +1261,15 @@
                (visitShowVariable [_ _] (cmd-exec-query conn portal))
                (visitDml [_ _] (cmd-exec-dml conn portal))
 
-               (visitBegin [_ _]
-                 ;; BEGIN runs through the Statement (as ADBC does): created at prepare, args bound at bind, so a
-                 ;; BEGIN option can be a parameter placeholder (e.g. AWAIT_TOKEN = $1)
-                 (.executeUpdate ^Xtdb$Statement (:statement portal))
+               (visitBegin [_ ^ParsedStatement$Begin stmt]
+                 (let [^Xtdb$Connection node-conn (:node-conn @conn-state)]
+                   (.begin node-conn)
+                   (try
+                     (util/with-open [args-rel (some->> (seq (:xt-args portal)) (vw/open-args (:allocator conn)))]
+                       (.setTransaction node-conn (.getTxOptions stmt) args-rel))
+                     (catch Throwable t
+                       (.rollbackTx node-conn)
+                       (throw t))))
                  (swap! conn-state assoc :implicit-tx? false)
                  (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "BEGIN"}))
 

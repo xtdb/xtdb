@@ -910,7 +910,11 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             is TxOptionValue.Expr -> eval(expr)
         }
 
-        private fun setTransaction(opts: TxOptions, args: RelationReader?) {
+        /** @suppress */
+        // public only for pgwire's BEGIN, which applies its characteristics after begin(); a Clojure caller can't
+        // reach an `internal` member.
+        @InternalApi
+        fun setTransaction(opts: TxOptions, args: RelationReader?) {
             fun literal(expr: ParserRuleContext) = sqlPlanner.evalLiteral(expr, args)
 
             // an isolation level only: XTDB is always serializable
