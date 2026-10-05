@@ -54,6 +54,7 @@ import xtdb.util.closeAllOnCatch
 import xtdb.util.closeOnCatch
 import xtdb.util.requiringResolve
 import xtdb.util.useAll
+import xtdb.util.XtdbVersion
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.*
@@ -1211,9 +1212,9 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                 }
 
                 addStringInfo(AdbcInfoCode.VENDOR_NAME, "XTDB")
-                addStringInfo(AdbcInfoCode.VENDOR_VERSION, "dev")
+                addStringInfo(AdbcInfoCode.VENDOR_VERSION, XtdbVersion.version)
                 addStringInfo(AdbcInfoCode.DRIVER_NAME, "XTDB ADBC Driver")
-                addStringInfo(AdbcInfoCode.DRIVER_VERSION, "dev")
+                addStringInfo(AdbcInfoCode.DRIVER_VERSION, XtdbVersion.version)
 
                 infoValueVec.valueCount = idx
                 root.rowCount = idx

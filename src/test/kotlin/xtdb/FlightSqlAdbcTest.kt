@@ -58,6 +58,7 @@ import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import xtdb.api.Xtdb
+import xtdb.util.XtdbVersion
 import xtdb.database.Database
 import xtdb.api.query.IKeyFn.KeyFn.SNAKE_CASE_STRING
 import xtdb.arrow.Relation
@@ -312,6 +313,12 @@ class FlightSqlAdbcTest {
     fun `test FlightSQL getSqlInfo`() {
         val rows = fsqlClient.getSqlInfo(intArrayOf(), *emptyCallOpts).readRows()
         assertTrue(rows.isNotEmpty(), "Expected at least one info row")
+    }
+
+    @Test
+    fun `FlightSQL getSqlInfo reports the XTDB version`() {
+        val rows = fsqlClient.getSqlInfo(intArrayOf(SqlInfo.FLIGHT_SQL_SERVER_VERSION_VALUE), *emptyCallOpts).readRows()
+        assertEquals(listOf(XtdbVersion.version), rows.map { (it["value"] as TaggedValue).value })
     }
 
     @Test

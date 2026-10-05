@@ -39,6 +39,7 @@ import xtdb.util.closeOnCatch
 import xtdb.util.logger
 import xtdb.util.serializeAsMessageInterruptibly
 import xtdb.util.warn
+import xtdb.util.XtdbVersion
 import java.util.*
 import java.util.concurrent.Callable
 import java.util.concurrent.ConcurrentHashMap
@@ -692,7 +693,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
             }
 
             addString(SqlInfo.FLIGHT_SQL_SERVER_NAME_VALUE, "XTDB")
-            addString(SqlInfo.FLIGHT_SQL_SERVER_VERSION_VALUE, "dev")
+            addString(SqlInfo.FLIGHT_SQL_SERVER_VERSION_VALUE, XtdbVersion.version)
             // The ADBC Go driver (underlying the Python adbc_driver_flightsql package) reads this code
             // at connect; without it set_autocommit(False) raises NOT_IMPLEMENTED. The value is the
             // SqlSupportedTransaction enum — TRANSACTION means begin/commit/rollback are supported.

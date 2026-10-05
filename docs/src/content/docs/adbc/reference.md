@@ -145,7 +145,7 @@ Both reflect **live data**, not just flushed-to-block state: freshly-inserted ro
 : returns `TABLE` (XTDB has one table type).
 
 `getInfo(…)`
-: returns `VENDOR_NAME = "XTDB"`, `DRIVER_NAME = "XTDB ADBC Driver"`, and version fields (currently placeholder strings).
+: returns `VENDOR_NAME = "XTDB"` and `DRIVER_NAME = "XTDB ADBC Driver"`, with `VENDOR_VERSION` and `DRIVER_VERSION` both XTDB's version, e.g. `"2.2.0"` — the same value as `current_setting('xtdb.version')`.
 
 ## Session options
 

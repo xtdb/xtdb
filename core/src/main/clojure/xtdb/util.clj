@@ -25,7 +25,7 @@
            (xtdb Bytes TaggedValue)
            (xtdb.arrow VectorType)
            (xtdb.log.proto TemporalMetadata TemporalMetadata$Builder)
-           (xtdb.util Iid NormalForm)))
+           (xtdb.util Iid NormalForm XtdbVersion)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -507,22 +507,8 @@
 (defn used-netty-memory []
   (io.netty.util.internal.PlatformDependent/usedDirectMemory))
 
-(defn manifest-attribute [^String k]
-  (let [manifest (-> (ClassLoader/getSystemResource "META-INF/MANIFEST.MF")
-                     .openStream
-                     java.util.jar.Manifest.)]
-    (.getValue (.getMainAttributes manifest) k)))
-
-(defn manifest-version []
-  (manifest-attribute "Implementation-Version"))
-
-(def ^:private !xtdb-version
-  (delay (or (some-> (System/getenv "XTDB_VERSION") str/trim not-empty)
-             (manifest-version)
-             "2.x")))
-
 (defn xtdb-version []
-  @!xtdb-version)
+  (XtdbVersion/getVersion))
 
 (defn normalize-git-sha [sha]
   (when-let [sha (not-empty (str/trim (str sha)))]
@@ -531,7 +517,7 @@
 
 (def ^:private !xtdb-git-sha
   (delay (or (normalize-git-sha (System/getenv "GIT_SHA"))
-             (normalize-git-sha (manifest-attribute "Scm-Revision"))
+             (normalize-git-sha (XtdbVersion/manifestAttribute "Scm-Revision"))
              (when-let [{:keys [out ^long exit]} (try
                                                    (sh/sh "git" "rev-parse" "--short" "HEAD")
                                                    (catch IOException _))] ; couldn't start git

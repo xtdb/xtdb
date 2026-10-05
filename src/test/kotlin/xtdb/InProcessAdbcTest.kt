@@ -1,10 +1,13 @@
 package xtdb
 
 import org.apache.arrow.adbc.core.AdbcConnection.GetObjectsDepth
+import org.apache.arrow.adbc.core.AdbcInfoCode
 import org.apache.arrow.adbc.core.AdbcStatement
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
+import org.apache.arrow.vector.UInt4Vector
 import org.apache.arrow.vector.VectorSchemaRoot
+import org.apache.arrow.vector.complex.DenseUnionVector
 import org.apache.arrow.vector.complex.ListVector
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.junit.jupiter.api.AfterEach
@@ -17,6 +20,7 @@ import xtdb.api.error.Incorrect
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import xtdb.api.Xtdb
+import xtdb.util.XtdbVersion
 import xtdb.api.query.IKeyFn.KeyFn.SNAKE_CASE_STRING
 import xtdb.arrow.Relation
 import xtdb.arrow.VectorType
@@ -90,6 +94,26 @@ class InProcessAdbcTest {
                 stmt.prepare()
 
                 assertEquals(listOf(mapOf("_id" to 1L, "n" to "one")), queryRows(stmt))
+            }
+        }
+    }
+
+    @Test
+    fun `getInfo reports the XTDB version as both vendor and driver version`() {
+        val vendorVersion = AdbcInfoCode.VENDOR_VERSION.value
+        val driverVersion = AdbcInfoCode.DRIVER_VERSION.value
+
+        xtdb.connect().use { conn ->
+            conn.getInfo(intArrayOf(vendorVersion, driverVersion)).use { rdr ->
+                assertTrue(rdr.loadNextBatch())
+                val root = rdr.vectorSchemaRoot
+                val names = root.getVector("info_name") as UInt4Vector
+                val values = root.getVector("info_value") as DenseUnionVector
+
+                assertEquals(
+                    mapOf(vendorVersion to XtdbVersion.version, driverVersion to XtdbVersion.version),
+                    (0 until root.rowCount).associate { names.get(it) to values.getObject(it).toString() }
+                )
             }
         }
     }
