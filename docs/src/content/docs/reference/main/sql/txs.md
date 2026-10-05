@@ -192,6 +192,7 @@ return rr.Diagram(rr.Choice(0, begin, commit, 'ROLLBACK'))
 * N.B. `READ WRITE` is a misnomer in XTDB here - this is to align with standard SQL syntax.
   XTDB doesn't have interactive read-write transactions, so any attempt to (e.g.) `SELECT` in this transaction will error.
 * For read-only transactions, see the [query reference](/reference/main/sql/queries#begin--commit--rollback).
+* `BEGIN`, `COMMIT` and `ROLLBACK` are SQL statements over the Postgres wire protocol only - see the [query reference](/reference/main/sql/queries#begin--commit--rollback).
 
 ### SET TRANSACTION (v2.2+)
 

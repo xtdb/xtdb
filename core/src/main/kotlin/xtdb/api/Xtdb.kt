@@ -379,10 +379,25 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         @InternalApi
         fun prepareStatement(parsed: ParsedStatement): Statement = openStatement(parsed).apply { prepare() }
 
-        fun createStatement(sql: String): Statement = openStatement(parseStatement(sql))
+        fun createStatement(sql: String): Statement = openStatement(parseClientSql(sql))
+
+        // pgwire hands over statements it has parsed itself, its own BEGIN/COMMIT/ROLLBACK among them; SQL text comes
+        // from callers with a transaction API of their own.
+        private fun parseClientSql(sql: String): ParsedStatement =
+            when (val parsed = parseStatement(sql)) {
+                is ParsedStatement.Begin, is ParsedStatement.Commit, is ParsedStatement.Rollback -> throw Incorrect(
+                    "BEGIN, START TRANSACTION, COMMIT and ROLLBACK aren't available as SQL here: " +
+                        "use the transaction API (ADBC's autocommit, commit and rollback; Flight SQL's " +
+                        "BeginTransaction and EndTransaction; Xtdb.Connection's begin, commitSync, commitAsync and rollbackTx), " +
+                        "and SET TRANSACTION for a transaction's characteristics",
+                    "xtdb.adbc/tx-control-as-sql"
+                )
+
+                else -> parsed
+            }
 
         // for a frontend that has already classified the statement (pgwire) — creates without preparing, so a
-        // non-preparable control statement (BEGIN/COMMIT/SET) executes through the same Statement path.
+        // non-preparable control statement (SET TRANSACTION, SET TIME ZONE) executes through the same Statement path.
         /** @suppress */
         @InternalApi
         fun createStatement(parsed: ParsedStatement): Statement = openStatement(parsed)
@@ -409,7 +424,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                 }
 
                 override fun setSqlQuery(sql: String) {
-                    this.parsedStatement = parseStatement(sql)
+                    this.parsedStatement = parseClientSql(sql)
                     this.preparedQuery = null
                     clearArgs()
                 }
@@ -542,16 +557,6 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                     val stmt = parsedStatement ?: throw Incorrect("SQL query not set", "xtdb.adbc/no-sql")
 
                     when (stmt) {
-                        is ParsedStatement.Begin -> begin(stmt.txOptions, args)
-
-                        is ParsedStatement.Commit -> when (stmt.mode) {
-                            ParsedStatement.CommitMode.SYNC -> commitSync()
-                            ParsedStatement.CommitMode.ASYNC -> commitAsync()
-                            null -> if (isTxAsync) commitAsync() else commitSync()
-                        }
-
-                        is ParsedStatement.Rollback -> rollbackTx()
-
                         is ParsedStatement.Dml -> executeTxOp(TxOp.Sql(stmt.originalSql, openQueryArgs()))
 
                         is ParsedStatement.SetSessionParameter ->
@@ -953,16 +958,6 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
             next?.let { tx.replacePhase(it) }
             tx.txDefaultTz = tz
-        }
-
-        private fun begin(opts: TxOptions, args: RelationReader?) {
-            begin()
-            try {
-                setTransaction(opts, args)
-            } catch (e: Throwable) {
-                rollbackTx()
-                throw e
-            }
         }
 
         private fun drainWriteTx(): Pair<List<TxOp>, TxOpts>? {

@@ -871,20 +871,21 @@ class FlightSqlAdbcTest {
         }
     }
 
-    // -- SQL transaction & session control --
-    //
-    // Driven through a session-bound client: BEGIN/SET are connection state, and only a session cookie
+    // Driven through a session-bound client: SET is connection state, and only a session cookie
     // ties a client to its own connection (a cookieless caller shares one per database).
 
     private fun sessionClient(): FlightSqlClient =
         cookieAwareClient().also { it.setSessionOptions(catalogOpt("xtdb"), *emptyCallOpts) }
 
     @Test
-    fun `SQL BEGIN with SYSTEM_TIME backfills at the requested system-time`() {
+    fun `SET TRANSACTION with SYSTEM_TIME backfills at the requested system-time`() {
         sessionClient().use { client ->
-            client.executeUpdate("BEGIN READ WRITE WITH (SYSTEM_TIME TIMESTAMP '2021-08-03T00:00:00Z')", *emptyCallOpts)
-            client.executeUpdate("INSERT INTO docs RECORDS {_id: 1, v: 'backfill'}", *emptyCallOpts)
-            client.executeUpdate("COMMIT", *emptyCallOpts)
+            val txn = client.beginTransaction(*emptyCallOpts)
+            client.executeUpdate(
+                "SET TRANSACTION READ WRITE, SYSTEM_TIME = TIMESTAMP '2021-08-03T00:00:00Z'", txn, *emptyCallOpts
+            )
+            client.executeUpdate("INSERT INTO docs RECORDS {_id: 1, v: 'backfill'}", txn, *emptyCallOpts)
+            client.commit(txn, *emptyCallOpts)
         }
 
         assertEquals(
@@ -899,13 +900,13 @@ class FlightSqlAdbcTest {
     }
 
     @Test
-    fun `SQL ROLLBACK discards the transaction's writes`() {
+    fun `rolling back discards the transaction's writes`() {
         fsqlClient.executeUpdate("INSERT INTO docs RECORDS {_id: 1}", *emptyCallOpts)
 
         sessionClient().use { client ->
-            client.executeUpdate("BEGIN READ WRITE", *emptyCallOpts)
-            client.executeUpdate("INSERT INTO docs RECORDS {_id: 2}", *emptyCallOpts)
-            client.executeUpdate("ROLLBACK", *emptyCallOpts)
+            val txn = client.beginTransaction(*emptyCallOpts)
+            client.executeUpdate("INSERT INTO docs RECORDS {_id: 2}", txn, *emptyCallOpts)
+            client.rollback(txn, *emptyCallOpts)
         }
 
         assertEquals(
@@ -932,18 +933,18 @@ class FlightSqlAdbcTest {
         )
     }
 
-    // Transaction control has no result set, so the ExecuteQuery route can't carry it — but it must say
-    // so as INVALID_ARGUMENT rather than failing inside the planner. See #5856.
     @Test
-    fun `SQL BEGIN through the query path is rejected as an argument error`() {
-        val ex = assertThrows(FlightRuntimeException::class.java) {
-            fsqlClient.execute("BEGIN READ WRITE", *emptyCallOpts)
+    fun `transaction control as SQL is rejected, naming the transaction API`() {
+        for (sql in listOf("BEGIN", "START TRANSACTION", "BEGIN READ WRITE", "COMMIT", "ROLLBACK")) {
+            for ((route, call) in listOf<Pair<String, () -> Any>>(
+                "update" to { fsqlClient.executeUpdate(sql, *emptyCallOpts) },
+                "query" to { fsqlClient.execute(sql, *emptyCallOpts) },
+            )) {
+                val ex = assertThrows(FlightRuntimeException::class.java, { call() }, "$sql via $route")
+                assertEquals(FlightStatusCode.INVALID_ARGUMENT, ex.status().code(), "$sql via $route")
+                assertTrue(ex.message?.contains("BeginTransaction") == true, "$sql via $route: ${ex.message}")
+            }
         }
-        assertEquals(FlightStatusCode.INVALID_ARGUMENT, ex.status().code())
-        assertTrue(
-            ex.message?.contains("not a preparable query") == true,
-            "expected message containing 'not a preparable query', got: ${ex.message}"
-        )
     }
 
     // -- executeSchema --

@@ -1867,6 +1867,12 @@
                               (jdbc/execute! conn ["SET TRANSACTION READ ONLY"]))
             mode))))
 
+(deftest a-begin-whose-options-fail-leaves-no-transaction-open
+  (with-open [conn (jdbc-conn)]
+    (t/is (thrown? PSQLException (jdbc/execute! conn ["BEGIN READ ONLY WITH (AWAIT_TOKEN = 'whatever')"])))
+    (jdbc/execute! conn ["BEGIN"])
+    (jdbc/execute! conn ["ROLLBACK"])))
+
 (deftest test-prepare-select
   (with-open [conn (jdbc-conn {"prepareThreshold" -1})]
     ;; real Postgres does this too - it's like it defaults the type of $1 on `PREPARE`

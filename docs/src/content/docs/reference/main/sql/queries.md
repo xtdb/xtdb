@@ -445,6 +445,8 @@ return rr.Diagram(rr.Choice(0, begin, 'COMMIT', 'ROLLBACK'))
 * `BEGIN READ ONLY WITH (...)` takes the same options inside `WITH (...)`, `TIMEZONE` included.
 * For read-write transactions, see the [transaction reference](/reference/main/sql/txs#begin--commit--rollback).
 * Committing/rolling back a read-only transaction has no effect in XTDB, because readers never block writers nor each other.
+* `BEGIN`, `START TRANSACTION`, `COMMIT` and `ROLLBACK` are SQL statements over the Postgres wire protocol only.
+  [ADBC](/adbc) and Flight SQL clients open and end transactions through their own transaction API, and reject these statements as SQL; they set a transaction's options with [`SET TRANSACTION`](#set-transaction-v22).
 
 ### SET TRANSACTION (v2.2+)
 

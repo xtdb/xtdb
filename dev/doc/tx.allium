@@ -14,20 +14,18 @@
 --
 -- == Frontend parity (the point of this spec) ==
 --
--- Both protocol frontends — pgwire and ADBC / Flight SQL — reach this ENTIRE model
--- through one shared Connection. There are two ways a client drives a transaction:
+-- All three frontends — pgwire, ADBC and Flight SQL — drive one shared Connection, and the model reaches each through the entry points that frontend owns.
 --
---   1. tx-control-as-SQL: BEGIN [modes], SET TRANSACTION modes, COMMIT [SYNC | ASYNC] and ROLLBACK, sent as SQL, classified by the SqlParser (Begin / SetTransaction / Commit / Rollback) and handled by the connection.
---      This is the FULL surface — access mode, read basis, commit-opts and the transaction's time zone are all expressible here.
---      An ADBC / Flight SQL client expresses the whole model this way.
---   2. programmatic basic-control: setAutoCommit / commit / rollback on the ADBC
---      AdbcConnection surface. Retained for driver ergonomics; a strict subset of (1).
+--   1. pgwire: BEGIN / START TRANSACTION [modes], BEGIN [READ ONLY | READ WRITE] WITH (...),
+--      COMMIT [SYNC | ASYNC] and ROLLBACK sent as SQL are pgwire's alone.
+--      pgwire parses them itself.
+--      BEGIN calls Connection.begin() then applies its characteristics through the entry point SQL SET TRANSACTION uses, rolling the transaction back if they are rejected.
+--      COMMIT and ROLLBACK call the connection's commit and rollback.
+--   2. ADBC and Flight SQL: a caller handing the connection SQL text has BEGIN, START TRANSACTION, COMMIT and ROLLBACK rejected with xtdb.adbc/tx-control-as-sql, which names the transaction API.
+--      These callers open and end transactions through their API: ADBC autocommit / commit / rollback, Flight SQL BeginTransaction / EndTransaction, and Xtdb.Connection.begin / commitSync / commitAsync / rollbackTx.
+--      They set characteristics with SET TRANSACTION, which is accepted as SQL, or with Xtdb.Connection.setTransactionReadOnly / setTransactionReadWrite / setTransactionTimeZone.
 --
--- This is the TARGET contract for an in-progress arc. The work in progress brings ADBC
--- up to this contract (tx-control-as-SQL + retained programmatic control); once ADBC
--- reaches it, pgwire is migrated onto the same Connection model wholesale. Code will
--- catch up increment by increment — this describes the intended complete model, not
--- only what is implemented today.
+--      SET TRANSACTION modes is accepted as SQL from every frontend, classified by the SqlParser, so access mode, read basis, commit-opts and the transaction's time zone are all expressible there.
 --
 -- == Boundaries ==
 --
@@ -35,8 +33,7 @@
 --        crosses this boundary (submit when async, execute-and-await when sync). The
 --        async/sync choice is the commit's own COMMIT SYNC / COMMIT ASYNC if it states one,
 --        else the transaction's begin-time async flag.
--- Above: the Frontend (pgwire / ADBC client) that decodes the wire protocol and feeds
---        SQL strings and programmatic calls into the Connection.
+-- Above: the Frontend (pgwire / ADBC / Flight SQL client) that decodes the wire protocol and feeds SQL strings and transaction API calls into the Connection.
 
 ---- Given
 
@@ -47,10 +44,10 @@ given {
 ---- External Entities
 
 external entity Frontend {
-    -- The protocol frontend driving the connection: pgwire, or an ADBC / Flight SQL
-    -- client. It decodes the wire protocol and feeds SQL strings (and, for ADBC, the
-    -- programmatic setAutoCommit/commit/rollback calls) into the Connection. The
-    -- connection model is frontend-agnostic; this is the party on the far side.
+    -- The protocol frontend driving the connection: pgwire, or an ADBC / Flight SQL client.
+    -- It decodes the wire protocol and feeds SQL strings (and, for ADBC and Flight SQL, the transaction API calls) into the Connection.
+    -- This is the party on the far side.
+    protocol: pgwire | adbc | flight_sql
 }
 
 external entity Database {
@@ -62,10 +59,10 @@ external entity Database {
 }
 
 external entity SqlParser {
-    -- The SQL classifier (xtdb.query.SqlParser → ParsedStatement). Recognises
-    -- tx-control statements (Begin / Commit / Rollback) and statement kinds
-    -- (Query vs Dml) without planning. The shared path by which a client expresses
-    -- the full transaction model as SQL. See: core/src/main/kotlin/xtdb/query/SqlParser.kt
+    -- The SQL classifier (xtdb.query.SqlParser → ParsedStatement).
+    -- Recognises tx-control statements (Begin / Commit / Rollback) and statement kinds (Query vs Dml) without planning.
+    -- pgwire acts on the tx-control statements it classifies; the other frontends reject them.
+    -- See: core/src/main/kotlin/xtdb/query/SqlParser.kt
 }
 
 external entity SqlPlanner {
@@ -209,7 +206,7 @@ enum CommitMode {
     -- `sync` forces execute-and-await, `async` forces fire-and-forget submit. Passed as an
     -- optional CommitTransaction parameter (null = no commit-time override, defer to the
     -- transaction's begin-time CommitOpts.async flag). Distinct from that begin-time flag: it
-    -- lets a single COMMIT override the mode fixed at BEGIN READ WRITE WITH (ASYNC = ...).
+    -- lets a single COMMIT override the mode fixed by the transaction's ASYNC option.
     sync | async
 }
 
@@ -283,12 +280,12 @@ entity DmlBuffer {
 
 ---- Rules: Beginning a Transaction
 
--- An explicit SQL BEGIN opens a transaction regardless of auto_commit; the flag is left
--- untouched and the explicit transaction coexists with it.
+-- An explicit transaction opens regardless of auto_commit; the flag is left untouched and the explicit transaction coexists with it.
+-- pgwire opens one with SQL BEGIN; ADBC and Flight SQL open one through their transaction API (see Rules: Tx-Control SQL Outside pgwire).
 --
--- BEGIN / START TRANSACTION take the same list of modes as SET TRANSACTION.
+-- pgwire's BEGIN / START TRANSACTION take the same list of modes as SET TRANSACTION.
 -- BEGIN also takes `READ ONLY WITH (...)` / `READ WRITE WITH (...)`, whose WITH list holds that access mode's options and TIMEZONE.
--- Either way, BEGIN opens a transaction with the session default access mode, then applies SET TRANSACTION with BEGIN's characteristics (see Rules: Setting Transaction Characteristics).
+-- Either way, pgwire's BEGIN opens a transaction with the session default access mode, then applies SET TRANSACTION with BEGIN's characteristics (see Rules: Setting Transaction Characteristics).
 -- If applying them is rejected, the transaction is rolled back, so a failed BEGIN leaves none open.
 --
 -- No BEGIN pins a read basis: that happens at the transaction's first query. The phase a
@@ -303,7 +300,7 @@ rule BeginOpensTransaction {
     -- Pending(ReadOnly with no options) / Writing directly; with no default set it opens
     -- Pending(Unspecified), resolved by the first statement (the common case).
     -- tx_default_tz and session_default_tz are the connection's default_tz.
-    -- BEGIN's own characteristics, if any, are then applied by SET TRANSACTION.
+    -- pgwire applies BEGIN's own characteristics, if any, through SET TRANSACTION.
     when: BeginTransaction(frontend, connection, access_mode, read_only_opts, commit_opts, tz_override)
     requires: connection.tx = null
 
@@ -817,8 +814,17 @@ rule FailedTransactionRejectsStatements {
 
 ---- Rules: Commit and Rollback
 
--- SQL COMMIT / ROLLBACK act on the explicit transaction regardless of auto_commit.
--- Programmatic commit() / rollback() are valid only when auto_commit is off.
+-- pgwire's SQL COMMIT / ROLLBACK act on the explicit transaction regardless of auto_commit.
+-- ADBC's programmatic commit() / rollback() are valid only when auto_commit is off.
+
+rule TxControlAsSqlRejected {
+    -- BEGIN, START TRANSACTION, COMMIT and ROLLBACK reach the connection as SQL text from ADBC and Flight SQL callers; the error names the transaction API those callers use.
+    when: TxControlSubmittedAsSql(frontend, connection, statement)
+    requires: frontend.protocol != pgwire
+
+    ensures:
+        StatementRejected(error_code: `xtdb.adbc/tx-control-as-sql`)
+}
 
 rule CommitWriting {
     -- Commit of a Writing transaction drains the buffer and crosses the Database
@@ -971,30 +977,47 @@ invariant TxReadOnlyForFrontend {
 ---- Actor Declarations
 
 actor FrontendActor {
-    -- Either protocol frontend (pgwire or ADBC / Flight SQL). Any Frontend may drive a
-    -- connection through the surfaces below.
+    -- Any protocol frontend (pgwire, ADBC or Flight SQL).
+    -- Any Frontend may drive a connection through the surfaces that provide entry points to every frontend.
     identified_by: Frontend where true
+}
+
+actor PgwireFrontend {
+    identified_by: Frontend where protocol = pgwire
+}
+
+actor TransactionApiFrontend {
+    -- An ADBC or Flight SQL client, which opens and ends transactions through its API.
+    identified_by: Frontend where protocol != pgwire
 }
 
 ---- Surfaces
 
-surface TxControlAsSql {
-    -- The shared path: tx-control expressed as SQL, classified by the SqlParser. This is
-    -- the full surface — an ADBC / Flight SQL client reaches the entire model here.
-    facing frontend: FrontendActor
+surface PgwireTxControl {
+    -- BEGIN / START TRANSACTION, COMMIT and ROLLBACK as SQL, which pgwire parses itself.
+    facing frontend: PgwireFrontend
 
     context conn: Connection
 
     provides:
         BeginTransaction(frontend, conn, access_mode, read_only_opts, commit_opts, tz_override)
             when conn.tx = null
-        SetTransaction(frontend, conn, access_mode, read_only_opts, commit_opts, tz_override)
-        ExecuteStatement(frontend, conn, kind, statement)
-        SetTimeZone(frontend, conn, zone)
         CommitTransaction(frontend, conn, commit_mode)
             when conn.tx != null
         RollbackTransaction(frontend, conn)
             when conn.tx != null
+}
+
+surface SqlStatements {
+    -- SQL accepted from every frontend; SET TRANSACTION is the SQL route to a transaction's characteristics.
+    facing frontend: FrontendActor
+
+    context conn: Connection
+
+    provides:
+        SetTransaction(frontend, conn, access_mode, read_only_opts, commit_opts, tz_override)
+        ExecuteStatement(frontend, conn, kind, statement)
+        SetTimeZone(frontend, conn, zone)
 
     @guarantee SingleOpenTransaction
         -- At most one transaction is open on a connection at any time.
@@ -1007,10 +1030,22 @@ surface TxControlAsSql {
         -- user; it is not a per-transaction option.
 }
 
-surface AdbcBasicControl {
-    -- Retained programmatic control on the ADBC AdbcConnection surface: a strict subset
-    -- of TxControlAsSql, kept for driver ergonomics.
-    facing frontend: FrontendActor
+surface TxControlAsSql {
+    -- tx-control statements handed to the connection as SQL text by ADBC and Flight SQL callers.
+    facing frontend: TransactionApiFrontend
+
+    context conn: Connection
+
+    provides:
+        TxControlSubmittedAsSql(frontend, conn, statement)
+
+    @guarantee TxControlAsSqlNamesTransactionApi
+        -- The rejection names the transaction API: ADBC autocommit / commit / rollback, Flight SQL BeginTransaction / EndTransaction, and Xtdb.Connection.begin / commitSync / commitAsync / rollbackTx.
+}
+
+surface TransactionApi {
+    -- How ADBC and Flight SQL callers open and end transactions, and set their characteristics without SQL: ADBC autocommit / commit / rollback, Flight SQL BeginTransaction / EndTransaction, and Xtdb.Connection.begin / commitSync / commitAsync / rollbackTx / setTransactionReadOnly / setTransactionReadWrite / setTransactionTimeZone.
+    facing frontend: TransactionApiFrontend
 
     context conn: Connection
 
