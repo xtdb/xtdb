@@ -390,12 +390,12 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         descriptor: FlightDescriptor
     ): FlightInfo = flightCall {
         val sql = cmd.queryBytes.toStringUtf8()
-        val dbName = resolveDb(ctx)
+        val conn = txOrSessionConnection(ctx, if (cmd.hasTransactionId()) cmd.transactionId else null)
 
-        connectionFor(ctx, dbName).createStatement().use { stmt ->
+        conn.createStatement().use { stmt ->
             stmt.setSqlQuery(sql)
             stmt.requireQuery()
-            queryFlightInfo(stmt, dbName, sql, null, descriptor)
+            queryFlightInfo(stmt, conn.dbName, sql, null, descriptor)
         }
     }
 

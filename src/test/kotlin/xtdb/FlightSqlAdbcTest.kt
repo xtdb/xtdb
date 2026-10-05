@@ -527,6 +527,22 @@ class FlightSqlAdbcTest {
     }
 
     @Test
+    fun `a query sent with a transaction reads at that transaction's snapshot`() {
+        fsqlClient.executeUpdate("INSERT INTO users (_id, n) VALUES (1, 'before')", *emptyCallOpts)
+
+        val txn = fsqlClient.beginTransaction(*emptyCallOpts)
+        assertEquals(1, fsqlClient.execute("SELECT _id FROM users", txn, *emptyCallOpts).readRows().size)
+
+        fsqlClient.executeUpdate("INSERT INTO users (_id, n) VALUES (2, 'after')", *emptyCallOpts)
+
+        assertEquals(
+            1, fsqlClient.execute("SELECT _id FROM users", txn, *emptyCallOpts).readRows().size,
+            "the second read shares the snapshot the first one pinned"
+        )
+        fsqlClient.rollback(txn, *emptyCallOpts)
+    }
+
+    @Test
     fun `test FlightSQL a transaction is scoped to its own session`() {
         cookieAwareClient().use { sessionA ->
             cookieAwareClient().use { sessionB ->
