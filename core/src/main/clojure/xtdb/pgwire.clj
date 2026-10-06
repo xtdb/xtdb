@@ -47,7 +47,8 @@
            (xtdb.query SqlParser SqlPlanner
                        ParsedStatement ParsedStatement$Visitor ParsedStatement$Begin
                        ParsedStatement$Commit ParsedStatement$CommitMode ParsedStatement$Query ParsedStatement$Dml
-                       ParsedStatement$ShowVariable ParsedStatement$CopyIn ParsedStatement$Execute)
+                       ParsedStatement$ShowVariable ParsedStatement$CopyIn ParsedStatement$Execute
+                       ParsedStatement$SetTransaction)
            (xtdb.tx TxOp$PutDocs)))
 
 ;; references
@@ -391,8 +392,7 @@
         user (get startup-opts "user")
         node-conn (let [^Xtdb$Connection node-conn (.connect ^Xtdb node db-name)]
                     ;; seed the connection's clock from the server's, when set (tests pin a fixed clock there);
-                    ;; otherwise the connection keeps its own. It owns the clock thereafter, pinning
-                    ;; current-time off it at BEGIN.
+                    ;; otherwise the connection keeps its own.
                     (when-let [clock (:clock @(:server-state server))]
                       (.setClock node-conn clock))
                     node-conn)
@@ -554,7 +554,7 @@
 (defn- begin-implicit
   "Open an implicit transaction — one pgwire started itself (no client BEGIN), so pgwire will auto-commit it.
   [access-mode] is :read-only / :read-write / nil (bare — the connection takes its session default access mode).
-  The connection pins the read basis (awaiting this connection's own writes) at BEGIN."
+  The connection pins the read basis (awaiting this connection's own writes) at the transaction's first query."
   [{:keys [conn-state]} access-mode]
   (let [^Xtdb$Connection node-conn (:node-conn @conn-state)]
     (case access-mode
@@ -673,6 +673,7 @@
                    (visitShowVariable [_ _] (describe* describe-target))
                    (visitDml [_ _] (describe* describe-target))
                    (visitBegin [_ _] (describe* describe-target))
+                   (visitSetTransaction [_ _] (describe* describe-target))
                    (visitExecute [_ stmt]
                      (let [inner (get-in @conn-state [:prepared-statements (.getName stmt)])]
                        (describe* {:param-oids (:param-oids describe-target)
@@ -817,7 +818,7 @@
                    (create-parsed))
                  ;; control statements executed through a Statement (see execute-portal) aren't preparable, so
                  ;; create rather than prepare — the args bind onto the statement at bind-stmt.
-                 (visitBegin [_ _] (create-parsed))
+                 (visitSetTransaction [_ _] (create-parsed))
                  (visitSetAwaitToken [_ _] (create-parsed))
                  (visitSetTimeZone [_ _] (create-parsed))
                  (visitOther [_ _] stmt)))
@@ -1007,7 +1008,8 @@
 
                  ;; control statements bind their args onto the statement (created at prep) — the option exprs
                  ;; read them at executeUpdate, so they live on the statement, not loose on the portal.
-                 (visitBegin [_ _] (bind-parsed))
+                 (visitBegin [_ _] (assoc stmt :xt-args xt-args))
+                 (visitSetTransaction [_ _] (bind-parsed))
                  (visitSetAwaitToken [_ _] (bind-parsed))
                  (visitSetTimeZone [_ _] (bind-parsed))
 
@@ -1087,11 +1089,6 @@
     (set-time-zone conn value)
     (set-session-parameter conn parameter value))
   (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET"}))
-
-(defn cmd-set-transaction [conn _tx-opts]
-  ;; no-op - can only set transaction isolation, and that
-  ;; doesn't mean anything to us because we're always serializable
-  (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET TRANSACTION"}))
 
 
 (defn cmd-set-session-characteristics [{:keys [conn-state] :as conn} access-mode]
@@ -1264,10 +1261,15 @@
                (visitShowVariable [_ _] (cmd-exec-query conn portal))
                (visitDml [_ _] (cmd-exec-dml conn portal))
 
-               (visitBegin [_ _]
-                 ;; BEGIN runs through the Statement (as ADBC does): created at prepare, args bound at bind, so a
-                 ;; BEGIN option can be a parameter placeholder (e.g. AWAIT_TOKEN = $1)
-                 (.executeUpdate ^Xtdb$Statement (:statement portal))
+               (visitBegin [_ ^ParsedStatement$Begin stmt]
+                 (let [^Xtdb$Connection node-conn (:node-conn @conn-state)]
+                   (.begin node-conn)
+                   (try
+                     (util/with-open [args-rel (some->> (seq (:xt-args portal)) (vw/open-args (:allocator conn)))]
+                       (.setTransaction node-conn (.getTxOptions stmt) args-rel))
+                     (catch Throwable t
+                       (.rollbackTx node-conn)
+                       (throw t))))
                  (swap! conn-state assoc :implicit-tx? false)
                  (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "BEGIN"}))
 
@@ -1279,7 +1281,9 @@
                  (cmd-rollback conn)
                  (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "ROLLBACK"}))
 
-               (visitSetTransaction [_ _] (cmd-set-transaction conn nil))
+               (visitSetTransaction [_ _]
+                 (.executeUpdate ^Xtdb$Statement (:statement portal))
+                 (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET TRANSACTION"}))
 
                (visitSetSessionCharacteristics [_ stmt]
                  (cmd-set-session-characteristics conn (.getAccessMode stmt)))
@@ -1354,9 +1358,11 @@
   (try
     (doseq [{:keys [^ParsedStatement parsed] :as stmt} (parse-sql query)]
       ;; an explicit BEGIN opens its own tx (and the connection rejects a double-begin), so don't auto-begin
-      ;; for it; SHOW / COPY don't need a wrapping tx either.
+      ;; for it; SHOW / COPY don't need a wrapping tx either. SET TRANSACTION outside a tx is rejected, as over
+      ;; the extended protocol, rather than shaping a tx that commits straight away.
       (when-not (or (.isTxOpen ^Xtdb$Connection (:node-conn @conn-state))
                     (instance? ParsedStatement$Begin parsed)
+                    (instance? ParsedStatement$SetTransaction parsed)
                     (instance? ParsedStatement$ShowVariable parsed)
                     (instance? ParsedStatement$CopyIn parsed))
         (begin-implicit conn nil))

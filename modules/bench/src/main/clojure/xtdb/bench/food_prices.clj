@@ -10,7 +10,7 @@
     and keep only the rows whose price actually moved;
   - resolve the place / product / unit foreign keys the same way, inserting any the dimension
     tables don't hold yet;
-  - write the survivors back as one `BEGIN READ WRITE WITH (SYSTEM_TIME = …)` transaction,
+  - write the survivors back as one read-write transaction at the batch's system-time,
     optionally closing out the rows the batch no longer mentions.
 
   So what this measures is the keyed temporal join against a growing fact table, and the cost of a
@@ -136,9 +136,6 @@
          (.bind stmt ^RelationReader rel)))
      (.executeUpdate stmt))))
 
-(defn- ts-literal ^String [^Instant instant]
-  (format "TIMESTAMP WITH TIME ZONE '%s'" instant))
-
 (defn- tick!
   "The next system time to write at: the batch's own basis, or a microsecond past the last write if
   we're already there. XTDB requires system times to ascend and these are historic, so every write
@@ -153,13 +150,9 @@
 
 (defn- with-tx!
   "Runs `f` as one write transaction at the next system time. Writes inside an open transaction
-  buffer until the commit, so an ingest and its DML land together.
-
-  Commits through `commitSync` rather than a SQL `COMMIT`: the statement path discards the
-  `ExecutedTx`, so an aborted transaction would leave the benchmark reporting timings for writes
-  that never landed."
+  buffer until the commit, so an ingest and its DML land together."
   [^Xtdb$Connection conn !clock basis f]
-  (execute! conn (format "BEGIN READ WRITE WITH (SYSTEM_TIME = %s)" (ts-literal (tick! !clock basis))))
+  (.beginWriteOnly conn (tick! !clock basis))
   (try
     (let [res (f)
           executed (.commitSync conn)]

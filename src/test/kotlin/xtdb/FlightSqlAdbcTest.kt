@@ -8,6 +8,7 @@ import org.apache.arrow.adbc.core.AdbcConnection
 import org.apache.arrow.adbc.core.AdbcConnection.GetObjectsDepth
 import org.apache.arrow.adbc.core.AdbcDatabase
 import org.apache.arrow.adbc.driver.flightsql.FlightSqlDriver
+import org.apache.arrow.flight.Action
 import org.apache.arrow.flight.AsyncPutListener
 import org.apache.arrow.flight.CallOption
 import org.apache.arrow.flight.FlightClient
@@ -61,6 +62,7 @@ import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import xtdb.api.Xtdb
+import xtdb.flight_sql.XtdbProducer
 import xtdb.util.XtdbVersion
 import xtdb.database.Database
 import xtdb.api.query.IKeyFn.KeyFn.SNAKE_CASE_STRING
@@ -527,6 +529,94 @@ class FlightSqlAdbcTest {
     }
 
     @Test
+    fun `a query sent with a transaction reads at that transaction's snapshot`() {
+        fsqlClient.executeUpdate("INSERT INTO users (_id, n) VALUES (1, 'before')", *emptyCallOpts)
+
+        val txn = fsqlClient.beginTransaction(*emptyCallOpts)
+        assertEquals(1, fsqlClient.execute("SELECT _id FROM users", txn, *emptyCallOpts).readRows().size)
+
+        fsqlClient.executeUpdate("INSERT INTO users (_id, n) VALUES (2, 'after')", *emptyCallOpts)
+
+        assertEquals(
+            1, fsqlClient.execute("SELECT _id FROM users", txn, *emptyCallOpts).readRows().size,
+            "the second read shares the snapshot the first one pinned"
+        )
+        fsqlClient.rollback(txn, *emptyCallOpts)
+    }
+
+    private fun commitWithOutcome(txn: FlightSqlClient.Transaction): Pair<List<Map<*, *>>, FlightRuntimeException?> {
+        val outcomes = mutableListOf<Map<*, *>>()
+        val err = try {
+            flightClient.doAction(Action(XtdbProducer.COMMIT_TRANSACTION_ACTION, txn.transactionId), *emptyCallOpts)
+                .forEach { outcomes += decode(String(it.body)) as Map<*, *> }
+            null
+        } catch (e: FlightRuntimeException) {
+            e
+        }
+        return outcomes to err
+    }
+
+    @Test
+    fun `the XTDB commit action returns the committed transaction's outcome`() {
+        val txn = fsqlClient.beginTransaction(*emptyCallOpts)
+        fsqlClient.executeUpdate("INSERT INTO users (_id, n) VALUES (1, 'a')", txn, *emptyCallOpts)
+
+        val (outcomes, err) = commitWithOutcome(txn)
+        assertNull(err)
+
+        val outcome = outcomes.single()
+        assertEquals(0L, outcome["txId"])
+        assertEquals(true, outcome["committed"])
+        assertNotNull(outcome["systemTime"])
+        assertNull(outcome["error"])
+        assertNotNull(outcome["awaitToken"])
+    }
+
+    @Test
+    fun `the XTDB commit action returns an aborted transaction's outcome ahead of its error`() {
+        val txn = fsqlClient.beginTransaction(*emptyCallOpts)
+        fsqlClient.executeUpdate("ASSERT FALSE", txn, *emptyCallOpts)
+
+        val (outcomes, err) = commitWithOutcome(txn)
+        assertNotNull(err)
+
+        val outcome = outcomes.single()
+        assertEquals(false, outcome["committed"])
+        assertEquals("conflict", (outcome["error"] as Map<*, *>)["category"])
+    }
+
+    @Test
+    fun `the XTDB commit action returns no outcome for a transaction that wrote nothing`() {
+        val txn = fsqlClient.beginTransaction(*emptyCallOpts)
+        fsqlClient.execute("SELECT 1 one", txn, *emptyCallOpts).readRows()
+
+        assertEquals(emptyList<Map<*, *>>() to null, commitWithOutcome(txn))
+    }
+
+    @Test
+    fun `the XTDB commit action on an ended transaction is NOT_FOUND`() {
+        val txn = fsqlClient.beginTransaction(*emptyCallOpts)
+        fsqlClient.commit(txn, *emptyCallOpts)
+
+        assertEquals(FlightStatusCode.NOT_FOUND, commitWithOutcome(txn).second?.status()?.code())
+    }
+
+    @Test
+    fun `a transaction takes its session's time zone`() {
+        cookieAwareClient().use { session ->
+            session.setSessionOptions(catalogOpt("xtdb"), *emptyCallOpts)
+            session.executeUpdate("SET TIME ZONE 'America/New_York'", *emptyCallOpts)
+
+            val txn = session.beginTransaction(*emptyCallOpts)
+            assertEquals(
+                listOf(mapOf("timezone" to "America/New_York")),
+                session.execute("SHOW TIME ZONE", txn, *emptyCallOpts).readRows(session)
+            )
+            session.rollback(txn, *emptyCallOpts)
+        }
+    }
+
+    @Test
     fun `test FlightSQL a transaction is scoped to its own session`() {
         cookieAwareClient().use { sessionA ->
             cookieAwareClient().use { sessionB ->
@@ -781,20 +871,21 @@ class FlightSqlAdbcTest {
         }
     }
 
-    // -- SQL transaction & session control --
-    //
-    // Driven through a session-bound client: BEGIN/SET are connection state, and only a session cookie
+    // Driven through a session-bound client: SET is connection state, and only a session cookie
     // ties a client to its own connection (a cookieless caller shares one per database).
 
     private fun sessionClient(): FlightSqlClient =
         cookieAwareClient().also { it.setSessionOptions(catalogOpt("xtdb"), *emptyCallOpts) }
 
     @Test
-    fun `SQL BEGIN with SYSTEM_TIME backfills at the requested system-time`() {
+    fun `SET TRANSACTION with SYSTEM_TIME backfills at the requested system-time`() {
         sessionClient().use { client ->
-            client.executeUpdate("BEGIN READ WRITE WITH (SYSTEM_TIME TIMESTAMP '2021-08-03T00:00:00Z')", *emptyCallOpts)
-            client.executeUpdate("INSERT INTO docs RECORDS {_id: 1, v: 'backfill'}", *emptyCallOpts)
-            client.executeUpdate("COMMIT", *emptyCallOpts)
+            val txn = client.beginTransaction(*emptyCallOpts)
+            client.executeUpdate(
+                "SET TRANSACTION READ WRITE, SYSTEM_TIME = TIMESTAMP '2021-08-03T00:00:00Z'", txn, *emptyCallOpts
+            )
+            client.executeUpdate("INSERT INTO docs RECORDS {_id: 1, v: 'backfill'}", txn, *emptyCallOpts)
+            client.commit(txn, *emptyCallOpts)
         }
 
         assertEquals(
@@ -809,13 +900,13 @@ class FlightSqlAdbcTest {
     }
 
     @Test
-    fun `SQL ROLLBACK discards the transaction's writes`() {
+    fun `rolling back discards the transaction's writes`() {
         fsqlClient.executeUpdate("INSERT INTO docs RECORDS {_id: 1}", *emptyCallOpts)
 
         sessionClient().use { client ->
-            client.executeUpdate("BEGIN READ WRITE", *emptyCallOpts)
-            client.executeUpdate("INSERT INTO docs RECORDS {_id: 2}", *emptyCallOpts)
-            client.executeUpdate("ROLLBACK", *emptyCallOpts)
+            val txn = client.beginTransaction(*emptyCallOpts)
+            client.executeUpdate("INSERT INTO docs RECORDS {_id: 2}", txn, *emptyCallOpts)
+            client.rollback(txn, *emptyCallOpts)
         }
 
         assertEquals(
@@ -842,18 +933,18 @@ class FlightSqlAdbcTest {
         )
     }
 
-    // Transaction control has no result set, so the ExecuteQuery route can't carry it — but it must say
-    // so as INVALID_ARGUMENT rather than failing inside the planner. See #5856.
     @Test
-    fun `SQL BEGIN through the query path is rejected as an argument error`() {
-        val ex = assertThrows(FlightRuntimeException::class.java) {
-            fsqlClient.execute("BEGIN READ WRITE", *emptyCallOpts)
+    fun `transaction control as SQL is rejected, naming the transaction API`() {
+        for (sql in listOf("BEGIN", "START TRANSACTION", "BEGIN READ WRITE", "COMMIT", "ROLLBACK")) {
+            for ((route, call) in listOf<Pair<String, () -> Any>>(
+                "update" to { fsqlClient.executeUpdate(sql, *emptyCallOpts) },
+                "query" to { fsqlClient.execute(sql, *emptyCallOpts) },
+            )) {
+                val ex = assertThrows(FlightRuntimeException::class.java, { call() }, "$sql via $route")
+                assertEquals(FlightStatusCode.INVALID_ARGUMENT, ex.status().code(), "$sql via $route")
+                assertTrue(ex.message?.contains("BeginTransaction") == true, "$sql via $route: ${ex.message}")
+            }
         }
-        assertEquals(FlightStatusCode.INVALID_ARGUMENT, ex.status().code())
-        assertTrue(
-            ex.message?.contains("not a preparable query") == true,
-            "expected message containing 'not a preparable query', got: ${ex.message}"
-        )
     }
 
     // -- executeSchema --

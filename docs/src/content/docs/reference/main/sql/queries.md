@@ -2,6 +2,21 @@
 title: SQL Queries
 ---
 
+<details>
+<summary>Changelog (last updated v2.2)</summary>
+
+v2.2: a transaction's basis is fixed at its first query
+
+: A transaction's snapshot and clock time are fixed when its first query runs, as are any of its [`BEGIN`](#begin--commit--rollback) or [`SET TRANSACTION`](#set-transaction-v22) options that bear on them.
+
+  Previously, `BEGIN` awaited the connection's writes, captured the snapshot and fixed the clock itself.
+  A transaction's characteristics can now arrive after `BEGIN`, through `SET TRANSACTION`, so the basis waits until they have all landed - as a Postgres repeatable-read transaction takes its snapshot at its first statement.
+  A transaction now sees a write that another connection makes between its `BEGIN` and its first query, and `CURRENT_TIMESTAMP` is the clock at that first query.
+
+  To keep a basis fixed at `BEGIN`, issue the transaction's first query straight after it, or pin the basis explicitly with `BEGIN READ ONLY WITH (SNAPSHOT_TOKEN = ..., CLOCK_TIME = ...)`.
+
+</details>
+
 For examples on how to run SQL queries in each client library, see the [individual driver documentation](/drivers).
 
 ## Top-level queries
@@ -372,7 +387,8 @@ Queries in XTDB run against a 'basis', which consists of:
 1. a 'snapshot' - an upper bound on the transactions that are visible to the query.
 2. a 'clock time' - used for any function calls that reference the current time (e.g. `CURRENT_TIMESTAMP`)
 
-These can be set either on a per-query basis, using `SETTING`, or at the start of a transaction, using `BEGIN`:
+These can be set either on a per-query basis, using `SETTING`, or for a transaction, using `BEGIN` or `SET TRANSACTION`.
+A transaction's basis is fixed when its first query runs, and every query in the transaction shares it.
 
 ### SETTING
 
@@ -393,7 +409,7 @@ return rr.Diagram(rr.Sequence(rr.Optional(setting, "skip"), "<query>"))
   If not provided, this defaults to the latest-completed transaction on the queried node.
 * Setting the `CLOCK_TIME` defines a fixed value for any functions that depend on the current time - e.g. `CURRENT_TIMESTAMP`.
   It also defines the default valid-time selection for any tables in `FROM` clauses that don't otherwise have a valid-time specification.
-  If not provided, it defaults to the clock-time fixed at the start of the transaction.
+  If not provided, it defaults to the clock-time fixed at the transaction's first query.
   
 ### BEGIN / COMMIT / ROLLBACK
 
@@ -410,11 +426,13 @@ const roOpts = rr.Choice(0,
   tz
 )
 
-const ro = rr.Sequence("READ", "ONLY", rr.Optional(rr.Sequence("WITH", "(", rr.OneOrMore(roOpts, ","), ")"), "skip"))
+const roWith = rr.Sequence("READ", "ONLY", "WITH", "(", rr.OneOrMore(roOpts, ","), ")")
 
-const rw = rr.Sequence("READ", "WRITE", '...')
+const rwWith = rr.Sequence("READ", "WRITE", "WITH", '...')
 
-const begin = rr.Sequence('BEGIN', rr.Optional(rr.Choice(0, ro, rw), 'skip'))
+const modes = rr.OneOrMore('<transaction mode>', ',')
+
+const begin = rr.Sequence(rr.Choice(0, 'BEGIN', rr.Sequence('START', 'TRANSACTION')), rr.Optional(rr.Choice(0, modes, roWith, rwWith), 'skip'))
 
 return rr.Diagram(rr.Choice(0, begin, 'COMMIT', 'ROLLBACK'))
 ```
@@ -423,11 +441,52 @@ return rr.Diagram(rr.Choice(0, begin, 'COMMIT', 'ROLLBACK'))
   If not specified, it will be inferred from the first statement in the transaction.
 
   Transactions must not mix query statements and [DML](https://en.wikipedia.org/wiki/Data_manipulation_language) statements.
-* Additionally, for read-only transactions:
-  * `SNAPSHOT_TOKEN` and `CLOCK_TIME` behave the same as in [`SETTING`](#setting).
-  * `AWAIT_TOKEN` may be provided to wait for a specific transaction to be visible on the queried node before starting the transaction.
-    If not provided, it defaults to waiting for the latest-submitted transaction on the current connection.
-  * `TIMEZONE` sets the time zone for the duration of the transaction, affecting any time zone-aware date/time literals and functions.
-    If not provided, it defaults to the time-zone of the connection.
+* `BEGIN`'s transaction modes are those of [`SET TRANSACTION`](#set-transaction-v22): `BEGIN READ ONLY, CLOCK_TIME = ...` opens a transaction and applies `SET TRANSACTION READ ONLY, CLOCK_TIME = ...` to it.
+* `BEGIN READ ONLY WITH (...)` takes the same options inside `WITH (...)`, `TIMEZONE` included.
 * For read-write transactions, see the [transaction reference](/reference/main/sql/txs#begin--commit--rollback).
 * Committing/rolling back a read-only transaction has no effect in XTDB, because readers never block writers nor each other.
+* `BEGIN`, `START TRANSACTION`, `COMMIT` and `ROLLBACK` are SQL statements over the Postgres wire protocol only.
+  [ADBC](/adbc) and Flight SQL clients open and end transactions through their own transaction API, and reject these statements as SQL; they set a transaction's options with [`SET TRANSACTION`](#set-transaction-v22).
+
+### SET TRANSACTION (v2.2+)
+
+```railroad
+const eq = rr.Optional('=')
+
+const value = (v) => rr.Choice(0, v, 'DEFAULT')
+
+const roMode = rr.Choice(0,
+  rr.Sequence('READ', 'ONLY'),
+  rr.Sequence('SNAPSHOT_TOKEN', eq, value('<snapshot token>')),
+  rr.Sequence('CLOCK_TIME', eq, value('<timestamp>')),
+  rr.Sequence('AWAIT_TOKEN', eq, value('<await token>')),
+  rr.Sequence(rr.Choice(0, 'TIMEZONE', rr.Sequence('TIME', 'ZONE')), eq, value('<timezone>')),
+  rr.Sequence('ISOLATION', 'LEVEL', '<isolation level>')
+)
+
+const ro = rr.OneOrMore(roMode, ',')
+
+const rw = rr.Sequence("READ", "WRITE", '...')
+
+return rr.Diagram(rr.Sequence('SET', 'TRANSACTION', rr.Choice(0, ro, rw)))
+```
+
+* `SET TRANSACTION` sets the open transaction's access mode and options, as a comma-separated list of transaction modes.
+  * The access mode, `READ ONLY` or `READ WRITE`, may appear anywhere in the list.
+  * An option belonging to one access mode requires that access mode in the same statement - `SET TRANSACTION CLOCK_TIME = ...` on its own is rejected.
+  * `TIMEZONE` and `ISOLATION LEVEL` need no access mode.
+* A later `SET TRANSACTION` sets only the modes it names, and keeps the rest:
+  * `<option> = DEFAULT` clears an option set earlier.
+  * Changing the access mode clears the previous access mode's options.
+    The time zone is kept.
+* It is accepted until the transaction's first query or first write - afterwards, it is rejected.
+* Outside a transaction, it is rejected under auto-commit, and opens a transaction otherwise.
+* `ISOLATION LEVEL ...` is accepted, and has no effect: XTDB transactions are always serializable.
+  `SET TRANSACTION ISOLATION LEVEL ...` on its own is accepted anywhere.
+* `TIMEZONE` sets the time zone for the duration of the transaction, affecting any time zone-aware date/time literals and functions.
+  If not provided, it defaults to the time-zone of the connection.
+* For read-only transactions:
+  * `SNAPSHOT_TOKEN` and `CLOCK_TIME` behave the same as in [`SETTING`](#setting).
+  * `AWAIT_TOKEN` may be provided to wait for a specific transaction to be visible on the queried node before the transaction's first query runs.
+    If not provided, it defaults to waiting for the latest-submitted transaction on the current connection.
+* For read-write transactions, see the [transaction reference](/reference/main/sql/txs#set-transaction-v22).

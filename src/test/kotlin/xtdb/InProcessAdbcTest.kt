@@ -12,6 +12,7 @@ import org.apache.arrow.vector.complex.ListVector
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
@@ -34,6 +35,8 @@ import xtdb.database.Database
 import xtdb.database.encodeTimeBasisToken
 import xtdb.test.flushBlock
 import java.time.Instant
+import java.time.InstantSource
+import java.time.ZoneId
 import java.util.UUID
 
 class InProcessAdbcTest {
@@ -278,7 +281,7 @@ class InProcessAdbcTest {
     @Test
     fun `a query in a read-write transaction is rejected`() {
         xtdb.connect().use { conn ->
-            conn.update("BEGIN")
+            conn.begin()
             conn.update("INSERT INTO foo RECORDS {_id: 1}")
 
             assertThrows(Incorrect::class.java) { conn.select("SELECT _id FROM foo") }
@@ -286,11 +289,11 @@ class InProcessAdbcTest {
     }
 
     @Test
-    fun `a query resolves a bare BEGIN to read-only, then DML is rejected`() {
+    fun `a query resolves a bare begin to read-only, then DML is rejected`() {
         insertData("INSERT INTO foo RECORDS {_id: 0}")
 
         xtdb.connect().use { conn ->
-            conn.update("BEGIN")
+            conn.begin()
             assertEquals(listOf(mapOf("_id" to 0L)), conn.select("SELECT _id FROM foo ORDER BY _id"))
 
             assertThrows(Incorrect::class.java) { conn.update("INSERT INTO foo RECORDS {_id: 1}") }
@@ -302,17 +305,18 @@ class InProcessAdbcTest {
         insertData("INSERT INTO foo RECORDS {_id: 0}")
 
         xtdb.connect().use { conn ->
-            conn.update("BEGIN READ ONLY")
+            conn.begin()
+            conn.update("SET TRANSACTION READ ONLY")
             assertEquals(listOf(mapOf("_id" to 0L)), conn.select("SELECT _id FROM foo ORDER BY _id"))
 
             insertData("INSERT INTO foo RECORDS {_id: 1}")
 
             assertEquals(
                 listOf(mapOf("_id" to 0L)), conn.select("SELECT _id FROM foo ORDER BY _id"),
-                "the concurrent write is invisible within the begin-pinned snapshot"
+                "the concurrent write is invisible within the snapshot the first read pinned"
             )
 
-            conn.update("COMMIT")
+            conn.commitSync()
             assertEquals(
                 listOf(mapOf("_id" to 0L), mapOf("_id" to 1L)), conn.select("SELECT _id FROM foo ORDER BY _id"),
                 "visible once the snapshot is released"
@@ -321,7 +325,7 @@ class InProcessAdbcTest {
     }
 
     @Test
-    fun `manual-mode reads share a snapshot without an explicit BEGIN`() {
+    fun `manual-mode reads share a snapshot without an explicit begin`() {
         insertData("INSERT INTO foo RECORDS {_id: 0}")
 
         xtdb.connect().use { conn ->
@@ -342,18 +346,60 @@ class InProcessAdbcTest {
     @Test
     fun `current-time is pinned across a read-only transaction`() {
         xtdb.connect().use { conn ->
-            conn.update("BEGIN READ ONLY")
+            conn.begin()
+            conn.update("SET TRANSACTION READ ONLY")
             val first = conn.select("SELECT CURRENT_TIMESTAMP ts")
             val second = conn.select("SELECT CURRENT_TIMESTAMP ts")
-            assertEquals(first, second, "current_timestamp is fixed at BEGIN, identical across reads in the tx")
-            conn.update("COMMIT")
+            assertEquals(first, second, "current_timestamp is identical across reads in the tx")
+            conn.commitSync()
         }
     }
 
     @Test
-    fun `READ ONLY WITH CLOCK_TIME pins the transaction wall-clock`() {
+    fun `a write between begin and the first read is visible to the transaction`() {
+        insertData("INSERT INTO foo RECORDS {_id: 0}")
+
+        for (setTx in listOf(null, "SET TRANSACTION READ ONLY")) {
+            xtdb.connect().use { conn ->
+                conn.begin()
+                setTx?.let { conn.update(it) }
+                insertData("INSERT INTO foo RECORDS {_id: 1}")
+
+                assertEquals(
+                    listOf(mapOf("_id" to 0L), mapOf("_id" to 1L)), conn.select("SELECT _id FROM foo ORDER BY _id"),
+                    "${setTx ?: "bare"}: the snapshot is pinned at the first read"
+                )
+                conn.rollbackTx()
+            }
+
+            insertData("DELETE FROM foo WHERE _id = 1")
+        }
+    }
+
+    @Test
+    fun `current_timestamp is the clock at the first read, not at begin`() {
+        val atBegin = Instant.parse("2021-01-01T00:00:00Z")
+        val atFirstRead = Instant.parse("2022-01-01T00:00:00Z")
+
         xtdb.connect().use { conn ->
-            conn.update("BEGIN READ ONLY WITH (CLOCK_TIME = TIMESTAMP '2021-07-01T00:00:00Z')")
+            conn.clock = InstantSource.fixed(atBegin)
+            conn.begin()
+            conn.update("SET TRANSACTION READ ONLY")
+            conn.clock = InstantSource.fixed(atFirstRead)
+
+            assertEquals(
+                listOf(mapOf("in_2022" to true)),
+                conn.select("SELECT CURRENT_TIMESTAMP = TIMESTAMP '2022-01-01T00:00:00Z' in_2022")
+            )
+            conn.commitSync()
+        }
+    }
+
+    @Test
+    fun `READ ONLY, CLOCK_TIME pins the transaction wall-clock`() {
+        xtdb.connect().use { conn ->
+            conn.begin()
+            conn.update("SET TRANSACTION READ ONLY, CLOCK_TIME = TIMESTAMP '2021-07-01T00:00:00Z'")
             assertEquals(
                 listOf(mapOf("in_2021" to true)),
                 conn.select(
@@ -361,20 +407,21 @@ class InProcessAdbcTest {
                         " AND CURRENT_TIMESTAMP < TIMESTAMP '2022-01-01T00:00:00Z') in_2021"
                 )
             )
-            conn.update("COMMIT")
+            conn.commitSync()
         }
     }
 
     @Test
-    fun `COMMIT SYNC and COMMIT ASYNC via SQL`() {
+    fun `commitSync and commitAsync`() {
         xtdb.connect().use { conn ->
-            conn.update("BEGIN READ WRITE")
+            conn.begin()
+            conn.update("SET TRANSACTION READ WRITE")
             conn.update("INSERT INTO foo RECORDS {_id: 'cs1'}")
-            conn.update("COMMIT SYNC")
+            conn.commitSync()
             assertEquals(
                 listOf(mapOf("_id" to "cs1")),
                 conn.select("SELECT _id FROM foo WHERE _id = 'cs1'"),
-                "COMMIT SYNC commits and the row is immediately visible"
+                "commitSync commits and the row is immediately visible"
             )
 
             // the sync commit awaited the outcome, so SHOW reports the full detail
@@ -384,13 +431,14 @@ class InProcessAdbcTest {
         }
 
         xtdb.connect().use { conn ->
-            conn.update("BEGIN READ WRITE")
+            conn.begin()
+            conn.update("SET TRANSACTION READ WRITE")
             conn.update("INSERT INTO foo RECORDS {_id: 'ca1'}")
-            conn.update("COMMIT ASYNC")
+            conn.commitAsync()
             assertEquals(
                 listOf(mapOf("_id" to "ca1")),
                 conn.select("SELECT _id FROM foo WHERE _id = 'ca1'"),
-                "COMMIT ASYNC commits and the row is visible after the async tx settles"
+                "commitAsync commits and the row is visible after the async tx settles"
             )
 
             // the async commit didn't await, so SHOW carries only the txId — no awaited detail
@@ -400,10 +448,11 @@ class InProcessAdbcTest {
     }
 
     @Test
-    fun `READ ONLY WITH AWAIT_TOKEN is rejected`() {
+    fun `READ ONLY, AWAIT_TOKEN is rejected`() {
         xtdb.connect().use { conn ->
+            conn.begin()
             assertThrows(Incorrect::class.java) {
-                conn.update("BEGIN READ ONLY WITH (AWAIT_TOKEN = 'whatever')")
+                conn.update("SET TRANSACTION READ ONLY, AWAIT_TOKEN = 'whatever'")
             }
         }
     }
@@ -453,12 +502,12 @@ class InProcessAdbcTest {
     }
 
     @Test
-    fun `SET SESSION CHARACTERISTICS READ ONLY makes a bare BEGIN read-only`() {
+    fun `SET SESSION CHARACTERISTICS READ ONLY makes a bare begin read-only`() {
         xtdb.connect().use { conn ->
             conn.update("SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY")
-            conn.update("BEGIN")
+            conn.begin()
             assertThrows(Incorrect::class.java) { conn.update("INSERT INTO foo RECORDS {_id: 1}") }
-            conn.update("ROLLBACK")
+            conn.rollbackTx()
         }
     }
 
@@ -471,25 +520,25 @@ class InProcessAdbcTest {
     }
 
     @Test
-    fun `a mid-transaction SET TIME ZONE is discarded on ROLLBACK and kept on COMMIT`() {
+    fun `a mid-transaction SET TIME ZONE is discarded on rollback and kept on commit`() {
         xtdb.connect().use { conn ->
             conn.update("SET TIME ZONE 'UTC'")
 
-            conn.update("BEGIN")
+            conn.begin()
             conn.update("SET TIME ZONE 'America/New_York'")
             assertEquals(listOf(mapOf("timezone" to "America/New_York")), conn.select("SHOW timezone"))
-            conn.update("ROLLBACK")
+            conn.rollbackTx()
             assertEquals(
                 listOf(mapOf("timezone" to "UTC")), conn.select("SHOW timezone"),
-                "ROLLBACK reverts the mid-transaction SET TIME ZONE"
+                "rollback reverts the mid-transaction SET TIME ZONE"
             )
 
-            conn.update("BEGIN")
+            conn.begin()
             conn.update("SET TIME ZONE 'America/New_York'")
-            conn.update("COMMIT")
+            conn.commitSync()
             assertEquals(
                 listOf(mapOf("timezone" to "America/New_York")), conn.select("SHOW timezone"),
-                "COMMIT keeps it"
+                "commit keeps it"
             )
         }
     }
@@ -497,10 +546,10 @@ class InProcessAdbcTest {
     @Test
     fun `SET TIME ZONE is rejected in a write transaction with buffered writes`() {
         xtdb.connect().use { conn ->
-            conn.update("BEGIN")
+            conn.begin()
             conn.update("INSERT INTO foo RECORDS {_id: 1}")
             assertThrows(Incorrect::class.java) { conn.update("SET TIME ZONE 'UTC'") }
-            conn.update("ROLLBACK")
+            conn.rollbackTx()
         }
     }
 
@@ -613,21 +662,21 @@ class InProcessAdbcTest {
     }
 
     @Test
-    fun `SQL BEGIN COMMIT buffers then lands the writes`() {
+    fun `begin then commit buffers then lands the writes`() {
         insertData("INSERT INTO foo RECORDS {_id: 0}")
 
         xtdb.connect().use { conn ->
-            conn.update("BEGIN")
+            conn.begin()
             conn.update("INSERT INTO foo RECORDS {_id: 1}")
 
             xtdb.connect().use { other ->
                 assertEquals(
                     listOf(mapOf("_id" to 0L)), other.select("SELECT _id FROM foo ORDER BY _id"),
-                    "buffered until COMMIT — not visible to another connection"
+                    "buffered until commit — not visible to another connection"
                 )
             }
 
-            conn.update("COMMIT")
+            conn.commitSync()
             assertEquals(
                 listOf(mapOf("_id" to 0L), mapOf("_id" to 1L)), conn.select("SELECT _id FROM foo ORDER BY _id"),
                 "visible once committed"
@@ -636,13 +685,13 @@ class InProcessAdbcTest {
     }
 
     @Test
-    fun `SQL ROLLBACK discards the buffered writes`() {
+    fun `rollback discards the buffered writes in an open transaction`() {
         insertData("INSERT INTO foo RECORDS {_id: 0}")
 
         xtdb.connect().use { conn ->
-            conn.update("BEGIN")
+            conn.begin()
             conn.update("INSERT INTO foo RECORDS {_id: 1}")
-            conn.update("ROLLBACK")
+            conn.rollbackTx()
 
             assertEquals(
                 listOf(mapOf("_id" to 0L)), conn.select("SELECT _id FROM foo ORDER BY _id"),
@@ -652,17 +701,27 @@ class InProcessAdbcTest {
     }
 
     @Test
-    fun `SQL BEGIN while a transaction is open is rejected`() {
+    fun `begin while a transaction is open is rejected`() {
         xtdb.connect().use { conn ->
-            conn.update("BEGIN")
-            assertThrows(Incorrect::class.java) { conn.update("BEGIN") }
+            conn.begin()
+            assertThrows(Incorrect::class.java) { conn.begin() }
+        }
+    }
+
+    @Test
+    fun `transaction control as SQL is rejected`() {
+        xtdb.connect().use { conn ->
+            for (sql in listOf("BEGIN", "START TRANSACTION", "BEGIN READ ONLY", "COMMIT", "COMMIT SYNC", "ROLLBACK")) {
+                assertThrows(Incorrect::class.java, { conn.update(sql) }, sql)
+                assertThrows(Incorrect::class.java, { conn.createStatement(sql) }, sql)
+            }
         }
     }
 
     @Test
     fun `submitTx and executeTx are rejected while a transaction is open`() {
         xtdb.connect().use { conn ->
-            conn.update("BEGIN")
+            conn.begin()
 
             // the autonomous helpers can't be mixed with an explicit tx - they'd fire an independent
             // transaction, ignoring the buffered one
@@ -674,7 +733,7 @@ class InProcessAdbcTest {
     @Test
     fun `executeUpdate rejects multi-statement input`() {
         xtdb.connect().use { conn ->
-            assertThrows(Incorrect::class.java) { conn.update("BEGIN; COMMIT") }
+            assertThrows(Incorrect::class.java) { conn.update("INSERT INTO foo RECORDS {_id: 1}; INSERT INTO foo RECORDS {_id: 2}") }
         }
     }
 
@@ -683,7 +742,7 @@ class InProcessAdbcTest {
         insertData("INSERT INTO foo RECORDS {_id: 0}")
 
         xtdb.connect().use { conn ->
-            conn.update("BEGIN")
+            conn.begin()
             conn.update("INSERT INTO foo RECORDS {_id: 1}")
             // no COMMIT/ROLLBACK — the connection closes (via use) with the write still buffered
         }
@@ -697,12 +756,12 @@ class InProcessAdbcTest {
     }
 
     @Test
-    fun `BEGIN then COMMIT with no writes is a no-op`() {
+    fun `begin then commit with no writes is a no-op`() {
         insertData("INSERT INTO foo RECORDS {_id: 0}")
 
         xtdb.connect().use { conn ->
-            conn.update("BEGIN")
-            conn.update("COMMIT")
+            conn.begin()
+            conn.commitSync()
 
             assertEquals(
                 listOf(mapOf("_id" to 0L)), conn.select("SELECT _id FROM foo ORDER BY _id"),
@@ -712,13 +771,14 @@ class InProcessAdbcTest {
     }
 
     @Test
-    fun `BEGIN READ WRITE buffers and commits`() {
+    fun `READ WRITE buffers and commits`() {
         insertData("INSERT INTO foo RECORDS {_id: 0}")
 
         xtdb.connect().use { conn ->
-            conn.update("BEGIN READ WRITE")
+            conn.begin()
+            conn.update("SET TRANSACTION READ WRITE")
             conn.update("INSERT INTO foo RECORDS {_id: 1}")
-            conn.update("COMMIT")
+            conn.commitSync()
 
             assertEquals(
                 listOf(mapOf("_id" to 0L), mapOf("_id" to 1L)), conn.select("SELECT _id FROM foo ORDER BY _id")
@@ -727,19 +787,21 @@ class InProcessAdbcTest {
     }
 
     @Test
-    fun `BEGIN READ ONLY rejects a write`() {
+    fun `READ ONLY rejects a write`() {
         xtdb.connect().use { conn ->
-            conn.update("BEGIN READ ONLY")
+            conn.begin()
+            conn.update("SET TRANSACTION READ ONLY")
             assertThrows(Incorrect::class.java) { conn.update("INSERT INTO foo RECORDS {_id: 1}") }
         }
     }
 
     @Test
-    fun `BEGIN READ WRITE WITH SYSTEM_TIME applies the requested system-time`() {
+    fun `READ WRITE, SYSTEM_TIME applies the requested system-time`() {
         xtdb.connect().use { conn ->
-            conn.update("BEGIN READ WRITE WITH (SYSTEM_TIME TIMESTAMP '2021-08-03T00:00:00')")
+            conn.begin()
+            conn.update("SET TRANSACTION READ WRITE, SYSTEM_TIME TIMESTAMP '2021-08-03T00:00:00'")
             conn.update("INSERT INTO foo RECORDS {_id: 1}")
-            conn.update("COMMIT")
+            conn.commitSync()
 
             // connection defaultTz is UTC, so a zoneless TIMESTAMP literal anchors there
             assertEquals(
@@ -751,11 +813,12 @@ class InProcessAdbcTest {
     }
 
     @Test
-    fun `BEGIN READ WRITE WITH METADATA round-trips`() {
+    fun `READ WRITE, METADATA round-trips`() {
         xtdb.connect().use { conn ->
-            conn.update("BEGIN READ WRITE WITH (METADATA = {source: 'mobile-app'})")
+            conn.begin()
+            conn.update("SET TRANSACTION READ WRITE, METADATA = {source: 'mobile-app'}")
             conn.update("INSERT INTO foo RECORDS {_id: 1}")
-            conn.update("COMMIT")
+            conn.commitSync()
 
             // the metadata is carried into the commit options; assert the tx committed and the row landed
             assertEquals(
@@ -766,11 +829,12 @@ class InProcessAdbcTest {
     }
 
     @Test
-    fun `BEGIN READ WRITE WITH ASYNC commits and the row lands`() {
+    fun `READ WRITE, ASYNC commits and the row lands`() {
         xtdb.connect().use { conn ->
-            conn.update("BEGIN READ WRITE WITH (ASYNC = TRUE)")
+            conn.begin()
+            conn.update("SET TRANSACTION READ WRITE, ASYNC = TRUE")
             conn.update("INSERT INTO foo RECORDS {_id: 1}")
-            conn.update("COMMIT")
+            conn.commitAsync()
 
             assertEquals(
                 listOf(mapOf("_id" to 1L)), conn.select("SELECT _id FROM foo ORDER BY _id"),
@@ -780,34 +844,250 @@ class InProcessAdbcTest {
     }
 
     @Test
-    fun `BEGIN WITH TIMEZONE sets the tz for the transaction and reverts after`() {
+    fun `TIMEZONE sets the tz for a read-write transaction and reverts after`() {
         xtdb.connect().use { conn ->
             conn.update("SET TIME ZONE 'Asia/Tokyo'")
 
-            conn.update("BEGIN READ WRITE WITH (TIMEZONE = 'America/New_York')")
+            conn.begin()
+            conn.update("SET TRANSACTION READ WRITE, TIMEZONE = 'America/New_York'")
             conn.update("INSERT INTO foo RECORDS {_id: 1, ts: (TIMESTAMP '2020-01-01'::timestamptz)}")
-            conn.update("COMMIT")
+            conn.commitSync()
 
             assertEquals(
                 listOf(mapOf("_id" to 1L, "ts" to "2020-01-01T00:00-05:00[America/New_York]")),
                 conn.select("SELECT _id, ts FROM foo").map { mapOf("_id" to it["_id"], "ts" to it["ts"].toString()) },
                 "the DML anchors its zoneless timestamptz in the tx zone, not the session's Asia/Tokyo"
             )
-            assertEquals(listOf(mapOf("timezone" to "Asia/Tokyo")), conn.select("SHOW timezone"), "reverts after COMMIT")
+            assertEquals(listOf(mapOf("timezone" to "Asia/Tokyo")), conn.select("SHOW timezone"), "reverts after commit")
 
-            conn.update("BEGIN READ ONLY WITH (TIMEZONE = 'America/New_York')")
+            conn.begin()
+            conn.update("SET TRANSACTION READ ONLY, TIMEZONE = 'America/New_York'")
             assertEquals(listOf(mapOf("timezone" to "America/New_York")), conn.select("SHOW timezone"))
             assertEquals(
                 listOf(mapOf("ts" to "2020-01-01T00:00-05:00[America/New_York]")),
                 conn.select("SELECT TIMESTAMP '2020-01-01'::timestamptz ts").map { mapOf("ts" to it["ts"].toString()) }
             )
-            conn.update("COMMIT")
-            assertEquals(listOf(mapOf("timezone" to "Asia/Tokyo")), conn.select("SHOW timezone"), "reverts after COMMIT")
+            conn.commitSync()
+            assertEquals(listOf(mapOf("timezone" to "Asia/Tokyo")), conn.select("SHOW timezone"), "reverts after commit")
         }
     }
 
     @Test
-    fun `READ ONLY WITH SNAPSHOT_TOKEN bounds reads to the given snapshot`() {
+    fun `SET TRANSACTION READ ONLY shapes a bare begin before its first statement`() {
+        xtdb.connect().use { conn ->
+            conn.begin()
+            conn.update("SET TRANSACTION READ ONLY, CLOCK_TIME = TIMESTAMP '2021-07-01T00:00:00Z'")
+
+            assertThrows(Incorrect::class.java) { conn.update("INSERT INTO foo RECORDS {_id: 1}") }
+            assertEquals(
+                listOf(mapOf("at_clock" to true)),
+                conn.select("SELECT CURRENT_TIMESTAMP = TIMESTAMP '2021-07-01T00:00:00Z' at_clock")
+            )
+            conn.rollbackTx()
+        }
+    }
+
+    @Test
+    fun `SET TRANSACTION READ WRITE shapes a bare begin before its first statement`() {
+        xtdb.connect().use { conn ->
+            conn.begin()
+            conn.update("SET TRANSACTION READ WRITE, SYSTEM_TIME = TIMESTAMP '2021-08-03T00:00:00Z'")
+            conn.update("INSERT INTO foo RECORDS {_id: 1}")
+            conn.commitSync()
+
+            assertEquals(listOf("2021-08-03T00:00Z[UTC]"), conn.systemFroms())
+        }
+    }
+
+    private fun Xtdb.Connection.systemFroms() =
+        select("SELECT _system_from FROM foo").map { it["_system_from"].toString() }
+
+    @Test
+    fun `a later SET TRANSACTION in the same access mode keeps the options it doesn't name`() {
+        xtdb.connect().use { conn ->
+            conn.begin()
+            conn.update("SET TRANSACTION READ WRITE, SYSTEM_TIME = TIMESTAMP '2021-08-03T00:00:00Z'")
+            conn.update("SET TRANSACTION READ WRITE, ASYNC = FALSE")
+            conn.update("INSERT INTO foo RECORDS {_id: 1}")
+            conn.commitSync()
+
+            assertEquals(listOf("2021-08-03T00:00Z[UTC]"), conn.systemFroms())
+        }
+    }
+
+    @Test
+    fun `a later SET TRANSACTION READ ONLY keeps the read-only options it doesn't name`() {
+        xtdb.connect().use { conn ->
+            conn.begin()
+            conn.update("SET TRANSACTION READ ONLY, CLOCK_TIME = TIMESTAMP '2021-07-01T00:00:00Z'")
+            conn.update("SET TRANSACTION READ ONLY, ISOLATION LEVEL SERIALIZABLE")
+            assertEquals(
+                listOf(mapOf("at_clock" to true)),
+                conn.select("SELECT CURRENT_TIMESTAMP = TIMESTAMP '2021-07-01T00:00:00Z' at_clock")
+            )
+            conn.rollbackTx()
+        }
+    }
+
+    @Test
+    fun `a SET TRANSACTION whose options fail opens no transaction`() {
+        xtdb.connect().use { conn ->
+            conn.setAutoCommit(false)
+            assertThrows(Incorrect::class.java) {
+                conn.update("SET TRANSACTION READ ONLY, AWAIT_TOKEN = 'whatever'")
+            }
+            conn.begin()
+            conn.rollbackTx()
+        }
+    }
+
+    @Test
+    fun `SET TRANSACTION with DEFAULT clears an option`() {
+        xtdb.connect().use { conn ->
+            conn.begin()
+            conn.update("SET TRANSACTION READ WRITE, SYSTEM_TIME = TIMESTAMP '2021-08-03T00:00:00Z'")
+            conn.update("SET TRANSACTION READ WRITE, SYSTEM_TIME = DEFAULT")
+            conn.update("INSERT INTO foo RECORDS {_id: 1}")
+            conn.commitSync()
+
+            assertNotEquals(listOf("2021-08-03T00:00Z[UTC]"), conn.systemFroms())
+        }
+    }
+
+    @Test
+    fun `switching access mode drops the other mode's options`() {
+        xtdb.connect().use { conn ->
+            conn.begin()
+            conn.update("SET TRANSACTION READ WRITE, SYSTEM_TIME = TIMESTAMP '2021-08-03T00:00:00Z'")
+            conn.update("SET TRANSACTION READ ONLY")
+            conn.update("SET TRANSACTION READ WRITE")
+            conn.update("INSERT INTO foo RECORDS {_id: 1}")
+            conn.commitSync()
+
+            assertNotEquals(listOf("2021-08-03T00:00Z[UTC]"), conn.systemFroms())
+        }
+    }
+
+    @Test
+    fun `SET TRANSACTION after the first query or write is rejected`() {
+        xtdb.connect().use { conn ->
+            conn.begin()
+            conn.select("SELECT 1 one")
+            assertEquals(
+                "SET TRANSACTION must be called before any query or write",
+                assertThrows(Incorrect::class.java) { conn.update("SET TRANSACTION READ ONLY") }.message
+            )
+            conn.rollbackTx()
+
+            conn.begin()
+            conn.update("INSERT INTO foo RECORDS {_id: 1}")
+            assertEquals(
+                "SET TRANSACTION must be called before any query or write",
+                assertThrows(Incorrect::class.java) { conn.update("SET TRANSACTION READ WRITE") }.message
+            )
+            conn.rollbackTx()
+        }
+    }
+
+    @Test
+    fun `SET TRANSACTION isolation level is accepted anywhere`() {
+        xtdb.connect().use { conn ->
+            conn.update("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
+
+            conn.begin()
+            conn.select("SELECT 1 one")
+            conn.update("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
+            conn.rollbackTx()
+        }
+    }
+
+    @Test
+    fun `SET TRANSACTION outside a transaction is rejected under auto-commit and opens one under manual commit`() {
+        insertData("INSERT INTO foo RECORDS {_id: 0}")
+
+        xtdb.connect().use { conn ->
+            assertEquals(
+                "SET TRANSACTION can only be used in a transaction",
+                assertThrows(Incorrect::class.java) { conn.update("SET TRANSACTION READ ONLY") }.message
+            )
+
+            conn.setAutoCommit(false)
+            conn.update("SET TRANSACTION READ ONLY")
+            assertThrows(Incorrect::class.java) { conn.update("INSERT INTO foo RECORDS {_id: 1}") }
+            conn.rollback()
+        }
+    }
+
+    @Test
+    fun `SET TRANSACTION TIMEZONE holds for the transaction only`() {
+        xtdb.connect().use { conn ->
+            conn.update("SET TIME ZONE 'Asia/Tokyo'")
+
+            conn.begin()
+            conn.update("SET TRANSACTION TIMEZONE = 'America/New_York'")
+            assertEquals(listOf(mapOf("timezone" to "America/New_York")), conn.select("SHOW timezone"))
+            conn.commitSync()
+
+            assertEquals(listOf(mapOf("timezone" to "Asia/Tokyo")), conn.select("SHOW timezone"))
+        }
+    }
+
+    @Test
+    fun `a SET TRANSACTION time zone survives a later SET TRANSACTION, until DEFAULT`() {
+        xtdb.connect().use { conn ->
+            conn.update("SET TIME ZONE 'Asia/Tokyo'")
+
+            conn.begin()
+            conn.update("SET TRANSACTION READ WRITE, TIMEZONE = 'America/New_York'")
+            conn.update("SET TRANSACTION READ ONLY")
+            assertEquals(listOf(mapOf("timezone" to "America/New_York")), conn.select("SHOW timezone"))
+            conn.rollbackTx()
+
+            conn.begin()
+            conn.update("SET TRANSACTION TIMEZONE = 'America/New_York'")
+            conn.update("SET TRANSACTION READ ONLY, TIMEZONE = DEFAULT")
+            assertEquals(listOf(mapOf("timezone" to "Asia/Tokyo")), conn.select("SHOW timezone"))
+            conn.rollbackTx()
+        }
+    }
+
+    @Test
+    fun `the typed setters shape a transaction without SQL`() {
+        val clockTime = Instant.parse("2021-07-01T00:00:00Z")
+
+        xtdb.connect().use { conn ->
+            conn.begin()
+            conn.setTransactionReadOnly(clockTime = clockTime)
+            conn.setTransactionReadOnly(snapshotTime = null)
+            conn.setTransactionTimeZone(ZoneId.of("America/New_York"))
+            assertEquals(
+                listOf(mapOf("at_clock" to true)),
+                conn.select("SELECT CURRENT_TIMESTAMP = TIMESTAMP '2021-07-01T00:00:00Z' at_clock")
+            )
+            assertEquals(listOf(mapOf("timezone" to "America/New_York")), conn.select("SHOW timezone"))
+            conn.rollbackTx()
+
+            conn.begin()
+            conn.setTransactionReadWrite(systemTime = Instant.parse("2021-08-03T00:00:00Z"))
+            conn.setTransactionReadWrite(async = false)
+            conn.update("INSERT INTO foo RECORDS {_id: 1}")
+            conn.commitSync()
+
+            assertEquals(listOf("2021-08-03T00:00Z[UTC]"), conn.systemFroms())
+        }
+    }
+
+    @Test
+    fun `a SET TRANSACTION whose options fail leaves the transaction open to rollback`() {
+        xtdb.connect().use { conn ->
+            conn.begin()
+            assertThrows(Incorrect::class.java) { conn.update("SET TRANSACTION READ ONLY, AWAIT_TOKEN = 'whatever'") }
+            conn.rollbackTx()
+        }
+    }
+
+    @Test
+    fun `READ ONLY, SNAPSHOT_TOKEN bounds reads to the given snapshot`() {
         insertData("INSERT INTO foo RECORDS {_id: 0}")
 
         // a past snapshot bound — earlier than the row's commit, so the explicit token must decode, apply, and
@@ -816,12 +1096,13 @@ class InProcessAdbcTest {
         val token = mapOf("xtdb" to listOf<Instant?>(Instant.parse("2020-01-01T00:00:00Z"))).encodeTimeBasisToken()
 
         xtdb.connect().use { conn ->
-            conn.update("BEGIN READ ONLY WITH (SNAPSHOT_TOKEN = '$token')")
+            conn.begin()
+            conn.update("SET TRANSACTION READ ONLY, SNAPSHOT_TOKEN = '$token'")
             assertEquals(
                 emptyList<Map<*, *>>(), conn.select("SELECT _id FROM foo ORDER BY _id"),
                 "as of the epoch the row's commit is in the future, so nothing is visible"
             )
-            conn.update("COMMIT")
+            conn.commitSync()
         }
     }
 
@@ -829,8 +1110,9 @@ class InProcessAdbcTest {
     fun `empty READ WRITE commit still records a transaction`() {
         xtdb.connect().use { conn ->
             val before = conn.select("SELECT count(*) AS c FROM xt.txs").single()["c"] as Long
-            conn.update("BEGIN READ WRITE")
-            conn.update("COMMIT")
+            conn.begin()
+            conn.update("SET TRANSACTION READ WRITE")
+            conn.commitSync()
             val after = conn.select("SELECT count(*) AS c FROM xt.txs").single()["c"] as Long
 
             assertEquals(before + 1, after, "an explicit write tx commits even when empty")

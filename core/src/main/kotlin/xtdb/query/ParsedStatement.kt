@@ -1,5 +1,6 @@
 package xtdb.query
 
+import org.antlr.v4.runtime.ParserRuleContext
 import org.antlr.v4.runtime.misc.Interval
 import xtdb.antlr.Sql
 
@@ -26,18 +27,28 @@ sealed interface ParsedStatement {
 
     enum class CopyFormat { TRANSIT_JSON, TRANSIT_MSGPACK, ARROW_FILE, ARROW_STREAM }
 
-    /** Begin-time transaction characteristics. Expression-typed options are carried un-planned. */
-    data class TxOptions(
-        val accessMode: AccessMode? = null,
-        val systemTime: Sql.ExprContext? = null,
-        val snapshotToken: Sql.ExprContext? = null,
-        val snapshotTime: Sql.ExprContext? = null,
-        val clockTime: Sql.ExprContext? = null,
-        val awaitToken: Sql.ExprContext? = null,
-        val defaultTz: Sql.ExprContext? = null,
-        val userMetadata: Sql.ExprContext? = null,
-        val async: Sql.LiteralContext? = null,
-    )
+    /** A transaction option's value as given: an expression, carried un-planned, or `DEFAULT`, which clears it. */
+    sealed interface TxOptionValue {
+        data class Expr(val expr: ParserRuleContext) : TxOptionValue
+        data object Default : TxOptionValue
+    }
+
+    /**
+     * Transaction characteristics, from BEGIN or SET TRANSACTION.
+     * A null option wasn't given; a null [accessMode] means the statement named neither READ ONLY nor READ WRITE.
+     */
+    data class TxOptions(val accessMode: AccessModeOptions?, val timeZone: TxOptionValue?) {
+        sealed interface AccessModeOptions
+
+        data class ReadOnly(
+            val snapshotToken: TxOptionValue?, val snapshotTime: TxOptionValue?,
+            val clockTime: TxOptionValue?, val awaitToken: TxOptionValue?,
+        ) : AccessModeOptions
+
+        data class ReadWrite(
+            val systemTime: TxOptionValue?, val userMetadata: TxOptionValue?, val async: TxOptionValue?,
+        ) : AccessModeOptions
+    }
 
     data class Query(override val ast: Sql.DirectlyExecutableStatementContext) : ParsedStatement
 
@@ -64,8 +75,8 @@ sealed interface ParsedStatement {
     data class Commit(override val ast: Sql.DirectlyExecutableStatementContext, val mode: CommitMode? = null) : ParsedStatement
     data class Rollback(override val ast: Sql.DirectlyExecutableStatementContext) : ParsedStatement
 
-    /** SET TRANSACTION ISOLATION LEVEL — a no-op for us, kept so the protocol acknowledges it. */
-    data class SetTransaction(override val ast: Sql.DirectlyExecutableStatementContext) : ParsedStatement
+    data class SetTransaction(override val ast: Sql.DirectlyExecutableStatementContext, val txOptions: TxOptions) :
+        ParsedStatement
 
     data class SetSessionCharacteristics(override val ast: Sql.DirectlyExecutableStatementContext, val accessMode: AccessMode?) : ParsedStatement
 

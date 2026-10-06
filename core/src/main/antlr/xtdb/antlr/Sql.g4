@@ -38,8 +38,8 @@ directlyExecutableStatement
     | EXECUTE statementName=identifier executeArgs #ExecuteStatement
 
     | COPY targetTable FROM STDIN opts=copyOpts # CopyInStmt
-    | (START TRANSACTION | BEGIN TRANSACTION?) transactionCharacteristics? # StartTransactionStatement
-    | SET TRANSACTION ISOLATION LEVEL levelOfIsolation # SetTransactionStatement
+    | (START TRANSACTION | BEGIN TRANSACTION?) (transactionCharacteristics | beginWithCharacteristics)? # StartTransactionStatement
+    | SET TRANSACTION transactionCharacteristics # SetTransactionStatement
     | COMMIT (SYNC | ASYNC)? # CommitStatement
     | ROLLBACK # RollbackStatement
     | SET SESSION CHARACTERISTICS AS sessionCharacteristic (',' sessionCharacteristic)* # SetSessionCharacteristicsStatement
@@ -844,29 +844,46 @@ sessionTxMode
     | 'READ' 'WRITE' # ReadWriteSession
     ;
 
-transactionCharacteristics : transactionMode (',' transactionMode)* ;
-
-transactionMode
-    : 'ISOLATION' 'LEVEL' levelOfIsolation # IsolationLevel
-    | 'READ' 'ONLY' ('WITH' '(' readOnlyTxOption? (',' readOnlyTxOption?)* ')')? # ReadOnlyTransaction
-    | 'READ' 'WRITE' ('WITH' '(' readWriteTxOption? (',' readWriteTxOption?)* ')')? # ReadWriteTransaction
+transactionCharacteristics
+    : (readOnlyTxMode ',')* 'READ' 'ONLY' (',' readOnlyTxMode)* # ReadOnlyTxCharacteristics
+    | (readWriteTxMode ',')* 'READ' 'WRITE' (',' readWriteTxMode)* # ReadWriteTxCharacteristics
+    | commonTxMode (',' commonTxMode)* # CommonTxCharacteristics
     ;
 
-txTzOption : ('TIMEZONE' | 'TIME' 'ZONE') '='? tz=expr ;
+commonTxMode
+    : 'ISOLATION' 'LEVEL' levelOfIsolation # IsolationLevelTxMode
+    | txTzOption # TxTzMode
+    ;
+
+readOnlyTxMode : commonTxMode | readOnlyTxOption ;
+readWriteTxMode : commonTxMode | readWriteTxOption ;
+
+beginWithCharacteristics : beginWithMode (',' beginWithMode)* ;
+
+beginWithMode
+    : 'ISOLATION' 'LEVEL' levelOfIsolation # BeginWithIsolationLevel
+    | 'READ' 'ONLY' 'WITH' '(' beginReadOnlyOption? (',' beginReadOnlyOption?)* ')' # BeginReadOnlyWith
+    | 'READ' 'WRITE' 'WITH' '(' beginReadWriteOption? (',' beginReadWriteOption?)* ')' # BeginReadWriteWith
+    ;
+
+beginReadOnlyOption : readOnlyTxOption | txTzOption ;
+beginReadWriteOption : readWriteTxOption | txTzOption ;
+
+txOptionValue : expr | DEFAULT ;
+
+txTzOption : ('TIMEZONE' | 'TIME' 'ZONE') '='? txOptionValue ;
 
 readOnlyTxOption
-    : 'SNAPSHOT_TOKEN' '='? snapshotToken=expr # SnapshotTokenTxOption
-    | 'SNAPSHOT_TIME' '='? snapshotTime=expr # SnapshotTimeTxOption
-    | 'CLOCK_TIME' '='? clockTime=expr # ClockTimeTxOption
-    | AWAIT_TOKEN '='? awaitToken=expr # AwaitTokenTxOption
-    | txTzOption # TxTzOption0
+    : 'SNAPSHOT_TOKEN' '='? txOptionValue # SnapshotTokenTxOption
+    | 'SNAPSHOT_TIME' '='? txOptionValue # SnapshotTimeTxOption
+    | 'CLOCK_TIME' '='? txOptionValue # ClockTimeTxOption
+    | AWAIT_TOKEN '='? txOptionValue # AwaitTokenTxOption
     ;
 
 readWriteTxOption
-    : 'SYSTEM_TIME' '='? systemTime=expr # SystemTimeTxOption
-    | ASYNC '='? async=literal # AsyncTxOption
-    | txTzOption # TxTzOption1
-    | METADATA '='? metadata=expr # MetadataTxOption
+    : 'SYSTEM_TIME' '='? txOptionValue # SystemTimeTxOption
+    | ASYNC '='? (async=literal | DEFAULT) # AsyncTxOption
+    | METADATA '='? txOptionValue # MetadataTxOption
     ;
 
 levelOfIsolation

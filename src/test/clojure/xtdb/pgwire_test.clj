@@ -986,7 +986,7 @@
 
         (t/is (= (-> #xt/zdt "2000-08-16T12:08:03+01:00" in-system-tz) (current-time conn)))
 
-        (testing "current ts instant is pinned at BEGIN, regardless of what happens to the session clock"
+        (testing "current ts instant is pinned for the transaction, regardless of what happens to the session clock"
 
           (let [{:keys [conn-state]} (get-last-conn)]
             (.setClock ^Xtdb$Connection (:node-conn @conn-state) (Clock/fixed Instant/EPOCH ZoneOffset/UTC)))
@@ -1828,6 +1828,50 @@
                   "2022-08-16 11:08:03.123456"
                   "2022-08-16 11:08:03.123456"]]
                 (read))))))))
+
+(deftest execute-args-read-at-the-read-only-txs-clock
+  (with-open [conn (jdbc-conn {"prepareThreshold" -1})]
+    (jdbc/execute! conn ["PREPARE at_clock AS SELECT $1::timestamptz = TIMESTAMP '2021-07-01Z' at_clock"])
+    (jdbc/execute! conn ["BEGIN READ ONLY WITH (CLOCK_TIME = TIMESTAMP '2021-07-01Z')"])
+    (try
+      (t/is (= {:at_clock true} (jdbc/execute-one! conn ["EXECUTE at_clock (CURRENT_TIMESTAMP)"]))
+            "the first statement's args see the tx's clock")
+      (finally
+        (jdbc/execute! conn ["ROLLBACK"])))))
+
+(deftest set-transaction-takes-bound-options
+  (with-open [conn (jdbc-conn)]
+    (jdbc/execute! conn ["BEGIN"])
+    (try
+      (jdbc/execute! conn ["SET TRANSACTION READ ONLY, CLOCK_TIME = ?" #xt/instant "2021-07-01T00:00:00Z"])
+      (t/is (= [{:clock_time (-> #xt/zdt "2021-07-01Z[UTC]" in-system-tz)}]
+               (jdbc/execute! conn ["SHOW CLOCK_TIME"])))
+      (finally
+        (jdbc/execute! conn ["ROLLBACK"])))))
+
+(deftest begin-takes-the-list-of-modes-and-its-with-form
+  (with-open [conn (jdbc-conn)]
+    (doseq [sql ["BEGIN READ ONLY, CLOCK_TIME = ?" "BEGIN READ ONLY WITH (CLOCK_TIME = ?)"]]
+      (jdbc/execute! conn [sql #xt/instant "2021-07-01T00:00:00Z"])
+      (try
+        (t/is (= [{:clock_time (-> #xt/zdt "2021-07-01Z[UTC]" in-system-tz)}]
+                 (jdbc/execute! conn ["SHOW CLOCK_TIME"]))
+              sql)
+        (finally
+          (jdbc/execute! conn ["ROLLBACK"]))))))
+
+(deftest set-transaction-outside-a-transaction-is-rejected
+  (doseq [mode ["extended" "simple"]]
+    (with-open [conn (jdbc-conn {"preferQueryMode" mode})]
+      (t/is (thrown-with-msg? PSQLException #"SET TRANSACTION can only be used in a transaction"
+                              (jdbc/execute! conn ["SET TRANSACTION READ ONLY"]))
+            mode))))
+
+(deftest a-begin-whose-options-fail-leaves-no-transaction-open
+  (with-open [conn (jdbc-conn)]
+    (t/is (thrown? PSQLException (jdbc/execute! conn ["BEGIN READ ONLY WITH (AWAIT_TOKEN = 'whatever')"])))
+    (jdbc/execute! conn ["BEGIN"])
+    (jdbc/execute! conn ["ROLLBACK"])))
 
 (deftest test-prepare-select
   (with-open [conn (jdbc-conn {"prepareThreshold" -1})]

@@ -159,7 +159,7 @@ const eq = rr.Optional('=')
 
 const tz = rr.Sequence(rr.Choice(0, 'TIMEZONE', rr.Sequence('TIME', 'ZONE')), eq, '<timezone>')
 
-const ro = rr.Sequence("READ", "ONLY", '...')
+const roWith = rr.Sequence("READ", "ONLY", "WITH", '...')
 
 const rwOpts = rr.Choice(0,
   rr.Skip(),
@@ -169,9 +169,11 @@ const rwOpts = rr.Choice(0,
   tz
 )
 
-const rw = rr.Sequence("READ", "WRITE", rr.Optional(rr.Sequence("WITH", "(", rr.OneOrMore(rwOpts, ","), ")"), "skip"))
+const rwWith = rr.Sequence("READ", "WRITE", "WITH", "(", rr.OneOrMore(rwOpts, ","), ")")
 
-const begin = rr.Sequence('BEGIN', rr.Optional(rr.Choice(0, ro, rw), 'skip'))
+const modes = rr.OneOrMore('<transaction mode>', ',')
+
+const begin = rr.Sequence(rr.Choice(0, 'BEGIN', rr.Sequence('START', 'TRANSACTION')), rr.Optional(rr.Choice(0, modes, roWith, rwWith), 'skip'))
 
 const commit = rr.Sequence('COMMIT', rr.Optional(rr.Choice(0, 'SYNC', 'ASYNC'), 'skip'))
 
@@ -182,7 +184,41 @@ return rr.Diagram(rr.Choice(0, begin, commit, 'ROLLBACK'))
   If not specified, it will be inferred from the first statement in the transaction.
 
   Transactions must not mix query statements and [DML](https://en.wikipedia.org/wiki/Data_manipulation_language) statements.
-* Additionally, for read-write transactions:
+* `BEGIN`'s transaction modes are those of [`SET TRANSACTION`](#set-transaction-v22): `BEGIN READ WRITE, SYSTEM_TIME = ...` opens a transaction and applies `SET TRANSACTION READ WRITE, SYSTEM_TIME = ...` to it.
+* `BEGIN READ WRITE WITH (...)` takes the same options inside `WITH (...)`, `TIMEZONE` included.
+* `COMMIT` (v2.2+) optionally takes `SYNC` or `ASYNC`, choosing whether the connection waits for the transaction to be indexed before returning.
+  `COMMIT SYNC` waits for indexing; `COMMIT ASYNC` returns as soon as the transaction is submitted to the log.
+  When given, this takes precedence over the transaction's `ASYNC` option; otherwise that option applies, defaulting to `SYNC`.
+* N.B. `READ WRITE` is a misnomer in XTDB here - this is to align with standard SQL syntax.
+  XTDB doesn't have interactive read-write transactions, so any attempt to (e.g.) `SELECT` in this transaction will error.
+* For read-only transactions, see the [query reference](/reference/main/sql/queries#begin--commit--rollback).
+* `BEGIN`, `COMMIT` and `ROLLBACK` are SQL statements over the Postgres wire protocol only - see the [query reference](/reference/main/sql/queries#begin--commit--rollback).
+
+### SET TRANSACTION (v2.2+)
+
+```railroad
+const eq = rr.Optional('=')
+
+const value = (v) => rr.Choice(0, v, 'DEFAULT')
+
+const ro = rr.Sequence("READ", "ONLY", '...')
+
+const rwMode = rr.Choice(0,
+  rr.Sequence('READ', 'WRITE'),
+  rr.Sequence('SYSTEM_TIME', eq, value('<timestamp>')),
+  rr.Sequence('ASYNC', eq, value('<boolean>')),
+  rr.Sequence('METADATA', eq, value('<value>')),
+  rr.Sequence(rr.Choice(0, 'TIMEZONE', rr.Sequence('TIME', 'ZONE')), eq, value('<timezone>')),
+  rr.Sequence('ISOLATION', 'LEVEL', '<isolation level>')
+)
+
+const rw = rr.OneOrMore(rwMode, ',')
+
+return rr.Diagram(rr.Sequence('SET', 'TRANSACTION', rr.Choice(0, ro, rw)))
+```
+
+* For how a list of transaction modes is read, how a later `SET TRANSACTION` merges into an earlier one, when it is accepted, `TIMEZONE`, and read-only transactions, see the [query reference](/reference/main/sql/queries#set-transaction-v22).
+* For read-write transactions:
   * `SYSTEM_TIME` overrides the system-time of the transaction, used for an initial backfill of the database.
     It must be strictly later than the system-time of the latest completed transaction — a backfill submitting several transactions gives each its own system-time rather than sharing one.
     A system-time that doesn't advance aborts the transaction, and the abort is recorded in `xt.txs`.
@@ -190,15 +226,7 @@ return rr.Diagram(rr.Choice(0, begin, commit, 'ROLLBACK'))
     Otherwise, the system-time of the transaction will be defined by the log.
   * `ASYNC` affects whether the connection will wait for the transaction to be indexed before returning from `COMMIT`.
     If not provided, it defaults to `false` - i.e. the connection will wait for the transaction to be indexed before returning.
-    This can be overridden per-commit with `COMMIT SYNC` / `COMMIT ASYNC` (see below).
-  * `TIMEZONE` sets the time zone for the duration of the transaction, affecting any time zone-aware date/time literals and functions.
-    If not provided, it defaults to the time-zone of the connection.
+    This can be overridden per-commit with `COMMIT SYNC` / `COMMIT ASYNC` (see [above](#begin--commit--rollback)).
   * `METADATA` (v2.1+) can provided to attach arbitrary metadata to the transaction.
     This is then added to the `xt.txs` table in the `user_metadata` column.
     For example, you might use this to attach upstream request IDs, correlation IDs, or other data lineage information.
-* `COMMIT` (v2.2+) optionally takes `SYNC` or `ASYNC`, choosing whether the connection waits for the transaction to be indexed before returning.
-  `COMMIT SYNC` waits for indexing; `COMMIT ASYNC` returns as soon as the transaction is submitted to the log.
-  When given, this takes precedence over the transaction's `ASYNC` option from `BEGIN`; otherwise the `BEGIN`-time setting applies, defaulting to `SYNC`.
-* N.B. `READ WRITE` is a misnomer in XTDB here - this is to align with standard SQL syntax.
-  XTDB doesn't have interactive read-write transactions, so any attempt to (e.g.) `SELECT` in this transaction will error.
-* For read-only transactions, see the [query reference](/reference/main/sql/queries#begin--commit--rollback).
