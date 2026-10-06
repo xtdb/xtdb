@@ -48,11 +48,12 @@ class FooterCacheDeadlockSimTest : SimulationTestBase() {
 
     // Unix `Path.hashCode` is String-like over the bytes, so these share a bin at every table size
     private val collidingKeys = listOf("AaAa", "BBBB", "AaBB", "BBAa").map { "tbl/$it.arrow".asPath }
+    private val prefix = "xtdb/0".asPath
     private val naturalKeys = (0 until 32).map { "tbl/key-$it.arrow".asPath }
 
     private fun ObjectStore.writeArrowFiles(keys: List<Path>, al: BufferAllocator, diskPath: Path) =
         MemoryCache.Factory().open(al).use { memoryCache ->
-            RemoteBufferPool(al, this, memoryCache, DiskCache(diskPath.createDirectories(), 1L shl 30), null, 0, "xtdb", 0)
+            RemoteBufferPool(al, this, memoryCache.openForDatabase(prefix), DiskCache(diskPath.createDirectories(), 1L shl 30).openForDatabase(prefix), null, 0)
                 .use { pool ->
                     for (k in keys) IntVector.open(al, "foo", false).use { v ->
                         v.writeInt(1)
@@ -70,9 +71,9 @@ class FooterCacheDeadlockSimTest : SimulationTestBase() {
 
         MemoryCache.Factory().open(al).use { memoryCache ->
             RemoteBufferPool(
-                al, YieldingObjectStore(bucket), memoryCache,
-                DiskCache(diskPath.resolve("test").createDirectories(), 1L shl 30, workerDispatcher),
-                null, 0, "xtdb", 0,
+                al, YieldingObjectStore(bucket), memoryCache.openForDatabase(prefix),
+                DiskCache(diskPath.resolve("test").createDirectories(), 1L shl 30, workerDispatcher).openForDatabase(prefix),
+                null, 0,
                 workerDispatcher,
                 Storage.arrowFooterCache(1, workerDispatcher)
             ).use { pool ->

@@ -125,6 +125,8 @@ object Storage {
         }
     }
 
+    private fun cachePrefix(dbName: DatabaseName, partition: Int): Path = dbName.asPath.resolve(partition.toString())
+
     // load with `get(key, BiFunction)`: `get(key, Function)` runs the loader via `supplyAsync` on this executor, not the caller's thread.
     internal fun arrowFooterCache(
         maxEntries: Long = 1024,
@@ -181,7 +183,7 @@ object Storage {
             val rootPath = path.resolve(storageRoot(storageVersion, epoch, partition, totalPartitions))
                 .also { it.createDirectories() }
 
-            return LocalStorage(allocator, memoryCache, meterRegistry, epoch, dbName, partition, rootPath)
+            return LocalStorage(allocator, memoryCache.openForDatabase(cachePrefix(dbName, partition)), meterRegistry, epoch, rootPath)
         }
     }
 
@@ -212,7 +214,8 @@ object Storage {
 
             val objStoreRoot = storageRoot(storageVersion, epoch, partition, totalPartitions)
             return objectStore.openObjectStore(objStoreRoot, remotes).closeOnCatch { objectStore ->
-                RemoteBufferPool(allocator, objectStore, memoryCache, diskCache, meterRegistry, epoch, dbName, partition)
+                val prefix = cachePrefix(dbName, partition)
+                RemoteBufferPool(allocator, objectStore, memoryCache.openForDatabase(prefix), diskCache.openForDatabase(prefix), meterRegistry, epoch)
             }
         }
     }
