@@ -3,7 +3,17 @@ title: Storage
 ---
 
 <details>
-<summary>Changelog (last updated v2.1)</summary>
+<summary>Changelog (last updated v2.3)</summary>
+
+v2.3: disk-cache entries are keyed by the store they came from
+
+: The disk cache keys its entries by the object store they were read from or written to — see [Disk cache](#disk-cache).
+
+  Previously entries were keyed by database name, so a database re-attached under the same name on a different store could be served the previous store's cached files.
+
+  No configuration changes are needed.
+  Entries cached by earlier versions are not reused, so a disk cache that survives the upgrade starts cold once.
+  If a warm cache matters, bring up upgraded nodes read-only on a fresh disk-cache directory, warm them with representative queries, then move traffic over.
 
 v2.1: multi-database support
 
@@ -133,6 +143,15 @@ memoryCache:
   # The maximum number of bytes to store in the in-memory cache (unset by default).
   # maxSizeBytes: 536870912
 ```
+
+### Disk cache
+
+The disk cache holds copies of objects read from, or written to, the object store.
+
+- Entries are keyed by the object store's location — its bucket or container, prefix and storage root — so databases attached to the same store share entries, and different stores never do.
+- Entries leave the cache only when it needs the space, least-recently-used first: detaching a database doesn't remove its cached files, and a restarted node keeps the entries in its `diskCache.path`.
+- Each node needs its own `diskCache.path`.
+- If you reset a store in place — empty it and reuse the same location for a new database — clear the disk-cache directory of any node that keeps it across the reset, or use a new prefix.
 
 Each Object Store implementation is configured separately - see the individual cloud platform documentation for more information:
 
