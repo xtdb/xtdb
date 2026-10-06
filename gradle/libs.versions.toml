@@ -33,7 +33,7 @@ opentelemetry = "1.65.0"
 transit = "1.1.357"
 
 slf4j = "2.0.17"
-log4j = "2.25.4"
+log4j = "2.26.1"
 
 [libraries]
 arrow-algorithm = { group = "org.apache.arrow", name = "arrow-algorithm", version.ref = "arrow" }
