@@ -565,13 +565,13 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                             setSessionParameter(stmt.name, sqlPlanner.evalLiteral(stmt.value, null)?.toString())
 
                         is ParsedStatement.SetTimeZone ->
-                            setTimeZone(coerceZoneId(sqlPlanner.evalLiteral(stmt.zone, args)))
+                            openQueryArgs().use { setTimeZone(coerceZoneId(sqlPlanner.evalLiteral(stmt.zone, it))) }
 
-                        is ParsedStatement.SetAwaitToken -> awaitToken =
-                            coerceAwaitToken(sqlPlanner.evalLiteral(stmt.token, args))
+                        is ParsedStatement.SetAwaitToken ->
+                            openQueryArgs().use { awaitToken = coerceAwaitToken(sqlPlanner.evalLiteral(stmt.token, it)) }
 
                         is ParsedStatement.SetSessionCharacteristics -> defaultAccessMode = stmt.accessMode
-                        is ParsedStatement.SetTransaction -> setTransaction(stmt.txOptions, args)
+                        is ParsedStatement.SetTransaction -> openQueryArgs().use { setTransaction(stmt.txOptions, it) }
                         is ParsedStatement.SetRole -> {} // accepted, no-op (as pgwire)
 
                         else -> throw Incorrect("not an update", "xtdb.adbc/not-an-update")

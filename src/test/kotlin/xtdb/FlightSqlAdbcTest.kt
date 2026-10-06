@@ -1043,6 +1043,41 @@ class FlightSqlAdbcTest {
     }
 
     @Test
+    fun `a prepared SET statement takes bound parameters, over either route`() {
+        sessionClient().use { client ->
+            client.prepare("SET TIME ZONE ?", *emptyCallOpts).use { ps ->
+                val tzField = Field("", FieldType.notNullable(ArrowType.Utf8()), null)
+                VectorSchemaRoot.create(Schema(listOf(tzField)), al).use { root ->
+                    (root.getVector(0) as VarCharVector).setSafe(0, "Europe/Paris".toByteArray())
+                    root.rowCount = 1
+                    ps.setParameters(root)
+                    ps.execute(*emptyCallOpts)
+                }
+            }
+
+            assertEquals(
+                listOf(mapOf("timezone" to "Europe/Paris")),
+                client.execute("SHOW timezone", *emptyCallOpts).readRows(client)
+            )
+
+            client.prepare("SET TIME ZONE ?", *emptyCallOpts).use { ps ->
+                val tzField = Field("", FieldType.notNullable(ArrowType.Utf8()), null)
+                VectorSchemaRoot.create(Schema(listOf(tzField)), al).use { root ->
+                    (root.getVector(0) as VarCharVector).setSafe(0, "America/New_York".toByteArray())
+                    root.rowCount = 1
+                    ps.setParameters(root)
+                    ps.executeUpdate(*emptyCallOpts)
+                }
+            }
+
+            assertEquals(
+                listOf(mapOf("timezone" to "America/New_York")),
+                client.execute("SHOW timezone", *emptyCallOpts).readRows(client)
+            )
+        }
+    }
+
+    @Test
     fun `transaction control as SQL is rejected, naming the transaction API`() {
         for (sql in listOf("BEGIN", "START TRANSACTION", "BEGIN READ WRITE", "COMMIT", "ROLLBACK")) {
             for ((route, call) in listOf<Pair<String, () -> Any>>(
