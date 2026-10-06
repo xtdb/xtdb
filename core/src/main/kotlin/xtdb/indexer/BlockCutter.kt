@@ -7,6 +7,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import xtdb.api.DatabaseName
 import xtdb.api.log.ReplicaMessage.BlockBoundary
 import xtdb.api.log.ReplicaMessage.BlockUploaded
@@ -51,6 +53,7 @@ internal class BlockCutter(
     ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
     private val uploadDispatcher = ioDispatcher.limitedParallelism(MAX_CONCURRENT_BLOCK_UPLOADS, "block-upload")
+    private val uploadSemaphore = Semaphore(MAX_CONCURRENT_BLOCK_UPLOADS)
 
     private val sourceLog = partitionStorage.sourceLog
     private val bufferPool = partitionStorage.bufferPool
@@ -217,8 +220,10 @@ internal class BlockCutter(
         coroutineScope {
             tableBlocks.forEach { (table, tableBlock) ->
                 launch(uploadDispatcher) {
-                    val path = TableCatalog.tableBlockPath(entries.getValue(table).slug, blockIdx)
-                    bufferPool.putObject(path, ByteBuffer.wrap(tableBlock.toByteArray()))
+                    uploadSemaphore.withPermit {
+                        val path = TableCatalog.tableBlockPath(entries.getValue(table).slug, blockIdx)
+                        bufferPool.putObject(path, ByteBuffer.wrap(tableBlock.toByteArray()))
+                    }
                 }
             }
         }
