@@ -149,13 +149,16 @@ private fun FlightStream.toRelation(allocator: BufferAllocator): Relation =
         acc
     }
 
-private class PreparedStatement(
-    val dbName: DatabaseName, val sql: String, val xtdbStmt: Xtdb.Statement, override val lease: Lease,
-) : Leased {
+private sealed interface PreparedScope {
+    data class Session(val dbName: DatabaseName) : PreparedScope
+    data class InTx(val txHandle: TxHandle) : PreparedScope
+}
+
+private class PreparedStatement(val sql: String, val scope: PreparedScope, override val lease: Lease) : Leased {
     @Volatile
     var params: QueryParams? = null
 
-    override fun close() = xtdbStmt.close()
+    override fun close() = Unit
 }
 
 private fun Xtdb.Statement.requireQuery() {
@@ -272,6 +275,21 @@ class XtdbProducer(
 
     private fun preparedStatement(handle: PreparedStatementHandle): PreparedStatement =
         stmts.lookup(handle).orNotFound("prepared statement", config.preparedStatementIdleTimeout)
+
+    private inline fun <R> PreparedStatement.withStatement(
+        ctx: CallContext?, f: (Xtdb.Connection, Xtdb.Statement) -> R
+    ): R {
+        val conn = when (scope) {
+            is PreparedScope.Session -> connectionFor(ctx, scope.dbName)
+            is PreparedScope.InTx -> txs.lookup(scope.txHandle).orNotFound().conn
+        }
+
+        return conn.createStatement().use { stmt ->
+            stmt.setSqlQuery(sql)
+            stmt.prepare()
+            f(conn, stmt)
+        }
+    }
 
     private fun txOrSessionConnection(ctx: CallContext?, txHandle: TxHandle?): Xtdb.Connection =
         if (txHandle != null) txs.lookup(txHandle).orNotFound().conn
@@ -395,8 +413,10 @@ class XtdbProducer(
         ackStream.reportingErrors {
             val ps = preparedStatement(cmd.preparedStatementHandle)
             flightStream.toRelation(node.allocator).use { acc ->
-                ps.xtdbStmt.bind(acc)
-                ps.xtdbStmt.executeUpdate()
+                ps.withStatement(ctx) { _, stmt ->
+                    stmt.bind(acc)
+                    stmt.executeUpdate()
+                }
             }
             ackStream.sendDoPutUpdateRes(allocator)
         }
@@ -455,7 +475,7 @@ class XtdbProducer(
         cmd: CommandPreparedStatementQuery, ctx: CallContext?, descriptor: FlightDescriptor
     ): FlightInfo = flightCall {
         val ps = preparedStatement(cmd.preparedStatementHandle)
-        queryFlightInfo(ps.xtdbStmt, ps.dbName, ps.sql, ps.params, descriptor)
+        ps.withStatement(ctx) { conn, stmt -> queryFlightInfo(stmt, conn.dbName, ps.sql, ps.params, descriptor) }
     }
 
     override fun createPreparedStatement(
@@ -467,7 +487,7 @@ class XtdbProducer(
         val sql = req.queryBytes.toStringUtf8()
         val txHandle = if (req.hasTransactionId()) req.transactionId else null
         val conn = txOrSessionConnection(ctx, txHandle)
-        conn.createStatement().closeOnCatch { xtdbStmt ->
+        conn.createStatement().use { xtdbStmt ->
             xtdbStmt.setSqlQuery(sql)
             xtdbStmt.prepare()
 
@@ -483,7 +503,8 @@ class XtdbProducer(
                 )
             }
 
-            stmts.add(psId, PreparedStatement(conn.dbName, sql, xtdbStmt, Lease(clock, config.preparedStatementIdleTimeout)))
+            val scope = if (txHandle != null) PreparedScope.InTx(txHandle) else PreparedScope.Session(conn.dbName)
+            stmts.add(psId, PreparedStatement(sql, scope, Lease(clock, config.preparedStatementIdleTimeout)))
             listener.onNext(packResult(resultBuilder.build()))
             listener.onCompleted()
         }
@@ -493,7 +514,7 @@ class XtdbProducer(
         cmd: CommandPreparedStatementQuery, ctx: CallContext?, descriptor: FlightDescriptor
     ): SchemaResult = flightCall {
         val ps = preparedStatement(cmd.preparedStatementHandle)
-        SchemaResult(ps.xtdbStmt.executeSchema())
+        ps.withStatement(ctx) { _, stmt -> SchemaResult(stmt.executeSchema()) }
     }
 
     override fun getSchemaStatement(

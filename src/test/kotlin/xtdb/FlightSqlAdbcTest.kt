@@ -733,6 +733,22 @@ class FlightSqlAdbcTest {
     }
 
     @Test
+    fun `a statement prepared in a transaction is NOT_FOUND once that transaction has ended`() {
+        sessionClient().use { client ->
+            val txn = client.beginTransaction(*emptyCallOpts)
+
+            client.prepare("SELECT 1 AS x", txn, *emptyCallOpts).use { ps ->
+                assertEquals(listOf(mapOf("x" to 1L)), ps.execute(*emptyCallOpts).readRows(client))
+                client.commit(txn, *emptyCallOpts)
+
+                val ex = assertThrows(FlightRuntimeException::class.java) { ps.execute(*emptyCallOpts) }
+                assertEquals(FlightStatusCode.NOT_FOUND, ex.status().code())
+                assertTrue(ex.message!!.contains("unknown transaction"), ex.message)
+            }
+        }
+    }
+
+    @Test
     fun `a transaction is reached by its handle from any session`() {
         cookieAwareClient().use { sessionA ->
             cookieAwareClient().use { sessionB ->
