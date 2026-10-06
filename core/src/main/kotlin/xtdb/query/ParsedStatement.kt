@@ -75,15 +75,17 @@ sealed interface ParsedStatement {
     data class Commit(override val ast: Sql.DirectlyExecutableStatementContext, val mode: CommitMode? = null) : ParsedStatement
     data class Rollback(override val ast: Sql.DirectlyExecutableStatementContext) : ParsedStatement
 
-    data class SetTransaction(override val ast: Sql.DirectlyExecutableStatementContext, val txOptions: TxOptions) :
-        ParsedStatement
+    /** Sets the connection's session or transaction state; has no result set. */
+    sealed interface Control : ParsedStatement
 
-    data class SetSessionCharacteristics(override val ast: Sql.DirectlyExecutableStatementContext, val accessMode: AccessMode?) : ParsedStatement
+    data class SetTransaction(override val ast: Sql.DirectlyExecutableStatementContext, val txOptions: TxOptions) : Control
 
-    data class SetTimeZone(override val ast: Sql.DirectlyExecutableStatementContext, val zone: Sql.ExprContext) : ParsedStatement
-    data class SetAwaitToken(override val ast: Sql.DirectlyExecutableStatementContext, val token: Sql.ExprContext) : ParsedStatement
-    data class SetSessionParameter(override val ast: Sql.DirectlyExecutableStatementContext, val name: String, val value: Sql.LiteralContext) : ParsedStatement
-    data class SetRole(override val ast: Sql.DirectlyExecutableStatementContext) : ParsedStatement
+    data class SetSessionCharacteristics(override val ast: Sql.DirectlyExecutableStatementContext, val accessMode: AccessMode?) : Control
+
+    data class SetTimeZone(override val ast: Sql.DirectlyExecutableStatementContext, val zone: Sql.ExprContext) : Control
+    data class SetAwaitToken(override val ast: Sql.DirectlyExecutableStatementContext, val token: Sql.ExprContext) : Control
+    data class SetSessionParameter(override val ast: Sql.DirectlyExecutableStatementContext, val name: String, val value: Sql.LiteralContext) : Control
+    data class SetRole(override val ast: Sql.DirectlyExecutableStatementContext) : Control
 
     /** SHOW variants answered from session state rather than as a SQL query. */
     data class ShowVariable(override val ast: Sql.DirectlyExecutableStatementContext, val variable: String) : ParsedStatement
