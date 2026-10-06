@@ -161,6 +161,7 @@ Both reflect **live data**, not just flushed-to-block state: freshly-inserted ro
 
 `closeSession()`
 : ends the session, closes its connections, and invalidates the cookie.
+  An open transaction is left open: a transaction is reached by its handle alone, and ends by commit, rollback, or rolling back once it has gone `flightSql.transactionIdleTimeout` (default 30 minutes) without a call naming it.
 
 The schema is not settable: `public` is the only accepted value (a confirming no-op), anything else is rejected.
 

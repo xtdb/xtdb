@@ -61,12 +61,17 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import xtdb.api.FlightSql
+import xtdb.api.FlightSqlConfig
 import xtdb.api.Xtdb
 import xtdb.flight_sql.XtdbProducer
 import xtdb.util.XtdbVersion
 import xtdb.database.Database
 import xtdb.api.query.IKeyFn.KeyFn.SNAKE_CASE_STRING
 import xtdb.arrow.Relation
+import java.time.Duration
+import java.time.Instant
+import java.time.InstantSource
 import java.time.ZonedDateTime
 import java.util.*
 
@@ -366,6 +371,65 @@ class FlightSqlAdbcTest {
         }
     }
 
+    @Test
+    fun `getSqlInfo advertises the transaction timeout, in milliseconds`() {
+        val rows = fsqlClient.getSqlInfo(intArrayOf(SqlInfo.FLIGHT_SQL_SERVER_TRANSACTION_TIMEOUT_VALUE), *emptyCallOpts)
+            .readRows()
+        assertEquals(listOf(Duration.ofMinutes(30).toMillis().toInt()), rows.map { (it["value"] as TaggedValue).value })
+    }
+
+    private class TestClock(@Volatile var now: Instant = Instant.parse("2030-01-01T00:00:00Z")) : InstantSource {
+        override fun instant(): Instant = now
+        fun advance(d: Duration) { now = now.plus(d) }
+    }
+
+    private fun <R> withClockedServer(f: (FlightSqlClient, TestClock) -> R): R {
+        val clock = TestClock()
+        return FlightSql.open(xtdb, FlightSqlConfig().port(0), clock, sweepInterval = Duration.ofDays(1)).use { srv ->
+            FlightSqlClient(FlightClient.builder(al, Location.forGrpcInsecure("127.0.0.1", srv.port)).build())
+                .use { client -> f(client, clock) }
+        }
+    }
+
+    @Test
+    fun `an abandoned transaction is rolled back after its idle timeout`() {
+        withClockedServer { client, clock ->
+            client.executeUpdate("INSERT INTO users (_id, n) VALUES (0, 'committed')", *emptyCallOpts)
+
+            val txn = client.beginTransaction(*emptyCallOpts)
+            client.executeUpdate("INSERT INTO users (_id, n) VALUES (1, 'abandoned')", txn, *emptyCallOpts)
+
+            clock.advance(Duration.ofMinutes(31))
+
+            val ex = assertThrows(FlightRuntimeException::class.java) { client.commit(txn, *emptyCallOpts) }
+            assertEquals(FlightStatusCode.NOT_FOUND, ex.status().code())
+            assertTrue(ex.message!!.contains("expired"), ex.message)
+
+            assertEquals(
+                listOf(mapOf("_id" to 0L)),
+                client.execute("SELECT _id FROM users", *emptyCallOpts).readRows(client)
+            )
+        }
+    }
+
+    @Test
+    fun `a call naming a transaction renews it`() {
+        withClockedServer { client, clock ->
+            val txn = client.beginTransaction(*emptyCallOpts)
+
+            clock.advance(Duration.ofMinutes(20))
+            client.executeUpdate("INSERT INTO users (_id, n) VALUES (1, 'kept')", txn, *emptyCallOpts)
+
+            clock.advance(Duration.ofMinutes(20))
+            client.commit(txn, *emptyCallOpts)
+
+            assertEquals(
+                listOf(mapOf("_id" to 1L)),
+                client.execute("SELECT _id FROM users", *emptyCallOpts).readRows(client)
+            )
+        }
+    }
+
     private val asString = object : NoOpSessionOptionValueVisitor<String?>() {
         override fun visit(value: String) = value
     }
@@ -492,27 +556,22 @@ class FlightSqlAdbcTest {
         SetSessionOptionsRequest(mapOf("catalog" to SessionOptionValueFactory.makeSessionOptionValue(db)))
 
     @Test
-    fun `test FlightSQL closeSession aborts an open session-bound transaction`() {
+    fun `closing a session leaves its transaction open`() {
         fsqlClient.executeUpdate("CREATE TABLE users (_id, n)", *emptyCallOpts)
 
-        cookieAwareClient().use { client ->
-            // session must exist before beginTransaction for the tx to be session-bound
+        val txn = cookieAwareClient().use { client ->
             client.setSessionOptions(catalogOpt("xtdb"), *emptyCallOpts)
 
-            val txn = client.beginTransaction(*emptyCallOpts)
-            client.executeUpdate("INSERT INTO users (_id, n) VALUES (1, 'in-tx')", txn, *emptyCallOpts)
-
-            client.closeSession(CloseSessionRequest(), *emptyCallOpts)
-
-            // closeSession reclaimed the tx connection, so the handle is now unknown
-            val ex = assertThrows(FlightRuntimeException::class.java) {
-                client.commit(txn, *emptyCallOpts)
+            client.beginTransaction(*emptyCallOpts).also { txn ->
+                client.executeUpdate("INSERT INTO users (_id, n) VALUES (1, 'in-tx')", txn, *emptyCallOpts)
+                client.closeSession(CloseSessionRequest(), *emptyCallOpts)
             }
-            assertEquals(org.apache.arrow.flight.FlightStatusCode.NOT_FOUND, ex.status().code())
         }
 
+        plainClient().use { it.commit(txn, *emptyCallOpts) }
+
         assertEquals(
-            emptyList<Map<*, *>>(),
+            listOf(mapOf("_id" to 1L, "n" to "in-tx")),
             fsqlClient.execute("SELECT _id, n FROM users", *emptyCallOpts).readRows()
         )
     }
@@ -617,35 +676,22 @@ class FlightSqlAdbcTest {
     }
 
     @Test
-    fun `test FlightSQL a transaction is scoped to its own session`() {
+    fun `a transaction is reached by its handle from any session`() {
         cookieAwareClient().use { sessionA ->
             cookieAwareClient().use { sessionB ->
-                // each client establishes its own session
                 sessionA.setSessionOptions(catalogOpt("xtdb"), *emptyCallOpts)
                 sessionB.setSessionOptions(catalogOpt("xtdb"), *emptyCallOpts)
 
                 val txnA = sessionA.beginTransaction(*emptyCallOpts)
-
-                // session B may not drive session A's transaction - it doesn't exist for B
-                val onCommit = assertThrows(FlightRuntimeException::class.java) {
-                    sessionB.commit(txnA, *emptyCallOpts)
-                }
-                assertEquals(org.apache.arrow.flight.FlightStatusCode.NOT_FOUND, onCommit.status().code())
-
-                val onDml = assertThrows(FlightRuntimeException::class.java) {
-                    sessionB.executeUpdate("INSERT INTO users (_id, n) VALUES (1, 'x')", txnA, *emptyCallOpts)
-                }
-                assertEquals(org.apache.arrow.flight.FlightStatusCode.NOT_FOUND, onDml.status().code())
-
-                // the owning session can still use and commit it
+                sessionB.executeUpdate("INSERT INTO users (_id, n) VALUES (1, 'b')", txnA, *emptyCallOpts)
                 sessionA.executeUpdate("INSERT INTO users (_id, n) VALUES (2, 'a')", txnA, *emptyCallOpts)
-                sessionA.commit(txnA, *emptyCallOpts)
+                sessionB.commit(txnA, *emptyCallOpts)
             }
         }
 
         assertEquals(
-            listOf(mapOf("_id" to 2L, "n" to "a")),
-            fsqlClient.execute("SELECT _id, n FROM users", *emptyCallOpts).readRows()
+            listOf(mapOf("_id" to 1L, "n" to "b"), mapOf("_id" to 2L, "n" to "a")),
+            fsqlClient.execute("SELECT _id, n FROM users ORDER BY _id", *emptyCallOpts).readRows()
         )
     }
 

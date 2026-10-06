@@ -31,6 +31,7 @@ import org.apache.arrow.vector.ipc.ArrowReader
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.Schema
 import org.apache.arrow.adbc.core.BulkIngestMode
+import xtdb.api.FlightSqlConfig
 import xtdb.api.Xtdb
 import xtdb.api.error.*
 import xtdb.api.error.Anomaly.Companion.toAnomaly
@@ -42,6 +43,8 @@ import xtdb.util.logger
 import xtdb.util.serializeAsMessageInterruptibly
 import xtdb.util.warn
 import xtdb.util.XtdbVersion
+import java.time.Duration
+import java.time.InstantSource
 import java.util.*
 import java.util.concurrent.Callable
 import java.util.concurrent.ConcurrentHashMap
@@ -197,7 +200,11 @@ private fun SessionOptionValue.asStringOrNull(): String? =
         override fun visit(value: String) = value
     })
 
-class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoCloseable {
+class XtdbProducer(
+    private val node: Xtdb,
+    private val config: FlightSqlConfig,
+    private val clock: InstantSource,
+) : NoOpFlightSqlProducer(), AutoCloseable {
     private val allocator = node.allocator.newChildAllocator("flight-sql", 0, Long.MAX_VALUE)
 
     // key is (session id, db)
@@ -208,8 +215,11 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
 
     // a tx owns a dedicated connection: autoCommit/pendingOps are connection-scoped, so flipping
     // them on a pooled connection would buffer other clients' autocommit writes into this tx.
-    private data class TxConn(val sessionId: String?, val conn: Xtdb.Connection)
-    private val txConns = ConcurrentHashMap<TxHandle, TxConn>()
+    private class FlightTx(val conn: Xtdb.Connection, override val lease: Lease) : Leased {
+        override fun close() = conn.close()
+    }
+
+    private val txs = Leases<TxHandle, FlightTx>(clock, tombstoneFor = config.transactionIdleTimeout)
     private val stmts = ConcurrentHashMap<PreparedStatementHandle, PreparedStatement>()
 
     private fun newConnection(dbName: DatabaseName): Xtdb.Connection =
@@ -247,26 +257,25 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
             defaultConns.computeIfAbsent(dbName) { newConnection(dbName) }
     }
 
-    // the session presenting the call, or null for a cookieless caller.
-    private fun currentSessionId(ctx: CallContext?): String? =
-        sessionMiddleware(ctx)?.takeIf { it.hasSession() }?.session?.id
-
-    // a transaction is owned by the session that opened it: a handle only resolves under
-    // its own session (cookieless == cookieless). A handle presented under any other session
-    // is NOT_FOUND - from that session's view the transaction doesn't exist.
-    private fun txConnFor(ctx: CallContext?, txHandle: TxHandle): TxConn =
-        txConns[txHandle]
-            ?.takeIf { it.sessionId == currentSessionId(ctx) }
-            ?: throw CallStatus.NOT_FOUND.withDescription("unknown transaction").toRuntimeException()
+    private fun Leases.Lookup<FlightTx>.orNotFound(): FlightTx = when (this) {
+        is Leases.Lookup.Found -> value
+        Leases.Lookup.Expired ->
+            throw CallStatus.NOT_FOUND.withDescription("transaction expired after ${config.transactionIdleTimeout} idle")
+                .toRuntimeException()
+        Leases.Lookup.Unknown -> throw CallStatus.NOT_FOUND.withDescription("unknown transaction").toRuntimeException()
+    }
 
     private fun txOrSessionConnection(ctx: CallContext?, txHandle: TxHandle?): Xtdb.Connection =
-        if (txHandle != null) txConnFor(ctx, txHandle).conn
+        if (txHandle != null) txs.lookup(txHandle).orNotFound().conn
         else connectionFor(ctx, resolveDb(ctx))
+
+    internal fun sweep() {
+        txs.sweep()
+    }
 
     override fun close() {
         stmts.closeAll()
-        txConns.values.forEach { it.conn.close() }
-        txConns.clear()
+        txs.close()
         sessionConns.values.forEach { it.close() }
         sessionConns.clear()
         defaultConns.values.forEach { it.close() }
@@ -590,13 +599,6 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
             }
 
             val sessionId = mw.session.id
-            // remove before close so an in-flight call can't resolve a connection being closed.
-            txConns.entries.removeIf { (_, txConn) ->
-                if (txConn.sessionId == sessionId) {
-                    txConn.conn.close()
-                    true
-                } else false
-            }
             sessionConns.keys.filter { it.first == sessionId }.forEach { key ->
                 sessionConns.remove(key)?.close()
             }
@@ -695,6 +697,10 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
                 SqlInfo.FLIGHT_SQL_SERVER_TRANSACTION_VALUE,
                 SqlSupportedTransaction.SQL_SUPPORTED_TRANSACTION_TRANSACTION_VALUE
             )
+            addInt32(
+                SqlInfo.FLIGHT_SQL_SERVER_TRANSACTION_TIMEOUT_VALUE,
+                minOf(config.transactionIdleTimeout, Duration.ofMillis(Int.MAX_VALUE.toLong())).toMillis().toInt()
+            )
 
             valueVec.valueCount = idx
             root.rowCount = idx
@@ -720,7 +726,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
          * - `awaitToken`, which bounds a read to one that sees this transaction.
          *
          * A commit that submits nothing sends no result.
-         * A handle that is unknown, already ended, or begun under another session fails with `NOT_FOUND`.
+         * A handle that is unknown, already ended, or expired fails with `NOT_FOUND`.
          */
         const val COMMIT_TRANSACTION_ACTION = "xtdb.CommitTransaction"
     }
@@ -849,7 +855,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
             defaultTz = session.defaultTz
             setAutoCommit(false)
         }
-        txConns[txHandle] = TxConn(currentSessionId(ctx), conn)
+        txs.add(txHandle, FlightTx(conn, Lease(clock, config.transactionIdleTimeout)))
 
         listener.onNext(
             ActionBeginTransactionResult.newBuilder()
@@ -860,21 +866,14 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         listener.onCompleted()
     }
 
-    // resolve under the calling session only, then claim it atomically (remove(k,v) lets
-    // exactly one concurrent ender win) - a wrong-session caller never reaches the remove.
-    private fun claimTx(ctx: CallContext?, txHandle: TxHandle): Xtdb.Connection {
-        val tx = txConnFor(ctx, txHandle)
-        if (!txConns.remove(txHandle, tx))
-            throw CallStatus.NOT_FOUND.withDescription("unknown transaction").toRuntimeException()
-        return tx.conn
-    }
+    private fun claimTx(txHandle: TxHandle): Xtdb.Connection = txs.take(txHandle).orNotFound().conn
 
     override fun endTransaction(
         req: ActionEndTransactionRequest,
         ctx: CallContext?,
         listener: StreamListener<Result>
     ) = listener.reportingErrors {
-        claimTx(ctx, req.transactionId).use { conn ->
+        claimTx(req.transactionId).use { conn ->
             if (req.action == EndTransaction.END_TRANSACTION_COMMIT) conn.commit() else conn.rollback()
         }
         listener.onCompleted()
@@ -884,7 +883,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         if (action.type != COMMIT_TRANSACTION_ACTION) return super.doAction(context, action, listener)
 
         listener.reportingErrors {
-            claimTx(context, ByteString.copyFrom(action.body)).use { conn ->
+            claimTx(ByteString.copyFrom(action.body)).use { conn ->
                 try {
                     conn.commit()
                 } finally {

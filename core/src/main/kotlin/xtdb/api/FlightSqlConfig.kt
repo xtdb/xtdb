@@ -1,11 +1,17 @@
+@file:UseSerializers(DurationSerde::class)
+
 package xtdb.api
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.UseSerializers
+import xtdb.DurationSerde
+import java.time.Duration
 
 @Serializable
 data class FlightSqlConfig(
     var host: String = "127.0.0.1",
     var port: Int = 0,
+    var transactionIdleTimeout: Duration = Duration.ofMinutes(30),
 ) {
     /**
      * Host on which to start the Flight SQL server.
@@ -21,4 +27,12 @@ data class FlightSqlConfig(
      * Set to -1 to not start a Flight SQL server.
      */
     fun port(port: Int) = apply { this.port = port }
+
+    /**
+     * How long a Flight SQL transaction may go without a call naming its handle before it is rolled back.
+     * Advertised to clients as `FLIGHT_SQL_SERVER_TRANSACTION_TIMEOUT`.
+     *
+     * Default is 30 minutes.
+     */
+    fun transactionIdleTimeout(timeout: Duration) = apply { this.transactionIdleTimeout = timeout }
 }

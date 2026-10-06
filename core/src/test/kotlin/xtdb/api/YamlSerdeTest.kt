@@ -1,5 +1,6 @@
 package xtdb.api
 
+import java.time.Duration
 import io.mockk.every
 import io.mockk.mockkObject
 import io.mockk.unmockkObject
@@ -230,10 +231,11 @@ class YamlSerdeTest {
         val input = """
         flightSql:
           port: 9833
+          transactionIdleTimeout: PT5M
         """.trimIndent()
 
         assertEquals(
-            FlightSqlConfig(port = 9833),
+            FlightSqlConfig(port = 9833, transactionIdleTimeout = Duration.ofMinutes(5)),
             nodeConfig(input).flightSql
         )
     }

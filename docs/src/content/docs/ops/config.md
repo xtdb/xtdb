@@ -203,6 +203,12 @@ flightSql:
   # (In the XTDB Docker images, this is defaulted to 3000.)
   # Set to -1 to not start a Flight SQL server.
   port: 0
+
+  # How long a Flight SQL transaction may go without a call naming its handle before it is rolled back.
+  # Advertised to clients as FLIGHT_SQL_SERVER_TRANSACTION_TIMEOUT.
+  #
+  # Default is "PT30M".
+  transactionIdleTimeout: PT30M
 ```
 
 ### Compactor
