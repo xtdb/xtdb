@@ -40,7 +40,7 @@
     "vega": "^5.28.0",
     "vega-embed": "^6.25.0",
     "vega-lite": "^5.18.0",
-    "vite": "8.3.0",
+    "vite": "8.3.1",
     "xtplay-components": "file:shared/xtplay-components"
   },
   "dependencies": {
