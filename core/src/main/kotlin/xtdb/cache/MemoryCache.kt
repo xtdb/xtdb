@@ -2,6 +2,7 @@
 
 package xtdb.cache
 
+import java.net.URI
 import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.coroutines.*
@@ -259,7 +260,11 @@ class MemoryCache @JvmOverloads internal constructor(
             this@MemoryCache.get(prefix.resolve(key), slice) { cacheKey -> fetch(prefix.relativize(cacheKey)) }
     }
 
-    fun openForDatabase(prefix: Path) = ForDatabase(prefix)
+    /**
+     * @param storageUri where the database's objects live, including its storage root — see [xtdb.api.storage.ObjectStore.location].
+     *   Null gets a namespace of its own, never shared with another open.
+     */
+    fun openForDatabase(storageUri: URI?) = ForDatabase(cachePrefix(storageUri))
 
     @OptIn(ExperimentalCoroutinesApi::class)
     @Suppress("NAME_SHADOWING")

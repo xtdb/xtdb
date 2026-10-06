@@ -1,5 +1,6 @@
 package xtdb.api.storage
 
+import java.net.URI
 import xtdb.api.storage.ObjectStore.StoredObject
 import xtdb.multipart.IMultipartUpload
 import xtdb.multipart.SupportsMultipart
@@ -23,6 +24,8 @@ import java.util.concurrent.CompletableFuture
 class PrefixedObjectStore(
     private val prefix: Path, private val delegate: InMemoryBucket,
 ) : SupportsMultipart<ByteBuffer> {
+
+    override val location: URI = URI("memory", delegate.id.toString(), "/$prefix", null)
 
     private fun StoredObject.relativized() = StoredObject(prefix.relativize(key), size)
 

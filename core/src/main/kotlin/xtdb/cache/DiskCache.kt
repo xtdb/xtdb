@@ -1,6 +1,7 @@
 @file:UseSerializers(PathSerde::class)
 package xtdb.cache
 
+import java.net.URI
 import com.github.benmanes.caffeine.cache.RemovalCause
 import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
@@ -74,6 +75,9 @@ class DiskCache internal constructor(
     init {
         LOGGER.debug("Creating disk cache with maxSizeBytes=$maxSizeBytes")
         val syncInnerCache = pinningCache.cache.synchronous()
+
+        rootPath.resolve(TMP_DIR).toFile().deleteRecursively()
+
         Files.walk(rootPath)
             .filter { Files.isRegularFile(it) }
             .sorted(comparingLong { path ->
@@ -90,7 +94,7 @@ class DiskCache internal constructor(
     }
 
     internal fun createTempPath(): Path =
-        Files.createTempFile(rootPath.resolve(".tmp").createDirectories(), "upload", ".arrow")
+        Files.createTempFile(rootPath.resolve(TMP_DIR).createDirectories(), "upload", ".arrow")
 
     @FunctionalInterface
     fun interface Fetch {
@@ -113,7 +117,11 @@ class DiskCache internal constructor(
         fun createTempPath(): Path = this@DiskCache.createTempPath()
     }
 
-    fun openForDatabase(prefix: Path) = ForDatabase(prefix)
+    /**
+     * @param storageUri where the database's objects live, including its storage root — see [xtdb.api.storage.ObjectStore.location].
+     *   Null gets a namespace of its own, never shared with another open.
+     */
+    fun openForDatabase(storageUri: URI?) = ForDatabase(cachePrefix(storageUri))
 
     @Suppress("NAME_SHADOWING")
     internal fun get(k: Path, fetch: Fetch) =
@@ -146,6 +154,8 @@ class DiskCache internal constructor(
     }
 
     companion object {
+        private const val TMP_DIR = ".tmp"
+
         @JvmStatic
         fun factory(path: Path) = Factory(path)
 

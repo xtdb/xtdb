@@ -69,6 +69,13 @@ class S3(
     private val factory: Factory
 ) : ObjectStore, SupportsMultipart<CompletedPart> {
 
+    // bucket names are unique within an AWS partition; a custom endpoint is its own namespace.
+    // Read off the built client, since an `S3Configurator` can override the endpoint the factory set.
+    override val location: URI =
+        client.serviceClientConfiguration().endpointOverride()
+            .map { URI(it.scheme, it.authority, "${it.path.trimEnd('/')}/$bucket/$prefix", null, null) }
+            .orElseGet { URI("s3", bucket, "/$prefix", null) }
+
     override fun close() {
         client.close()
     }

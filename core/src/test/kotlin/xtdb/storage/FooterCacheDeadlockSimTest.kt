@@ -1,5 +1,6 @@
 package xtdb.storage
 
+import java.net.URI
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.yield
@@ -48,12 +49,12 @@ class FooterCacheDeadlockSimTest : SimulationTestBase() {
 
     // Unix `Path.hashCode` is String-like over the bytes, so these share a bin at every table size
     private val collidingKeys = listOf("AaAa", "BBBB", "AaBB", "BBAa").map { "tbl/$it.arrow".asPath }
-    private val prefix = "xtdb/0".asPath
+    private val storageUri = URI("memory", "footer-cache-deadlock", "/xtdb/0", null)
     private val naturalKeys = (0 until 32).map { "tbl/key-$it.arrow".asPath }
 
     private fun ObjectStore.writeArrowFiles(keys: List<Path>, al: BufferAllocator, diskPath: Path) =
         MemoryCache.Factory().open(al).use { memoryCache ->
-            RemoteBufferPool(al, this, memoryCache.openForDatabase(prefix), DiskCache(diskPath.createDirectories(), 1L shl 30).openForDatabase(prefix), null, 0)
+            RemoteBufferPool(al, this, memoryCache.openForDatabase(storageUri), DiskCache(diskPath.createDirectories(), 1L shl 30).openForDatabase(storageUri), null, 0)
                 .use { pool ->
                     for (k in keys) IntVector.open(al, "foo", false).use { v ->
                         v.writeInt(1)
@@ -71,8 +72,8 @@ class FooterCacheDeadlockSimTest : SimulationTestBase() {
 
         MemoryCache.Factory().open(al).use { memoryCache ->
             RemoteBufferPool(
-                al, YieldingObjectStore(bucket), memoryCache.openForDatabase(prefix),
-                DiskCache(diskPath.resolve("test").createDirectories(), 1L shl 30, workerDispatcher).openForDatabase(prefix),
+                al, YieldingObjectStore(bucket), memoryCache.openForDatabase(storageUri),
+                DiskCache(diskPath.resolve("test").createDirectories(), 1L shl 30, workerDispatcher).openForDatabase(storageUri),
                 null, 0,
                 workerDispatcher,
                 Storage.arrowFooterCache(1, workerDispatcher)

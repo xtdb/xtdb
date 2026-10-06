@@ -1,6 +1,7 @@
 @file:UseSerializers(PathSerde::class)
 package xtdb.gcp
 
+import java.net.URI
 import clojure.lang.ExceptionInfo
 import clojure.lang.PersistentHashMap
 import com.google.cloud.storage.BlobInfo
@@ -64,6 +65,8 @@ class CloudStorage(
 ) : ObjectStore {
 
     private val client = StorageOptions.newBuilder().run { setProjectId(projectId); build() }.service
+
+    override val location: URI = URI("gs", bucket, "/$prefix", null)
 
     override suspend fun getObject(k: Path): ByteBuffer =
         runInterruptible(ioContext) {
