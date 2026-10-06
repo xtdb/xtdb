@@ -105,6 +105,9 @@ class BlobStorage(
             buildClient()
         }.getBlobContainerClient(factory.container).also { it.createIfNotExists() }
 
+    // the client's URL, not the configured endpoint: a remote's connection string can point the client elsewhere
+    override val location: String = "${client.blobContainerUrl.trimEnd('/')}/$prefix"
+
     override suspend fun getObject(k: Path): ByteBuffer =
         try {
             unwrappingReactorException {

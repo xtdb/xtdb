@@ -68,6 +68,9 @@ class DiskCache internal constructor(val rootPath: Path, val maxSizeBytes: Long)
     init {
         LOGGER.debug("Creating disk cache with maxSizeBytes=$maxSizeBytes")
         val syncInnerCache = pinningCache.cache.synchronous()
+
+        rootPath.resolve(TMP_DIR).toFile().deleteRecursively()
+
         Files.walk(rootPath)
             .filter { Files.isRegularFile(it) }
             .sorted(comparingLong { path ->
@@ -84,7 +87,7 @@ class DiskCache internal constructor(val rootPath: Path, val maxSizeBytes: Long)
     }
 
     internal fun createTempPath(): Path =
-        Files.createTempFile(rootPath.resolve(".tmp").createDirectories(), "upload", ".arrow")
+        Files.createTempFile(rootPath.resolve(TMP_DIR).createDirectories(), "upload", ".arrow")
 
     @FunctionalInterface
     fun interface Fetch {
@@ -140,6 +143,8 @@ class DiskCache internal constructor(val rootPath: Path, val maxSizeBytes: Long)
     }
 
     companion object {
+        private const val TMP_DIR = ".tmp"
+
         @JvmStatic
         fun factory(path: Path) = Factory(path)
 

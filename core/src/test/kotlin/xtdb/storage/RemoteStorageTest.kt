@@ -1,5 +1,6 @@
 package xtdb.storage
 
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.apache.arrow.memory.BufferAllocator
 import org.junit.jupiter.api.AfterEach
@@ -141,6 +142,113 @@ class RemoteStorageTest : PartitionedStorageTest() {
                 assertEquals(3, p0.getByteArray(key).size, "partition 0 reads its own bytes")
                 assertEquals(7, p1.getByteArray(key).size, "partition 1 isn't served partition 0's cache entry")
             }
+        }
+    }
+
+    class LocationlessObjectStoreFactory(val bucket: InMemoryBucket) : ObjectStore.Factory {
+        override fun openObjectStore(storageRoot: Path, remotes: Map<RemoteAlias, Remote>): ObjectStore =
+            object : ObjectStore by PrefixedObjectStore(storageRoot, bucket) {
+                override val location: String? = null
+            }
+
+        override val configProto: ProtoAny
+            get() = ProtoAny.newBuilder().build()
+    }
+
+    private fun openPool(factory: ObjectStore.Factory, dbName: String = "xtdb", epoch: Int = 0): BufferPool =
+        remote(factory).epoch(epoch).open(allocator, memoryCache, diskCache, dbName)
+
+    private fun BufferPool.writeRows(key: Path, rowCount: Int) {
+        Relation(allocator, "a" ofType I32).use { relation ->
+            openArrowWriter(key, relation).use { writer ->
+                val v = relation["a"]
+                repeat(rowCount) { v.writeInt(it); relation.endRow() }
+                writer.writePage()
+                writer.endSync()
+            }
+        }
+    }
+
+    private fun BufferPool.rowCount(key: Path): Int = runBlocking { getRecordBatch(key, 0).use { it.length } }
+
+    @Test
+    fun `a database re-attached on a different store reads that store, not the previous store's cache entries`() {
+        val key = "blocks/b00.binpb".asPath
+
+        openPool(PrefixingObjectStoreFactory(InMemoryBucket())).use { x ->
+            x.putObjectSync(key, ByteBuffer.wrap(ByteArray(3)))
+            assertEquals(3, x.getByteArray(key).size)
+        }
+
+        openPool(PrefixingObjectStoreFactory(InMemoryBucket())).use { y ->
+            y.putObjectSync(key, ByteBuffer.wrap(ByteArray(7)))
+            assertEquals(7, y.getByteArray(key).size)
+        }
+    }
+
+    @Test
+    fun `a database re-attached on a different store reads its own written files`() {
+        val key = "tables/foo/data/l00-rc-b00.arrow".asPath
+
+        openPool(PrefixingObjectStoreFactory(InMemoryBucket())).use { x ->
+            x.writeRows(key, 10)
+            assertEquals(10, x.rowCount(key))
+        }
+
+        openPool(PrefixingObjectStoreFactory(InMemoryBucket())).use { y ->
+            y.writeRows(key, 3)
+            assertEquals(3, y.rowCount(key))
+        }
+    }
+
+    @Test
+    fun `a storage-epoch bump doesn't read the previous epoch's cache entries`() {
+        val bucket = InMemoryBucket()
+        val key = "blocks/b00.binpb".asPath
+
+        openPool(PrefixingObjectStoreFactory(bucket), epoch = 1).use { e1 ->
+            e1.putObjectSync(key, ByteBuffer.wrap(ByteArray(3)))
+            assertEquals(3, e1.getByteArray(key).size)
+        }
+
+        openPool(PrefixingObjectStoreFactory(bucket), epoch = 2).use { e2 ->
+            e2.putObjectSync(key, ByteBuffer.wrap(ByteArray(7)))
+            assertEquals(7, e2.getByteArray(key).size)
+        }
+    }
+
+    @Test
+    fun `one store opened under two database names shares its cache entries`() {
+        val bucket = InMemoryBucket()
+        val key = "blocks/b00.binpb".asPath
+
+        openPool(PrefixingObjectStoreFactory(bucket), dbName = "a").use { a ->
+            a.putObjectSync(key, ByteBuffer.wrap(ByteArray(3)))
+            assertEquals(3, a.getByteArray(key).size)
+        }
+
+        bucket.buffers.clear()
+
+        openPool(PrefixingObjectStoreFactory(bucket), dbName = "b").use { b ->
+            assertEquals(3, b.getByteArray(key).size)
+        }
+    }
+
+    @Test
+    fun `a store with no location doesn't share cache entries between opens`() {
+        val bucket = InMemoryBucket()
+        val key = "blocks/b00.binpb".asPath
+
+        openPool(LocationlessObjectStoreFactory(bucket)).use { first ->
+            first.putObjectSync(key, ByteBuffer.wrap(ByteArray(3)))
+            assertEquals(3, first.getByteArray(key).size)
+        }
+
+        bucket.buffers.clear()
+
+        openPool(LocationlessObjectStoreFactory(bucket)).use { second ->
+            second.putObjectSync(key, ByteBuffer.wrap(ByteArray(7)))
+            assertEquals(7, second.getByteArray(key).size)
         }
     }
 
