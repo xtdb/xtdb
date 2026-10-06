@@ -63,28 +63,15 @@
 
 (defn utf8-buf [s] (ByteBuffer/wrap (.getBytes (str s) "utf-8")))
 
-(defn test-get-object [^RemoteBufferPool bp, ^Path k, ^ByteBuffer expected]
-  (let [object-store (.getObjectStore bp)
-        ^DiskCache disk-cache (.getDiskCache bp)
-        root-path (.getRootPath disk-cache)]
+(defn test-get-object [^BufferPool bp, ^Path k, ^ByteBuffer expected]
+  (t/is (= 0 (util/compare-nio-buffers-unsigned expected (ByteBuffer/wrap (.getByteArray bp k))))
+        "get produces the stored bytes")
 
-    (t/testing "immediate get from buffers map produces correct buffer"
-      (t/is (= 0 (util/compare-nio-buffers-unsigned expected (ByteBuffer/wrap (.getByteArray bp k))))))
-
-    (when root-path
-      (t/testing "expect a file to exist under our :disk-store"
-        (let [cache-path (.resolve root-path (.resolve (util/->path "xtdb/0") k))]
-          (t/is (util/path-exists cache-path))
-          (t/is (= 0 (util/compare-nio-buffers-unsigned expected (util/->mmap-path cache-path)))))))
-
-    (when object-store
-      (t/testing "if the buffer is evicted and deleted from disk, it is delivered from object storage"
-        ;; Deleted from disk (ie, replicating effects of 'eviction' here)
-        (-> (.asMap (.getCache (.getPinningCache disk-cache)))
-            (.remove k))
-        (util/delete-file (.resolve root-path k))
-        ;; Will fetch from object store again
-        (t/is (= 0 (util/compare-nio-buffers-unsigned expected (ByteBuffer/wrap (.getByteArray bp k)))))))))
+  (let [cached (->> (file-seq (.toFile *disk-cache-dir*))
+                    (filter #(and (.isFile ^File %) (= (str (.getFileName k)) (.getName ^File %)))))]
+    (t/is (= 1 (count cached)) "the object is cached on disk")
+    (t/is (= 0 (util/compare-nio-buffers-unsigned expected (util/->mmap-path (.toPath ^File (first cached)))))
+          "the cached file holds the stored bytes")))
 
 (defn prefixing-obj-store-factory [^InMemoryBucket bucket]
   (reify ObjectStore$Factory

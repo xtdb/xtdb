@@ -122,6 +122,8 @@ object Storage {
         }
     }
 
+    private fun cacheScope(dbName: DatabaseName, partition: Int): Path = dbName.asPath.resolve(partition.toString())
+
     internal fun arrowFooterCache(maxEntries: Long = 1024): Cache<Path, ArrowFooter> =
         Caffeine.newBuilder().maximumSize(maxEntries).build()
 
@@ -174,7 +176,7 @@ object Storage {
             val rootPath = path.resolve(storageRoot(storageVersion, epoch, partition, totalPartitions))
                 .also { it.createDirectories() }
 
-            return LocalStorage(allocator, memoryCache, meterRegistry, epoch, dbName, partition, rootPath)
+            return LocalStorage(allocator, memoryCache.scope(cacheScope(dbName, partition)), meterRegistry, epoch, rootPath)
         }
     }
 
@@ -205,7 +207,8 @@ object Storage {
 
             val objStoreRoot = storageRoot(storageVersion, epoch, partition, totalPartitions)
             return objectStore.openObjectStore(objStoreRoot, remotes).closeOnCatch { objectStore ->
-                RemoteBufferPool(allocator, objectStore, memoryCache, diskCache, meterRegistry, epoch, dbName, partition)
+                val scope = cacheScope(dbName, partition)
+                RemoteBufferPool(allocator, objectStore, memoryCache.scope(scope), diskCache.scope(scope), meterRegistry, epoch)
             }
         }
     }

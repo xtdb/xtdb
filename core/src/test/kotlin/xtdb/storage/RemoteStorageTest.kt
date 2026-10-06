@@ -127,7 +127,7 @@ class RemoteStorageTest : PartitionedStorageTest() {
      * the disk cache is durable, so p0's entry is still there when p1 reads. Local has no disk cache, and
      * MemoryCache releases an entry once the last reference drops, so p1's read is a fresh miss that
      * reloads from its own root — the assertion would pass there even with the partition dropped from the
-     * cache key. Verified by reverting `cacheRootPath` to `dbName/0`: this fails, the local sibling didn't.
+     * cache key.
      */
     @Test
     fun `partitions get their own entries in the node-shared caches`() {
@@ -239,7 +239,7 @@ class RemoteStorageTest : PartitionedStorageTest() {
 
     @Test
     fun bufferPoolClearsUpArrowWriterTempFiles(al: BufferAllocator) {
-        val rootPath = remoteBufferPool.diskCache.rootPath
+        val rootPath = diskCache.rootPath
         val tmpDir = rootPath.resolve(".tmp")
         val schema = schema("a" ofType I32)
 
