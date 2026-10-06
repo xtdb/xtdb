@@ -33,6 +33,7 @@ import org.apache.arrow.flight.SetSessionOptionsResult
 import org.apache.arrow.flight.client.ClientCookieMiddleware
 import org.apache.arrow.flight.sql.FlightSqlClient
 import org.apache.arrow.flight.sql.FlightSqlClient.ExecuteIngestOptions
+import org.apache.arrow.flight.sql.impl.FlightSql.CommandPreparedStatementQuery
 import org.apache.arrow.flight.sql.impl.FlightSql.CommandStatementIngest
 import org.apache.arrow.flight.sql.impl.FlightSql.SqlInfo
 import org.apache.arrow.flight.sql.impl.FlightSql.SqlSupportedTransaction
@@ -62,6 +63,7 @@ import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import xtdb.api.FlightSql
+import xtdb.api.error.Incorrect
 import xtdb.api.FlightSqlConfig
 import xtdb.api.Xtdb
 import xtdb.flight_sql.XtdbProducer
@@ -372,10 +374,16 @@ class FlightSqlAdbcTest {
     }
 
     @Test
-    fun `getSqlInfo advertises the transaction timeout, in milliseconds`() {
-        val rows = fsqlClient.getSqlInfo(intArrayOf(SqlInfo.FLIGHT_SQL_SERVER_TRANSACTION_TIMEOUT_VALUE), *emptyCallOpts)
-            .readRows()
-        assertEquals(listOf(Duration.ofMinutes(30).toMillis().toInt()), rows.map { (it["value"] as TaggedValue).value })
+    fun `getSqlInfo advertises the transaction and prepared-statement timeouts, in milliseconds`() {
+        val rows = fsqlClient.getSqlInfo(
+            intArrayOf(
+                SqlInfo.FLIGHT_SQL_SERVER_STATEMENT_TIMEOUT_VALUE, SqlInfo.FLIGHT_SQL_SERVER_TRANSACTION_TIMEOUT_VALUE
+            ),
+            *emptyCallOpts
+        ).readRows()
+
+        val thirtyMinutes = Duration.ofMinutes(30).toMillis().toInt()
+        assertEquals(listOf(thirtyMinutes, thirtyMinutes), rows.map { (it["value"] as TaggedValue).value })
     }
 
     private class TestClock(@Volatile var now: Instant = Instant.parse("2030-01-01T00:00:00Z")) : InstantSource {
@@ -409,6 +417,55 @@ class FlightSqlAdbcTest {
                 listOf(mapOf("_id" to 0L)),
                 client.execute("SELECT _id FROM users", *emptyCallOpts).readRows(client)
             )
+        }
+    }
+
+    @Test
+    fun `an abandoned prepared statement is closed after its idle timeout`() {
+        withClockedServer { client, clock ->
+            client.prepare("SELECT 1 AS x", *emptyCallOpts).use { ps ->
+                clock.advance(Duration.ofMinutes(31))
+
+                val ex = assertThrows(FlightRuntimeException::class.java) { ps.execute(*emptyCallOpts) }
+                assertEquals(FlightStatusCode.NOT_FOUND, ex.status().code())
+                assertTrue(ex.message!!.contains("expired"), ex.message)
+            }
+        }
+    }
+
+    @Test
+    fun `a prepared-statement handle the server never issued is NOT_FOUND`() {
+        val cmd = CommandPreparedStatementQuery.newBuilder()
+            .setPreparedStatementHandle(ByteString.copyFromUtf8("no-such-handle"))
+            .build()
+
+        val ex = assertThrows(FlightRuntimeException::class.java) {
+            flightClient.getInfo(FlightDescriptor.command(ProtoAny.pack(cmd).toByteArray()), *emptyCallOpts)
+        }
+        assertEquals(FlightStatusCode.NOT_FOUND, ex.status().code())
+        assertTrue(ex.message!!.contains("unknown prepared statement"), ex.message)
+    }
+
+    @Test
+    fun `a non-positive idle timeout is rejected at startup`() {
+        assertThrows(Incorrect::class.java) {
+            FlightSql.open(xtdb, FlightSqlConfig().port(0).transactionIdleTimeout(Duration.ZERO)).close()
+        }
+        assertThrows(Incorrect::class.java) {
+            FlightSql.open(xtdb, FlightSqlConfig().port(0).preparedStatementIdleTimeout(Duration.ofMinutes(-1))).close()
+        }
+    }
+
+    @Test
+    fun `executing a prepared statement renews it`() {
+        withClockedServer { client, clock ->
+            client.prepare("SELECT 1 AS x", *emptyCallOpts).use { ps ->
+                clock.advance(Duration.ofMinutes(20))
+                ps.execute(*emptyCallOpts).readRows(client)
+
+                clock.advance(Duration.ofMinutes(20))
+                assertEquals(listOf(mapOf("x" to 1L)), ps.execute(*emptyCallOpts).readRows(client))
+            }
         }
     }
 

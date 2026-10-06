@@ -149,7 +149,9 @@ private fun FlightStream.toRelation(allocator: BufferAllocator): Relation =
         acc
     }
 
-private class PreparedStatement(val dbName: DatabaseName, val sql: String, val xtdbStmt: Xtdb.Statement) : AutoCloseable {
+private class PreparedStatement(
+    val dbName: DatabaseName, val sql: String, val xtdbStmt: Xtdb.Statement, override val lease: Lease,
+) : Leased {
     @Volatile
     var params: QueryParams? = null
 
@@ -220,7 +222,9 @@ class XtdbProducer(
     }
 
     private val txs = Leases<TxHandle, FlightTx>(clock, tombstoneFor = config.transactionIdleTimeout)
-    private val stmts = ConcurrentHashMap<PreparedStatementHandle, PreparedStatement>()
+    private val stmts = Leases<PreparedStatementHandle, PreparedStatement>(
+        clock, tombstoneFor = config.preparedStatementIdleTimeout
+    )
 
     private fun newConnection(dbName: DatabaseName): Xtdb.Connection =
         (node.connect()).also { it.setCurrentCatalog(dbName) }
@@ -257,13 +261,17 @@ class XtdbProducer(
             defaultConns.computeIfAbsent(dbName) { newConnection(dbName) }
     }
 
-    private fun Leases.Lookup<FlightTx>.orNotFound(): FlightTx = when (this) {
+    private fun <V> Leases.Lookup<V>.orNotFound(what: String, idleTimeout: Duration): V = when (this) {
         is Leases.Lookup.Found -> value
         Leases.Lookup.Expired ->
-            throw CallStatus.NOT_FOUND.withDescription("transaction expired after ${config.transactionIdleTimeout} idle")
-                .toRuntimeException()
-        Leases.Lookup.Unknown -> throw CallStatus.NOT_FOUND.withDescription("unknown transaction").toRuntimeException()
+            throw CallStatus.NOT_FOUND.withDescription("$what expired after $idleTimeout idle").toRuntimeException()
+        Leases.Lookup.Unknown -> throw CallStatus.NOT_FOUND.withDescription("unknown $what").toRuntimeException()
     }
+
+    private fun Leases.Lookup<FlightTx>.orNotFound() = orNotFound("transaction", config.transactionIdleTimeout)
+
+    private fun preparedStatement(handle: PreparedStatementHandle): PreparedStatement =
+        stmts.lookup(handle).orNotFound("prepared statement", config.preparedStatementIdleTimeout)
 
     private fun txOrSessionConnection(ctx: CallContext?, txHandle: TxHandle?): Xtdb.Connection =
         if (txHandle != null) txs.lookup(txHandle).orNotFound().conn
@@ -271,10 +279,11 @@ class XtdbProducer(
 
     internal fun sweep() {
         txs.sweep()
+        stmts.sweep()
     }
 
     override fun close() {
-        stmts.closeAll()
+        stmts.close()
         txs.close()
         sessionConns.values.forEach { it.close() }
         sessionConns.clear()
@@ -370,7 +379,7 @@ class XtdbProducer(
         ackStream: StreamListener<PutResult>
     ): Runnable = Runnable {
         ackStream.reportingErrors {
-            val ps = requireNotNull(stmts[cmd.preparedStatementHandle]) { "invalid ps-id" }
+            val ps = preparedStatement(cmd.preparedStatementHandle)
             flightStream.next()
             ps.params = QueryParams.of(flightStream.root)
             ackStream.onCompleted()
@@ -384,7 +393,7 @@ class XtdbProducer(
         ackStream: StreamListener<PutResult>
     ): Runnable = Runnable {
         ackStream.reportingErrors {
-            val ps = requireNotNull(stmts[cmd.preparedStatementHandle]) { "invalid ps-id" }
+            val ps = preparedStatement(cmd.preparedStatementHandle)
             flightStream.toRelation(node.allocator).use { acc ->
                 ps.xtdbStmt.bind(acc)
                 ps.xtdbStmt.executeUpdate()
@@ -445,7 +454,7 @@ class XtdbProducer(
     override fun getFlightInfoPreparedStatement(
         cmd: CommandPreparedStatementQuery, ctx: CallContext?, descriptor: FlightDescriptor
     ): FlightInfo = flightCall {
-        val ps = requireNotNull(stmts[cmd.preparedStatementHandle]) { "invalid ps-id" }
+        val ps = preparedStatement(cmd.preparedStatementHandle)
         queryFlightInfo(ps.xtdbStmt, ps.dbName, ps.sql, ps.params, descriptor)
     }
 
@@ -474,7 +483,7 @@ class XtdbProducer(
                 )
             }
 
-            stmts[psId] = PreparedStatement(conn.dbName, sql, xtdbStmt)
+            stmts.add(psId, PreparedStatement(conn.dbName, sql, xtdbStmt, Lease(clock, config.preparedStatementIdleTimeout)))
             listener.onNext(packResult(resultBuilder.build()))
             listener.onCompleted()
         }
@@ -483,7 +492,7 @@ class XtdbProducer(
     override fun getSchemaPreparedStatement(
         cmd: CommandPreparedStatementQuery, ctx: CallContext?, descriptor: FlightDescriptor
     ): SchemaResult = flightCall {
-        val ps = requireNotNull(stmts[cmd.preparedStatementHandle]) { "invalid ps-id" }
+        val ps = preparedStatement(cmd.preparedStatementHandle)
         SchemaResult(ps.xtdbStmt.executeSchema())
     }
 
@@ -508,8 +517,8 @@ class XtdbProducer(
         req: ActionClosePreparedStatementRequest,
         ctx: CallContext?,
         listener: StreamListener<Result>
-    ) {
-        stmts.remove(req.preparedStatementHandle)?.close()
+    ) = listener.reportingErrors {
+        (stmts.take(req.preparedStatementHandle) as? Leases.Lookup.Found)?.value?.close()
         listener.onCompleted()
     }
 
@@ -697,10 +706,10 @@ class XtdbProducer(
                 SqlInfo.FLIGHT_SQL_SERVER_TRANSACTION_VALUE,
                 SqlSupportedTransaction.SQL_SUPPORTED_TRANSACTION_TRANSACTION_VALUE
             )
-            addInt32(
-                SqlInfo.FLIGHT_SQL_SERVER_TRANSACTION_TIMEOUT_VALUE,
-                minOf(config.transactionIdleTimeout, Duration.ofMillis(Int.MAX_VALUE.toLong())).toMillis().toInt()
-            )
+            fun Duration.toInt32Millis() = minOf(this, Duration.ofMillis(Int.MAX_VALUE.toLong())).toMillis().toInt()
+
+            addInt32(SqlInfo.FLIGHT_SQL_SERVER_STATEMENT_TIMEOUT_VALUE, config.preparedStatementIdleTimeout.toInt32Millis())
+            addInt32(SqlInfo.FLIGHT_SQL_SERVER_TRANSACTION_TIMEOUT_VALUE, config.transactionIdleTimeout.toInt32Millis())
 
             valueVec.valueCount = idx
             root.rowCount = idx

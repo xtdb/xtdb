@@ -31,11 +31,12 @@
            (xtdb.flight_sql XtdbProducer)
            (xtdb.arrow Relation)))
 
-(defmethod xtn/apply-config! :flight-sql [^Xtdb$Config config _ {:keys [host port transaction-idle-timeout]}]
+(defmethod xtn/apply-config! :flight-sql [^Xtdb$Config config _ {:keys [host port transaction-idle-timeout prepared-statement-idle-timeout]}]
   (cond-> (.getFlightSql config)
     (some? host) (.host host)
     (some? port) (.port port)
-    (some? transaction-idle-timeout) (.transactionIdleTimeout (time/->duration transaction-idle-timeout))))
+    (some? transaction-idle-timeout) (.transactionIdleTimeout (time/->duration transaction-idle-timeout))
+    (some? prepared-statement-idle-timeout) (.preparedStatementIdleTimeout (time/->duration prepared-statement-idle-timeout))))
 
 (defmethod ig/expand-key ::server [k config]
   {k {:node (ig/ref :xtdb/node)

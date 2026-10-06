@@ -209,6 +209,12 @@ flightSql:
   #
   # Default is "PT30M".
   transactionIdleTimeout: PT30M
+
+  # How long a prepared statement may go without a call naming its handle before it is closed.
+  # Advertised to clients as FLIGHT_SQL_SERVER_STATEMENT_TIMEOUT.
+  #
+  # Default is "PT30M".
+  preparedStatementIdleTimeout: PT30M
 ```
 
 ### Compactor

@@ -12,6 +12,7 @@ data class FlightSqlConfig(
     var host: String = "127.0.0.1",
     var port: Int = 0,
     var transactionIdleTimeout: Duration = Duration.ofMinutes(30),
+    var preparedStatementIdleTimeout: Duration = Duration.ofMinutes(30),
 ) {
     /**
      * Host on which to start the Flight SQL server.
@@ -35,4 +36,12 @@ data class FlightSqlConfig(
      * Default is 30 minutes.
      */
     fun transactionIdleTimeout(timeout: Duration) = apply { this.transactionIdleTimeout = timeout }
+
+    /**
+     * How long a prepared statement may go without a call naming its handle before it is closed.
+     * Advertised to clients as `FLIGHT_SQL_SERVER_STATEMENT_TIMEOUT`.
+     *
+     * Default is 30 minutes.
+     */
+    fun preparedStatementIdleTimeout(timeout: Duration) = apply { this.preparedStatementIdleTimeout = timeout }
 }

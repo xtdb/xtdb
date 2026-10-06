@@ -31,11 +31,16 @@ interface FlightSql : AutoCloseable {
             clock: InstantSource = InstantSource.system(),
             sweepInterval: Duration = Duration.ofSeconds(10),
         ): FlightSql {
-            if (config.transactionIdleTimeout <= Duration.ZERO)
-                throw Incorrect(
-                    "flightSql.transactionIdleTimeout must be positive, got ${config.transactionIdleTimeout}",
-                    "xtdb.flight-sql/invalid-transaction-idle-timeout"
-                )
+            for ((key, timeout) in listOf(
+                "transactionIdleTimeout" to config.transactionIdleTimeout,
+                "preparedStatementIdleTimeout" to config.preparedStatementIdleTimeout,
+            )) {
+                if (timeout <= Duration.ZERO)
+                    throw Incorrect(
+                        "flightSql.$key must be positive, got $timeout",
+                        "xtdb.flight-sql/invalid-idle-timeout", mapOf("key" to key, "timeout" to timeout.toString())
+                    )
+            }
 
             require(sweepInterval > Duration.ZERO) { "sweepInterval must be positive, got $sweepInterval" }
 

@@ -232,10 +232,15 @@ class YamlSerdeTest {
         flightSql:
           port: 9833
           transactionIdleTimeout: PT5M
+          preparedStatementIdleTimeout: PT10M
         """.trimIndent()
 
         assertEquals(
-            FlightSqlConfig(port = 9833, transactionIdleTimeout = Duration.ofMinutes(5)),
+            FlightSqlConfig(
+                port = 9833,
+                transactionIdleTimeout = Duration.ofMinutes(5),
+                preparedStatementIdleTimeout = Duration.ofMinutes(10),
+            ),
             nodeConfig(input).flightSql
         )
     }
