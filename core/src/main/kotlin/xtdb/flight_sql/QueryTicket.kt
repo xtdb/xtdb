@@ -2,6 +2,7 @@ package xtdb.flight_sql
 
 import com.google.protobuf.ByteString
 import kotlinx.serialization.KSerializer
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.descriptors.PrimitiveKind
@@ -55,17 +56,27 @@ internal class QueryParams private constructor(private val bytes: ByteArray) {
     }
 }
 
-/**
- * Everything `DoGet` needs to run a query, carried by the client between `GetFlightInfo` and `DoGet`.
- */
-@OptIn(InternalApi::class)
 @Serializable
-internal class QueryTicket(
-    val dbName: DatabaseName,
-    val sql: String,
-    val params: QueryParams?,
-    val basis: QueryBasis,
-) {
+internal sealed interface QueryTicket {
+
+    @OptIn(InternalApi::class)
+    @Serializable
+    @SerialName("run")
+    class Run(
+        val dbName: DatabaseName,
+        val sql: String,
+        val params: QueryParams?,
+        val basis: QueryBasis,
+    ) : QueryTicket
+
+    /**
+     * A statement with no result set, already run at `GetFlightInfo` - which `FlightSql.proto` defines as the call
+     * that executes a statement query - so `DoGet` streams no rows and runs nothing.
+     */
+    @Serializable
+    @SerialName("empty")
+    data object Empty : QueryTicket
+
     fun encode(): ByteString = ByteString.copyFromUtf8(Json.encodeToString(serializer(), this))
 
     companion object {

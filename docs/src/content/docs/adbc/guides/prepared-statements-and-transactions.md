@@ -208,6 +208,26 @@ Builds before 2026-05 do not include this advertisement; `set_autocommit(False)`
 Use the nightly image or build from main.
 :::
 
+### Setting a transaction's characteristics
+
+`SET TRANSACTION`, as the transaction's first statement, makes it read-only, pins its snapshot, or back-fills at a given system-time:
+
+```python
+with flight_sql.connect("grpc://localhost:3000") as conn:
+    conn.adbc_connection.set_autocommit(False)
+
+    with conn.cursor() as cur:
+        cur.execute("SET TRANSACTION READ WRITE, SYSTEM_TIME = TIMESTAMP '2024-01-01T00:00:00Z'")
+        cur.executemany(
+            "INSERT INTO orders (_id, item, qty) VALUES (?, ?, ?)",
+            [["o0", "Back-filled", 1]],
+        )
+
+    conn.adbc_connection.commit()
+```
+
+`BEGIN`, `COMMIT` and `ROLLBACK` aren't accepted as SQL; the connection's transaction calls open and end the transaction.
+
 ### ROLLBACK empties pending writes
 
 ```python

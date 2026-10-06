@@ -44,6 +44,7 @@ import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.vector.BigIntVector
 import org.apache.arrow.vector.UInt4Vector
 import org.apache.arrow.vector.VarBinaryVector
+import org.apache.arrow.vector.VarCharVector
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.complex.DenseUnionVector
 import org.apache.arrow.vector.complex.ListVector
@@ -931,6 +932,114 @@ class FlightSqlAdbcTest {
             fsqlClient.execute("SHOW timezone", *emptyCallOpts).readRows(),
             "the session's zone doesn't leak to another connection"
         )
+    }
+
+    @Test
+    fun `a statement with no result set runs over the query route and answers an empty result`() {
+        sessionClient().use { client ->
+            val info = client.execute("SET TIME ZONE 'America/New_York'", *emptyCallOpts)
+            assertEquals(0, info.schemaOptional.get().fields.size)
+
+            assertEquals(
+                listOf(mapOf("timezone" to "America/New_York")),
+                client.execute("SHOW timezone", *emptyCallOpts).readRows(client)
+            )
+
+            client.executeUpdate("SET TIME ZONE 'Europe/Paris'", *emptyCallOpts)
+            assertEquals(emptyList<Map<*, *>>(), info.readRows(client))
+            assertEquals(emptyList<Map<*, *>>(), info.readRows(client))
+
+            assertEquals(
+                listOf(mapOf("timezone" to "Europe/Paris")),
+                client.execute("SHOW timezone", *emptyCallOpts).readRows(client),
+                "redeeming the ticket doesn't run the statement again"
+            )
+        }
+    }
+
+    @Test
+    fun `a statement with no result set doesn't run when it's prepared or described`() {
+        sessionClient().use { client ->
+            client.getExecuteSchema("SET TIME ZONE 'Europe/Paris'", *emptyCallOpts)
+            client.prepare("SET TIME ZONE 'Europe/Paris'", *emptyCallOpts).use { ps ->
+                assertEquals(0, ps.resultSetSchema.fields.size)
+                assertEquals(0, ps.parameterSchema.fields.size)
+                ps.fetchSchema(*emptyCallOpts)
+            }
+
+            assertEquals(
+                listOf(mapOf("timezone" to "Z")),
+                client.execute("SHOW timezone", *emptyCallOpts).readRows(client)
+            )
+        }
+    }
+
+    @Test
+    fun `a prepared statement with no result set runs over the query route on each execution`() {
+        sessionClient().use { client ->
+            client.prepare("SET TIME ZONE 'Europe/Paris'", *emptyCallOpts).use { ps ->
+                assertEquals(emptyList<Map<*, *>>(), ps.execute(*emptyCallOpts).readRows(client))
+
+                client.executeUpdate("SET TIME ZONE 'America/New_York'", *emptyCallOpts)
+                ps.execute(*emptyCallOpts)
+            }
+
+            assertEquals(
+                listOf(mapOf("timezone" to "Europe/Paris")),
+                client.execute("SHOW timezone", *emptyCallOpts).readRows(client)
+            )
+        }
+    }
+
+    @Test
+    fun `SET TRANSACTION over the query route sets the Flight SQL transaction's characteristics`() {
+        fun setTx(day: Int) = "SET TRANSACTION READ WRITE, SYSTEM_TIME = TIMESTAMP '2021-08-0${day}T00:00:00Z'"
+
+        sessionClient().use { client ->
+            client.beginTransaction(*emptyCallOpts).let { txn ->
+                client.execute(setTx(3), txn, *emptyCallOpts)
+                client.executeUpdate("INSERT INTO docs RECORDS {_id: 1}", txn, *emptyCallOpts)
+                client.commit(txn, *emptyCallOpts)
+            }
+
+            client.beginTransaction(*emptyCallOpts).let { txn ->
+                client.prepare(setTx(4), txn, *emptyCallOpts).use { it.execute(*emptyCallOpts) }
+                client.executeUpdate("INSERT INTO docs RECORDS {_id: 2}", txn, *emptyCallOpts)
+                client.commit(txn, *emptyCallOpts)
+            }
+        }
+
+        assertEquals(
+            listOf(
+                mapOf("_id" to 1L, "_system_from" to ZonedDateTime.parse("2021-08-03T00:00Z[UTC]")),
+                mapOf("_id" to 2L, "_system_from" to ZonedDateTime.parse("2021-08-04T00:00Z[UTC]")),
+            ),
+            fsqlClient.execute("SELECT _id, _system_from FROM docs ORDER BY _id", *emptyCallOpts).readRows()
+        )
+    }
+
+    @Test
+    fun `a statement with no result set reads as empty through the ADBC driver's query route`() {
+        fun showTimeZone() = conn.createStatement().use { stmt ->
+            stmt.setSqlQuery("SHOW timezone")
+            stmt.executeQuery().use { r ->
+                r.reader.loadNextBatch()
+                r.reader.vectorSchemaRoot.getVector(0).getObject(0).toString()
+            }
+        }
+
+        conn.createStatement().use { stmt ->
+            stmt.setSqlQuery("SET TIME ZONE 'America/New_York'")
+            stmt.executeQuery().use { r -> assertFalse(r.reader.loadNextBatch()) }
+        }
+        assertEquals("America/New_York", showTimeZone())
+
+        conn.createStatement().use { stmt ->
+            stmt.setSqlQuery("SET TIME ZONE 'Europe/Paris'")
+            stmt.prepare()
+            stmt.executeQuery().use { r -> assertFalse(r.reader.loadNextBatch()) }
+        }
+        assertEquals("Europe/Paris", showTimeZone())
     }
 
     @Test

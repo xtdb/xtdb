@@ -816,8 +816,6 @@
                    ;; DML executes through the Statement too (buffered via executeUpdate); the prepare above is
                    ;; only to surface warnings and is discarded.
                    (create-parsed))
-                 ;; control statements executed through a Statement (see execute-portal) aren't preparable, so
-                 ;; create rather than prepare — the args bind onto the statement at bind-stmt.
                  (visitSetTransaction [_ _] (create-parsed))
                  (visitSetAwaitToken [_ _] (create-parsed))
                  (visitSetTimeZone [_ _] (create-parsed))

@@ -81,6 +81,9 @@ private fun StreamListener<PutResult>.sendDoPutUpdateRes(allocator: BufferAlloca
 @OptIn(InternalApi::class)
 private val Xtdb.Statement.isDml get() = parsedStatement is ParsedStatement.Dml
 
+@OptIn(InternalApi::class)
+private val Xtdb.Statement.isControl get() = parsedStatement is ParsedStatement.Control
+
 /**
  * Translate a throwable into a [FlightRuntimeException] carrying the XTDB anomaly's
  * message and a status code mapped from its category, so the client sees the real
@@ -379,13 +382,18 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
     private fun queryFlightInfo(
         stmt: Xtdb.Statement, dbName: DatabaseName, sql: String, params: QueryParams?, descriptor: FlightDescriptor
     ): FlightInfo {
-        val ticket = QueryTicket(dbName, sql, params, stmt.queryBasis())
-
-        val schema =
-            if (params == null) stmt.executeSchema()
-            else stmt.executeSchema(params.read(allocator) { root ->
-                root.schema.fields.mapIndexed { idx, f -> Field("?_$idx", f.fieldType, f.children) }
-            })
+        val (ticket, schema) =
+            if (stmt.isControl) {
+                params?.read(allocator) { stmt.bind(it) }
+                stmt.executeUpdate()
+                QueryTicket.Empty to Schema(emptyList())
+            } else {
+                QueryTicket.Run(dbName, sql, params, stmt.queryBasis()) to
+                    if (params == null) stmt.executeSchema()
+                    else stmt.executeSchema(params.read(allocator) { root ->
+                        root.schema.fields.mapIndexed { idx, f -> Field("?_$idx", f.fieldType, f.children) }
+                    })
+            }
 
         val flightTicket = Ticket(
             ProtoAny.pack(TicketStatementQuery.newBuilder().setStatementHandle(ticket.encode()).build()).toByteArray()
@@ -413,14 +421,21 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
     override fun getStreamStatement(
         ticket: TicketStatementQuery, ctx: CallContext?, listener: ServerStreamListener
     ) = listener.reportingErrors {
-        val t = QueryTicket.decode(ticket.statementHandle)
+        when (val t = QueryTicket.decode(ticket.statementHandle)) {
+            is QueryTicket.Run ->
+                connectionFor(ctx, t.dbName).createStatement().use { stmt ->
+                    stmt.setSqlQuery(t.sql)
+                    stmt.requireQuery()
+                    stmt.prepare()
+                    t.params?.read(allocator) { stmt.bind(it) }
+                    streamArrowReader(stmt.executeQueryAt(t.basis).reader, listener)
+                }
 
-        connectionFor(ctx, t.dbName).createStatement().use { stmt ->
-            stmt.setSqlQuery(t.sql)
-            stmt.requireQuery()
-            stmt.prepare()
-            t.params?.read(allocator) { stmt.bind(it) }
-            streamArrowReader(stmt.executeQueryAt(t.basis).reader, listener)
+            QueryTicket.Empty ->
+                VectorSchemaRoot.create(Schema(emptyList()), allocator).use { vsr ->
+                    listener.start(vsr)
+                    listener.completed()
+                }
         }
     }
 

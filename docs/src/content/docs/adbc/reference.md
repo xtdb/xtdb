@@ -121,6 +121,7 @@ Because XTDB advertises FlightSQL transaction support (`FLIGHT_SQL_SERVER_TRANSA
 **Transaction options.**
 The connection's transaction API is the only way to open and end a transaction: `BEGIN`, `START TRANSACTION`, `COMMIT` and `ROLLBACK` are rejected as SQL.
 To make a transaction read-only, pin its snapshot, or back-fill at a given system-time, run [`SET TRANSACTION`](/reference/main/sql/queries#set-transaction-v22) as its first statement - e.g. `SET TRANSACTION READ ONLY, SNAPSHOT_TOKEN = 'ChYKBHh0ZGISDgoMCKHqs8cGEPCP2poB'`.
+It runs through either `executeUpdate` or `executeQuery` - the latter, as for every statement without a result set, answers an empty result - so the Python dbapi's `cursor.execute` runs it too.
 
 **Visibility inside an open transaction.**
 XTDB buffers a transaction's DML and applies it atomically on `COMMIT`, so reads on the same connection do **not** see that transaction's own pending writes before it commits. A `SELECT` issued between an uncommitted `INSERT` and the `COMMIT` returns the pre-transaction state.

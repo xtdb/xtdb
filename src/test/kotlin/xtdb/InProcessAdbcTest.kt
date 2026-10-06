@@ -512,6 +512,23 @@ class InProcessAdbcTest {
     }
 
     @Test
+    fun `a statement with no result set prepares and describes as empty, without running`() {
+        xtdb.connect().use { conn ->
+            conn.createStatement().use { stmt ->
+                stmt.setSqlQuery("SET TIME ZONE 'America/New_York'")
+                stmt.prepare()
+                assertEquals(0, stmt.parameterSchema.fields.size)
+                assertEquals(0, stmt.executeSchema().fields.size)
+                assertEquals(emptyList<String>(), stmt.columnNames)
+                assertEquals(listOf(mapOf("timezone" to "Z")), conn.select("SHOW timezone"))
+
+                stmt.executeUpdate()
+                assertEquals(listOf(mapOf("timezone" to "America/New_York")), conn.select("SHOW timezone"))
+            }
+        }
+    }
+
+    @Test
     fun `SET TIME ZONE is reflected by SHOW timezone`() {
         xtdb.connect().use { conn ->
             conn.update("SET TIME ZONE 'America/New_York'")

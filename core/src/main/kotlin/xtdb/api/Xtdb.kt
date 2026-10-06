@@ -396,8 +396,6 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                 else -> parsed
             }
 
-        // for a frontend that has already classified the statement (pgwire) — creates without preparing, so a
-        // non-preparable control statement (SET TRANSACTION, SET TIME ZONE) executes through the same Statement path.
         /** @suppress */
         @InternalApi
         fun createStatement(parsed: ParsedStatement): Statement = openStatement(parsed)
@@ -414,8 +412,9 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                 override val warnings get() = preparedQuery?.warnings.orEmpty()
 
                 override val columnNames
-                    get() = (preparedQuery ?: throw Incorrect("call prepare() first", "xtdb.adbc/not-prepared"))
-                        .columnNames
+                    get() =
+                        if (parsedStatement is ParsedStatement.Control) emptyList()
+                        else (preparedQuery ?: throw Incorrect("call prepare() first", "xtdb.adbc/not-prepared")).columnNames
 
                 private var args: RelationReader? = null
 
@@ -457,10 +456,11 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                 }
 
                 override fun prepare() {
-                    doPrepare()
+                    if (parsedStatement !is ParsedStatement.Control) doPrepare()
                 }
 
                 override fun getParameterSchema(): Schema {
+                    if (parsedStatement is ParsedStatement.Control) return Schema(emptyList())
                     val pq = preparedQuery ?: throw Incorrect("call prepare() first", "xtdb.adbc/not-prepared")
                     // Positional `?` placeholders → empty field names, per ADBC AdbcStatementGetParameterSchema:
                     // "If the parameter does not have a name … the name of the corresponding field in the schema
@@ -471,11 +471,13 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                 }
 
                 override fun executeSchema(): Schema {
+                    if (parsedStatement is ParsedStatement.Control) return Schema(emptyList())
                     val pq = preparedQuery ?: throw Incorrect("call prepare() first", "xtdb.adbc/not-prepared")
                     return executeSchema((0 until pq.paramCount).map { idx -> "?_$idx" ofType VectorType.fromLegs() })
                 }
 
                 override fun executeSchema(paramFields: List<Field>): Schema {
+                    if (parsedStatement is ParsedStatement.Control) return Schema(emptyList())
                     val pq = preparedQuery ?: throw Incorrect("call prepare() first", "xtdb.adbc/not-prepared")
                     return Schema(pq.getColumnFields(paramFields).map { it.withUnionTypeIds() })
                 }
