@@ -64,6 +64,50 @@ class LeaseTest {
     }
 
     @Test
+    fun `a lease in use doesn't lapse, and its limit runs again from its release`() {
+        val h = leases.add("h", held())
+        assertTrue(h.lease.acquire())
+
+        clock.advance(Duration.ofHours(1))
+        leases.sweep()
+        assertEquals(0, h.closes.get())
+
+        assertTrue(h.lease.release())
+        clock.advance(Duration.ofMinutes(9))
+        assertEquals(Lookup.Found(h), leases.lookup("h"))
+
+        clock.advance(Duration.ofMinutes(10))
+        assertEquals(Lookup.Expired(Duration.ofMinutes(10)), leases.lookup("h"))
+    }
+
+    @Test
+    fun `holding a lease keeps its first limit`() {
+        val h = leases.add("h", held(first = Duration.ofMinutes(1)))
+        h.lease.acquire()
+        clock.advance(Duration.ofMinutes(5))
+        h.lease.release()
+
+        clock.advance(Duration.ofMinutes(2))
+        assertEquals(Lookup.Expired(Duration.ofMinutes(1)), leases.lookup("h"))
+    }
+
+    @Test
+    fun `acquiring by key moves an unclaimed lease onto its idle timeout, and holds it until its release`() {
+        val h = leases.add("h", held(first = Duration.ofMinutes(1)))
+
+        clock.advance(Duration.ofSeconds(30))
+        assertEquals(Lookup.Found(h), leases.acquire("h"))
+
+        clock.advance(Duration.ofHours(1))
+        leases.sweep()
+        assertEquals(0, h.closes.get())
+
+        assertTrue(h.lease.release())
+        clock.advance(Duration.ofMinutes(9))
+        assertEquals(Lookup.Found(h), leases.lookup("h"))
+    }
+
+    @Test
     fun `take hands the value to exactly one caller and forgets the handle`() {
         val h = leases.add("h", held())
 

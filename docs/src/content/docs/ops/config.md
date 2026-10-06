@@ -215,6 +215,17 @@ flightSql:
   #
   # Default is "PT30M".
   preparedStatementIdleTimeout: PT30M
+
+  # How long a session may go without a call presenting its cookie before it is closed, with its connections.
+  # A call presenting the cookie of a closed session fails with NOT_FOUND.
+  #
+  # Default is "PT30M".
+  sessionIdleTimeout: PT30M
+
+  # How long a session started by a call without a session cookie lasts if no later call presents its cookie.
+  #
+  # Default is "PT1M".
+  sessionUnclaimedTimeout: PT1M
 ```
 
 ### Compactor

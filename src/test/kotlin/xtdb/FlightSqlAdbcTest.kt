@@ -134,9 +134,9 @@ class FlightSqlAdbcTest {
         xtdb.close()
     }
 
-    private fun FlightInfo.readRows(client: FlightSqlClient = fsqlClient): List<Map<*, *>> {
+    private fun FlightInfo.readRows(client: FlightSqlClient = fsqlClient, vararg opts: CallOption): List<Map<*, *>> {
         val ticket = endpoints.first().ticket
-        client.getStream(ticket, *emptyCallOpts).use { stream ->
+        client.getStream(ticket, *opts).use { stream ->
             val root = stream.root
             Relation.fromRoot(al, root).use { rel ->
                 val rows = mutableListOf<Map<*, *>>()
@@ -391,11 +391,14 @@ class FlightSqlAdbcTest {
         fun advance(d: Duration) { now = now.plus(d) }
     }
 
-    private fun <R> withClockedServer(f: (FlightSqlClient, TestClock) -> R): R {
+    private fun <R> withClockedServer(
+        vararg middleware: FlightClientMiddleware.Factory, f: (FlightSqlClient, TestClock) -> R
+    ): R {
         val clock = TestClock()
         return FlightSql.open(xtdb, FlightSqlConfig().port(0), clock, sweepInterval = Duration.ofDays(1)).use { srv ->
-            FlightSqlClient(FlightClient.builder(al, Location.forGrpcInsecure("127.0.0.1", srv.port)).build())
-                .use { client -> f(client, clock) }
+            val builder = FlightClient.builder(al, Location.forGrpcInsecure("127.0.0.1", srv.port))
+            middleware.forEach { builder.intercept(it) }
+            FlightSqlClient(builder.build()).use { client -> f(client, clock) }
         }
     }
 
@@ -454,6 +457,12 @@ class FlightSqlAdbcTest {
         assertThrows(Incorrect::class.java) {
             FlightSql.open(xtdb, FlightSqlConfig().port(0).preparedStatementIdleTimeout(Duration.ofMinutes(-1))).close()
         }
+        assertThrows(Incorrect::class.java) {
+            FlightSql.open(xtdb, FlightSqlConfig().port(0).sessionIdleTimeout(Duration.ZERO)).close()
+        }
+        assertThrows(Incorrect::class.java) {
+            FlightSql.open(xtdb, FlightSqlConfig().port(0).sessionUnclaimedTimeout(Duration.ZERO)).close()
+        }
     }
 
     @Test
@@ -485,6 +494,95 @@ class FlightSqlAdbcTest {
                 client.execute("SELECT _id FROM users", *emptyCallOpts).readRows(client)
             )
         }
+    }
+
+    private fun sessionCookieOpt(id: String) =
+        HeaderCallOption(FlightCallHeaders().apply { insert("cookie", "arrow_flight_session_id=$id") })
+
+    private fun SetCookieRecorder.sessionId(): String =
+        values.last { it.startsWith("arrow_flight_session_id=") }.removePrefix("arrow_flight_session_id=").substringBefore(';')
+
+    private fun FlightSqlClient.timeZone(vararg opts: CallOption) =
+        execute("SHOW TIME ZONE", *opts).readRows(this, *opts).single()["timezone"]
+
+    @Test
+    fun `an idle session is closed after its idle timeout, and its cookie is then NOT_FOUND`() {
+        withClockedServer(ClientCookieMiddleware.Factory()) { client, clock ->
+            client.executeUpdate("SET TIME ZONE 'America/New_York'", *emptyCallOpts)
+            assertEquals("America/New_York", client.timeZone())
+
+            clock.advance(Duration.ofMinutes(31))
+
+            val ex = assertThrows(FlightRuntimeException::class.java) { client.timeZone() }
+            assertEquals(FlightStatusCode.NOT_FOUND, ex.status().code())
+            assertTrue(ex.message!!.contains("session expired after PT30M idle"), ex.message)
+        }
+    }
+
+    @Test
+    fun `a call presenting a session's cookie renews it`() {
+        withClockedServer(ClientCookieMiddleware.Factory()) { client, clock ->
+            client.executeUpdate("SET TIME ZONE 'America/New_York'", *emptyCallOpts)
+            assertEquals("America/New_York", client.timeZone())
+
+            clock.advance(Duration.ofMinutes(20))
+            assertEquals("America/New_York", client.timeZone())
+
+            clock.advance(Duration.ofMinutes(20))
+            assertEquals("America/New_York", client.timeZone())
+        }
+    }
+
+    @Test
+    fun `a session minted for a cookieless call lapses if its cookie isn't presented within the unclaimed timeout`() {
+        val recorder = SetCookieRecorder()
+        withClockedServer(recorder) { client, clock ->
+            client.executeUpdate("SET TIME ZONE 'America/New_York'", *emptyCallOpts)
+            val claimed = recorder.sessionId()
+            client.executeUpdate("SET TIME ZONE 'Europe/London'", *emptyCallOpts)
+            val unclaimed = recorder.sessionId()
+
+            clock.advance(Duration.ofSeconds(30))
+            assertEquals("America/New_York", client.timeZone(sessionCookieOpt(claimed)))
+
+            clock.advance(Duration.ofSeconds(45))
+            assertEquals("America/New_York", client.timeZone(sessionCookieOpt(claimed)))
+
+            val ex = assertThrows(FlightRuntimeException::class.java) { client.timeZone(sessionCookieOpt(unclaimed)) }
+            assertEquals(FlightStatusCode.NOT_FOUND, ex.status().code())
+            assertTrue(ex.message!!.contains("session expired after PT1M idle"), ex.message)
+        }
+    }
+
+    @Test
+    fun `a cookie naming no session is NOT_FOUND rather than given a new session`() {
+        val ex = assertThrows(FlightRuntimeException::class.java) {
+            fsqlClient.timeZone(sessionCookieOpt("no-such-session"))
+        }
+        assertEquals(FlightStatusCode.NOT_FOUND, ex.status().code())
+        assertTrue(ex.message!!.contains("unknown session"), ex.message)
+    }
+
+    @Test
+    fun `a closed session's cookie is NOT_FOUND`() {
+        val recorder = SetCookieRecorder()
+        FlightSqlClient(
+            FlightClient.builder(al, Location.forGrpcInsecure("127.0.0.1", flightPort)).intercept(recorder).build()
+        ).use { client ->
+            client.getSessionOptions(GetSessionOptionsRequest(), *emptyCallOpts)
+            val id = recorder.sessionId()
+
+            client.closeSession(CloseSessionRequest(), sessionCookieOpt(id))
+
+            val ex = assertThrows(FlightRuntimeException::class.java) { client.timeZone(sessionCookieOpt(id)) }
+            assertEquals(FlightStatusCode.NOT_FOUND, ex.status().code())
+        }
+    }
+
+    @Test
+    fun `cookieless calls each run in a session of their own`() {
+        fsqlClient.executeUpdate("SET TIME ZONE 'America/New_York'", *emptyCallOpts)
+        assertNotEquals("America/New_York", fsqlClient.timeZone())
     }
 
     private val asString = object : NoOpSessionOptionValueVisitor<String?>() {
@@ -886,7 +984,7 @@ class FlightSqlAdbcTest {
     }
 
     @Test
-    fun `test FlightSQL getSessionOptions does not mint a session`() {
+    fun `a cookieless call's response names the session it ran in`() {
         val recorder = SetCookieRecorder()
         FlightSqlClient(
             FlightClient.builder(al, Location.forGrpcInsecure("127.0.0.1", flightPort))
@@ -894,18 +992,10 @@ class FlightSqlAdbcTest {
                 .build()
         ).use { client ->
             client.getSessionOptions(GetSessionOptionsRequest(), *emptyCallOpts)
-            assertEquals(emptyList<String>(), recorder.values)
+            val id = recorder.sessionId()
 
-            client.setSessionOptions(
-                SetSessionOptionsRequest(
-                    mapOf("catalog" to SessionOptionValueFactory.makeSessionOptionValue("xtdb"))
-                ),
-                *emptyCallOpts
-            )
-            assertTrue(
-                recorder.values.any { it.startsWith("arrow_flight_session_id=") },
-                "setSessionOptions should establish the Flight SQL session cookie; saw ${recorder.values}"
-            )
+            client.getSessionOptions(GetSessionOptionsRequest(), sessionCookieOpt(id))
+            assertEquals(1, recorder.values.size, "a call presenting its cookie isn't sent another: ${recorder.values}")
         }
     }
 
@@ -991,7 +1081,7 @@ class FlightSqlAdbcTest {
     }
 
     // Driven through a session-bound client: SET is connection state, and only a session cookie
-    // ties a client to its own connection (a cookieless caller shares one per database).
+    // carries a client's connection across calls (each cookieless call runs in a fresh session).
 
     private fun sessionClient(): FlightSqlClient =
         cookieAwareClient().also { it.setSessionOptions(catalogOpt("xtdb"), *emptyCallOpts) }

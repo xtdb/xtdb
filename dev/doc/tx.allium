@@ -291,8 +291,8 @@ entity DmlBuffer {
 
 entity FlightSqlTransaction {
     -- The handle Flight SQL's BeginTransaction returns, naming a transaction on a connection of its own.
-    -- A call presenting the handle reaches that transaction, whichever Flight SQL session the call carries, or none.
-    -- Closing a session does not end it: only EndTransaction or the idle timeout does.
+    -- A call presenting the handle reaches that transaction, whichever Flight SQL session the call runs in.
+    -- Closing or expiring a session does not end it: only EndTransaction or the idle timeout does.
     connection: Connection
     status: open | expired
     last_named_at: Timestamp

@@ -34,6 +34,8 @@ interface FlightSql : AutoCloseable {
             for ((key, timeout) in listOf(
                 "transactionIdleTimeout" to config.transactionIdleTimeout,
                 "preparedStatementIdleTimeout" to config.preparedStatementIdleTimeout,
+                "sessionIdleTimeout" to config.sessionIdleTimeout,
+                "sessionUnclaimedTimeout" to config.sessionUnclaimedTimeout,
             )) {
                 if (timeout <= Duration.ZERO)
                     throw Incorrect(
@@ -49,7 +51,7 @@ interface FlightSql : AutoCloseable {
                 val server = builder(xtdb.allocator, forGrpcInsecure(host, config.port), producer)
                     .also { it.withErrorLoggingMiddleware() }
                     .also { it.withDatabaseMiddleware() }
-                    .also { it.withSessionMiddleware() }
+                    .also { it.withSessionMiddleware(producer.sessionMiddlewareFactory) }
                     .build()
                     .also { it.start() }
 

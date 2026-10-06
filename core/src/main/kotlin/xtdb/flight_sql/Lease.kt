@@ -12,8 +12,8 @@ internal class Lease(
     firstLimit: Duration = idleTimeout,
 ) {
     sealed interface State {
-        data class Live(val since: Instant, val limit: Duration) : State {
-            fun lapsedAt(now: Instant): Boolean = !now.isBefore(since.plus(limit))
+        data class Live(val since: Instant, val limit: Duration, val inUse: Int) : State {
+            fun lapsedAt(now: Instant): Boolean = inUse == 0 && !now.isBefore(since.plus(limit))
         }
 
         sealed interface Released : State {
@@ -24,18 +24,27 @@ internal class Lease(
 
     // renew, end and expire each compare-and-set against the state they observed, so of a racing renewal and expiry
     // exactly one wins
-    private val state = AtomicReference<State>(State.Live(clock.instant(), firstLimit))
+    private val state = AtomicReference<State>(State.Live(clock.instant(), firstLimit, 0))
 
     val current: State get() = state.get()
 
-    fun renew(): Boolean {
+    private inline fun updateLive(f: (State.Live, Instant) -> State.Live): Boolean {
         while (true) {
             val now = clock.instant()
             val s = state.get() as? State.Live ?: return false
             if (s.lapsedAt(now)) return false
-            if (state.compareAndSet(s, State.Live(now, idleTimeout))) return true
+            if (state.compareAndSet(s, f(s, now))) return true
         }
     }
+
+    fun renew(): Boolean = updateLive { s, now -> s.copy(since = now, limit = idleTimeout) }
+
+    fun acquire(): Boolean = updateLive { s, _ -> s.copy(inUse = s.inUse + 1) }
+
+    fun renewAndAcquire(): Boolean =
+        updateLive { s, now -> s.copy(since = now, limit = idleTimeout, inUse = s.inUse + 1) }
+
+    fun release(): Boolean = updateLive { s, now -> s.copy(since = now, inUse = s.inUse - 1) }
 
     fun end(): Boolean {
         while (true) {
@@ -70,6 +79,8 @@ internal class Leases<K : Any, V : Leased>(private val clock: InstantSource) : A
     fun add(key: K, value: V): V = value.also { entries[key] = it }
 
     fun lookup(key: K): Lookup<V> = resolve(key) { it.lease.renew() }
+
+    fun acquire(key: K): Lookup<V> = resolve(key) { it.lease.renewAndAcquire() }
 
     fun take(key: K): Lookup<V> = resolve(key) { it.lease.end() }.also { if (it is Lookup.Found) entries.remove(key) }
 
