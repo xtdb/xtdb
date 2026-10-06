@@ -224,10 +224,8 @@ class XtdbProducer(
         override fun close() = conn.close()
     }
 
-    private val txs = Leases<TxHandle, FlightTx>(clock, tombstoneFor = config.transactionIdleTimeout)
-    private val stmts = Leases<PreparedStatementHandle, PreparedStatement>(
-        clock, tombstoneFor = config.preparedStatementIdleTimeout
-    )
+    private val txs = Leases<TxHandle, FlightTx>(clock)
+    private val stmts = Leases<PreparedStatementHandle, PreparedStatement>(clock)
 
     private fun newConnection(dbName: DatabaseName): Xtdb.Connection =
         (node.connect()).also { it.setCurrentCatalog(dbName) }
@@ -264,17 +262,17 @@ class XtdbProducer(
             defaultConns.computeIfAbsent(dbName) { newConnection(dbName) }
     }
 
-    private fun <V> Leases.Lookup<V>.orNotFound(what: String, idleTimeout: Duration): V = when (this) {
+    private fun <V> Leases.Lookup<V>.orNotFound(what: String): V = when (this) {
         is Leases.Lookup.Found -> value
-        Leases.Lookup.Expired ->
-            throw CallStatus.NOT_FOUND.withDescription("$what expired after $idleTimeout idle").toRuntimeException()
+        is Leases.Lookup.Expired ->
+            throw CallStatus.NOT_FOUND.withDescription("$what expired after $after idle").toRuntimeException()
         Leases.Lookup.Unknown -> throw CallStatus.NOT_FOUND.withDescription("unknown $what").toRuntimeException()
     }
 
-    private fun Leases.Lookup<FlightTx>.orNotFound() = orNotFound("transaction", config.transactionIdleTimeout)
+    private fun Leases.Lookup<FlightTx>.orNotFound() = orNotFound("transaction")
 
     private fun preparedStatement(handle: PreparedStatementHandle): PreparedStatement =
-        stmts.lookup(handle).orNotFound("prepared statement", config.preparedStatementIdleTimeout)
+        stmts.lookup(handle).orNotFound("prepared statement")
 
     private inline fun <R> PreparedStatement.withStatement(
         ctx: CallContext?, f: (Xtdb.Connection, Xtdb.Statement) -> R

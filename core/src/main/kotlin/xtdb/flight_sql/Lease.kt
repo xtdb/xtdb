@@ -18,7 +18,7 @@ internal class Lease(
 
         sealed interface Released : State {
             data object Ended : Released
-            data class Expired(val at: Instant) : Released
+            data class Expired(val at: Instant, val after: Duration) : Released
         }
     }
 
@@ -49,7 +49,7 @@ internal class Lease(
     fun expireIfLapsed(): Boolean {
         val now = clock.instant()
         val s = state.get() as? State.Live ?: return false
-        return s.lapsedAt(now) && state.compareAndSet(s, State.Released.Expired(now))
+        return s.lapsedAt(now) && state.compareAndSet(s, State.Released.Expired(now, s.limit))
     }
 }
 
@@ -57,14 +57,11 @@ internal interface Leased : AutoCloseable {
     val lease: Lease
 }
 
-internal class Leases<K : Any, V : Leased>(
-    private val clock: InstantSource,
-    private val tombstoneFor: Duration,
-) : AutoCloseable {
+internal class Leases<K : Any, V : Leased>(private val clock: InstantSource) : AutoCloseable {
 
     sealed interface Lookup<out V> {
         data class Found<V>(val value: V) : Lookup<V>
-        data object Expired : Lookup<Nothing>
+        data class Expired(val after: Duration) : Lookup<Nothing>
         data object Unknown : Lookup<Nothing>
     }
 
@@ -80,7 +77,10 @@ internal class Leases<K : Any, V : Leased>(
         val v = entries[key] ?: return Lookup.Unknown
         if (claim(v)) return Lookup.Found(v)
         if (v.lease.expireIfLapsed()) v.close()
-        return if (v.lease.current is Lease.State.Released.Expired) Lookup.Expired else Lookup.Unknown
+        return when (val s = v.lease.current) {
+            is Lease.State.Released.Expired -> Lookup.Expired(s.after)
+            Lease.State.Released.Ended, is Lease.State.Live -> Lookup.Unknown
+        }
     }
 
     fun sweep() {
@@ -88,7 +88,7 @@ internal class Leases<K : Any, V : Leased>(
         for ((key, v) in entries) {
             if (v.lease.expireIfLapsed()) v.close()
             else (v.lease.current as? Lease.State.Released.Expired)
-                ?.takeIf { !now.isBefore(it.at.plus(tombstoneFor)) }
+                ?.takeIf { !now.isBefore(it.at.plus(it.after)) }
                 ?.let { entries.remove(key, v) }
         }
     }

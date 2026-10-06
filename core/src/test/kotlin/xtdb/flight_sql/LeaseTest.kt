@@ -27,7 +27,7 @@ class LeaseTest {
     }
 
     private val clock = TestClock()
-    private val leases = Leases<String, Held>(clock, tombstoneFor = Duration.ofMinutes(10))
+    private val leases = Leases<String, Held>(clock)
 
     private fun held(idle: Duration = Duration.ofMinutes(10), first: Duration = idle) =
         Held(Lease(clock, idle, first))
@@ -43,9 +43,9 @@ class LeaseTest {
         assertEquals(Lookup.Found(h), leases.lookup("h"))
 
         clock.advance(Duration.ofMinutes(10))
-        assertEquals(Lookup.Expired, leases.lookup("h"))
+        assertEquals(Lookup.Expired(Duration.ofMinutes(10)), leases.lookup("h"))
         assertEquals(1, h.closes.get(), "the lookup that finds it lapsed closes it")
-        assertEquals(Lookup.Expired, leases.lookup("h"))
+        assertEquals(Lookup.Expired(Duration.ofMinutes(10)), leases.lookup("h"))
         assertEquals(1, h.closes.get())
     }
 
@@ -58,7 +58,7 @@ class LeaseTest {
         assertEquals(Lookup.Found(claimed), leases.lookup("claimed"))
 
         clock.advance(Duration.ofMinutes(5))
-        assertEquals(Lookup.Expired, leases.lookup("unclaimed"))
+        assertEquals(Lookup.Expired(Duration.ofMinutes(1)), leases.lookup("unclaimed"))
         assertEquals(1, unclaimed.closes.get())
         assertEquals(Lookup.Found(claimed), leases.lookup("claimed"))
     }
@@ -82,12 +82,12 @@ class LeaseTest {
         val h = leases.add("h", held())
         clock.advance(Duration.ofMinutes(10))
 
-        assertEquals(Lookup.Expired, leases.take("h"))
+        assertEquals(Lookup.Expired(Duration.ofMinutes(10)), leases.take("h"))
         assertEquals(1, h.closes.get())
     }
 
     @Test
-    fun `sweep closes lapsed values and forgets them once their tombstone is up`() {
+    fun `sweep closes lapsed values and forgets each once it has been expired for as long as its limit`() {
         val lapsed = leases.add("lapsed", held(idle = Duration.ofMinutes(1)))
         val live = leases.add("live", held())
 
@@ -95,9 +95,9 @@ class LeaseTest {
         leases.sweep()
         assertEquals(1, lapsed.closes.get())
         assertEquals(0, live.closes.get())
-        assertEquals(Lookup.Expired, leases.lookup("lapsed"))
+        assertEquals(Lookup.Expired(Duration.ofMinutes(1)), leases.lookup("lapsed"))
 
-        clock.advance(Duration.ofMinutes(10))
+        clock.advance(Duration.ofMinutes(1))
         leases.sweep()
         assertEquals(Lookup.Unknown, leases.lookup("lapsed"))
         assertEquals(1, lapsed.closes.get())
