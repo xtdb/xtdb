@@ -210,6 +210,17 @@ enum CommitMode {
     sync | async
 }
 
+enum EndTransactionAction {
+    -- The outcome Flight SQL's EndTransaction asks for.
+    commit | rollback
+}
+
+enum HandleFailure {
+    -- Why a call naming a Flight SQL transaction handle reaches no transaction.
+    -- Both fail the call NOT_FOUND; the description says which.
+    expired | unknown
+}
+
 ---- Entities and Variants
 
 entity Connection {
@@ -276,6 +287,23 @@ entity DmlBuffer {
     -- See: Xtdb.Connection.DmlBuffer
     transaction: Transaction
     ops: List<TxOp>
+}
+
+entity FlightSqlTransaction {
+    -- The handle Flight SQL's BeginTransaction returns, naming a transaction on a connection of its own.
+    -- A call presenting the handle reaches that transaction, whichever Flight SQL session the call runs in.
+    -- Closing or expiring a session does not end it: only EndTransaction or the idle timeout does.
+    connection: Connection
+    status: open | expired
+    last_named_at: Timestamp
+    expired_at: Timestamp?
+}
+
+---- Config
+
+config {
+    -- Flight SQL's transaction_idle_timeout: how long an open handle may go unnamed before its transaction is rolled back.
+    transaction_idle_timeout: Duration = 30.minutes
 }
 
 ---- Rules: Beginning a Transaction
@@ -946,6 +974,85 @@ rule CloseConnection {
             not exists connection.tx
 }
 
+---- Rules: Flight SQL Transaction Handles
+
+rule FlightSqlBeginOpensHandle {
+    -- BeginTransaction opens a connection for the transaction alone, in manual mode, starting from the caller's await_token and default_tz.
+    when: FlightSqlBeginTransaction(frontend, connection)
+
+    ensures:
+        let dedicated = Connection.created(
+            user: connection.user,
+            auto_commit: false,
+            default_tz: connection.default_tz,
+            await_token: connection.await_token,
+            default_access_mode: null
+        )
+        FlightSqlTransaction.created(connection: dedicated, status: open, last_named_at: now, expired_at: null)
+}
+
+rule NamingOpenHandleRenews {
+    -- Any call other than EndTransaction that names an open handle runs on the handle's connection, and renews its idle timeout.
+    when: NamesTransactionHandle(frontend, handle, end)
+    requires: handle.status = open
+    requires: end = null
+
+    ensures:
+        handle.last_named_at = now
+}
+
+rule EndTransactionEndsHandle {
+    -- EndTransaction commits or rolls back the handle's transaction, closes its connection, and forgets the handle.
+    when: NamesTransactionHandle(frontend, handle, end)
+    requires: handle.status = open
+    requires: end != null
+
+    ensures:
+        if end = commit:
+            CommitTransaction(frontend: frontend, connection: handle.connection, commit_mode: null)
+        else:
+            RollbackTransaction(frontend: frontend, connection: handle.connection)
+        CloseConnection(frontend: frontend, connection: handle.connection)
+        not exists handle
+}
+
+rule IdleHandleExpires {
+    -- A handle no call has named for transaction_idle_timeout has its transaction rolled back.
+    when: handle: FlightSqlTransaction.last_named_at + config.transaction_idle_timeout <= now
+    requires: handle.status = open
+
+    ensures:
+        not exists handle.connection.tx
+        handle.status = expired
+        handle.expired_at = now
+}
+
+rule ExpiredHandleForgotten {
+    -- An expired handle is reported as expired for a further transaction_idle_timeout, then as unknown.
+    when: handle: FlightSqlTransaction.expired_at + config.transaction_idle_timeout <= now
+    requires: handle.status = expired
+
+    ensures:
+        not exists handle
+}
+
+rule NamingExpiredHandleRejected {
+    -- The call fails NOT_FOUND, saying the transaction expired.
+    when: NamesTransactionHandle(frontend, handle, end)
+    requires: handle.status = expired
+
+    ensures:
+        HandleRejected(failure: expired)
+}
+
+rule NamingUnknownHandleRejected {
+    -- A handle that never existed, or whose transaction was ended, fails the call NOT_FOUND as unknown.
+    when: UnknownTransactionHandleNamed(frontend)
+
+    ensures:
+        HandleRejected(failure: unknown)
+}
+
 ---- Invariants
 
 invariant WritingCarriesCommitOpts {
@@ -989,6 +1096,10 @@ actor PgwireFrontend {
 actor TransactionApiFrontend {
     -- An ADBC or Flight SQL client, which opens and ends transactions through its API.
     identified_by: Frontend where protocol != pgwire
+}
+
+actor FlightSqlFrontend {
+    identified_by: Frontend where protocol = flight_sql
 }
 
 ---- Surfaces
@@ -1058,6 +1169,21 @@ surface TransactionApi {
 
     @guarantee ProgrammaticControlNeedsManualMode
         -- Programmatic commit / rollback are valid only when auto_commit is off.
+}
+
+surface FlightSqlTransactionHandles {
+    -- BeginTransaction, EndTransaction, and every other call that carries a transaction handle.
+    facing frontend: FlightSqlFrontend
+
+    context conn: Connection
+
+    provides:
+        FlightSqlBeginTransaction(frontend, conn)
+        NamesTransactionHandle(frontend, handle, end)
+        UnknownTransactionHandleNamed(frontend)
+
+    @guarantee TransactionTimeoutAdvertised
+        -- The server advertises transaction_idle_timeout as FLIGHT_SQL_SERVER_TRANSACTION_TIMEOUT, in milliseconds.
 }
 
 surface ConnectionLifecycle {

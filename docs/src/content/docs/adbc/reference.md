@@ -153,14 +153,20 @@ Both reflect **live data**, not just flushed-to-block state: freshly-inserted ro
 
 ## Session options
 
+Every call runs in a FlightSQL session.
+A call without the session cookie starts a new one, and its response carries the cookie; the client keeps session state - the catalog, a `SET` - across calls only by sending that cookie back.
+A session is closed once it goes `flightSql.sessionIdleTimeout` (default 30 minutes) without a call presenting its cookie, or `flightSql.sessionUnclaimedTimeout` (default 1 minute) if its cookie never comes back.
+A call presenting the cookie of a closed session fails with `NOT_FOUND`.
+
 `getCurrentCatalog()` / `getCurrentDbSchema()`
-: return the session catalog (default `xtdb`) and schema (`public`). Read via `getSessionOptions`, a pure getter that does not create a session, so probing doesn't leak one.
+: return the session catalog (default `xtdb`) and schema (`public`). Read via `getSessionOptions`.
 
 `setSessionOptions("catalog", db)`
-: selects the database for the session. The value is validated against the node's known databases: an unknown name returns `INVALID_VALUE`, an empty string clears it. Setting it creates a FlightSQL session; the server issues a cookie the client must keep across calls for the option to persist.
+: selects the database for the session. The value is validated against the node's known databases: an unknown name returns `INVALID_VALUE`, an empty string clears it.
 
 `closeSession()`
 : ends the session, closes its connections, and invalidates the cookie.
+  An open transaction is left open: a transaction is reached by its handle alone, and ends by commit, rollback, or rolling back once it has gone `flightSql.transactionIdleTimeout` (default 30 minutes) without a call naming it.
 
 The schema is not settable: `public` is the only accepted value (a confirming no-op), anything else is rejected.
 

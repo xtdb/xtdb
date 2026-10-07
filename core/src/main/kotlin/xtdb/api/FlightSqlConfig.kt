@@ -1,11 +1,20 @@
+@file:UseSerializers(DurationSerde::class)
+
 package xtdb.api
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.UseSerializers
+import xtdb.DurationSerde
+import java.time.Duration
 
 @Serializable
 data class FlightSqlConfig(
     var host: String = "127.0.0.1",
     var port: Int = 0,
+    var transactionIdleTimeout: Duration = Duration.ofMinutes(30),
+    var preparedStatementIdleTimeout: Duration = Duration.ofMinutes(30),
+    var sessionIdleTimeout: Duration = Duration.ofMinutes(30),
+    var sessionUnclaimedTimeout: Duration = Duration.ofMinutes(1),
 ) {
     /**
      * Host on which to start the Flight SQL server.
@@ -21,4 +30,34 @@ data class FlightSqlConfig(
      * Set to -1 to not start a Flight SQL server.
      */
     fun port(port: Int) = apply { this.port = port }
+
+    /**
+     * How long a Flight SQL transaction may go without a call naming its handle before it is rolled back.
+     * Advertised to clients as `FLIGHT_SQL_SERVER_TRANSACTION_TIMEOUT`.
+     *
+     * Default is 30 minutes.
+     */
+    fun transactionIdleTimeout(timeout: Duration) = apply { this.transactionIdleTimeout = timeout }
+
+    /**
+     * How long a prepared statement may go without a call naming its handle before it is closed.
+     * Advertised to clients as `FLIGHT_SQL_SERVER_STATEMENT_TIMEOUT`.
+     *
+     * Default is 30 minutes.
+     */
+    fun preparedStatementIdleTimeout(timeout: Duration) = apply { this.preparedStatementIdleTimeout = timeout }
+
+    /**
+     * How long a session may go without a call presenting its cookie before it is closed, with its connections.
+     *
+     * Default is 30 minutes.
+     */
+    fun sessionIdleTimeout(timeout: Duration) = apply { this.sessionIdleTimeout = timeout }
+
+    /**
+     * How long a session minted for a call without a session cookie lasts if no later call presents its cookie.
+     *
+     * Default is 1 minute.
+     */
+    fun sessionUnclaimedTimeout(timeout: Duration) = apply { this.sessionUnclaimedTimeout = timeout }
 }

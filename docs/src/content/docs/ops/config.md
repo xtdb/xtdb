@@ -203,6 +203,29 @@ flightSql:
   # (In the XTDB Docker images, this is defaulted to 3000.)
   # Set to -1 to not start a Flight SQL server.
   port: 0
+
+  # How long a Flight SQL transaction may go without a call naming its handle before it is rolled back.
+  # Advertised to clients as FLIGHT_SQL_SERVER_TRANSACTION_TIMEOUT.
+  #
+  # Default is "PT30M".
+  transactionIdleTimeout: PT30M
+
+  # How long a prepared statement may go without a call naming its handle before it is closed.
+  # Advertised to clients as FLIGHT_SQL_SERVER_STATEMENT_TIMEOUT.
+  #
+  # Default is "PT30M".
+  preparedStatementIdleTimeout: PT30M
+
+  # How long a session may go without a call presenting its cookie before it is closed, with its connections.
+  # A call presenting the cookie of a closed session fails with NOT_FOUND.
+  #
+  # Default is "PT30M".
+  sessionIdleTimeout: PT30M
+
+  # How long a session started by a call without a session cookie lasts if no later call presents its cookie.
+  #
+  # Default is "PT1M".
+  sessionUnclaimedTimeout: PT1M
 ```
 
 ### Compactor
