@@ -3,6 +3,7 @@ package xtdb.flight_sql
 import xtdb.InternalApi
 import xtdb.encodeToBytes
 import xtdb.query.ParsedStatement
+import clojure.lang.Keyword
 import com.google.protobuf.Any as ProtoAny
 import com.google.protobuf.ByteString
 import com.google.protobuf.Message
@@ -89,6 +90,14 @@ private val Xtdb.Statement.isDml get() = parsedStatement is ParsedStatement.Dml
  * A throwable we've already shaped into a Flight status (e.g. the DML-via-query
  * guard) passes through untouched. Mirrors the pgwire `ex->pgw-err` mapping.
  */
+private val ERROR_CODE: Keyword = Keyword.intern("xtdb.error", "code")
+private val NOT_A_QUERY: Keyword = Keyword.intern("xtdb", "not-a-query")
+
+private fun Anomaly.flightDescription(): String {
+    val msg = message ?: toString()
+    return if (data.valAt(ERROR_CODE) == NOT_A_QUERY) "$msg - see https://github.com/xtdb/xtdb/issues/5861" else msg
+}
+
 private fun Throwable.asFlightException(): FlightRuntimeException =
     this as? FlightRuntimeException ?: toAnomaly().let { anom ->
         val status = when (anom) {
@@ -101,7 +110,7 @@ private fun Throwable.asFlightException(): FlightRuntimeException =
             is Unavailable -> CallStatus.UNAVAILABLE
             is Fault -> CallStatus.INTERNAL
         }
-        status.withDescription(anom.message ?: anom.toString()).withCause(anom).toRuntimeException()
+        status.withDescription(anom.flightDescription()).withCause(anom).toRuntimeException()
     }
 
 private fun Xtdb.Connection.LastSubmittedTx.toCommitResult(awaitToken: String?) = Result(

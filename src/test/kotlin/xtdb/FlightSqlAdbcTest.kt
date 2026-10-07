@@ -934,6 +934,21 @@ class FlightSqlAdbcTest {
     }
 
     @Test
+    fun `a statement with no result set sent as a query is rejected, pointing to the issue tracking it`() {
+        val prepared = assertThrows(FlightRuntimeException::class.java) {
+            fsqlClient.prepare("SET TIME ZONE 'Europe/London'", *emptyCallOpts).close()
+        }
+        assertEquals(FlightStatusCode.INVALID_ARGUMENT, prepared.status().code())
+        assertTrue(prepared.message!!.contains("https://github.com/xtdb/xtdb/issues/5861"), prepared.message)
+
+        val adHoc = assertThrows(FlightRuntimeException::class.java) {
+            fsqlClient.execute("SET TIME ZONE 'Europe/London'", *emptyCallOpts)
+        }
+        assertEquals(FlightStatusCode.INVALID_ARGUMENT, adHoc.status().code())
+        assertTrue(adHoc.message!!.contains("https://github.com/xtdb/xtdb/issues/5861"), adHoc.message)
+    }
+
+    @Test
     fun `transaction control as SQL is rejected, naming the transaction API`() {
         for (sql in listOf("BEGIN", "START TRANSACTION", "BEGIN READ WRITE", "COMMIT", "ROLLBACK")) {
             for ((route, call) in listOf<Pair<String, () -> Any>>(
