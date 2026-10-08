@@ -883,6 +883,17 @@ createBench("scan-perf", mapOf(
     "nodeDir" to "--node-dir"
 ))
 
+createBench("wide-tables", mapOf(
+    "bigTables" to "--big-tables",
+    "bigRows" to "--big-rows",
+    "smallTables" to "--small-tables",
+    "smallRows" to "--small-rows",
+    "columns" to "--columns",
+    "rounds" to "--rounds",
+    "noLoad" to "--no-load",
+    "nodeDir" to "--node-dir"
+))
+
 createBench(
     "auctionmark",
     mapOf(
