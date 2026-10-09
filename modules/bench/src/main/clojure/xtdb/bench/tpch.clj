@@ -72,10 +72,10 @@
     {:t :call, :stage stage
      :f (fn [{:keys [node]}]
           (try
+            (spit (io/file out-dir (format "sql-q%02d.plan.edn" n))
+                  (with-out-str (pp/pprint (xt/q node (str "EXPLAIN " q) {:key-fn :snake-case-keyword}))))
             (let [[cnt ms] (with-timeout #(with-jfr (name stage) (fn [] (timed (fn [] (count (xt/q node q {:key-fn :snake-case-keyword})))))))]
               (log/infof "TPCHRESULT %s q%02d rows=%d ms=%.1f" (name stage-name) n cnt ms)
-              (spit (io/file out-dir (format "sql-q%02d.plan.edn" n))
-                    (with-out-str (pp/pprint (xt/q node (str "EXPLAIN " q) {:key-fn :snake-case-keyword}))))
               (when analyze?
                 (let [[ea ea-ms] (with-timeout #(timed (fn [] (xt/q node (str "EXPLAIN ANALYZE " q) {:key-fn :snake-case-keyword}))))]
                   (log/infof "TPCHRESULT %s-analyze q%02d ms=%.1f" (name stage-name) n ea-ms)
