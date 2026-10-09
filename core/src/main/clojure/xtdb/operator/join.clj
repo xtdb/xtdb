@@ -15,10 +15,13 @@
            (org.roaringbitmap.buffer MutableRoaringBitmap)
            (xtdb Bytes)
            (xtdb.api ICursor)
-           (xtdb.arrow BitVector RelationReader VectorType)
+           (org.apache.arrow.vector.types TimeUnit)
+           (org.apache.arrow.vector.types.pojo ArrowType$Timestamp)
+           (xtdb.arrow BitVector RelationReader VectorReader VectorType)
            (xtdb.bloom BloomUtils)
            (xtdb.operator ProjectionSpec)
-           (xtdb.operator.join BuildSide ComparatorFactory DiskHashJoin JoinType MemoryHashJoin ProbeSide)))
+           (xtdb.operator.join BuildSide ComparatorFactory DiskHashJoin JoinType MemoryHashJoin ProbeSide)
+           (xtdb.util TemporalDimension)))
 
 (defmethod lp/ra-expr :cross-join [_]
   (s/cat :op #{:⨯ :cross-join}
@@ -188,6 +191,90 @@
                 (.add col-pushdown-iids (if iid-col? v (util/->iid v)))))
             (.add pushdown-bloom ^ints (BloomUtils/bloomHashes build-col build-idx))))))))
 
+(declare expr->columns)
+
+(defn- conjuncts [expr]
+  (if (and (seq? expr) (= 'and (first expr)))
+    (mapcat conjuncts (rest expr))
+    [expr]))
+
+(defn- comparisons
+  "`[strict? lesser greater]` for every comparison the thetas imply — `(< (greatest xs) (least ys))` implies each `x < y`."
+  [thetas]
+  (for [conjunct (mapcat conjuncts thetas)
+        :when (and (seq? conjunct) (= 3 (count conjunct)) ('#{< <= > >=} (first conjunct)))
+        :let [[op a b] conjunct
+              [lesser greater] (if ('#{< <=} op) [a b] [b a])]
+        lesser (if (and (seq? lesser) (= 'greatest (first lesser))) (rest lesser) [lesser])
+        greater (if (and (seq? greater) (= 'least (first greater))) (rest greater) [greater])]
+    [(boolean ('#{< >} op)) lesser greater]))
+
+(defn- valid-time-pushdown-specs
+  "One spec per probe `_valid_from`/`_valid_to` column the thetas bound by build-side values —
+   `:upper` where `_valid_from` has to lie below the projected value of some build row, `:lower` where `_valid_to` has to lie above it."
+  [thetas {:keys [probe-cols build-vec-types param-types]}]
+  (let [probe-col (fn [expr col-name]
+                    (when (and (symbol? expr) (probe-cols expr) (= col-name (name expr)))
+                      expr))
+        probe-valid-to (fn [expr]
+                         (if (and (seq? expr) (= 'coalesce (first expr)) (= 3 (count expr)) (= 'xtdb/end-of-time (last expr)))
+                           (probe-col (second expr) "_valid_to")
+                           (probe-col expr "_valid_to")))
+        build-only? (fn [expr] (not-any? probe-cols (expr->columns expr)))
+        bounds (for [[strict? lesser greater] (comparisons thetas)
+                     :let [from-col (probe-col lesser "_valid_from")
+                           to-col (probe-valid-to greater)]
+                     :when (or (and from-col (build-only? greater))
+                               (and to-col (build-only? lesser)))]
+                 (if from-col
+                   {:bound :upper, :col from-col, :strict? strict?, :expr greater}
+                   {:bound :lower, :col to-col, :strict? strict?, :expr lesser}))
+        input-types {:var-types build-vec-types, :param-types param-types}]
+    (vec (for [[[bound col] bounds] (group-by (juxt :bound :col) bounds)
+               :let [exprs (mapv :expr bounds)
+                     expr (if (= 1 (count exprs))
+                            (first exprs)
+                            (list* (case bound :upper 'least, :lower 'greatest) exprs))]]
+           {:bound bound, :col col, :strict? (every? :strict? bounds)
+            :projection (expr/->expression-projection-spec "_pushdown_valid_time"
+                                                           (expr/form->expr (list 'cast_tstz expr) input-types)
+                                                           input-types)}))))
+
+(defn- tstz-micros? [^VectorReader v]
+  (let [arrow-type (.getArrowType (.getType v))]
+    (and (instance? ArrowType$Timestamp arrow-type)
+         (= TimeUnit/MICROSECOND (.getUnit ^ArrowType$Timestamp arrow-type))
+         (some? (.getTimezone ^ArrowType$Timestamp arrow-type)))))
+
+(defn- extreme-micros ^Long [^VectorReader v, ^long row-count, max?]
+  (loop [idx 0, acc (if max? Long/MIN_VALUE Long/MAX_VALUE), seen? false]
+    (if (< idx row-count)
+      (if (.isNull v idx)
+        (recur (inc idx) acc seen?)
+        (let [micros (.getLong v idx)]
+          (recur (inc idx) (if max? (max acc micros) (min acc micros)) true)))
+      (when seen? acc))))
+
+(defn- build-valid-time-pushdown
+  "{probe-col TemporalDimension} — for each bounded column, the valid-time range a probe row has to intersect to match any build row."
+  [^BufferAllocator allocator, args, ^BuildSide build-side, specs]
+  (let [build-rel (.getDataRel build-side)
+        row-count (.getRowCount build-rel)]
+    (into {}
+          (keep (fn [{:keys [bound col strict? ^ProjectionSpec projection]}]
+                  (with-open [v (.project projection allocator build-rel {} args)]
+                    (when (tstz-micros? v)
+                      (case bound
+                        :upper (when-let [upper (extreme-micros v row-count true)]
+                                 (let [upper (long upper)]
+                                   [col (TemporalDimension. Long/MIN_VALUE
+                                                            (if (or strict? (= Long/MAX_VALUE upper)) upper (inc upper)))]))
+                        :lower (when-let [lower (extreme-micros v row-count false)]
+                                 (let [lower (long lower)]
+                                   [col (TemporalDimension. (if (or strict? (= Long/MIN_VALUE lower)) lower (dec lower))
+                                                            Long/MAX_VALUE)])))))))
+          specs)))
+
 (defn- ->child-cursors [build-plan-side build-cursor probe-cursors]
   (if (= build-plan-side :left)
     (into [build-cursor] probe-cursors)
@@ -215,7 +302,8 @@
         (util/with-close-on-catch [probe-cursor (->probe-cursor (when (and (not shuffle?) pushdown-blooms)
                                                                   (zipmap (map symbol probe-key-cols) pushdown-blooms))
                                                                 (when (and (not shuffle?) pushdown-iids)
-                                                                  (zipmap (map symbol probe-key-cols) pushdown-iids)))]
+                                                                  (zipmap (map symbol probe-key-cols) pushdown-iids))
+                                                                (when-not shuffle? build-side))]
           (set! (.hash-join-cursor this)
                 (let [probe-vec-types (update-keys probe-vec-types str)]
                   (if shuffle?
@@ -255,7 +343,7 @@
       (set! (.probe-cursor this)
             (->probe-cursor (zipmap (map symbol (.getKeyColNames build-side))
                                     pushdown-blooms)
-                            nil)))
+                            nil nil)))
 
     (boolean
      (let [advanced? (boolean-array 1)]
@@ -376,6 +464,12 @@
           :right [right-vec-types-proj right-key-col-names ->right-project-cursor
                   left-vec-types-proj left-key-col-names ->left-project-cursor])
 
+        valid-time-pushdown-specs (when pushdown-blooms?
+                                    (valid-time-pushdown-specs (map second thetas)
+                                                               {:probe-cols (set (keys probe-vec-types))
+                                                                :build-vec-types build-vec-types
+                                                                :param-types param-types}))
+
         merged-vec-types (merge-vec-types-fn left-vec-types-proj right-vec-types-proj)
         output-projections (->> (set/difference (set (keys merged-vec-types))
                                                 (into #{} (comp (mapcat (juxt :left :right))
@@ -407,10 +501,13 @@
                                                                                 :key-col-names build-key-col-names
                                                                                 :with-nil-row? with-nil-row?
                                                                                 :track-unmatched-build-idxs? track-unmatched-build-idxs?})]
-                   (letfn [(->probe-cursor-with-pushdowns [our-pushdown-blooms our-pushdown-iids]
-                             (->probe-cursor (cond-> opts
-                                               our-pushdown-blooms (update :pushdown-blooms (fnil into {}) our-pushdown-blooms)
-                                               our-pushdown-iids (update :pushdown-iids (fnil into {}) our-pushdown-iids))))]
+                   (letfn [(->probe-cursor-with-pushdowns [our-pushdown-blooms our-pushdown-iids ^BuildSide build-side]
+                             (let [our-pushdown-valid-time (when (and build-side (seq valid-time-pushdown-specs))
+                                                             (build-valid-time-pushdown allocator args build-side valid-time-pushdown-specs))]
+                               (->probe-cursor (cond-> opts
+                                                 our-pushdown-blooms (update :pushdown-blooms (fnil into {}) our-pushdown-blooms)
+                                                 our-pushdown-iids (update :pushdown-iids (fnil into {}) our-pushdown-iids)
+                                                 (seq our-pushdown-valid-time) (update :pushdown-valid-time (fnil into {}) our-pushdown-valid-time)))))]
                      (let [pushdown-blooms (when pushdown-blooms?
                                              (vec (repeatedly (count build-key-col-names) #(MutableRoaringBitmap.))))
                            pushdown-iids (->> probe-key-col-names

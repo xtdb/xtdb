@@ -119,6 +119,12 @@
 
       bounds)))
 
+(defn- narrow-valid-time ^TemporalBounds [^TemporalBounds bounds, pushdown-valid-time]
+  (->> (keep pushdown-valid-time ['_valid_from '_valid_to])
+       (reduce (fn [^TemporalBounds bounds, ^TemporalDimension dim]
+                 (TemporalBounds. (.intersect (.getValidTime bounds) dim) (.getSystemTime bounds)))
+               bounds)))
+
 (defn tables-with-cols [^Snapshot$Source snap-src]
   (with-open [snap (.openSnapshot snap-src nil)]
     (update-vals (.getTableInfo snap) set)))
@@ -310,7 +316,7 @@
          :vec-types (->> vec-types (into {} (keep (fn [[k v]] (when v [k v])))))
          :stats {:row-count row-count}
          :->cursor (fn [{:keys [allocator, query-source, db-cat, dbs, snaps, system-time-basis, schema, args
-                                pushdown-blooms pushdown-iids explain-analyze? tracer query-span] :as opts}]
+                                pushdown-blooms pushdown-iids pushdown-valid-time explain-analyze? tracer query-span] :as opts}]
                      (let [^IQuerySource$QueryDatabase db (db-or-throw dbs db-name)
                            storage (.getStorage db)
                            ^DatabaseSnapshot db-snapshot (db-or-throw snaps db-name)
@@ -363,8 +369,11 @@
                                ;; absent at N>1: each would apply partition 0's temporal bound, so the
                                ;; scan returns wrong rows rather than failing. `system-time-basis` is
                                ;; already indexed by partition — the walk over partitions is what's missing.
-                               temporal-bounds (->temporal-bounds allocator args scan-opts
-                                                                  (get-in system-time-basis [db-name 0]))
+                               temporal-bounds (cond-> (->temporal-bounds allocator args scan-opts
+                                                                          (get-in system-time-basis [db-name 0]))
+                                                 ;; a clamped scan clips the ranges it emits to its bounds, so a join's bound must not reach one
+                                                 (and pushdown-valid-time (not (:clamp-valid-time? scan-opts)))
+                                                 (narrow-valid-time pushdown-valid-time))
 
                                trace? (or explain-analyze? (and tracer query-span))
                                trace-attrs (when trace?
@@ -375,7 +384,10 @@
                                                                          str))
                                                           (update-keys (update-vals (into {} (filter val) (or pushdown-iids {}))
                                                                                     (fn [s] {:iids s}))
-                                                                       str))))]
+                                                                       str)
+                                                          (when pushdown-valid-time
+                                                            (update-keys (update-vals pushdown-valid-time (fn [d] {:valid-time d}))
+                                                                         str)))))]
 
                            ;; the cursor owns its segments from the moment it's built, and the tracing
                            ;; wrap takes that ownership over — so it has to happen under a scope that

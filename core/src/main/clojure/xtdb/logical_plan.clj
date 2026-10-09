@@ -132,8 +132,8 @@
                               (->cursor opts inner)))))))
 
 (defn with-col-mapping
-  "Wraps ->cursor to remap pushdown-blooms and pushdown-iids keys
-   through the given col-mapping ({output-col input-col})."
+  "Wraps ->cursor to remap the keys of the pushdowns in opts (`:pushdown-blooms`, `:pushdown-iids`,
+   `:pushdown-valid-time`) through the given col-mapping ({output-col input-col})."
   [{:keys [col-mapping] :as emitted-rel}]
   (if (seq col-mapping)
     (-> (dissoc emitted-rel :col-mapping)
@@ -141,7 +141,8 @@
                             (fn [opts]
                               (->cursor (-> opts
                                             (update :pushdown-blooms update-keys #(get col-mapping % %))
-                                            (update :pushdown-iids update-keys #(get col-mapping % %))))))))
+                                            (update :pushdown-iids update-keys #(get col-mapping % %))
+                                            (update :pushdown-valid-time update-keys #(get col-mapping % %))))))))
     (dissoc emitted-rel :col-mapping)))
 
 (defn binary-expr {:style/indent 2} [{->left-cursor :->cursor, :as left} {->right-cursor :->cursor, :as right} f]

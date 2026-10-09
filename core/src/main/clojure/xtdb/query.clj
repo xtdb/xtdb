@@ -247,6 +247,7 @@
   (case k
     :bloom-filter {:cardinality (.getCardinality ^org.roaringbitmap.buffer.MutableRoaringBitmap v)}
     :iids {:count (.size ^java.util.Collection v)}
+    :valid-time (str v)
     v))
 
 (defn- truncate-pushdowns
