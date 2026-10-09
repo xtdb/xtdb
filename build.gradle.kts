@@ -868,7 +868,7 @@ fun createBench(benchName: String, properties: Map<String, String>, defaultArgs:
     }
 }
 
-createBench("tpch", mapOf("scaleFactor" to "--scale-factor"))
+createBench("tpch", mapOf("scaleFactor" to "--scale-factor", "noLoad" to "--no-load"))
 
 createBench("yakbench", mapOf(
     "scaleFactor" to "--scale-factor",
