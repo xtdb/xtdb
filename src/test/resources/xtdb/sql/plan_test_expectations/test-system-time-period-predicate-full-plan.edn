@@ -2,12 +2,10 @@
  {:projections [{foo_name foo.1/name} {bar_name bar.2/name}]}
  [:mega-join
   {:conditions
-   [(<
-     (lower foo.1/_system_time)
-     (coalesce (upper bar.2/_system_time) xtdb/end-of-time))
+   [(< foo.1/_system_from (coalesce bar.2/_system_to xtdb/end-of-time))
     (>
-     (coalesce (upper foo.1/_system_time) xtdb/end-of-time)
-     (lower bar.2/_system_time))]}
+     (coalesce foo.1/_system_to xtdb/end-of-time)
+     bar.2/_system_from)]}
   [[:rename
     {:prefix foo.1}
     [:project
@@ -17,7 +15,8 @@
        _system_to
        {_system_time (period _system_from _system_to)}]}
      [:scan
-      {:db-name "xtdb", :table #xt/table foo,
+      {:db-name "xtdb",
+       :table #xt/table foo,
        :columns [name _system_from _system_to]}]]]
    [:rename
     {:prefix bar.2}
@@ -28,5 +27,6 @@
        _system_to
        {_system_time (period _system_from _system_to)}]}
      [:scan
-      {:db-name "xtdb", :table #xt/table bar,
+      {:db-name "xtdb",
+       :table #xt/table bar,
        :columns [name _system_from _system_to]}]]]]]]

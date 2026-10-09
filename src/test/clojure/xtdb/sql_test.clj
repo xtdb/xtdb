@@ -3025,6 +3025,45 @@ UNION ALL
                     PERIOD(TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
                      {:table-info {#xt/table foo #{"name"}}})))))
 
+(t/deftest test-period-predicates-collapse-in-join-conditions-4167
+  (let [opts {:table-info {#xt/table a #{"_id" "k"}
+                           #xt/table b #{"_id" "v"}}}]
+    (t/is (=plan-file
+           "test-period-predicates-collapse-in-join-conditions-4167-contains"
+           (sql/plan "SELECT a._id, b.v
+                      FROM a FOR ALL VALID_TIME
+                      JOIN b FOR ALL VALID_TIME ON b._id = a.k AND b._valid_time CONTAINS a._valid_time"
+                     opts)))
+
+    (t/is (=plan-file
+           "test-period-predicates-collapse-in-join-conditions-4167-overlaps"
+           (sql/plan "SELECT a._id, b.v
+                      FROM a FOR ALL VALID_TIME
+                      JOIN b FOR ALL VALID_TIME ON b._id = a.k AND b._valid_time OVERLAPS a._valid_time"
+                     opts)))))
+
+(t/deftest test-period-predicate-join-results-4167
+  (xt/execute-tx tu/*node* [[:sql "INSERT INTO a RECORDS {_id: ?, k: ?, _valid_from: ?, _valid_to: ?}"
+                             [1 10 #inst "2021-03" #inst "2021-04"]
+                             [2 10 #inst "2020-12" #inst "2021-02"]]
+                            [:sql "INSERT INTO b RECORDS {_id: ?, v: ?, _valid_from: ?, _valid_to: ?}"
+                             [10 "old" #inst "2020" #inst "2021"]
+                             [10 "current" #inst "2021" #inst "2022"]]
+                            [:sql "INSERT INTO b RECORDS {_id: ?, v: ?, _valid_from: ?}"
+                             [10 "future" #inst "2022"]]])
+
+  (t/is (= #{{:xt/id 1, :v "current"}}
+           (set (xt/q tu/*node* "SELECT a._id, b.v
+                                 FROM a FOR ALL VALID_TIME
+                                 JOIN b FOR ALL VALID_TIME ON b._id = a.k AND b._valid_time CONTAINS a._valid_time"))))
+
+  (t/is (= #{{:xt/id 1, :v "current"}
+             {:xt/id 2, :v "old"}
+             {:xt/id 2, :v "current"}}
+           (set (xt/q tu/*node* "SELECT a._id, b.v
+                                 FROM a FOR ALL VALID_TIME
+                                 JOIN b FOR ALL VALID_TIME ON b._id = a.k AND b._valid_time OVERLAPS a._valid_time")))))
+
 (t/deftest interval-read-write-bug-4066
   (xt/submit-tx tu/*node* ["INSERT INTO docs RECORDS {_id: 1, tx_interval: INTERVAL 'PT1H'};"])
 

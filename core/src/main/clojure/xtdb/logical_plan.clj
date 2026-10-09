@@ -1489,6 +1489,46 @@
 (def ^:private push-decorrelated-selection-down-past-group-by (partial push-selection-down-past-group-by false))
 (def ^:private push-decorrelated-selections-with-fewer-variables-down (partial push-selections-with-fewer-variables-down false))
 
+(defn- renamed-period-constructors [rel]
+  (when (and (vector? rel) (= :rename (first rel)))
+    (let [[_ {:keys [prefix columns]} [inner-op {:keys [projections]} :as inner]] rel]
+      (when (and prefix (nil? columns) (= :project inner-op))
+        (let [inner-cols (set (relation-columns inner))
+              ->col #(symbol (str prefix) (name %))]
+          (into {}
+                (keep (fn [projection]
+                        (when-let [[col [_ from to]] (some-> (period-extends-projection? projection) first)]
+                          (when (and (symbol? from) (symbol? to) (inner-cols from) (inner-cols to))
+                            [(->col col) (list 'period (->col from) (->col to))]))))
+                projections))))))
+
+(defn- collapse-period-constructors-in-conditions [conditions rels]
+  (let [period-exprs (into {} (map renamed-period-constructors) rels)]
+    (when (seq period-exprs)
+      (letfn [(period-free? [expr]
+                (not-any? #(and (seq? %) (= 'period (first %)))
+                          (tree-seq coll? seq expr)))]
+        (let [conditions' (mapv (fn [condition]
+                                  (if (map? condition)
+                                    condition
+                                    (let [{:keys [expr]} (optimise-expression (w/postwalk-replace period-exprs condition))]
+                                      (if (period-free? expr) expr condition))))
+                                conditions)]
+          (when (not= conditions' conditions)
+            conditions'))))))
+
+(defn- collapse-period-constructors-in-joins [z]
+  (r/zmatch z
+    [:join opts left right]
+    ;;=>
+    (when-let [conditions (collapse-period-constructors-in-conditions (:conditions opts) [left right])]
+      [:join (assoc opts :conditions conditions) left right])
+
+    [:mega-join opts rels]
+    ;;=>
+    (when-let [conditions (collapse-period-constructors-in-conditions (:conditions opts) rels)]
+      [:mega-join (assoc opts :conditions conditions) rels])))
+
 ;; Logical plan API
 
 (def ^:private optimise-plan-rules
@@ -1504,6 +1544,7 @@
    #'push-correlated-selection-down-past-unnest
    #'push-correlated-predicate-down-past-period-constructor
    #'optimise-select-expressions
+   #'collapse-period-constructors-in-joins
    #'push-correlated-selection-down-past-group-by
    #'push-correlated-selections-with-fewer-variables-down
    #'remove-superseded-projects
@@ -1563,7 +1604,7 @@
                       %))
                   (r/innermost (r/mono-tp (instrument-rules optimise-plan-rules)))
                   (r/topdown (r/adhoc-tp r/id-tp (instrument-rules [#'rewrite-equals-predicates-in-join-as-equi-join-map])))
-                  (r/innermost (r/mono-tp (instrument-rules [#'merge-joins-to-mega-join])))
+                  (r/innermost (r/mono-tp (instrument-rules [#'merge-joins-to-mega-join #'collapse-period-constructors-in-joins])))
                   (r/node))))))))
 
 (defn validate-plan [plan]

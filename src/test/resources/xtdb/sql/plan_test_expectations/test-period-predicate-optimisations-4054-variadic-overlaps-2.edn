@@ -3,14 +3,11 @@
  [:mega-join
   {:conditions
    [(<
-     (greatest
-      (lower foo.1/_valid_time)
-      (lower bar.2/_valid_time)
-      (lower baz.3/_valid_time))
+     (greatest foo.1/_valid_from bar.2/_valid_from baz.3/_valid_from)
      (least
-      (coalesce (upper foo.1/_valid_time) xtdb/end-of-time)
-      (coalesce (upper bar.2/_valid_time) xtdb/end-of-time)
-      (coalesce (upper baz.3/_valid_time) xtdb/end-of-time)))]}
+      (coalesce foo.1/_valid_to xtdb/end-of-time)
+      (coalesce bar.2/_valid_to xtdb/end-of-time)
+      (coalesce baz.3/_valid_to xtdb/end-of-time)))]}
   [[:rename
     {:prefix baz.3}
     [:project
@@ -18,7 +15,10 @@
       [_valid_from
        _valid_to
        {_valid_time (period _valid_from _valid_to)}]}
-     [:scan {:db-name "xtdb", :table #xt/table baz, :columns [_valid_from _valid_to]}]]]
+     [:scan
+      {:db-name "xtdb",
+       :table #xt/table baz,
+       :columns [_valid_from _valid_to]}]]]
    [:rename
     {:prefix foo.1}
     [:project
@@ -28,7 +28,9 @@
        _valid_to
        {_valid_time (period _valid_from _valid_to)}]}
      [:scan
-      {:db-name "xtdb", :table #xt/table foo, :columns [name _valid_from _valid_to]}]]]
+      {:db-name "xtdb",
+       :table #xt/table foo,
+       :columns [name _valid_from _valid_to]}]]]
    [:rename
     {:prefix bar.2}
     [:project
@@ -37,4 +39,6 @@
        _valid_to
        {_valid_time (period _valid_from _valid_to)}]}
      [:scan
-      {:db-name "xtdb", :table #xt/table bar, :columns [_valid_from _valid_to]}]]]]]]
+      {:db-name "xtdb",
+       :table #xt/table bar,
+       :columns [_valid_from _valid_to]}]]]]]]

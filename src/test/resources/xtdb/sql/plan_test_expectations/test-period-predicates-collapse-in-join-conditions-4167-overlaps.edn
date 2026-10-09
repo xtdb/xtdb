@@ -1,0 +1,35 @@
+[:project
+ {:projections [{_id a.1/_id} {v b.2/v}]}
+ [:mega-join
+  {:conditions
+   [{a.1/k b.2/_id}
+    (< b.2/_valid_from (coalesce a.1/_valid_to xtdb/end-of-time))
+    (> (coalesce b.2/_valid_to xtdb/end-of-time) a.1/_valid_from)]}
+  [[:rename
+    {:prefix a.1}
+    [:project
+     {:projections
+      [_id
+       k
+       _valid_from
+       _valid_to
+       {_valid_time (period _valid_from _valid_to)}]}
+     [:scan
+      {:db-name "xtdb",
+       :table #xt/table a,
+       :columns [_id k _valid_from _valid_to],
+       :for-valid-time :all-time}]]]
+   [:rename
+    {:prefix b.2}
+    [:project
+     {:projections
+      [_id
+       v
+       _valid_from
+       _valid_to
+       {_valid_time (period _valid_from _valid_to)}]}
+     [:scan
+      {:db-name "xtdb",
+       :table #xt/table b,
+       :columns [_id v _valid_from _valid_to],
+       :for-valid-time :all-time}]]]]]]
