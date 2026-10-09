@@ -10,20 +10,22 @@ import xtdb.util.toHLL
 
 class TableBlockFormatTest {
 
-    private val vecTypes = mapOf(
-        "_id" to VectorType.I64,
-        "a" to VectorType.maybe(VectorType.UTF8),
-        "l" to VectorType.Listy(ArrowType.List(), VectorType.I64),
-        "s" to VectorType.Struct(mapOf("x" to VectorType.I64, "y" to VectorType.maybe(VectorType.UTF8)))
+    private val meta = TableCatalog.TableMeta.of(
+        mapOf(
+            "_id" to VectorType.I64,
+            "a" to VectorType.maybe(VectorType.UTF8),
+            "l" to VectorType.Listy(ArrowType.List(), VectorType.I64),
+            "s" to VectorType.Struct(mapOf("x" to VectorType.I64, "y" to VectorType.maybe(VectorType.UTF8)))
+        ),
+        rowCount = 3,
+        hlls = mapOf("_id" to toHLL(ByteArray(10) { it.toByte() }))
     )
 
-    private val hlls = mapOf("_id" to toHLL(ByteArray(10) { it.toByte() }))
-
-    private val block = buildTableBlock(vecTypes, rowCount = 3, partitions = emptyList(), hlls = hlls)
+    private val block = buildTableBlock(meta, emptyList())
 
     @Test
     fun `a block recording a column tree is read through it`() {
-        assertEquals(TableCatalog.TableMeta(vecTypes, 3, hlls), parseTableBlock(block))
+        assertEquals(meta, parseTableBlock(block))
     }
 
     @Test
