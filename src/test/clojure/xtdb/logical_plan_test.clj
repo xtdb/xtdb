@@ -171,6 +171,24 @@
                 ~(sql/->col-sym 'col1)))))
        "not possible to tell if col1 is a period or a scalar temporal value (timestamp etc.)"))))
 
+(t/deftest test-period-columns-collapse-in-join-conditions-only-over-pass-through-columns-4167
+  (letfn [(side [prefix table from-projection]
+            [:rename {:prefix prefix}
+             [:project {:projections [from-projection '_valid_to '{_valid_time (period _valid_from _valid_to)}]}
+              [:scan {:db-name "xtdb", :table table, :columns '[_valid_from _valid_to]}]]])
+          (join-conditions [from-projection]
+            (->> (lp/rewrite-plan [:join {:conditions '[(contains? p.1/_valid_time q.2/_valid_time)]}
+                                   (side 'p.1 #xt/table p from-projection)
+                                   (side 'q.2 #xt/table q '_valid_from)])
+                 (tree-seq vector? seq)
+                 (some #(when (and (vector? %) (= :mega-join (first %))) (:conditions (second %))))))]
+
+    (t/is (not-any? '#{contains?} (flatten (join-conditions '_valid_from))))
+
+    (t/is (= '[(contains? p.1/_valid_time q.2/_valid_time)]
+             (join-conditions '{_valid_from (+ _valid_from 1)}))
+          "p.1/_valid_from is the computed column, not the one the period is built from")))
+
 (t/deftest test-push-selection-down-past-apply
   (t/testing "pushes selection down to independent relation"
     (t/is

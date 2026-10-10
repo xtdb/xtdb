@@ -1492,14 +1492,14 @@
 
 (defn- renamed-period-constructors [rel]
   (when (and (vector? rel) (= :rename (first rel)))
-    (let [[_ {:keys [prefix columns]} [inner-op {:keys [projections]} :as inner]] rel]
+    (let [[_ {:keys [prefix columns]} [inner-op {:keys [projections]}]] rel]
       (when (and prefix (nil? columns) (= :project inner-op))
-        (let [inner-cols (set (relation-columns inner))
+        (let [pass-through-cols (into #{} (filter symbol?) projections)
               ->col #(symbol (str prefix) (name %))]
           (into {}
                 (keep (fn [projection]
                         (when-let [[col [_ from to]] (some-> (period-extends-projection? projection) first)]
-                          (when (and (symbol? from) (symbol? to) (inner-cols from) (inner-cols to))
+                          (when (and (pass-through-cols from) (pass-through-cols to))
                             [(->col col) (list 'period (->col from) (->col to))]))))
                 projections))))))
 
