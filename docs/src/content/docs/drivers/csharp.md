@@ -78,6 +78,14 @@ Users:
 */
 ```
 
+## Connection pooling (v2.2+)
+
+Npgsql resets a pooled connection with `DISCARD ALL` before handing it to its next user.
+XTDB returns the session's time zone, `SET` parameters, await token and default access mode to their startup values, and closes the session's prepared statements and portals.
+`DISCARD ALL` is refused inside an open transaction.
+
+`DISCARD PLANS` closes the prepared statements and portals only; `DISCARD TEMP` and `DISCARD SEQUENCES` are accepted and do nothing.
+
 ## Examples
 
 For more examples and tests, see the [XTDB driver-examples repository](https://github.com/xtdb/driver-examples), which contains comprehensive test suites demonstrating various features and use cases.
