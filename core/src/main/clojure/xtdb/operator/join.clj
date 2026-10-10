@@ -17,7 +17,7 @@
            (xtdb.api ICursor)
            (org.apache.arrow.vector.types TimeUnit)
            (org.apache.arrow.vector.types.pojo ArrowType$Timestamp)
-           (xtdb.arrow BitVector RelationReader VectorReader VectorType)
+           (xtdb.arrow BitVector RelationReader VectorReader VectorType VectorType$Mono VectorType$Null)
            (xtdb.bloom BloomUtils)
            (xtdb.operator ProjectionSpec)
            (xtdb.operator.join BuildSide ComparatorFactory DiskHashJoin JoinType MemoryHashJoin ProbeSide)
@@ -193,21 +193,25 @@
 
 (declare expr->columns)
 
-(defn- conjuncts [expr]
-  (if (and (seq? expr) (= 'and (first expr)))
-    (mapcat conjuncts (rest expr))
-    [expr]))
+(defn- tstz-arrow-type? [arrow-type]
+  (and (instance? ArrowType$Timestamp arrow-type)
+       (some? (.getTimezone ^ArrowType$Timestamp arrow-type))))
+
+(defn- tstz-type? [^VectorType vec-type]
+  (every? (fn [^VectorType$Mono leg]
+            (or (= VectorType$Null/INSTANCE leg) (tstz-arrow-type? (.getArrowType leg))))
+          (.getLegs vec-type)))
 
 (defn- comparisons
-  "`[strict? lesser greater]` for every comparison the thetas imply — `(< (greatest xs) (least ys))` implies each `x < y`."
+  "`[lesser greater]` for every comparison the thetas imply — `(< (greatest xs) (least ys))` implies each `x < y`."
   [thetas]
-  (for [conjunct (mapcat conjuncts thetas)
+  (for [conjunct (mapcat (partial lp/flatten-expr lp/and-predicate?) thetas)
         :when (and (seq? conjunct) (= 3 (count conjunct)) ('#{< <= > >=} (first conjunct)))
         :let [[op a b] conjunct
               [lesser greater] (if ('#{< <=} op) [a b] [b a])]
         lesser (if (and (seq? lesser) (= 'greatest (first lesser))) (rest lesser) [lesser])
         greater (if (and (seq? greater) (= 'least (first greater))) (rest greater) [greater])]
-    [(boolean ('#{< >} op)) lesser greater]))
+    [lesser greater]))
 
 (defn- valid-time-pushdown-specs
   "One spec per probe `_valid_from`/`_valid_to` column the thetas bound by build-side values —
@@ -221,30 +225,33 @@
                            (probe-col (second expr) "_valid_to")
                            (probe-col expr "_valid_to")))
         build-only? (fn [expr] (not-any? probe-cols (expr->columns expr)))
-        bounds (for [[strict? lesser greater] (comparisons thetas)
+        bounds (for [[lesser greater] (comparisons thetas)
                      :let [from-col (probe-col lesser "_valid_from")
                            to-col (probe-valid-to greater)]
                      :when (or (and from-col (build-only? greater))
                                (and to-col (build-only? lesser)))]
                  (if from-col
-                   {:bound :upper, :col from-col, :strict? strict?, :expr greater}
-                   {:bound :lower, :col to-col, :strict? strict?, :expr lesser}))
+                   {:bound :upper, :col from-col, :expr greater}
+                   {:bound :lower, :col to-col, :expr lesser}))
         input-types {:var-types build-vec-types, :param-types param-types}]
     (vec (for [[[bound col] bounds] (group-by (juxt :bound :col) bounds)
                :let [exprs (mapv :expr bounds)
                      expr (if (= 1 (count exprs))
                             (first exprs)
-                            (list* (case bound :upper 'least, :lower 'greatest) exprs))]]
-           {:bound bound, :col col, :strict? (every? :strict? bounds)
+                            (list* (case bound :upper 'least, :lower 'greatest) exprs))]
+               ;; a local timestamp compares in wall-clock time, which an instant can't stand in for across a DST overlap
+               :when (tstz-type? (.getType (expr/->expression-projection-spec "_pushdown_valid_time"
+                                                                              (expr/form->expr expr input-types)
+                                                                              input-types)))]
+           {:bound bound, :col col
             :projection (expr/->expression-projection-spec "_pushdown_valid_time"
                                                            (expr/form->expr (list 'cast_tstz expr) input-types)
                                                            input-types)}))))
 
 (defn- tstz-micros? [^VectorReader v]
   (let [arrow-type (.getArrowType (.getType v))]
-    (and (instance? ArrowType$Timestamp arrow-type)
-         (= TimeUnit/MICROSECOND (.getUnit ^ArrowType$Timestamp arrow-type))
-         (some? (.getTimezone ^ArrowType$Timestamp arrow-type)))))
+    (and (tstz-arrow-type? arrow-type)
+         (= TimeUnit/MICROSECOND (.getUnit ^ArrowType$Timestamp arrow-type)))))
 
 (defn- extreme-micros ^Long [^VectorReader v, ^long row-count, max?]
   (loop [idx 0, acc (if max? Long/MIN_VALUE Long/MAX_VALUE), seen? false]
@@ -261,18 +268,17 @@
   (let [build-rel (.getDataRel build-side)
         row-count (.getRowCount build-rel)]
     (into {}
-          (keep (fn [{:keys [bound col strict? ^ProjectionSpec projection]}]
+          (keep (fn [{:keys [bound col ^ProjectionSpec projection]}]
                   (with-open [v (.project projection allocator build-rel {} args)]
                     (when (tstz-micros? v)
                       (case bound
+                        ;; one chronon either side: the cast to micros can round a finer-grained build value either way
                         :upper (when-let [upper (extreme-micros v row-count true)]
                                  (let [upper (long upper)]
-                                   [col (TemporalDimension. Long/MIN_VALUE
-                                                            (if (or strict? (= Long/MAX_VALUE upper)) upper (inc upper)))]))
+                                   [col (TemporalDimension. Long/MIN_VALUE (if (= Long/MAX_VALUE upper) upper (inc upper)))]))
                         :lower (when-let [lower (extreme-micros v row-count false)]
                                  (let [lower (long lower)]
-                                   [col (TemporalDimension. (if (or strict? (= Long/MIN_VALUE lower)) lower (dec lower))
-                                                            Long/MAX_VALUE)])))))))
+                                   [col (TemporalDimension. (if (= Long/MIN_VALUE lower) lower (dec lower)) Long/MAX_VALUE)])))))))
           specs)))
 
 (defn- ->child-cursors [build-plan-side build-cursor probe-cursors]

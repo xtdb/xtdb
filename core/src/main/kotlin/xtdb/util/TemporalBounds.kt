@@ -16,6 +16,11 @@ data class TemporalDimension(
     /** True where this dimension spans a single chronon — an `AS OF`, or a `BETWEEN t AND t`. */
     val isPoint get() = upper - lower == 1L
 
+    /**
+     * Narrows both ends.
+     * The ends are independent half-bounds — a range passes [intersects] when it ends after [lower] and starts before [upper] —
+     * so the result can have `lower > upper`, which still admits a range spanning that gap.
+     */
     fun intersect(other: TemporalDimension) = TemporalDimension(max(lower, other.lower), min(upper, other.upper))
 
     override fun toString(): String {

@@ -2,7 +2,8 @@
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
             [xtdb.test-util :as tu])
-  (:import [java.time Instant ZonedDateTime]))
+  (:import [java.time Instant ZonedDateTime]
+           [java.util Date]))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
@@ -85,8 +86,8 @@
                 {:id 5, :k 5, :vf #inst "2022-07-01"}
                 {:id 6, :k 6, :vf #inst "2022-07-01", :vt #inst "2022-07-02"}
                 {:id 7, :k 7, :vf #inst "1990-01-01", :vt #inst "1991-01-01"}]
-        a-rows (map #(update % :vf (fn [^java.util.Date d] (.toInstant d))) a-rows)
-        a-rows (map #(cond-> % (:vt %) (update :vt (fn [^java.util.Date d] (.toInstant d)))) a-rows)]
+        a-rows (map #(update % :vf (fn [^Date d] (.toInstant d))) a-rows)
+        a-rows (map #(cond-> % (:vt %) (update :vt (fn [^Date d] (.toInstant d)))) a-rows)]
     (put-a! a-rows)
 
     (t/is (= (expected a-rows overlaps?)
@@ -155,6 +156,26 @@
                     JOIN (SELECT _id, v, _valid_from FROM b FOR ALL VALID_TIME ORDER BY _valid_from DESC, _id LIMIT 1) AS b1
                       ON b1._id = a.k AND b1._valid_from <= a.t"))
         "the latest version overall is 2024, which the condition rejects"))
+
+(t/deftest a-sub-microsecond-build-value-keeps-the-version-it-matches
+  (xt/execute-tx tu/*node* [[:put-docs {:into :b, :valid-from (Instant/parse "2021-03-15T12:00:00Z")} {:xt/id 1, :k 1, :v "match"}]])
+  (xt/execute-tx tu/*node* [[:sql "INSERT INTO a RECORDS {_id: 1, k: 1, t: CAST('2021-03-15T12:00:00.000000500Z' AS TIMESTAMP(9) WITH TIME ZONE)}"]])
+  (tu/flush-block! tu/*node*)
+
+  (t/is (= 500 (.getNano ^ZonedDateTime (:t (first (xt/q tu/*node* "SELECT t FROM a")))))
+        "the build value carries sub-microsecond precision")
+
+  (t/is (= #{{:a-id 1, :v "match"}}
+           (q "SELECT a._id AS a_id, b.v FROM a JOIN b FOR ALL VALID_TIME ON b._id = a.k AND b._valid_from < a.t"))))
+
+(t/deftest a-local-timestamp-build-value-takes-no-bound
+  (seed-history! :b)
+  (xt/execute-tx tu/*node* [[:sql "INSERT INTO a RECORDS {_id: 1, k: 1, t: TIMESTAMP '2021-03-15 00:00:00'}"]])
+  (tu/flush-block! tu/*node*)
+
+  (let [sql "SELECT a._id AS a_id, b.v FROM a JOIN b FOR ALL VALID_TIME ON b._id = a.k AND b._valid_from <= a.t"]
+    (t/is (= (set (for [y (range 2000 2022)] {:a-id 1, :v y})) (q sql)))
+    (t/is (not-any? :valid-time (:pushdowns (scan-row sql "b"))))))
 
 (t/deftest a-clamped-probe-scan-keeps-its-own-bounds
   (seed-history! :b)
