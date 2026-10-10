@@ -1176,6 +1176,24 @@
     (cond-> (list 'cast ve cast-type)
       (not-empty cast-opts) (concat [cast-opts]))))
 
+(defn- ->sort-opts [^Sql$SortSpecificationContext sort-spec-ctx]
+  (let [dir (or (some-> (.orderingSpecification sort-spec-ctx)
+                        (.getText)
+                        str/lower-case
+                        keyword)
+                :asc)]
+    {:direction dir
+
+     :null-ordering (or (when-let [null-order (.nullOrdering sort-spec-ctx)]
+                          (case (-> (.getChild null-order 1)
+                                    (.getText)
+                                    str/lower-case)
+                            "first" :nulls-first
+                            "last" :nulls-last))
+
+                        ;; postgres sorts nulls high - so last on asc and first on desc
+                        (case dir :asc :nulls-last, :desc :nulls-first))}))
+
 (defrecord AggregatesDisallowed []
   PlanError
   (error-string [_] "Aggregates are not allowed in this context"))
@@ -2301,23 +2319,7 @@
          (->> (mapv (fn [^Sql$SortSpecificationContext sort-spec-ctx]
                      (let [expr (cond-> (-> (.expr sort-spec-ctx) (.accept ob-expr-visitor))
                                  (seq gb-expr-to-col) (->> (w/postwalk #(get gb-expr-to-col % %))))
-                           dir (or (some-> (.orderingSpecification sort-spec-ctx)
-                                           (.getText)
-                                           str/lower-case
-                                           keyword)
-                                   :asc)
-
-                           ob-opts {:direction dir
-
-                                    :null-ordering (or (when-let [null-order (.nullOrdering sort-spec-ctx)]
-                                                         (case (-> (.getChild null-order 1)
-                                                                   (.getText)
-                                                                   str/lower-case)
-                                                           "first" :nulls-first
-                                                           "last" :nulls-last))
-
-                                                       ;; postgres sorts nulls high - so last on asc and first on desc
-                                                       (case dir :asc :nulls-last, :desc :nulls-first))}]
+                           ob-opts (->sort-opts sort-spec-ctx)]
 
                        ;; we could potentially try to avoid this extra projection for simple cols
                        (cond
