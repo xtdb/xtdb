@@ -58,7 +58,10 @@
 (defn identifier-sym [^ParserRuleContext ctx]
   (some-> ctx
           (.accept (reify SqlVisitor
-                     (visitAsClause [this ctx] (-> (.columnLabel ctx) (.accept this)))
+                     (visitAsClause [this ctx]
+                       (if-let [label (.columnLabel ctx)]
+                         (.accept label this)
+                         'default))
 
                      (visitColumnLabel [this ctx]
                        (if-let [id (.identifier ctx)]
@@ -905,9 +908,8 @@
                                                                             (if-let [table-cols (not-empty (find-cols scope [nil table-name] excludes))]
                                                                               (let [renames (->> (for [^Sql$QualifiedRenameColumnContext rename-pair (some-> (.qualifiedRenameClause ctx)
                                                                                                                                                              (.qualifiedRenameColumn))]
-                                                                                                   (let [sym (find-col scope [(identifier-sym (.identifier rename-pair)) table-name])
-                                                                                                         out-col-name (.columnLabel (.asClause rename-pair))]
-                                                                                                     (MapEntry/create sym (->col-sym (identifier-sym out-col-name)))))
+                                                                                                   (let [sym (find-col scope [(identifier-sym (.identifier rename-pair)) table-name])]
+                                                                                                     (MapEntry/create sym (->col-sym (identifier-sym (.asClause rename-pair))))))
                                                                                                  (into {}))]
                                                                                 (->> table-cols
                                                                                      (into [] (map-indexed (fn [col-idx sym]
@@ -922,10 +924,9 @@
                                       (let [renames (->> (for [^Sql$RenameColumnContext rename-pair (some-> (.renameClause star-ctx)
                                                                                                             (.renameColumn))]
                                                            (let [chain (rseq (mapv identifier-sym (.identifier (.identifierChain (.columnReference rename-pair)))))
-                                                                 out-col-name (.columnLabel (.asClause rename-pair))
                                                                  sym (find-col scope chain)]
 
-                                                             (MapEntry/create sym (->col-sym (identifier-sym out-col-name)))))
+                                                             (MapEntry/create sym (->col-sym (identifier-sym (.asClause rename-pair))))))
                                                          (into {}))
 
                                             excludes (set/union (into #{} (map (comp symbol name :col-sym)) explicitly-projected-cols)

@@ -130,7 +130,13 @@
       (t/is (= [] (vec (set/difference accepted non-reserved-keywords)))
             (str position ": a keyword the grammar accepts that the tier doesn't name")))))
 
-(t/deftest a-column-alias-accepts-the-non-reserved-keywords-and-current-user
+(t/deftest a-column-alias-accepts-the-non-reserved-keywords-current-user-and-default
   (let [accepted (accepted-by #(str "SELECT 1 AS " %))]
     (t/is (= [] (vec (set/difference non-reserved-keywords accepted))))
-    (t/is (= ["CURRENT_USER"] (vec (set/difference accepted non-reserved-keywords))))))
+    (t/is (= ["CURRENT_USER" "DEFAULT"] (vec (set/difference accepted non-reserved-keywords))))))
+
+(t/deftest as-default-names-the-column-default
+  (t/is (= [{:default 1}] (xt/q tu/*node* "SELECT 1 AS default")))
+
+  (t/is (thrown? Exception (xt/q tu/*node* "SELECT 1 default"))
+        "DEFAULT is a column alias only after an explicit AS, as in Postgres"))

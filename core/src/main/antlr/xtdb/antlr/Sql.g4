@@ -683,7 +683,10 @@ excludeClause
     ;
 
 derivedColumn : expr asClause? ;
-asClause : 'AS'? columnLabel ;
+asClause
+    : 'AS' (columnLabel | 'DEFAULT')
+    | columnLabel
+    ;
 
 /// §7.13 <query expression>
 
