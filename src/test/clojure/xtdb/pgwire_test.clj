@@ -1611,6 +1611,22 @@
                             {:builder-fn xt-jdbc/builder-fn}))
           "re-run with different type (still transit though)")))
 
+(t/deftest decimal-and-array-params-dont-degrade-result-types
+  (with-open [conn (jdbc-conn {"prepareThreshold" -1})]
+    (jdbc/execute! conn ["INSERT INTO docs RECORDS {_id: 1, name: 'a'}"])
+
+    (with-open [stmt (.prepareStatement conn "SELECT ? AS d, ? + 1 AS e, 1 AS i")]
+      (.setBigDecimal stmt 1 1.5M)
+      (.setBigDecimal stmt 2 2.5M)
+      (t/is (= ["numeric" "numeric"] (param-metadata stmt)))
+      (t/is (= [{"d" "numeric"} {"e" "numeric"} {"i" "int8"}] (result-metadata stmt))))
+
+    (with-open [stmt (.prepareStatement conn "SELECT _id, name FROM docs WHERE _id = ANY(?)")]
+      (.setArray stmt 1 (.createArrayOf conn "int8" (object-array [1])))
+      (t/is (= ["_int8"] (param-metadata stmt)))
+      (t/is (= [{"_id" "int8"} {"name" "text"}] (result-metadata stmt)))
+      (t/is (= [{"_id" 1, "name" "a"}] (rs->maps (.executeQuery stmt)))))))
+
 (deftest test-prepared-statments
   (with-open [conn (jdbc-conn {"prepareThreshold" -1})]
     (.execute (.prepareStatement conn "INSERT INTO foo(_id, a, b) VALUES (1, 'one', 2)"))
