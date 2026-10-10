@@ -5,6 +5,7 @@ import org.apache.arrow.vector.types.FloatingPointPrecision.SINGLE
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.ArrowType.ArrowTypeVisitor
 import org.apache.commons.codec.binary.Hex
+import xtdb.api.error.Incorrect
 import xtdb.arrow.VectorReader
 import xtdb.arrow.VectorType
 import xtdb.arrow.VectorType.Companion.BOOL
@@ -435,8 +436,13 @@ sealed class PgType(
         typsend = "interval_send",
         typreceive = "interval_recv",
     ) {
-        override fun readBinary(data: ByteArray): Nothing =
-            throw IllegalArgumentException("Interval parameters currently unsupported")
+        override fun readBinary(data: ByteArray): Interval {
+            val bb = ByteBuffer.wrap(data)
+            val micros = bb.long
+            val days = bb.int
+            val months = bb.int
+            return Interval(months, days, Math.multiplyExact(micros, 1000L))
+        }
 
         override fun readText(data: ByteArray): Interval =
             readUtf8(data).asInterval()
@@ -514,6 +520,8 @@ sealed class PgType(
         typsend = "byteasend",
         typreceive = "bytearecv",
     ) {
+        override fun readBinary(data: ByteArray): ByteArray = data
+
         override fun readText(data: ByteArray): ByteArray {
             val s = readUtf8(data)
             return if (s.startsWith("\\x")) Hex.decodeHex(s.substring(2)) else data
@@ -795,7 +803,17 @@ sealed class PgType(
         typsend = "jsonb_send",
         typreceive = "jsonb_recv",
     ) {
-        override fun readBinary(data: ByteArray): Any? = jsonDecode(ByteArrayInputStream(data))
+        private const val JSONB_VERSION: Byte = 1
+
+        override fun readBinary(data: ByteArray): Any? {
+            val version = data.firstOrNull()
+            if (version != JSONB_VERSION)
+                throw Incorrect(
+                    "Unsupported binary jsonb version: $version", "xtdb.pgwire/unsupported-jsonb-version",
+                    mapOf("version" to version)
+                )
+            return jsonDecode(ByteArrayInputStream(data, 1, data.size - 1))
+        }
 
         override fun readText(data: ByteArray): Any? = jsonDecode(ByteArrayInputStream(data))
     }
