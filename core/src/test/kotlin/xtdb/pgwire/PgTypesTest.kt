@@ -2,8 +2,13 @@ package xtdb.pgwire
 
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.assertThrows
+import xtdb.api.error.Incorrect
+import xtdb.time.Interval
 import java.math.BigDecimal
+import java.nio.ByteBuffer
 
 class PgTypesTest {
 
@@ -115,5 +120,28 @@ class PgTypesTest {
     fun `a JSON null under a key reads as a null value under that key`() {
         assertEquals(mapOf("a" to null, "b" to 1L), readText(JSONB_OID, """{"a": null, "b": 1}"""))
         assertEquals(listOf(1L, null), readText(JSONB_OID, "[1, null]"))
+    }
+
+    @Test
+    fun `binary bytea reads as the raw bytes`() {
+        val bytes = byteArrayOf(0, 1, -1, 92, 120)
+        assertArrayEquals(bytes, PgType.Bytes.readBinary(bytes))
+    }
+
+    @Test
+    fun `binary jsonb skips its version byte`() {
+        assertEquals(mapOf("a" to 1L), PgType.Jsonb.readBinary(byteArrayOf(1) + """{"a": 1}""".toByteArray()))
+    }
+
+    @Test
+    fun `binary jsonb with an unknown version is rejected`() {
+        assertThrows<Incorrect> { PgType.Jsonb.readBinary(byteArrayOf(2) + "{}".toByteArray()) }
+        assertThrows<Incorrect> { PgType.Jsonb.readBinary(byteArrayOf()) }
+    }
+
+    @Test
+    fun `binary interval reads micros, days and months`() {
+        val wire = ByteBuffer.allocate(16).putLong(3_723_000_004L).putInt(5).putInt(14).array()
+        assertEquals(Interval(14, 5, 3_723_000_004_000L), PgType.PgInterval.readBinary(wire))
     }
 }
