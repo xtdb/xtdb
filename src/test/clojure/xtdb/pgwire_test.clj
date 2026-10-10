@@ -2669,7 +2669,7 @@ ORDER BY t.oid DESC LIMIT 1"
                             (jdbc/execute! conn ["SELECT SUBSTRING('asf' FROM 0 FOR -1);"])))))
 
 (t/deftest test-min-max-incomparable-default-json-pgwire
-  (xt/submit-tx tu/*node*
+  (xt/execute-tx tu/*node*
                 [[:put-docs :docs {:xt/id 1, :v 12}]
                  [:put-docs :docs {:xt/id 2, :v #xt/zoned-date-time "2022-08-01T13:34+01:00[Europe/London]"}]])
 
@@ -2692,7 +2692,7 @@ ORDER BY t.oid DESC LIMIT 1"
               "data.from-type is the pr-str'd VectorType form")))))
 
 (t/deftest test-min-max-incomparable-json-ld-pgwire
-  (xt/submit-tx tu/*node*
+  (xt/execute-tx tu/*node*
                 [[:put-docs :docs {:xt/id 1, :v 12}]
                  [:put-docs :docs {:xt/id 2, :v #xt/zoned-date-time "2022-08-01T13:34+01:00[Europe/London]"}]])
 
