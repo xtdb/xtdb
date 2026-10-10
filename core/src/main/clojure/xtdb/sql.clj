@@ -1590,7 +1590,7 @@
         between-expr)))
 
   (visitLikePredicate [this ctx]
-    (let [like-expr (list 'like
+    (let [like-expr (list (if (.ILIKE ctx) 'ilike 'like)
                           (-> (.expr ctx) (.accept this))
                           (-> (.likePattern ctx) (.accept this)))]
       (if (.NOT ctx)
@@ -1598,10 +1598,11 @@
         like-expr)))
 
   (visitLikePredicatePart2 [{:keys [pt1] :as this} ctx]
-    (let [cp (-> (.likePattern ctx) (.accept (dissoc this :pt1)))]
+    (let [cp (-> (.likePattern ctx) (.accept (dissoc this :pt1)))
+          like-expr (list (if (.ILIKE ctx) 'ilike 'like) pt1 cp)]
       (if (.NOT ctx)
-        (list 'not (list 'like pt1 cp))
-        (list 'like pt1 cp))))
+        (list 'not like-expr)
+        like-expr)))
 
   (visitLikeRegexPredicate [this ctx]
     (let [like-expr (list 'like-regex (.accept (.expr ctx) this)

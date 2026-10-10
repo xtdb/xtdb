@@ -63,6 +63,9 @@
     "foo.a NOT LIKE foo.b" '(not (like f/a f/b))
     "foo.a NOT LIKE 'foo%'" '(not (like f/a "foo%"))
 
+    "foo.a ILIKE 'foo%'" '(ilike f/a "foo%")
+    "foo.a NOT ILIKE foo.b" '(not (ilike f/a f/b))
+
     ;; no support for ESCAPE (or default escapes), see #157
     ))
 
@@ -80,6 +83,15 @@
 
   (t/is (= [{:match true}]
            (xt/q tu/*node* "SELECT ('ABC' LIKE_REGEX 'a' FLAG 'i') as match"))))
+
+(t/deftest test-ilike-query
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1, :name "Alice"} {:xt/id 2, :name "bob"} {:xt/id 3, :name "ALINE"}]])
+
+  (t/is (= [{:xt/id 1} {:xt/id 3}]
+           (xt/q tu/*node* "SELECT _id FROM docs WHERE name ILIKE 'al%' ORDER BY _id")))
+
+  (t/is (= [{:xt/id 2}]
+           (xt/q tu/*node* "SELECT _id FROM docs WHERE name NOT ILIKE 'AL%' ORDER BY _id"))))
 
 (t/deftest test-postgres-regex-expr
   (t/are [sql expected] (= expected (plan-expr-with-foo sql))

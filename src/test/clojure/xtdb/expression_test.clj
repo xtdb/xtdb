@@ -503,6 +503,25 @@
   (t/testing "literal projection"
     (t/is (project1 (list 'like 's "%.+%ar") {:s "foo .+ bar"}))))
 
+(t/deftest test-ilike
+  (t/are [s ptn expected-result]
+      (= expected-result (project1 '(ilike a b) {:a s, :b ptn}))
+
+    "A" "a" true
+    "a" "A" true
+    "FooBar" "foo%" true
+    "FooBar" "%BAR" true
+    "FooBar" "f_ob_r" true
+    "FooBar" "foo" false
+    "ÉCOLE" "école" true
+    ".*" ".." false
+
+    "a" nil nil
+    nil "%" nil)
+
+  (t/is (true? (project1 (list 'ilike 's "%BAR") {:s "foo .+ bar"}))
+        "literal pattern"))
+
 (t/deftest test-like-regex
   (t/are [s ptn expected-result]
       (= expected-result (project1 '(like-regex a b "") {:a s, :b ptn}))

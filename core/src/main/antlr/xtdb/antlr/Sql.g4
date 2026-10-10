@@ -229,7 +229,7 @@ fieldDefinition : fieldName=identifier dataType ;
 expr
     : commonValueExpr NOT? 'BETWEEN' (ASYMMETRIC | SYMMETRIC)? commonValueExpr 'AND' commonValueExpr # BetweenPredicate
     | expr NOT? 'IN' inPredicateValue # InPredicate
-    | expr 'NOT'? 'LIKE' likePattern=commonValueExpr ('ESCAPE' likeEscape=commonValueExpr)? # LikePredicate
+    | expr 'NOT'? ('LIKE' | 'ILIKE') likePattern=commonValueExpr ('ESCAPE' likeEscape=commonValueExpr)? # LikePredicate
     | expr 'NOT'? 'LIKE_REGEX' xqueryPattern=commonValueExpr ('FLAG' xqueryOptionFlag=commonValueExpr)? # LikeRegexPredicate
     | expr postgresRegexOperator xqueryPattern=commonValueExpr # PostgresRegexPredicate
 
@@ -728,7 +728,7 @@ predicatePart2
     : compOp expr # ComparisonPredicatePart2
     | NOT? 'BETWEEN' (ASYMMETRIC | SYMMETRIC)? commonValueExpr 'AND' commonValueExpr # BetweenPredicatePart2
     | NOT? 'IN' inPredicateValue # InPredicatePart2
-    | 'NOT'? 'LIKE' likePattern=commonValueExpr ('ESCAPE' likeEscape=commonValueExpr)? # LikePredicatePart2
+    | 'NOT'? ('LIKE' | 'ILIKE') likePattern=commonValueExpr ('ESCAPE' likeEscape=commonValueExpr)? # LikePredicatePart2
     | 'NOT'? 'LIKE_REGEX' xqueryPattern=commonValueExpr ('FLAG' xqueryOptionFlag=commonValueExpr)? # LikeRegexPredicatePart2
     | postgresRegexOperator xqueryPattern=commonValueExpr # PostgresRegexPredicatePart2
     | 'IS' 'NOT'? 'NULL' # NullPredicatePart2
