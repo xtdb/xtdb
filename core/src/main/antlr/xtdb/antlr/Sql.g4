@@ -216,6 +216,7 @@ dataType
     | 'BYTEA' #VarbinaryType
     | 'URI' # UriType
     | dataType 'ARRAY' ('[' maximumCardinality ']')? # ArrayType
+    | dataType '[' maximumCardinality? ']' # ArrayType
     ;
 
 precision : UNSIGNED_INTEGER ;

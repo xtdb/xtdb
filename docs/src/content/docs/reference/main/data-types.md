@@ -242,6 +242,15 @@ XTDB supports arbitrarily nested data in a first-class way, without needing to s
     - `ARRAY[1, 2, 3]`
     - `[1, 2, 3]`
 
+    Casting to an array type (v2.2+) — `<type> ARRAY` or `<type>[]` — casts each element:
+
+    - `CAST([1, 2] AS VARCHAR ARRAY)` → `['1', '2']`
+    - `$1::BIGINT[]` fixes a parameter's type as an array of `BIGINT`
+    - `'{1,2,NULL}'::INT8[]` parses a Postgres array literal → `[1, 2, NULL]`
+
+    A cardinality (`INT[3]`) is accepted and ignored.
+    Arrays of `TIMESTAMP WITH TIME ZONE` and `INTERVAL` can't be cast to.
+
 `OBJECT` | `RECORD`
 : a mapping of keys to values:
 
