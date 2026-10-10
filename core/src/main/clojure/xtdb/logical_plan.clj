@@ -1478,6 +1478,20 @@
                                    (:rel %)) indexed-rels)]
           [:mega-join {:conditions output-join-conditions} output-rels])))))
 
+(defn- push-left-outer-join-conditions-to-rhs [z]
+  (r/zmatch
+    z
+    [:left-outer-join opts lhs rhs]
+    ;;=>
+    (let [{rhs-preds true, join-conditions false}
+          (->> (:conditions opts)
+               (mapcat #(if (map? %) [%] (flatten-expr and-predicate? %)))
+               (group-by #(boolean (and (not (map? %)) (all-columns-in-relation? % rhs)))))]
+      (when (seq rhs-preds)
+        [:left-outer-join {:conditions (vec join-conditions)}
+         lhs
+         (reduce (fn [rel pred] [:select {:predicate pred} rel]) rhs rhs-preds)]))))
+
 (def ^:private push-correlated-selection-down-past-join (partial push-selection-down-past-join true))
 (def ^:private push-correlated-selection-down-past-rename (partial push-selection-down-past-rename true))
 (def ^:private push-correlated-selection-down-past-project (partial push-selection-down-past-project true))
@@ -1503,6 +1517,7 @@
    #'split-conjunctions-in-mega-join
    #'push-predicates-from-mega-join-to-child-relations
    #'push-selection-down-past-apply
+   #'push-left-outer-join-conditions-to-rhs
    #'push-correlated-selection-down-past-join
    #'push-correlated-selection-down-past-rename
    #'push-correlated-selection-down-past-project

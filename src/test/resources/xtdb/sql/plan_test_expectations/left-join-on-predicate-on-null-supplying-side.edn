@@ -1,0 +1,16 @@
+[:project
+ {:projections [{_id c.1/_id} {o_id o.2/_id}]}
+ [:left-outer-join
+  {:conditions [{c.1/_id o.2/custkey} c.1/active]}
+  [:rename
+   {:prefix c.1}
+   [:scan
+    {:db-name "xtdb",
+     :table #xt/table customer,
+     :columns [_id active]}]]
+  [:rename
+   {:prefix o.2}
+   [:scan
+    {:db-name "xtdb",
+     :table #xt/table orders,
+     :columns [custkey _id {comment (<> comment "special")}]}]]]]
