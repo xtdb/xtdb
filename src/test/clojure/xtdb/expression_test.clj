@@ -2340,3 +2340,33 @@
   (t/testing "identifier null throws"
     (t/is (thrown-with-msg? Exception #"null values cannot be formatted as an SQL identifier"
                             (project1 '(format "%I" a) {:a nil})))))
+
+(t/deftest test-cast-list-elementwise
+  (t/is (= [1 2 3] (project1 '(cast [1 2 3] #xt/type [:list :i64]) {})))
+  (t/is (= [1 2] (project1 '(cast x #xt/type [:list :i64]) {:x [1 2]})) "i64 -> i64 identity")
+  (t/is (= ["1" "2"] (project1 '(cast [1 2] #xt/type [:list :utf8]) {})))
+  (t/is (= [1.0 2.5] (project1 '(cast [1 2.5] #xt/type [:list :f64]) {})) "mixed numeric elements")
+  (t/is (= [1 nil 3] (project1 '(cast [1 nil 3] #xt/type [:list :i64]) {})) "nullable elements")
+  (t/is (= [1 2] (project1 '(cast ["1" "2"] #xt/type [:list :i64]) {})))
+  (t/is (= [[1 2] [3]] (project1 '(cast [[1.0 2.0] [3.0]] #xt/type [:list [:list :i64]]) {})) "nested")
+  (t/is (= [] (project1 '(cast [] #xt/type [:list :i64]) {})))
+  (t/is (nil? (project1 '(cast nil #xt/type [:list :i64]) {}))))
+
+(t/deftest test-cast-pg-array-text-to-list
+  (t/is (= [1 2 3] (project1 '(cast "{1,2,3}" #xt/type [:list :i64]) {})))
+  (t/is (= [1 nil] (project1 '(cast x #xt/type [:list :i64]) {:x "{1,NULL}"})))
+  (t/is (= ["a,b" "c"] (project1 '(cast "{\"a,b\",c}" #xt/type [:list :utf8]) {})))
+  (t/is (= [] (project1 '(cast "{}" #xt/type [:list :i64]) {})))
+
+  (t/is (thrown-with-msg? Exception #"Malformed array literal"
+                          (project1 '(cast "abc" #xt/type [:list :utf8]) {})))
+  (t/is (thrown-with-msg? Exception #"Multi-dimensional array literals"
+                          (project1 '(cast "{{1,2},{3,4}}" #xt/type [:list [:list :i64]]) {}))))
+
+(t/deftest test-cast-list-applies-element-cast-opts
+  (t/is (= [2]
+           (->> (project1 '(cast (cast [1.5] #xt/type [:list [:decimal 64 9 256]])
+                                 #xt/type [:list [:decimal 64 9 256]] {:precision 10, :scale 2})
+                          {})
+                (mapv #(.scale ^BigDecimal %))))
+        "an element type equal to the source's still takes the cast's precision and scale"))

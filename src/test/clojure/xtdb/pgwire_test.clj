@@ -3463,3 +3463,15 @@ ORDER BY 1,2;")
 
 (comment
   (user/set-log-level! 'xtdb.pgwire :trace))
+
+(deftest list-casts-pin-array-params-and-results
+  (with-open [conn (jdbc-conn {"prepareThreshold" -1})]
+    (with-open [stmt (.prepareStatement conn "SELECT ?::BIGINT[] AS a, ?::BIGINT ARRAY AS b, ?::VARCHAR ARRAY AS c")]
+      (.setArray stmt 1 (.createArrayOf conn "int8" (object-array [1 2])))
+      (.setArray stmt 2 (.createArrayOf conn "int8" (object-array [3])))
+      (.setArray stmt 3 (.createArrayOf conn "text" (object-array ["x"])))
+      (t/is (= [{"a" "_int8"} {"b" "_int8"} {"c" "_text"}] (result-metadata stmt)))
+      (t/is (= [{"a" [1 2] "b" [3] "c" ["x"]}] (rs->maps (.executeQuery stmt)))))
+
+    (with-open [stmt (.prepareStatement conn "SELECT '{1,2}'::BIGINT[] AS a, [1, 2]::VARCHAR ARRAY AS b")]
+      (t/is (= [{"a" [1 2] "b" ["1" "2"]}] (rs->maps (.executeQuery stmt)))))))
