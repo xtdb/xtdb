@@ -25,14 +25,14 @@
 (t/deftest a-declared-column-holds-the-bottom-until-a-put-writes-a-row-5948
   (xt/execute-tx tu/*node* [[:sql "CREATE TABLE foo (a)"]])
 
-  (t/is (= [{:data-type ":nothing"}]
-           (xt/q tu/*node* "SELECT data_type FROM information_schema.columns
+  (t/is (= [{:xt-type ":nothing"}]
+           (xt/q tu/*node* "SELECT xt_type FROM information_schema.columns
                             WHERE table_name = 'foo' AND column_name = 'a'")))
 
   (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo (_id) VALUES (1)"]])
 
-  (t/is (= [{:data-type ":null"}]
-           (xt/q tu/*node* "SELECT data_type FROM information_schema.columns
+  (t/is (= [{:xt-type ":null"}]
+           (xt/q tu/*node* "SELECT xt_type FROM information_schema.columns
                             WHERE table_name = 'foo' AND column_name = 'a'"))
         "the put pads the declared column, which is what takes it off the bottom"))
 

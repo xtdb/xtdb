@@ -72,7 +72,10 @@
                                       is_generated :utf8, generation_expression [:? :utf8],
                                       character_maximum_length [:? :i32], character_octet_length [:? :i32],
                                       numeric_precision [:? :i32], numeric_scale [:? :i32], datetime_precision [:? :i32],
-                                      collation_name [:? :utf8]}
+                                      numeric_precision_radix [:? :i32],
+                                      character_set_catalog [:? :utf8], character_set_schema [:? :utf8], character_set_name [:? :utf8],
+                                      collation_catalog [:? :utf8], collation_name [:? :utf8],
+                                      xt_type :utf8}
           information_schema/schemata {catalog_name :utf8, schema_name :utf8, schema_owner :utf8}
 
           ;; empty views - tools probe these during schema sync; we don't model constraints yet
@@ -132,6 +135,8 @@
 
           pg_catalog/pg_roles {oid :i32, rolname :utf8, rolsuper :bool, rolcanlogin :bool}
           pg_catalog/pg_auth_members {roleid :i32, member :i32, grantor [:? :i32], admin_option :bool}
+
+          pg_catalog/pg_depend {classid :i32, objid :i32, objsubid :i32, refclassid :i32, refobjid :i32, refobjsubid :i32, deptype :utf8}
 
           ;; empty tables - tools probe these during schema sync; we don't model their contents yet
           pg_catalog/pg_enum {oid :i32, enumtypid :i32, enumsortorder :f64, enumlabel :utf8}
@@ -318,21 +323,42 @@
      :rngcanonical rngcanonical
      :rngsubdiff rngsubdiff}))
 
+(defn- column-pg-type
+  "The Postgres type a column is reported as: a struct/map/union column is `json`, an all-null column `text`."
+  ^PgType [^VectorType vec-type]
+  (let [pg-type (PgType/fromVectorType vec-type)]
+    (cond
+      (identical? pg-type PgType/PG_DEFAULT) PgType/PG_JSON
+      (identical? pg-type PgType/PG_NULL) PgType/PG_TEXT
+      :else pg-type)))
+
+;; Postgres's numeric_precision for the fixed-width numeric types, by oid; both radix 2.
+(def ^:private numeric-precision-by-oid
+  {21 16, 23 32, 20 64, 700 24, 701 53})
+
+(def ^:private int-oids #{21 23 20})
+
 (defn columns [db-name col-rows]
   (for [{:keys [^TableRef table, ^VectorType vec-type, idx], col-name :name} col-rows
-        :let [typname (.getTypname (PgType/fromVectorType vec-type))]]
+        :let [pg-type (column-pg-type vec-type)
+              oid (.getOid pg-type)
+              precision (numeric-precision-by-oid oid)]]
     {:table-catalog db-name
      :table-name (.getTableName table)
      :table-schema (.getSchemaName table)
      :column-name (.denormalize ^IKeyFn (identity #xt/key-fn :snake-case-string) (str col-name))
-     :data-type (pr-str (st/render-type vec-type))
+     :data-type (.getDataType pg-type)
+     :xt-type (pr-str (st/render-type vec-type))
      :udt-schema "pg_catalog"
-     :udt-name (or typname "json")
+     :udt-name (.getTypname pg-type)
      :ordinal-position (int idx)
      :column-default nil
      :is-nullable (if (types/nullable-vec-type? vec-type) "YES" "NO")
      :is-identity "NO"
-     :is-generated "NEVER"}))
+     :is-generated "NEVER"
+     :numeric-precision (some-> precision int)
+     :numeric-precision-radix (when precision (int 2))
+     :numeric-scale (when (int-oids oid) (int 0))}))
 
 (defn pg-attribute [oid-by-table col-rows]
   (for [{:keys [idx table name ^VectorType vec-type]} col-rows
@@ -581,6 +607,7 @@
                                      pg_catalog/pg_user (pg-user authn)
                                      pg_catalog/pg_roles (pg-roles authn query-source db-cat)
                                      pg_catalog/pg_auth_members (pg-auth-members query-source db-cat)
+                                     pg_catalog/pg_depend nil
                                      xt/trie_stats (trie-stats trie-catalog)
                                      xt/live_tables (live-tables snap)
                                      xt/live_columns (live-columns snap)
