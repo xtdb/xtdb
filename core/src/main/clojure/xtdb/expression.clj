@@ -1053,21 +1053,29 @@
 (defmethod codegen-call [:double :num] [_]
   {:return-type #xt/type :f64, :->call-code #(do `(double ~@%))})
 
-(defn like->regex [like-pattern]
-  (-> like-pattern
-      (Pattern/quote)
-      (.replace "%" "\\E.*\\Q")
-      (.replace "_" "\\E.\\Q")
-      (->> (format "^%s\\z"))
-      re-pattern))
+(defn like->regex
+  ([like-pattern] (like->regex like-pattern ""))
+  ([like-pattern inline-flags]
+   (-> like-pattern
+       (Pattern/quote)
+       (.replace "%" "\\E.*\\Q")
+       (.replace "_" "\\E.\\Q")
+       (->> (format "%s^%s\\z" inline-flags))
+       re-pattern)))
 
-(defmethod codegen-call [:like :utf8 :utf8] [{[_ {:keys [literal]}] :args}]
+(defn- codegen-like [literal inline-flags]
   {:return-type #xt/type :bool
    :->call-code (fn [[haystack-code needle-code]]
                   `(boolean (re-find ~(if literal
-                                        (like->regex literal)
-                                        `(like->regex (resolve-string ~needle-code)))
+                                        (like->regex literal inline-flags)
+                                        `(like->regex (resolve-string ~needle-code) ~inline-flags))
                                      (resolve-string ~haystack-code))))})
+
+(defmethod codegen-call [:like :utf8 :utf8] [{[_ {:keys [literal]}] :args}]
+  (codegen-like literal ""))
+
+(defmethod codegen-call [:ilike :utf8 :utf8] [{[_ {:keys [literal]}] :args}]
+  (codegen-like literal "(?iu)"))
 
 (defn binary->hex-like-pattern
   "Returns a like pattern that will match on binary encoded to hex.
