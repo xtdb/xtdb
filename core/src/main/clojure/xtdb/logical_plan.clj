@@ -1467,6 +1467,29 @@
            [:semi-join join-opts (wrap-maps map-opts inner-lhs) rhs]
            inner-rhs])))))
 
+(defn- at-most-one-row? [relation]
+  (case (first relation)
+    :group-by (every? map? (:columns (second relation)))
+    (:project :map :rename :select) (recur (last relation))
+    false))
+
+(defn- push-select-and-single-join-below-filtering-join [z]
+  (r/zmatch z
+    [:select select-opts
+     [:single-join sj-opts lhs rhs]]
+    ;;=>
+    (when (and (at-most-one-row? rhs)
+               (some (set (relation-columns rhs)) (expr-symbols (:predicate select-opts))))
+      (let [[map-opts [inner-op inner-opts inner-lhs inner-rhs :as inner]] (peel-maps lhs)]
+        (when (and (filtering-join? inner)
+                   (not (literal-rows-semi-join? inner))
+                   (maps-movable-below? map-opts inner-rhs)
+                   (not-any? (set (relation-columns inner-rhs)) (relation-columns rhs)))
+          [inner-op inner-opts
+           [:select select-opts
+            [:single-join sj-opts (wrap-maps map-opts inner-lhs) rhs]]
+           inner-rhs])))))
+
 (defn- promote-selection-to-mega-join [z]
   (r/zmatch
     z
@@ -1572,6 +1595,7 @@
    #'merge-selections-around-scan
    #'push-semi-and-anti-joins-down
    #'push-literal-rows-semi-join-below-filtering-join
+   #'push-select-and-single-join-below-filtering-join
    #'add-selection-to-scan-predicate
    #'push-sort-bounds-down-towards-sort
    #'fuse-sorts])
