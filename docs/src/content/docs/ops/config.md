@@ -5,6 +5,20 @@ title: Configuration
 <details>
 <summary>Changelog (last updated v2.2)</summary>
 
+v2.2: the memory cache keeps files mapped between queries
+
+: Each file is mapped once, and stays mapped while no query is using it, within `maxSizeBytes` — see [Caching](#caching).
+
+  Previously each page a query read was mapped on its own and unmapped as soon as the query released it, so nothing was kept between queries.
+  Mapping and unmapping every page was over half of a TPC-H SF1 scan's time.
+
+  `maxSizeBytes` now bounds the files kept mapped while idle as well as the pages in use.
+  Pages a query has already loaded count against it until the query releases them; previously only pages still being fetched did.
+
+  No upgrade steps.
+  Expect a node to keep more mapped than before: up to `maxSizeBytes` of idle files, plus the whole of each file a query is reading from, of which only the pages read take up memory.
+  With a remote object store, its disk cache keeps every mapped file pinned.
+
 v2.2: blocks are flushed every 15 minutes
 
 : A database too quiet to fill a block still writes one within 15 minutes — see [Indexer](#indexer).
@@ -81,9 +95,11 @@ By default a [single root user](config/authentication#single-root-user-v22) name
 XTDB has two caches for [object store](config/storage) data:
 
 ```yaml
-# By default configured to use half the JVM's maximum direct memory
+# Maps files into memory; by default configured to use half the JVM's maximum direct memory
 memoryCache:
-  # Maximum size of the cache, in bytes.
+  # Maximum size of the cache, in bytes, bounding separately:
+  # - the pages in use at once - a query that needs more fails;
+  # - the files kept mapped while no query is using them - beyond it, files are unmapped.
   # Defaults to being calculated via `maxSizeRatio`
   maxSizeBytes: 1073741824
 
