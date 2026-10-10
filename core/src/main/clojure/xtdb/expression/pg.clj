@@ -3,7 +3,8 @@
             [xtdb.error :as err]
             [xtdb.expression :as expr]
             [xtdb.information-schema :as info]
-            [xtdb.table :as table]))
+            [xtdb.table :as table])
+  (:import xtdb.pgwire.PgType))
 
 (defn symbol-names
   "returns possible symbol names based on search path for unqualified names"
@@ -119,3 +120,21 @@
   {:return-type #xt/type :null
    :->call-code (fn [[_regoid-code _int-code]]
                   nil)})
+
+
+;; not strict, unlike most functions: a NULL typmod means "no modifier", and only a NULL oid gives NULL.
+
+(defn format-type [oid typmod]
+  (PgType/formatType (int oid) (int typmod)))
+
+(doseq [oid-type [:int :oid]
+        typmod-type [:int :null]]
+  (defmethod expr/codegen-call [:format_type oid-type typmod-type] [_]
+    {:return-type #xt/type :utf8
+     :->call-code (fn [[oid-code typmod-code]]
+                    `(expr/resolve-utf8-buf (format-type ~oid-code ~(if (= typmod-type :null) -1 typmod-code))))}))
+
+(doseq [typmod-type [:int :null]]
+  (defmethod expr/codegen-call [:format_type :null typmod-type] [_]
+    {:return-type #xt/type :null
+     :->call-code (constantly nil)}))

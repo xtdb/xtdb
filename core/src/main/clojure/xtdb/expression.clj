@@ -638,7 +638,8 @@
                       :=== :null_eq :compare_nulls_first :compare_nulls_last
                       :distinct_from
                       :period :str :_patch
-                      :string_to_array}
+                      :string_to_array
+                      :format_type}
                     normalise-fn-name)))
 
 (defn- cont-b3-call [arg-type code]

@@ -1273,6 +1273,7 @@
 
 ;; system info
 (def-sql-fns [col_description] 2 2)
+(def-sql-fns [format_type] 2 2)
 
 (defn- json-field-access [obj-expr field-expr]
   (cond

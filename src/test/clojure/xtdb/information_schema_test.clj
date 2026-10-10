@@ -34,18 +34,18 @@
                     [xtdb xt/role_membership user :nothing]
                     [xtdb xt/role_membership role :nothing]}
                  (for [table '[public/baseball public/beanie xt/txs]
-                       [col data-type] '[[_system_from :instant]
+                       [col xt-type] '[[_system_from :instant]
                                          [_system_to [:? :instant]]
                                          [_valid_from :instant]
                                          [_valid_to [:? :instant]]]]
-                   ['xtdb table col data-type]))
+                   ['xtdb table col xt-type]))
            (into #{} (map (juxt (comp symbol :table-catalog)
                                 (fn [{:keys [table-schema table-name]}]
                                   (symbol table-schema table-name))
                                 (comp symbol :column-name)
-                                (comp read-string :data-type)))
+                                (comp read-string :xt-type)))
                  (xt/q tu/*node*
-                       "SELECT table_catalog, table_schema, table_name, column_name, data_type
+                       "SELECT table_catalog, table_schema, table_name, column_name, xt_type
                         FROM information_schema.columns
                         WHERE table_schema = 'public' OR table_schema = 'xt'")))))
 
@@ -302,11 +302,11 @@
            (xt/q tu/*node* "SELECT attname, attrelid FROM pg_attribute ORDER BY attname, attrelid LIMIT 1")))
 
   (t/is (= [{:table-name "baseball",
-             :data-type ":keyword",
+             :xt-type ":keyword",
              :column-name "_id",
              :table-catalog "xtdb",
              :table-schema "public"}]
-           (xt/q tu/*node* "SELECT table_catalog, table_schema, table_name, column_name, data_type FROM information_schema.columns ORDER BY table_name, column_name LIMIT 1"))))
+           (xt/q tu/*node* "SELECT table_catalog, table_schema, table_name, column_name, xt_type FROM information_schema.columns ORDER BY table_name, column_name LIMIT 1"))))
 
 (deftest test-selection-and-projection
   (xt/submit-tx tu/*node* [[:put-docs :beanie {:xt/id :foo, :col1 "foo1"}]
@@ -379,9 +379,9 @@
 (deftest test-composite-columns
   (xt/submit-tx tu/*node* [[:put-docs :composite-docs {:xt/id 1 :set-column #{"hello world"}}]])
 
-  (t/is (= [{:data-type "[:set :utf8]"}]
+  (t/is (= [{:xt-type "[:set :utf8]"}]
            (xt/q tu/*node*
-                 "SELECT data_type FROM information_schema.columns
+                 "SELECT xt_type FROM information_schema.columns
                   WHERE column_name = 'set_column'"))))
 
 (deftest test-pg-user
@@ -602,17 +602,17 @@
                      (set (xt/q new-db-conn "FROM information_schema.columns SELECT DISTINCT table_catalog, table_schema")))
                   "query information_schema from new-db")
 
-            (t/is (= [{:table-catalog "new-db", :table-schema "public", :table-name "foo", :column-name "_id", :data-type ":keyword"}]
-                     (xt/q new-db-conn "SELECT table_catalog, table_schema, table_name, column_name, data_type FROM information_schema.columns WHERE table_schema = 'public' AND column_name = '_id'"))
+            (t/is (= [{:table-catalog "new-db", :table-schema "public", :table-name "foo", :column-name "_id", :xt-type ":keyword"}]
+                     (xt/q new-db-conn "SELECT table_catalog, table_schema, table_name, column_name, xt_type FROM information_schema.columns WHERE table_schema = 'public' AND column_name = '_id'"))
                   "query information_schema from new-db")
 
-            (t/is (= [{:table-catalog "xtdb", :table-schema "public", :table-name "foo", :column-name "_id", :data-type ":utf8"}]
-                     (xt/q xt-conn "SELECT table_catalog, table_schema, table_name, column_name, data_type FROM information_schema.columns WHERE table_schema = 'public' AND column_name = '_id'"))
+            (t/is (= [{:table-catalog "xtdb", :table-schema "public", :table-name "foo", :column-name "_id", :xt-type ":utf8"}]
+                     (xt/q xt-conn "SELECT table_catalog, table_schema, table_name, column_name, xt_type FROM information_schema.columns WHERE table_schema = 'public' AND column_name = '_id'"))
                   "query information_schema from xtdb"))
 
           (t/testing "cross-database information_schema queries"
-            (t/is (= [{:table-catalog "new-db", :table-schema "public", :table-name "foo", :column-name "_id", :data-type ":keyword"}]
-                     (xt/q xt-conn "SELECT table_catalog, table_schema, table_name, column_name, data_type FROM \"new-db\".information_schema.columns WHERE table_schema = 'public' AND column_name = '_id'"))
+            (t/is (= [{:table-catalog "new-db", :table-schema "public", :table-name "foo", :column-name "_id", :xt-type ":keyword"}]
+                     (xt/q xt-conn "SELECT table_catalog, table_schema, table_name, column_name, xt_type FROM \"new-db\".information_schema.columns WHERE table_schema = 'public' AND column_name = '_id'"))
                   "query other db's information_schema from xtdb connection")))))))
 
 (deftest a-tables-oid-does-not-change-when-its-first-block-is-written
@@ -628,3 +628,58 @@
     (xt/execute-tx tu/*node* [[:put-docs :unrelated {:xt/id 1}]])
 
     (t/is (= before (->oid)))))
+
+(deftest columns-data-type-follows-postgres-spelling
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1, :i32 (int 1), :f64 1.5, :s "a", :b true
+                                              :ts #xt/zdt "2020-01-01T00:00Z[UTC]", :ldt #xt/ldt "2020-01-01T00:00"
+                                              :d #xt/date "2020-01-01", :bytes (byte-array 2)
+                                              :ints [1 2], :strs ["a"], :uuid #uuid "00000000-0000-0000-0000-000000000001"
+                                              :nested {:a 1}, :kw :foo}]])
+
+  (t/is (= {"_id" ["bigint" "int8" 64 2 0]
+            "i32" ["integer" "int4" 32 2 0]
+            "f64" ["double precision" "float8" 53 2 nil]
+            "s" ["text" "text" nil nil nil]
+            "b" ["boolean" "boolean" nil nil nil]
+            "ts" ["timestamp with time zone" "timestamptz" nil nil nil]
+            "ldt" ["timestamp without time zone" "timestamp" nil nil nil]
+            "d" ["date" "date" nil nil nil]
+            "bytes" ["bytea" "bytea" nil nil nil]
+            "ints" ["ARRAY" "_int8" nil nil nil]
+            "strs" ["ARRAY" "_text" nil nil nil]
+            "uuid" ["uuid" "uuid" nil nil nil]
+            "nested" ["json" "json" nil nil nil]
+            "kw" ["USER-DEFINED" "keyword" nil nil nil]}
+           (->> (xt/q tu/*node* "SELECT column_name, data_type, udt_name, numeric_precision, numeric_precision_radix, numeric_scale
+                                 FROM information_schema.columns
+                                 WHERE table_name = 'docs' AND column_name NOT IN ('_system_from', '_system_to', '_valid_from', '_valid_to')")
+                (into {} (map (juxt :column-name (juxt :data-type :udt-name :numeric-precision :numeric-precision-radix :numeric-scale)))))))
+
+  (t/is (= [{}]
+           (xt/q tu/*node* "SELECT character_set_catalog, character_set_schema, character_set_name, collation_catalog
+                            FROM information_schema.columns WHERE table_name = 'docs' AND column_name = 's'"))
+        "Postgres reports these as NULL"))
+
+(deftest npgsql-get-schema-columns-query
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1, :s "a", :ts #xt/zdt "2020-01-01T00:00Z[UTC]", :ints [1 2]}]])
+
+  (t/is (= #{["_id" "bigint"] ["s" "text"] ["ts" "timestamp with time zone"] ["ints" "bigint[]"]}
+           (->> (xt/q tu/*node* "SELECT column_name,
+                                        CASE WHEN udt_schema is NULL THEN udt_name ELSE format_type(typ.oid, NULL) END AS data_type,
+                                        numeric_precision_radix, character_set_catalog, character_set_schema, character_set_name, collation_catalog
+                                 FROM information_schema.columns
+                                 JOIN pg_namespace AS ns ON ns.nspname = udt_schema
+                                 JOIN pg_type AS typ ON typ.typnamespace = ns.oid AND typname = udt_name
+                                 WHERE table_name = 'docs' AND column_name NOT IN ('_system_from', '_system_to', '_valid_from', '_valid_to')")
+                (into #{} (map (juxt :column-name :data-type)))))
+        "every column joins to pg_type, and format_type spells it as Postgres does"))
+
+(deftest pg-depend-is-empty
+  (t/is (= [] (xt/q tu/*node* "SELECT classid, objid, objsubid, refclassid, refobjid, refobjsubid, deptype FROM pg_catalog.pg_depend")))
+
+  (t/is (= [{:n 0}]
+           (xt/q tu/*node* "SELECT count(*) AS n FROM pg_class AS cls
+                            WHERE EXISTS (SELECT 1 FROM pg_depend
+                                          WHERE classid = (SELECT oid FROM pg_class WHERE relname = 'pg_class')
+                                            AND objid = cls.oid AND deptype IN ('e', 'x'))"))
+        "the EF Core scaffolder's extension-member exclusion plans"))

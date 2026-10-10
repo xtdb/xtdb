@@ -260,8 +260,8 @@
   (let [fields (->> info-schema
                     (filter (fn [{:keys [column-name]}]
                               (not (#{"_system_from" "_system_to" "_valid_from" "_valid_to"} column-name))))
-                    (mapv (fn [{:keys [column-name data-type]}]
-                            (types/->field column-name (read-string data-type)))))]
+                    (mapv (fn [{:keys [column-name xt-type]}]
+                            (types/->field column-name (read-string xt-type)))))]
     (vec-type->value-generator (apply types/->field* "docs" #xt.arrow/type :struct false fields))))
 
 (defn generate-unique-id-records
