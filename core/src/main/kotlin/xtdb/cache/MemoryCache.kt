@@ -120,7 +120,12 @@ class MemoryCache @JvmOverloads internal constructor(
                         LOGGER.trace("FetchReq: Starting new fetch for $pathSlice")
                         val res = mutableSetOf(res)
                         scope.launch(CoroutineName("MemoryCache-Fetch-$pathSlice")) {
-                            val (localPath, onEvict) = fetch(path)
+                            val (localPath, onEvict) = try {
+                                fetch(path)
+                            } catch (t: Throwable) {
+                                fetchCh.send(FetchFailed(pathSlice, t))
+                                return@launch
+                            }
                             try {
                                 LOGGER.trace("FetchReq: Fetched $pathSlice to $localPath, sending FetchDone message...")
                                 fetchCh.send(FetchDone(pathSlice, localPath, onEvict))
@@ -133,6 +138,12 @@ class MemoryCache @JvmOverloads internal constructor(
                     }
                 }
             }
+        }
+    }
+
+    private inner class FetchFailed(val pathSlice: PathSlice, val cause: Throwable) : FetchChEvent {
+        override suspend fun handle(fetchReqs: FetchReqs) {
+            fetchReqs.remove(pathSlice).orEmpty().forEach { it.completeExceptionally(cause) }
         }
     }
 

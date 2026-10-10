@@ -173,6 +173,32 @@ class CacheSimulationTest : SimulationTestBase() {
 
     @RepeatableSimulationTest
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    fun `a failed fetch fails every concurrent waiter, and the slice can be fetched again`() = runTest {
+        val loader = TestPathLoader()
+        MemoryCache(allocator, 250, loader, dispatcher).use { cache ->
+            val sliceSize = rand.nextLong(1L, 250L)
+            val path = Path.of("test/$sliceSize")
+            val slice = Slice(0, sliceSize)
+            val concurrentFetches = rand.nextInt(2, 10)
+
+            val failures = async(dispatcher) {
+                (1..concurrentFetches).map {
+                    async(dispatcher) {
+                        shouldThrow<IllegalStateException> { cache.get(path, slice) { error("no such object") } }
+                    }
+                }
+            }.await().awaitAll()
+
+            assertEquals(List(concurrentFetches) { "no such object" }, failures.map { it.message })
+
+            cache.get(path, slice) { it to null }.use { buf -> assertEquals(sliceSize, buf.readableBytes()) }
+
+            assertEquals(MemoryCache.Stats(0L, 250L), cache.stats0)
+        }
+    }
+
+    @RepeatableSimulationTest
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
     fun `deterministic concurrent different slices of same path`() = runTest {
         val loader = TestPathLoader()
         val concurrentFetches = rand.nextInt(2, 10)

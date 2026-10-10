@@ -105,6 +105,21 @@ class MemoryCacheTest {
         }
 
     @Test
+    fun `a failed fetch fails its waiter, and the slice can be fetched again`() = runTest {
+        MemoryCache(allocator, 250, PathLoader()).use { cache ->
+            val path = Path.of("t1")
+            val slice = Slice(0, 100)
+
+            val ex = shouldThrow<IllegalStateException> { cache.get(path, slice) { error("no such object") } }
+            assertEquals("no such object", ex.message)
+
+            cache.get(path, slice) { it to null }.use { buf -> assertEquals(100L, buf.readableBytes()) }
+
+            assertEquals(MemoryCache.Stats(0, 250), cache.stats0)
+        }
+    }
+
+    @Test
     fun `ooms the mem-cache`() = runTest {
         MemoryCache(allocator, 100, PathLoader()).use { cache ->
             shouldThrow<OutOfMemoryException> {
