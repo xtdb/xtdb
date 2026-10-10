@@ -363,6 +363,24 @@
            (tu/query-ra '[:group-by {:columns [a {arr-out (array-agg b)}]}
                           [:table {:rows [{:a 42, :b nil} {:a 45, :b 1} {:a 45, :b nil}]}]]))))
 
+(t/deftest test-array-agg-orders-each-group-by-its-sort-keys
+  (t/is (= [{:a 1, :arr-out [12 11 10]} {:a 2, :arr-out [20 22 21]}]
+           (tu/query-ra '[:group-by {:columns [a {arr-out (array-agg b {:order-specs [[c {:direction :desc}] [b]]})}]}
+                          [::tu/pages {a #xt/type :i64, b #xt/type :i64, c #xt/type :i64}
+                           [[{:a 1, :b 10, :c 0} {:a 2, :b 21, :c 0}]
+                            [{:a 1, :b 12, :c 2} {:a 2, :b 20, :c 1}]
+                            [{:a 1, :b 11, :c 1} {:a 2, :b 22, :c 1}]]]]))
+        "ordered across pages, ties broken by the next key")
+
+  (t/is (= [{:arr-out [nil 1 3]}]
+           (tu/query-ra '[:group-by {:columns [{arr-out (array-agg b {:order-specs [[b {:null-ordering :nulls-first}]]})}]}
+                          [:table {:rows [{:b 1} {:b nil} {:b 3}]}]])))
+
+  (t/is (= [{:arr-out [3 1]}]
+           (tu/query-ra '[:group-by {:columns [{arr-out (array-agg b {:filter (> c 0), :order-specs [[c]]})}]}
+                          [:table {:rows [{:b 1, :c 1} {:b 2, :c 0} {:b 3, :c -1} {:b 3, :c 0.5}]}]]))
+        "sorts only the rows the filter keeps"))
+
 (t/deftest test-vec-agg
   (t/is (= [{:vec-out []}]
            (tu/query-ra '[:group-by {:columns [{vec-out (vec-agg a)}]}

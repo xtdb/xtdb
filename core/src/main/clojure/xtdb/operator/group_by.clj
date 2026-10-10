@@ -13,7 +13,7 @@
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import (java.io Closeable)
-           (java.util ArrayList LinkedList List Spliterator)
+           (java.util ArrayList Arrays LinkedList List Spliterator)
            (java.util.stream IntStream IntStream$Builder)
            (org.apache.arrow.memory BufferAllocator)
            (xtdb.api ICursor)
@@ -30,7 +30,7 @@
 (s/def ::fraction (s/or :literal number?, :param ::lp/param))
 
 (s/def ::filter ::lp/expression)
-(s/def ::agg-opts (s/keys :opt-un [::filter]))
+(s/def ::agg-opts (s/keys :opt-un [::filter ::order-by/order-specs]))
 
 (s/def ::aggregate-expr
   (s/or :nullary (s/cat :f simple-symbol?
@@ -291,9 +291,20 @@
 (defmethod ->aggregate-factory :avg_all [agg-opts]
   (->aggregate-factory (assoc agg-opts :f :avg)))
 
+(defn- sort-by-rank
+  ^ints [^ints idxs ^ints sorted ^ints ranks]
+  (let [res (int-array (alength idxs))]
+    (dotimes [i (alength idxs)]
+      (aset res i (aget ranks (aget idxs i))))
+    (Arrays/sort res)
+    (dotimes [i (alength res)]
+      (aset res i (aget sorted (aget res i))))
+    res))
+
 (deftype ArrayAggAggregateSpec [^BufferAllocator allocator
                                 from-name to-name ^VectorType to-type
                                 ^VectorWriter acc-col
+                                ^List sort-cols order-specs
                                 ^:unsynchronized-mutable ^long base-idx
                                 ^List group-idxmaps
                                 on-empty]
@@ -302,6 +313,9 @@
     (let [in-vec (.vectorForOrNull in-rel (str from-name))
           row-count (.getValueCount in-vec)]
       (.append acc-col in-vec)
+
+      (doseq [^VectorWriter sort-col sort-cols]
+        (.append sort-col (.vectorFor in-rel (.getName sort-col))))
 
       (dotimes [idx row-count]
         (let [group-idx (.getInt group-mapping idx)]
@@ -316,9 +330,17 @@
   (openFinishedVector [_]
     (util/with-close-on-catch [out-vec (Vector/open allocator to-name to-type)]
       (let [el-writer (.getListElements out-vec)
-            row-copier (.rowCopier acc-col el-writer)]
+            row-copier (.rowCopier acc-col el-writer)
+            sorted (when (seq order-specs)
+                     (order-by/sorted-idxs (vr/rel-reader sort-cols) order-specs))
+            ranks (when sorted
+                    (let [ranks (int-array (alength sorted))]
+                      (dotimes [i (alength sorted)]
+                        (aset ranks (aget sorted i) i))
+                      ranks))]
         (doseq [^IntStream$Builder isb group-idxmaps]
-          (let [idxs (.toArray (.build isb))]
+          (let [idxs (cond-> (.toArray (.build isb))
+                       sorted (sort-by-rank sorted ranks))]
             (if (zero? (alength idxs))
               (.writeNull out-vec)
               (do
@@ -336,9 +358,10 @@
 
   Closeable
   (close [_]
+    (util/close sort-cols)
     (util/close acc-col)))
 
-(defmethod ->aggregate-factory :array_agg [{:keys [from-name from-type to-name zero-row?]}]
+(defmethod ->aggregate-factory :array_agg [{:keys [from-name from-type to-name zero-row? order-specs order-col-types]}]
   (let [to-type (cond-> (types/->type [:list from-type])
                   zero-row? types/->nullable-type)]
     (reify AggregateSpec$Factory
@@ -346,8 +369,13 @@
       (getType [_] to-type)
 
       (build [this al _args]
-        (util/with-close-on-catch [acc-col (Vector/open al "$data$" from-type)]
+        (util/with-close-on-catch [acc-col (Vector/open al "$data$" from-type)
+                                   sort-cols (ArrayList.)]
+          (doseq [[col-name col-type] order-col-types]
+            (.add sort-cols (Vector/open al (str col-name) col-type)))
+
           (ArrayAggAggregateSpec. al from-name (.getColName this) (.getType this) acc-col
+                                  sort-cols order-specs
                                   0 (ArrayList.) (if zero-row? :null :empty-rel)))))))
 
 (defmethod ->aggregate-factory :array_agg_distinct [{:keys [from-name from-type] :as agg-opts}]
@@ -363,6 +391,7 @@
       (build [this al _args]
         (util/with-close-on-catch [acc-col (Vector/open al "$data$" from-type)]
           (ArrayAggAggregateSpec. al from-name (.getColName this) (.getType this) acc-col
+                                  [] []
                                   0 (ArrayList.) (if zero-row? :empty-vec :empty-rel)))))))
 
 (defn- percentile-cont-result
@@ -561,10 +590,14 @@
 
                                   [:unary agg-opts]
                                   (let [{:keys [f from-column opts]} agg-opts
+                                        {:keys [order-specs]} opts
                                         from-type (get vec-types from-column #xt/type :null)]
                                     [{:f f
                                       :from-name from-column
-                                      :from-type from-type}
+                                      :from-type from-type
+                                      :order-specs order-specs
+                                      :order-col-types (->> (distinct (map first order-specs))
+                                                            (mapv (juxt identity #(get vec-types % #xt/type :null))))}
                                      (:filter opts)])
 
                                   [:ordered-set agg-opts]

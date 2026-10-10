@@ -2012,25 +2012,33 @@
       agg-sym))
 
   (visitArrayAggFunction [{{:keys [!id-count]} :env, :keys [^Map !aggs], :as this} ctx]
-    (if (.sortSpecificationList ctx)
-      (throw (UnsupportedOperationException. "array-agg sort-spec"))
+    (let [agg-sym (-> (->col-sym (str "_array_agg_out" (swap! !id-count inc)))
+                      (vary-meta assoc :agg-out-sym? true))
+          agg-visitor (assoc this :!aggs nil, :scope (assoc scope :!implied-gicrs nil))
+          ->agg-input (fn [expr prefix]
+                        (if (:column? (meta expr))
+                          [expr nil]
+                          (let [in-sym (-> (->col-sym (str prefix (swap! !id-count inc)))
+                                           (vary-meta assoc :agg-in-sym? true))]
+                            [in-sym (->ProjectedCol {in-sym expr} in-sym)])))
+          expr (-> (.expr ctx) (.accept agg-visitor))
+          filter-expr (plan-agg-filter this scope ctx)
+          [in-sym in-projection] (->agg-input expr "_array_agg_in")
+          sort-inputs (->> (some-> (.sortSpecificationList ctx) (.sortSpecification))
+                           (mapv (fn [^Sql$SortSpecificationContext sort-spec-ctx]
+                                   (let [[sort-sym sort-projection] (->agg-input (-> (.expr sort-spec-ctx) (.accept agg-visitor))
+                                                                                 "_array_agg_sort")]
+                                     {:order-spec [sort-sym (->sort-opts sort-spec-ctx)]
+                                      :in-projection sort-projection}))))
+          agg-opts (cond-> {}
+                     filter-expr (assoc :filter filter-expr)
+                     (seq sort-inputs) (assoc :order-specs (mapv :order-spec sort-inputs)))]
+      (.put !aggs agg-sym
+            {:agg-expr (apply list (cond-> ['array-agg in-sym]
+                                     (seq agg-opts) (conj agg-opts)))
+             :in-projections (into [] (keep identity) (cons in-projection (map :in-projection sort-inputs)))})
 
-      (let [agg-sym (-> (->col-sym (str "_array_agg_out" (swap! !id-count inc)))
-                        (vary-meta assoc :agg-out-sym? true))
-            expr (-> (.expr ctx)
-                     (.accept (assoc this :!aggs nil, :scope (assoc scope :!implied-gicrs nil))))
-            filter-expr (plan-agg-filter this scope ctx)]
-        (.put !aggs agg-sym
-              (if (:column? (meta expr))
-                {:agg-expr (apply list (cond-> ['array-agg expr]
-                                         filter-expr (conj {:filter filter-expr})))}
-                (let [in-sym (-> (->col-sym (str "_array_agg_in" (swap! !id-count inc)))
-                                 (vary-meta assoc :agg-in-sym? true))]
-                  {:agg-expr (apply list (cond-> ['array-agg in-sym]
-                                           filter-expr (conj {:filter filter-expr})))
-                   :in-projections [(->ProjectedCol {in-sym expr} in-sym)]})))
-
-        agg-sym)))
+      agg-sym))
 
   (visitSetFunction [{{:keys [!id-count]} :env, :keys [^Map !aggs], :as this} ctx]
     (let [set-fn (symbol (str/lower-case (cond-> (.getText (.setFunctionType ctx))
