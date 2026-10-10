@@ -43,6 +43,7 @@ directlyExecutableStatement
     | COMMIT (SYNC | ASYNC)? # CommitStatement
     | ROLLBACK # RollbackStatement
     | SET SESSION CHARACTERISTICS AS sessionCharacteristic (',' sessionCharacteristic)* # SetSessionCharacteristicsStatement
+    | DISCARD discardTarget # DiscardStatement
     | SET ROLE ( identifier | NONE ) # SetRoleStatement
     | SET SESSION? ('TIME' 'ZONE' | 'TIMEZONE') zone=expr # SetTimeZoneStatement
     | SET AWAIT_TOKEN ( TO | '=' ) awaitToken=expr # SetAwaitTokenStatement
@@ -59,6 +60,13 @@ directlyExecutableStatement
     | REVOKE roleName=identifier FROM userName=identifier # RevokeRoleStatement
 
     | CREATE (OR ALTER)? TABLE targetTable ('(' columnNameList ')')? # CreateTableStatement
+    ;
+
+discardTarget
+    : ALL # DiscardAll
+    | PLANS # DiscardPlans
+    | (TEMP | TEMPORARY) # DiscardTemp
+    | SEQUENCES # DiscardSequences
     ;
 
 targetTable : (schemaName=identifier '.')? tableName=identifier ;
@@ -161,6 +169,7 @@ nonReservedKeyword
     | TABLE
     | METADATA
     | SYNC
+    | DISCARD | PLANS | TEMP | TEMPORARY | SEQUENCES
     | setFunctionType
     | primaryDatetimeField
     | pgExtractField
