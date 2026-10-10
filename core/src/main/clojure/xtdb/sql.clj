@@ -1079,9 +1079,9 @@
   (visitBooleanType [_ _] {:cast-type #xt/type :bool})
   (visitIntegerType [_ ctx]
     {:cast-type (types/->type (case (str/lower-case (.getText ctx))
-                                "smallint" :i16
-                                ("int" "integer") :i32
-                                "bigint" :i64))})
+                                ("smallint" "int2") :i16
+                                ("int" "integer" "int4") :i32
+                                ("bigint" "int8") :i64))})
 
   (visitFloatType [_ _] {:cast-type #xt/type :f32})
   (visitRealType [_ _] {:cast-type #xt/type :f32})

@@ -113,7 +113,7 @@
                  "BIGINT" "BOOLEAN" "CHAR" "DATE" "DEC" "DECIMAL" "DOUBLE" "DURATION" "FLOAT" "INT"
                  "INTEGER" "INTERVAL" "KEYWORD" "NUMERIC" "OBJECT" "PERIOD" "PRECISION" "REAL" "RECORD"
                  "REGCLASS" "REGPROC" "ROW" "SMALLINT" "TEXT" "TIME" "TIMESTAMP" "TIMESTAMPTZ"
-                 "TSTZRANGE" "UUID" "VARCHAR"]
+                 "TSTZRANGE" "UUID" "VARCHAR" "BOOL" "BPCHAR" "NAME"]
                 ["AVG" "MAX" "MIN" "SUM" "COUNT" "EVERY" "BOOL_AND" "BOOL_OR"
                  "STDDEV_POP" "STDDEV_SAMP" "VAR_SAMP" "VAR_POP"]
                 ["YEAR" "MONTH" "DAY" "HOUR" "MINUTE" "SECOND"]
