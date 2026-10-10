@@ -221,6 +221,8 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
         var awaitToken: String? = null
 
+        private val initialTz = defaultTz
+
         data class LastSubmittedTx(
             val txId: MessageId,
             val systemTime: Instant?,
@@ -699,6 +701,28 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             if (tx != null) throw Incorrect("transaction already started", "xtdb/tx-already-open")
 
             tx = Transaction(phase, txDefaultTz = tz, sessionDefaultTz = defaultTz)
+        }
+
+        /**
+         * Returns the session-scoped settings (parameters, time zone, await token, default access mode)
+         * to their construction-time values, as `DISCARD ALL` requires.
+         * A frontend re-applies its own startup defaults afterwards.
+         *
+         * Internal: pgwire's `DISCARD ALL`; would become `internal` were pgwire Kotlin.
+         *
+         * @throws Incorrect if a transaction is open.
+         * @suppress
+         */
+        @InternalApi
+        fun resetSession() {
+            if (tx != null) throw Incorrect(
+                "DISCARD ALL cannot run inside a transaction block", "xtdb/discard-in-tx"
+            )
+
+            _sessionParameters.clear()
+            defaultTz = initialTz
+            awaitToken = null
+            defaultAccessMode = null
         }
 
         // the default access mode a bare BEGIN (explicit or implicit) takes; set by SET SESSION CHARACTERISTICS.
