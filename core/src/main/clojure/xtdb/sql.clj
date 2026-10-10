@@ -657,7 +657,7 @@
 
 (defn- wrap-aggs [plan aggs group-invariant-cols group-by-in-projs]
   (let [in-projs (not-empty (into (vec group-by-in-projs)
-                                  (keep (comp :projection :in-projection))
+                                  (comp (mapcat :in-projections) (map :projection))
                                   (vals aggs)))]
     (as-> plan plan
       (if in-projs
@@ -2010,7 +2010,7 @@
                                  (vary-meta assoc :agg-in-sym? true))]
                   {:agg-expr (apply list (cond-> ['array-agg in-sym]
                                            filter-expr (conj {:filter filter-expr})))
-                   :in-projection (->ProjectedCol {in-sym expr} in-sym)})))
+                   :in-projections [(->ProjectedCol {in-sym expr} in-sym)]})))
 
         agg-sym)))
 
@@ -2032,7 +2032,7 @@
                                (vary-meta assoc :agg-in-sym? true))]
                 {:agg-expr (apply list (cond-> [set-fn in-sym]
                                          filter-expr (conj {:filter filter-expr})))
-                 :in-projection (->ProjectedCol {in-sym expr} in-sym)})))
+                 :in-projections [(->ProjectedCol {in-sym expr} in-sym)]})))
 
       agg-sym))
 
@@ -2063,7 +2063,7 @@
       (.put !aggs agg-sym
             (cond-> {:agg-expr (apply list (cond-> [set-fn fraction-expr [sort-sym sort-opts]]
                                              filter-expr (conj {:filter filter-expr})))}
-              sort-in (assoc :in-projection (->ProjectedCol sort-in (first (keys sort-in))))))
+              sort-in (assoc :in-projections [(->ProjectedCol sort-in (first (keys sort-in)))])))
 
       agg-sym))
 
