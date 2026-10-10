@@ -22,6 +22,7 @@
            (xtdb.arrow ListValueReader RelationReader ValueBox ValueReader Vector VectorMask VectorReader VectorType VectorType$Listy VectorType$Mono VectorType$Nothing VectorType$Poly VectorType$Struct)
            (xtdb.expression PgFormat)
            (xtdb.operator MaskSpec ProjectionSpec SelectionSpec)
+           (xtdb.pgwire PgTypes)
            xtdb.time.Interval
            (xtdb.util StringUtil)))
 
@@ -2100,11 +2101,65 @@
   {:return-type r-type
    :->call-code (fn [[_ r]] r)})
 
-(defmethod codegen-cast [:list :list] [{:keys [^VectorType source-type, ^VectorType target-type]}]
+(defn- codegen-cast-list-elements [^VectorType source-type ^VectorType target-type cast-opts]
+  (let [src-el-type (types/unnest-type source-type)
+        tgt-el-type (types/unnest-type target-type)
+        box-sym (gensym 'box)
+        el-sym (gensym 'el)
+        !ret-types (volatile! [])
+        read-code (continue-read (fn [^VectorType leg-type code]
+                                   (if (= #xt/type :null leg-type)
+                                     (do (vswap! !ret-types conj #xt/type :null)
+                                         `(do ~code (.writeNull ~box-sym) ~box-sym))
+                                     (let [{:keys [^VectorType return-type ->call-code]}
+                                           (codegen-cast {:source-type leg-type, :target-type tgt-el-type, :cast-opts cast-opts})]
+                                       (vswap! !ret-types conj return-type)
+                                       `(do
+                                          ~(write-value-code return-type box-sym
+                                                             (types/arrow-type->leg (.getArrowType return-type))
+                                                             (->call-code [code]))
+                                          ~box-sym))))
+                                 src-el-type el-sym)
+        ret-type (types/->type [:list (apply types/merge-types @!ret-types)])]
+    {:return-type ret-type
+     :->call-code (fn [[code]]
+                    (let [list-sym (with-meta (gensym 'list) {:tag `ListValueReader})
+                          el-sym (with-meta el-sym {:tag `ValueReader})]
+                      `(let [~list-sym ~code
+                             ~box-sym (ValueBox.)]
+                         (reify ListValueReader
+                           (~'size [_#] (.size ~list-sym))
+                           (~'nth [_# idx#]
+                            (let [~el-sym (.nth ~list-sym idx#)]
+                              ~read-code))))))}))
+
+(defn pg-array-text->list-reader ^ListValueReader [^String text]
+  (let [els (vec (PgTypes/parsePgArray text))
+        box (ValueBox.)]
+    (reify ListValueReader
+      (size [_] (count els))
+      (nth [_ idx]
+        (if-some [^String el (nth els idx)]
+          (.writeBytes box "utf8" (str->buf el))
+          (.writeNull box))
+        box))))
+
+(defmethod codegen-cast [:utf8 :list] [{:keys [target-type cast-opts]}]
+  (let [text-list-type (types/->type [:list (types/merge-types #xt/type :utf8 #xt/type :null)])
+        {:keys [return-type ->call-code]} (codegen-cast-list-elements text-list-type target-type cast-opts)]
+    {:return-type return-type
+     :->call-code (fn [[code]]
+                    (->call-code [`(pg-array-text->list-reader (buf->str ~code))]))}))
+
+(defmethod codegen-cast [:list :list] [{:keys [^VectorType source-type, ^VectorType target-type cast-opts]}]
   (let [[_ source-el-type] (types/vec-type->col-type source-type)
-        [_ target-el-type :as target-col-type] (types/vec-type->col-type target-type)]
-    (assert (types/union? target-el-type))
-    (if (types/union? source-el-type)
+        [_ target-el-type] (types/vec-type->col-type target-type)]
+    (cond
+      (= source-type target-type) {:return-type target-type, :->call-code first}
+
+      (not (types/union? target-el-type)) (codegen-cast-list-elements source-type target-type cast-opts)
+
+      (types/union? source-el-type)
       (let [target-types ^List (vec (second target-el-type))
             type-id-mapping (->> (second source-el-type)
                                  (mapv (fn [source-type]
@@ -2113,6 +2168,7 @@
          :->call-code (fn [[code]]
                         `(RemappedTypeIdReader. ~code (byte-array ~type-id-mapping)))})
 
+      :else
       (let [type-id (.indexOf ^List (vec (second target-el-type)) source-el-type)]
         {:return-type target-type
          :->call-code (fn [[code]]

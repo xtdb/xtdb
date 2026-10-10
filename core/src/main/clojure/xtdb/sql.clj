@@ -1074,8 +1074,19 @@
   PlanError
   (error-string [_] (format "Unsupported precision: %s" precision)))
 
+(defrecord UnsupportedArrayElementType [element-type]
+  PlanError
+  (error-string [_] (format "Unsupported array element type: %s" element-type)))
+
 (defrecord CastArgsVisitor [env]
   SqlVisitor
+  (visitArrayType [this ctx]
+    (let [el-ctx (.dataType ctx)
+          {:keys [cast-type cast-opts]} (.accept el-ctx this)]
+      (if cast-type
+        {:cast-type (types/->type [:list cast-type]), :cast-opts cast-opts}
+        (add-err! env (->UnsupportedArrayElementType (.getText el-ctx))))))
+
   (visitBooleanType [_ _] {:cast-type #xt/type :bool})
   (visitIntegerType [_ ctx]
     {:cast-type (types/->type (case (str/lower-case (.getText ctx))

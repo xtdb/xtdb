@@ -2340,3 +2340,20 @@
   (t/testing "identifier null throws"
     (t/is (thrown-with-msg? Exception #"null values cannot be formatted as an SQL identifier"
                             (project1 '(format "%I" a) {:a nil})))))
+
+(t/deftest test-cast-list-elementwise
+  (t/is (= [1 2 3] (project1 '(cast [1 2 3] #xt/type [:list :i64]) {})))
+  (t/is (= [1 2] (project1 '(cast x #xt/type [:list :i64]) {:x [1 2]})) "i64 -> i64 identity")
+  (t/is (= ["1" "2"] (project1 '(cast [1 2] #xt/type [:list :utf8]) {})))
+  (t/is (= [1.0 2.5] (project1 '(cast [1 2.5] #xt/type [:list :f64]) {})) "mixed numeric elements")
+  (t/is (= [1 nil 3] (project1 '(cast [1 nil 3] #xt/type [:list :i64]) {})) "nullable elements")
+  (t/is (= [1 2] (project1 '(cast ["1" "2"] #xt/type [:list :i64]) {})))
+  (t/is (= [[1 2] [3]] (project1 '(cast [[1.0 2.0] [3.0]] #xt/type [:list [:list :i64]]) {})) "nested")
+  (t/is (= [] (project1 '(cast [] #xt/type [:list :i64]) {})))
+  (t/is (nil? (project1 '(cast nil #xt/type [:list :i64]) {}))))
+
+(t/deftest test-cast-pg-array-text-to-list
+  (t/is (= [1 2 3] (project1 '(cast "{1,2,3}" #xt/type [:list :i64]) {})))
+  (t/is (= [1 nil] (project1 '(cast x #xt/type [:list :i64]) {:x "{1,NULL}"})))
+  (t/is (= ["a,b" "c"] (project1 '(cast "{\"a,b\",c}" #xt/type [:list :utf8]) {})))
+  (t/is (= [] (project1 '(cast "{}" #xt/type [:list :i64]) {}))))
