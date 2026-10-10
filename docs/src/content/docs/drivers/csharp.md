@@ -2,6 +2,19 @@
 title: Using XTDB from C#
 ---
 
+<details>
+<summary>Changelog (last updated v2.2)</summary>
+
+v2.2: Npgsql's type loading works
+
+: Npgsql connects with its default settings — see [Connect](#connect).
+
+  Before v2.2, Npgsql's type loading had to be disabled: its type-loading query failed to plan, and `pg_type` named the boolean type `boolean` where Npgsql expects `bool`.
+
+  To upgrade, remove the `ConfigureTypeLoading(sb => { sb.EnableTypeLoading(false); sb.EnableTableCompositesLoading(false); })` call from your data source builder.
+
+</details>
+
 In C#, you can talk to a running XTDB node using the [Npgsql](https://www.npgsql.org/) PostgreSQL driver, taking advantage of XTDB's PostgreSQL wire-compatibility.
 
 ## Install
@@ -33,15 +46,7 @@ class XtdbExample
     {
         var connectionString = "Host=localhost;Port=5432;Database=xtdb;Username=xtdb;Password=xtdb;";
 
-        var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString);
-
-        // Required for XTDB support
-        dataSourceBuilder.ConfigureTypeLoading(sb => {
-            sb.EnableTypeLoading(false);
-            sb.EnableTableCompositesLoading(false);
-        });
-
-        var dataSource = dataSourceBuilder.Build();
+        var dataSource = NpgsqlDataSource.Create(connectionString);
         var connection = await dataSource.OpenConnectionAsync();
 
         await using (var insertCommand = connection.CreateCommand())

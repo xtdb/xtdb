@@ -281,7 +281,7 @@ sealed class PgType(
     }
 
     data object Bool : PgType(
-        typname = "boolean",
+        typname = "bool",
         xtType = BOOL,
         oid = 16,
         typlen = 1,
