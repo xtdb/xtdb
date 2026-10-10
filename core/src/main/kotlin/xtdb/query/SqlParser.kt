@@ -237,6 +237,17 @@ private class ParsedStatementVisitor : SqlBaseVisitor<ParsedStatement>() {
         return SetSessionCharacteristics(ctx, mode)
     }
 
+    override fun visitDiscardStatement(ctx: Sql.DiscardStatementContext) = Discard(
+        ctx,
+        when (ctx.discardTarget()) {
+            is Sql.DiscardAllContext -> DiscardTarget.ALL
+            is Sql.DiscardPlansContext -> DiscardTarget.PLANS
+            is Sql.DiscardTempContext -> DiscardTarget.TEMP
+            is Sql.DiscardSequencesContext -> DiscardTarget.SEQUENCES
+            else -> error("unknown DISCARD target")
+        }
+    )
+
     override fun visitSetRoleStatement(ctx: Sql.SetRoleStatementContext) = SetRole(ctx)
     override fun visitSetTimeZoneStatement(ctx: Sql.SetTimeZoneStatementContext) = SetTimeZone(ctx, ctx.zone)
     override fun visitSetAwaitTokenStatement(ctx: Sql.SetAwaitTokenStatementContext) = SetAwaitToken(ctx, ctx.awaitToken)

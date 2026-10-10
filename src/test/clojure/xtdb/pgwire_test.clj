@@ -3381,5 +3381,76 @@ ORDER BY 1,2;")
     (t/testing "fetch size larger than row count"
       (t/is (= 200 (count-rows 500))))))
 
+(deftest discard-all-resets-session-state
+  (with-open [conn (jdbc-conn)]
+    (let [show (fn [sql k] (get (jdbc/execute-one! conn [sql]) k))
+          default-tz (show "SHOW TIME ZONE" :timezone)]
+      (exec conn "SET TIME ZONE 'Asia/Tokyo'")
+      (exec conn "SET foo = 'bar'")
+      (exec conn "INSERT INTO other RECORDS {_id: 1}")
+      (exec conn (str "SET AWAIT_TOKEN = '" (show "SHOW AWAIT_TOKEN" :await_token) "'"))
+      (exec conn "SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY")
+
+      (exec conn "BEGIN")
+      (t/is (thrown? PSQLException (exec conn "INSERT INTO docs RECORDS {_id: 1}")))
+      (exec conn "ROLLBACK")
+      (t/is (= "Asia/Tokyo" (show "SHOW TIME ZONE" :timezone)))
+      (t/is (= "bar" (show "SHOW foo" :foo)))
+      (t/is (some? (show "SHOW AWAIT_TOKEN" :await_token)))
+
+      (exec conn "DISCARD ALL")
+
+      (t/is (= default-tz (show "SHOW TIME ZONE" :timezone)) "time zone back to the startup value")
+      (t/is (nil? (show "SHOW foo" :foo)) "SET parameters cleared")
+      (t/is (nil? (show "SHOW AWAIT_TOKEN" :await_token)) "await token cleared")
+
+      (exec conn "BEGIN")
+      (exec conn "INSERT INTO docs RECORDS {_id: 1}")
+      (exec conn "COMMIT")
+      (t/is (= [{:xt/id 1}] (xt/q tu/*node* "SELECT _id FROM docs"))
+            "default access mode no longer READ ONLY"))))
+
+(deftest discard-all-drops-prepared-statements-and-portals
+  (with-open [conn (jdbc-conn)]
+    (exec conn "PREPARE s AS SELECT 1 AS x")
+    (t/is (= [{:x 1}] (jdbc/execute! conn ["EXECUTE s"])))
+
+    (exec conn "DISCARD ALL")
+
+    (t/is (thrown? PSQLException (jdbc/execute! conn ["EXECUTE s"])))
+
+    (exec conn "PREPARE s AS SELECT 2 AS x")
+    (t/is (= [{:x 2}] (jdbc/execute! conn ["EXECUTE s"])) "names are reusable afterwards")))
+
+(deftest discard-plans-drops-prepared-statements-but-keeps-settings
+  (with-open [conn (jdbc-conn)]
+    (exec conn "SET TIME ZONE 'Asia/Tokyo'")
+    (exec conn "PREPARE s AS SELECT 1 AS x")
+    (exec conn "DISCARD PLANS")
+    (t/is (thrown? PSQLException (jdbc/execute! conn ["EXECUTE s"])))
+    (t/is (= "Asia/Tokyo" (:timezone (jdbc/execute-one! conn ["SHOW TIME ZONE"]))))))
+
+(deftest discard-targets-are-accepted-with-their-command-tags
+  (with-open [conn (jdbc-conn)]
+    (doseq [target ["ALL" "PLANS" "TEMP" "TEMPORARY" "SEQUENCES"]]
+      (t/is (false? (exec conn (str "DISCARD " target))) target))
+    (t/is (= [{:temp 1}] (jdbc/execute! conn ["SELECT 1 AS temp"])) "TEMP stays usable as an identifier")))
+
+(deftest discard-all-is-refused-in-a-transaction
+  (with-open [conn (jdbc-conn)]
+    (exec conn "SET TIME ZONE 'Asia/Tokyo'")
+    (exec conn "BEGIN")
+    (let [e (try (exec conn "DISCARD ALL") nil (catch PSQLException e e))]
+      (t/is (= "25001" (some-> e .getSQLState))))
+    (exec conn "ROLLBACK")
+    (t/is (= "Asia/Tokyo" (:timezone (jdbc/execute-one! conn ["SHOW TIME ZONE"])))
+          "the refused DISCARD ALL reset nothing")))
+
+(deftest discard-all-over-the-extended-protocol
+  (with-open [conn (jdbc-conn {"preferQueryMode" "extendedForPrepared"})]
+    (with-open [ps (.prepareStatement conn "DISCARD ALL")]
+      (.execute ps))
+    (t/is (= [{:x 1}] (jdbc/execute! conn ["SELECT 1 AS x"])))))
+
 (comment
   (user/set-log-level! 'xtdb.pgwire :trace))

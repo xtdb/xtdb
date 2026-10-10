@@ -85,6 +85,12 @@ sealed interface ParsedStatement {
     data class SetSessionParameter(override val ast: Sql.DirectlyExecutableStatementContext, val name: String, val value: Sql.LiteralContext) : ParsedStatement
     data class SetRole(override val ast: Sql.DirectlyExecutableStatementContext) : ParsedStatement
 
+    data class Discard(override val ast: Sql.DirectlyExecutableStatementContext, val target: DiscardTarget) : ParsedStatement
+
+    enum class DiscardTarget(val commandTag: String) {
+        ALL("DISCARD ALL"), PLANS("DISCARD PLANS"), TEMP("DISCARD TEMP"), SEQUENCES("DISCARD SEQUENCES")
+    }
+
     /** SHOW variants answered from session state rather than as a SQL query. */
     data class ShowVariable(override val ast: Sql.DirectlyExecutableStatementContext, val variable: String) : ParsedStatement
 
@@ -129,6 +135,7 @@ sealed interface ParsedStatement {
         is SetAwaitToken -> visitor.visitSetAwaitToken(this)
         is SetSessionParameter -> visitor.visitSetSessionParameter(this)
         is SetRole -> visitor.visitSetRole(this)
+        is Discard -> visitor.visitDiscard(this)
         is ShowVariable -> visitor.visitShowVariable(this)
         is CopyIn -> visitor.visitCopyIn(this)
         is Prepare -> visitor.visitPrepare(this)
@@ -163,6 +170,7 @@ sealed interface ParsedStatement {
         fun visitSetAwaitToken(stmt: SetAwaitToken): R = visitOther(stmt)
         fun visitSetSessionParameter(stmt: SetSessionParameter): R = visitOther(stmt)
         fun visitSetRole(stmt: SetRole): R = visitOther(stmt)
+        fun visitDiscard(stmt: Discard): R = visitOther(stmt)
         fun visitShowVariable(stmt: ShowVariable): R = visitOther(stmt)
         fun visitCopyIn(stmt: CopyIn): R = visitOther(stmt)
         fun visitPrepare(stmt: Prepare): R = visitOther(stmt)

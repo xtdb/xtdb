@@ -48,7 +48,7 @@
                        ParsedStatement ParsedStatement$Visitor ParsedStatement$Begin
                        ParsedStatement$Commit ParsedStatement$CommitMode ParsedStatement$Query ParsedStatement$Dml
                        ParsedStatement$ShowVariable ParsedStatement$CopyIn ParsedStatement$Execute
-                       ParsedStatement$SetTransaction)
+                       ParsedStatement$SetTransaction ParsedStatement$DiscardTarget ParsedStatement$Discard)
            (xtdb.tx TxOp$PutDocs)))
 
 ;; references
@@ -273,6 +273,7 @@
                                                                         :binary "22P03")}
                            :xtdb/invalid-client-credentials {::severity :error, ::error-code "28P01"}
                            :xtdb/authn-failed {::severity :error, ::error-code "28P01"}
+                           :xtdb/discard-in-tx {::severity :error, ::error-code "25001"}
 
                            {::severity :error, ::error-code "08P01"})
 
@@ -343,18 +344,19 @@
   ([conn status]
    (pgio/cmd-write-msg conn pgio/msg-ready {:status status})))
 
+(defn- apply-startup-params [{:keys [conn-state] :as conn}]
+  (doseq [[k v] (:startup-params @conn-state)]
+    (if (= time-zone-nf-param-name k)
+      (set-time-zone conn v)
+      (set-session-parameter conn k v))))
+
 (defn startup-ok [{:keys [server] :as conn} startup-opts]
   (let [{:keys [server-state]} server]
 
-    (let [default-server-params (-> (:parameters @server-state)
-                                    (update-keys str/lower-case))
-          startup-opts-from-client (-> startup-opts
-                                       (update-keys str/lower-case))]
-
-      (doseq [[k v] (merge default-server-params startup-opts-from-client)]
-        (if (= time-zone-nf-param-name k)
-          (set-time-zone conn v)
-          (set-session-parameter conn k v))))
+    (swap! (:conn-state conn) assoc :startup-params
+           (merge (update-keys (:parameters @server-state) str/lower-case)
+                  (update-keys startup-opts str/lower-case)))
+    (apply-startup-params conn)
 
     ;; thread the authenticated user onto the connection — it goes into every write's TxOpts (audit trail)
     (.setUser ^Xtdb$Connection (:node-conn @(:conn-state conn)) (get startup-opts "user"))
@@ -1244,6 +1246,22 @@
       (when-let [error (.getError tx)]
         (throw error)))))
 
+(defn- close-all-prepared-statements [{:keys [conn-state] :as conn}]
+  (close-all-portals conn)
+  (doseq [stmt (vals (:prepared-statements @conn-state))]
+    (util/close (:statement stmt)))
+  (swap! conn-state dissoc :prepared-statements))
+
+(defn- cmd-discard [{:keys [conn-state] :as conn} ^ParsedStatement$DiscardTarget target]
+  (case (.name target)
+    "ALL" (do
+            (.resetSession ^Xtdb$Connection (:node-conn @conn-state))
+            (apply-startup-params conn)
+            (close-all-prepared-statements conn))
+    "PLANS" (close-all-prepared-statements conn)
+    ("TEMP" "SEQUENCES") nil)
+  (pgio/cmd-write-msg conn pgio/msg-command-complete {:command (.getCommandTag target)}))
+
 (defn execute-portal [{:keys [conn-state] :as conn} {:keys [^ParsedStatement parsed canned-response] :as portal}]
   (verify-permissibility conn portal)
 
@@ -1301,6 +1319,7 @@
                  (cmd-set-session-parameter conn (.getName stmt)
                                             (.evalLiteral ^SqlPlanner (:sql-planner (-> conn :server )) (.getValue stmt) nil)))
                (visitSetRole [_ _] nil)
+               (visitDiscard [_ stmt] (cmd-discard conn (.getTarget stmt)))
 
                (visitCopyIn [_ stmt]
                  (when (nil? (.getFormat stmt))
@@ -1362,6 +1381,7 @@
       ;; the extended protocol, rather than shaping a tx that commits straight away.
       (when-not (or (.isTxOpen ^Xtdb$Connection (:node-conn @conn-state))
                     (instance? ParsedStatement$Begin parsed)
+                    (instance? ParsedStatement$Discard parsed)
                     (instance? ParsedStatement$SetTransaction parsed)
                     (instance? ParsedStatement$ShowVariable parsed)
                     (instance? ParsedStatement$CopyIn parsed))
