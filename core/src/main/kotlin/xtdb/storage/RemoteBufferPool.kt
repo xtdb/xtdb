@@ -218,6 +218,7 @@ internal class RemoteBufferPool(
 
     override fun close() {
         runBlocking { withTimeout(5.seconds) { scope.coroutineContext.job.cancelAndJoin() } }
+        memoryCache.invalidate(cacheRootPath)
         objectStore.close()
         allocator.close()
     }

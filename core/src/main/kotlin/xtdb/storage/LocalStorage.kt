@@ -180,6 +180,7 @@ internal class LocalStorage(
     }
 
     override fun close() {
+        memoryCache.invalidate(cacheRootPath)
         allocator.close()
     }
 }
