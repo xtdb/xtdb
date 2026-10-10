@@ -32,7 +32,7 @@
            [java.util.concurrent ArrayBlockingQueue BlockingQueue ExecutorService Future$State FutureTask LinkedBlockingQueue RejectedExecutionException ThreadPoolExecutor TimeUnit]
            [javax.net.ssl KeyManagerFactory SSLContext]
            (org.apache.arrow.memory BufferAllocator)
-           org.apache.arrow.vector.types.pojo.Field
+           (org.apache.arrow.vector.types.pojo ArrowType$List ArrowType$Null Field)
            (xtdb.api Authenticator DataSource DataSource$ConnectionBuilder OAuthResult ServerConfig Xtdb Xtdb$Config Xtdb$Connection Xtdb$Statement Xtdb$ExecutedTx Xtdb$SubmittedTx)
            xtdb.api.module.XtdbModule
            (xtdb.arrow Relation Relation$ILoader VectorType)
@@ -40,7 +40,7 @@
            xtdb.database.Database$Config
            (xtdb.api.error Incorrect)
            xtdb.api.ResultCursor
-           (xtdb.pgwire PgType PgTypes)
+           (xtdb.pgwire PgType PgTypes TypCategory)
            xtdb.JsonSerde
            xtdb.JsonLdSerde
            xtdb.NodeBase
@@ -944,13 +944,18 @@
                     (.openUncheckedQuery statement)))))
 
             (->pg-cols [prepared-pg-cols ^ResultCursor cursor]
-              (let [resolved-pg-cols (mapv (fn [[col-name vec-type]] (type->pg-col col-name vec-type)) (.getResultTypes cursor))]
+              (let [result-types (.getResultTypes cursor)
+                    resolved-pg-cols (mapv (fn [[col-name vec-type]] (type->pg-col col-name vec-type)) result-types)]
                 (when-not (and (= (count prepared-pg-cols) (count resolved-pg-cols))
-                               (->> (map vector prepared-pg-cols resolved-pg-cols)
-                                    (every? (fn [[{prepared-pg-type :pg-type} {resolved-pg-type :pg-type}]]
+                               (->> (map vector prepared-pg-cols result-types resolved-pg-cols)
+                                    (every? (fn [[{^PgType prepared-pg-type :pg-type} [_ ^VectorType vec-type] {resolved-pg-type :pg-type}]]
                                               (or (identical? prepared-pg-type PgType/PG_DEFAULT)
                                                   (identical? resolved-pg-type PgType/PG_NULL)
-                                                  (identical? prepared-pg-type resolved-pg-type))))))
+                                                  (identical? prepared-pg-type resolved-pg-type)
+                                                  ;; an empty list has no element type, so fits any array description
+                                                  (and (identical? TypCategory/ARRAY (.getTypcategory prepared-pg-type))
+                                                       (instance? ArrowType$List (.getArrowType vec-type))
+                                                       (instance? ArrowType$Null (.getArrowType (types/unnest-type vec-type)))))))))
                   (throw (err/conflict :prepared-query-out-of-date "cached plan must not change result type"
                                        #_ ; FIXME: these break because of PgType not being serializable
                                        {:prepared-cols prepared-pg-cols
