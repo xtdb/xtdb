@@ -280,7 +280,7 @@ sealed class PgType(
 
     data object Numeric : PgType(
         typname = "numeric",
-        xtType = null, // decimal has precision/scale
+        xtType = VectorType.Scalar(ArrowType.Decimal(32, 0, 128)), // precision and scale aren't on the wire, so this is a placeholder for describing
         oid = 1700,
         typcategory = NUMERIC,
         typsend = "numeric_send",
@@ -534,7 +534,7 @@ sealed class PgType(
 
     data object Int4s : PgType(
         typname = "_int4",
-        xtType = null,
+        xtType = VectorType.listTypeOf(VectorType.I32),
         oid = 1007,
         typcategory = ARRAY,
         typsend = "array_send",
@@ -545,7 +545,7 @@ sealed class PgType(
     ) {
         private const val TYPLEN = 4
 
-        override fun readBinary(data: ByteArray): List<Long> = readBinaryIntArray(data)
+        override fun readBinary(data: ByteArray): List<Int> = readBinaryIntArray(data).map { it.toInt() }
 
         override fun readText(data: ByteArray): List<Int?> = parsePgArray(readUtf8(data)).map { it?.toInt() }
 
@@ -573,7 +573,7 @@ sealed class PgType(
 
     data object Int8s : PgType(
         typname = "_int8",
-        xtType = null,
+        xtType = VectorType.listTypeOf(VectorType.I64),
         oid = 1016,
         typcategory = ARRAY,
         typsend = "array_send",
@@ -612,7 +612,7 @@ sealed class PgType(
 
     data object Texts : PgType(
         typname = "_text",
-        xtType = null,
+        xtType = VectorType.listTypeOf(VectorType.UTF8),
         oid = 1009,
         typcategory = ARRAY,
         typsend = "array_send",
