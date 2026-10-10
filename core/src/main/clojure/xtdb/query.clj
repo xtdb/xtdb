@@ -38,6 +38,7 @@
            io.micrometer.core.instrument.Counter
            java.lang.AutoCloseable
            (java.time Duration InstantSource)
+           (java.time.temporal ChronoUnit)
            (java.util LinkedHashMap Map)
            [java.util.concurrent.atomic AtomicBoolean]
            (org.antlr.v4.runtime.misc Interval)
@@ -237,6 +238,7 @@
                                                                   "scan_pages_pruned" :i64, "scan_pages_used" :i64
                                                                   "scan_rows_read" :i64}]
                                   "total_time" #xt/type [:duration :micro]
+                                  "self_time" #xt/type [:duration :micro]
                                   ;; null for a branch the plan never advanced — a LIMIT 0 above it, or an unreferenced CTE
                                   "time_to_first_page" #xt/type [:? :duration :micro]
                                   "page_count" #xt/type :i64
@@ -260,23 +262,27 @@
 
 (defn- explain-analyze-results [^ResultCursor cursor]
   (letfn [(->results [^ICursor cursor, depth]
-            (lazy-seq
-             (if-let [ea (.getExplainAnalyze cursor)]
-               (cons (let [attrs (some-> (.getCursorAttributes ea) (.toMap))]
-                       {:depth (str (str/join (repeat depth "  ")) "->")
+            (if-let [ea (.getExplainAnalyze cursor)]
+              (let [child-results (mapv #(->results % (inc depth)) (.getChildCursors cursor))
+                    attrs (some-> (.getCursorAttributes ea) (.toMap))
+                    total-time (.truncatedTo (.getTotalTime ea) ChronoUnit/MICROS)]
+                (into [{:depth (str (str/join (repeat depth "  ")) "->")
                         :op (keyword (.getCursorType cursor))
                         :attributes (not-empty (into {} attrs))
-                        :total-time (.getTotalTime ea)
+                        :total-time total-time
+                        :self-time (reduce (fn [^Duration self-time child-rows]
+                                             (.minus self-time ^Duration (:total-time (first child-rows))))
+                                           total-time
+                                           child-results)
                         :time-to-first-page (.getTimeToFirstPage ea)
                         :page-count (.getPageCount ea)
                         :row-count (.getRowCount ea)
-                        :pushdowns (not-empty (truncate-pushdowns (.getPushdowns ea)))})
-                     (->> (for [child (.getChildCursors cursor)]
-                            (->results child (inc depth)))
-                          (sequence cat)))
-               (->results (first (.getChildCursors cursor)) depth))))]
+                        :pushdowns (not-empty (truncate-pushdowns (.getPushdowns ea)))}]
+                      cat
+                      child-results))
+              (->results (first (.getChildCursors cursor)) depth)))]
 
-    (vec (->results cursor 0))))
+    (->results cursor 0)))
 
 (defn- ast-source-text [^Sql$DirectlyExecutableStatementContext ast]
   (let [start (.getStart ast)]

@@ -77,16 +77,18 @@ interface ICursor : Spliterator<RelationReader>, AutoCloseable {
                     }
                 }
                 val pageStart = clock.instant()
+                var acceptTime = Duration.ZERO
 
                 return inner.tryAdvance { rel ->
-                    val pageTime = Duration.between(pageStart, clock.instant())
-                    timeToFirstPage = timeToFirstPage ?: pageTime
+                    val acceptStart = clock.instant()
+                    timeToFirstPage = timeToFirstPage ?: Duration.between(pageStart, acceptStart)
                     rowCount += rel.rowCount
                     pageCount++
                     c.accept(rel)
+                    acceptTime += Duration.between(acceptStart, clock.instant())
                 }.also {
                     val pageEnd = clock.instant()
-                    totalTime += Duration.between(pageStart, pageEnd)
+                    totalTime += Duration.between(pageStart, pageEnd) - acceptTime
                     endTime = pageEnd
                 }
             }

@@ -504,6 +504,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
   (letfn [(elide [row]
             (-> row
                 (update :total-time class)
+                (update :self-time class)
                 (update :time-to-first-page class)
                 ;; the scan's runtime metrics vary with storage layout — asserted separately below
                 (cond-> (contains? row :attributes)
@@ -511,11 +512,11 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
 
     (t/is (= [{:depth "->", :op :project,
                :page-count 1, :row-count 1
-               :total-time Duration, :time-to-first-page Duration}
+               :total-time Duration, :self-time Duration, :time-to-first-page Duration}
               {:depth "  ->", :op :scan,
                :attributes {:scan-db "xtdb", :scan-source "public.people"}
                :page-count 1, :row-count 1
-               :total-time Duration, :time-to-first-page Duration}]
+               :total-time Duration, :self-time Duration, :time-to-first-page Duration}]
              (->> (xt/q tu/*node*
                         [(format "EXPLAIN ANALYZE XTQL ($$ %s $$, ?)"
                                  (pr-str '#(from :people [{:xt/id %} name age xt/valid-from xt/valid-to])))
@@ -524,14 +525,14 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
 
     (t/is (= [{:depth "->", :op :project,
                :page-count 1, :row-count 1
-               :total-time Duration, :time-to-first-page Duration}
+               :total-time Duration, :self-time Duration, :time-to-first-page Duration}
               {:depth "  ->", :op :rename,
                :page-count 1, :row-count 1
-               :total-time Duration, :time-to-first-page Duration}
+               :total-time Duration, :self-time Duration, :time-to-first-page Duration}
               {:depth "    ->", :op :scan,
                :attributes {:scan-db "xtdb", :scan-source "public.people"}
                :page-count 1, :row-count 1
-               :total-time Duration, :time-to-first-page Duration}]
+               :total-time Duration, :self-time Duration, :time-to-first-page Duration}]
              (->> (xt/q tu/*node*
                         ["EXPLAIN ANALYZE SELECT name, age, _valid_from, _valid_to FROM people WHERE _id = ?" 1])
                   (mapv elide))))
@@ -548,6 +549,23 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
         ;; rows read off the pages is the throughput denominator — never fewer than the rows emitted
         (t/is (>= scan-rows-read (:row-count scan-row)))
         (t/is (pos? scan-rows-read) "read at least the row we emitted")))))
+
+(t/deftest test-explain-analyze-self-time-is-total-time-less-the-children
+  (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 7 :name "seven"}]
+                           [:put-docs :docs {:xt/id 8 :name "eight"}]])
+
+  (let [rows (xt/q tu/*node* "EXPLAIN ANALYZE SELECT d._id FROM docs d JOIN docs e ON d._id = e._id")
+        depth (fn [row] (count (:depth row)))
+        children-of (fn [i]
+                      (let [d (depth (nth rows i))]
+                        (->> (drop (inc i) rows)
+                             (take-while #(> (depth %) d))
+                             (filter #(= (depth %) (+ d 2))))))]
+    (t/is (> (count rows) 2))
+    (doseq [[i row] (map-indexed vector rows)]
+      (t/is (= (:self-time row)
+               (reduce #(.minus ^Duration %1 ^Duration (:total-time %2)) (:total-time row) (children-of i)))
+            (str (:op row) " self_time = total_time - children's total_time")))))
 
 (t/deftest test-explain-analyze-covers-the-whole-plan
   (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 7 :name "seven"}]

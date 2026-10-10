@@ -6,6 +6,7 @@ interface ExplainAnalyze {
     val rowCount: Long
     val pageCount: Int
     val timeToFirstPage: Duration?
+    /** Time in this cursor's `tryAdvance`, including its subtree but excluding the consumer's `accept`. */
     val totalTime: Duration
     val pushdowns: Map<String, Any>?
     val cursorAttributes: ScanAttributes?
