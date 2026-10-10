@@ -521,11 +521,16 @@
                                   vf2 (assoc :xt/valid-from vf2)
                                   vt2 (assoc :xt/valid-to vt2))]])
 
-          (let [res-before-compaction (xt/q node q)]
+          (let [res-before-flush (xt/q node q)]
             (tu/flush-block! node)
+
+            (t/is (= (set res-before-flush) (set (xt/q node q)))
+                  "an unmerged L0 file queries as the live index did")
+
             (c/compact-all! node nil)
 
-            (t/is (= (set res-before-compaction) (set (xt/q node q))))))))))
+            (t/is (= (set res-before-flush) (set (xt/q node q)))
+                  "the L1 output queries as the live index did")))))))
 
 (t/deftest no-returning-erased-docs-4576
   (xt/execute-tx tu/*node* [[:put-docs :xt_docs {:xt/id :doc1 :col "value1"}]

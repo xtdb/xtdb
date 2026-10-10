@@ -153,34 +153,44 @@ internal class SegmentMerge(private val al: BufferAllocator) : AutoCloseable {
         val path = path.let { if (pathFilter == null || it.size > pathFilter.size) it else pathFilter }
         val mergeQueue = PriorityQueue(Comparator.comparing(QueueElem::evPtr, EventRowPointer.comparator()))
 
-        val rels = pages.map { it.loadDataPage(al) }
+        val resolvedRels = mutableListOf<Relation>()
 
-        for (rel in rels) {
-            val evPtr = EventRowPointer(rel, path)
-            val rowCopier = outWriter.rowCopier(rel)
+        try {
+            val rels = pages.map { page ->
+                val rel = page.loadDataPage(al)
+                if (page.sameSystemTimeResolved) rel
+                else Relation(al, rel.schema).also { resolvedRels.add(it) }.let { resolveSameSystemTimeEvents(rel, it) }
+            }
 
-            if (evPtr.isValid())
-                mergeQueue.add(QueueElem(evPtr, rowCopier))
+            for (rel in rels) {
+                val evPtr = EventRowPointer(rel, path)
+                val rowCopier = outWriter.rowCopier(rel)
+
+                if (evPtr.isValid())
+                    mergeQueue.add(QueueElem(evPtr, rowCopier))
+            }
+
+            val polygonCalculator = PolygonCalculator()
+
+            while (true) {
+                val elem = mergeQueue.poll() ?: break
+                val (evPtr, rowCopier) = elem
+
+                polygonCalculator.calculate(evPtr)
+                    ?.let { polygon ->
+                        rowCopier.copyRow(polygon.recency, evPtr.index)
+                    }
+
+                evPtr.nextIndex()
+
+                if (evPtr.isValid())
+                    mergeQueue.add(elem)
+            }
+
+            outWriter.endPage(ByteArrayList.from(*this.path))
+        } finally {
+            resolvedRels.closeAll()
         }
-
-        val polygonCalculator = PolygonCalculator()
-
-        while (true) {
-            val elem = mergeQueue.poll() ?: break
-            val (evPtr, rowCopier) = elem
-
-            polygonCalculator.calculate(evPtr)
-                ?.let { polygon ->
-                    rowCopier.copyRow(polygon.recency, evPtr.index)
-                }
-
-            evPtr.nextIndex()
-
-            if (evPtr.isValid())
-                mergeQueue.add(elem)
-        }
-
-        outWriter.endPage(ByteArrayList.from(*this.path))
     }
 
     sealed interface RecencyPartitioning {
@@ -262,6 +272,7 @@ private class LocalSegment(
     }
 
     override val part = parsedTrieKey.part?.toArray()
+    override val sameSystemTimeResolved = parsedTrieKey.level != 0L
 
     override suspend fun openMetadata(): Metadata = Metadata()
 

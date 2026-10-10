@@ -6,9 +6,11 @@ import xtdb.trie.RecencyMicros
 
 class TestSegment(val name: String, val trie: TestTrie) : Segment<TestTrie.Leaf> {
     override val part = null
+    override val sameSystemTimeResolved = true
     override val schema: Schema get() = error("schema")
 
     class Page(val name: String, val pageIdx: Int) : Segment.Page<TestTrie.Leaf>, Segment.PageMeta<TestTrie.Leaf> {
+        override val sameSystemTimeResolved = true
         override suspend fun loadDataPage(al: BufferAllocator) = error("loadDataPage")
         override val page: Segment.Page<TestTrie.Leaf> get() = this
         override val temporalMetadata get() = error("temporalMetadata")

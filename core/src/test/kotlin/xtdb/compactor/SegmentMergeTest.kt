@@ -62,6 +62,20 @@ class SegmentMergeTest {
             importData(rel)
         }
 
+    private fun LiveTable.indexTxEvents(systemTime: Instant, vararg events: Triple<Long, Int, Int>): LiveTable =
+        Trie.openLogDataWriter(al).use { rel ->
+            val systemFrom = systemTime.asMicros
+            for ((v, validFrom, validTo) in events) {
+                rel["_iid"].writeBytes(ByteBuffer.wrap("foo".asIid))
+                rel["_system_from"].writeLong(systemFrom)
+                rel["_valid_from"].writeLong(year(validFrom).toInstant().asMicros)
+                rel["_valid_to"].writeLong(year(validTo).toInstant().asMicros)
+                rel["op"].vectorFor("put", STRUCT_TYPE, false).writeObject(mapOf("_id" to "foo", "v" to v))
+                rel.endRow()
+            }
+            importData(rel)
+        }
+
     private fun put(id: String, v: Long, year: Int) = mapOf(
         "_iid" to ByteBuffer.wrap(id.asIid),
         "_system_from" to year(year),
@@ -140,6 +154,33 @@ class SegmentMergeTest {
                     ),
                     results.associate { it.path.fileName.toString() to segMerge.rowsOf(it) }
                 )
+            }
+        }
+    }
+
+    @Test
+    fun `a same-transaction event overridden by a later one is resolved away before partitioning by recency`() {
+        LiveTable.open(al, foo, TableSlug.of(foo), 0L, RowCounter()).use { liveTable ->
+            val lt = liveTable.indexTxEvents(
+                Instant.parse("2020-01-01T00:00:00Z"),
+                Triple(1L, 2023, 2024), Triple(2L, 2022, 2025)
+            )
+
+            val rel = lt.relation.openSlice(al)
+            MemorySegment(lt.trie.compactLogs().withIidReader(rel["_iid"]), rel).use { segment ->
+                SegmentMerge(al).use { segMerge ->
+                    segMerge.mergeSegmentsSync(listOf(segment), null, RecencyPartitioning.Partition).use { results ->
+                        assertEquals(
+                            mapOf(
+                                "r20250106.arrow" to listOf(
+                                    put("foo", 2, 2020) + mapOf("_valid_from" to year(2022), "_valid_to" to year(2025))
+                                ),
+                                "rc.arrow" to emptyList()
+                            ),
+                            results.associate { it.path.fileName.toString() to segMerge.rowsOf(it) }
+                        )
+                    }
+                }
             }
         }
     }

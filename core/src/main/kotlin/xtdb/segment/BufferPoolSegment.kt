@@ -4,7 +4,6 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
-import xtdb.compactor.resolveSameSystemTimeEvents
 import xtdb.metadata.MetadataPredicate
 import xtdb.metadata.PageMetadata
 import xtdb.segment.Segment.PageMeta
@@ -23,11 +22,12 @@ class BufferPoolSegment(
 ) : Segment<ArrowHashTrie.Leaf> {
     val dataFilePath = slug.dataFilePath(trieKey)
     private val parsedTrieKey = Trie.parseKey(trieKey)
-    private val resolveSameSystemTimeEvents = parsedTrieKey.level == 0L
     private val recency: RecencyMicros = parsedTrieKey.recency?.atStartOfDay()?.asMicros ?: Long.MAX_VALUE
 
     override val part: ByteArray?
         get() = parsedTrieKey.part?.toArray()
+
+    override val sameSystemTimeResolved = parsedTrieKey.level != 0L
 
     override val schema: Schema = bp.getFooter(dataFilePath).schema
 
@@ -64,17 +64,7 @@ class BufferPoolSegment(
         if (currentDataPageIndex == leaf.dataPageIndex) dataRel
         else {
             currentDataPageIndex = leaf.dataPageIndex
-            bp.getRecordBatch(dataFilePath, leaf.dataPageIndex).use { rb ->
-                if (resolveSameSystemTimeEvents) {
-                    dataRel.clear()
-
-                    Relation.fromRecordBatch(al, schema, rb).use { inRel ->
-                        resolveSameSystemTimeEvents(inRel, dataRel)
-                    }
-                } else {
-                    dataRel.apply { load(rb) }
-                }
-            }
+            bp.getRecordBatch(dataFilePath, leaf.dataPageIndex).use { rb -> dataRel.apply { load(rb) } }
         }
 
     override fun close() {

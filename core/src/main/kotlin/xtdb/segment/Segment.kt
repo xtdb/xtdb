@@ -14,6 +14,12 @@ interface Segment<L> : AutoCloseable {
 
     val schema: Schema
 
+    /**
+     * Whether events sharing a `_system_from` have been resolved against each other in this segment's pages.
+     * L0 files and the live index hold them raw, in live-index order; see #4303 for what resolution does to them.
+     */
+    val sameSystemTimeResolved: Boolean
+
     fun openMetadataSync(): Metadata<L> = runBlocking { openMetadata() }
     suspend fun openMetadata(): Metadata<L>
 
@@ -25,11 +31,13 @@ interface Segment<L> : AutoCloseable {
     }
 
     interface Page<L> {
+        val sameSystemTimeResolved: Boolean
 
         suspend fun loadDataPage(al: BufferAllocator): RelationReader
 
         companion object {
             fun <L> page(segment: Segment<L>, leaf: L) = object : Page<L> {
+                override val sameSystemTimeResolved get() = segment.sameSystemTimeResolved
                 override suspend fun loadDataPage(al: BufferAllocator) = segment.loadDataPage(al, leaf)
             }
         }

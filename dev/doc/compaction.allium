@@ -117,6 +117,8 @@ entity CompactionJob {
 -- == Stage 1: Merge pages to disk ==
 --
 -- Similarly to the scan operator, we calculate a list of merge tasks.
+-- An input page from an unresolved segment (an L0 file, or the live index) first has its same-system-time events resolved against each other.
+-- Their order holds only within their page, and the recency split separates them into different files.
 -- For each merge task, we merge-sort the input pages by IID and system-time, applying bitemporal resolution.
 --
 -- The behaviour differs depending on the compaction type:

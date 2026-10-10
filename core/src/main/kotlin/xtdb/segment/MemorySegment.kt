@@ -10,6 +10,7 @@ import xtdb.trie.MemoryHashTrie
 
 class MemorySegment(val trie: MemoryHashTrie, val rel: RelationReader) : Segment<MemoryHashTrie.Leaf> {
     override val part = null
+    override val sameSystemTimeResolved = false
 
     override val schema: Schema get() = rel.schema
 
