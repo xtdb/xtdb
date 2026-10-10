@@ -711,6 +711,23 @@
       "foo.a::INT" '(cast f/a #xt/type :i32)
       "'42.0'::FLOAT" '(cast "42.0" #xt/type :f32)
       "43.1::TEXT" '(cast 43.1 #xt/type :utf8)))
+
+  (t/testing "Postgres type names"
+    (t/are [sql expected]
+        (= expected (plan-expr-with-foo sql))
+
+      "foo.a::int2" '(cast f/a #xt/type :i16)
+      "foo.a::int4" '(cast f/a #xt/type :i32)
+      "foo.a::INT8" '(cast f/a #xt/type :i64)
+      "foo.a::float4" '(cast f/a #xt/type :f32)
+      "CAST(foo.a AS float8)" '(cast f/a #xt/type :f64)
+      "foo.a::bool" '(cast f/a #xt/type :bool)
+      "foo.a::bpchar" '(cast f/a #xt/type :utf8)
+      "foo.a::name" '(cast f/a #xt/type :utf8)))
+
+  (t/is (= [{:name "x", :int8 1}]
+           (xt/q tu/*node* "SELECT 'x'::name AS name, '1'::int8 AS int8"))
+        "the aliases stay usable as identifiers")
   
   (t/testing "used within a query"
     (t/is (= [{:x 42}]

@@ -6,20 +6,22 @@ The following types are available within XTDB:
 
 ## Numeric Types
 
-`SMALLINT`
+`SMALLINT` | `INT2`
 : 16-bit signed integer
 
-`INT` | `INTEGER`
+`INT` | `INTEGER` | `INT4`
 : 32-bit signed integer
 
-`BIGINT`
+`BIGINT` | `INT8`
 : 64-bit signed integer
 
-`FLOAT` | `REAL`
+`FLOAT` | `REAL` | `FLOAT4`
 : 32-bit (IEEE single-precision) floating-point number
 
-`DOUBLE`
+`DOUBLE` | `DOUBLE PRECISION` | `FLOAT8`
 : 64-bit (IEEE double-precision) floating-point number
+
+The Postgres spellings (`INT2`, `INT4`, `INT8`, `FLOAT4`, `FLOAT8`, and `BOOL`, `BPCHAR` and `NAME` below) are accepted as cast targets (v2.2+).
 
 ### Decimal type
 
@@ -196,7 +198,7 @@ When casting to/from intervals from other types, the following rules apply:
 
 ## Other scalar types
 
-`BOOLEAN`
+`BOOLEAN` | `BOOL`
 : 3-valued boolean: TRUE, FALSE or NULL
 
 `VARBINARY`
@@ -204,9 +206,10 @@ When casting to/from intervals from other types, the following rules apply:
 
     e.g. `X('41af8e01')`
 
-`VARCHAR` | `TEXT` | `CHAR`
+`VARCHAR` | `TEXT` | `CHAR` | `BPCHAR` | `NAME`
 : a variable-length character array.
   `CHAR` is accepted as a synonym for `VARCHAR`/`TEXT` (v2.2+); XTDB does not distinguish fixed-width character types.
+  `BPCHAR` and `NAME` (v2.2+) are the same type: neither blank-padding nor `NAME`'s length limit applies.
 
     e.g.:
 

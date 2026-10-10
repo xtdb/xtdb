@@ -175,6 +175,7 @@ nonReservedKeyword
     | pgExtractField
     | rankFunctionType
     | AT | BETWEEN | BY | CURRENT | FIRST | LAST | NEXT | OF | POSITION
+    | INT2 | INT4 | INT8 | FLOAT4 | FLOAT8 | BOOL | BPCHAR | NAME
     | BIGINT | BOOLEAN | CHAR | DATE | DEC | DECIMAL | DOUBLE | DURATION | FLOAT | INT | INTEGER
     | INTERVAL | KEYWORD | NUMERIC | OBJECT | PERIOD | PRECISION | REAL | RECORD | REGCLASS
     | REGPROC | ROW | SMALLINT | TEXT | TIME | TIMESTAMP | TIMESTAMPTZ | TSTZRANGE | UUID | VARCHAR
@@ -193,17 +194,17 @@ columnLabel
 
 dataType
     : ('NUMERIC' | 'DECIMAL' | 'DEC') ('(' precision (',' scale)? ')')? # DecimalType
-    | ('SMALLINT' | 'INTEGER' | 'INT' | 'BIGINT') # IntegerType
+    | ('SMALLINT' | 'INTEGER' | 'INT' | 'BIGINT' | 'INT2' | 'INT4' | 'INT8') # IntegerType
     | 'FLOAT' ('(' precision ')')? # FloatType
-    | 'REAL' # RealType
-    | 'DOUBLE' 'PRECISION'? # DoubleType
-    | 'BOOLEAN' # BooleanType
+    | ('REAL' | 'FLOAT4') # RealType
+    | ('DOUBLE' 'PRECISION'? | 'FLOAT8') # DoubleType
+    | ('BOOLEAN' | 'BOOL') # BooleanType
     | 'DATE' # DateType
     | 'TIME' ('(' precision ')')? withOrWithoutTimeZone? # TimeType
     | 'TIMESTAMP' ('(' precision ')')? withOrWithoutTimeZone? # TimestampType
     | 'TIMESTAMPTZ' #TimestampTzType
     | 'INTERVAL' intervalQualifier? # IntervalType
-    | ('CHAR' | 'VARCHAR' | 'TEXT') # CharacterStringType
+    | ('CHAR' | 'VARCHAR' | 'TEXT' | 'BPCHAR' | 'NAME') # CharacterStringType
     | 'DURATION' ('(' precision ')')? # DurationType
     | 'ROW' '(' fieldDefinition (',' fieldDefinition)* ')' # RowType
     | 'OID' #OidType
