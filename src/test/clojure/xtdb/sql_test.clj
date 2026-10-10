@@ -2715,7 +2715,7 @@ UNION ALL
                                      (fn [{:keys [table-schema table-name]}]
                                        (symbol table-schema table-name))
                                      (comp symbol :column-name)
-                                     (comp read-string :data-type))))))))
+                                     (comp read-string :xt-type))))))))
 
 (t/deftest missing-values-in-insert-shouldnt-stop-ingestion-3721
   (xt/submit-tx tu/*node* [[:sql "CREATE TABLE docs"]])

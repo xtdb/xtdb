@@ -82,6 +82,73 @@ sealed class PgType(
     val typinput: String? = null,
     val typoutput: String? = null,
 ) {
+    /**
+     * Postgres's spelling of this type, as `format_type(oid, NULL)` renders it.
+     * The types Postgres has no name for (keyword, transit, duration) keep their `typname`.
+     */
+    val formatName: String
+        get() = when (this) {
+            Default -> typname
+            Null, Text -> "text"
+            Int8 -> "bigint"
+            Int4 -> "integer"
+            Int2 -> "smallint"
+            Float4 -> "real"
+            Float8 -> "double precision"
+            Bool -> "boolean"
+            VarChar -> "character varying"
+            Numeric -> "numeric"
+            Timestamp -> "timestamp without time zone"
+            TimestampTz -> "timestamp with time zone"
+            Date -> "date"
+            Time -> "time without time zone"
+            PgInterval -> "interval"
+            PgDuration -> typname
+            TsTzRange -> "tstzrange"
+            Bytes -> "bytea"
+            Int4s -> "integer[]"
+            Int8s -> "bigint[]"
+            Texts -> "text[]"
+            Uuid -> "uuid"
+            Keyword -> typname
+            PgOid -> "oid"
+            RegClass -> "regclass"
+            RegProc -> "regproc"
+            Json, JsonLd -> "json"
+            Jsonb -> "jsonb"
+            Transit -> typname
+        }
+
+    /**
+     * `information_schema.columns.data_type`: `ARRAY` for arrays, [formatName] for Postgres's own types,
+     * `USER-DEFINED` for the rest - which `udt_name` then identifies.
+     */
+    val dataType: String
+        get() = when (this) {
+            Int4s, Int8s, Texts -> "ARRAY"
+            Default, PgDuration, Keyword, Transit -> "USER-DEFINED"
+            else -> formatName
+        }
+
+    /**
+     * `format_type(oid, typmod)`: [formatName] plus the modifier Postgres packs into `typmod` -
+     * `varchar(n)` stores n + 4, `numeric(p, s)` stores ((p << 16) | s) + 4, the temporal types store their precision.
+     * A negative `typmod` means no modifier.
+     */
+    fun formatType(typmod: Int): String {
+        if (typmod < 0) return formatName
+
+        return when (this) {
+            VarChar -> if (typmod >= 4) "character varying(${typmod - 4})" else formatName
+            Numeric -> if (typmod >= 4) "numeric(${((typmod - 4) shr 16) and 0xffff},${(typmod - 4) and 0xffff})" else formatName
+            Timestamp -> "timestamp($typmod) without time zone"
+            TimestampTz -> "timestamp($typmod) with time zone"
+            Time -> "time($typmod) without time zone"
+            PgInterval -> if ((typmod and 0xffff) != 0xffff) "interval(${typmod and 0xffff})" else formatName
+            else -> formatName
+        }
+    }
+
     open fun readBinary(data: ByteArray): Any? = unsupported("readBinary")
     open fun readText(data: ByteArray): Any? = unsupported("readText")
     open fun writeBinary(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray? = unsupported("writeBinary")
@@ -863,6 +930,11 @@ sealed class PgType(
 
         @JvmStatic
         fun fromOid(oid: Oid): PgType? = byOid[oid]
+
+        /** `format_type(oid, typmod)`, including Postgres's `-` for the zero oid and `???` for an oid it doesn't know. */
+        @JvmStatic
+        fun formatType(oid: Oid, typmod: Int): String =
+            if (oid == 0) "-" else fromOid(oid)?.formatType(typmod) ?: "???"
 
         @JvmStatic
         fun fromXtType(xtType: VectorType): PgType = xtType.arrowType.accept(object : ArrowTypeVisitor<PgType> {

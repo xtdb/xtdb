@@ -343,7 +343,7 @@ commonValueExpr
     | 'EXTRACT' '(' extractField 'FROM' extractSource=expr ')' # ExtractFunction
     | ('CHAR_LENGTH' | 'CHARACTER_LENGTH') '(' expr ('USING' charLengthUnits)? ')' # CharacterLengthFunction
     | ('PERIOD' | 'TSTZRANGE') '(' expr ',' expr ')' # TsTzRangeConstructor
-    | fn=identifier '(' ( expr (',' expr)* )? ')' # FunctionCall
+    | (schemaName=identifier '.')? fn=identifier '(' ( expr (',' expr)* )? ')' # FunctionCall
 
     // string value functions
     | 'SUBSTRING' '('

@@ -158,26 +158,33 @@ FROM people
   </Card>
 </TabbedExample>
 
-You can also observe the inferred schema using the SQL standard's `INFORMATION_SCHEMA` facilities:
+You can also observe the inferred schema using the SQL standard's `INFORMATION_SCHEMA` facilities.
+`data_type` follows Postgres's spelling, so that Postgres tooling understands it; `xt_type` carries XTDB's own, more precise, type:
 
 <TabbedExample>
   <Xtplay magicContext="my-context" slot="1">
     <Query q={`
-SELECT * FROM information_schema.columns WHERE table_name = 'people'`} />
+SELECT column_name, data_type, xt_type
+FROM information_schema.columns
+WHERE table_name = 'people'
+ORDER BY ordinal_position`} />
   </Xtplay>
   <Card slot="2">
 ```sql
-user=> SELECT * FROM information_schema.columns WHERE table_name = 'people';
- column_name |                                                                  data_type                                                                  | table_catalog | table_name | table_schema
--------------+---------------------------------------------------------------------------------------------------------------------------------------------+---------------+------------+--------------
- system_time | [:timestamp-tz :micro "UTC"]                                                                                                                | xtdb          | txs        | xt
- committed   | :bool                                                                                                                                       | xtdb          | txs        | xt
- _id         | :i64                                                                                                                                        | xtdb          | txs        | xt
- error       | [:union #{:null :transit}]                                                                                                                  | xtdb          | txs        | xt
- _id         | :i64                                                                                                                                        | xtdb          | people     | public
- name        | :utf8                                                                                                                                       | xtdb          | people     | public
- likes       | [:union #{[:list [:union #{:f64 :utf8 [:struct {nested :utf8}]}]] :null}]                                                                  | xtdb          | people     | public
- info        | [:union #{[:struct {contact [:union #{:null [:list [:struct {loc :utf8, registered [:union #{[:date :day] :null}], tel :utf8}]]}]}] :null}] | xtdb          | people     | public
+user=> SELECT column_name, data_type, xt_type
+FROM information_schema.columns
+WHERE table_name = 'people'
+ORDER BY ordinal_position;
+ column_name  |        data_type         |                                               xt_type
+--------------+--------------------------+-----------------------------------------------------------------------------------------------------
+ _id          | bigint                   | :i64
+ _system_from | timestamp with time zone | :instant
+ _system_to   | timestamp with time zone | [:? :instant]
+ _valid_from  | timestamp with time zone | :instant
+ _valid_to    | timestamp with time zone | [:? :instant]
+ info         | json                     | [:? :struct {"contact" [:list [:struct {"loc" :utf8, "tel" :utf8, "registered" [:? :date :day]}]]}]
+ likes        | json                     | [:? :list #{:f64 [:struct {"nested" :utf8}] :utf8}]
+ name         | text                     | :utf8
 (8 rows)
 ```
   </Card>

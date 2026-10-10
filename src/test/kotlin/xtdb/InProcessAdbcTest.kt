@@ -1359,8 +1359,8 @@ class InProcessAdbcTest {
 
         val infoSchema = xtdb.connect().use { conn ->
             conn.createStatement().use { stmt ->
-                stmt.setSqlQuery("SELECT data_type FROM information_schema.columns WHERE table_name = 'el' AND column_name = 'v'")
-                queryRows(stmt).single()["data_type"].toString()
+                stmt.setSqlQuery("SELECT xt_type FROM information_schema.columns WHERE table_name = 'el' AND column_name = 'v'")
+                queryRows(stmt).single()["xt_type"].toString()
             }
         }
 
