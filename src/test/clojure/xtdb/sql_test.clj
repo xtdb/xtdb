@@ -2284,6 +2284,21 @@
     (t/is (= #{{:xt/id 1, :o-id 10} {:xt/id 2} {:xt/id 3}}
              (set (xt/q tu/*node* q))))))
 
+(t/deftest literal-list-semi-joins-run-before-anti-join-6169
+  (let [q "SELECT c._id FROM customer AS c
+           WHERE substring(c.phone, 1, 2) IN ('13', '31')
+             AND c.region IN ('eu', 'us')
+             AND NOT EXISTS (SELECT 1 FROM orders AS o WHERE o.custkey = c._id)"]
+    (t/is (=plan-file
+           "literal-list-semi-joins-below-anti-join"
+           (sql/plan q {:table-info {#xt/table customer #{"_id" "phone" "region"}
+                                     #xt/table orders #{"_id" "custkey"}}})))
+
+    (xt/execute-tx tu/*node* [[:sql "INSERT INTO customer RECORDS {_id: 1, phone: '13-1', region: 'eu'}, {_id: 2, phone: '31-2', region: 'us'}, {_id: 3, phone: '99-3', region: 'eu'}, {_id: 4, phone: '13-4', region: 'asia'}"]
+                              [:sql "INSERT INTO orders RECORDS {_id: 10, custkey: 1}"]])
+
+    (t/is (= [{:xt/id 2}] (xt/q tu/*node* q)))))
+
 (t/deftest test-erase-with-subquery
   (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id :foo :bar 1}]])
   (t/is (xt/execute-tx tu/*node* [[:sql "ERASE FROM docs WHERE docs._id IN (SELECT docs._id FROM docs WHERE docs.bar = 1)"]]))

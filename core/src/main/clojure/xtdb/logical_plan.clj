@@ -1425,6 +1425,48 @@
          [:anti-join {:conditions (w/postwalk-replace (rename-map-for-projection-spec projections) conditions)}
           inner-lhs inner-rhs]]))))
 
+(defn- filtering-join? [relation]
+  (contains? #{:semi-join :anti-join} (first relation)))
+
+(defn- literal-rows? [relation]
+  (case (first relation)
+    :table (contains? (second relation) :rows)
+    (:rename :project) (recur (last relation))
+    false))
+
+(defn- literal-rows-semi-join? [relation]
+  (and (= :semi-join (first relation))
+       (literal-rows? (last relation))))
+
+(defn- peel-maps [relation]
+  (loop [map-opts [], relation relation]
+    (if (= :map (first relation))
+      (recur (conj map-opts (second relation)) (last relation))
+      [map-opts relation])))
+
+(defn- wrap-maps [map-opts relation]
+  (reduce (fn [relation opts] [:map opts relation]) relation (rseq map-opts)))
+
+(defn- maps-movable-below? [map-opts filtering-rhs]
+  (and (not-any? (comp numbers-rows? :projections) map-opts)
+       (not-any? (set (relation-columns filtering-rhs))
+                 (for [{:keys [projections]} map-opts, p projections]
+                   (->projected-column p)))))
+
+(defn- push-literal-rows-semi-join-below-filtering-join [z]
+  (r/zmatch z
+    [:semi-join join-opts lhs rhs]
+    ;;=>
+    (when (literal-rows? rhs)
+      (let [[map-opts [inner-op inner-opts inner-lhs inner-rhs :as inner]] (peel-maps lhs)]
+        (when (and (filtering-join? inner)
+                   ;; two literal-rows semi-joins would swap forever
+                   (not (literal-rows-semi-join? inner))
+                   (maps-movable-below? map-opts inner-rhs))
+          [inner-op inner-opts
+           [:semi-join join-opts (wrap-maps map-opts inner-lhs) rhs]
+           inner-rhs])))))
+
 (defn- promote-selection-to-mega-join [z]
   (r/zmatch
     z
@@ -1529,6 +1571,7 @@
    #'remove-superseded-projects
    #'merge-selections-around-scan
    #'push-semi-and-anti-joins-down
+   #'push-literal-rows-semi-join-below-filtering-join
    #'add-selection-to-scan-predicate
    #'push-sort-bounds-down-towards-sort
    #'fuse-sorts])
