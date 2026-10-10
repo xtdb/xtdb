@@ -212,9 +212,9 @@
 (defn- valid-time-pushdown-specs
   "One spec per probe `_valid_from`/`_valid_to` column the thetas bound by build-side values —
    `:upper` where `_valid_from` has to lie below the projected value of some build row, `:lower` where `_valid_to` has to lie above it."
-  [thetas {:keys [probe-cols build-vec-types param-types]}]
+  [thetas {:keys [probe-cols offered-cols build-vec-types param-types]}]
   (let [probe-col (fn [expr col-name]
-                    (when (and (symbol? expr) (probe-cols expr) (= col-name (name expr)))
+                    (when (and (symbol? expr) (contains? offered-cols expr) (= col-name (name expr)))
                       expr))
         probe-valid-to (fn [expr]
                          (if (and (seq? expr) (= 'coalesce (first expr)) (= 3 (count expr)) (= 'xtdb/end-of-time (last expr)))
@@ -464,9 +464,11 @@
           :right [right-vec-types-proj right-key-col-names ->right-project-cursor
                   left-vec-types-proj left-key-col-names ->left-project-cursor])
 
-        valid-time-pushdown-specs (when pushdown-blooms?
+        valid-time-pushdown-specs (when-let [offered-cols (and pushdown-blooms?
+                                                               (:valid-time-pushdown-cols (case build-plan-side :left right, :right left)))]
                                     (valid-time-pushdown-specs (map second thetas)
                                                                {:probe-cols (set (keys probe-vec-types))
+                                                                :offered-cols offered-cols
                                                                 :build-vec-types build-vec-types
                                                                 :param-types param-types}))
 

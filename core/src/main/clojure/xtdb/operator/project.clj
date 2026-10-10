@@ -82,6 +82,19 @@
                                                                           :param-types param-types}
                                                              expr (expr/form->expr form input-types)]
                                                          (expr/->expression-projection-spec col-name expr input-types)))))
+                  valid-time-pushdown-cols (let [offered (:valid-time-pushdown-cols inner-rel)]
+                                             (->> (concat (when append-columns?
+                                                            (for [col-name (keys inner-vec-types)]
+                                                              [col-name (contains? offered col-name)]))
+                                                          (for [[p-type arg] projections]
+                                                            (case p-type
+                                                              :column [arg (contains? offered arg)]
+                                                              :rename (let [[to-name from-name] (first arg)]
+                                                                        [to-name (contains? offered from-name)])
+                                                              [(key (first arg)) false])))
+                                                  (into {})
+                                                  (into #{} (keep (fn [[col-name offered?]] (when offered? col-name))))
+                                                  not-empty))
                   col-mapping (->> projections
                                    (into {} (keep (fn [[p-type arg]]
                                                     (when (= p-type :rename)
@@ -96,6 +109,7 @@
                            :append? (boolean append-columns?)}
                  :vec-types out-vec-types
                  :stats (:stats emitted-child-relation)
+                 :valid-time-pushdown-cols valid-time-pushdown-cols
                  :col-mapping col-mapping
                  :->cursor (fn [{:keys [explain-analyze? tracer query-span] :as opts} in-cursor]
                              (cond-> (->project-cursor opts in-cursor projection-specs)

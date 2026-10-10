@@ -136,6 +136,26 @@
           "entity 1's 2025 version lies outside the periods; entity 21's only version covers them")
     (t/is (= 1 (:row-count (scan-row sql "b"))))))
 
+(t/deftest a-computed-column-named-valid-from-takes-no-bound
+  (seed-history! :b)
+  (put-a! [{:id 1, :k 1, :vf (year 2000), :t (Instant/parse "2021-03-15T00:00:00Z")}])
+
+  (t/is (= (set (for [y (range 2000 2023)] {:a-id 1, :v y}))
+           (q "SELECT a._id AS a_id, b2.v
+               FROM a FOR ALL VALID_TIME
+               JOIN (SELECT _id, v, _valid_from - INTERVAL 'P1Y' AS _valid_from FROM b FOR ALL VALID_TIME) AS b2
+                 ON b2._id = a.k AND b2._valid_from <= a.t"))))
+
+(t/deftest the-bound-does-not-cross-a-limit
+  (seed-history! :b)
+  (put-a! [{:id 1, :k 1, :vf (year 2000), :t (Instant/parse "2021-03-15T00:00:00Z")}])
+
+  (t/is (empty? (q "SELECT a._id AS a_id, b1.v
+                    FROM a FOR ALL VALID_TIME
+                    JOIN (SELECT _id, v, _valid_from FROM b FOR ALL VALID_TIME ORDER BY _valid_from DESC, _id LIMIT 1) AS b1
+                      ON b1._id = a.k AND b1._valid_from <= a.t"))
+        "the latest version overall is 2024, which the condition rejects"))
+
 (t/deftest a-clamped-probe-scan-keeps-its-own-bounds
   (seed-history! :b)
   (put-a! [{:id 1, :k 1, :vf #inst "2024-06-01", :vt #inst "2024-07-01"}])

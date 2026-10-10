@@ -55,6 +55,7 @@
        :explain {:prefix prefix, :columns (some-> columns pr-str)}
        :vec-types out-vec-types
        :stats (:stats emitted-child-relation)
+       :valid-time-pushdown-cols (not-empty (into #{} (keep col-name-mapping) (:valid-time-pushdown-cols emitted-child-relation)))
        :col-mapping col-mapping
        :->cursor (fn [{:keys [explain-analyze? tracer query-span] :as opts}]
                    (cond-> (util/with-close-on-catch [in-cursor (->inner-cursor opts)]

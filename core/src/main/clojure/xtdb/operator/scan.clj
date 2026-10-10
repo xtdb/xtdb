@@ -315,6 +315,9 @@
 
          :vec-types (->> vec-types (into {} (keep (fn [[k v]] (when v [k v])))))
          :stats {:row-count row-count}
+         ;; a clamped scan clips the ranges it emits to its bounds, so a join's bound must not reach one
+         :valid-time-pushdown-cols (when-not (:clamp-valid-time? scan-opts)
+                                     (not-empty (into #{} (filter '#{_valid_from _valid_to}) (keys vec-types))))
          :->cursor (fn [{:keys [allocator, query-source, db-cat, dbs, snaps, system-time-basis, schema, args
                                 pushdown-blooms pushdown-iids pushdown-valid-time explain-analyze? tracer query-span] :as opts}]
                      (let [^IQuerySource$QueryDatabase db (db-or-throw dbs db-name)
@@ -371,9 +374,7 @@
                                ;; already indexed by partition — the walk over partitions is what's missing.
                                temporal-bounds (cond-> (->temporal-bounds allocator args scan-opts
                                                                           (get-in system-time-basis [db-name 0]))
-                                                 ;; a clamped scan clips the ranges it emits to its bounds, so a join's bound must not reach one
-                                                 (and pushdown-valid-time (not (:clamp-valid-time? scan-opts)))
-                                                 (narrow-valid-time pushdown-valid-time))
+                                                 pushdown-valid-time (narrow-valid-time pushdown-valid-time))
 
                                trace? (or explain-analyze? (and tracer query-span))
                                trace-attrs (when trace?
