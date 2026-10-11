@@ -62,10 +62,10 @@ class DenseUnionVector private constructor(
         override val childFields get() = inner.childFields
         override val type: VectorType get() = inner.type
 
-        fun getTypeId(idx: Int) = typeBuffer.getByte(idx)
+        private fun unionTypeId(idx: Int) = typeBuffer.getByte(idx)
         fun getOffset(idx: Int) = offsetBuffer.getInt(idx)
 
-        override fun isNull(idx: Int) = getTypeId(idx) != typeId || inner.isNull(getOffset(idx))
+        override fun isNull(idx: Int) = unionTypeId(idx) != typeId || inner.isNull(getOffset(idx))
         override fun getBoolean(idx: Int) = inner.getBoolean(getOffset(idx))
         override fun getByte(idx: Int) = inner.getByte(getOffset(idx))
         override fun getShort(idx: Int) = inner.getShort(getOffset(idx))
