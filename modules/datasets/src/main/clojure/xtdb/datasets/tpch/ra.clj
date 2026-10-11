@@ -82,21 +82,22 @@
   (-> '[:sort {:order-specs [[revenue {:direction :desc}]]}
         [:group-by {:columns [n_name {revenue (sum disc_price)}]}
          [:project {:projections [n_name {disc_price (* l_extendedprice (- 1 l_discount))}]}
-          [:join {:conditions [{o_orderkey l_orderkey} {s_suppkey l_suppkey}]}
-           [:join {:conditions [{s_nationkey c_nationkey}]}
-            [:join {:conditions [{n_nationkey s_nationkey}]}
-             [:join {:conditions [{r_regionkey n_regionkey}]}
-              [:rename {:columns {_id r_regionkey}} [:scan {:db-name "xtdb", :table #xt/table region, :columns [_id {r_name (== r_name "ASIA")}]}]]
-              [:rename {:columns {_id n_nationkey}} [:scan {:db-name "xtdb", :table #xt/table nation, :columns [_id n_name n_regionkey]}]]]
-             [:rename {:columns {_id s_suppkey}} [:scan {:db-name "xtdb", :table #xt/table supplier, :columns [_id s_nationkey]}]]]
-            [:join {:conditions [{o_custkey c_custkey}]}
+          [:join {:conditions [{s_suppkey l_suppkey} {s_nationkey c_nationkey}]}
+           [:rename {:columns {_id s_suppkey}} [:scan {:db-name "xtdb", :table #xt/table supplier, :columns [_id s_nationkey]}]]
+           [:join {:conditions [{o_orderkey l_orderkey}]}
+            [:join {:conditions [{c_custkey o_custkey}]}
+             [:join {:conditions [{n_nationkey c_nationkey}]}
+              [:join {:conditions [{r_regionkey n_regionkey}]}
+               [:rename {:columns {_id r_regionkey}} [:scan {:db-name "xtdb", :table #xt/table region, :columns [_id {r_name (== r_name "ASIA")}]}]]
+               [:rename {:columns {_id n_nationkey}} [:scan {:db-name "xtdb", :table #xt/table nation, :columns [_id n_name n_regionkey]}]]]
+              [:rename {:columns {_id c_custkey}} [:scan {:db-name "xtdb", :table #xt/table customer, :columns [_id c_nationkey]}]]]
              [:rename {:columns {_id o_orderkey}} [:scan {:db-name "xtdb", :table #xt/table orders, :columns [_id o_custkey
                 {o_orderdate (and (>= o_orderdate ?start_date)
-                                  (< o_orderdate ?end_date))}]}]]
-             [:rename {:columns {_id c_custkey}} [:scan {:db-name "xtdb", :table #xt/table customer, :columns [_id c_nationkey]}]]]]
-           [:scan {:db-name "xtdb", :table #xt/table lineitem, :columns [l_orderkey l_extendedprice l_discount l_suppkey]}]]]]]
+                                  (< o_orderdate ?end_date))}]}]]]
+            [:scan {:db-name "xtdb", :table #xt/table lineitem, :columns [l_orderkey l_extendedprice l_discount l_suppkey]}]]]]]]
       (with-args {:start-date (LocalDate/parse "1994-01-01")
                   :end-date (LocalDate/parse "1995-01-01")})))
+
 
 (def q6-forecasting-revenue-change
   (-> '[:group-by {:columns [{revenue (sum disc_price)}]}
@@ -118,27 +119,29 @@
          [:project {:projections [supp_nation cust_nation
                                    {l_year (extract "YEAR" l_shipdate)}
                                    {volume (* l_extendedprice (- 1 l_discount))}]}
-          [:rename {:columns {n1/n_name supp_nation, n2/n_name cust_nation}} [:join {:conditions [{c_nationkey n2/n_nationkey}
-                   (or (and (== n1/n_name ?nation1)
-                            (== n2/n_name ?nation2))
-                       (and (== n1/n_name ?nation2)
-                            (== n2/n_name ?nation1)))]}
-            [:join {:conditions [{o_custkey c_custkey}]}
+          [:rename {:columns {n1/n_name supp_nation, n2/n_name cust_nation}}
+           [:join {:conditions [{o_orderkey l_orderkey}
+                                (or (and (== n1/n_name ?nation1)
+                                         (== n2/n_name ?nation2))
+                                    (and (== n1/n_name ?nation2)
+                                         (== n2/n_name ?nation1)))]}
+            [:join {:conditions [{c_custkey o_custkey}]}
+             [:join {:conditions [{n2/n_nationkey c_nationkey}]}
+              [:rename {:prefix n2} [:rename {:columns {_id n_nationkey}} [:scan {:db-name "xtdb", :table #xt/table nation, :columns [_id {n_name (or (== n_name ?nation1) (== n_name ?nation2))}]}]]]
+              [:rename {:columns {_id c_custkey}} [:scan {:db-name "xtdb", :table #xt/table customer, :columns [_id c_nationkey]}]]]
+             [:rename {:columns {_id o_orderkey}} [:scan {:db-name "xtdb", :table #xt/table orders, :columns [_id o_custkey]}]]]
+            [:join {:conditions [{s_suppkey l_suppkey}]}
              [:join {:conditions [{n1/n_nationkey s_nationkey}]}
               [:rename {:prefix n1} [:rename {:columns {_id n_nationkey}} [:scan {:db-name "xtdb", :table #xt/table nation, :columns [_id {n_name (or (== n_name ?nation1) (== n_name ?nation2))}]}]]]
-              [:join {:conditions [{o_orderkey l_orderkey}]}
-               [:rename {:columns {_id o_orderkey}} [:scan {:db-name "xtdb", :table #xt/table orders, :columns [_id o_custkey]}]]
-               [:join {:conditions [{s_suppkey l_suppkey}]}
-                [:rename {:columns {_id s_suppkey}} [:scan {:db-name "xtdb", :table #xt/table supplier, :columns [_id s_nationkey]}]]
-                [:scan {:db-name "xtdb", :table #xt/table lineitem, :columns [l_orderkey l_extendedprice l_discount l_suppkey
-                  {l_shipdate (and (>= l_shipdate ?start_date)
-                                   (<= l_shipdate ?end_date))}]}]]]]
-             [:rename {:columns {_id c_custkey}} [:scan {:db-name "xtdb", :table #xt/table customer, :columns [_id c_nationkey]}]]]
-            [:rename {:prefix n2} [:rename {:columns {_id n_nationkey}} [:scan {:db-name "xtdb", :table #xt/table nation, :columns [_id {n_name (or (== n_name ?nation1) (== n_name ?nation2))}]}]]]]]]]]
+              [:rename {:columns {_id s_suppkey}} [:scan {:db-name "xtdb", :table #xt/table supplier, :columns [_id s_nationkey]}]]]
+             [:scan {:db-name "xtdb", :table #xt/table lineitem, :columns [l_orderkey l_extendedprice l_discount l_suppkey
+               {l_shipdate (and (>= l_shipdate ?start_date)
+                                (<= l_shipdate ?end_date))}]}]]]]]]]
       (with-args {:nation1 "FRANCE"
                   :nation2 "GERMANY"
                   :start-date (LocalDate/parse "1995-01-01")
                   :end-date (LocalDate/parse "1996-12-31")})))
+
 
 (def q8-national-market-share
   (-> '[:sort {:order-specs [[o_year]]}
