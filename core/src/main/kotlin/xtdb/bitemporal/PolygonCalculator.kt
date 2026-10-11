@@ -1,5 +1,6 @@
 package xtdb.bitemporal
 
+import xtdb.trie.EventOp.ERASE
 import xtdb.trie.EventRowPointer
 import xtdb.util.TemporalBounds
 
@@ -27,7 +28,7 @@ class PolygonCalculator(private val queryBounds: TemporalBounds? = null) {
         // after an erase, we don't process any more rows
         if (erased) return null
 
-        val isErase = erp.op == "erase"
+        val isErase = erp.op == ERASE
 
         val systemFrom = erp.systemFrom
 

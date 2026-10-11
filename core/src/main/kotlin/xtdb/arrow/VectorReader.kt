@@ -70,6 +70,8 @@ interface VectorReader : ILookup, AutoCloseable {
     val mapValues: VectorReader get() = unsupported("mapValueReader")
 
     val keyNames: Set<String>? get() = null
+
+    /** For a union, the names of its legs in type-id order. */
     val legNames: Set<String>? get() = null
 
     /**
@@ -94,6 +96,13 @@ interface VectorReader : ILookup, AutoCloseable {
     operator fun get(idx: Int) = getObject(idx)
 
     fun getLeg(idx: Int): String? = unsupported("getLeg")
+
+    /**
+     * For a union, the type id of the leg at [idx] — its position in [legNames], or -1 where the row is unset.
+     *
+     * Type ids belong to this vector: the same leg can have a different type id in another.
+     */
+    fun getTypeId(idx: Int): Byte = unsupported("getTypeId")
 
     fun valueReader(): ValueReader = ValueReader.ForVector(this)
 

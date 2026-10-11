@@ -198,7 +198,7 @@ class DenseUnionVector private constructor(
         override fun close() = reader.close()
     }
 
-    private fun getTypeId(idx: Int) = typeBuffer.getByte(idx)
+    override fun getTypeId(idx: Int) = typeBuffer.getByte(idx)
     internal fun typeIds() = (0 until valueCount).map { typeBuffer.getByte(it) }
 
     private fun getOffset(idx: Int) = offsetBuffer.getInt(idx)
