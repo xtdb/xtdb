@@ -42,7 +42,7 @@ interface Compactor : AutoCloseable {
     interface Job {
         val table: TableRef
         val trieKeys: List<TrieKey>
-        val part: ByteArray
+        val part: ByteArray?
         val outputTrieKey: Trie.Key
         val partitionedByRecency: Boolean
     }
