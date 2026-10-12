@@ -16,9 +16,9 @@ class ArrowHashTrie @JvmOverloads constructor(
 
     private val dataPageIdxVec = nodesVec[LEAF][DATA_PAGE_IDX]
 
-    interface Node : HashTrie.Node<Leaf>
+    sealed interface Node : HashTrie.Node<Leaf>
 
-    inner class IidBranch(override val path: ByteArray, branchVecIdx: Int) : Node {
+    inner class IidBranch(override val path: ByteArray, branchVecIdx: Int) : Node, HashTrie.Branch<Leaf> {
         private val startIdx = iidBranchVec.getListStartIndex(branchVecIdx)
         private val count = iidBranchVec.getListCount(branchVecIdx)
 
@@ -32,9 +32,7 @@ class ArrowHashTrie @JvmOverloads constructor(
             }
     }
 
-    class Leaf(override val path: ByteArray, val dataPageIndex: Int) : Node {
-        override val hashChildren = null
-    }
+    class Leaf(override val path: ByteArray, val dataPageIndex: Int) : Node, HashTrie.Leaf<Leaf>
 
     private fun forIndex(path: ByteArray, idx: Int) =
         when (nodesVec.getLeg(idx)) {

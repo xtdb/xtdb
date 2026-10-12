@@ -15,7 +15,10 @@ object MergePlanner {
         val segMeta: Segment.Metadata<L>, val node: HashTrie.Node<L>
     ) {
         val children: List<SegmentNode<L>?>?
-            get() = node.hashChildren?.map { it?.let { SegmentNode(segMeta, it) } }
+            get() = when (node) {
+                is HashTrie.Branch -> node.hashChildren.map { it?.let { SegmentNode(segMeta, it) } }
+                is HashTrie.Leaf -> null
+            }
 
         @Suppress("UNCHECKED_CAST")
         val page get() = segMeta.page(node as L)
