@@ -149,6 +149,11 @@ jobs:
         run: |
           docker compose run rust
 
+      - name: .NET test
+        working-directory: "lang"
+        run: |
+          docker compose run dotnet
+
       - name: Dump all logs on test failure
         if: failure()
         working-directory: "lang"

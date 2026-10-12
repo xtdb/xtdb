@@ -40,3 +40,10 @@ services:
     environment:
       PG_HOST: xtdb
       PG_PORT: 5439
+
+  dotnet:
+    build:
+      context: dotnet
+    environment:
+      PG_HOST: xtdb
+      PG_PORT: 5439
