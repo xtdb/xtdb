@@ -41,6 +41,7 @@ class IndirectVector(private val inner: VectorReader, private val sel: VectorInd
     override fun vectorForOrNull(name: String) = inner.vectorForOrNull(name)?.let { IndirectVector(it, sel) }
 
     override fun getLeg(idx: Int) = inner.getLeg(sel[idx])
+    override fun getTypeId(idx: Int) = inner.getTypeId(sel[idx])
 
     override val listElements get() = inner.listElements
     override fun getListStartIndex(idx: Int) = inner.getListStartIndex(sel[idx])

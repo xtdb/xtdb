@@ -1,6 +1,7 @@
 package xtdb.trie
 
 import org.apache.arrow.memory.util.ArrowBufPointer
+import xtdb.api.error.Fault
 import xtdb.arrow.LongLongVectorReader
 import xtdb.arrow.RelationReader
 import java.lang.Long.compareUnsigned
@@ -14,6 +15,9 @@ class EventRowPointer(private val relReader: RelationReader, path: ByteArray) {
     private val validToReader = relReader["_valid_to"]
 
     private val opReader = relReader["op"]
+
+    // type ids differ between pages: `put` is 0 in one and 2 in another
+    private val opsByTypeId = opReader.legNames!!.map(EventOp::ofLegOrNull).toTypedArray()
 
     var iidHigh: Long = -1
         private set
@@ -89,7 +93,11 @@ class EventRowPointer(private val relReader: RelationReader, path: ByteArray) {
 
     val validFrom get() = validFromReader.getLong(index)
     val validTo get() = validToReader.getLong(index)
-    val op get() = opReader.getLeg(index)!!
+    val op: EventOp
+        get() = opsByTypeId[opReader.getTypeId(index).toInt()]
+            ?: opReader.getLeg(index).let { leg ->
+                throw Fault("unknown op leg: $leg", "xtdb/unknown-op-leg", mapOf("leg" to leg))
+            }
 
     fun isValid(): Boolean = index < maxIndex
 

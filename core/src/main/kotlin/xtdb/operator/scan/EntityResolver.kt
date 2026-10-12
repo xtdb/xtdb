@@ -1,6 +1,8 @@
 package xtdb.operator.scan
 
 import xtdb.bitemporal.PolygonCalculator
+import xtdb.trie.EventOp.ERASE
+import xtdb.trie.EventOp.PUT
 import xtdb.util.TemporalBounds
 import kotlin.math.max
 import kotlin.math.min
@@ -38,7 +40,7 @@ internal class AsOfResolver(
 
             // an erase is exempt from the system-time bound, and suppresses only events older than
             // itself — which, walking newest-first, are exactly the ones we have yet to reach.
-            if (op == "erase") return
+            if (op == ERASE) return
 
             if (evPtr.systemFrom >= stUpper) continue
 
@@ -46,7 +48,7 @@ internal class AsOfResolver(
             val validTo = evPtr.validTo
 
             if (validFrom <= vtLower && vtLower < validTo) {
-                if (op == "put") {
+                if (op == PUT) {
                     val outValidFrom = max(validFrom, leftBound)
                     val outValidTo = min(validTo, rightBound)
 
@@ -84,7 +86,7 @@ internal class PolygonResolver(
             val leafPtr = events.nextEvent() ?: return
             val evPtr = leafPtr.evPtr
 
-            val polygon = polygonCalculator.calculate(evPtr)?.takeIf { evPtr.op == "put" } ?: continue
+            val polygon = polygonCalculator.calculate(evPtr)?.takeIf { evPtr.op == PUT } ?: continue
 
             val sysFrom = evPtr.systemFrom
             val idx = evPtr.index

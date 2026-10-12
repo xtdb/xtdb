@@ -7,7 +7,6 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 import xtdb.arrow.Relation
 import xtdb.arrow.STRUCT_TYPE
-import xtdb.arrow.VectorType.Companion.I64
 import xtdb.trie.EventRowPointer
 import xtdb.trie.Trie
 import xtdb.util.TemporalBounds
@@ -29,7 +28,7 @@ class PolygonCalculatorTest {
         this["_valid_from"].writeLong(validFrom)
         this["_valid_to"].writeLong(validTo)
 
-        if (op == "put") this["op"].vectorFor("put", STRUCT_TYPE, false).vectorFor("x", I64.arrowType, false).writeLong(0)
+        if (op == "put") this["op"].vectorFor("put", STRUCT_TYPE, false).writeObject(mapOf("x" to 0L))
         else this["op"][op].writeNull()
 
         endRow()
