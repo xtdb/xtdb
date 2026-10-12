@@ -190,6 +190,7 @@ internal class SegmentMerge(private val al: BufferAllocator) : AutoCloseable {
             outWriter.endPage(ByteArrayList.from(*this.path))
         } finally {
             resolvedRels.closeAll()
+            release()
         }
     }
 
@@ -264,7 +265,10 @@ private class LocalSegment(
         // in the utility, we keep the Segments open throughout,
         // so can be excused for the dataLoader being used 'outside its lifetime'
         override fun page(leaf: ArrowHashTrie.Leaf) =
-            pageMeta(this@LocalSegment, this, leaf, UNBOUND_TEMPORAL_METADATA, recency)
+            pageMeta(
+                Segment.Page.page(sameSystemTimeResolved) { al -> dataLoader.loadPage(leaf.dataPageIndex, al) },
+                this, leaf, UNBOUND_TEMPORAL_METADATA, recency
+            )
 
         override fun testPage(leaf: ArrowHashTrie.Leaf) = true
 
@@ -278,9 +282,6 @@ private class LocalSegment(
 
     private val dataLoader = Relation.loader(al, dataFile)
     override val schema: Schema get() = dataLoader.schema
-
-    override suspend fun loadDataPage(al: BufferAllocator, leaf: ArrowHashTrie.Leaf) =
-        dataLoader.loadPage(leaf.dataPageIndex, al)
 
     override fun close() {
         dataLoader.close()
