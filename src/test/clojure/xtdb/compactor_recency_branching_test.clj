@@ -11,7 +11,7 @@
            (org.apache.arrow.memory RootAllocator)
            (xtdb.arrow Relation Relation$Loader)
            (xtdb.storage LocalStorage)
-           (xtdb.trie ArrowHashTrie ArrowHashTrie$IidBranch ArrowHashTrie$Leaf ArrowHashTrie$RecencyBranch HashTrie$RecencyBranch$Bucket)))
+           (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf)))
 
 (defn- table-path ^Path [node table-name]
   (let [db (db/primary-db node)]
@@ -39,19 +39,6 @@
          sort
          vec)))
 
-(defn- leaf-bounds
-  "each leaf's data page index, with the tightest recency-branch key above it"
-  [^ArrowHashTrie trie]
-  (letfn [(walk [node bound]
-            (cond
-              (nil? node) []
-              (instance? ArrowHashTrie$Leaf node) [[(.getDataPageIndex ^ArrowHashTrie$Leaf node) bound]]
-              (instance? ArrowHashTrie$IidBranch node) (mapcat #(walk % bound) (.getHashChildren ^ArrowHashTrie$IidBranch node))
-              (instance? ArrowHashTrie$RecencyBranch node) (mapcat (fn [^HashTrie$RecencyBranch$Bucket bucket]
-                                                                     (walk (.getNode bucket) (min bound (.getRecency bucket))))
-                                                                   (.getBuckets ^ArrowHashTrie$RecencyBranch node))))]
-    (walk (.getRootNode trie) Long/MAX_VALUE)))
-
 (defn- trie-summary
   "whether the trie branches on recency, and any page holding a row newer than the bound its branches give it"
   [node trie-key]
@@ -64,21 +51,34 @@
       (.loadNextPage meta-ldr meta-rel)
       (let [nodes (.vectorFor meta-rel "nodes")]
         {:recency-branched? (contains? (set (.getLegNames nodes)) "branch-recency")
-         :bound-violations (vec (for [[page-idx bound] (leaf-bounds (ArrowHashTrie. nodes))
-                                      :let [_ (.loadPage data-ldr page-idx data-rel)
+         :bound-violations (vec (for [^ArrowHashTrie$Leaf leaf (.getLeaves (ArrowHashTrie. nodes))
+                                      :let [page-idx (.getDataPageIndex leaf)
+                                            bound (.getRecencyBound leaf)
+                                            _ (.loadPage data-ldr page-idx data-rel)
                                             recency-vec (.vectorFor data-rel "_recency")
                                             newest (reduce max Long/MIN_VALUE
                                                            (map #(.getLong recency-vec %) (range (.getRowCount data-rel))))]
                                       :when (> newest bound)]
                                   [trie-key page-idx newest bound]))}))))
 
+(def ^:private window-sql
+  "SELECT _id, v, _system_from FROM docs
+   FOR SYSTEM_TIME FROM TIMESTAMP '2020-01-05T19:00:00Z' TO TIMESTAMP '2020-01-06T07:00:00Z'")
+
+(def ^:private all-sql
+  "SELECT _id, v, _system_from, _system_to FROM docs FOR ALL SYSTEM_TIME FOR ALL VALID_TIME")
+
+(defn- rows-read [node sql]
+  (->> (xt/q node (str "EXPLAIN ANALYZE " sql))
+       (filter #(= :scan (:op %)))
+       first :attributes :scan-rows-read))
+
 (defn- query-results [node]
-  {:window (set (xt/q node "SELECT _id, v, _system_from FROM docs
-                            FOR SYSTEM_TIME FROM TIMESTAMP '2020-01-05T19:00:00Z' TO TIMESTAMP '2020-01-06T07:00:00Z'"))
-   :all (set (xt/q node "SELECT _id, v, _system_from, _system_to FROM docs FOR ALL SYSTEM_TIME FOR ALL VALID_TIME"))
+  {:window (set (xt/q node window-sql))
+   :all (set (xt/q node all-sql))
    :solo (xt/q node ["SELECT v, _system_from FROM docs FOR ALL SYSTEM_TIME WHERE _id = ? ORDER BY _system_from" :solo])})
 
-(t/deftest historical-files-branch-by-recency-and-read-back-identically
+(t/deftest historical-files-branch-by-recency-and-a-recent-window-reads-a-fraction-of-them
   (tu/with-tmp-dir* "compactor-recency-branching"
     (fn [node-dir]
       (binding [c/*page-size* 8
@@ -99,6 +99,9 @@
               (t/is (empty? (mapcat :bound-violations summaries)) "no page holds a row newer than its bucket's bound"))
 
             (t/is (= before (query-results node)) "compaction leaves query results unchanged")
+
+            (t/is (< (* 4 (rows-read node window-sql)) (rows-read node all-sql))
+                  "a 12h window reads a fraction of five days' history")
 
             (t/is (not-any? #(re-find #"recency" (str %))
                             (concat (mapcat keys (xt/q node "SELECT * FROM docs FOR ALL SYSTEM_TIME"))
