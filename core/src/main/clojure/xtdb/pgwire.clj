@@ -32,7 +32,7 @@
            [java.util.concurrent ArrayBlockingQueue BlockingQueue ExecutorService Future$State FutureTask LinkedBlockingQueue RejectedExecutionException ThreadPoolExecutor TimeUnit]
            [javax.net.ssl KeyManagerFactory SSLContext]
            (org.apache.arrow.memory BufferAllocator)
-           org.apache.arrow.vector.types.pojo.Field
+           (org.apache.arrow.vector.types.pojo ArrowType$List ArrowType$Null Field)
            (xtdb.api Authenticator DataSource DataSource$ConnectionBuilder OAuthResult ServerConfig Xtdb Xtdb$Config Xtdb$Connection Xtdb$Statement Xtdb$ExecutedTx Xtdb$SubmittedTx)
            xtdb.api.module.XtdbModule
            (xtdb.arrow Relation Relation$ILoader VectorType)
@@ -40,7 +40,7 @@
            xtdb.database.Database$Config
            (xtdb.api.error Incorrect)
            xtdb.api.ResultCursor
-           (xtdb.pgwire PgType PgTypes)
+           (xtdb.pgwire PgType PgTypes TypCategory)
            xtdb.JsonSerde
            xtdb.JsonLdSerde
            xtdb.NodeBase
@@ -48,7 +48,7 @@
                        ParsedStatement ParsedStatement$Visitor ParsedStatement$Begin
                        ParsedStatement$Commit ParsedStatement$CommitMode ParsedStatement$Query ParsedStatement$Dml
                        ParsedStatement$ShowVariable ParsedStatement$CopyIn ParsedStatement$Execute
-                       ParsedStatement$SetTransaction)
+                       ParsedStatement$SetTransaction ParsedStatement$DiscardTarget ParsedStatement$Discard)
            (xtdb.tx TxOp$PutDocs)))
 
 ;; references
@@ -273,6 +273,7 @@
                                                                         :binary "22P03")}
                            :xtdb/invalid-client-credentials {::severity :error, ::error-code "28P01"}
                            :xtdb/authn-failed {::severity :error, ::error-code "28P01"}
+                           :xtdb/discard-in-tx {::severity :error, ::error-code "25001"}
 
                            {::severity :error, ::error-code "08P01"})
 
@@ -343,18 +344,19 @@
   ([conn status]
    (pgio/cmd-write-msg conn pgio/msg-ready {:status status})))
 
+(defn- apply-startup-params [{:keys [conn-state] :as conn}]
+  (doseq [[k v] (:startup-params @conn-state)]
+    (if (= time-zone-nf-param-name k)
+      (set-time-zone conn v)
+      (set-session-parameter conn k v))))
+
 (defn startup-ok [{:keys [server] :as conn} startup-opts]
   (let [{:keys [server-state]} server]
 
-    (let [default-server-params (-> (:parameters @server-state)
-                                    (update-keys str/lower-case))
-          startup-opts-from-client (-> startup-opts
-                                       (update-keys str/lower-case))]
-
-      (doseq [[k v] (merge default-server-params startup-opts-from-client)]
-        (if (= time-zone-nf-param-name k)
-          (set-time-zone conn v)
-          (set-session-parameter conn k v))))
+    (swap! (:conn-state conn) assoc :startup-params
+           (merge (update-keys (:parameters @server-state) str/lower-case)
+                  (update-keys startup-opts str/lower-case)))
+    (apply-startup-params conn)
 
     ;; thread the authenticated user onto the connection — it goes into every write's TxOpts (audit trail)
     (.setUser ^Xtdb$Connection (:node-conn @(:conn-state conn)) (get startup-opts "user"))
@@ -944,13 +946,18 @@
                     (.openUncheckedQuery statement)))))
 
             (->pg-cols [prepared-pg-cols ^ResultCursor cursor]
-              (let [resolved-pg-cols (mapv (fn [[col-name vec-type]] (type->pg-col col-name vec-type)) (.getResultTypes cursor))]
+              (let [result-types (.getResultTypes cursor)
+                    resolved-pg-cols (mapv (fn [[col-name vec-type]] (type->pg-col col-name vec-type)) result-types)]
                 (when-not (and (= (count prepared-pg-cols) (count resolved-pg-cols))
-                               (->> (map vector prepared-pg-cols resolved-pg-cols)
-                                    (every? (fn [[{prepared-pg-type :pg-type} {resolved-pg-type :pg-type}]]
+                               (->> (map vector prepared-pg-cols result-types resolved-pg-cols)
+                                    (every? (fn [[{^PgType prepared-pg-type :pg-type} [_ ^VectorType vec-type] {resolved-pg-type :pg-type}]]
                                               (or (identical? prepared-pg-type PgType/PG_DEFAULT)
                                                   (identical? resolved-pg-type PgType/PG_NULL)
-                                                  (identical? prepared-pg-type resolved-pg-type))))))
+                                                  (identical? prepared-pg-type resolved-pg-type)
+                                                  ;; an empty list has no element type, so fits any array description
+                                                  (and (identical? TypCategory/ARRAY (.getTypcategory prepared-pg-type))
+                                                       (instance? ArrowType$List (.getArrowType vec-type))
+                                                       (instance? ArrowType$Null (.getArrowType (types/unnest-type vec-type)))))))))
                   (throw (err/conflict :prepared-query-out-of-date "cached plan must not change result type"
                                        #_ ; FIXME: these break because of PgType not being serializable
                                        {:prepared-cols prepared-pg-cols
@@ -1244,6 +1251,21 @@
       (when-let [error (.getError tx)]
         (throw error)))))
 
+(defn- close-all-prepared-statements [{:keys [conn-state] :as conn}]
+  (close-all-portals conn)
+  (doseq [stmt (vals (:prepared-statements @conn-state))]
+    (util/close (:statement stmt)))
+  (swap! conn-state dissoc :prepared-statements))
+
+(defn- cmd-discard [{:keys [conn-state] :as conn} ^ParsedStatement$DiscardTarget target]
+  (case (.name target)
+    "ALL" (do
+            (.resetSession ^Xtdb$Connection (:node-conn @conn-state))
+            (apply-startup-params conn)
+            (close-all-prepared-statements conn))
+    ("PLANS" "TEMP" "SEQUENCES") nil)
+  (pgio/cmd-write-msg conn pgio/msg-command-complete {:command (.getCommandTag target)}))
+
 (defn execute-portal [{:keys [conn-state] :as conn} {:keys [^ParsedStatement parsed canned-response] :as portal}]
   (verify-permissibility conn portal)
 
@@ -1301,6 +1323,7 @@
                  (cmd-set-session-parameter conn (.getName stmt)
                                             (.evalLiteral ^SqlPlanner (:sql-planner (-> conn :server )) (.getValue stmt) nil)))
                (visitSetRole [_ _] nil)
+               (visitDiscard [_ stmt] (cmd-discard conn (.getTarget stmt)))
 
                (visitCopyIn [_ stmt]
                  (when (nil? (.getFormat stmt))
@@ -1362,6 +1385,7 @@
       ;; the extended protocol, rather than shaping a tx that commits straight away.
       (when-not (or (.isTxOpen ^Xtdb$Connection (:node-conn @conn-state))
                     (instance? ParsedStatement$Begin parsed)
+                    (instance? ParsedStatement$Discard parsed)
                     (instance? ParsedStatement$SetTransaction parsed)
                     (instance? ParsedStatement$ShowVariable parsed)
                     (instance? ParsedStatement$CopyIn parsed))

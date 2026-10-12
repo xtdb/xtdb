@@ -5,6 +5,7 @@ import org.apache.arrow.vector.types.FloatingPointPrecision.SINGLE
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.ArrowType.ArrowTypeVisitor
 import org.apache.commons.codec.binary.Hex
+import xtdb.api.error.Incorrect
 import xtdb.arrow.VectorReader
 import xtdb.arrow.VectorType
 import xtdb.arrow.VectorType.Companion.BOOL
@@ -81,6 +82,73 @@ sealed class PgType(
     val typinput: String? = null,
     val typoutput: String? = null,
 ) {
+    /**
+     * Postgres's spelling of this type, as `format_type(oid, NULL)` renders it.
+     * The types Postgres has no name for (keyword, transit, duration) keep their `typname`.
+     */
+    val formatName: String
+        get() = when (this) {
+            Default -> typname
+            Null, Text -> "text"
+            Int8 -> "bigint"
+            Int4 -> "integer"
+            Int2 -> "smallint"
+            Float4 -> "real"
+            Float8 -> "double precision"
+            Bool -> "boolean"
+            VarChar -> "character varying"
+            Numeric -> "numeric"
+            Timestamp -> "timestamp without time zone"
+            TimestampTz -> "timestamp with time zone"
+            Date -> "date"
+            Time -> "time without time zone"
+            PgInterval -> "interval"
+            PgDuration -> typname
+            TsTzRange -> "tstzrange"
+            Bytes -> "bytea"
+            Int4s -> "integer[]"
+            Int8s -> "bigint[]"
+            Texts -> "text[]"
+            Uuid -> "uuid"
+            Keyword -> typname
+            PgOid -> "oid"
+            RegClass -> "regclass"
+            RegProc -> "regproc"
+            Json, JsonLd -> "json"
+            Jsonb -> "jsonb"
+            Transit -> typname
+        }
+
+    /**
+     * `information_schema.columns.data_type`: `ARRAY` for arrays, [formatName] for Postgres's own types,
+     * `USER-DEFINED` for the rest - which `udt_name` then identifies.
+     */
+    val dataType: String
+        get() = when (this) {
+            Int4s, Int8s, Texts -> "ARRAY"
+            Default, PgDuration, Keyword, Transit -> "USER-DEFINED"
+            else -> formatName
+        }
+
+    /**
+     * `format_type(oid, typmod)`: [formatName] plus the modifier Postgres packs into `typmod` -
+     * `varchar(n)` stores n + 4, `numeric(p, s)` stores ((p << 16) | s) + 4, the temporal types store their precision.
+     * A negative `typmod` means no modifier.
+     */
+    fun formatType(typmod: Int): String {
+        if (typmod < 0) return formatName
+
+        return when (this) {
+            VarChar -> if (typmod >= 4) "character varying(${typmod - 4})" else formatName
+            Numeric -> if (typmod >= 4) "numeric(${((typmod - 4) shr 16) and 0xffff},${(typmod - 4) and 0xffff})" else formatName
+            Timestamp -> "timestamp($typmod) without time zone"
+            TimestampTz -> "timestamp($typmod) with time zone"
+            Time -> "time($typmod) without time zone"
+            PgInterval -> if ((typmod and 0xffff) != 0xffff) "interval(${typmod and 0xffff})" else formatName
+            else -> formatName
+        }
+    }
+
     open fun readBinary(data: ByteArray): Any? = unsupported("readBinary")
     open fun readText(data: ByteArray): Any? = unsupported("readText")
     open fun writeBinary(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray? = unsupported("writeBinary")
@@ -280,7 +348,7 @@ sealed class PgType(
 
     data object Numeric : PgType(
         typname = "numeric",
-        xtType = null, // decimal has precision/scale
+        xtType = VectorType.Scalar(ArrowType.Decimal(32, 0, 128)), // precision and scale aren't on the wire, so this is a placeholder for describing
         oid = 1700,
         typcategory = NUMERIC,
         typsend = "numeric_send",
@@ -435,8 +503,13 @@ sealed class PgType(
         typsend = "interval_send",
         typreceive = "interval_recv",
     ) {
-        override fun readBinary(data: ByteArray): Nothing =
-            throw IllegalArgumentException("Interval parameters currently unsupported")
+        override fun readBinary(data: ByteArray): Interval {
+            val bb = ByteBuffer.wrap(data)
+            val micros = bb.long
+            val days = bb.int
+            val months = bb.int
+            return Interval(months, days, Math.multiplyExact(micros, 1000L))
+        }
 
         override fun readText(data: ByteArray): Interval =
             readUtf8(data).asInterval()
@@ -514,6 +587,8 @@ sealed class PgType(
         typsend = "byteasend",
         typreceive = "bytearecv",
     ) {
+        override fun readBinary(data: ByteArray): ByteArray = data
+
         override fun readText(data: ByteArray): ByteArray {
             val s = readUtf8(data)
             return if (s.startsWith("\\x")) Hex.decodeHex(s.substring(2)) else data
@@ -534,7 +609,7 @@ sealed class PgType(
 
     data object Int4s : PgType(
         typname = "_int4",
-        xtType = null,
+        xtType = VectorType.listTypeOf(VectorType.I32),
         oid = 1007,
         typcategory = ARRAY,
         typsend = "array_send",
@@ -545,7 +620,7 @@ sealed class PgType(
     ) {
         private const val TYPLEN = 4
 
-        override fun readBinary(data: ByteArray): List<Long> = readBinaryIntArray(data)
+        override fun readBinary(data: ByteArray): List<Int> = readBinaryIntArray(data).map { it.toInt() }
 
         override fun readText(data: ByteArray): List<Int?> = parsePgArray(readUtf8(data)).map { it?.toInt() }
 
@@ -573,7 +648,7 @@ sealed class PgType(
 
     data object Int8s : PgType(
         typname = "_int8",
-        xtType = null,
+        xtType = VectorType.listTypeOf(VectorType.I64),
         oid = 1016,
         typcategory = ARRAY,
         typsend = "array_send",
@@ -612,7 +687,7 @@ sealed class PgType(
 
     data object Texts : PgType(
         typname = "_text",
-        xtType = null,
+        xtType = VectorType.listTypeOf(VectorType.UTF8),
         oid = 1009,
         typcategory = ARRAY,
         typsend = "array_send",
@@ -795,7 +870,17 @@ sealed class PgType(
         typsend = "jsonb_send",
         typreceive = "jsonb_recv",
     ) {
-        override fun readBinary(data: ByteArray): Any? = jsonDecode(ByteArrayInputStream(data))
+        private const val JSONB_VERSION: Byte = 1
+
+        override fun readBinary(data: ByteArray): Any? {
+            val version = data.firstOrNull()
+            if (version != JSONB_VERSION)
+                throw Incorrect(
+                    "Unsupported binary jsonb version: $version", "xtdb.pgwire/unsupported-jsonb-version",
+                    mapOf("version" to version)
+                )
+            return jsonDecode(ByteArrayInputStream(data, 1, data.size - 1))
+        }
 
         override fun readText(data: ByteArray): Any? = jsonDecode(ByteArrayInputStream(data))
     }
@@ -845,6 +930,11 @@ sealed class PgType(
 
         @JvmStatic
         fun fromOid(oid: Oid): PgType? = byOid[oid]
+
+        /** `format_type(oid, typmod)`, including Postgres's `-` for the zero oid and `???` for an oid it doesn't know. */
+        @JvmStatic
+        fun formatType(oid: Oid, typmod: Int): String =
+            if (oid == 0) "-" else fromOid(oid)?.formatType(typmod) ?: "???"
 
         @JvmStatic
         fun fromXtType(xtType: VectorType): PgType = xtType.arrowType.accept(object : ArrowTypeVisitor<PgType> {

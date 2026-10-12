@@ -22,6 +22,7 @@
            (xtdb.arrow ListValueReader RelationReader ValueBox ValueReader Vector VectorMask VectorReader VectorType VectorType$Listy VectorType$Mono VectorType$Nothing VectorType$Poly VectorType$Struct)
            (xtdb.expression PgFormat)
            (xtdb.operator MaskSpec ProjectionSpec SelectionSpec)
+           (xtdb.pgwire PgTypes)
            xtdb.time.Interval
            (xtdb.util StringUtil)))
 
@@ -637,7 +638,8 @@
                       :=== :null_eq :compare_nulls_first :compare_nulls_last
                       :distinct_from
                       :period :str :_patch
-                      :string_to_array}
+                      :string_to_array
+                      :format_type}
                     normalise-fn-name)))
 
 (defn- cont-b3-call [arg-type code]
@@ -1053,21 +1055,29 @@
 (defmethod codegen-call [:double :num] [_]
   {:return-type #xt/type :f64, :->call-code #(do `(double ~@%))})
 
-(defn like->regex [like-pattern]
-  (-> like-pattern
-      (Pattern/quote)
-      (.replace "%" "\\E.*\\Q")
-      (.replace "_" "\\E.\\Q")
-      (->> (format "^%s\\z"))
-      re-pattern))
+(defn like->regex
+  ([like-pattern] (like->regex like-pattern ""))
+  ([like-pattern inline-flags]
+   (-> like-pattern
+       (Pattern/quote)
+       (.replace "%" "\\E.*\\Q")
+       (.replace "_" "\\E.\\Q")
+       (->> (format "%s^%s\\z" inline-flags))
+       re-pattern)))
 
-(defmethod codegen-call [:like :utf8 :utf8] [{[_ {:keys [literal]}] :args}]
+(defn- codegen-like [literal inline-flags]
   {:return-type #xt/type :bool
    :->call-code (fn [[haystack-code needle-code]]
                   `(boolean (re-find ~(if literal
-                                        (like->regex literal)
-                                        `(like->regex (resolve-string ~needle-code)))
+                                        (like->regex literal inline-flags)
+                                        `(like->regex (resolve-string ~needle-code) ~inline-flags))
                                      (resolve-string ~haystack-code))))})
+
+(defmethod codegen-call [:like :utf8 :utf8] [{[_ {:keys [literal]}] :args}]
+  (codegen-like literal ""))
+
+(defmethod codegen-call [:ilike :utf8 :utf8] [{[_ {:keys [literal]}] :args}]
+  (codegen-like literal "(?iu)"))
 
 (defn binary->hex-like-pattern
   "Returns a like pattern that will match on binary encoded to hex.
@@ -2092,11 +2102,70 @@
   {:return-type r-type
    :->call-code (fn [[_ r]] r)})
 
-(defmethod codegen-cast [:list :list] [{:keys [^VectorType source-type, ^VectorType target-type]}]
+(defn- codegen-cast-list-elements [^VectorType source-type ^VectorType target-type cast-opts]
+  (let [src-el-type (types/unnest-type source-type)
+        tgt-el-type (types/unnest-type target-type)
+        box-sym (gensym 'box)
+        el-sym (gensym 'el)
+        !ret-types (volatile! [])
+        read-code (continue-read (fn [^VectorType leg-type code]
+                                   (if (= #xt/type :null leg-type)
+                                     (do (vswap! !ret-types conj #xt/type :null)
+                                         `(do ~code (.writeNull ~box-sym) ~box-sym))
+                                     (let [{:keys [^VectorType return-type ->call-code]}
+                                           (codegen-cast {:source-type leg-type, :target-type tgt-el-type, :cast-opts cast-opts})]
+                                       (vswap! !ret-types conj return-type)
+                                       `(do
+                                          ~(write-value-code return-type box-sym
+                                                             (types/arrow-type->leg (.getArrowType return-type))
+                                                             (->call-code [code]))
+                                          ~box-sym))))
+                                 src-el-type el-sym)
+        ret-type (types/->type [:list (apply types/merge-types @!ret-types)])]
+    {:return-type ret-type
+     :->call-code (fn [[code]]
+                    (let [list-sym (with-meta (gensym 'list) {:tag `ListValueReader})
+                          el-sym (with-meta el-sym {:tag `ValueReader})]
+                      `(let [~list-sym ~code
+                             ~box-sym (ValueBox.)]
+                         (reify ListValueReader
+                           (~'size [_#] (.size ~list-sym))
+                           (~'nth [_# idx#]
+                            (let [~el-sym (.nth ~list-sym idx#)]
+                              ~read-code))))))}))
+
+(defn pg-array-text->list-reader ^ListValueReader [^String text]
+  (let [text (str/trim text)
+        _ (when-not (and (str/starts-with? text "{") (str/ends-with? text "}"))
+            (throw (err/incorrect ::malformed-array-literal (format "Malformed array literal: '%s'" text))))
+        _ (when (str/starts-with? (str/triml (subs text 1)) "{")
+            (throw (err/unsupported ::multi-dimensional-array-literal "Multi-dimensional array literals aren't supported")))
+        els (vec (PgTypes/parsePgArray text))
+        box (ValueBox.)]
+    (reify ListValueReader
+      (size [_] (count els))
+      (nth [_ idx]
+        (if-some [^String el (nth els idx)]
+          (.writeBytes box "utf8" (str->buf el))
+          (.writeNull box))
+        box))))
+
+(defmethod codegen-cast [:utf8 :list] [{:keys [target-type cast-opts]}]
+  (let [text-list-type (types/->type [:list (types/merge-types #xt/type :utf8 #xt/type :null)])
+        {:keys [return-type ->call-code]} (codegen-cast-list-elements text-list-type target-type cast-opts)]
+    {:return-type return-type
+     :->call-code (fn [[code]]
+                    (->call-code [`(pg-array-text->list-reader (buf->str ~code))]))}))
+
+(defmethod codegen-cast [:list :list] [{:keys [^VectorType source-type, ^VectorType target-type cast-opts]}]
   (let [[_ source-el-type] (types/vec-type->col-type source-type)
-        [_ target-el-type :as target-col-type] (types/vec-type->col-type target-type)]
-    (assert (types/union? target-el-type))
-    (if (types/union? source-el-type)
+        [_ target-el-type] (types/vec-type->col-type target-type)]
+    (cond
+      (and (= source-type target-type) (empty? cast-opts)) {:return-type target-type, :->call-code first}
+
+      (not (types/union? target-el-type)) (codegen-cast-list-elements source-type target-type cast-opts)
+
+      (types/union? source-el-type)
       (let [target-types ^List (vec (second target-el-type))
             type-id-mapping (->> (second source-el-type)
                                  (mapv (fn [source-type]
@@ -2105,6 +2174,7 @@
          :->call-code (fn [[code]]
                         `(RemappedTypeIdReader. ~code (byte-array ~type-id-mapping)))})
 
+      :else
       (let [type-id (.indexOf ^List (vec (second target-el-type)) source-el-type)]
         {:return-type target-type
          :->call-code (fn [[code]]

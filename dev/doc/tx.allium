@@ -229,6 +229,7 @@ entity Connection {
     user: User                       -- session identity, set once at authentication
     auto_commit: Boolean
     default_tz: ZoneId
+    opened_tz: ZoneId                -- the default_tz the connection was constructed with
     await_token: TxBasisToken?       -- advanced by every write, threaded through every read
     default_access_mode: SessionAccessMode?  -- set by SET SESSION CHARACTERISTICS; null leaves a bare BEGIN unspecified
 
@@ -974,6 +975,32 @@ rule CloseConnection {
             not exists connection.tx
 }
 
+---- Rules: Session Reset
+
+-- pgwire's DISCARD ALL, which a connection pool issues before handing a connection to its next borrower.
+-- pgwire then re-applies the startup parameters, and closes every prepared statement and portal.
+
+rule ResetSession {
+    -- The session settings return to their construction-time values.
+    -- user is kept: it is the session identity, set once at authentication.
+    when: ResetSession(frontend, connection)
+    requires: connection.tx = null
+
+    ensures:
+        connection.default_tz = connection.opened_tz
+        connection.await_token = null
+        connection.default_access_mode = null
+}
+
+rule ResetSessionInTxRejected {
+    -- Nothing is reset.
+    when: ResetSession(frontend, connection)
+    requires: connection.tx != null
+
+    ensures:
+        StatementRejected(error_code: `xtdb/discard-in-tx`)
+}
+
 ---- Rules: Flight SQL Transaction Handles
 
 rule FlightSqlBeginOpensHandle {
@@ -1105,7 +1132,7 @@ actor FlightSqlFrontend {
 ---- Surfaces
 
 surface PgwireTxControl {
-    -- BEGIN / START TRANSACTION, COMMIT and ROLLBACK as SQL, which pgwire parses itself.
+    -- BEGIN / START TRANSACTION, COMMIT and ROLLBACK as SQL, which pgwire parses itself, and DISCARD ALL.
     facing frontend: PgwireFrontend
 
     context conn: Connection
@@ -1117,6 +1144,7 @@ surface PgwireTxControl {
             when conn.tx != null
         RollbackTransaction(frontend, conn)
             when conn.tx != null
+        ResetSession(frontend, conn)
 }
 
 surface SqlStatements {

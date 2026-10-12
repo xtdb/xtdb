@@ -63,6 +63,9 @@
     "foo.a NOT LIKE foo.b" '(not (like f/a f/b))
     "foo.a NOT LIKE 'foo%'" '(not (like f/a "foo%"))
 
+    "foo.a ILIKE 'foo%'" '(ilike f/a "foo%")
+    "foo.a NOT ILIKE foo.b" '(not (ilike f/a f/b))
+
     ;; no support for ESCAPE (or default escapes), see #157
     ))
 
@@ -80,6 +83,15 @@
 
   (t/is (= [{:match true}]
            (xt/q tu/*node* "SELECT ('ABC' LIKE_REGEX 'a' FLAG 'i') as match"))))
+
+(t/deftest test-ilike-query
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1, :name "Alice"} {:xt/id 2, :name "bob"} {:xt/id 3, :name "ALINE"}]])
+
+  (t/is (= [{:xt/id 1} {:xt/id 3}]
+           (xt/q tu/*node* "SELECT _id FROM docs WHERE name ILIKE 'al%' ORDER BY _id")))
+
+  (t/is (= [{:xt/id 2}]
+           (xt/q tu/*node* "SELECT _id FROM docs WHERE name NOT ILIKE 'AL%' ORDER BY _id"))))
 
 (t/deftest test-postgres-regex-expr
   (t/are [sql expected] (= expected (plan-expr-with-foo sql))
@@ -681,6 +693,14 @@
       (= expected (plan-expr-with-foo sql))
 
     "CAST(NULL AS INT)" '(cast nil #xt/type :i32)
+    "CAST(foo.a AS BIGINT ARRAY)" '(cast f/a #xt/type [:list :i64])
+    "foo.a::BIGINT ARRAY" '(cast f/a #xt/type [:list :i64])
+    "foo.a::BIGINT[]" '(cast f/a #xt/type [:list :i64])
+    "foo.a::BIGINT[3]" '(cast f/a #xt/type [:list :i64])
+    "foo.a::VARCHAR ARRAY[3]" '(cast f/a #xt/type [:list :utf8])
+    "foo.a::INT[][]" '(cast f/a #xt/type [:list [:list :i32]])
+    "foo.a::int8[]" '(cast f/a #xt/type [:list :i64])
+    "foo.a::text[]" '(cast f/a #xt/type [:list :utf8])
     "CAST(NULL AS INTEGER)" '(cast nil #xt/type :i32)
     "CAST(NULL AS BIGINT)" '(cast nil #xt/type :i64)
     "CAST(NULL AS SMALLINT)" '(cast nil #xt/type :i16)
@@ -699,6 +719,23 @@
       "foo.a::INT" '(cast f/a #xt/type :i32)
       "'42.0'::FLOAT" '(cast "42.0" #xt/type :f32)
       "43.1::TEXT" '(cast 43.1 #xt/type :utf8)))
+
+  (t/testing "Postgres type names"
+    (t/are [sql expected]
+        (= expected (plan-expr-with-foo sql))
+
+      "foo.a::int2" '(cast f/a #xt/type :i16)
+      "foo.a::int4" '(cast f/a #xt/type :i32)
+      "foo.a::INT8" '(cast f/a #xt/type :i64)
+      "foo.a::float4" '(cast f/a #xt/type :f32)
+      "CAST(foo.a AS float8)" '(cast f/a #xt/type :f64)
+      "foo.a::bool" '(cast f/a #xt/type :bool)
+      "foo.a::bpchar" '(cast f/a #xt/type :utf8)
+      "foo.a::name" '(cast f/a #xt/type :utf8)))
+
+  (t/is (= [{:name "x", :int8 1}]
+           (xt/q tu/*node* "SELECT 'x'::name AS name, '1'::int8 AS int8"))
+        "the aliases stay usable as identifiers")
   
   (t/testing "used within a query"
     (t/is (= [{:x 42}]

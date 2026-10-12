@@ -115,8 +115,8 @@ describe("connects to XT", function() {
       assert.deepStrictEqual([...res], [{_id: 1, nest: {a: 1, b: 1, c: 1.1, d: 1}}])
 
       res = await conn`select * from information_schema.columns WHERE table_name = 'tagged_nums' AND column_name = 'nest'`
-      const type = res[0].data_type;
-      assert.equal('[:struct {"a" :i64, "b" :i64, "c" :f64, "d" :f64}]', type, `data_type is actually ${type}`);
+      const type = res[0].xt_type;
+      assert.equal('[:struct {"a" :i64, "b" :i64, "c" :f64, "d" :f64}]', type, `xt_type is actually ${type}`);
     } finally {
       await conn.release()
     }

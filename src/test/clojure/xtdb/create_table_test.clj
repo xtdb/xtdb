@@ -13,7 +13,7 @@
                    WHERE table_schema = 'public'")))
 
 (defn- public-columns [node]
-  (set (xt/q node "SELECT table_name, column_name, data_type, is_nullable
+  (set (xt/q node "SELECT table_name, column_name, xt_type, is_nullable
                    FROM information_schema.columns
                    WHERE table_schema = 'public'")))
 
@@ -29,19 +29,19 @@
           "querying declared-but-empty columns returns no rows, no error")))
 
 (defn- col-type [node table col]
-  (xt/q node ["SELECT data_type, is_nullable FROM information_schema.columns
+  (xt/q node ["SELECT xt_type, is_nullable FROM information_schema.columns
                WHERE table_name = ? AND column_name = ?" table col]))
 
 (t/deftest declared-column-widens-cleanly
   (with-open [node (xtn/start-node)]
     (xt/execute-tx node [[:sql "CREATE TABLE foo (a)"]])
 
-    (t/is (= [{:data-type ":nothing", :is-nullable "NO"}] (col-type node "foo" "a"))
+    (t/is (= [{:xt-type ":nothing", :is-nullable "NO"}] (col-type node "foo" "a"))
           "a declared-but-empty column is the lattice bottom: nothing type, not nullable")
 
     (xt/execute-tx node [[:sql "INSERT INTO foo (_id, a) VALUES (1, 42)"]])
 
-    (t/is (= [{:data-type ":i64", :is-nullable "NO"}] (col-type node "foo" "a"))
+    (t/is (= [{:xt-type ":i64", :is-nullable "NO"}] (col-type node "foo" "a"))
           "first insert widens it cleanly to a non-nullable i64 - NOT Maybe(i64)")))
 
 (t/deftest declared-columns-survive-block-flush
@@ -49,7 +49,7 @@
     (xt/execute-tx node [[:sql "CREATE TABLE foo (a, b)"]])
     (tu/flush-block! node)
 
-    (t/is (= [{:data-type ":nothing", :is-nullable "NO"}] (col-type node "foo" "a"))
+    (t/is (= [{:xt-type ":nothing", :is-nullable "NO"}] (col-type node "foo" "a"))
           "a declared Nothing column round-trips through a block flush as Nothing, not Null")))
 
 (t/deftest declared-column-pgwire-type
@@ -159,7 +159,7 @@ $$"])
               "an empty table created on the primary propagates to the read-only follower")))))
 
 (defn- col-type [node table col]
-  (xt/q node ["SELECT data_type, is_nullable FROM information_schema.columns
+  (xt/q node ["SELECT xt_type, is_nullable FROM information_schema.columns
                WHERE table_name = ? AND column_name = ?" table col]))
 
 ;; `TableCatalog/mergeVecTypes` folds each block's types into the catalog, reading each side as a total
@@ -171,13 +171,13 @@ $$"])
     (xt/execute-tx node [[:sql "INSERT INTO foo (_id, v) VALUES (1, 42)"]])
     (tu/flush-block! node)
 
-    (t/is (= [{:data-type ":i64", :is-nullable "NO"}] (col-type node "foo" "v"))
+    (t/is (= [{:xt-type ":i64", :is-nullable "NO"}] (col-type node "foo" "v"))
           "baseline: one non-null i64")
 
     (xt/execute-tx node [[:sql "DELETE FROM foo WHERE _id = 1"]])
     (tu/flush-block! node)
 
-    (t/is (= [{:data-type ":i64", :is-nullable "NO"}] (col-type node "foo" "v"))
+    (t/is (= [{:xt-type ":i64", :is-nullable "NO"}] (col-type node "foo" "v"))
           "a delete ends a version rather than producing one, so it carries no columns and must not widen `v`")))
 
 (t/deftest declaring-a-column-does-not-widen-the-others
@@ -187,5 +187,5 @@ $$"])
     (xt/execute-tx node [[:sql "CREATE TABLE foo (w)"]])
     (tu/flush-block! node)
 
-    (t/is (= [{:data-type ":i64", :is-nullable "NO"}] (col-type node "foo" "v"))
+    (t/is (= [{:xt-type ":i64", :is-nullable "NO"}] (col-type node "foo" "v"))
           "declaring `w` writes no rows, so it must not widen `v`")))

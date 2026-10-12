@@ -1074,14 +1074,25 @@
   PlanError
   (error-string [_] (format "Unsupported precision: %s" precision)))
 
+(defrecord UnsupportedArrayElementType [element-type]
+  PlanError
+  (error-string [_] (format "Unsupported array element type: %s" element-type)))
+
 (defrecord CastArgsVisitor [env]
   SqlVisitor
+  (visitArrayType [this ctx]
+    (let [el-ctx (.dataType ctx)
+          {:keys [cast-type cast-opts]} (.accept el-ctx this)]
+      (if cast-type
+        {:cast-type (types/->type [:list cast-type]), :cast-opts cast-opts}
+        (add-err! env (->UnsupportedArrayElementType (.getText el-ctx))))))
+
   (visitBooleanType [_ _] {:cast-type #xt/type :bool})
   (visitIntegerType [_ ctx]
     {:cast-type (types/->type (case (str/lower-case (.getText ctx))
-                                "smallint" :i16
-                                ("int" "integer") :i32
-                                "bigint" :i64))})
+                                ("smallint" "int2") :i16
+                                ("int" "integer" "int4") :i32
+                                ("bigint" "int8") :i64))})
 
   (visitFloatType [_ _] {:cast-type #xt/type :f32})
   (visitRealType [_ _] {:cast-type #xt/type :f32})
@@ -1262,6 +1273,7 @@
 
 ;; system info
 (def-sql-fns [col_description] 2 2)
+(def-sql-fns [format_type] 2 2)
 
 (defn- json-field-access [obj-expr field-expr]
   (cond
@@ -1590,7 +1602,7 @@
         between-expr)))
 
   (visitLikePredicate [this ctx]
-    (let [like-expr (list 'like
+    (let [like-expr (list (if (.ILIKE ctx) 'ilike 'like)
                           (-> (.expr ctx) (.accept this))
                           (-> (.likePattern ctx) (.accept this)))]
       (if (.NOT ctx)
@@ -1598,10 +1610,11 @@
         like-expr)))
 
   (visitLikePredicatePart2 [{:keys [pt1] :as this} ctx]
-    (let [cp (-> (.likePattern ctx) (.accept (dissoc this :pt1)))]
+    (let [cp (-> (.likePattern ctx) (.accept (dissoc this :pt1)))
+          like-expr (list (if (.ILIKE ctx) 'ilike 'like) pt1 cp)]
       (if (.NOT ctx)
-        (list 'not (list 'like pt1 cp))
-        (list 'like pt1 cp))))
+        (list 'not like-expr)
+        like-expr)))
 
   (visitLikeRegexPredicate [this ctx]
     (let [like-expr (list 'like-regex (.accept (.expr ctx) this)

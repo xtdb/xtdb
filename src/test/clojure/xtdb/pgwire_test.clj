@@ -1611,6 +1611,31 @@
                             {:builder-fn xt-jdbc/builder-fn}))
           "re-run with different type (still transit though)")))
 
+(t/deftest array-params-execute-against-their-described-type
+  (with-open [conn (jdbc-conn {"prepareThreshold" -1})]
+    (doseq [[pg-type els] [["int4" [1 2]] ["int8" [1 2]] ["text" ["a"]]
+                           ["int4" []] ["int8" []] ["text" []]]]
+      (with-open [stmt (.prepareStatement conn "SELECT ? AS a")]
+        (.setArray stmt 1 (.createArrayOf conn pg-type (object-array els)))
+        (t/is (= [{"a" (vec els)}] (rs->maps (.executeQuery stmt)))
+              (str pg-type " " (pr-str els)))))))
+
+(t/deftest decimal-and-array-params-dont-degrade-result-types
+  (with-open [conn (jdbc-conn {"prepareThreshold" -1})]
+    (jdbc/execute! conn ["INSERT INTO docs RECORDS {_id: 1, name: 'a'}"])
+
+    (with-open [stmt (.prepareStatement conn "SELECT ? AS d, ? + 1 AS e, 1 AS i")]
+      (.setBigDecimal stmt 1 1.5M)
+      (.setBigDecimal stmt 2 2.5M)
+      (t/is (= ["numeric" "numeric"] (param-metadata stmt)))
+      (t/is (= [{"d" "numeric"} {"e" "numeric"} {"i" "int8"}] (result-metadata stmt))))
+
+    (with-open [stmt (.prepareStatement conn "SELECT _id, name FROM docs WHERE _id = ANY(?)")]
+      (.setArray stmt 1 (.createArrayOf conn "int8" (object-array [1])))
+      (t/is (= ["_int8"] (param-metadata stmt)))
+      (t/is (= [{"_id" "int8"} {"name" "text"}] (result-metadata stmt)))
+      (t/is (= [{"_id" 1, "name" "a"}] (rs->maps (.executeQuery stmt)))))))
+
 (deftest test-prepared-statments
   (with-open [conn (jdbc-conn {"prepareThreshold" -1})]
     (.execute (.prepareStatement conn "INSERT INTO foo(_id, a, b) VALUES (1, 'one', 2)"))
@@ -2644,7 +2669,7 @@ ORDER BY t.oid DESC LIMIT 1"
                             (jdbc/execute! conn ["SELECT SUBSTRING('asf' FROM 0 FOR -1);"])))))
 
 (t/deftest test-min-max-incomparable-default-json-pgwire
-  (xt/submit-tx tu/*node*
+  (xt/execute-tx tu/*node*
                 [[:put-docs :docs {:xt/id 1, :v 12}]
                  [:put-docs :docs {:xt/id 2, :v #xt/zoned-date-time "2022-08-01T13:34+01:00[Europe/London]"}]])
 
@@ -2667,7 +2692,7 @@ ORDER BY t.oid DESC LIMIT 1"
               "data.from-type is the pr-str'd VectorType form")))))
 
 (t/deftest test-min-max-incomparable-json-ld-pgwire
-  (xt/submit-tx tu/*node*
+  (xt/execute-tx tu/*node*
                 [[:put-docs :docs {:xt/id 1, :v 12}]
                  [:put-docs :docs {:xt/id 2, :v #xt/zoned-date-time "2022-08-01T13:34+01:00[Europe/London]"}]])
 
@@ -3364,6 +3389,89 @@ ORDER BY 1,2;")
 
     (t/testing "fetch size larger than row count"
       (t/is (= 200 (count-rows 500))))))
+
+(deftest discard-all-resets-session-state
+  (with-open [conn (jdbc-conn)]
+    (let [show (fn [sql k] (get (jdbc/execute-one! conn [sql]) k))
+          default-tz (show "SHOW TIME ZONE" :timezone)]
+      (exec conn "SET TIME ZONE 'Asia/Tokyo'")
+      (exec conn "SET foo = 'bar'")
+      (exec conn "INSERT INTO other RECORDS {_id: 1}")
+      (exec conn (str "SET AWAIT_TOKEN = '" (show "SHOW AWAIT_TOKEN" :await_token) "'"))
+      (exec conn "SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY")
+
+      (exec conn "BEGIN")
+      (t/is (thrown? PSQLException (exec conn "INSERT INTO docs RECORDS {_id: 1}")))
+      (exec conn "ROLLBACK")
+      (t/is (= "Asia/Tokyo" (show "SHOW TIME ZONE" :timezone)))
+      (t/is (= "bar" (show "SHOW foo" :foo)))
+      (t/is (some? (show "SHOW AWAIT_TOKEN" :await_token)))
+
+      (exec conn "DISCARD ALL")
+
+      (t/is (= default-tz (show "SHOW TIME ZONE" :timezone)) "time zone back to the startup value")
+      (t/is (nil? (show "SHOW foo" :foo)) "SET parameters cleared")
+      (t/is (nil? (show "SHOW AWAIT_TOKEN" :await_token)) "await token cleared")
+
+      (exec conn "BEGIN")
+      (exec conn "INSERT INTO docs RECORDS {_id: 1}")
+      (exec conn "COMMIT")
+      (t/is (= [{:xt/id 1}] (xt/q tu/*node* "SELECT _id FROM docs"))
+            "default access mode no longer READ ONLY"))))
+
+(deftest discard-all-drops-prepared-statements-and-portals
+  (with-open [conn (jdbc-conn)]
+    (exec conn "PREPARE s AS SELECT 1 AS x")
+    (t/is (= [{:x 1}] (jdbc/execute! conn ["EXECUTE s"])))
+
+    (exec conn "DISCARD ALL")
+
+    (t/is (thrown? PSQLException (jdbc/execute! conn ["EXECUTE s"])))
+
+    (exec conn "PREPARE s AS SELECT 2 AS x")
+    (t/is (= [{:x 2}] (jdbc/execute! conn ["EXECUTE s"])) "names are reusable afterwards")))
+
+(deftest discard-plans-keeps-prepared-statements-and-settings
+  (with-open [conn (jdbc-conn)]
+    (exec conn "SET TIME ZONE 'Asia/Tokyo'")
+    (exec conn "PREPARE s AS SELECT 1 AS x")
+    (exec conn "DISCARD PLANS")
+    (t/is (= [{:x 1}] (jdbc/execute! conn ["EXECUTE s"])))
+    (t/is (= "Asia/Tokyo" (:timezone (jdbc/execute-one! conn ["SHOW TIME ZONE"]))))))
+
+(deftest discard-targets-are-accepted-with-their-command-tags
+  (with-open [conn (jdbc-conn)]
+    (doseq [target ["ALL" "PLANS" "TEMP" "TEMPORARY" "SEQUENCES"]]
+      (t/is (false? (exec conn (str "DISCARD " target))) target))
+    (t/is (= [{:temp 1}] (jdbc/execute! conn ["SELECT 1 AS temp"])) "TEMP stays usable as an identifier")))
+
+(deftest discard-all-is-refused-in-a-transaction
+  (with-open [conn (jdbc-conn)]
+    (exec conn "SET TIME ZONE 'Asia/Tokyo'")
+    (exec conn "BEGIN")
+    (let [e (try (exec conn "DISCARD ALL") nil (catch PSQLException e e))]
+      (t/is (= "25001" (some-> e .getSQLState))))
+    (exec conn "ROLLBACK")
+    (t/is (= "Asia/Tokyo" (:timezone (jdbc/execute-one! conn ["SHOW TIME ZONE"])))
+          "the refused DISCARD ALL reset nothing")))
+
+(deftest discard-all-over-the-extended-protocol
+  (with-open [conn (jdbc-conn {"preferQueryMode" "extendedForPrepared"})]
+    (with-open [ps (.prepareStatement conn "DISCARD ALL")]
+      (.execute ps))
+    (t/is (= [{:x 1}] (jdbc/execute! conn ["SELECT 1 AS x"])))))
+
+(deftest list-casts-pin-array-params-and-results
+  (with-open [conn (jdbc-conn {"prepareThreshold" -1})]
+    (with-open [stmt (.prepareStatement conn "SELECT ?::BIGINT[] AS a, ?::BIGINT ARRAY AS b, ?::VARCHAR ARRAY AS c")]
+      (.setArray stmt 1 (.createArrayOf conn "int8" (object-array [1 2])))
+      (.setArray stmt 2 (.createArrayOf conn "int8" (object-array [3])))
+      (.setArray stmt 3 (.createArrayOf conn "text" (object-array ["x"])))
+      (t/is (= [{"a" "_int8"} {"b" "_int8"} {"c" "_text"}] (result-metadata stmt)))
+      (t/is (= [{"a" [1 2] "b" [3] "c" ["x"]}] (rs->maps (.executeQuery stmt)))))
+
+    (with-open [stmt (.prepareStatement conn "SELECT '{1,2}'::BIGINT[] AS a, [1, 2]::VARCHAR ARRAY AS b")]
+      (t/is (= [{"a" [1 2] "b" ["1" "2"]}] (rs->maps (.executeQuery stmt)))))))
 
 (comment
   (user/set-log-level! 'xtdb.pgwire :trace))

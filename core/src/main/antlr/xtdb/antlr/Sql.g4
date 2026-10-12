@@ -43,6 +43,7 @@ directlyExecutableStatement
     | COMMIT (SYNC | ASYNC)? # CommitStatement
     | ROLLBACK # RollbackStatement
     | SET SESSION CHARACTERISTICS AS sessionCharacteristic (',' sessionCharacteristic)* # SetSessionCharacteristicsStatement
+    | DISCARD discardTarget # DiscardStatement
     | SET ROLE ( identifier | NONE ) # SetRoleStatement
     | SET SESSION? ('TIME' 'ZONE' | 'TIMEZONE') zone=expr # SetTimeZoneStatement
     | SET AWAIT_TOKEN ( TO | '=' ) awaitToken=expr # SetAwaitTokenStatement
@@ -59,6 +60,13 @@ directlyExecutableStatement
     | REVOKE roleName=identifier FROM userName=identifier # RevokeRoleStatement
 
     | CREATE (OR ALTER)? TABLE targetTable ('(' columnNameList ')')? # CreateTableStatement
+    ;
+
+discardTarget
+    : ALL # DiscardAll
+    | PLANS # DiscardPlans
+    | (TEMP | TEMPORARY) # DiscardTemp
+    | SEQUENCES # DiscardSequences
     ;
 
 targetTable : (schemaName=identifier '.')? tableName=identifier ;
@@ -161,11 +169,13 @@ nonReservedKeyword
     | TABLE
     | METADATA
     | SYNC
+    | DISCARD | PLANS | TEMP | TEMPORARY | SEQUENCES
     | setFunctionType
     | primaryDatetimeField
     | pgExtractField
     | rankFunctionType
     | AT | BETWEEN | BY | CURRENT | FIRST | LAST | NEXT | OF | POSITION
+    | INT2 | INT4 | INT8 | FLOAT4 | FLOAT8 | BOOL | BPCHAR | NAME
     | BIGINT | BOOLEAN | CHAR | DATE | DEC | DECIMAL | DOUBLE | DURATION | FLOAT | INT | INTEGER
     | INTERVAL | KEYWORD | NUMERIC | OBJECT | PERIOD | PRECISION | REAL | RECORD | REGCLASS
     | REGPROC | ROW | SMALLINT | TEXT | TIME | TIMESTAMP | TIMESTAMPTZ | TSTZRANGE | UUID | VARCHAR
@@ -184,17 +194,17 @@ columnLabel
 
 dataType
     : ('NUMERIC' | 'DECIMAL' | 'DEC') ('(' precision (',' scale)? ')')? # DecimalType
-    | ('SMALLINT' | 'INTEGER' | 'INT' | 'BIGINT') # IntegerType
+    | ('SMALLINT' | 'INTEGER' | 'INT' | 'BIGINT' | 'INT2' | 'INT4' | 'INT8') # IntegerType
     | 'FLOAT' ('(' precision ')')? # FloatType
-    | 'REAL' # RealType
-    | 'DOUBLE' 'PRECISION'? # DoubleType
-    | 'BOOLEAN' # BooleanType
+    | ('REAL' | 'FLOAT4') # RealType
+    | ('DOUBLE' 'PRECISION'? | 'FLOAT8') # DoubleType
+    | ('BOOLEAN' | 'BOOL') # BooleanType
     | 'DATE' # DateType
     | 'TIME' ('(' precision ')')? withOrWithoutTimeZone? # TimeType
     | 'TIMESTAMP' ('(' precision ')')? withOrWithoutTimeZone? # TimestampType
     | 'TIMESTAMPTZ' #TimestampTzType
     | 'INTERVAL' intervalQualifier? # IntervalType
-    | ('CHAR' | 'VARCHAR' | 'TEXT') # CharacterStringType
+    | ('CHAR' | 'VARCHAR' | 'TEXT' | 'BPCHAR' | 'NAME') # CharacterStringType
     | 'DURATION' ('(' precision ')')? # DurationType
     | 'ROW' '(' fieldDefinition (',' fieldDefinition)* ')' # RowType
     | 'OID' #OidType
@@ -206,6 +216,7 @@ dataType
     | 'BYTEA' #VarbinaryType
     | 'URI' # UriType
     | dataType 'ARRAY' ('[' maximumCardinality ']')? # ArrayType
+    | dataType '[' maximumCardinality? ']' # ArrayType
     ;
 
 precision : UNSIGNED_INTEGER ;
@@ -229,7 +240,7 @@ fieldDefinition : fieldName=identifier dataType ;
 expr
     : commonValueExpr NOT? 'BETWEEN' (ASYMMETRIC | SYMMETRIC)? commonValueExpr 'AND' commonValueExpr # BetweenPredicate
     | expr NOT? 'IN' inPredicateValue # InPredicate
-    | expr 'NOT'? 'LIKE' likePattern=commonValueExpr ('ESCAPE' likeEscape=commonValueExpr)? # LikePredicate
+    | expr 'NOT'? ('LIKE' | 'ILIKE') likePattern=commonValueExpr ('ESCAPE' likeEscape=commonValueExpr)? # LikePredicate
     | expr 'NOT'? 'LIKE_REGEX' xqueryPattern=commonValueExpr ('FLAG' xqueryOptionFlag=commonValueExpr)? # LikeRegexPredicate
     | expr postgresRegexOperator xqueryPattern=commonValueExpr # PostgresRegexPredicate
 
@@ -332,7 +343,7 @@ commonValueExpr
     | 'EXTRACT' '(' extractField 'FROM' extractSource=expr ')' # ExtractFunction
     | ('CHAR_LENGTH' | 'CHARACTER_LENGTH') '(' expr ('USING' charLengthUnits)? ')' # CharacterLengthFunction
     | ('PERIOD' | 'TSTZRANGE') '(' expr ',' expr ')' # TsTzRangeConstructor
-    | fn=identifier '(' ( expr (',' expr)* )? ')' # FunctionCall
+    | (schemaName=identifier '.')? fn=identifier '(' ( expr (',' expr)* )? ')' # FunctionCall
 
     // string value functions
     | 'SUBSTRING' '('
@@ -728,7 +739,7 @@ predicatePart2
     : compOp expr # ComparisonPredicatePart2
     | NOT? 'BETWEEN' (ASYMMETRIC | SYMMETRIC)? commonValueExpr 'AND' commonValueExpr # BetweenPredicatePart2
     | NOT? 'IN' inPredicateValue # InPredicatePart2
-    | 'NOT'? 'LIKE' likePattern=commonValueExpr ('ESCAPE' likeEscape=commonValueExpr)? # LikePredicatePart2
+    | 'NOT'? ('LIKE' | 'ILIKE') likePattern=commonValueExpr ('ESCAPE' likeEscape=commonValueExpr)? # LikePredicatePart2
     | 'NOT'? 'LIKE_REGEX' xqueryPattern=commonValueExpr ('FLAG' xqueryOptionFlag=commonValueExpr)? # LikeRegexPredicatePart2
     | postgresRegexOperator xqueryPattern=commonValueExpr # PostgresRegexPredicatePart2
     | 'IS' 'NOT'? 'NULL' # NullPredicatePart2

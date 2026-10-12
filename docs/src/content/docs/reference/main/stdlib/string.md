@@ -77,6 +77,9 @@ title: String functions
     - `_`: matches any single character
     - `%`: matches 0-n characters
 
+`str [NOT] ILIKE like_pattern` (v2.2+)
+: As `LIKE`, ignoring case.
+
 `str [NOT] LIKE_REGEX regex [FLAG flags]`
 : Returns true iff the `str` matches (/ doesn't match) the `regex`.
 

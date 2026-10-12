@@ -238,3 +238,35 @@
     (let [result (xt/q tu/*node*
                        "SELECT (error->>'tx-op-idx')::decimal AS v FROM xt.txs WHERE error IS NOT NULL")]
       (t/is (decimal? (:v (first result)))))))
+
+(t/deftest test-format-type
+  (t/is (= [{:int8 "bigint", :int4 "integer", :int2 "smallint", :float4 "real", :float8 "double precision"
+             :bool "boolean", :text "text", :varchar "character varying", :numeric "numeric"
+             :ts "timestamp without time zone", :tstz "timestamp with time zone", :date "date"
+             :time "time without time zone", :interval "interval", :bytea "bytea", :int4s "integer[]"
+             :int8s "bigint[]", :texts "text[]", :uuid "uuid", :oid "oid", :json "json", :jsonb "jsonb"}]
+           (xt/q tu/*node* "SELECT format_type(20, NULL) int8, format_type(23, NULL) int4, format_type(21, NULL) int2,
+                                   format_type(700, NULL) float4, format_type(701, NULL) float8, format_type(16, NULL) bool,
+                                   format_type(25, NULL) text, format_type(1043, NULL) varchar, format_type(1700, NULL) numeric,
+                                   format_type(1114, NULL) ts, format_type(1184, NULL) tstz, format_type(1082, NULL) date,
+                                   format_type(1083, NULL) time, format_type(1186, NULL) interval, format_type(17, NULL) bytea,
+                                   format_type(1007, NULL) int4s, format_type(1016, NULL) int8s, format_type(1009, NULL) texts,
+                                   format_type(2950, NULL) uuid, format_type(26, NULL) oid, format_type(114, NULL) json,
+                                   format_type(3802, NULL) jsonb"))
+        "format_type spells each oid as Postgres does")
+
+  (t/is (= [{:a "character varying(10)", :b "numeric(10,2)", :c "timestamp(3) without time zone"
+             :d "timestamp(6) with time zone", :e "text", :f "bigint"}]
+           (xt/q tu/*node* "SELECT format_type(1043, 14) a, format_type(1700, ((10 * 65536) + 2) + 4) b, format_type(1114, 3) c,
+                                   format_type(1184, 6) d, format_type(25, 14) e, format_type(20, -1) f"))
+        "typmod is applied where the type takes one")
+
+  (t/is (= [{:a "-", :b "???"}]
+           (xt/q tu/*node* "SELECT format_type(0, NULL) a, format_type(999999, NULL) b")))
+
+  (t/is (= [{}] (xt/q tu/*node* "SELECT format_type(NULL, NULL) a"))
+        "a NULL oid gives NULL")
+
+  (t/is (= [{:v "timestamp with time zone"}]
+           (xt/q tu/*node* "SELECT pg_catalog.format_type(atttypid, atttypmod) v FROM pg_attribute WHERE attname = '_system_from' LIMIT 1"))
+        "composes with pg_attribute, as psql's describe-result does"))
