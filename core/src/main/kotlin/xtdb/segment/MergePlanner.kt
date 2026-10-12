@@ -8,6 +8,8 @@ import xtdb.trie.HashTrie
 import xtdb.trie.conjPath
 import xtdb.util.safeMap
 import xtdb.util.useAll
+import java.util.Collections
+import java.util.IdentityHashMap
 import java.util.function.Predicate
 
 object MergePlanner {
@@ -52,7 +54,7 @@ object MergePlanner {
                 else pathPred.test(part)
             }
             .safeMap { it.openMetadata() }.useAll { segMetas ->
-                val result = mutableListOf<MergeTask>()
+                val result = mutableListOf<Pair<List<Segment.Page<*>>, ByteArray>>()
 
                 val initialSegNodes = segMetas.mapNotNull { it.toSegmentNode() }
                 if (initialSegNodes.isEmpty()) return emptyList()
@@ -82,11 +84,15 @@ object MergePlanner {
                     } else {
                         filterPages.filterPages(segNodes.map { it.page })
                             ?.takeIf { it.isNotEmpty() }
-                            ?.let { filteredPages -> result += MergeTask(filteredPages.map { it.page }, workTask.path) }
+                            ?.let { filteredPages -> result += filteredPages.map { it.page } to workTask.path }
                     }
                 }
 
-                return result
+                val laterPages = Collections.newSetFromMap(IdentityHashMap<Segment.Page<*>, Boolean>())
+
+                return result.asReversed()
+                    .map { (pages, path) -> MergeTask(pages, path, lastUsedPages = pages.filter { laterPages.add(it) }) }
+                    .asReversed()
             }
     }
 }

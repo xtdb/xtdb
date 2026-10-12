@@ -50,15 +50,9 @@ class ScanCursor(
 
     private val bufferedRels: Queue<RelationReader> = LinkedList()
 
-    override fun tryAdvance(c: Consumer<in RelationReader>): Boolean {
-        bufferedRels.poll()?.use {
-            c.accept(it)
-            return true
-        }
-
-        val iidPred = colPreds["_iid"]
-        while (mergeTasks.hasNext()) {
-            val task = mergeTasks.next()
+    private fun bufferTask(task: MergeTask) {
+        task.use {
+            val iidPred = colPreds["_iid"]
             val taskPath = task.path
             val resolver = openResolver()
 
@@ -92,11 +86,22 @@ class ScanCursor(
                     .filter { it.rowCount > 0 }
                     .safeMap { it.openSlice(al) }
                     .also { bufferedRels.addAll(it) }
+            }
+        }
+    }
 
-                bufferedRels.poll()?.use {
-                    c.accept(it)
-                    return true
-                }
+    override fun tryAdvance(c: Consumer<in RelationReader>): Boolean {
+        bufferedRels.poll()?.use {
+            c.accept(it)
+            return true
+        }
+
+        while (mergeTasks.hasNext()) {
+            bufferTask(mergeTasks.next())
+
+            bufferedRels.poll()?.use {
+                c.accept(it)
+                return true
             }
         }
 
