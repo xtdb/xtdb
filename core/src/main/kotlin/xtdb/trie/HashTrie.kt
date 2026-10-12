@@ -14,7 +14,10 @@ internal fun conjPath(path: ByteArray, idx: Byte): ByteArray {
 
 @Suppress("UNCHECKED_CAST")
 private fun <L> Node<L>.leafStream(): Stream<L> =
-    hashChildren?.let { it.stream().flatMap { child -> child?.leafStream() } } ?: Stream.of(this as L)
+    when (this) {
+        is HashTrie.Branch -> hashChildren.stream().flatMap { child -> child?.leafStream() }
+        is HashTrie.Leaf -> Stream.of(this as L)
+    }
 
 
 interface HashTrie<L> {
@@ -22,11 +25,15 @@ interface HashTrie<L> {
 
     val leaves get() = rootNode?.leaves ?: emptyList()
 
-    interface Node<L> {
+    sealed interface Node<L> {
         val path: ByteArray
-
-        val hashChildren: List<Node<L>?>?
 
         val leaves: List<L> get() = leafStream().toList()
     }
+
+    interface Branch<L> : Node<L> {
+        val hashChildren: List<Node<L>?>
+    }
+
+    interface Leaf<L> : Node<L>
 }

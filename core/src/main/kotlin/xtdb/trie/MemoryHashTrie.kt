@@ -66,7 +66,7 @@ class MemoryHashTrie(
     class Branch(
         override val path: ByteArray,
         override val hashChildren: List<Node?>,
-    ) : Node {
+    ) : Node, HashTrie.Branch<Leaf> {
         private val addPtr = ArrowBufPointer()
 
         override fun add(trie: MemoryHashTrie, newIdx: Int): Node {
@@ -124,9 +124,7 @@ class MemoryHashTrie(
         // so the worst case is redundant computation, but without volatile a reader on a
         // weak memory model might never see the cached value.
         @Volatile private var sortedData: IntArray? = null
-    ) : Node {
-
-        override val hashChildren = null
+    ) : Node, HashTrie.Leaf<Leaf> {
 
         fun mergeSort(trie: MemoryHashTrie): IntArray {
             if (logCount == 0) return data
