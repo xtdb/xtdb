@@ -103,6 +103,18 @@ entity CompactionJob {
 }
 
 ------------------------------------------------------------
+-- Config
+------------------------------------------------------------
+
+config {
+    -- TODO(#6263): goes with withinFileRecencyBranching
+    -- See: api/CompactorConfig.kt
+    -- `compactor.withinFileRecencyBranching`, or env `XTDB_WITHIN_FILE_RECENCY_BRANCHING`.
+    -- Whether this node's compactor writes `_recency` into its historical outputs.
+    within_file_recency_branching: Boolean = false
+}
+
+------------------------------------------------------------
 -- Compaction Algorithm
 ------------------------------------------------------------
 
@@ -125,7 +137,11 @@ entity CompactionJob {
 --   L0 → L1C/L1H: recency is calculated for each event through bitemporal resolution.
 --     Events with recency = ∞ go to the current output file.
 --     Events with finite recency are routed to historical output files, partitioned into weekly buckets.
+--     With `within_file_recency_branching` on, every row of a historical output file carries the recency computed for it in a `_recency` column; current output files carry none.
 --   All other compactions: recency from the input file's trie key is preserved into a single output file.
+--     Recency is never recomputed above L1H.
+--     With `within_file_recency_branching` on, a historical output carries `_recency` through only when every input file carries it; otherwise it carries none.
+--   With `within_file_recency_branching` off, no output file carries `_recency`.
 --
 -- At the end of each merge task (i.e. for each IID path prefix), accumulated rows are flushed to a temporary file on disk.
 -- This bounds the memory usage of the compactor.
@@ -140,12 +156,65 @@ entity CompactionJob {
 --     This recurses until each leaf fits within the page size limit.
 --   If a branch has fewer rows than the page size: coalesce all descendant leaves into a single page.
 --
+-- In a file whose data carries `_recency`, a node may branch on recency instead of IID, on the schedule RecencyBranchSchedule sets out.
+-- More than a page of versions of one entity can't split on IID: in a file without `_recency` they stay one page.
+--
 -- This ensures output pages are consistently sized (~1024 rows), regardless of input distribution.
 --
 -- == Upload ==
 --
 -- The data file is uploaded first.
 -- The presence of the meta file is the marker that the segment is complete.
+
+------------------------------------------------------------
+-- Contracts
+------------------------------------------------------------
+
+contract OutputSegmentLayout {
+    -- What a compaction job's output data and meta files hold, and how the meta file's trie branches.
+    -- See: compactor/OutWriter.kt, compactor/SegmentMerge.kt, trie/PageTrieWriter.kt, trie/RecencyRange.kt, trie/MetadataFileWriter.kt
+
+    @invariant HistoricalRowsCarryComputedRecency
+        -- With `within_file_recency_branching` on, a job that partitions by recency (L0 → L1C + L1H) writes, for every row of each historical (L1H) output, the recency the merge computes for that row into a `_recency` column.
+        -- Its current (L1C) output carries no `_recency` column.
+
+    @invariant RecencyCarriedOnlyWhenEveryInputCarriesIt
+        -- With `within_file_recency_branching` on, a job over historical inputs that preserves recency (L1H → L2H and up) copies `_recency` through only when every input file carries it.
+        -- Otherwise its output carries none.
+        -- Recency is never recomputed above L1H.
+
+    @invariant NoRecencyWrittenWhenBranchingOff
+        -- With `within_file_recency_branching` off, no output file carries `_recency`: an L0 → L1C + L1H job writes none, and a historical merge drops it even when every input carries it.
+        -- The output is then identical to that of a compactor that never writes `_recency`.
+
+    @invariant FilesReadableWhateverTheSetting
+        -- Every node reads files with and without `_recency`, whatever its `within_file_recency_branching` setting.
+
+    @invariant RecencyBranchSchedule
+        -- A file whose data carries `_recency` branches its trie on recency as well as IID.
+        -- Below the IID levels fixed by the file's part, and at least the first IID level, IID and recency branches alternate, IID first, with no limit on the number of recency levels.
+        -- A node on a recency turn whose rows span more than one recency splits the observed recency range of its rows, from their minimum to their maximum, into k parts of equal width.
+        -- k is 4 when the node holds more than 4 pages of rows, and otherwise the number of pages its rows fill.
+        -- Each non-empty part becomes a child, keyed by the largest recency in it, an inclusive upper bound.
+        -- A node on a recency turn whose rows all share one recency branches on IID instead.
+        -- A file whose data carries no `_recency` branches on IID only.
+
+    @invariant BranchOnlyAboveAPage
+        -- A node branches, on IID or recency, only when it holds more than a page of rows.
+
+    @invariant OneEntityKeepsSplittingOnRecency
+        -- A node holding more than a page of versions of one entity can't branch on IID, so it branches on recency as RecencyBranchSchedule sets out, whether or not it is on a recency turn, until its parts fit a page.
+        -- Only when its rows all share one recency does it split by count, into pages of roughly equal size, each no larger than a page and keyed by the most recent row in it.
+        -- Two such pages may share a key.
+
+    @invariant RecencyBranchNodeOnlyWithRecency
+        -- The meta file's trie schema includes the `branch-recency` node type only when the data carries `_recency`.
+        -- A file without `_recency` keeps the earlier meta schema.
+
+    @invariant OutputDeterministic
+        -- Every output file, including its recency column and its trie, is a deterministic function of the job and the `within_file_recency_branching` setting.
+        -- Every node compacting a database has the same setting, so every node that runs the job writes identical files.
+}
 
 ------------------------------------------------------------
 -- Open Questions

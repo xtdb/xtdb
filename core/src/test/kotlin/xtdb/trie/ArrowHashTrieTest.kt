@@ -24,7 +24,7 @@ internal class ArrowHashTrieTest {
 
     @Test
     fun `a trie with no nodes has no root`() {
-        Relation(allocator, MetadataFileWriter.metaRelSchema).use { rel ->
+        Relation(allocator, MetadataFileWriter.metaRelSchema(recencyBranches = false)).use { rel ->
             assertNull(ArrowHashTrie(rel["nodes"]).rootNode)
         }
     }

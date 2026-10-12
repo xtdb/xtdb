@@ -1,11 +1,15 @@
 package xtdb.trie
 
 import xtdb.arrow.Vector
+import xtdb.arrow.VectorReader
 
 private const val NIL = "nil"
 private const val BRANCH_IID = "branch-iid"
+private const val BRANCH_RECENCY = "branch-recency"
 private const val LEAF = "leaf"
 private const val DATA_PAGE_IDX = "data-page-idx"
+private const val RECENCY = "recency"
+private const val IDX = "idx"
 
 class ArrowHashTrie @JvmOverloads constructor(
     private val nodesVec: Vector, private val closeNodesVec: Boolean = false
@@ -13,6 +17,8 @@ class ArrowHashTrie @JvmOverloads constructor(
 
     private val iidBranchVec = nodesVec[BRANCH_IID]
     private val iidBranchElVec = iidBranchVec.listElements
+
+    private val recencyBranchVec = nodesVec.vectorForOrNull(BRANCH_RECENCY)
 
     private val dataPageIdxVec = nodesVec[LEAF][DATA_PAGE_IDX]
 
@@ -32,12 +38,28 @@ class ArrowHashTrie @JvmOverloads constructor(
             }
     }
 
+    inner class RecencyBranch(
+        override val path: ByteArray, recencyBranchVec: VectorReader, branchVecIdx: Int
+    ) : Node, HashTrie.RecencyBranch<Leaf> {
+        private val startIdx = recencyBranchVec.getListStartIndex(branchVecIdx)
+        private val count = recencyBranchVec.getListCount(branchVecIdx)
+        private val recencyVec = recencyBranchVec.listElements[RECENCY]
+        private val childIdxVec = recencyBranchVec.listElements[IDX]
+
+        override val buckets: List<HashTrie.RecencyBranch.Bucket<Leaf>>
+            get() = List(count) { bucket ->
+                val elIdx = startIdx + bucket
+                HashTrie.RecencyBranch.Bucket(recencyVec.getLong(elIdx), forIndex(path, childIdxVec.getInt(elIdx))!!)
+            }
+    }
+
     class Leaf(override val path: ByteArray, val dataPageIndex: Int) : Node, HashTrie.Leaf<Leaf>
 
-    private fun forIndex(path: ByteArray, idx: Int) =
+    private fun forIndex(path: ByteArray, idx: Int): Node? =
         when (nodesVec.getLeg(idx)) {
             NIL -> null
             BRANCH_IID -> IidBranch(path, idx)
+            BRANCH_RECENCY -> RecencyBranch(path, recencyBranchVec!!, idx)
             LEAF -> Leaf(path, dataPageIdxVec.getInt(idx))
             else -> error("unknown leg: ${nodesVec.getLeg(idx)}")
         }
