@@ -24,7 +24,9 @@ class ArrowHashTrie @JvmOverloads constructor(
 
     sealed interface Node : HashTrie.Node<Leaf>
 
-    inner class IidBranch(override val path: ByteArray, branchVecIdx: Int) : Node, HashTrie.IidBranch<Leaf> {
+    inner class IidBranch(
+        override val path: ByteArray, branchVecIdx: Int, private val recencyBound: RecencyMicros
+    ) : Node, HashTrie.IidBranch<Leaf> {
         private val startIdx = iidBranchVec.getListStartIndex(branchVecIdx)
         private val count = iidBranchVec.getListCount(branchVecIdx)
 
@@ -34,12 +36,13 @@ class ArrowHashTrie @JvmOverloads constructor(
                 if (iidBranchElVec.isNull(childIdx))
                     null
                 else
-                    forIndex(conjPath(path, childBucket.toByte()), iidBranchElVec.getInt(childIdx))
+                    forIndex(conjPath(path, childBucket.toByte()), iidBranchElVec.getInt(childIdx), recencyBound)
             }
     }
 
     inner class RecencyBranch(
-        override val path: ByteArray, recencyBranchVec: VectorReader, branchVecIdx: Int
+        override val path: ByteArray, recencyBranchVec: VectorReader, branchVecIdx: Int,
+        private val recencyBound: RecencyMicros
     ) : Node, HashTrie.RecencyBranch<Leaf> {
         private val startIdx = recencyBranchVec.getListStartIndex(branchVecIdx)
         private val count = recencyBranchVec.getListCount(branchVecIdx)
@@ -49,23 +52,29 @@ class ArrowHashTrie @JvmOverloads constructor(
         override val buckets: List<HashTrie.RecencyBranch.Bucket<Leaf>>
             get() = List(count) { bucket ->
                 val elIdx = startIdx + bucket
-                HashTrie.RecencyBranch.Bucket(recencyVec.getLong(elIdx), forIndex(path, childIdxVec.getInt(elIdx))!!)
+                val recency = recencyVec.getLong(elIdx)
+                HashTrie.RecencyBranch.Bucket(recency, forIndex(path, childIdxVec.getInt(elIdx), minOf(recencyBound, recency))!!)
             }
     }
 
-    class Leaf(override val path: ByteArray, val dataPageIndex: Int) : Node, HashTrie.Leaf<Leaf>
+    /**
+     * @property recencyBound an inclusive upper bound on the recency of every row in the page -
+     *   the tightest recency-branch key above it, or [Long.MAX_VALUE] if there's none
+     */
+    class Leaf(override val path: ByteArray, val dataPageIndex: Int, val recencyBound: RecencyMicros) :
+        Node, HashTrie.Leaf<Leaf>
 
-    private fun forIndex(path: ByteArray, idx: Int): Node? =
+    private fun forIndex(path: ByteArray, idx: Int, recencyBound: RecencyMicros): Node? =
         when (nodesVec.getLeg(idx)) {
             NIL -> null
-            BRANCH_IID -> IidBranch(path, idx)
-            BRANCH_RECENCY -> RecencyBranch(path, recencyBranchVec!!, idx)
-            LEAF -> Leaf(path, dataPageIdxVec.getInt(idx))
+            BRANCH_IID -> IidBranch(path, idx, recencyBound)
+            BRANCH_RECENCY -> RecencyBranch(path, recencyBranchVec!!, idx, recencyBound)
+            LEAF -> Leaf(path, dataPageIdxVec.getInt(idx), recencyBound)
             else -> error("unknown leg: ${nodesVec.getLeg(idx)}")
         }
 
     override val rootNode
-        get() = if (nodesVec.valueCount == 0) null else forIndex(ByteArray(0), nodesVec.valueCount - 1)
+        get() = if (nodesVec.valueCount == 0) null else forIndex(ByteArray(0), nodesVec.valueCount - 1, Long.MAX_VALUE)
 
     override fun close() {
         if (closeNodesVec) nodesVec.close()
