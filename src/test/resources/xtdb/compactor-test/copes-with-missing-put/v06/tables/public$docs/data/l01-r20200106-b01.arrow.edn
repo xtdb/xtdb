@@ -7,10 +7,12 @@
               [:union
                {"put" [:struct {"_id" :utf8, "a" :i64}],
                 "delete" [:? :null],
-                "erase" [:? :null]}]}),
+                "erase" [:? :null]}]}
+             {"_recency" :instant}),
  :batches
  ([{:xt/system-from #xt/zdt "2020-01-01T00:00Z[UTC]",
     :xt/valid-from #xt/zdt "2020-01-01T00:00Z[UTC]",
     :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
     :op #xt/tagged [:put {:xt/id "foo", :a 1}],
-    :xt/iid #bytes "d9c7fae2a04e047164936265ba33cf80"}])}
+    :xt/iid #bytes "d9c7fae2a04e047164936265ba33cf80",
+    :xt/recency #xt/zdt "2020-01-02T00:00Z[UTC]"}])}

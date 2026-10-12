@@ -120,7 +120,7 @@ interface Compactor : AutoCloseable {
                                                                 trieWriter.writePageTree(
                                                                     slug, trieKey,
                                                                     loader, it.leaves.asTree,
-                                                                    pageSize
+                                                                    pageSize, pinnedDepth = job.part?.size ?: 0
                                                                 )
 
                                                             job.trieDetails(trieKey, dataFileSize, trieMetadata)
