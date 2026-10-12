@@ -18,7 +18,7 @@ class ArrowHashTrie @JvmOverloads constructor(
 
     sealed interface Node : HashTrie.Node<Leaf>
 
-    inner class IidBranch(override val path: ByteArray, branchVecIdx: Int) : Node, HashTrie.Branch<Leaf> {
+    inner class IidBranch(override val path: ByteArray, branchVecIdx: Int) : Node, HashTrie.IidBranch<Leaf> {
         private val startIdx = iidBranchVec.getListStartIndex(branchVecIdx)
         private val count = iidBranchVec.getListCount(branchVecIdx)
 
