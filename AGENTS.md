@@ -87,6 +87,8 @@ That commentary belongs in the commit body and the PR, which are read once aroun
 
 For user-visible features:
 * You MUST update relevant docs in `/dev/doc/` or user-facing documentation when implementing new features or changing existing behaviour.
+* The docs MUST land in the same commit as the change they document — where a feature spans several commits, in the one that makes the documented behaviour true.
+  A separate `docs:` commit is for docs that change on their own.
 
 ## Style
 
