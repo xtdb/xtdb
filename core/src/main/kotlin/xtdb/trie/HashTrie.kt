@@ -16,6 +16,7 @@ internal fun conjPath(path: ByteArray, idx: Byte): ByteArray {
 private fun <L> Node<L>.leafStream(): Stream<L> =
     when (this) {
         is HashTrie.IidBranch -> hashChildren.stream().flatMap { child -> child?.leafStream() }
+        is HashTrie.RecencyBranch -> buckets.stream().flatMap { bucket -> bucket.node.leafStream() }
         is HashTrie.Leaf -> Stream.of(this as L)
     }
 
@@ -33,6 +34,21 @@ interface HashTrie<L> {
 
     interface IidBranch<L> : Node<L> {
         val hashChildren: List<Node<L>?>
+    }
+
+    /**
+     * Every bucket's node sits at this branch's own IID [path].
+     */
+    interface RecencyBranch<L> : Node<L> {
+        /**
+         * @property recency the inclusive upper bound of the recency of every row under [node]
+         */
+        class Bucket<L>(val recency: RecencyMicros, val node: Node<L>)
+
+        /**
+         * in ascending order of [Bucket.recency]
+         */
+        val buckets: List<Bucket<L>>
     }
 
     interface Leaf<L> : Node<L>

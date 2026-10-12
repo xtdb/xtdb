@@ -3,7 +3,23 @@ title: Configuration
 ---
 
 <details>
-<summary>Changelog (last updated v2.2)</summary>
+<summary>Changelog (last updated v2-NEXT)</summary>
+
+v2-NEXT: the compactor can branch historical files by recency, behind `withinFileRecencyBranching`
+
+: With `compactor.withinFileRecencyBranching` on, a historical file branches on recency within its week, so a query over a recent window reads that window's superseded rows rather than the whole week's — see [Compactor](#compactor).
+
+  It's off by default, and with it off the compactor writes the same files as v2.2, so upgrading from v2.2 needs no extra steps.
+  Every v2-NEXT node reads files written either way.
+
+  Every node that compacts a database must write the same format, so turning it on takes two rolls:
+
+  1. Roll with the compactor off (`compactor.threads: 0`).
+     Where several clusters write to the same database, every one of them finishes this roll before the next step starts anywhere.
+  2. Roll again with the compactor on and `withinFileRecencyBranching: true` (or `XTDB_WITHIN_FILE_RECENCY_BRANCHING=true`).
+
+  A new cluster can set it from the start.
+  To go back to a release before v2-NEXT once it's on, run `reset-compactor` first: earlier releases can't read the files it writes.
 
 v2.2: blocks are flushed every 15 minutes
 
@@ -239,6 +255,11 @@ compactor:
   # Defaults to !Env XTDB_COMPACTOR_THREADS # or if that's not specified min(availableProcessors / 2, 1).
   # Set to 0 to disable the compactor.
   threads: 4
+
+  # (v2-NEXT+) Branch historical files by recency within the file.
+  # Every node compacting a database must agree - see the v2-NEXT changelog entry above before turning it on for an existing cluster.
+  # Defaults to !Env XTDB_WITHIN_FILE_RECENCY_BRANCHING # or if that's not specified false.
+  withinFileRecencyBranching: false
 ```
 
 ### Indexer

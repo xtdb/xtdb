@@ -11,7 +11,13 @@ private val DEFAULT_THREADS = (getRuntime().availableProcessors() / 2).coerceAtL
 
 @Serializable
 data class CompactorConfig(
-    var threads: Int = System.getenv("XTDB_COMPACTOR_THREADS")?.toIntOrNull() ?: DEFAULT_THREADS
+    var threads: Int = System.getenv("XTDB_COMPACTOR_THREADS")?.toIntOrNull() ?: DEFAULT_THREADS,
+    // TODO(#6263): goes with withinFileRecencyBranching
+    var withinFileRecencyBranching: Boolean = System.getenv("XTDB_WITHIN_FILE_RECENCY_BRANCHING").toBoolean(),
 ) {
     fun threads(threads: Int) = apply { this.threads = threads }
+
+    // TODO(#6263): goes with withinFileRecencyBranching
+    fun withinFileRecencyBranching(withinFileRecencyBranching: Boolean) =
+        apply { this.withinFileRecencyBranching = withinFileRecencyBranching }
 }
