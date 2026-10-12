@@ -66,7 +66,7 @@ class MemoryHashTrie(
     class Branch(
         override val path: ByteArray,
         override val hashChildren: List<Node?>,
-    ) : Node, HashTrie.Branch<Leaf> {
+    ) : Node, HashTrie.IidBranch<Leaf> {
         private val addPtr = ArrowBufPointer()
 
         override fun add(trie: MemoryHashTrie, newIdx: Int): Node {
