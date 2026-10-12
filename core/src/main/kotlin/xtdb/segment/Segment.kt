@@ -35,15 +35,30 @@ interface Segment<L> : AutoCloseable {
 
         suspend fun loadDataPage(al: BufferAllocator): RelationReader
 
+        /**
+         * Called once the last [MergeTask] that includes this page has finished with it;
+         * the relation [loadDataPage] returned mustn't be used afterwards.
+         */
+        fun release()
+
         companion object {
-            fun <L> page(segment: Segment<L>, leaf: L) = object : Page<L> {
-                override val sameSystemTimeResolved get() = segment.sameSystemTimeResolved
-                override suspend fun loadDataPage(al: BufferAllocator) = segment.loadDataPage(al, leaf)
-            }
+            /**
+             * A page that doesn't own what it loads, so [release] does nothing.
+             */
+            fun <L> page(sameSystemTimeResolved: Boolean, load: suspend (BufferAllocator) -> RelationReader) =
+                object : Page<L> {
+                    override val sameSystemTimeResolved = sameSystemTimeResolved
+                    override suspend fun loadDataPage(al: BufferAllocator) = load(al)
+                    override fun release() = Unit
+                }
         }
     }
 
     interface PageMeta<L> {
+        /**
+         * The same page for the same leaf, for the lifetime of the segment —
+         * the merge planner releases a page after the last task that includes it.
+         */
         val page: Page<L>
         val temporalMetadata: TemporalMetadata
         val recency: RecencyMicros
@@ -51,9 +66,9 @@ interface Segment<L> : AutoCloseable {
         fun testMetadata(): Boolean
 
         companion object {
-            fun <L> pageMeta(seg: Segment<L>, meta: Metadata<L>, leaf: L, temporalMetadata: TemporalMetadata, recency: RecencyMicros) =
+            fun <L> pageMeta(page: Page<L>, meta: Metadata<L>, leaf: L, temporalMetadata: TemporalMetadata, recency: RecencyMicros) =
                 object : PageMeta<L> {
-                    override val page get() = page(seg, leaf)
+                    override val page get() = page
                     override val temporalMetadata get() = temporalMetadata
                     override val recency get() = recency
 
@@ -64,6 +79,4 @@ interface Segment<L> : AutoCloseable {
                 }
         }
     }
-
-    suspend fun loadDataPage(al: BufferAllocator, leaf: L): RelationReader
 }
