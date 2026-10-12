@@ -3,6 +3,8 @@
 An xUnit suite for XTDB through [Npgsql](https://www.npgsql.org/), the PostgreSQL driver underneath most of .NET's database tooling (Dapper, EF Core).
 Each test connects to a fresh database.
 
+`XtdbTest.cs` exercises Npgsql directly; `EfCoreTest.cs` runs LINQ queries through an EF Core `DbContext` over the same connection settings.
+
 ## Running
 
 With the .NET 10 SDK installed, `dotnet test`.

@@ -20,13 +20,7 @@ public class XtdbTest : IAsyncLifetime
             MaxPoolSize = 1,
         };
 
-        var builder = new NpgsqlDataSourceBuilder(csb.ConnectionString);
-        builder.ConfigureTypeLoading(sb =>
-        {
-            sb.EnableTypeLoading(false);
-            sb.EnableTableCompositesLoading(false);
-        });
-        _dataSource = builder.Build();
+        _dataSource = NpgsqlDataSource.Create(csb.ConnectionString);
     }
 
     public Task InitializeAsync() => Task.CompletedTask;

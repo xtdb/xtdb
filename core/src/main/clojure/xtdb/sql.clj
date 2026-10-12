@@ -58,7 +58,10 @@
 (defn identifier-sym [^ParserRuleContext ctx]
   (some-> ctx
           (.accept (reify SqlVisitor
-                     (visitAsClause [this ctx] (-> (.columnLabel ctx) (.accept this)))
+                     (visitAsClause [this ctx]
+                       (if-let [label (.columnLabel ctx)]
+                         (.accept label this)
+                         'default))
 
                      (visitColumnLabel [this ctx]
                        (if-let [id (.identifier ctx)]
@@ -654,7 +657,7 @@
 
 (defn- wrap-aggs [plan aggs group-invariant-cols group-by-in-projs]
   (let [in-projs (not-empty (into (vec group-by-in-projs)
-                                  (keep (comp :projection :in-projection))
+                                  (comp (mapcat :in-projections) (map :projection))
                                   (vals aggs)))]
     (as-> plan plan
       (if in-projs
@@ -905,9 +908,8 @@
                                                                             (if-let [table-cols (not-empty (find-cols scope [nil table-name] excludes))]
                                                                               (let [renames (->> (for [^Sql$QualifiedRenameColumnContext rename-pair (some-> (.qualifiedRenameClause ctx)
                                                                                                                                                              (.qualifiedRenameColumn))]
-                                                                                                   (let [sym (find-col scope [(identifier-sym (.identifier rename-pair)) table-name])
-                                                                                                         out-col-name (.columnLabel (.asClause rename-pair))]
-                                                                                                     (MapEntry/create sym (->col-sym (identifier-sym out-col-name)))))
+                                                                                                   (let [sym (find-col scope [(identifier-sym (.identifier rename-pair)) table-name])]
+                                                                                                     (MapEntry/create sym (->col-sym (identifier-sym (.asClause rename-pair))))))
                                                                                                  (into {}))]
                                                                                 (->> table-cols
                                                                                      (into [] (map-indexed (fn [col-idx sym]
@@ -922,10 +924,9 @@
                                       (let [renames (->> (for [^Sql$RenameColumnContext rename-pair (some-> (.renameClause star-ctx)
                                                                                                             (.renameColumn))]
                                                            (let [chain (rseq (mapv identifier-sym (.identifier (.identifierChain (.columnReference rename-pair)))))
-                                                                 out-col-name (.columnLabel (.asClause rename-pair))
                                                                  sym (find-col scope chain)]
 
-                                                             (MapEntry/create sym (->col-sym (identifier-sym out-col-name)))))
+                                                             (MapEntry/create sym (->col-sym (identifier-sym (.asClause rename-pair))))))
                                                          (into {}))
 
                                             excludes (set/union (into #{} (map (comp symbol name :col-sym)) explicitly-projected-cols)
@@ -1175,6 +1176,24 @@
     (cond-> (list 'cast ve cast-type)
       (not-empty cast-opts) (concat [cast-opts]))))
 
+(defn- ->sort-opts [^Sql$SortSpecificationContext sort-spec-ctx]
+  (let [dir (or (some-> (.orderingSpecification sort-spec-ctx)
+                        (.getText)
+                        str/lower-case
+                        keyword)
+                :asc)]
+    {:direction dir
+
+     :null-ordering (or (when-let [null-order (.nullOrdering sort-spec-ctx)]
+                          (case (-> (.getChild null-order 1)
+                                    (.getText)
+                                    str/lower-case)
+                            "first" :nulls-first
+                            "last" :nulls-last))
+
+                        ;; postgres sorts nulls high - so last on asc and first on desc
+                        (case dir :asc :nulls-last, :desc :nulls-first))}))
+
 (defrecord AggregatesDisallowed []
   PlanError
   (error-string [_] "Aggregates are not allowed in this context"))
@@ -1272,7 +1291,7 @@
 (def-sql-fns [string_to_array] 2 2)
 
 ;; system info
-(def-sql-fns [col_description] 2 2)
+(def-sql-fns [col_description pg_indexam_has_property] 2 2)
 (def-sql-fns [format_type] 2 2)
 
 (defn- json-field-access [obj-expr field-expr]
@@ -1993,25 +2012,33 @@
       agg-sym))
 
   (visitArrayAggFunction [{{:keys [!id-count]} :env, :keys [^Map !aggs], :as this} ctx]
-    (if (.sortSpecificationList ctx)
-      (throw (UnsupportedOperationException. "array-agg sort-spec"))
+    (let [agg-sym (-> (->col-sym (str "_array_agg_out" (swap! !id-count inc)))
+                      (vary-meta assoc :agg-out-sym? true))
+          agg-visitor (assoc this :!aggs nil, :scope (assoc scope :!implied-gicrs nil))
+          ->agg-input (fn [expr prefix]
+                        (if (:column? (meta expr))
+                          [expr nil]
+                          (let [in-sym (-> (->col-sym (str prefix (swap! !id-count inc)))
+                                           (vary-meta assoc :agg-in-sym? true))]
+                            [in-sym (->ProjectedCol {in-sym expr} in-sym)])))
+          expr (-> (.expr ctx) (.accept agg-visitor))
+          filter-expr (plan-agg-filter this scope ctx)
+          [in-sym in-projection] (->agg-input expr "_array_agg_in")
+          sort-inputs (->> (some-> (.sortSpecificationList ctx) (.sortSpecification))
+                           (mapv (fn [^Sql$SortSpecificationContext sort-spec-ctx]
+                                   (let [[sort-sym sort-projection] (->agg-input (-> (.expr sort-spec-ctx) (.accept agg-visitor))
+                                                                                 "_array_agg_sort")]
+                                     {:order-spec [sort-sym (->sort-opts sort-spec-ctx)]
+                                      :in-projection sort-projection}))))
+          agg-opts (cond-> {}
+                     filter-expr (assoc :filter filter-expr)
+                     (seq sort-inputs) (assoc :order-specs (mapv :order-spec sort-inputs)))]
+      (.put !aggs agg-sym
+            {:agg-expr (apply list (cond-> ['array-agg in-sym]
+                                     (seq agg-opts) (conj agg-opts)))
+             :in-projections (into [] (keep identity) (cons in-projection (map :in-projection sort-inputs)))})
 
-      (let [agg-sym (-> (->col-sym (str "_array_agg_out" (swap! !id-count inc)))
-                        (vary-meta assoc :agg-out-sym? true))
-            expr (-> (.expr ctx)
-                     (.accept (assoc this :!aggs nil, :scope (assoc scope :!implied-gicrs nil))))
-            filter-expr (plan-agg-filter this scope ctx)]
-        (.put !aggs agg-sym
-              (if (:column? (meta expr))
-                {:agg-expr (apply list (cond-> ['array-agg expr]
-                                         filter-expr (conj {:filter filter-expr})))}
-                (let [in-sym (-> (->col-sym (str "_array_agg_in" (swap! !id-count inc)))
-                                 (vary-meta assoc :agg-in-sym? true))]
-                  {:agg-expr (apply list (cond-> ['array-agg in-sym]
-                                           filter-expr (conj {:filter filter-expr})))
-                   :in-projection (->ProjectedCol {in-sym expr} in-sym)})))
-
-        agg-sym)))
+      agg-sym))
 
   (visitSetFunction [{{:keys [!id-count]} :env, :keys [^Map !aggs], :as this} ctx]
     (let [set-fn (symbol (str/lower-case (cond-> (.getText (.setFunctionType ctx))
@@ -2031,7 +2058,7 @@
                                (vary-meta assoc :agg-in-sym? true))]
                 {:agg-expr (apply list (cond-> [set-fn in-sym]
                                          filter-expr (conj {:filter filter-expr})))
-                 :in-projection (->ProjectedCol {in-sym expr} in-sym)})))
+                 :in-projections [(->ProjectedCol {in-sym expr} in-sym)]})))
 
       agg-sym))
 
@@ -2062,7 +2089,7 @@
       (.put !aggs agg-sym
             (cond-> {:agg-expr (apply list (cond-> [set-fn fraction-expr [sort-sym sort-opts]]
                                              filter-expr (conj {:filter filter-expr})))}
-              sort-in (assoc :in-projection (->ProjectedCol sort-in (first (keys sort-in))))))
+              sort-in (assoc :in-projections [(->ProjectedCol sort-in (first (keys sort-in)))])))
 
       agg-sym))
 
@@ -2300,23 +2327,7 @@
          (->> (mapv (fn [^Sql$SortSpecificationContext sort-spec-ctx]
                      (let [expr (cond-> (-> (.expr sort-spec-ctx) (.accept ob-expr-visitor))
                                  (seq gb-expr-to-col) (->> (w/postwalk #(get gb-expr-to-col % %))))
-                           dir (or (some-> (.orderingSpecification sort-spec-ctx)
-                                           (.getText)
-                                           str/lower-case
-                                           keyword)
-                                   :asc)
-
-                           ob-opts {:direction dir
-
-                                    :null-ordering (or (when-let [null-order (.nullOrdering sort-spec-ctx)]
-                                                         (case (-> (.getChild null-order 1)
-                                                                   (.getText)
-                                                                   str/lower-case)
-                                                           "first" :nulls-first
-                                                           "last" :nulls-last))
-
-                                                       ;; postgres sorts nulls high - so last on asc and first on desc
-                                                       (case dir :asc :nulls-last, :desc :nulls-first))}]
+                           ob-opts (->sort-opts sort-spec-ctx)]
 
                        ;; we could potentially try to avoid this extra projection for simple cols
                        (cond

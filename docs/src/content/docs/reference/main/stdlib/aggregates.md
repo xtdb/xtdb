@@ -56,6 +56,7 @@ Note: In keeping with Postgres, we rename `ALL` and `ANY` to `BOOL_AND` and `BOO
 ## Composite-type aggregate functions
 
 - `ARRAY_AGG(xs)` (return an array of all of the input values)
+- `ARRAY_AGG(xs ORDER BY ys [ASC|DESC] [NULLS FIRST|LAST], ...)` (v2.3+) (as above, with the values in the given order)
 
 ## Ordered-set aggregate functions
 

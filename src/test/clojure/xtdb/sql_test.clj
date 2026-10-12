@@ -1746,6 +1746,34 @@
            (sql/plan "SELECT (SELECT ARRAY_AGG(x.y) FROM (VALUES (1), (2), (3), (tab0.z)) AS x(y)) FROM tab0"
                      {:table-info {#xt/table tab0 #{"z"}}})))))
 
+(t/deftest array-agg-order-by
+  (xt/execute-tx tu/*node* [[:sql "INSERT INTO docs RECORDS
+                                 {_id: 1, k: 'a', v: 'x', o: 2},
+                                 {_id: 2, k: 'a', v: 'y', o: 1},
+                                 {_id: 3, k: 'a', v: 'z', o: 3},
+                                 {_id: 4, k: 'b', v: 'p', o: NULL},
+                                 {_id: 5, k: 'b', v: 'q', o: 5}"]])
+
+  (t/is (= #{{:k "a", :vs ["y" "x" "z"]} {:k "b", :vs ["q" "p"]}}
+           (set (xt/q tu/*node* "SELECT k, ARRAY_AGG(v ORDER BY o) AS vs FROM docs GROUP BY k")))
+        "nulls sort last ascending, as in Postgres")
+
+  (t/is (= [{:k "a", :vs ["z" "x" "y"]}]
+           (xt/q tu/*node* "SELECT k, ARRAY_AGG(v ORDER BY o DESC) AS vs FROM docs WHERE k = 'a' GROUP BY k")))
+
+  (t/is (= #{{:k "a", :vs ["z" "x" "y"]} {:k "b", :vs ["q" "p"]}}
+           (set (xt/q tu/*node* "SELECT k, ARRAY_AGG(v ORDER BY -o NULLS LAST) AS vs FROM docs GROUP BY k"))))
+
+  (t/is (= [{:vs ["Y" "X" "Z" "Q" "P"]}]
+           (xt/q tu/*node* "SELECT ARRAY_AGG(UPPER(v) ORDER BY o, k) AS vs FROM docs WHERE o IS NOT NULL OR k = 'b'"))
+        "a computed value, and a query with no GROUP BY")
+
+  (t/is (= [{:k "a", :vs ["y" "x" "z"]} {:k "b", :vs ["q" "p"]}]
+           (xt/q tu/*node* "SELECT k, (SELECT ARRAY_AGG(d2.v ORDER BY d2.o) FROM docs d2 WHERE d2.k = d1.k) AS vs
+                            FROM (SELECT DISTINCT k FROM docs) d1
+                            ORDER BY k"))
+        "in a correlated subquery"))
+
 (t/deftest test-order-by-3065
   (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 :x 3}]
                            [:put-docs :docs {:xt/id 2 :x 2}]

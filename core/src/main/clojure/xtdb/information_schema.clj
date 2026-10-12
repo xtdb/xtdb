@@ -106,19 +106,19 @@
                                relforcerowsecurity :bool, relispartition :bool, reltablespace :i32, reloftype :i32
                                relpersistence :utf8, relreplident :utf8, reltoastrelid :i32
                                reltype [:? :i32], reltuples [:? :f64], relpages [:? :i32], relallvisible [:? :i32]
-                               relnatts [:? :i32], relhassubclass [:? :bool], relpartbound [:? :utf8]}
+                               relnatts [:? :i32], relhassubclass [:? :bool], relpartbound [:? :utf8], reloptions [:? :list :utf8]}
           pg_catalog/pg_description {objoid :i32, classoid :i32, objsubid :i16, description :utf8}
           pg_catalog/pg_views {schemaname :utf8, viewname :utf8, viewowner :utf8}
           pg_catalog/pg_matviews {schemaname :utf8, matviewname :utf8, matviewowner :utf8}
           pg_catalog/pg_attribute {attrelid :i32, attname :utf8, atttypid :i32
                                    attlen :i32, attnum :i32
                                    attisdropped :bool, attnotnull :bool
-                                   atttypmod :i32, attidentity :utf8, attgenerated :utf8
+                                   atttypmod :i32, attidentity :utf8, attgenerated :utf8, attcompression :utf8
                                    attstorage [:? :utf8], attalign [:? :utf8], atthasdef [:? :bool], attcollation [:? :i32]
                                    attislocal [:? :bool], attinhcount [:? :i32], atthasmissing [:? :bool], attndims [:? :i32]}
           pg_catalog/pg_namespace {oid :i32, nspname :utf8, nspowner :i32, nspacl :null}
           pg_catalog/pg_proc {oid :i32, proname :utf8, pronamespace :i32}
-          pg_catalog/pg_database {oid :i32, datname :utf8, datallowconn :bool, datistemplate :bool}
+          pg_catalog/pg_database {oid :i32, datname :utf8, datallowconn :bool, datistemplate :bool, datcollate :utf8}
 
           pg_catalog/pg_stat_user_tables {relid :i32
                                           schemaname :utf8
@@ -149,6 +149,14 @@
           pg_catalog/pg_extension {oid :i32, extname :utf8, extowner :i32, extnamespace :i32
                                    extrelocatable :bool, extversion :utf8, extconfig [:? :list :i32], extcondition [:? :list :utf8]}
           pg_catalog/pg_attrdef {oid :i32, adrelid :i32, adnum :i32, adbin [:? :utf8]}
+          pg_catalog/pg_sequence {seqrelid :i32, seqtypid :i32, seqstart :i64, seqincrement :i64
+                                  seqmax :i64, seqmin :i64, seqcache :i64, seqcycle :bool}
+          pg_catalog/pg_collation {oid :i32, collname :utf8, collnamespace :i32, collowner :i32
+                                   collprovider :utf8, collisdeterministic :bool, collencoding :i32
+                                   collcollate [:? :utf8], collctype [:? :utf8]
+                                   colliculocale [:? :utf8], collversion [:? :utf8]}
+          pg_catalog/pg_opclass {oid :i32, opcmethod :i32, opcname :utf8, opcnamespace :i32, opcowner :i32
+                                 opcfamily :i32, opcintype :i32, opcdefault :bool, opckeytype :i32}
           pg_catalog/pg_index {indexrelid :i32, indrelid :i32, indnatts :i32, indnkeyatts :i32
                                indisunique :bool, indnullsnotdistinct :bool, indisprimary :bool, indisexclusion :bool
                                indimmediate :bool, indisclustered :bool, indisvalid :bool, indcheckxmin :bool
@@ -371,7 +379,8 @@
      :attnotnull false
      :atttypmod (int -1)
      :attidentity ""
-     :attgenerated ""}))
+     :attgenerated ""
+     :attcompression ""}))
 
 (defn pg-namespace []
   (for [{:keys [oid schema-name nspowner]} pg-namespaces]
@@ -407,7 +416,8 @@
     {:oid (name->oid db-name)
      :datname db-name
      :datallowconn true
-     :datistemplate false}))
+     :datistemplate false
+     :datcollate "C"}))
 
 (defn pg-stat-user-tables [oid-by-table table-refs]
   (for [^TableRef table table-refs]
@@ -601,6 +611,9 @@
                                      pg_catalog/pg_constraint nil
                                      pg_catalog/pg_extension nil
                                      pg_catalog/pg_attrdef nil
+                                     pg_catalog/pg_sequence nil
+                                     pg_catalog/pg_collation nil
+                                     pg_catalog/pg_opclass nil
                                      pg_catalog/pg_index nil
                                      pg_catalog/pg_user (pg-user authn)
                                      pg_catalog/pg_roles (pg-roles authn query-source db-cat)
