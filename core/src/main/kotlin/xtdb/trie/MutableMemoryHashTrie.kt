@@ -120,7 +120,7 @@ class MutableMemoryHashTrie(override val rootNode: Node, val hashReader: VectorR
         private val pageLimit: Int,
         override val path: ByteArray,
         override val hashChildren: MutableList<Node?>,
-    ) : Node, HashTrie.Branch<Leaf> {
+    ) : Node, HashTrie.IidBranch<Leaf> {
 
         override fun add(trie: MutableMemoryHashTrie, newIdx: Int): Node {
             val bucket = trie.bucketFor(newIdx, path.size, trie.reusePtr1)

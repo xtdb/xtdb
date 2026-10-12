@@ -18,7 +18,7 @@ object MergePlanner {
     ) {
         val children: List<SegmentNode<L>?>?
             get() = when (node) {
-                is HashTrie.Branch -> node.hashChildren.map { it?.let { SegmentNode(segMeta, it) } }
+                is HashTrie.IidBranch -> node.hashChildren.map { it?.let { SegmentNode(segMeta, it) } }
                 is HashTrie.Leaf -> null
             }
 

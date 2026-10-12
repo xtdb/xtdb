@@ -4,7 +4,7 @@ import xtdb.trie.HashTrie
 
 class TestTrie(override val rootNode: HashTrie.Node<Leaf>?) : HashTrie<TestTrie.Leaf> {
 
-    class Branch(override val path: ByteArray, override val hashChildren: List<HashTrie.Node<Leaf>?>) : HashTrie.Branch<Leaf>
+    class Branch(override val path: ByteArray, override val hashChildren: List<HashTrie.Node<Leaf>?>) : HashTrie.IidBranch<Leaf>
 
     class Leaf(override val path: ByteArray, val pageIdx: Int) : HashTrie.Leaf<Leaf>
 
