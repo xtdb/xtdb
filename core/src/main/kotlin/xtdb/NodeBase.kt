@@ -83,7 +83,21 @@ class NodeBase(
                     (config.logClusters + config.remotes)
                         .mapValues { (_, factory) -> open { factory.open() } }
 
-                val compactor = open { compactorFactory.create(meterReg, config.compactor.threads) }
+                val compactorConfig = config.compactor
+                if (compactorConfig.threads > 0 && !compactorConfig.withinFileRecencyBranching) {
+                    throw Incorrect(
+                        """
+                        This release compacts files in a new format, and nodes compacting in the old and new formats must not share a database.
+                        Upgrading an existing cluster: roll this release out with the compactor off ('compactor.threads: 0') in every cluster writing to the database, then roll again with 'compactor.withinFileRecencyBranching: true'.
+                        New cluster: set 'compactor.withinFileRecencyBranching: true' (or XTDB_WITHIN_FILE_RECENCY_BRANCHING=true).
+                        See https://docs.xtdb.com/ops/config
+                        """.trimIndent(),
+                        errorCode = "xtdb/compactor-format-upgrade",
+                        data = mapOf("threads" to compactorConfig.threads),
+                    )
+                }
+
+                val compactor = open { compactorFactory.create(meterReg, compactorConfig.threads) }
 
                 val infoSchema = infoSchemaFactory.invoke(al, meterReg, config.authn)
                 val scanEmitter = scanEmitterFactory.invoke(infoSchema)

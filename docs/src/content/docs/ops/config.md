@@ -3,7 +3,26 @@ title: Configuration
 ---
 
 <details>
-<summary>Changelog (last updated v2.2)</summary>
+<summary>Changelog (last updated v2.3)</summary>
+
+v2.3: a compacting node requires `compactor.withinFileRecencyBranching`
+
+: A node whose compactor runs refuses to start unless `withinFileRecencyBranching` is set — see [Compactor](#compactor).
+
+  Previously a node compacted with no further setting.
+  v2.3 compacts files in a new format, and every node may run the same compaction job, so a node on an earlier release compacting alongside a v2.3 node can leave a trie whose data and metadata files disagree.
+  The setting is your assertion that no node on an earlier release still compacts.
+
+  Upgrading an existing cluster takes two rolls:
+
+  1. Roll v2.3 out with the compactor off (`compactor.threads: 0`).
+     Where several clusters write to the same database, every one of them finishes this roll before the next step starts anywhere.
+  2. Roll again with the compactor on and `compactor.withinFileRecencyBranching: true` (or `XTDB_WITHIN_FILE_RECENCY_BRANCHING=true`).
+
+  Queries keep working throughout; compaction pauses between the two rolls.
+  A new cluster sets `withinFileRecencyBranching` and needs nothing else.
+
+  To go back to an earlier release, run `reset-compactor` first: earlier releases can't read files v2.3 compacts.
 
 v2.2: blocks are flushed every 15 minutes
 
@@ -239,6 +258,10 @@ compactor:
   # Defaults to !Env XTDB_COMPACTOR_THREADS # or if that's not specified min(availableProcessors / 2, 1).
   # Set to 0 to disable the compactor.
   threads: 4
+
+  # (v2.3+) Required on a node whose compactor runs (`threads` > 0) — see the v2.3 changelog entry above before setting it on an existing cluster.
+  # Defaults to !Env XTDB_WITHIN_FILE_RECENCY_BRANCHING # or if that's not specified false.
+  withinFileRecencyBranching: true
 ```
 
 ### Indexer

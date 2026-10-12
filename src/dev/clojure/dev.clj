@@ -51,6 +51,7 @@
                                       :keystore-password "password123"}}
                        :log [:local {:path (io/file dev-node-dir "log")}]
                        :storage [:local {:path (io/file dev-node-dir "objects")}]
+                       :compactor {:within-file-recency-branching? true}
                        :healthz {:port 8081
                                  :host "*"}
                        :flight-sql {:port 52358

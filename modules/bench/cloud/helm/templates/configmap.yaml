@@ -8,6 +8,7 @@ data:
   XTDB_LOG_TOPIC: {{ .Values.xtdbConfig.logTopic | quote }}
   JDK_JAVA_OPTIONS: {{ .Values.xtdbConfig.jdkOptions | quote }}
   XTDB_LOGGING_LEVEL: {{ .Values.xtdbConfig.loggingLevel | quote }}
+  XTDB_WITHIN_FILE_RECENCY_BRANCHING: "true"
   {{- with .Values.providerConfig.env }}
   {{- range $key, $val := . }}
   {{ $key }}: {{ $val | quote }}
