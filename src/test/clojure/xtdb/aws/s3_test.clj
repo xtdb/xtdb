@@ -16,7 +16,7 @@
            [xtdb.multipart IMultipartUpload SupportsMultipart]
            [xtdb.storage RemoteBufferPool]))
 
-;; Setup the stack via cloudformation - see modules/s3/cloudformation/s3-stack.yml
+;; Setup the stack via cloudformation - see modules/aws/cloudformation/s3-stack.yml
 ;; Ensure region is set locally to wherever cloudformation stack is created (ie, eu-west-1 if stack on there)
 
 (def bucket
