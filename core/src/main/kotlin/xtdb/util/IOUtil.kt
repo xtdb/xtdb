@@ -32,7 +32,17 @@ val String.asPath: Path
     get() = Path.of(this)
 
 fun Iterable<AutoCloseable?>.closeAll() {
-    forEach { it?.close() }
+    var closeError: Throwable? = null
+
+    for (c in this) {
+        try {
+            c?.close()
+        } catch (e: Throwable) {
+            if (closeError == null) closeError = e else closeError.addSuppressed(e)
+        }
+    }
+
+    closeError?.let { throw it }
 }
 
 fun <T : AutoCloseable> Lazy<T>.close() {
