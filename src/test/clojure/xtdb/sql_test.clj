@@ -674,6 +674,19 @@
          (sql/plan "select f.a from foo f where f.a in (1,2) AND f.a = 42 AND f.b in (3,4)"
                    {:table-info {#xt/table foo #{"a" "b"}}}))))
 
+(t/deftest multiple-expression-ins-project-distinct-columns
+  (let [plan (sql/plan "SELECT f.a FROM foo f WHERE UPPER(f.a) IN (SELECT b.x FROM bar b) AND UPPER(f.b) IN ('X', 'Y')"
+                       {:table-info {#xt/table foo #{"a" "b"}
+                                     #xt/table bar #{"x"}}})
+        upper-cols (for [node (tree-seq vector? seq plan)
+                         :when (and (vector? node) (= :map (first node)))
+                         projection (:projections (second node))
+                         :when (map? projection)
+                         :let [[col expr] (first projection)]
+                         :when (and (seq? expr) (= 'upper (first expr)))]
+                     col)]
+    (t/is (= 2 (count (distinct upper-cols))))))
+
 #_ ; FIXME broken
 (t/deftest deeply-nested-correlated-query
   (t/is (=plan-file

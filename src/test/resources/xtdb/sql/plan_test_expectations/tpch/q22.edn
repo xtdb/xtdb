@@ -27,9 +27,9 @@
         [:map
          {:projections [{_sq_2 true}]}
          [:semi-join
-          {:conditions [{_needle xt.values.3/_column_1}]}
+          {:conditions [{_sq_2_needle xt.values.3/_column_1}]}
           [:map
-           {:projections [{_needle (substring c.1/c_phone 1 2)}]}
+           {:projections [{_sq_2_needle (substring c.1/c_phone 1 2)}]}
            [:map
             {:projections [{_sq_9 true}]}
             [:anti-join
@@ -85,9 +85,9 @@
           [:map
            {:projections [{_sq_6 true}]}
            [:semi-join
-            {:conditions [{_needle xt.values.7/_column_1}]}
+            {:conditions [{_sq_6_needle xt.values.7/_column_1}]}
             [:map
-             {:projections [{_needle (substring c.5/c_phone 1 2)}]}
+             {:projections [{_sq_6_needle (substring c.5/c_phone 1 2)}]}
              [:rename
               {:prefix c.5}
               [:scan

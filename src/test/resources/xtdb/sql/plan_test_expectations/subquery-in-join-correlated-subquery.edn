@@ -9,8 +9,8 @@
     {:predicate _sq_3}
     [:apply
      {:mode :mark-join,
-      :columns {bar.2/b ?_sq_b_4, bar.2/c ?_needle},
-      :mark-join-projection {_sq_3 (== ?_needle b)}}
+      :columns {bar.2/b ?_sq_b_4, bar.2/c ?_sq_3_needle},
+      :mark-join-projection {_sq_3 (== ?_sq_3_needle b)}}
      [:rename
       {:prefix bar.2}
       [:scan {:db-name "xtdb", :table #xt/table bar, :columns [c b]}]]

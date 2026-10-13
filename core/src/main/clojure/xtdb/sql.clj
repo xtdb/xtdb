@@ -231,7 +231,9 @@
                           (:plan query-plan)]
 
                  :quantified-comparison (let [{:keys [expr op]} sq
-                                              needle-param (vary-meta '?_needle assoc :correlated-column? true)]
+                                              needle-col (->col-sym (str sq-sym "_needle"))
+                                              needle-param (-> (symbol (str "?" sq-sym "_needle"))
+                                                               (vary-meta assoc :correlated-column? true))]
 
                                           (if (and (:column? (meta expr))
                                                    (not (get sq-refs expr)))
@@ -246,9 +248,9 @@
 
                                             [:apply
                                              {:mode :mark-join
-                                              :columns (assoc sq-refs (->col-sym '_needle) needle-param)
+                                              :columns (assoc sq-refs needle-col needle-param)
                                               :mark-join-projection {sq-sym (list op needle-param (first (:col-syms query-plan)))}}
-                                             [:map {:projections [{'_needle expr}]}
+                                             [:map {:projections [{needle-col expr}]}
                                               plan]
                                              (:plan query-plan)]))))
              plan

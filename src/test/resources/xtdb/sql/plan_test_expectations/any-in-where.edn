@@ -3,9 +3,9 @@
  [:map
   {:projections [{_sq_2 true}]}
   [:semi-join
-   {:conditions [(> _needle z)]}
+   {:conditions [(> _sq_2_needle z)]}
    [:map
-    {:projections [{_needle (== x.1/z 1)}]}
+    {:projections [{_sq_2_needle (== x.1/z 1)}]}
     [:rename
      {:prefix x.1}
      [:scan {:db-name "xtdb", :table #xt/table x, :columns [y z]}]]]
