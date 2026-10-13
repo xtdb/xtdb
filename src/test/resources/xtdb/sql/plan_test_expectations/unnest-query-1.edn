@@ -2,9 +2,9 @@
  {:projections
   [{films si.1/films} {film film.3/film} {film_ord film.3/film_ord}]}
  [:unnest
-  {:columns {film.3/film unnest}, :ordinality-column film.3/film_ord}
+  {:columns {film.3/film _unnest_0}, :ordinality-column film.3/film_ord}
   [:map
-   {:projections [{unnest si.1/films}]}
+   {:projections [{_unnest_0 si.1/films}]}
    [:rename
     {:prefix si.1}
     [:scan {:db-name "xtdb", :table #xt/table stars_in, :columns [films]}]]]]]

@@ -3107,6 +3107,15 @@ UNION ALL
            "test-push-selection-down-past-unnest-ord-col-ref"
            (sql/plan q {:table-info {#xt/table foo #{"_id" "vs"}}})))))
 
+(t/deftest multiple-unnests-unnest-distinct-columns
+  (let [plan (sql/plan "SELECT a.x, b.y FROM docs d, UNNEST(d.xs) AS a(x), UNNEST(d.ys) AS b(y)"
+                       {:table-info {#xt/table docs #{"xs" "ys"}}})
+        unnested-cols (for [node (tree-seq vector? seq plan)
+                            :when (and (vector? node) (= :unnest (first node)))
+                            from-col (vals (:columns (second node)))]
+                        from-col)]
+    (t/is (= 2 (count (distinct unnested-cols))))))
+
 (t/deftest forbid-invalid-columns-insert
   (t/is (anomalous? [:incorrect nil
                      #"Cannot put documents with columns: \[_foo\]"]

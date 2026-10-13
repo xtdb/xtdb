@@ -3,9 +3,9 @@
  [:select
   {:predicate (< (. uvs.3/v :v) 2)}
   [:unnest
-   {:columns {uvs.3/v unnest}}
+   {:columns {uvs.3/v _unnest_0}}
    [:map
-    {:projections [{unnest f.1/vs}]}
+    {:projections [{_unnest_0 f.1/vs}]}
     [:rename
      {:prefix f.1}
      [:scan {:db-name "xtdb", :table #xt/table foo, :columns [vs _id]}]]]]]]

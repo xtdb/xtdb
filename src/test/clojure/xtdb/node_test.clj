@@ -567,9 +567,9 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
   (t/is (= [{:depth "->", :op :project
              :explain {:project "[{_id a.1/_id} {x u.3/x}]", :append? false}}
             {:depth "  ->", :op :unnest
-             :explain {:from "unnest", :to "u.3/x", :ordinality "u.3/o"}}
+             :explain {:from "_unnest_0", :to "u.3/x", :ordinality "u.3/o"}}
             {:depth "    ->", :op :project
-             :explain {:project "[{unnest a.1/xs}]", :append? true}}
+             :explain {:project "[{_unnest_0 a.1/xs}]", :append? true}}
             {:depth "      ->", :op :rename
              :explain {:prefix "a.1"}}
             {:depth "        ->", :op :scan

@@ -1065,9 +1065,10 @@
           {:keys [column]} table-opts]
       (when (and (= mode :cross-join) column)
         (let [[unnest-col unnest-expr] (first column)
-              unnest-expr (w/postwalk-replace (set/map-invert columns) unnest-expr)]
-          [:unnest {:columns {unnest-col 'unnest}}
-           [:map {:projections [{'unnest unnest-expr}]}
+              unnest-expr (w/postwalk-replace (set/map-invert columns) unnest-expr)
+              unnest-sym (symbol (str "_" (*gensym* "unnest")))]
+          [:unnest {:columns {unnest-col unnest-sym}}
+           [:map {:projections [{unnest-sym unnest-expr}]}
             lhs]])))
 
     [:apply opts
@@ -1084,9 +1085,10 @@
                  (map? (first projections))
                  (= '(local-row-number) (val (ffirst projections))))
         (let [[unnest-col unnest-expr] (first column)
-              unnest-expr (w/postwalk-replace (set/map-invert columns) unnest-expr)]
-          [:unnest {:columns {unnest-col 'unnest}, :ordinality-column (key (ffirst projections))}
-           [:map {:projections [{'unnest unnest-expr}]}
+              unnest-expr (w/postwalk-replace (set/map-invert columns) unnest-expr)
+              unnest-sym (symbol (str "_" (*gensym* "unnest")))]
+          [:unnest {:columns {unnest-col unnest-sym}, :ordinality-column (key (ffirst projections))}
+           [:map {:projections [{unnest-sym unnest-expr}]}
             lhs]])))))
 
 (defn- decorrelate-apply-rule-2
