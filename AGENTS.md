@@ -71,7 +71,8 @@ That commentary belongs in the commit body and the PR, which are read once aroun
 
 **When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
 
-* You MUST include tests for new/changed functionality.
+* You MUST include tests for new/changed functionality, in the same commit as the change they cover.
+  A branch is reviewed commit by commit, and a commit whose tests or docs arrive later can't be agreed with on its own.
 * You MUST run tests locally to verify they pass, per the `xtdb-testing` skill.
 * You MUST update the Allium specs if you've made changes in the areas they cover — see [Allium specs](#allium-specs) for the map.
 * The full test suite MUST pass (`./gradlew test`).
