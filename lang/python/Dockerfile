@@ -1,4 +1,4 @@
-FROM python:3.14
+FROM python:3.15
 
 WORKDIR /app
 
@@ -10,6 +10,6 @@ RUN pip install poetry
 COPY pyproject.toml .
 COPY poetry.lock .
 
-RUN poetry install && poetry run pip install pyarrow
+RUN poetry install
 
 COPY . .
