@@ -61,7 +61,19 @@
              (tu/query-ra '[:sort {:order-specs [[a]]}
                             [:table {:param ?table}]]
                           {:args {:table table-with-nil}}))
-          "default nulls last")))
+          "default nulls last")
+
+    (t/is (= [{:b 15}, {:a 100, :b 83}, {:a 83.0, :b 100}, {:a 12.4, :b 10}]
+             (tu/query-ra '[:sort {:order-specs [[a {:direction :desc, :null-ordering :nulls-first}]]}
+                            [:table {:param ?table}]]
+                          {:args {:table table-with-nil}}))
+          "desc nulls first")
+
+    (t/is (= [{:a 100, :b 83}, {:a 83.0, :b 100}, {:a 12.4, :b 10}, {:b 15}]
+             (tu/query-ra '[:sort {:order-specs [[a {:direction :desc, :null-ordering :nulls-last}]]}
+                            [:table {:param ?table}]]
+                          {:args {:table table-with-nil}}))
+          "desc nulls last")))
 
 (t/deftest test-order-by-spill
   (binding [order-by/*block-size* 10]
