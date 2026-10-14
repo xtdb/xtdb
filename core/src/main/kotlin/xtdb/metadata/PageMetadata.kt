@@ -1,7 +1,5 @@
 package xtdb.metadata
 
-import com.github.benmanes.caffeine.cache.Cache
-import com.github.benmanes.caffeine.cache.Caffeine
 import kotlinx.coroutines.runBlocking
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.storage.BufferPool
@@ -45,7 +43,7 @@ class PageMetadata private constructor(private val rel: Relation, private val pa
 
     companion object {
         @JvmStatic
-        fun factory(al: BufferAllocator, bp: BufferPool, cacheSize: Long = 128) = Factory(al, bp, cacheSize)
+        fun factory(al: BufferAllocator, bp: BufferPool) = Factory(al, bp)
 
         @JvmStatic
         fun open(al: BufferAllocator, metaFilePath: Path): PageMetadata =
@@ -132,10 +130,7 @@ class PageMetadata private constructor(private val rel: Relation, private val pa
     override fun close() = rel.close()
 
     // TODO inline this into BP
-    class Factory(al: BufferAllocator, private val bp: BufferPool, cacheSize: Long) : AutoCloseable {
-        private val pageIdxCache: Cache<Path, PageIdxs> =
-            Caffeine.newBuilder().maximumSize(cacheSize).build()
-
+    class Factory(al: BufferAllocator, private val bp: BufferPool) : AutoCloseable {
         private val al = al.openChildAllocator("metadata-mgr")
 
         fun openPageMetadataSync(metaFilePath: Path): PageMetadata = runBlocking { openPageMetadata(metaFilePath) }
@@ -144,7 +139,7 @@ class PageMetadata private constructor(private val rel: Relation, private val pa
             bp.getRecordBatch(metaFilePath, 0).use { rb ->
                 val footer = bp.getFooter(metaFilePath)
                 Relation.fromRecordBatch(al, footer.schema, rb).closeOnCatch { rel ->
-                    PageMetadata(rel, pageIdxCache.get(metaFilePath) { readPageIdxs(rel) })
+                    PageMetadata(rel, readPageIdxs(rel))
                 }
             }
 
