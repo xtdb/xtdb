@@ -13,6 +13,9 @@
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
   (:import (clojure.lang MapEntry)
+           xtdb.api.storage.ObjectStore$StoredObject
+           xtdb.arrow.VectorReader
+           xtdb.metadata.PageMetadata
            xtdb.storage.LocalStorage
            (xtdb.table TableSlug)))
 
@@ -286,3 +289,47 @@
                      (sort-by :xt/id (tu/query-ra '[:scan {:db-name "xtdb", :table #xt/table xt_docs
                                                             :columns [_id {status (not (nil? status))}]}]
                                                    {:node node}))))))))))
+
+(defn- leaf-layouts [^PageMetadata page-metadata]
+  (let [^VectorReader leaf-rdr (.getMetadataLeafReader page-metadata)
+        ^VectorReader cols-rdr (.vectorFor leaf-rdr "columns")
+        ^VectorReader col-rdr (.getListElements cols-rdr)
+        ^VectorReader col-name-rdr (.vectorFor col-rdr "col-name")
+        ^VectorReader root-col-rdr (.vectorFor col-rdr "root-col?")]
+    (vec (for [leaf-idx (range (.getValueCount leaf-rdr))
+               :when (not (.isNull leaf-rdr leaf-idx))
+               :let [start (.getListStartIndex cols-rdr leaf-idx)]]
+           (vec (for [entry-idx (range start (+ start (.getListCount cols-rdr leaf-idx)))]
+                  [(.getObject col-name-rdr entry-idx) (.getBoolean root-col-rdr entry-idx)]))))))
+
+(t/deftest test-every-page-of-a-metadata-file-has-the-same-entry-layout
+  (binding [c/*page-size* 16]
+    (with-open [node (xtn/start-node (assoc tu/*node-opts* :indexer {:page-limit 16}))]
+      (doseq [block (range 3)]
+        (xt/execute-tx node (for [i (range (* block 60) (* (inc block) 60))]
+                              [:put-docs :docs (cond-> {:xt/id i}
+                                                 (even? i) (assoc :n (if (zero? (mod i 4)) i (str "n" i)))
+                                                 (zero? (mod i 3)) (assoc :nested (cond-> {:a i}
+                                                                                    (odd? i) (assoc :b [i (str i) {:deep i}])
+                                                                                    (= block 2) (assoc (keyword (str "k" (mod i 5))) i)))
+                                                 (zero? (mod i 7)) (assoc :tags #{"x" (str "t" i)})
+                                                 (= block 1) (assoc :only-in-block-1 true))]))
+        (xt/execute-tx node [[:delete-docs :docs (* block 60)]
+                             [:erase-docs :docs (inc (* block 60))]])
+        (tu/flush-block! node))
+
+      (c/compact-all! node #xt/duration "PT5S")
+
+      (let [db (db/primary-db node)
+            metadata-mgr (.getMetadataManager db)
+            meta-paths (->> (.listAllObjects (.getBufferPool db))
+                            (map #(.getKey ^ObjectStore$StoredObject %))
+                            (filter #(re-find #"docs/meta/" (str %))))
+            layouts-by-path (into {} (for [meta-path meta-paths]
+                                       (util/with-open [page-metadata (.openPageMetadataSync metadata-mgr meta-path)]
+                                         [meta-path (leaf-layouts page-metadata)])))]
+        (t/is (<= 4 (count (filter #(< 1 (count %)) (vals layouts-by-path))))
+              "the L0s and the L1C span several pages")
+
+        (doseq [[meta-path layouts] layouts-by-path]
+          (t/is (= 1 (count (distinct layouts))) (str meta-path)))))))
