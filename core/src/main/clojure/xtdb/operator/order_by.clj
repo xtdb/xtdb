@@ -36,17 +36,28 @@
     (.writePage unl)
     (.end unl)))
 
+;; :desc flips null-ordering before negating, not after - negating the
+;; null outcomes too would move NULLS FIRST/LAST with direction, when
+;; it's meant to be a fixed position (#6172).
+(defn- ->order-comparator ^Comparator [read-col1 read-col2 direction null-ordering]
+  (let [desc? (= :desc direction)
+        col-comparator (expr.comp/->comparator read-col1 read-col2
+                                                (if desc?
+                                                  (case null-ordering
+                                                    :nulls-first :nulls-last
+                                                    :nulls-last :nulls-first)
+                                                  null-ordering))]
+    (if desc?
+      (fn [left right] (- (.applyAsInt col-comparator left right)))
+      (fn [left right] (.applyAsInt col-comparator left right)))))
+
 (defn sorted-idxs ^ints [^RelationReader read-rel, order-specs]
   (-> (IntStream/range 0 (.getRowCount read-rel))
       (.boxed)
       (.sorted (reduce (fn [^Comparator acc, [column {:keys [direction null-ordering]
                                                       :or {direction :asc, null-ordering :nulls-last}}]]
                          (let [read-col (.vectorForOrNull read-rel (str column))
-                               col-comparator (expr.comp/->comparator read-col read-col null-ordering)
-
-                               comparator (cond-> ^Comparator (fn [left right]
-                                                                (.applyAsInt col-comparator left right))
-                                            (= :desc direction) (.reversed))]
+                               comparator (->order-comparator read-col read-col direction null-ordering)]
                            (if acc
                              (.thenComparing acc comparator)
                              comparator)))
@@ -83,14 +94,7 @@
                                          :or {direction :asc, null-ordering :nulls-last}}]]
             (let [read-col1 (.get rel1 (str column))
                   read-col2 (.get rel2 (str column))
-                  col-comparator (expr.comp/->comparator read-col1 read-col2 null-ordering)
-
-                  ^Comparator
-                  comparator (if (= :desc direction)
-                               (fn [left right]
-                                 (- (.applyAsInt col-comparator left right)))
-                               (fn [left right]
-                                 (.applyAsInt col-comparator left right)))]
+                  comparator (->order-comparator read-col1 read-col2 direction null-ordering)]
               (if acc
                 (.thenComparing acc comparator)
                 comparator)))
