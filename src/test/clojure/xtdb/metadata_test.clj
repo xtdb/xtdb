@@ -290,6 +290,20 @@
                                                             :columns [_id {status (not (nil? status))}]}]
                                                    {:node node}))))))))))
 
+(defn- root-col-entries [^PageMetadata page-metadata]
+  (let [^VectorReader leaf-rdr (.getMetadataLeafReader page-metadata)
+        ^VectorReader page-idx-rdr (.vectorFor leaf-rdr "data-page-idx")
+        ^VectorReader cols-rdr (.vectorFor leaf-rdr "columns")
+        ^VectorReader col-rdr (.getListElements cols-rdr)
+        ^VectorReader col-name-rdr (.vectorFor col-rdr "col-name")
+        ^VectorReader root-col-rdr (.vectorFor col-rdr "root-col?")]
+    (into {}
+          (for [leaf-idx (range (.getValueCount leaf-rdr))
+                :let [start (.getListStartIndex cols-rdr leaf-idx)]
+                entry-idx (range start (+ start (.getListCount cols-rdr leaf-idx)))
+                :when (.getBoolean root-col-rdr entry-idx)]
+            [[(.getObject col-name-rdr entry-idx) (.getInt page-idx-rdr leaf-idx)] entry-idx]))))
+
 (defn- leaf-layouts [^PageMetadata page-metadata]
   (let [^VectorReader leaf-rdr (.getMetadataLeafReader page-metadata)
         ^VectorReader cols-rdr (.vectorFor leaf-rdr "columns")
@@ -333,3 +347,32 @@
 
         (doseq [[meta-path layouts] layouts-by-path]
           (t/is (= 1 (count (distinct layouts))) (str meta-path)))))))
+
+(t/deftest test-row-index-finds-each-root-column-entry-on-each-page
+  (binding [c/*page-size* 16]
+    (with-open [node (xtn/start-node (assoc tu/*node-opts* :indexer {:page-limit 16}))]
+      (xt/execute-tx node (for [i (range 100)]
+                            [:put-docs :docs (cond-> {:xt/id i, :n i}
+                                               (even? i) (assoc :s (str "s" i))
+                                               (zero? (mod i 3)) (assoc :nested {:a i, :b [i (str i)]})
+                                               (zero? (mod i 7)) (assoc :tags #{"x" (str "t" i)}))]))
+
+      (tu/flush-block! node)
+      (c/compact-all! node #xt/duration "PT1S")
+
+      (let [metadata-mgr (.getMetadataManager (db/primary-db node))
+            slug (TableSlug/of #xt/table docs)]
+        (doseq [trie-key [(trie/->l0-trie-key 0) (trie/->l1-trie-key nil 0)]]
+          (util/with-open [page-metadata (.openPageMetadataSync metadata-mgr (.metaFilePath slug ^String trie-key))]
+            (let [expected (root-col-entries page-metadata)
+                  page-count (.getPageCount page-metadata)
+                  col-names (into #{"absent"} (map first) (keys expected))]
+              (t/is (< 1 page-count) (str trie-key " spans several pages"))
+
+              (t/is (= (into {} (for [col-name col-names
+                                      page-idx (range -1 (inc page-count))]
+                                  [[col-name page-idx] (get expected [col-name page-idx] -1)]))
+                       (into {} (for [col-name col-names
+                                      page-idx (range -1 (inc page-count))]
+                                  [[col-name page-idx] (.rowIndex page-metadata col-name page-idx)])))
+                    trie-key))))))))
