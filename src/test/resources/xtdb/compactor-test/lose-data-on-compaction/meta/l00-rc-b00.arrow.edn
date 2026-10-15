@@ -24,66 +24,62 @@
                  :columns
                  [{:col-name "_iid",
                    :root-col? true,
-                   :count 11,
+                   :count 8,
                    :bytes
                    {:bloom
                     #bytes "3a300000050000000b0000001d000000260000002f0000003800000030000000320000003400000036000000380000002f246766bf9f9fa8f7e1"}}
                   {:col-name "_valid_from",
                    :root-col? true,
-                   :count 11,
-                   :date-times {:min 1.5778368E9, :max 1.5787008E9}}
+                   :count 8,
+                   :date-times {:min 1.5778368E9, :max 1.5784416E9}}
                   {:col-name "_valid_to",
                    :root-col? true,
-                   :count 11,
+                   :count 8,
                    :date-times
                    {:min 9.223372036854775E12,
                     :max 9.223372036854775E12}}
                   {:col-name "_system_from",
                    :root-col? true,
-                   :count 11,
-                   :date-times {:min 1.5778368E9, :max 1.5787008E9}}
+                   :count 8,
+                   :date-times {:min 1.5778368E9, :max 1.5784416E9}}
                   {:col-name "_id",
                    :root-col? true,
-                   :count 11,
+                   :count 8,
                    :numbers {:min 1.0, :max 1.0}}
                   {:col-name "v",
                    :root-col? true,
-                   :count 11,
-                   :numbers {:min 0.0, :max 10.0}}]}]}
-   {:nodes #xt/tagged [:branch-iid [nil nil nil 0]]}
-   {:nodes #xt/tagged [:branch-iid [1 nil nil nil]]}
+                   :count 8,
+                   :numbers {:min 0.0, :max 7.0}}]}]}
    {:nodes
     #xt/tagged [:leaf
                 {:data-page-idx 1,
                  :columns
                  [{:col-name "_iid",
                    :root-col? true,
-                   :count 11,
+                   :count 8,
                    :bytes
                    {:bloom
                     #bytes "3a3000000500000004000000110000001e0000002b00000038000000300000003200000034000000360000003800000043079dfe6104bbfb7f01"}}
                   {:col-name "_valid_from",
                    :root-col? true,
-                   :count 11,
-                   :date-times {:min 1.5778368E9, :max 1.5787008E9}}
+                   :count 8,
+                   :date-times {:min 1.5778368E9, :max 1.5784416E9}}
                   {:col-name "_valid_to",
                    :root-col? true,
-                   :count 11,
+                   :count 8,
                    :date-times
                    {:min 9.223372036854775E12,
                     :max 9.223372036854775E12}}
                   {:col-name "_system_from",
                    :root-col? true,
-                   :count 11,
-                   :date-times {:min 1.5778368E9, :max 1.5787008E9}}
+                   :count 8,
+                   :date-times {:min 1.5778368E9, :max 1.5784416E9}}
                   {:col-name "_id",
                    :root-col? true,
-                   :count 11,
+                   :count 8,
                    :numbers {:min 0.0, :max 0.0}}
                   {:col-name "v",
                    :root-col? true,
-                   :count 11,
-                   :numbers {:min 0.0, :max 10.0}}]}]}
-   {:nodes #xt/tagged [:branch-iid [nil 3 nil nil]]}
-   {:nodes #xt/tagged [:branch-iid [nil nil 4 nil]]}
-   {:nodes #xt/tagged [:branch-iid [nil 2 5 nil]]}])}
+                   :count 8,
+                   :numbers {:min 0.0, :max 7.0}}]}]}
+   {:nodes #xt/tagged [:branch-iid [nil 0 1 nil]]}])}

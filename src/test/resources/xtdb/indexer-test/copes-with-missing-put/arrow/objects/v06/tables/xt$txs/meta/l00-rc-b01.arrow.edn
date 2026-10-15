@@ -29,7 +29,7 @@
                    :count 1,
                    :bytes
                    {:bloom
-                    #bytes "3a300000050000000100000003000000050000003d0000003f000000300000003200000034000000360000003800000037b2c7aa57a317c1a7b9"}}
+                    #bytes "3a30000005000000040000000e00000017000000290000003c000000300000003200000034000000360000003800000040ce04bf714aa2c6d342"}}
                   {:col-name "_valid_from",
                    :root-col? true,
                    :count 1,
@@ -47,7 +47,7 @@
                   {:col-name "_id",
                    :root-col? true,
                    :count 1,
-                   :numbers {:min 2138.0, :max 2138.0}}
+                   :numbers {:min 2233.0, :max 2233.0}}
                   {:col-name "system_time",
                    :root-col? true,
                    :count 1,

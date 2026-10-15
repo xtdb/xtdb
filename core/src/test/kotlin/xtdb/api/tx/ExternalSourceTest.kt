@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import xtdb.SimulationTestUtils.Companion.createTrieCatalog
+import xtdb.api.TableRef
 import xtdb.api.log.*
 import xtdb.api.error.Incorrect
 import xtdb.api.tx.TxIndexer.TxResult
@@ -138,6 +139,19 @@ internal class ExternalSourceTest : LeaderTermTest() {
             -1L, resolved.srcMsgId,
             "ext-source ResolvedTx carries the leader's source-log watermark (-1 — no source-log records yet)"
         )
+    }
+
+    @Test
+    fun `an external-source tx is recorded in xt txs, not xt src_log_txs`() = runTest {
+        val extSource = InMemoryExternalSource()
+        val term = extTerm(extSource)
+
+        extSource.channel.send(null)
+        term.watchers.awaitTx(0)
+
+        val tables = term.resolvedTxs().single().tableData.keys
+        assertTrue(TableRef("xt", "txs").schemaAndTable in tables)
+        assertFalse(TableRef("xt", "src_log_txs").schemaAndTable in tables)
     }
 
     @Test

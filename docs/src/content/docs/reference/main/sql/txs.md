@@ -230,3 +230,53 @@ return rr.Diagram(rr.Sequence('SET', 'TRANSACTION', rr.Choice(0, ro, rw)))
   * `METADATA` (v2.1+) can provided to attach arbitrary metadata to the transaction.
     This is then added to the `xt.txs` table in the `user_metadata` column.
     For example, you might use this to attach upstream request IDs, correlation IDs, or other data lineage information.
+
+## Transaction records
+
+XTDB records the outcome of every transaction in tables in the `xt` schema.
+
+### `xt.txs`
+
+One row per transaction, keyed by its transaction ID.
+
+`_id`
+
+: the transaction ID.
+
+`system_time`
+
+: the transaction's system-time.
+
+`committed`
+
+: `true` if the transaction committed, `false` if it aborted.
+
+`error`
+
+: why the transaction aborted, or `null`.
+
+`user_metadata`
+
+: the transaction's `METADATA`, or `null`.
+
+### `xt.src_log_txs` (v2.3+)
+
+The transactions submitted to the database through XTDB, one row per transaction.
+
+``` sql
+SELECT tx_id, system_time, committed, error
+FROM xt.src_log_txs
+ORDER BY tx_id;
+```
+
+`_id`
+
+: the transaction ID.
+
+`tx_id`
+
+: the transaction ID, as in `xt.txs._id`.
+
+`system_time`, `committed`, `error`, `user_metadata`
+
+: as in `xt.txs`.

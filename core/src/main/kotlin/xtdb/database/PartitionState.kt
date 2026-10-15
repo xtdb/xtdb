@@ -58,11 +58,12 @@ class PartitionState(
         ): PartitionState = safelyOpening {
             val tableCatalog = TableCatalog(bufferPool, bufferPool.latestBlock).also {
                 it.loadTables()
-                // xt.txs and xt.role_membership are data-backed, so they're absent from the catalog
+                // xt.txs, xt.src_log_txs and xt.role_membership are data-backed, so they're absent from the catalog
                 // until the first transaction / GRANT. Seed them (as empty CREATE TABLEs) so they're
-                // always resolvable - the columns mirror `OpenTx.writeTxRow` / the GRANT path. On a node
-                // that already has these tables, the loaded types win (no-op seed).
+                // always resolvable - the columns mirror `OpenTx.writeTxRow` / `writeSrcLogTxRow` / the GRANT path.
+                // On a node that already has these tables, the loaded types win (no-op seed).
                 it.seedTable(TableRef("xt", "txs"), listOf("_id", "system_time", "committed", "user_metadata", "error"))
+                it.seedTable(TableRef("xt", "src_log_txs"), listOf("_id", "tx_id", "system_time", "committed", "user_metadata", "error"))
                 it.seedTable(TableRef("xt", "role_membership"), listOf("user", "role"))
             }
 

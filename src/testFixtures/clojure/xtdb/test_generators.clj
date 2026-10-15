@@ -279,7 +279,9 @@
    (gen/let [blocks-to-generate (gen/choose 2 5)
              rows-per-block (gen/elements [20 40 60 80 100])
              records (generate-unique-id-records (* blocks-to-generate rows-per-block))]
-     {:expected-block-count blocks-to-generate
+     ;; each tx writes its 10 docs, plus a row in each of xt.txs and xt.src_log_txs
+     {:expected-block-count (quot (quot (count records) 10)
+                                  (long (Math/ceil (/ rows-per-block 12.0))))
       :total-doc-count (* blocks-to-generate rows-per-block)
       :rows-per-block rows-per-block
       :partitioned-records (partition 10 records)})))

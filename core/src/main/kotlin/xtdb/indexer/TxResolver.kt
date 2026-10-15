@@ -184,7 +184,7 @@ internal class TxResolver(
         if (countError) txErrorCounter?.increment()
 
         return openTx(txKey, null).use { openTx ->
-            openTx.writeTxRow(error, userMetadata)
+            openTx.writeSrcLogTxRow(error, userMetadata)
             stage(openTx, msgId, Aborted(txKey, error), dbOp = null, pending = null)
         }
     }
@@ -255,7 +255,7 @@ internal class TxResolver(
         when (result) {
             is TxResult.Committed ->
                 openTx.use {
-                    it.writeTxRow(null, userMetadataMap)
+                    it.writeSrcLogTxRow(null, userMetadataMap)
                     stage(it, msgId, Committed(txKey), dbOp = null, pending = null)
                 }
 
@@ -380,7 +380,7 @@ internal class TxResolver(
         val txKey = TransactionKey(msgId, smoothSystemTime(msgTimestamp))
 
         return openTx(txKey, null).use { openTx ->
-            openTx.writeTxRow(null, null)
+            openTx.writeSrcLogTxRow(null, null)
             stage(openTx, msgId, Committed(txKey), dbOp, pending = null)
         }
     }
@@ -390,7 +390,7 @@ internal class TxResolver(
         val txKey = TransactionKey(msgId, smoothSystemTime(msgTimestamp))
 
         return openTx(txKey, null).use { openTx ->
-            openTx.writeTxRow(error, null)
+            openTx.writeSrcLogTxRow(error, null)
             stage(openTx, msgId, Aborted(txKey, error), dbOp = null, pending = null)
         }
     }

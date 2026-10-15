@@ -1,11 +1,15 @@
 {:block-idx 0,
  :latest-processed-msg-id 122,
- :table-names #{"xt/txs" "xt/role_membership"},
+ :table-names #{"xt/src_log_txs" "xt/txs" "xt/role_membership"},
  :tables
- [{:oid 16385,
+ [{:oid 16386,
    :schema-name "xt",
    :table-name "role_membership",
    :slug "xt$role_membership"}
+  {:oid 16385,
+   :schema-name "xt",
+   :table-name "src_log_txs",
+   :slug "xt$src_log_txs"}
   {:oid 16384, :schema-name "xt", :table-name "txs", :slug "xt$txs"}],
  :secondary-dbs
  {"new_db"

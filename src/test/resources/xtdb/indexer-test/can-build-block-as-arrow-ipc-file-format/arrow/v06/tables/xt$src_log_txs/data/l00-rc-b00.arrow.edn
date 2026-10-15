@@ -1,0 +1,38 @@
+{:schema
+ #xt/schema ({"_iid" [:fixed-size-binary 16]}
+             {"_system_from" :instant}
+             {"_valid_from" :instant}
+             {"_valid_to" :instant}
+             {"op"
+              [:union
+               {"delete" [:? :null],
+                "erase" [:? :null],
+                "put"
+                [:struct
+                 {"_id" :i64,
+                  "system_time" :instant,
+                  "committed" :bool,
+                  "tx_id" :i64,
+                  "user_metadata" [:? :struct],
+                  "error" [:? :transit]}]}]}),
+ :batches
+ ([{:xt/system-from #xt/zdt "2020-01-02T00:00Z[UTC]",
+    :xt/valid-from #xt/zdt "2020-01-02T00:00Z[UTC]",
+    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
+    :op
+    #xt/tagged [:put
+                {:xt/id 4039,
+                 :system-time #xt/zdt "2020-01-02T00:00Z[UTC]",
+                 :committed true,
+                 :tx-id 4039}],
+    :xt/iid #bytes "969f874ef5dda2bac975dab8e897973f"}
+   {:xt/system-from #xt/zdt "2020-01-01T00:00Z[UTC]",
+    :xt/valid-from #xt/zdt "2020-01-01T00:00Z[UTC]",
+    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
+    :op
+    #xt/tagged [:put
+                {:xt/id 0,
+                 :system-time #xt/zdt "2020-01-01T00:00Z[UTC]",
+                 :committed true,
+                 :tx-id 0}],
+    :xt/iid #bytes "a4e167a76a05add8a8654c169b07b044"}])}

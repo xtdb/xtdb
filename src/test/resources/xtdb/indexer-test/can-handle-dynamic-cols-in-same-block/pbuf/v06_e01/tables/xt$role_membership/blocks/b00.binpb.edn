@@ -1,0 +1,5 @@
+{:row-count 0,
+ :fields
+ {"user" #xt/field {"user" :null}, "role" #xt/field {"role" :null}},
+ :hlls {},
+ :partitions []}

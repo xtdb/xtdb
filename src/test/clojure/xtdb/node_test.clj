@@ -910,6 +910,35 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
               {:xt/id 2, :system-time #xt/zoned-date-time "2021-01-01Z[UTC]"}]
              (xt/q node "SELECT _id, system_time FROM xt.txs ORDER BY _id")))))
 
+(t/deftest src-log-txs-keeps-a-tx-followed-by-an-attach
+  (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id 1}]] {:system-time #inst "2100-01-01"})
+  (with-open [conn (jdbc/get-connection tu/*node*)]
+    (jdbc/execute! conn ["ATTACH DATABASE new_db"]))
+
+  (t/is (= 2 (count (xt/q tu/*node* "SELECT tx_id FROM xt.src_log_txs FOR ALL VALID_TIME")))))
+
+(t/deftest src-log-txs-is-one-entity-per-tx
+  (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id 1}]] {:metadata {:k "v"}})
+  (t/is (thrown? Exception (xt/execute-tx tu/*node* ["ASSERT 1 = 2, 'boom'"])))
+  (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id 2}]])
+
+  (let [[tx0 tx1 tx2] (mapv :xt/id (xt/q tu/*node* "SELECT _id FROM xt.txs ORDER BY _id"))]
+
+    (t/is (= [{:xt/id tx0, :tx-id tx0} {:xt/id tx1, :tx-id tx1} {:xt/id tx2, :tx-id tx2}]
+             (xt/q tu/*node* "SELECT _id, tx_id FROM xt.src_log_txs ORDER BY _id"))
+          "a plain SELECT returns every tx, keyed by tx id")
+
+    (t/is (= [{:tx-id tx0, :committed true, :user-metadata {:k "v"}}
+              {:tx-id tx1, :committed false}
+              {:tx-id tx2, :committed true}]
+             (xt/q tu/*node* "SELECT tx_id, committed, user_metadata FROM xt.src_log_txs FOR ALL VALID_TIME ORDER BY tx_id"))
+          "FOR ALL VALID_TIME returns every tx, matching xt.txs")
+
+    (t/is (= [true false true]
+             (mapv (comp nil? :error)
+                   (xt/q tu/*node* "SELECT error FROM xt.src_log_txs FOR ALL VALID_TIME ORDER BY tx_id")))
+          "the aborted tx carries its error")))
+
 (t/deftest startup-error-doesnt-output-integrant-system
   (t/is (thrown-with-msg? IllegalArgumentException
                           #"Port value out of range: 99999"

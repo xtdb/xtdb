@@ -1,0 +1,70 @@
+{:schema
+ #xt/schema ({"nodes"
+              [:union
+               {"nil" [:? :null],
+                "branch-iid" [:list [:? :i32]],
+                "leaf"
+                [:struct
+                 {"data-page-idx" :i32,
+                  "columns"
+                  [:list
+                   [:struct
+                    {"col-name" :utf8,
+                     "transit" [:? :bool],
+                     "count" :i64,
+                     "bool" [:? :bool],
+                     "bytes" [:? :struct {"bloom" [:? :varbinary]}],
+                     "numbers" [:? :struct {"min" :f64, "max" :f64}],
+                     "date-times"
+                     [:? :struct {"min" :f64, "max" :f64}],
+                     "struct" [:? :list :i32],
+                     "root-col?" :bool}]]}]}]}),
+ :batches
+ ([{:nodes
+    #xt/tagged [:leaf
+                {:data-page-idx 0,
+                 :columns
+                 [{:col-name "_iid",
+                   :root-col? true,
+                   :count 1,
+                   :bytes
+                   {:bloom
+                    #bytes "3a3000000400000002000000030001002200000023000000280000002a0000002e00000030000000362720080ae9ab979578"}}
+                  {:col-name "_valid_from",
+                   :root-col? true,
+                   :count 1,
+                   :date-times {:min 1.578096E9, :max 1.578096E9}}
+                  {:col-name "_valid_to",
+                   :root-col? true,
+                   :count 1,
+                   :date-times
+                   {:min 9.223372036854775E12,
+                    :max 9.223372036854775E12}}
+                  {:col-name "_system_from",
+                   :root-col? true,
+                   :count 1,
+                   :date-times {:min 1.578096E9, :max 1.578096E9}}
+                  {:col-name "_id",
+                   :root-col? true,
+                   :count 1,
+                   :numbers {:min 4733.0, :max 4733.0}}
+                  {:col-name "system_time",
+                   :root-col? true,
+                   :count 1,
+                   :date-times {:min 1.578096E9, :max 1.578096E9}}
+                  {:col-name "committed",
+                   :root-col? true,
+                   :count 1,
+                   :bool true}
+                  {:col-name "tx_id",
+                   :root-col? true,
+                   :count 1,
+                   :numbers {:min 4733.0, :max 4733.0}}
+                  {:col-name "user_metadata",
+                   :root-col? true,
+                   :count 0,
+                   :struct []}
+                  {:col-name "error",
+                   :root-col? true,
+                   :count 0,
+                   :transit true}]}]}])}

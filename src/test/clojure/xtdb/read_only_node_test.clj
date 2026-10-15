@@ -125,14 +125,14 @@
   (util/with-tmp-dirs #{node-dir}
     (let [cfg {:log [:local {:path (.resolve node-dir "log")}]
                :storage [:local {:path (.resolve node-dir "objects")}]
-               :indexer {:rows-per-block 3}
+               :indexer {:rows-per-block 4}
                :compactor {:threads 0}}]
       (with-open [rw-node (xtn/start-node cfg)
                   ro-node (-> (xtn/->config cfg)
                               (.readOnlyDatabases true)
                               (.open))]
 
-        ;; 2 docs + 1 xt.txs row = 3 rows, triggers isFull() with rows-per-block=3
+        ;; 2 docs + its xt.txs and xt.src_log_txs rows = 4 rows, triggers isFull() with rows-per-block=4
         (xt/execute-tx rw-node [[:put-docs :foo {:xt/id "a", :x 1}]
                                 [:put-docs :foo {:xt/id "b", :x 2}]])
 

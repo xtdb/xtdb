@@ -362,14 +362,14 @@
 
         ;; in-memory, the seeded-but-dataless xt/role_membership has no trie, so the trie catalog
         ;; doesn't track it yet (unlike after a restart, below, where it's reconstructed from its block)
-        (t/is (= #{#xt/table foo, #xt/table xt/txs} (.getTables cat)))
+        (t/is (= #{#xt/table foo, #xt/table xt/txs, #xt/table xt/src_log_txs} (.getTables cat)))
         (t/is (= #{"l00-rc-b00" "l00-rc-b01"}
                  (->> (cat/current-tries (cat/trie-state cat #xt/table foo))
                       (into #{} (map :trie-key)))))))
 
     (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
       (let [cat (.getTrieCatalog (db/primary-db node))]
-        (t/is (= #{#xt/table xt/role_membership, #xt/table foo, #xt/table xt/txs} (.getTables cat)))
+        (t/is (= #{#xt/table xt/role_membership, #xt/table foo, #xt/table xt/txs, #xt/table xt/src_log_txs} (.getTables cat)))
         (t/is (= #{"l00-rc-b01" "l00-rc-b00"}
                  (->> (cat/current-tries (cat/trie-state cat #xt/table foo))
                       (into #{} (map :trie-key)))))))
@@ -855,7 +855,7 @@
                          (-> t :table TableRef/.getTableName keyword)))]
           (t/is (= 2 (count blocks)) "Should have 2 blocks after second finish-block")
           (t/is (= [0 1] (map :block-idx blocks)))
-          (t/is (= [[:table_a :table_b :txs] [:table_c :txs]] tables)))))))
+          (t/is (= [[:table_a :table_b :txs :src_log_txs] [:table_c :txs :src_log_txs]] tables)))))))
 
 (t/deftest test-reset-rebuilds-l0-from-object-store
   ;; After compaction, the catalog has no L0 entries — they're dropped on supersession.

@@ -1,16 +1,21 @@
 {:block-idx 1,
  :latest-completed-tx
- {:tx-id 1833, :system-time #xt/instant "2020-01-02T00:00:00Z"},
- :latest-processed-msg-id 3416,
- :table-names #{"xt/txs" "public/foo" "xt/role_membership"},
+ {:tx-id 1928, :system-time #xt/instant "2020-01-02T00:00:00Z"},
+ :latest-processed-msg-id 3511,
+ :table-names
+ #{"xt/src_log_txs" "xt/txs" "public/foo" "xt/role_membership"},
  :tables
- [{:oid 16386,
+ [{:oid 16387,
    :schema-name "public",
    :table-name "foo",
    :slug "public$foo"}
-  {:oid 16385,
+  {:oid 16386,
    :schema-name "xt",
    :table-name "role_membership",
    :slug "xt$role_membership"}
+  {:oid 16385,
+   :schema-name "xt",
+   :table-name "src_log_txs",
+   :slug "xt$src_log_txs"}
   {:oid 16384, :schema-name "xt", :table-name "txs", :slug "xt$txs"}],
  :secondary-dbs {}}

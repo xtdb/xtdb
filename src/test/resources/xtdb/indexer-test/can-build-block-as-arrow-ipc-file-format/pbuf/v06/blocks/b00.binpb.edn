@@ -3,22 +3,27 @@
  {:tx-id 4039, :system-time #xt/instant "2020-01-02T00:00:00Z"},
  :latest-processed-msg-id 8086,
  :table-names
- #{"xt/txs"
+ #{"xt/src_log_txs"
+   "xt/txs"
    "public/device_info"
    "xt/role_membership"
    "public/device_readings"},
  :tables
- [{:oid 16386,
+ [{:oid 16387,
    :schema-name "public",
    :table-name "device_info",
    :slug "public$device_info"}
-  {:oid 16387,
+  {:oid 16388,
    :schema-name "public",
    :table-name "device_readings",
    :slug "public$device_readings"}
-  {:oid 16385,
+  {:oid 16386,
    :schema-name "xt",
    :table-name "role_membership",
    :slug "xt$role_membership"}
+  {:oid 16385,
+   :schema-name "xt",
+   :table-name "src_log_txs",
+   :slug "xt$src_log_txs"}
   {:oid 16384, :schema-name "xt", :table-name "txs", :slug "xt$txs"}],
  :secondary-dbs {}}

@@ -133,20 +133,33 @@ class OpenTx
         resolvedTxs.asReversed().firstNotNullOfOrNull { it.liveTable(ref) }?.openTx(systemTimeMicros)
             ?: partitionState.liveIndex.openTable(ref, systemTimeMicros)
 
-    internal fun writeTxRow(error: Throwable?, userMetadata: Map<*, *>?) {
-        val txId = txKey.txId
-        val systemTimeMicros = txKey.systemTime.asMicros
+    internal fun writeSrcLogTxRow(error: Throwable?, userMetadata: Map<*, *>?) {
+        writeTxRecord(TableRef("xt", "src_log_txs"), txKey.txId, error) { docWriter ->
+            docWriter.vectorFor("tx_id", I64.arrowType, false).writeLong(txKey.txId)
+            docWriter.vectorFor("user_metadata", VectorType.structOf().arrowType, true).writeObject(userMetadata)
+        }
 
-        val liveTable = table(TableRef("xt", "txs"))
+        writeTxRow(error, userMetadata)
+    }
+
+    internal fun writeTxRow(error: Throwable?, userMetadata: Map<*, *>?) =
+        writeTxRecord(TableRef("xt", "txs"), txKey.txId, error) { docWriter ->
+            docWriter.vectorFor("user_metadata", VectorType.structOf().arrowType, true).writeObject(userMetadata)
+        }
+
+    private fun writeTxRecord(ref: TableRef, id: Long, error: Throwable?, writeCols: (VectorWriter) -> Unit) {
+        val txId = txKey.txId
+
+        val liveTable = table(ref)
         val docWriter = liveTable.putDocWriter
 
-        liveTable.writeId(txId)
+        liveTable.writeId(id)
         liveTable.writeDefaultValidTime()
 
-        docWriter.vectorFor("_id", I64.arrowType, false).writeLong(txId)
+        docWriter.vectorFor("_id", I64.arrowType, false).writeLong(id)
         docWriter.vectorFor("system_time", INSTANT.arrowType, false).writeLong(systemTimeMicros)
         docWriter.vectorFor("committed", BOOL.arrowType, false).writeBoolean(error == null)
-        docWriter.vectorFor("user_metadata", VectorType.structOf().arrowType, true).writeObject(userMetadata)
+        writeCols(docWriter)
 
         val errorWriter = docWriter.vectorFor("error", TRANSIT.arrowType, true)
 

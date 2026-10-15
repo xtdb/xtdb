@@ -30,10 +30,16 @@
                     [xtdb xt/txs error [:? :transit]]
                     [xtdb xt/txs system_time :instant]
                     [xtdb xt/txs user_metadata [:? :struct {}]]
+                    [xtdb xt/src_log_txs _id :i64]
+                    [xtdb xt/src_log_txs tx_id :i64]
+                    [xtdb xt/src_log_txs committed :bool]
+                    [xtdb xt/src_log_txs error [:? :transit]]
+                    [xtdb xt/src_log_txs system_time :instant]
+                    [xtdb xt/src_log_txs user_metadata [:? :struct {}]]
                     ;; seeded but unused - declared columns read as the lattice bottom `Nothing`
                     [xtdb xt/role_membership user :nothing]
                     [xtdb xt/role_membership role :nothing]}
-                 (for [table '[public/baseball public/beanie xt/txs]
+                 (for [table '[public/baseball public/beanie xt/txs xt/src_log_txs]
                        [col xt-type] '[[_system_from :instant]
                                          [_system_to [:? :instant]]
                                          [_valid_from :instant]
@@ -62,6 +68,10 @@
               :table-type "BASE TABLE"}
              {:table-catalog "xtdb",
               :table-schema "xt",
+              :table-name "src_log_txs",
+              :table-type "BASE TABLE"}
+             {:table-catalog "xtdb",
+              :table-schema "xt",
               :table-name "role_membership",
               :table-type "BASE TABLE"}
              {:table-catalog "xtdb",
@@ -78,6 +88,8 @@
                        (xt/q tu/*node* "SELECT table_name FROM information_schema.tables WHERE table_schema = 'xt'"))]
     (t/is (contains? xt-tables "txs")
           "xt.txs is seeded into the catalog at startup, resolvable before any transaction")
+    (t/is (contains? xt-tables "src_log_txs")
+          "xt.src_log_txs is seeded too")
     (t/is (contains? xt-tables "role_membership")
           "xt.role_membership is seeded too"))
 
@@ -90,17 +102,22 @@
   ;; the seeded column set must equal what a real transaction writes: if `writeTxRow` gains a column
   ;; the seed doesn't declare, a fresh node is missing it until the first tx - the very inconsistency
   ;; the seed exists to prevent. Temporal columns are injected for display, so exclude them.
-  (letfn [(txs-data-cols []
+  (letfn [(data-cols [table-name]
             (into #{} (comp (map :column-name)
                             (remove #{"_system_from" "_system_to" "_valid_from" "_valid_to"}))
-                  (xt/q tu/*node* "SELECT column_name FROM information_schema.columns
-                                   WHERE table_schema = 'xt' AND table_name = 'txs'")))]
-    (let [seeded (txs-data-cols)]
-      (t/is (= #{"_id" "system_time" "committed" "user_metadata" "error"} seeded)
+                  (xt/q tu/*node* ["SELECT column_name FROM information_schema.columns
+                                    WHERE table_schema = 'xt' AND table_name = ?" table-name])))]
+    (let [seeded-txs (data-cols "txs")
+          seeded-src-log-txs (data-cols "src_log_txs")]
+      (t/is (= #{"_id" "system_time" "committed" "user_metadata" "error"} seeded-txs)
             "fresh-node xt.txs exposes exactly the seeded data columns")
-      (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 1}]])
-      (t/is (= seeded (txs-data-cols))
-            "a real transaction writes exactly the seeded columns - no drift between seed and writeTxRow"))))
+      (t/is (= #{"_id" "tx_id" "system_time" "committed" "user_metadata" "error"} seeded-src-log-txs)
+            "fresh-node xt.src_log_txs exposes exactly the seeded data columns")
+      (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id 1}]])
+      (t/is (= seeded-txs (data-cols "txs"))
+            "a real transaction writes exactly the seeded xt.txs columns")
+      (t/is (= seeded-src-log-txs (data-cols "src_log_txs"))
+            "a real transaction writes exactly the seeded xt.src_log_txs columns"))))
 
 (defn- ->table-oids
   "`{relname oid}` as pg_class reports it — resolved rather than hardcoded, because an allocated oid
@@ -112,7 +129,7 @@
 (deftest test-pg-attribute
   (xt/submit-tx tu/*node* test-data)
 
-  (let [{beanie "beanie", baseball "baseball", txs "txs"} (->table-oids)]
+  (let [{beanie "beanie", baseball "baseball", txs "txs", src-log-txs "src_log_txs"} (->table-oids)]
     (t/is (= (set (for [[attrelid attname attnum atttypeid attlen] [[beanie "_id" 1 11111 -1]
                                                                   [beanie "_system_from" 2 1184 8]
                                                                   [beanie "_system_to" 3 1184 8]
@@ -135,7 +152,16 @@
                                                                   [txs "_valid_to" 5 1184 8]
                                                                   [txs "committed" 6 16 1]
                                                                   [txs "error" 7 16384 -1]
-                                                                  [txs "system_time" 8 1184 8]]]
+                                                                  [txs "system_time" 8 1184 8]
+
+                                                                  [src-log-txs "_id" 1 20 8]
+                                                                  [src-log-txs "_system_from" 2 1184 8]
+                                                                  [src-log-txs "_system_to" 3 1184 8]
+                                                                  [src-log-txs "_valid_from" 4 1184 8]
+                                                                  [src-log-txs "_valid_to" 5 1184 8]
+                                                                  [src-log-txs "committed" 6 16 1]
+                                                                  [src-log-txs "error" 7 16384 -1]
+                                                                  [src-log-txs "system_time" 8 1184 8]]]
                   {:atttypmod -1,
                    :attrelid attrelid,
                    :attidentity "",
@@ -160,6 +186,9 @@
   (t/is (= #{{:schemaname "xt",
               :tableowner "xtdb",
               :tablename "txs"}
+             {:schemaname "xt",
+              :tableowner "xtdb",
+              :tablename "src_log_txs"}
              {:schemaname "xt",
               :tableowner "xtdb",
               :tablename "role_membership"}
@@ -314,6 +343,7 @@
                            [:put-docs :baseball {:xt/id :baz, :col1 123 :col2 456}]])
 
   (t/is (= #{{:table-name "txs", :table-schema "xt"}
+             {:table-name "src_log_txs", :table-schema "xt"}
              {:table-name "role_membership", :table-schema "xt"}
              {:table-name "beanie", :table-schema "public"}
              {:table-name "baseball", :table-schema "public"}}
@@ -344,6 +374,7 @@
   (t/is (= #{{:table-name "baseball" :table-schema "public"}
              {:table-name "beanie" :table-schema "public"}
              {:table-name "txs" :table-schema "xt"}
+             {:table-name "src_log_txs" :table-schema "xt"}
              {:table-name "role_membership" :table-schema "xt"}}
            (set (xt/q tu/*node*
                       "SELECT table_name, null AS unknown_col, table_schema
@@ -476,6 +507,15 @@
             {:schema-name "public", :table-name "foo", :trie-key "l01-rc-b00",
              :level 1, :trie-state "live", :data-file-size 1382}
 
+            {:schema-name "xt", :table-name "src_log_txs", :trie-key "l01-rc-b00",
+             :level 1, :trie-state "live", :row-count 1, :data-file-size 3070,
+             :temporal-metadata {:min-valid-from (time/->zdt #inst "2020-01-01")
+                                 :max-valid-from (time/->zdt #inst "2020-01-01")
+                                 :min-valid-to (time/->zdt time/end-of-time)
+                                 :max-valid-to (time/->zdt time/end-of-time)
+                                 :min-system-from (time/->zdt #inst "2020-01-01")
+                                 :max-system-from (time/->zdt #inst "2020-01-01")}}
+
             {:schema-name "xt", :table-name "txs", :trie-key "l01-rc-b00",
              :level 1, :trie-state "live", :row-count 1, :data-file-size 2894,
              :temporal-metadata {:min-valid-from (time/->zdt #inst "2020-01-01")
@@ -495,12 +535,18 @@
 
   (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id 3, :a "hello"} {:xt/id 4, :a "world"}]])
 
-  (t/is (= [["public" "foo" 2] ["xt" "txs" 1]]
+  (t/is (= [["public" "foo" 2] ["xt" "src_log_txs" 1] ["xt" "txs" 1]]
            (->> (xt/q tu/*node* "SELECT * FROM xt.live_tables ORDER BY schema_name, table_name")
                 (mapv (juxt :schema-name :table-name :row-count)))))
 
   (t/is (= [["public" "foo" "_id" :i64]
             ["public" "foo" "a" :utf8]
+            ["xt" "src_log_txs" "_id" :i64]
+            ["xt" "src_log_txs" "committed" :bool]
+            ["xt" "src_log_txs" "error" [:? :transit]]
+            ["xt" "src_log_txs" "system_time" :instant]
+            ["xt" "src_log_txs" "tx_id" :i64]
+            ["xt" "src_log_txs" "user_metadata" [:? :struct {}]]
             ["xt" "txs" "_id" :i64]
             ["xt" "txs" "committed" :bool]
             ["xt" "txs" "error" [:? :transit]]
