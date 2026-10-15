@@ -659,8 +659,9 @@
 (t/deftest non-semi-join-subquery-optimizations-test
   (t/is (=plan-file
          "non-semi-join-subquery-optimizations-test-1"
-         (sql/plan "select f.a from foo f where f.a in (1,2) or f.b = 42"
-                   {:table-info {#xt/table foo #{"a" "b"}}}))
+         (sql/plan "select f.a from foo f where f.a in (select b.x from bar b) or f.b = 42"
+                   {:table-info {#xt/table foo #{"a" "b"}
+                                 #xt/table bar #{"x"}}}))
         "should not be decorrelated")
   (t/is (=plan-file
          "non-semi-join-subquery-optimizations-test-2"
@@ -675,9 +676,10 @@
                    {:table-info {#xt/table foo #{"a" "b"}}}))))
 
 (t/deftest multiple-expression-ins-project-distinct-columns
-  (let [plan (sql/plan "SELECT f.a FROM foo f WHERE UPPER(f.a) IN (SELECT b.x FROM bar b) AND UPPER(f.b) IN ('X', 'Y')"
+  (let [plan (sql/plan "SELECT f.a FROM foo f WHERE UPPER(f.a) IN (SELECT b.x FROM bar b) AND UPPER(f.b) IN (SELECT z.y FROM baz z)"
                        {:table-info {#xt/table foo #{"a" "b"}
-                                     #xt/table bar #{"x"}}})
+                                     #xt/table bar #{"x"}
+                                     #xt/table baz #{"y"}}})
         upper-cols (for [node (tree-seq vector? seq plan)
                          :when (and (vector? node) (= :map (first node)))
                          projection (:projections (second node))
@@ -872,13 +874,14 @@
          (sql/plan
           "SELECT t1.a1
             FROM t1, t2, t3
-            WHERE t1.b1 in (532,593)
-            AND t2.b1 in (808,662)
-            AND t3.c1 in (792,14)
+            WHERE t1.b1 in (SELECT u.x FROM u)
+            AND t2.b1 in (SELECT u.y FROM u)
+            AND t3.c1 in (SELECT u.z FROM u)
             AND t1.a1 = t2.a2"
           {:table-info {#xt/table t1 #{"a1" "b1"}
                         #xt/table t2 #{"b1" "a2"}
-                        #xt/table t3 #{"c1"}}}))))
+                        #xt/table t3 #{"c1"}
+                        #xt/table u #{"x" "y" "z"}}}))))
 
 (t/deftest datascript-test-aggregates
   (let [_tx (xt/submit-tx tu/*node*
@@ -2269,6 +2272,52 @@
   (t/is (= #{{:x 2}, {:x 1}}
            (-> (xt/q tu/*node* "SELECT foo.x, bar.x bar_x FROM foo LEFT JOIN bar ON bar.x = (SELECT baz.x FROM baz WHERE baz.x = foo.x)")
                set))))
+
+(t/deftest short-in-lists-are-disjunctions-6169
+  (let [q "SELECT c._id FROM customer AS c
+           WHERE substring(c.phone, 1, 2) IN ('13', '31')
+             AND c.region IN ('eu', 'us')
+             AND NOT EXISTS (SELECT 1 FROM orders AS o WHERE o.custkey = c._id)"]
+    (t/is (=plan-file
+           "short-in-lists-below-anti-join"
+           (sql/plan q {:table-info {#xt/table customer #{"_id" "phone" "region"}
+                                     #xt/table orders #{"_id" "custkey"}}}))
+          "both IN lists are scan predicates beneath the anti-join")
+
+    (xt/execute-tx tu/*node* [[:sql "INSERT INTO customer RECORDS {_id: 1, phone: '13-1', region: 'eu'}, {_id: 2, phone: '31-2', region: 'us'}, {_id: 3, phone: '99-3', region: 'eu'}, {_id: 4, phone: '13-4', region: 'asia'}"]
+                              [:sql "INSERT INTO orders RECORDS {_id: 10, custkey: 1}"]
+                              [:sql "INSERT INTO nums RECORDS {_id: 1, n: 1}, {_id: 2, n: 2.0}, {_id: 3, n: NULL}, {_id: 9, n: 9}"]])
+
+    (t/is (= [{:xt/id 2}] (xt/q tu/*node* q)))
+
+    (t/is (= #{{:xt/id 1} {:xt/id 2}}
+             (set (xt/q tu/*node* "SELECT _id FROM nums WHERE n IN (1, 2, NULL)")))
+          "1.0-style numeric equality matches across types, as the semi-join's key comparison does")
+    (t/is (= [] (xt/q tu/*node* "SELECT _id FROM nums WHERE n NOT IN (1, NULL)"))
+          "a NULL in the list makes NOT IN unknown for every non-matching row")
+    (t/is (= #{{:xt/id 9}}
+             (set (xt/q tu/*node* "SELECT _id FROM nums WHERE n NOT IN (1, 2)"))))
+    (t/is (= [{:xt/id 9}] (xt/q tu/*node* ["SELECT _id FROM nums WHERE n IN (?)" 9])))
+    (t/is (= #{{:xt/id 1} {:xt/id 2}}
+             (set (xt/q tu/*node* ["SELECT _id FROM nums WHERE n NOT IN (?)" 9]))))
+    (t/is (= #{{:xt/id 1, :in true} {:xt/id 2, :in false} {:xt/id 3} {:xt/id 9, :in false}}
+             (set (xt/q tu/*node* "SELECT _id, n IN (1, 3) AS \"in\" FROM nums")))
+          "an IN in the select list yields true, false or null")
+
+    (let [long-list "(1, 2, 3, 4, 5, 6, 7, 8, 9)"]
+      (t/is (some #{:semi-join}
+                  (flatten (sql/plan (str "SELECT _id FROM nums WHERE n IN " long-list)
+                                     {:table-info {#xt/table nums #{"_id" "n"}}})))
+            "a list longer than eight stays a semi-join")
+      (t/is (= #{{:xt/id 1} {:xt/id 2} {:xt/id 9}}
+               (set (xt/q tu/*node* (str "SELECT _id FROM nums WHERE n IN " long-list))))))
+
+    (let [col-list-q "SELECT _id FROM nums WHERE n IN (_id, _id + 1, _id + 2, _id + 3, _id + 4, _id + 5, _id + 6, _id + 7, _id + 8)"]
+      (t/is (not-any? #{:apply :semi-join :mark-join}
+                      (flatten (sql/plan col-list-q {:table-info {#xt/table nums #{"_id" "n"}}})))
+            "a list whose items read columns is a disjunction at any length")
+      (t/is (= #{{:xt/id 1} {:xt/id 2} {:xt/id 9}}
+               (set (xt/q tu/*node* col-list-q)))))))
 
 (t/deftest test-erase-with-subquery
   (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id :foo :bar 1}]])

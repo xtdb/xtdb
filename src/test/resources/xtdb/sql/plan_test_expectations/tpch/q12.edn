@@ -8,65 +8,59 @@
    [[l.2/l_shipmode {:direction :asc, :null-ordering :nulls-last}]]}
   [:map
    {:projections
-    [{high_line_count _sum_out_5} {low_line_count _sum_out_7}]}
+    [{high_line_count _sum_out_3} {low_line_count _sum_out_5}]}
    [:group-by
     {:columns
      [l.2/l_shipmode
-      {_sum_out_7 (sum _sum_in_8)}
-      {_sum_out_5 (sum _sum_in_6)}]}
+      {_sum_out_5 (sum _sum_in_6)}
+      {_sum_out_3 (sum _sum_in_4)}]}
     [:map
      {:projections
-      [{_sum_in_8
+      [{_sum_in_6
         (cond
          (and
           (<> o.1/o_orderpriority "1-URGENT")
           (<> o.1/o_orderpriority "2-HIGH"))
          1
          0)}
-       {_sum_in_6
+       {_sum_in_4
         (cond
          (or
           (== o.1/o_orderpriority "1-URGENT")
           (== o.1/o_orderpriority "2-HIGH"))
          1
          0)}]}
-     [:map
-      {:projections [{_sq_3 true}]}
-      [:mega-join
-       {:conditions [{o.1/_id l.2/l_orderkey}]}
-       [[:rename
-         {:prefix o.1}
+     [:mega-join
+      {:conditions [{o.1/_id l.2/l_orderkey}]}
+      [[:rename
+        {:prefix o.1}
+        [:scan
+         {:db-name "xtdb",
+          :table #xt/table orders,
+          :columns [o_orderpriority _id]}]]
+       [:rename
+        {:prefix l.2}
+        [:select
+         {:predicate
+          (and
+           (< l_commitdate l_receiptdate)
+           (< l_shipdate l_commitdate))}
          [:scan
           {:db-name "xtdb",
-           :table #xt/table orders,
-           :columns [o_orderpriority _id]}]]
-        [:semi-join
-         {:conditions [{l.2/l_shipmode xt.values.4/_column_1}]}
-         [:rename
-          {:prefix l.2}
-          [:select
-           {:predicate
-            (and
-             (< l_commitdate l_receiptdate)
-             (< l_shipdate l_commitdate))}
-           [:scan
-            {:db-name "xtdb",
-             :table #xt/table lineitem,
-             :columns
-             [{l_receiptdate
-               (and
-                (<
-                 l_receiptdate
-                 (+
-                  #xt/date "1994-01-01"
-                  (single-field-interval "1" "YEAR" 2 6)))
-                (>= l_receiptdate #xt/date "1994-01-01"))}
-              l_commitdate
-              l_orderkey
-              l_shipdate
-              l_shipmode]}]]]
-         [:rename
-          {:prefix xt.values.4}
-          [:table
-           {:output-cols [_column_1],
-            :rows [{:_column_1 "MAIL"} {:_column_1 "SHIP"}]}]]]]]]]]]]]
+           :table #xt/table lineitem,
+           :columns
+           [{l_receiptdate
+             (and
+              (<
+               l_receiptdate
+               (+
+                #xt/date "1994-01-01"
+                (single-field-interval "1" "YEAR" 2 6)))
+              (>= l_receiptdate #xt/date "1994-01-01"))}
+            l_commitdate
+            l_orderkey
+            l_shipdate
+            {l_shipmode
+             (or
+              (== l_shipmode "MAIL")
+              (== l_shipmode "SHIP"))}]}]]]]]]]]]]
