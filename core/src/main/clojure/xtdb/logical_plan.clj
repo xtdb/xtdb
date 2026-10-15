@@ -1436,14 +1436,14 @@
       (when (columns-in-predicate-present-in-relation? [:mega-join mega-join-opts rels] predicate)
         [:mega-join {:conditions (conj conditions predicate)} rels]))))
 
-(defn- split-conjunctions-in-mega-join [z]
-  (r/zmatch
-    z
-    [:mega-join opts rels]
-    ;;=>
-    (let [{:keys [conditions]} opts]
+(defn- split-conjunctions-in-join-conditions [z]
+  (r/zcase z
+    (:mega-join :join :semi-join :anti-join :left-outer-join :single-join :full-outer-join)
+    (let [[op {:keys [conditions] :as opts} & rels] (r/znode z)]
       (when (some and-predicate? conditions)
-        [:mega-join {:conditions (vec (mapcat #(flatten-expr and-predicate? %) conditions))} rels]))))
+        (into [op (assoc opts :conditions (vec (mapcat #(flatten-expr and-predicate? %) conditions)))] rels)))
+
+    nil))
 
 (defn- push-predicates-from-mega-join-to-child-relations [z]
   (r/zmatch
@@ -1500,7 +1500,7 @@
   [#'promote-selection-cross-join-to-join
    #'promote-selection-to-join
    #'promote-selection-to-mega-join
-   #'split-conjunctions-in-mega-join
+   #'split-conjunctions-in-join-conditions
    #'push-predicates-from-mega-join-to-child-relations
    #'push-selection-down-past-apply
    #'push-correlated-selection-down-past-join
