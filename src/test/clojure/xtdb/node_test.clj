@@ -888,6 +888,17 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
               {:node tu/*node*}))
           "scan pred")))
 
+(t/deftest attach-and-detach-system-times-advance-past-the-latest-tx
+  (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id 1}]] {:system-time #inst "2100-01-01"})
+  (with-open [conn (jdbc/get-connection tu/*node*)]
+    (jdbc/execute! conn ["ATTACH DATABASE new_db"])
+    (jdbc/execute! conn ["DETACH DATABASE new_db"]))
+
+  (t/is (= [#xt/zoned-date-time "2100-01-01Z[UTC]"
+            #xt/zoned-date-time "2100-01-01T00:00:00.000001Z[UTC]"
+            #xt/zoned-date-time "2100-01-01T00:00:00.000002Z[UTC]"]
+           (mapv :system-time (xt/q tu/*node* "SELECT system_time FROM xt.txs FOR ALL VALID_TIME ORDER BY _id")))))
+
 (t/deftest copes-with-log-time-going-backwards-3864
   (with-open [node (xtn/start-node {:log [:in-memory {:instant-src (tu/->mock-clock [#inst "2020" #inst "2019" #inst "2021"])}]})]
     (t/is (= {:tx-id 0} (xt/submit-tx node [[:put-docs :foo {:xt/id 1, :version 0}]])))

@@ -377,7 +377,7 @@ internal class TxResolver(
 
     /** Stage the tx row recording an applied database attach/detach. */
     fun indexDbOp(msgId: MessageId, msgTimestamp: Instant, dbOp: DbOp): ResolvedTx {
-        val txKey = TransactionKey(msgId, msgTimestamp)
+        val txKey = TransactionKey(msgId, smoothSystemTime(msgTimestamp))
 
         return openTx(txKey, null).use { openTx ->
             openTx.writeTxRow(null, null)
@@ -387,7 +387,7 @@ internal class TxResolver(
 
     /** Stage the abort row for a database attach/detach the catalog rejected. */
     fun indexFailedDbOp(msgId: MessageId, msgTimestamp: Instant, error: Anomaly.Caller): ResolvedTx {
-        val txKey = TransactionKey(msgId, msgTimestamp)
+        val txKey = TransactionKey(msgId, smoothSystemTime(msgTimestamp))
 
         return openTx(txKey, null).use { openTx ->
             openTx.writeTxRow(error, null)
