@@ -2270,6 +2270,40 @@
            (-> (xt/q tu/*node* "SELECT foo.x, bar.x bar_x FROM foo LEFT JOIN bar ON bar.x = (SELECT baz.x FROM baz WHERE baz.x = foo.x)")
                set))))
 
+(t/deftest left-join-on-predicate-on-null-supplying-side-6170
+  (let [q "SELECT c._id, o._id AS o_id FROM customer AS c LEFT JOIN orders AS o ON c._id = o.custkey AND o.comment <> 'special' AND c.active"]
+    (t/is (=plan-file
+           "left-join-on-predicate-on-null-supplying-side"
+           (sql/plan q {:table-info {#xt/table customer #{"_id" "active"}
+                                     #xt/table orders #{"_id" "custkey" "comment"}}}))
+          "the orders predicate moves into the orders scan; the customer predicate stays in the join")
+
+    (xt/execute-tx tu/*node* [[:sql "INSERT INTO customer RECORDS {_id: 1, active: true}, {_id: 2, active: true}, {_id: 3, active: false}"]
+                              [:sql "INSERT INTO orders RECORDS {_id: 10, custkey: 1, comment: 'ok'}, {_id: 20, custkey: 2, comment: 'special'}, {_id: 30, custkey: 3, comment: 'ok'}"]])
+
+    (t/is (= #{{:xt/id 1, :o-id 10} {:xt/id 2} {:xt/id 3}}
+             (set (xt/q tu/*node* q))))))
+
+(t/deftest join-predicates-on-one-side-move-into-that-side
+  (let [table-info {:table-info {#xt/table customer #{"_id" "active"}
+                                 #xt/table orders #{"_id" "custkey" "comment"}}}
+        inner-q "SELECT c._id, o._id AS o_id FROM customer AS c JOIN orders AS o ON c._id = o.custkey AND o.comment <> 'special' AND c.active"
+        semi-q "SELECT c._id FROM customer AS c WHERE EXISTS (SELECT 1 FROM orders AS o WHERE o.custkey = c._id AND o.comment <> 'special' AND c.active)"
+        anti-q "SELECT c._id FROM customer AS c WHERE NOT EXISTS (SELECT 1 FROM orders AS o WHERE o.custkey = c._id AND o.comment <> 'special' AND c.active)"]
+    (t/is (=plan-file "inner-join-on-predicates-on-one-side" (sql/plan inner-q table-info))
+          "both the orders and the customer predicates move into their scans")
+    (t/is (=plan-file "semi-join-predicates-on-one-side" (sql/plan semi-q table-info))
+          "both the orders and the customer predicates move into their scans")
+    (t/is (=plan-file "anti-join-predicates-on-one-side" (sql/plan anti-q table-info))
+          "the orders predicate moves into the orders scan; the customer predicate stays in the join")
+
+    (xt/execute-tx tu/*node* [[:sql "INSERT INTO customer RECORDS {_id: 1, active: true}, {_id: 2, active: true}, {_id: 3, active: false}"]
+                              [:sql "INSERT INTO orders RECORDS {_id: 10, custkey: 1, comment: 'ok'}, {_id: 20, custkey: 2, comment: 'special'}, {_id: 30, custkey: 3, comment: 'ok'}"]])
+
+    (t/is (= #{{:xt/id 1, :o-id 10}} (set (xt/q tu/*node* inner-q))))
+    (t/is (= #{{:xt/id 1}} (set (xt/q tu/*node* semi-q))))
+    (t/is (= #{{:xt/id 2} {:xt/id 3}} (set (xt/q tu/*node* anti-q))))))
+
 (t/deftest test-erase-with-subquery
   (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id :foo :bar 1}]])
   (t/is (xt/execute-tx tu/*node* [[:sql "ERASE FROM docs WHERE docs._id IN (SELECT docs._id FROM docs WHERE docs.bar = 1)"]]))
