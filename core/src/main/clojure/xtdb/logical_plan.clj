@@ -1422,6 +1422,46 @@
          [:anti-join {:conditions (w/postwalk-replace (rename-map-for-projection-spec projections) conditions)}
           inner-lhs inner-rhs]]))))
 
+(defn- filtering-join? [relation]
+  (contains? #{:semi-join :anti-join} (first relation)))
+
+(defn- peel-maps [relation]
+  (loop [map-opts [], relation relation]
+    (if (= :map (first relation))
+      (recur (conj map-opts (second relation)) (last relation))
+      [map-opts relation])))
+
+(defn- wrap-maps [map-opts relation]
+  (reduce (fn [relation opts] [:map opts relation]) relation (rseq map-opts)))
+
+(defn- maps-movable-below? [map-opts filtering-rhs]
+  (and (not-any? (comp numbers-rows? :projections) map-opts)
+       (not-any? (set (relation-columns filtering-rhs))
+                 (for [{:keys [projections]} map-opts, p projections]
+                   (->projected-column p)))))
+
+(defn- at-most-one-row? [relation]
+  (case (first relation)
+    :group-by (every? map? (:columns (second relation)))
+    (:project :map :rename :select) (recur (last relation))
+    false))
+
+(defn- push-select-and-single-join-below-filtering-join [z]
+  (r/zmatch z
+    [:select select-opts
+     [:single-join sj-opts lhs rhs]]
+    ;;=>
+    (when (and (at-most-one-row? rhs)
+               (some (set (relation-columns rhs)) (expr-symbols (:predicate select-opts))))
+      (let [[map-opts [inner-op inner-opts inner-lhs inner-rhs :as inner]] (peel-maps lhs)]
+        (when (and (filtering-join? inner)
+                   (maps-movable-below? map-opts inner-rhs)
+                   (not-any? (set (relation-columns inner-rhs)) (relation-columns rhs)))
+          [inner-op inner-opts
+           [:select select-opts
+            [:single-join sj-opts (wrap-maps map-opts inner-lhs) rhs]]
+           inner-rhs])))))
+
 (defn- promote-selection-to-mega-join [z]
   (r/zmatch
     z
@@ -1511,6 +1551,7 @@
    #'remove-superseded-projects
    #'merge-selections-around-scan
    #'push-semi-and-anti-joins-down
+   #'push-select-and-single-join-below-filtering-join
    #'add-selection-to-scan-predicate
    #'push-sort-bounds-down-towards-sort
    #'fuse-sorts])
