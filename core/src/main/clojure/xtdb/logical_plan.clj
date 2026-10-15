@@ -274,6 +274,9 @@
     [:sort _opts relation]
     (relation-columns relation)
 
+    [:patch-gaps _opts relation]
+    (relation-columns relation)
+
     [:distinct _opts relation]
     (relation-columns relation)
 

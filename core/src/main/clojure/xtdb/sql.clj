@@ -3056,15 +3056,21 @@
   (error-string [_] (format "Cannot PATCH %s column" col)))
 
 (defn plan-patch [{:keys [table-info]} {:keys [db-name table valid-from valid-to patch-rel]}]
-  (let [known-cols (mapv symbol (get table-info [db-name table]))]
+  (let [known-cols (mapv symbol (get table-info [db-name table]))
+        new-iid (->col-sym 'new '_iid)
+        new-doc (->col-sym 'new 'doc)
+        old-iid (->col-sym 'old '_iid)
+        old-valid-from (->col-sym 'old '_valid_from)
+        old-valid-to (->col-sym 'old '_valid_to)
+        old-doc (->col-sym 'old 'doc)]
     (xt/template
-     [:project {:projections [{_iid new/_iid}
-                              {_valid_from (cast (coalesce old/_valid_from ~valid-from (current-timestamp))
+     [:project {:projections [{_iid ~new-iid}
+                              {_valid_from (cast (coalesce ~old-valid-from ~valid-from (current-timestamp))
                                                  #xt/type :instant)}
-                              {_valid_to (cast (coalesce old/_valid_to ~valid-to xtdb/end-of-time)
+                              {_valid_to (cast (coalesce ~old-valid-to ~valid-to xtdb/end-of-time)
                                                #xt/type :instant)}
-                              {doc (_patch old/doc new/doc)}]}
-      [:left-outer-join {:conditions [{new/_iid old/_iid}]}
+                              {doc (_patch ~old-doc ~new-doc)}]}
+      [:left-outer-join {:conditions [(== ~new-iid ~old-iid)]}
        [:rename {:prefix new}
         ~(:plan patch-rel)]
        [:rename {:prefix old}
