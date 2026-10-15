@@ -165,7 +165,7 @@
 (t/deftest test-sql-roundtrip
   (let [tx (xt/submit-tx *node* devs)]
 
-    (t/is (= {:tx-id 0} tx))
+    (t/is (= 0 (:tx-id @tx)))
 
     (t/is (= [{:name "James"}]
              (xt/q *node* "SELECT u.name FROM users u WHERE u.name = 'James'")))))
@@ -261,7 +261,7 @@
   (let [tx (xt/submit-tx *node*
                          ["INSERT INTO foo (_id, _valid_from) VALUES ('foo', DATE '2018-01-01')"])]
 
-    (t/is (= {:tx-id 0} tx))
+    (t/is (= 0 (:tx-id @tx)))
 
     ;; the DATE is read in the node's default zone — UTC here, this node not configuring one
     (t/is (= [{:xt/id "foo", :xt/valid-from (time/->zdt #inst "2018")}]
@@ -708,6 +708,15 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
 
     (t/is (= expected (set (xt/q tu/*node* "SELECT * FROM foo"))))))
 
+(t/deftest a-submitted-tx-raises-its-error-on-deref
+  (t/is (anomalous? [:conflict :xtdb/assert-failed "boom"]
+                    @(xt/submit-tx tu/*node* ["ASSERT 1 = 2, 'boom'"]))
+        "in-process")
+
+  (t/is (anomalous? [:conflict :xtdb/assert-failed "boom"]
+                    @(xt/submit-tx (xt/client {:port (.getServerPort tu/*node*)}) ["ASSERT 1 = 2, 'boom'"]))
+        "over pgwire"))
+
 (t/deftest test-remote-client
   (let [client (xt/client {:port (.getServerPort tu/*node*)})]
     (xt/execute-tx client [[:put-docs :docs {:xt/id :foo, :name "Foo"}]])
@@ -721,7 +730,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
           "original node")
 
     (with-open [conn (jdbc/get-connection client)]
-      (t/is (= {:tx-id 1} (xt/submit-tx conn [[:put-docs :docs {:xt/id :bar, :name "Bar"}]])))
+      (t/is (= 1 (:tx-id @(xt/submit-tx conn [[:put-docs :docs {:xt/id :bar, :name "Bar"}]]))))
 
       (t/is (= [{:name "Bar", :xt/id :bar}
                 {:xt/id :foo, :name "Foo"}]

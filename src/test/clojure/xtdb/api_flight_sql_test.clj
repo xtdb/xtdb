@@ -25,7 +25,7 @@
              (xt/q conn "SELECT _id, n FROM docs"))
           "the connection reads its own write (read-your-writes)")
 
-    (t/is (= {:tx-id 1} (xt/submit-tx conn [[:put-docs :docs {:xt/id :bar, :n 2}]]))
+    (t/is (= 1 (:tx-id @(xt/submit-tx conn [[:put-docs :docs {:xt/id :bar, :n 2}]])))
           "submit-tx returns the tx-id")
 
     (t/is (= #{{:xt/id :foo, :n 1} {:xt/id :bar, :n 2}}
@@ -61,6 +61,11 @@
 
     (t/is (= [{:xt/id :seed}] (xt/q conn "SELECT _id FROM docs"))
           "and the put in the same tx didn't land - the ops are one transaction")))
+
+(deftest a-submitted-tx-raises-its-error-on-deref
+  (with-open [conn (open-conn)]
+    (t/is (anomalous? [:conflict :xtdb/assert-failed "boom"]
+                      @(xt/submit-tx conn ["ASSERT 1 = 2, 'boom'"])))))
 
 (deftest multi-row-batches
   (with-open [conn (open-conn)]

@@ -8,6 +8,7 @@
   await-basis; a write advances it), never close it."
   (:require [xtdb.basis :as basis]
             [xtdb.error :as err]
+            [xtdb.protocols :as xtp]
             [xtdb.serde :as serde]
             [xtdb.time :as time]
             [xtdb.util :as util]
@@ -15,7 +16,7 @@
   (:import (clojure.lang IReduceInit)
            (java.time.format DateTimeParseException)
            (org.apache.arrow.memory BufferAllocator)
-           (xtdb.api ResultCursor Xtdb$Connection)
+           (xtdb.api ResultCursor Xtdb$Connection Xtdb$ExecutedTx)
            (xtdb.arrow RelationReader)
            (xtdb.tx TxOp$PatchDocs TxOp$PutDocs TxOp$Sql TxOpts)))
 
@@ -134,20 +135,22 @@
   ;; no dbName — a connection is already bound to its database (cf. the JDBC path rejecting :database)
   (TxOpts. default-tz (coerce-instant system-time default-tz) nil metadata nil))
 
+(defn- executed->tx-key ^xtdb.api.TransactionKey [^Xtdb$ExecutedTx executed]
+  (when-not (.getCommitted executed)
+    (throw (or (.getError executed)
+               (err/fault :xtdb/tx-aborted "Transaction aborted"))))
+  (serde/->TxKey (.getTxId executed) (.getSystemTime executed)))
+
 (defn submit-tx
-  "Converts parsed `tx-ops` to native `TxOp`s and submits them asynchronously."
+  "Converts parsed `tx-ops` to native `TxOp`s and submits them asynchronously, returning a future of what `execute-tx` would return."
   [^Xtdb$Connection conn tx-ops opts]
   (err/wrap-anomaly {}
     (util/with-open [core-ops (->tx-ops conn tx-ops opts)]
-      {:tx-id (.getTxId (.submitTx conn core-ops (->tx-opts opts)))})))
+      (xtp/tx-future (.submitTx conn core-ops (->tx-opts opts)) executed->tx-key))))
 
 (defn execute-tx
   "Converts parsed `tx-ops` to native `TxOp`s and submits them, blocking for indexing; throws on abort."
   ^xtdb.api.TransactionKey [^Xtdb$Connection conn tx-ops opts]
   (err/wrap-anomaly {}
     (util/with-open [core-ops (->tx-ops conn tx-ops opts)]
-      (let [executed (.executeTx conn core-ops (->tx-opts opts))]
-        (when-not (.getCommitted executed)
-          (throw (or (.getError executed)
-                     (err/fault :xtdb/tx-aborted "Transaction aborted"))))
-        (serde/->TxKey (.getTxId executed) (.getSystemTime executed))))))
+      (executed->tx-key (.executeTx conn core-ops (->tx-opts opts))))))

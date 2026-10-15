@@ -18,6 +18,7 @@ import xtdb.tx.TxOpts
 import java.time.InstantSource
 import java.time.Instant
 import java.time.ZoneOffset
+import java.util.concurrent.CompletableFuture
 
 class ConnectionTest {
 
@@ -26,16 +27,14 @@ class ConnectionTest {
     private lateinit var db: Database
     private lateinit var dbCat: Database.Catalog
 
-    // components mocked only to feed return values — submitTxBlocking yields the next tx id and
-    // awaitTxBlocking returns it committed; the assertions observe the connection's real await-token.
     private fun connection(dbName: DatabaseName): Xtdb.Connection {
         db = mockk()
-        every { db.submitTxBlocking(any(), any()) } answers { Xtdb.SubmittedTx(nextTxId) }
-        every { db.awaitTxBlocking(any(), any()) } answers {
-            TransactionResult.Committed(mockk<TransactionKey> {
+        every { db.submitTxBlocking(any(), any()) } answers { nextTxId }
+        every { db.awaitTxAsync(any()) } answers {
+            CompletableFuture.completedFuture(TransactionResult.Committed(mockk<TransactionKey> {
                 every { txId } returns nextTxId
                 every { systemTime } returns Instant.EPOCH
-            })
+            }))
         }
 
         dbCat = mockk(relaxed = true)

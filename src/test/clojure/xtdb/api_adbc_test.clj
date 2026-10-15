@@ -20,7 +20,7 @@
              (xt/q conn "SELECT _id, n FROM docs"))
           "the connection reads its own write (read-your-writes)")
 
-    (t/is (= {:tx-id 1} (xt/submit-tx conn [[:put-docs :docs {:xt/id :bar, :n 2}]]))
+    (t/is (= 1 (:tx-id @(xt/submit-tx conn [[:put-docs :docs {:xt/id :bar, :n 2}]])))
           "submit-tx returns the tx-id")
 
     (t/is (= #{{:xt/id :foo, :n 1} {:xt/id :bar, :n 2}}

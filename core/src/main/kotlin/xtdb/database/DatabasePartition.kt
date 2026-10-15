@@ -40,6 +40,7 @@ class DatabasePartition(
         logProcessor?.close()
         externalSource?.close()
         compactorOrNull?.close()
+        watchers.close()
         state.close()
         storage.close()
     }
