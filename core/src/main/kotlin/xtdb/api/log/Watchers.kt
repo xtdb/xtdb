@@ -1,12 +1,15 @@
 package xtdb.api.log
 
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.future.await
 import xtdb.api.TransactionResult
 import xtdb.api.TxId
 import xtdb.api.tx.ExternalSourceToken
 import xtdb.types.MessageId
 import xtdb.util.error
 import xtdb.util.logger
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.ConcurrentSkipListMap
 
 private val LOG = Watchers::class.logger
 
@@ -47,11 +50,29 @@ class Watchers(
 
     private val activeState: Flow<Active> get() = state.map { it.activeOrThrow() }
 
-    private inline fun MutableStateFlow<State>.updateIfActive(block: (Active) -> State) {
-        update {
+    private inline fun MutableStateFlow<State>.updateIfActive(block: (Active) -> State): State =
+        updateAndGet {
             when (it) {
                 is Active -> block(it)
                 is Failed -> it
+            }
+        }
+
+    // A waiter registers before reading the state, and a notify swaps the state before scanning the waiters,
+    // so at least one of the two sees the other and the waiter can't be missed.
+    private val txWaiters = ConcurrentSkipListMap<TxId, CompletableFuture<TransactionResult?>>()
+
+    private fun releaseTxWaiters(state: State) {
+        val released = when (state) {
+            is Active -> txWaiters.headMap(state.latestTxId, true)
+            is Failed -> txWaiters
+        }
+
+        for ((txId, waiter) in released) {
+            if (!released.remove(txId, waiter)) continue
+            when (state) {
+                is Active -> waiter.complete(state.latestTxResult?.takeIf { it.txKey.txId == txId })
+                is Failed -> waiter.completeExceptionally(state.exception)
             }
         }
     }
@@ -79,7 +100,7 @@ class Watchers(
     ) {
         val txId = txResult?.txKey?.txId
 
-        state.updateIfActive {
+        val applied = state.updateIfActive {
             if (txId != null) check(txId > it.latestTxId) { "txId $txId <= latestTxId ${it.latestTxId}" }
             // >= not >: the BlockUploaded closing a block can carry the same source msgId as the
             // preceding ResolvedTx, when the block was cut by the row gauge with no FlushBlock in between
@@ -94,10 +115,12 @@ class Watchers(
                 externalSourceToken = extSourceToken ?: it.externalSourceToken,
             )
         }
+
+        if (txId != null) releaseTxWaiters(applied)
     }
 
     fun notifyError(exception: Throwable) {
-        state.updateIfActive {
+        val failed = state.updateIfActive {
             LOG.error(exception) { "ingestion stopping" }
             Failed(
                 latestSourceMsgId = it.latestSourceMsgId,
@@ -106,11 +129,25 @@ class Watchers(
                 exception = exception as? IngestionStoppedException ?: IngestionStoppedException(null, exception),
             )
         }
+
+        releaseTxWaiters(failed)
     }
 
-    suspend fun awaitTx(txId: TxId) =
-        activeState.first { it.latestTxId >= txId }
-            .latestTxResult?.takeIf { it.txKey.txId == txId }
+    /**
+     * Completes with the result of the transaction [txId] once it has been applied, or with null if the
+     * watermark passes [txId] without its result being the latest - a non-transaction position, or a result
+     * already superseded by the time the caller asked.
+     * Fails with [IngestionStoppedException] if ingestion stops first.
+     *
+     * Cancelling the returned future doesn't affect other callers awaiting the same transaction.
+     */
+    fun awaitTxAsync(txId: TxId): CompletableFuture<TransactionResult?> {
+        val waiter = txWaiters.computeIfAbsent(txId) { CompletableFuture() }
+        releaseTxWaiters(state.value)
+        return waiter.copy()
+    }
+
+    suspend fun awaitTx(txId: TxId): TransactionResult? = awaitTxAsync(txId).await()
 
     suspend fun awaitSource(srcMsgId: MessageId) {
         activeState.first { it.latestSourceMsgId >= srcMsgId }

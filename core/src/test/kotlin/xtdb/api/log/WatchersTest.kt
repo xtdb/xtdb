@@ -10,6 +10,8 @@ import org.junit.jupiter.api.assertThrows
 import xtdb.api.TransactionKey
 import xtdb.api.TransactionResult
 import java.time.Instant
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.TimeUnit
 import kotlin.time.Duration.Companion.seconds
 
 class WatchersTest {
@@ -104,6 +106,57 @@ class WatchersTest {
 
             assertThrows<IngestionStoppedException> { watchers.awaitSource(5) }
                 .also { assertEquals(ex, it.cause) }
+        }
+    }
+
+    private fun committed(txId: Long) =
+        TransactionResult.Committed(TransactionKey(txId, Instant.EPOCH.plusSeconds(txId)))
+
+    @Test
+    fun `a waiter for the latest applied tx completes at once with its result`() {
+        val watchers = Watchers(latestTxId = 3, latestSourceMsgId = 3)
+        watchers.notifyApplied(4, committed(4))
+
+        assertEquals(committed(4), watchers.awaitTxAsync(4).getNow(null))
+    }
+
+    @Test
+    fun `cancelling one waiter leaves another on the same tx waiting`() {
+        val watchers = Watchers(latestTxId = 3, latestSourceMsgId = 3)
+        val cancelled = watchers.awaitTxAsync(4)
+        val waiting = watchers.awaitTxAsync(4)
+
+        cancelled.cancel(true)
+        watchers.notifyApplied(4, committed(4))
+
+        assertEquals(committed(4), waiting.get(1, TimeUnit.SECONDS))
+    }
+
+    @Test
+    fun `a waiter registered after ingestion stops fails`() {
+        val watchers = Watchers(latestTxId = 3, latestSourceMsgId = 3)
+        val ex = Exception("test")
+        watchers.notifyError(ex)
+
+        assertThrows<ExecutionException> { watchers.awaitTxAsync(4).get(1, TimeUnit.SECONDS) }
+            .also { assertEquals(ex, it.cause?.cause) }
+    }
+
+    @RepeatedTest(20)
+    fun `a waiter registered while its tx applies is never left waiting`() {
+        val watchers = Watchers(latestTxId = 0, latestSourceMsgId = 0)
+        val txCount = 1_000L
+
+        val applier = Thread.ofPlatform().start {
+            for (txId in 1..txCount) watchers.notifyApplied(txId, committed(txId))
+        }
+
+        val waiters = (1..txCount).map { txId -> txId to watchers.awaitTxAsync(txId) }
+        applier.join()
+
+        for ((txId, waiter) in waiters) {
+            val res = waiter.get(1, TimeUnit.SECONDS)
+            if (res != null) assertEquals(committed(txId), res)
         }
     }
 }
