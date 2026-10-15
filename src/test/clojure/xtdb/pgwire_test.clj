@@ -2736,6 +2736,7 @@ ORDER BY 1,2;")
 
     (t/is (= [["public" "bar"]
               ["public" "foo"]
+              ["xt" "ext_src_txs"]
               ["xt" "role_membership"]
               ["xt" "src_log_txs"]
               ["xt" "txs"]]
@@ -2752,6 +2753,7 @@ ORDER BY 1,2;")
        (send "\\d\n")
        (t/is (= [["Schema" "Name" "Type" "Owner"]
                  ["public" "foo" "table" "xtdb"]
+                 ["xt" "ext_src_txs" "table" "xtdb"]
                  ["xt" "role_membership" "table" "xtdb"]
                  ["xt" "src_log_txs" "table" "xtdb"]
                  ["xt" "txs" "table" "xtdb"]]

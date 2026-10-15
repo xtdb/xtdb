@@ -244,7 +244,7 @@ class PostgresSourceIntegrationTest {
         val deadline = System.currentTimeMillis() + timeout.inWholeMilliseconds
         var count = 0L
         while (System.currentTimeMillis() < deadline) {
-            count = xtQueryDb(node, db, "SELECT count(*) AS cnt FROM xt.txs")[0]["cnt"] as Long
+            count = xtQueryDb(node, db, "SELECT count(*) AS cnt FROM xt.ext_src_txs")[0]["cnt"] as Long
             if (count >= expected) return
             runInterruptible { Thread.sleep(200) }
         }

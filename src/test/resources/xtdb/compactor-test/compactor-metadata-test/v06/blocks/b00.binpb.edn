@@ -3,13 +3,21 @@
  {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"},
  :latest-processed-msg-id 1423,
  :table-names
- #{"xt/src_log_txs" "xt/txs" "public/foo" "xt/role_membership"},
+ #{"xt/src_log_txs"
+   "xt/txs"
+   "public/foo"
+   "xt/role_membership"
+   "xt/ext_src_txs"},
  :tables
- [{:oid 16387,
+ [{:oid 16388,
    :schema-name "public",
    :table-name "foo",
    :slug "public$foo"}
   {:oid 16386,
+   :schema-name "xt",
+   :table-name "ext_src_txs",
+   :slug "xt$ext_src_txs"}
+  {:oid 16387,
    :schema-name "xt",
    :table-name "role_membership",
    :slug "xt$role_membership"}

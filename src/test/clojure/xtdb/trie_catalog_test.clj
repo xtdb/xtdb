@@ -369,7 +369,7 @@
 
     (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
       (let [cat (.getTrieCatalog (db/primary-db node))]
-        (t/is (= #{#xt/table xt/role_membership, #xt/table foo, #xt/table xt/txs, #xt/table xt/src_log_txs} (.getTables cat)))
+        (t/is (= #{#xt/table xt/role_membership, #xt/table foo, #xt/table xt/txs, #xt/table xt/src_log_txs, #xt/table xt/ext_src_txs} (.getTables cat)))
         (t/is (= #{"l00-rc-b01" "l00-rc-b00"}
                  (->> (cat/current-tries (cat/trie-state cat #xt/table foo))
                       (into #{} (map :trie-key)))))))

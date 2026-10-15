@@ -237,7 +237,8 @@ XTDB records the outcome of every transaction in tables in the `xt` schema.
 
 ### `xt.txs`
 
-One row per transaction, keyed by its transaction ID.
+One row per transaction submitted through XTDB, keyed by its transaction ID.
+On a database with an [external source](/ops/external-sources/overview), the transactions the source indexed are in `xt.ext_src_txs`, not here.
 
 `_id`
 
@@ -259,7 +260,7 @@ One row per transaction, keyed by its transaction ID.
 
 : the transaction's `METADATA`, or `null`.
 
-### `xt.src_log_txs` (v2.3+)
+### `xt.src_log_txs` (v2.2+)
 
 The transactions submitted to the database through XTDB, one row per transaction.
 
@@ -280,3 +281,26 @@ ORDER BY tx_id;
 `system_time`, `committed`, `error`, `user_metadata`
 
 : as in `xt.txs`.
+
+### `xt.ext_src_txs` (v2.2+)
+
+On a database with an [external source](/ops/external-sources/overview), the transactions the source indexed, one row per transaction.
+These have no transaction ID.
+
+``` sql
+SELECT system_time, committed, error
+FROM xt.ext_src_txs
+ORDER BY system_time;
+```
+
+`_id`
+
+: the transaction's system time, in microseconds since the epoch.
+
+`external_source_token`
+
+: the source's position after this transaction, in the source's own encoding.
+
+`system_time`, `committed`, `error`, `user_metadata`
+
+: as in `xt.txs`; `user_metadata` is whatever the source attached to the transaction.

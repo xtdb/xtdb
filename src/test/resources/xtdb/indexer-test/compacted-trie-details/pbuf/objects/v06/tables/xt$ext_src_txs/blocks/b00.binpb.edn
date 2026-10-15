@@ -1,0 +1,10 @@
+{:row-count 0,
+ :fields
+ {"_id" #xt/field {"_id" :null},
+  "system_time" #xt/field {"system_time" :null},
+  "committed" #xt/field {"committed" :null},
+  "user_metadata" #xt/field {"user_metadata" :null},
+  "external_source_token" #xt/field {"external_source_token" :null},
+  "error" #xt/field {"error" :null}},
+ :hlls {},
+ :partitions []}

@@ -219,7 +219,7 @@
     (binding [c/*page-size* 8
               cat/*file-size-target* (* 16 1024)
               c/*ignore-signal-block?* true]
-      (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-block 10})]
+      (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-block 11})]
         (let [db (db/primary-db node)
               bp (.getBufferPool db)
               meta-mgr (.getMetadataManager db)]

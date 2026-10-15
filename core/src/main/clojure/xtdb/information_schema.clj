@@ -44,7 +44,7 @@
 (defn schema-info->col-rows [schema-info]
   (for [[^TableRef table cols] schema-info
         :let [cols (into (when-not (and (contains? #{"pg_catalog" "information_schema" "xt"} (.getSchemaName table))
-                                        (not (contains? '#{xt/txs xt/src_log_txs} (table/ref->schema+table table))))
+                                        (not (contains? '#{xt/txs xt/src_log_txs xt/ext_src_txs} (table/ref->schema+table table))))
                            (-> '{"_valid_from" :instant
                                  "_valid_to" [:? :instant]
                                  "_system_from" :instant

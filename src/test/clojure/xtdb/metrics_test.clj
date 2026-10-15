@@ -277,8 +277,8 @@ $$"])
 
           (t/testing "block GC meters"
             (t/is (= 4 (.count ^Timer (.timer (.tag (.find registry "xtdb.gc.block_files.delete.timer") "db" "xtdb")))))
-            ;; Deletes table blocks for foo, xt$txs, xt$src_log_txs and the seeded-but-empty xt$role_membership (4 each)
-            (t/is (= 16 (.count ^Timer (.timer (.tag (.find registry "xtdb.gc.table_block_files.delete.timer") "db" "xtdb"))))))
+            ;; Deletes table blocks for foo, xt$txs, xt$src_log_txs and the seeded-but-empty xt$ext_src_txs and xt$role_membership (4 each)
+            (t/is (= 20 (.count ^Timer (.timer (.tag (.find registry "xtdb.gc.table_block_files.delete.timer") "db" "xtdb"))))))
 
           (t/testing "trie GC meters"
             (t/is (= 12 (.count ^Timer (.timer (.tag (.find registry "xtdb.gc.tries.delete.timer") "db" "xtdb")))))))))))

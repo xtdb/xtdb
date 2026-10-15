@@ -37,9 +37,15 @@
                     [xtdb xt/src_log_txs system_time :instant]
                     [xtdb xt/src_log_txs user_metadata [:? :struct {}]]
                     ;; seeded but unused - declared columns read as the lattice bottom `Nothing`
+                    [xtdb xt/ext_src_txs _id :nothing]
+                    [xtdb xt/ext_src_txs system_time :nothing]
+                    [xtdb xt/ext_src_txs committed :nothing]
+                    [xtdb xt/ext_src_txs error :nothing]
+                    [xtdb xt/ext_src_txs user_metadata :nothing]
+                    [xtdb xt/ext_src_txs external_source_token :nothing]
                     [xtdb xt/role_membership user :nothing]
                     [xtdb xt/role_membership role :nothing]}
-                 (for [table '[public/baseball public/beanie xt/txs xt/src_log_txs]
+                 (for [table '[public/baseball public/beanie xt/txs xt/src_log_txs xt/ext_src_txs]
                        [col xt-type] '[[_system_from :instant]
                                          [_system_to [:? :instant]]
                                          [_valid_from :instant]
@@ -69,6 +75,10 @@
              {:table-catalog "xtdb",
               :table-schema "xt",
               :table-name "src_log_txs",
+              :table-type "BASE TABLE"}
+             {:table-catalog "xtdb",
+              :table-schema "xt",
+              :table-name "ext_src_txs",
               :table-type "BASE TABLE"}
              {:table-catalog "xtdb",
               :table-schema "xt",
@@ -129,7 +139,7 @@
 (deftest test-pg-attribute
   (xt/submit-tx tu/*node* test-data)
 
-  (let [{beanie "beanie", baseball "baseball", txs "txs", src-log-txs "src_log_txs"} (->table-oids)]
+  (let [{beanie "beanie", baseball "baseball", txs "txs", src-log-txs "src_log_txs", ext-src-txs "ext_src_txs"} (->table-oids)]
     (t/is (= (set (for [[attrelid attname attnum atttypeid attlen] [[beanie "_id" 1 11111 -1]
                                                                   [beanie "_system_from" 2 1184 8]
                                                                   [beanie "_system_to" 3 1184 8]
@@ -161,7 +171,17 @@
                                                                   [src-log-txs "_valid_to" 5 1184 8]
                                                                   [src-log-txs "committed" 6 16 1]
                                                                   [src-log-txs "error" 7 16384 -1]
-                                                                  [src-log-txs "system_time" 8 1184 8]]]
+                                                                  [src-log-txs "system_time" 8 1184 8]
+
+                                                                  ;; seeded but unused: `Nothing` columns read as text
+                                                                  [ext-src-txs "_id" 1 25 -1]
+                                                                  [ext-src-txs "_system_from" 2 1184 8]
+                                                                  [ext-src-txs "_system_to" 3 1184 8]
+                                                                  [ext-src-txs "_valid_from" 4 1184 8]
+                                                                  [ext-src-txs "_valid_to" 5 1184 8]
+                                                                  [ext-src-txs "committed" 6 25 -1]
+                                                                  [ext-src-txs "error" 7 25 -1]
+                                                                  [ext-src-txs "system_time" 9 25 -1]]]
                   {:atttypmod -1,
                    :attrelid attrelid,
                    :attidentity "",
@@ -189,6 +209,9 @@
              {:schemaname "xt",
               :tableowner "xtdb",
               :tablename "src_log_txs"}
+             {:schemaname "xt",
+              :tableowner "xtdb",
+              :tablename "ext_src_txs"}
              {:schemaname "xt",
               :tableowner "xtdb",
               :tablename "role_membership"}
@@ -344,6 +367,7 @@
 
   (t/is (= #{{:table-name "txs", :table-schema "xt"}
              {:table-name "src_log_txs", :table-schema "xt"}
+             {:table-name "ext_src_txs", :table-schema "xt"}
              {:table-name "role_membership", :table-schema "xt"}
              {:table-name "beanie", :table-schema "public"}
              {:table-name "baseball", :table-schema "public"}}
@@ -375,6 +399,7 @@
              {:table-name "beanie" :table-schema "public"}
              {:table-name "txs" :table-schema "xt"}
              {:table-name "src_log_txs" :table-schema "xt"}
+             {:table-name "ext_src_txs" :table-schema "xt"}
              {:table-name "role_membership" :table-schema "xt"}}
            (set (xt/q tu/*node*
                       "SELECT table_name, null AS unknown_col, table_schema

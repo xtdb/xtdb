@@ -37,8 +37,8 @@
                                                                                   (.storage (Storage/local (.resolve node-dir "objects"))))
                                                                                 "xtdb")]
 
-      (t/is (= 5 tables))
-      (t/is (= 14 file-count))
+      (t/is (= 6 tables))
+      (t/is (= 15 file-count))
 
       (let [export-dir (-> node-dir
                            (.resolve "objects")
@@ -91,5 +91,5 @@
 
           {:keys [tables file-count]} (export/export-snapshot! node-opts "xtdb")]
 
-      (t/is (= 4 tables))
+      (t/is (= 5 tables))
       (t/is (pos? file-count)))))

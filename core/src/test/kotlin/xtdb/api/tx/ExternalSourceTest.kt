@@ -142,7 +142,7 @@ internal class ExternalSourceTest : LeaderTermTest() {
     }
 
     @Test
-    fun `an external-source tx is recorded in xt txs, not xt src_log_txs`() = runTest {
+    fun `an external-source tx is recorded in xt ext_src_txs, not xt txs or xt src_log_txs`() = runTest {
         val extSource = InMemoryExternalSource()
         val term = extTerm(extSource)
 
@@ -150,7 +150,8 @@ internal class ExternalSourceTest : LeaderTermTest() {
         term.watchers.awaitTx(0)
 
         val tables = term.resolvedTxs().single().tableData.keys
-        assertTrue(TableRef("xt", "txs").schemaAndTable in tables)
+        assertTrue(TableRef("xt", "ext_src_txs").schemaAndTable in tables)
+        assertFalse(TableRef("xt", "txs").schemaAndTable in tables)
         assertFalse(TableRef("xt", "src_log_txs").schemaAndTable in tables)
     }
 

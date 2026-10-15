@@ -8,21 +8,26 @@
    "public/foo"
    "public/world"
    "xt/role_membership"
+   "xt/ext_src_txs"
    "public/hello"},
  :tables
- [{:oid 16389,
+ [{:oid 16390,
    :schema-name "public",
    :table-name "foo",
    :slug "public$foo"}
-  {:oid 16387,
+  {:oid 16388,
    :schema-name "public",
    :table-name "hello",
    :slug "public$hello"}
-  {:oid 16388,
+  {:oid 16389,
    :schema-name "public",
    :table-name "world",
    :slug "public$world"}
   {:oid 16386,
+   :schema-name "xt",
+   :table-name "ext_src_txs",
+   :slug "xt$ext_src_txs"}
+  {:oid 16387,
    :schema-name "xt",
    :table-name "role_membership",
    :slug "xt$role_membership"}

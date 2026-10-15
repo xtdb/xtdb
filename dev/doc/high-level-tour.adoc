@@ -179,7 +179,7 @@ The differences are confined to where a transaction enters and how its tx-id is 
   Note this is the resolved head, not the durable one — resolution runs ahead of durability, so taking it from the live index would re-use a tx-id for every tx still in flight.
 * *client `submitTx` is rejected* on external-source DBs with error code `xtdb/submit-tx-to-external-source-db` — users must submit through the external source instead.
   The check is on the *database's* configured source, not on whether this node happens to lead it, because the source log is shared and every node's submit path has to answer the same way.
-* *the source drives ingestion* through `TxIndexer`, per-tx: smooth the system-time, open an `OpenTx`, let the source populate it, add the `xt/txs` row, then stage it on the resolver and hand it to the append pump.
+* *the source drives ingestion* through `TxIndexer`, per-tx: smooth the system-time, open an `OpenTx`, let the source populate it, add its `xt.ext_src_txs` row, then stage it on the resolver and hand it to the append pump.
   'Smoothing' nudges the system-time forward as needed to keep it strictly monotonic — upstream sources don't always guarantee that, but XTDB requires it.
   This is also how CDC sources get to choose tx metadata (including `userMetadata`) after seeing the transaction rather than before.
 * *durability is confirmed on read-back*, not at append.

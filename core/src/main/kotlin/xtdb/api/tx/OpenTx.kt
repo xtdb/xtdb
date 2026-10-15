@@ -11,6 +11,7 @@ import xtdb.arrow.VectorType.Companion.BOOL
 import xtdb.arrow.VectorType.Companion.I64
 import xtdb.arrow.VectorType.Companion.INSTANT
 import xtdb.arrow.VectorType.Companion.TRANSIT
+import xtdb.arrow.VectorType.Companion.VAR_BINARY
 import xtdb.authz.RoleMembership
 import xtdb.database.DatabaseName
 import xtdb.database.PartitionState
@@ -141,6 +142,13 @@ class OpenTx
 
         writeTxRow(error, userMetadata)
     }
+
+    internal fun writeExtSrcTxRow(error: Throwable?, userMetadata: Map<*, *>?) =
+        writeTxRecord(TableRef("xt", "ext_src_txs"), systemTimeMicros, error) { docWriter ->
+            docWriter.vectorFor("user_metadata", VectorType.structOf().arrowType, true).writeObject(userMetadata)
+            docWriter.vectorFor("external_source_token", VAR_BINARY.arrowType, true)
+                .writeObject(externalSourceToken?.let(ByteBuffer::wrap))
+        }
 
     internal fun writeTxRow(error: Throwable?, userMetadata: Map<*, *>?) =
         writeTxRecord(TableRef("xt", "txs"), txKey.txId, error) { docWriter ->

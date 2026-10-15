@@ -354,7 +354,7 @@ class KafkaConnectSourceIntegrationTest {
             val second = xtQueryDb(node, "events", "SELECT _id FROM public.events WHERE _id = 'second'")
             assertTrue(second.isEmpty(), "second shouldn't appear — source halts at the bad record under halt-on-decode-failure")
 
-            val aborted = xtQueryDb(node, "events", "SELECT _id FROM xt.txs WHERE committed = false")
+            val aborted = xtQueryDb(node, "events", "SELECT system_time FROM xt.ext_src_txs WHERE committed = false")
             assertTrue(aborted.isEmpty(), "no aborted txs under halt-on-decode-failure, got: $aborted")
         }
     }
@@ -397,7 +397,7 @@ class KafkaConnectSourceIntegrationTest {
             val second = xtQueryDb(node, "events", "SELECT _id FROM public.events WHERE _id = 'second'")
             assertTrue(second.isEmpty(), "second shouldn't appear — source halts at the un-indexable record under halt-on-failure")
 
-            val aborted = xtQueryDb(node, "events", "SELECT _id FROM xt.txs WHERE committed = false")
+            val aborted = xtQueryDb(node, "events", "SELECT system_time FROM xt.ext_src_txs WHERE committed = false")
             assertTrue(aborted.isEmpty(), "no aborted txs under halt-on-failure, got: $aborted")
         }
     }
@@ -536,7 +536,7 @@ class KafkaConnectSourceIntegrationTest {
 
             // Without the predicate, MaskField would crash on the tombstone's null value
             // and we'd see an aborted tx for that record.
-            val aborted = xtQueryDb(node, "events", "SELECT committed FROM xt.txs WHERE committed = false")
+            val aborted = xtQueryDb(node, "events", "SELECT committed FROM xt.ext_src_txs WHERE committed = false")
             assertTrue(aborted.isEmpty(), "no aborted txs — tombstone should bypass MaskField via the predicate, got: $aborted")
         }
     }

@@ -349,7 +349,7 @@ internal class TxResolver(
                 val writerResult = msg.writer(openTx)
                 val txResult: TransactionResult = when (writerResult) {
                     is TxResult.Committed -> {
-                        openTx.writeTxRow(null, writerResult.userMetadata)
+                        openTx.writeExtSrcTxRow(null, writerResult.userMetadata)
                         Committed(txKey)
                     }
 
@@ -358,14 +358,14 @@ internal class TxResolver(
                         openTx.close()
                         // fresh tx for the abort row — the original openTx may hold partial writes
                         openTx = openTx(txKey, msg.externalSourceToken)
-                        openTx.writeTxRow(writerResult.error, writerResult.userMetadata)
+                        openTx.writeExtSrcTxRow(writerResult.error, writerResult.userMetadata)
                         Aborted(txKey, writerResult.error)
                     }
                 }
 
                 stage(openTx, resolvedSrcMsgId, txResult, dbOp = null, pending = msg.pending)
             } catch (e: Throwable) {
-                // Writer, writeTxRow, or stage threw before the tx reached the queue, so nothing will ever
+                // Writer, writeExtSrcTxRow, or stage threw before the tx reached the queue, so nothing will ever
                 // settle it — complete the handle here, or a caller awaiting it hangs until the term closes.
                 msg.pending.completeExceptionally(e)
                 throw e

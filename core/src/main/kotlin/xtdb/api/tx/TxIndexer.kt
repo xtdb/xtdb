@@ -12,7 +12,7 @@ import java.time.Instant
  * after writing, not before).
  *
  * [executeTx] and [submitTx] own the full lifecycle: smoothing, opening the OpenTx, running the writer,
- * adding the `xt/txs` row, publishing the resulting tx, and closing the OpenTx. They differ only in
+ * publishing the resulting tx, and closing the OpenTx. They differ only in
  * whether the caller waits for the result.
  */
 interface TxIndexer {
@@ -31,7 +31,7 @@ interface TxIndexer {
      */
     val latestBlock: StateFlow<BlockDetails?>
 
-    /** The outcome a [writer] returns: commit or abort, plus optional `userMetadata` recorded on the `xt/txs` table. */
+    /** The outcome a [writer] returns: commit or abort, plus optional `userMetadata` recorded on the `xt.ext_src_txs` table. */
     sealed interface TxResult {
         val userMetadata: Map<*, *>?
 
