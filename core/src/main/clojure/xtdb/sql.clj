@@ -22,12 +22,12 @@
            (java.util Collection HashMap HashSet IdentityHashMap LinkedHashSet Map SequencedSet Set UUID)
            java.util.function.Function
            (org.antlr.v4.runtime ParserRuleContext)
-           (org.antlr.v4.runtime.tree ParseTree)
+           (org.antlr.v4.runtime.tree ParseTree Trees)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector.types.pojo Field)
            (org.apache.commons.codec.binary Hex)
            (xtdb.tx TxOp$PatchDocs TxOp$PutDocs)
-           (xtdb.antlr Sql$DirectlyExecutableStatementContext Sql$DynamicParameterContext Sql$XtqlQueryContext Sql$GroupByClauseContext Sql$HavingClauseContext Sql$JoinSpecificationContext Sql$JoinTypeContext Sql$ObjectNameAndValueContext Sql$OrderByClauseContext Sql$QualifiedRenameColumnContext Sql$QuerySpecificationContext Sql$QueryTailContext Sql$RenameColumnContext Sql$SearchedWhenClauseContext Sql$SelectClauseContext Sql$SetClauseContext Sql$SimpleWhenClauseContext Sql$SortSpecificationContext Sql$SortSpecificationListContext Sql$WhenOperandContext Sql$WhereClauseContext Sql$WithTimeZoneContext SqlLexer SqlVisitor)
+           (xtdb.antlr Sql$ColumnReferenceContext Sql$DirectlyExecutableStatementContext Sql$DynamicParameterContext Sql$XtqlQueryContext Sql$GroupByClauseContext Sql$HavingClauseContext Sql$JoinSpecificationContext Sql$JoinTypeContext Sql$ObjectNameAndValueContext Sql$OrderByClauseContext Sql$QualifiedRenameColumnContext Sql$QuerySpecificationContext Sql$QueryTailContext Sql$RenameColumnContext Sql$RowValueListContext Sql$SearchedWhenClauseContext Sql$SelectClauseContext Sql$SetClauseContext Sql$SimpleWhenClauseContext Sql$SortSpecificationContext Sql$SortSpecificationListContext Sql$SubqueryContext Sql$WhenOperandContext Sql$WhereClauseContext Sql$WithTimeZoneContext SqlLexer SqlVisitor)
            (xtdb.arrow RelationReader VectorReader)
            (xtdb.query DmlCacheKey ParsedStatement$Dml SqlParser SqlPlanner)
            (xtdb.xtql QueryWithParams)
@@ -1335,6 +1335,38 @@
   (-> (symbol (str "?_" param-idx))
       (vary-meta assoc :param? true)))
 
+(def ^:private max-in-list-disjuncts 8)
+
+(defn- in-predicate-sq-ctx ^ParserRuleContext [^ParserRuleContext in-value-ctx]
+  (.accept in-value-ctx
+           (reify SqlVisitor
+             (visitInSubquery [_ ctx] (.subquery ctx))
+             (visitInRowValueList [_ ctx] (.rowValueList ctx)))))
+
+(defn- reads-columns? [^ParseTree expr-ctx]
+  (some #(or (instance? Sql$ColumnReferenceContext %) (instance? Sql$SubqueryContext %))
+        (Trees/getDescendants expr-ctx)))
+
+(defn- in-list-disjunction [^ParserRuleContext sq-ctx needle expr-visitor]
+  (when (instance? Sql$RowValueListContext sq-ctx)
+    (let [items (.rowValueConstructor ^Sql$RowValueListContext sq-ctx)
+          item-exprs (keep (fn [^ParserRuleContext item]
+                             (.accept item
+                                      (reify SqlVisitor
+                                        (visitSingleExprRowConstructor [_ ctx] (.expr ctx))
+                                        (visitMultiExprRowConstructor [_ _ctx] nil))))
+                           items)]
+      (when (and (= (count items) (count item-exprs))
+                 (or (<= (count item-exprs) max-in-list-disjuncts)
+                     (some reads-columns? item-exprs)))
+        ;; copies the needle per item - sound only while SQL plans no non-deterministic function (#6203)
+        (let [disjuncts (mapv (fn [^ParserRuleContext item-expr]
+                                (list '== needle (.accept item-expr expr-visitor)))
+                              item-exprs)]
+          (if (= 1 (count disjuncts))
+            (first disjuncts)
+            (list* 'or disjuncts)))))))
+
 (defrecord ExprPlanVisitor [env scope]
   SqlVisitor
   (visitSearchCondition [this ctx] (list* 'and (mapv (partial accept-visitor this) (.expr ctx))))
@@ -2236,31 +2268,24 @@
         (= :all (:quantifier qc-pt2)) (->> (list 'not)))))
 
   (visitInPredicate [{:keys [!subqs] :as this} ctx]
-    (let [^ParserRuleContext
-          sq-ctx (.accept (.inPredicateValue ctx)
-                          (reify SqlVisitor
-                            (visitInSubquery [_ ctx] (.subquery ctx))
-                            (visitInRowValueList [_ ctx] (.rowValueList ctx))))]
-
-      (cond->> (plan-sq sq-ctx env scope !subqs
-                        {:sq-type :quantified-comparison
-                         :assert-single-col? true
-                         :expr (.accept (.expr ctx) this)
-                         :op '==})
+    (let [needle (.accept (.expr ctx) this)
+          sq-ctx (in-predicate-sq-ctx (.inPredicateValue ctx))]
+      (cond->> (or (in-list-disjunction sq-ctx needle this)
+                   (plan-sq sq-ctx env scope !subqs
+                            {:sq-type :quantified-comparison
+                             :assert-single-col? true
+                             :expr needle
+                             :op '==}))
         (boolean (.NOT ctx)) (list 'not))))
 
-  (visitInPredicatePart2 [{:keys [pt1 !subqs]} ctx]
-    (let [^ParserRuleContext
-          sq-ctx (.accept (.inPredicateValue ctx)
-                          (reify SqlVisitor
-                            (visitInSubquery [_ ctx] (.subquery ctx))
-                            (visitInRowValueList [_ ctx] (.rowValueList ctx))))]
-
-      (cond->> (plan-sq sq-ctx env scope !subqs
-                        {:sq-type :quantified-comparison
-                         :assert-single-col? true
-                         :expr pt1
-                         :op '==})
+  (visitInPredicatePart2 [{:keys [pt1 !subqs] :as this} ctx]
+    (let [sq-ctx (in-predicate-sq-ctx (.inPredicateValue ctx))]
+      (cond->> (or (in-list-disjunction sq-ctx pt1 this)
+                   (plan-sq sq-ctx env scope !subqs
+                            {:sq-type :quantified-comparison
+                             :assert-single-col? true
+                             :expr pt1
+                             :op '==}))
         (boolean (.NOT ctx)) (list 'not))))
 
   (visitFetchFirstRowCount [this ctx]
