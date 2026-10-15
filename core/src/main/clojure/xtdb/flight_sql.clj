@@ -318,7 +318,8 @@
 
   (-submit-tx [this tx-ops opts]
     (xtp/check-no-database this opts)
-    {:tx-id (:tx-id (submit-tx* allocator client flight-client tx-ops (assoc opts :async? true)))})
+    (let [{:keys [tx-id await-token]} (submit-tx* allocator client flight-client tx-ops (assoc opts :async? true))]
+      (xtp/lazy-tx-future #(xtp/await-tx-key this tx-id await-token))))
 
   (-execute-tx [this tx-ops opts]
     (xtp/check-no-database this opts)

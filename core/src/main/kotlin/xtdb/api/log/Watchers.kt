@@ -3,6 +3,7 @@ package xtdb.api.log
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.future.await
 import xtdb.api.TransactionResult
+import xtdb.api.error.Interrupted
 import xtdb.api.TxId
 import xtdb.api.tx.ExternalSourceToken
 import xtdb.types.MessageId
@@ -18,7 +19,7 @@ class Watchers(
     latestTxId: TxId,
     latestSourceMsgId: MessageId,
     externalSourceToken: ExternalSourceToken? = null,
-) {
+) : AutoCloseable {
 
     private sealed interface State {
         val latestSourceMsgId: MessageId
@@ -148,6 +149,13 @@ class Watchers(
     }
 
     suspend fun awaitTx(txId: TxId): TransactionResult? = awaitTxAsync(txId).await()
+
+    /** Fails every transaction still awaited, as the database is going away. */
+    override fun close() {
+        val closed = Interrupted("database closed", "xtdb/database-closed")
+        for ((txId, waiter) in txWaiters)
+            if (txWaiters.remove(txId, waiter)) waiter.completeExceptionally(closed)
+    }
 
     suspend fun awaitSource(srcMsgId: MessageId) {
         activeState.first { it.latestSourceMsgId >= srcMsgId }

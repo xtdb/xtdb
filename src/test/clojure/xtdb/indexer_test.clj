@@ -84,9 +84,9 @@
               table-cat (.getTableCatalog db)]
           (t/is (nil? (.getCurrentBlockIndex table-cat)))
 
-          (t/is (= {:tx-id magic-last-tx-id}
-                   (last (for [tx-ops txs]
-                           (xt/submit-tx node tx-ops {:default-tz #xt/zone "Europe/London"})))))
+          (t/is (= magic-last-tx-id
+                   (:tx-id @(last (for [tx-ops txs]
+                                    (xt/submit-tx node tx-ops {:default-tz #xt/zone "Europe/London"}))))))
 
           (xt-log/sync-node node (Duration/ofSeconds 2))
 
@@ -303,10 +303,10 @@
 
         (util/mkdirs object-dir)
 
-        (t/is (= {:tx-id magic-last-tx-id}
-                 (last (for [tx-ops txs]
-                         (xt/submit-tx node tx-ops
-                                       {:default-tz #xt/zone "Europe/London"})))))
+        (t/is (= magic-last-tx-id
+                 (:tx-id @(last (for [tx-ops txs]
+                                  (xt/submit-tx node tx-ops
+                                                {:default-tz #xt/zone "Europe/London"}))))))
 
         (xt-log/sync-node node (Duration/ofSeconds 2))
         (t/is (= {"xtdb" [last-tx-key]} (tu/latest-completed-txs node)))
@@ -342,11 +342,11 @@
 
         (t/is (= {"xtdb" [nil]} (tu/latest-completed-txs node)))
 
-        (let [{last-tx-id :tx-id} (reduce
+        (let [last-tx-id (:tx-id @(reduce
                                    (fn [_acc tx-ops]
                                      (xt/submit-tx node tx-ops))
                                    nil
-                                   (partition-all 100 tx-ops))
+                                   (partition-all 100 tx-ops)))
               last-tx-key (serde/->TxKey last-tx-id (time/->instant #inst "2020-04-19") (time/->instant #inst "2020-04-19"))]
 
           (xt-log/sync-node node (Duration/ofSeconds 15))
@@ -385,10 +385,10 @@
             _ (t/is (= 5500 (count second-half-tx-ops)))
 
             [first-half-tx-id first-half-await-token] (util/with-open [node1 (tu/->local-node node-opts)]
-                                                        (let [{first-half-tx-id :tx-id} (->> (partition-all 100 first-half-tx-ops)
+                                                        (let [first-half-tx-id (:tx-id @(->> (partition-all 100 first-half-tx-ops)
                                                                                              (reduce (fn [_ tx-ops]
                                                                                                        (xt/submit-tx node1 tx-ops))
-                                                                                                     nil))]
+                                                                                                     nil)))]
                                                           [first-half-tx-id (tu/await-token node1)]))
             
             [second-half-tx-id second-half-await-token] (util/with-open [node2 (tu/->local-node node-opts)]
@@ -417,10 +417,10 @@
                                                             (t/is (= #xt/type :utf8
                                                                      (get-in (.getTypes (.snap tc)) [#xt/table device_readings "_id"])))
 
-                                                            (let [{second-half-tx-id :tx-id} (->> (partition-all 100 second-half-tx-ops)
+                                                            (let [second-half-tx-id (:tx-id @(->> (partition-all 100 second-half-tx-ops)
                                                                                                   (reduce (fn [_ tx-ops]
                                                                                                             (xt/submit-tx node2 tx-ops))
-                                                                                                          nil))
+                                                                                                          nil)))
                                                                   second-half-await-token (tu/await-token node2)]
 
                                                               (t/is (<= first-half-tx-id

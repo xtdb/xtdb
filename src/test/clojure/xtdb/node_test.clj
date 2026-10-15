@@ -890,9 +890,9 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
 (t/deftest copes-with-log-time-going-backwards-3864
   (with-open [node (xtn/start-node {:log [:in-memory {:instant-src (tu/->mock-clock [#inst "2020" #inst "2019" #inst "2021"])}]})]
-    (t/is (= {:tx-id 0} (xt/submit-tx node [[:put-docs :foo {:xt/id 1, :version 0}]])))
-    (t/is (= {:tx-id 1} (xt/submit-tx node [[:put-docs :foo {:xt/id 1, :version 1}]])))
-    (t/is (= {:tx-id 2} (xt/submit-tx node [[:put-docs :foo {:xt/id 1, :version 2}]])))
+    (t/is (= 0 (:tx-id @(xt/submit-tx node [[:put-docs :foo {:xt/id 1, :version 0}]]))))
+    (t/is (= 1 (:tx-id @(xt/submit-tx node [[:put-docs :foo {:xt/id 1, :version 1}]]))))
+    (t/is (= 2 (:tx-id @(xt/submit-tx node [[:put-docs :foo {:xt/id 1, :version 2}]]))))
 
     (t/is (= [{:xt/id 0, :system-time #xt/zoned-date-time "2020-01-01Z[UTC]"}
               {:xt/id 1, :system-time #xt/zoned-date-time "2020-01-01T00:00:00.000001Z[UTC]"}
@@ -1242,6 +1242,10 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                                     :compactor {:threads 0}})]
     (t/is (anomalous? [:fault nil "log processor not initialised"]
                       (xt/execute-tx node [[:put-docs :docs {:xt/id 1}]])))
+
+    (let [submitted (xt/submit-tx node [[:put-docs :docs {:xt/id 2}]])]
+      (t/is (anomalous? [:fault nil "log processor not initialised"] @submitted)
+            "the submit itself succeeds; its future fails"))
 
     (t/is (= [{:v 1}] (xt/q node "SELECT 1 AS v")))))
 

@@ -12,7 +12,6 @@ import org.apache.arrow.memory.BufferAllocator
 import xtdb.NodeBase
 import xtdb.api.TransactionKey
 import xtdb.api.TransactionResult
-import xtdb.api.Xtdb
 import xtdb.api.YAML_SERDE
 import xtdb.api.log.IngestionStoppedException
 import xtdb.api.log.Log
@@ -53,6 +52,7 @@ import io.micrometer.core.instrument.MeterRegistry
 import java.time.Duration
 import java.time.Instant
 import java.util.*
+import java.util.concurrent.CompletableFuture
 import xtdb.api.tx.ExternalSource
 
 private val LOG = Database::class.logger
@@ -124,6 +124,10 @@ class Database(
     /** Whether an ingestion error here should take the whole node out of service. */
     val isCritical: Boolean get() = name == "xtdb" || config.critical
 
+    fun awaitTxAsync(txId: Long): CompletableFuture<TransactionResult?> =
+        if (isIndexing) watchers.awaitTxAsync(txId)
+        else CompletableFuture.failedFuture(IllegalStateException("log processor not initialised"))
+
     fun awaitTxBlocking(txId: Long, timeout: Duration? = null): TransactionResult? =
         runBlocking {
             check(isIndexing) { "log processor not initialised" }
@@ -155,7 +159,7 @@ class Database(
         (partitions + listOf(logs, allocator)).closeAll()
     }
 
-    fun submitTxBlocking(ops: List<TxOp>, opts: TxOpts): Xtdb.SubmittedTx {
+    fun submitTxBlocking(ops: List<TxOp>, opts: TxOpts): MessageId {
         if (config.externalSource != null)
             throw Incorrect(
                 "Cannot submit transactions to database '$name': it has an external source configured. " +
@@ -172,8 +176,7 @@ class Database(
             user = opts.user,
             userMetadata = opts.userMetadata?.let { serializeUserMetadata(allocator, it) }
         )
-        val meta = sourceLog.appendMessageBlocking(txMsg)
-        return Xtdb.SubmittedTx(meta.msgId)
+        return sourceLog.appendMessageBlocking(txMsg).msgId
     }
 
     fun sendFlushBlockMessage(): Log.MessageMetadata = runBlocking {

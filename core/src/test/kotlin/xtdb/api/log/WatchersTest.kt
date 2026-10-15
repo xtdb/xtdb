@@ -4,11 +4,13 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.RepeatedTest
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import xtdb.api.TransactionKey
 import xtdb.api.TransactionResult
+import xtdb.api.error.Interrupted
 import java.time.Instant
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.TimeUnit
@@ -140,6 +142,17 @@ class WatchersTest {
 
         assertThrows<ExecutionException> { watchers.awaitTxAsync(4).get(1, TimeUnit.SECONDS) }
             .also { assertEquals(ex, it.cause?.cause) }
+    }
+
+    @Test
+    fun `closing fails every pending waiter`() {
+        val watchers = Watchers(latestTxId = 3, latestSourceMsgId = 3)
+        val waiter = watchers.awaitTxAsync(4)
+
+        watchers.close()
+
+        assertThrows<ExecutionException> { waiter.get(1, TimeUnit.SECONDS) }
+            .also { assertTrue(it.cause is Interrupted) }
     }
 
     @RepeatedTest(20)
