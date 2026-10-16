@@ -11,6 +11,7 @@ import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
 import xtdb.bitemporal.PolygonCalculator
 import xtdb.compactor.OutWriter.OutWriters
+import xtdb.compactor.OutWriter.OutWriters.RecencyColumn
 import xtdb.compactor.OutWriter.RecencyRowCopier
 import xtdb.compactor.RecencyPartition.WEEK
 import xtdb.metadata.PageMetadata
@@ -62,6 +63,7 @@ fun resolveSameSystemTimeEvents(
     val validFromVec = relWriter["_valid_from"]
     val validToVec = relWriter["_valid_to"]
     val opCopier = dataReader["op"].rowCopier(relWriter["op"])
+    val recencyCopier = dataReader.vectorForOrNull(Trie.RECENCY_COL)?.let { it.rowCopier(relWriter[Trie.RECENCY_COL]) }
 
     val evPtr = EventRowPointer(dataReader, path)
     val polygonCalculator = PolygonCalculator()
@@ -86,6 +88,7 @@ fun resolveSameSystemTimeEvents(
                         validFromVec.writeLong(MIN_LONG)
                         validToVec.writeLong(MAX_LONG)
                         opCopier.copyRow(evPtr.index)
+                        recencyCopier?.copyRow(evPtr.index)
                         relWriter.endRow()
                     }
                     seenErase = true
@@ -99,6 +102,7 @@ fun resolveSameSystemTimeEvents(
                             validFromVec.writeLong(polygon.getValidFrom(i))
                             validToVec.writeLong(polygon.getValidTo(i))
                             opCopier.copyRow(evPtr.index)
+                            recencyCopier?.copyRow(evPtr.index)
                             relWriter.endRow()
                         }
                     }
@@ -190,6 +194,7 @@ internal class SegmentMerge(private val al: BufferAllocator) : AutoCloseable {
             outWriter.endPage(ByteArrayList.from(*this.path))
         } finally {
             resolvedRels.closeAll()
+            release()
         }
     }
 
@@ -227,7 +232,14 @@ internal class SegmentMerge(private val al: BufferAllocator) : AutoCloseable {
 
         val outWriter = when (recencyPartitioning) {
             RecencyPartitioning.Partition -> outWriters.PartitionedOutWriter(schema, recencyPartition)
-            is RecencyPartitioning.Preserve -> outWriters.OutRel(schema, recency = recencyPartitioning.recency)
+            is RecencyPartitioning.Preserve -> {
+                val recencyColumn =
+                    if (recencyPartitioning.recency != null && segments.all { it.schema.fields.any { f -> f.name == Trie.RECENCY_COL } })
+                        RecencyColumn.CARRIED
+                    else RecencyColumn.ABSENT
+
+                outWriters.OutRel(schema, recency = recencyPartitioning.recency, recencyColumn = recencyColumn)
+            }
         }
 
         return outWriter.use {
@@ -264,7 +276,10 @@ private class LocalSegment(
         // in the utility, we keep the Segments open throughout,
         // so can be excused for the dataLoader being used 'outside its lifetime'
         override fun page(leaf: ArrowHashTrie.Leaf) =
-            pageMeta(this@LocalSegment, this, leaf, UNBOUND_TEMPORAL_METADATA, recency)
+            pageMeta(
+                Segment.Page.page(sameSystemTimeResolved) { al -> dataLoader.loadPage(leaf.dataPageIndex, al) },
+                this, leaf, UNBOUND_TEMPORAL_METADATA, recency
+            )
 
         override fun testPage(leaf: ArrowHashTrie.Leaf) = true
 
@@ -278,9 +293,6 @@ private class LocalSegment(
 
     private val dataLoader = Relation.loader(al, dataFile)
     override val schema: Schema get() = dataLoader.schema
-
-    override suspend fun loadDataPage(al: BufferAllocator, leaf: ArrowHashTrie.Leaf) =
-        dataLoader.loadPage(leaf.dataPageIndex, al)
 
     override fun close() {
         dataLoader.close()

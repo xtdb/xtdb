@@ -23,4 +23,26 @@ class NodeBaseTest {
             "error message should reference the offending alias, was: ${thrown.message}"
         )
     }
+
+    @Test
+    fun `a compacting node without withinFileRecencyBranching refuses to start`() {
+        val thrown = assertThrows<Incorrect> {
+            Xtdb.openNode { compactor { threads(1); withinFileRecencyBranching(false) } }
+        }
+
+        assertTrue(
+            thrown.message?.contains("withinFileRecencyBranching") == true,
+            "error message should name the setting, was: ${thrown.message}"
+        )
+    }
+
+    @Test
+    fun `a node with its compactor off starts without withinFileRecencyBranching`() {
+        Xtdb.openNode { compactor { threads(0); withinFileRecencyBranching(false) } }.close()
+    }
+
+    @Test
+    fun `a compacting node with withinFileRecencyBranching starts`() {
+        Xtdb.openNode { compactor { threads(1); withinFileRecencyBranching(true) } }.close()
+    }
 }

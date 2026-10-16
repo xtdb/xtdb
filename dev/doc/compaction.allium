@@ -125,7 +125,10 @@ entity CompactionJob {
 --   L0 → L1C/L1H: recency is calculated for each event through bitemporal resolution.
 --     Events with recency = ∞ go to the current output file.
 --     Events with finite recency are routed to historical output files, partitioned into weekly buckets.
+--     Every row of a historical output file carries the recency computed for it in a `_recency` column; current output files carry none.
 --   All other compactions: recency from the input file's trie key is preserved into a single output file.
+--     Recency is never recomputed above L1H.
+--     A historical output carries `_recency` through only when every input file carries it; otherwise it carries none.
 --
 -- At the end of each merge task (i.e. for each IID path prefix), accumulated rows are flushed to a temporary file on disk.
 -- This bounds the memory usage of the compactor.
@@ -140,12 +143,55 @@ entity CompactionJob {
 --     This recurses until each leaf fits within the page size limit.
 --   If a branch has fewer rows than the page size: coalesce all descendant leaves into a single page.
 --
+-- In a file whose data carries `_recency`, a node may branch on recency instead of IID, on the schedule RecencyBranchSchedule sets out.
+-- More than a page of versions of one entity can't split on IID: in a file without `_recency` they stay one page.
+--
 -- This ensures output pages are consistently sized (~1024 rows), regardless of input distribution.
 --
 -- == Upload ==
 --
 -- The data file is uploaded first.
 -- The presence of the meta file is the marker that the segment is complete.
+
+------------------------------------------------------------
+-- Contracts
+------------------------------------------------------------
+
+contract OutputSegmentLayout {
+    -- What a compaction job's output data and meta files hold, and how the meta file's trie branches.
+    -- See: compactor/OutWriter.kt, compactor/SegmentMerge.kt, trie/PageTrieWriter.kt, trie/RecencyLevel.kt, trie/MetadataFileWriter.kt
+
+    @invariant HistoricalRowsCarryComputedRecency
+        -- A job that partitions by recency (L0 → L1C + L1H) writes, for every row of each historical (L1H) output, the recency the merge computes for that row into a `_recency` column.
+        -- Its current (L1C) output carries no `_recency` column.
+
+    @invariant RecencyCarriedOnlyWhenEveryInputCarriesIt
+        -- A job over historical inputs that preserves recency (L1H → L2H and up) copies `_recency` through only when every input file carries it.
+        -- Otherwise its output carries none.
+        -- Recency is never recomputed above L1H.
+
+    @invariant RecencyBranchSchedule
+        -- A file whose data carries `_recency` branches its trie on recency as well as IID, on a fixed schedule: IID, day, IID, six hours, IID, hour, then IID only.
+        -- Recency buckets are aligned to the epoch, and each is keyed by its inclusive upper bound.
+        -- The IID levels fixed by the file's part are never interleaved with recency; the recency levels then catch up.
+        -- So a file whose part has depth 2 branches IID, IID, day, six hours, IID, hour, then IID only.
+        -- A file whose data carries no `_recency` branches on IID only.
+
+    @invariant BranchOnlyAboveAPage
+        -- A node branches, on IID or recency, only when it holds more than a page of rows.
+
+    @invariant OneEntityTakesTheRemainingRecencyLevels
+        -- A node holding more than a page of versions of one entity can't branch on IID, so it takes every recency level not yet used above it, regardless of the schedule.
+        -- Past the hour level it splits by count into pages of roughly equal size, each no larger than a page and keyed by the most recent row in it.
+        -- Two such pages may share a key.
+
+    @invariant RecencyBranchNodeOnlyWithRecency
+        -- The meta file's trie schema includes the `branch-recency` node type only when the data carries `_recency`.
+        -- A file without `_recency` keeps the earlier meta schema.
+
+    @invariant OutputDeterministic
+        -- Every output file, including its recency column and its trie, is a deterministic function of the job, so every node that runs the job writes identical files.
+}
 
 ------------------------------------------------------------
 -- Open Questions

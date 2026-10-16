@@ -3,6 +3,8 @@
               [:union
                {"nil" [:? :null],
                 "branch-iid" [:list [:? :i32]],
+                "branch-recency"
+                [:list [:struct {"recency" :i64, "idx" :i32}]],
                 "leaf"
                 [:struct
                  {"data-page-idx" :i32,

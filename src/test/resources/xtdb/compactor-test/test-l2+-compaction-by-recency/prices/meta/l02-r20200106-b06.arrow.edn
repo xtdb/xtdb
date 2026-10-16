@@ -3,6 +3,8 @@
               [:union
                {"nil" [:? :null],
                 "branch-iid" [:list [:? :i32]],
+                "branch-recency"
+                [:list [:struct {"recency" :i64, "idx" :i32}]],
                 "leaf"
                 [:struct
                  {"data-page-idx" :i32,
@@ -152,6 +154,8 @@
                    :numbers {:min 3.0, :max 5.0}}]}]}
    {:nodes #xt/tagged [:branch-iid [0 1 2 3]]}
    {:nodes
+    #xt/tagged [:branch-recency [{:recency 1578096000000000, :idx 4}]]}
+   {:nodes
     #xt/tagged [:leaf
                 {:data-page-idx 4,
                  :columns
@@ -281,7 +285,10 @@
                    :root-col? true,
                    :count 10,
                    :numbers {:min 4.0, :max 5.0}}]}]}
-   {:nodes #xt/tagged [:branch-iid [5 6 7 8]]}
+   {:nodes #xt/tagged [:branch-iid [6 7 8 9]]}
+   {:nodes
+    #xt/tagged [:branch-recency
+                [{:recency 1578096000000000, :idx 10}]]}
    {:nodes
     #xt/tagged [:leaf
                 {:data-page-idx 8,
@@ -414,7 +421,10 @@
                    :root-col? true,
                    :count 14,
                    :numbers {:min 3.0, :max 5.0}}]}]}
-   {:nodes #xt/tagged [:branch-iid [10 11 12 13]]}
+   {:nodes #xt/tagged [:branch-iid [12 13 14 15]]}
+   {:nodes
+    #xt/tagged [:branch-recency
+                [{:recency 1578096000000000, :idx 16}]]}
    {:nodes
     #xt/tagged [:leaf
                 {:data-page-idx 12,
@@ -547,5 +557,8 @@
                    :root-col? true,
                    :count 8,
                    :numbers {:min 3.0, :max 5.0}}]}]}
-   {:nodes #xt/tagged [:branch-iid [15 16 17 18]]}
-   {:nodes #xt/tagged [:branch-iid [4 9 14 19]]}])}
+   {:nodes #xt/tagged [:branch-iid [18 19 20 21]]}
+   {:nodes
+    #xt/tagged [:branch-recency
+                [{:recency 1578096000000000, :idx 22}]]}
+   {:nodes #xt/tagged [:branch-iid [5 11 17 23]]}])}

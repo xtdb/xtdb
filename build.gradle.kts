@@ -280,7 +280,12 @@ allprojects {
         }
         dependencies.addProvider("hangWatchdogAgent", libs.kotlinx.coroutines.debug)
 
+        tasks.withType<JavaExec> {
+            environment("XTDB_WITHIN_FILE_RECENCY_BRANCHING", "true")
+        }
+
         tasks.withType<Test> {
+            environment("XTDB_WITHIN_FILE_RECENCY_BRANCHING", "true")
             jvmArgumentProviders.add(CommandLineArgumentProvider {
                 listOf("-javaagent:${hangWatchdogAgent.singleFile}")
             })

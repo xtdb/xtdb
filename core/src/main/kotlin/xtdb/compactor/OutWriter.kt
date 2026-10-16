@@ -5,6 +5,9 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
+import xtdb.arrow.RelationWriter
+import xtdb.arrow.VectorType.Companion.INSTANT
+import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.compactor.RecencyPartition.*
 import xtdb.compactor.SegmentMerge.Results
 import xtdb.time.microsAsInstant
@@ -80,33 +83,60 @@ internal interface OutWriter : AutoCloseable {
 
         private val tempDir = createTempDirectory("compactor")
 
-        private class CopierFactory(private val dataRel: Relation) {
-            fun rowCopier(dataReader: RelationReader) = object : RecencyRowCopier {
-                private val copier = dataReader.rowCopier(dataRel)
+        internal enum class RecencyColumn { ABSENT, CARRIED, COMPUTED }
 
-                override fun copyRow(recency: RecencyMicros, sourceIndex: Int) = copier.copyRow(sourceIndex)
-            }
-        }
+        private fun RelationReader.withoutRecency() =
+            RelationReader.from(vectors.filter { it.name != Trie.RECENCY_COL }, rowCount)
 
         internal inner class OutRel(
             schema: Schema,
             private val outPath: Path = createTempFile(tempDir, "merged-segments", ".arrow"),
-            val recency: LocalDate?
+            val recency: LocalDate?,
+            private val recencyColumn: RecencyColumn
         ) : OutWriter {
-            private val outRel = Relation(al, schema)
+            private val outRel = Relation(
+                al,
+                if (recencyColumn == RecencyColumn.ABSENT) schema
+                else Schema(schema.fields + (Trie.RECENCY_COL ofType INSTANT))
+            )
 
             private val unloader = runCatching { outRel.startUnload(outPath.openWritableChannel()) }
                 .onFailure { outRel.close() }
                 .getOrThrow()
-
-            private val copierFactory = CopierFactory(outRel)
 
             private var pageIdx = 0
             private val leaves0 = mutableListOf<PageTree.Leaf>()
 
             val leaves: List<PageTree.Leaf> get() = leaves0
 
-            override fun rowCopier(reader: RelationReader) = copierFactory.rowCopier(reader)
+            override fun rowCopier(reader: RelationReader): RecencyRowCopier =
+                when (recencyColumn) {
+                    RecencyColumn.ABSENT -> reader.withoutRecency().rowCopier(outRel).let { copier ->
+                        RecencyRowCopier { _, sourceIndex -> copier.copyRow(sourceIndex) }
+                    }
+
+                    RecencyColumn.CARRIED -> reader.rowCopier(outRel).let { copier ->
+                        RecencyRowCopier { _, sourceIndex -> copier.copyRow(sourceIndex) }
+                    }
+
+                    RecencyColumn.COMPUTED -> {
+                        val recencyVec = outRel[Trie.RECENCY_COL]
+
+                        // the copier would otherwise fill the recency column with the source's (absent) value
+                        val contentRel = object : RelationWriter by outRel {
+                            override val vectors = outRel.vectors.filter { it.name != Trie.RECENCY_COL }
+                            override fun vectorForOrNull(name: String) =
+                                if (name == Trie.RECENCY_COL) null else outRel.vectorForOrNull(name)
+                        }
+
+                        val copier = reader.withoutRecency().rowCopier(contentRel)
+
+                        RecencyRowCopier { recency, sourceIndex ->
+                            recencyVec.writeLong(recency)
+                            copier.copyRow(sourceIndex)
+                        }
+                    }
+                }
 
             override fun endPage(path: ByteArrayList) {
                 if (outRel.rowCount == 0) return
@@ -130,12 +160,12 @@ internal interface OutWriter : AutoCloseable {
 
         internal inner class PartitionedOutWriter(private val schema: Schema, private val recencyPartition: RecencyPartition?) : OutWriter {
             private val outDir = createTempDirectory(tempDir, "merged-segments")
-            private var currentRel = OutRel(schema, outDir.resolve("rc.arrow"), null)
+            private var currentRel = OutRel(schema, outDir.resolve("rc.arrow"), null, RecencyColumn.ABSENT)
 
             private val historicalRels = mutableMapOf<LocalDate, OutRel>()
 
             private fun historicalRel(recencyPartition: LocalDate) = historicalRels.computeIfAbsent(recencyPartition) {
-                OutRel(schema, outDir.resolve("r${Trie.RECENCY_FMT.format(it)}.arrow"), recencyPartition)
+                OutRel(schema, outDir.resolve("r${Trie.RECENCY_FMT.format(it)}.arrow"), recencyPartition, RecencyColumn.COMPUTED)
             }
 
             override fun rowCopier(reader: RelationReader) = object : RecencyRowCopier {

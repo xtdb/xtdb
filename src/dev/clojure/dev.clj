@@ -23,7 +23,7 @@
            (xtdb.block.proto TableBlock)
            (xtdb.log.proto TrieDetails)
            (xtdb.table TableSlug)
-           (xtdb.trie ArrowHashTrie ArrowHashTrie$IidBranch ArrowHashTrie$Leaf ArrowHashTrie$Node)
+           (xtdb.trie ArrowHashTrie ArrowHashTrie$IidBranch ArrowHashTrie$Leaf ArrowHashTrie$Node ArrowHashTrie$RecencyBranch HashTrie$RecencyBranch$Bucket)
            [xtdb.api.log SourceMessage]))
 
 #_{:clj-kondo/ignore [:unused-namespace :unused-referred-var]}
@@ -51,6 +51,7 @@
                                       :keystore-password "password123"}}
                        :log [:local {:path (io/file dev-node-dir "log")}]
                        :storage [:local {:path (io/file dev-node-dir "objects")}]
+                       :compactor {:within-file-recency-branching? true}
                        :healthz {:port 8081
                                  :host "*"}
                        :flight-sql {:port 52358
@@ -159,6 +160,10 @@
               (cond
                 (instance? ArrowHashTrie$Leaf node) (.getDataPageIndex ^ArrowHashTrie$Leaf node)
                 (instance? ArrowHashTrie$IidBranch node) (mapv render-trie (.getHashChildren ^ArrowHashTrie$IidBranch node))
+                (instance? ArrowHashTrie$RecencyBranch node) (into (sorted-map)
+                                                                  (map (fn [^HashTrie$RecencyBranch$Bucket bucket]
+                                                                         [(.getRecency bucket) (render-trie (.getNode bucket))]))
+                                                                  (.getBuckets ^ArrowHashTrie$RecencyBranch node))
                 :else node))]
 
       (render-trie (-> (.vectorFor rel "nodes")

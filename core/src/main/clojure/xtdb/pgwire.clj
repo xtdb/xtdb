@@ -1952,7 +1952,7 @@
   (^xtdb.pgwire.Server [] (open-playground nil))
 
   (^xtdb.pgwire.Server [opts]
-   (util/with-close-on-catch [node (xtn/start-node)]
+   (util/with-close-on-catch [node (xtn/start-node {:compactor {:within-file-recency-branching? true}})]
      (let [{:keys [^InetAddress host, port] :as srv} (serve node (merge {:host nil}
                                                                         opts
                                                                         {:allocator (util/->child-allocator (:allocator node) "playground")

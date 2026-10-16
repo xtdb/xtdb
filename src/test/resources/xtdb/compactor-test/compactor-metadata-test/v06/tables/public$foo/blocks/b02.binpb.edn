@@ -7,7 +7,7 @@
    :part [],
    :tries
    [{:trie-key "l01-r20110103-b00",
-     :data-file-size 1918,
+     :data-file-size 2118,
      :trie-metadata
      {:min-valid-from #xt/instant "2010-01-01T00:00:00Z",
       :max-valid-from #xt/instant "2010-01-01T00:00:00Z",
@@ -30,7 +30,7 @@
    :part [],
    :tries
    [{:trie-key "l01-r20160104-b01",
-     :data-file-size 1918,
+     :data-file-size 2118,
      :trie-metadata
      {:min-valid-from #xt/instant "2015-01-01T00:00:00Z",
       :max-valid-from #xt/instant "2015-01-01T00:00:00Z",
