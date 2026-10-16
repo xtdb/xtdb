@@ -220,28 +220,7 @@ interface Compactor : AutoCloseable {
                             availableJobs.keys.forEach { jobKey ->
                                 if (queuedJobs.add(jobKey)) {
                                     launch(jobsDispatcher + CoroutineName("job: ${jobKey.first} / ${jobKey.second}")) {
-                                        jobsSemaphore.withPermit {
-                                            // check it's still required
-                                            val job = availableJobs[jobKey]
-                                            if (job != null) {
-                                                LOGGER.debug("compacting '${job.table.sym}' ${job.trieKeys} -> ${job.outputTrieKey}")
-
-                                                val timer = meterRegistry?.let { Timer.start(it) }
-                                                val triesAdded = driver.executeJob(job)
-                                                jobTimer?.let { timer?.stop(it) }
-                                                driver.publishTries(triesAdded)
-
-                                                LOGGER.debug {
-                                                    buildString {
-                                                        append("compacted '${job.table.sym}'")
-                                                        append(" -> ")
-                                                        append(
-                                                            triesAdded.tries
-                                                                .joinToString(prefix = "(", postfix = ")") { it.trieKey })
-                                                    }
-                                                }
-                                            }
-                                        }
+                                        runJob(jobKey)
 
                                         // intentionally outside try/finally - if the job fails, we leave it in queuedJobs
                                         // so this node doesn't attempt it again
@@ -256,6 +235,31 @@ interface Compactor : AutoCloseable {
                                 wakeupCh.onReceive {
                                     LOGGER.trace("wakey wakey")
                                 }
+                            }
+                        }
+                    }
+                }
+            }
+
+            private suspend fun runJob(jobKey: JobKey) {
+                jobsSemaphore.withPermit {
+                    // check it's still required
+                    val job = availableJobs[jobKey]
+                    if (job != null) {
+                        LOGGER.debug("compacting '${job.table.sym}' ${job.trieKeys} -> ${job.outputTrieKey}")
+
+                        val timer = meterRegistry?.let { Timer.start(it) }
+                        val triesAdded = driver.executeJob(job)
+                        jobTimer?.let { timer?.stop(it) }
+                        driver.publishTries(triesAdded)
+
+                        LOGGER.debug {
+                            buildString {
+                                append("compacted '${job.table.sym}'")
+                                append(" -> ")
+                                append(
+                                    triesAdded.tries
+                                        .joinToString(prefix = "(", postfix = ")") { it.trieKey })
                             }
                         }
                     }
