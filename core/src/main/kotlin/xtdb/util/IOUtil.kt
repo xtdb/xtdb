@@ -60,7 +60,11 @@ inline fun <T : AutoCloseable?, R> T.closeOnCatch(block: (T) -> R): R {
     return try {
         block(this)
     } catch (e: Throwable) {
-        this?.close()
+        try {
+            this?.close()
+        } catch (closeError: Throwable) {
+            e.addSuppressed(closeError)
+        }
         throw e
     }
 }
@@ -69,39 +73,52 @@ inline fun <C : AutoCloseable?, L : Iterable<C>, R> L.closeAllOnCatch(block: (L)
     try {
         block(this)
     } catch (e: Throwable) {
-        closeAll()
+        try {
+            closeAll()
+        } catch (closeError: Throwable) {
+            e.addSuppressed(closeError)
+        }
         throw e
     }
 
 inline fun <K, C : AutoCloseable?, M : Map<K, C>, R> M.closeAllOnCatch(block: (M) -> R): R =
-    try {
-        block(this)
-    } catch (e: Throwable) {
-        closeAll()
-        throw e
-    }
+    values.closeAllOnCatch { block(this) }
 
 inline fun <R> Path.deleteOnCatch(block: (Path) -> R): R =
     try {
         block(this)
     } catch (e: Throwable) {
-        deleteIfExists()
+        try {
+            deleteIfExists()
+        } catch (deleteError: Throwable) {
+            e.addSuppressed(deleteError)
+        }
         throw e
     }
 
 inline fun <C : AutoCloseable?, L : Map<*, C>, R> L.useAll(block: (L) -> R): R =
-    try {
-        block(this)
-    } finally {
-        closeAll()
-    }
+    values.useAll { block(this) }
 
-inline fun <C : AutoCloseable?, L : Iterable<C>, R> L.useAll(block: (L) -> R): R =
+inline fun <C : AutoCloseable?, L : Iterable<C>, R> L.useAll(block: (L) -> R): R {
+    var blockError: Throwable? = null
+
     try {
-        block(this)
+        return block(this)
+    } catch (e: Throwable) {
+        blockError = e
+        throw e
     } finally {
-        closeAll()
+        if (blockError == null) {
+            closeAll()
+        } else {
+            try {
+                closeAll()
+            } catch (closeError: Throwable) {
+                blockError.addSuppressed(closeError)
+            }
+        }
     }
+}
 
 inline fun <C, L : Iterable<C>, R : AutoCloseable?> L.safeMap(block: (C) -> R): List<R> =
     mutableListOf<R>().closeAllOnCatch { els ->

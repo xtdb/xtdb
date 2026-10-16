@@ -25,4 +25,47 @@ class IOUtilTest {
         assertEquals(first, thrown)
         assertEquals(listOf(second), thrown.suppressed.toList())
     }
+
+    @Test
+    fun `useAll surfaces the body's exception with close failures suppressed`() {
+        val closed = mutableListOf<Int>()
+        val bodyError = IllegalStateException("body")
+        val closeError = IllegalStateException("close")
+
+        val closeables = listOf(
+            AutoCloseable { closed += 0; throw closeError },
+            AutoCloseable { closed += 1 },
+        )
+
+        val thrown = assertThrows<IllegalStateException> { closeables.useAll { throw bodyError } }
+
+        assertEquals(listOf(0, 1), closed)
+        assertEquals(bodyError, thrown)
+        assertEquals(listOf(closeError), thrown.suppressed.toList())
+    }
+
+    private fun returnFromInside(closeables: List<AutoCloseable>): Int {
+        closeables.useAll { return 1 }
+    }
+
+    @Test
+    fun `useAll closes every element when the block returns from the enclosing function`() {
+        val closed = mutableListOf<Int>()
+
+        assertEquals(1, returnFromInside(listOf(AutoCloseable { closed += 0 }, AutoCloseable { closed += 1 })))
+        assertEquals(listOf(0, 1), closed)
+    }
+
+    @Test
+    fun `closeOnCatch surfaces the body's exception with the close failure suppressed`() {
+        val bodyError = IllegalStateException("body")
+        val closeError = IllegalStateException("close")
+
+        val thrown = assertThrows<IllegalStateException> {
+            AutoCloseable { throw closeError }.closeOnCatch { throw bodyError }
+        }
+
+        assertEquals(bodyError, thrown)
+        assertEquals(listOf(closeError), thrown.suppressed.toList())
+    }
 }
