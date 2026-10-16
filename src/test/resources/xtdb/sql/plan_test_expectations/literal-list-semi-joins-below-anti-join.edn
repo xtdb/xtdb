@@ -1,0 +1,38 @@
+[:project
+ {:projections [{_id c.1/_id}]}
+ [:map
+  {:projections [{_sq_4 true}]}
+  [:map
+   {:projections [{_sq_2 true}]}
+   [:anti-join
+    {:conditions [{c.1/_id o.7/custkey}]}
+    [:semi-join
+     {:conditions [{c.1/region xt.values.5/_column_1}]}
+     [:semi-join
+      {:conditions [{_needle xt.values.3/_column_1}]}
+      [:map
+       {:projections [{_needle (substring c.1/phone 1 2)}]}
+       [:map
+        {:projections [{_sq_6 true}]}
+        [:rename
+         {:prefix c.1}
+         [:scan
+          {:db-name "xtdb",
+           :table #xt/table customer,
+           :columns [_id phone region]}]]]]
+      [:rename
+       {:prefix xt.values.3}
+       [:table
+        {:output-cols [_column_1],
+         :rows [{:_column_1 "13"} {:_column_1 "31"}]}]]]
+     [:rename
+      {:prefix xt.values.5}
+      [:table
+       {:output-cols [_column_1],
+        :rows [{:_column_1 "eu"} {:_column_1 "us"}]}]]]
+    [:rename
+     {:prefix o.7}
+     [:scan
+      {:db-name "xtdb",
+       :table #xt/table orders,
+       :columns [custkey]}]]]]]]

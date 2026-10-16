@@ -1425,6 +1425,71 @@
          [:anti-join {:conditions (w/postwalk-replace (rename-map-for-projection-spec projections) conditions)}
           inner-lhs inner-rhs]]))))
 
+(defn- filtering-join? [relation]
+  (contains? #{:semi-join :anti-join} (first relation)))
+
+(defn- literal-rows? [relation]
+  (case (first relation)
+    :table (contains? (second relation) :rows)
+    (:rename :project) (recur (last relation))
+    false))
+
+(defn- literal-rows-semi-join? [relation]
+  (and (= :semi-join (first relation))
+       (literal-rows? (last relation))))
+
+(defn- peel-maps [relation]
+  (loop [map-opts [], relation relation]
+    (if (= :map (first relation))
+      (recur (conj map-opts (second relation)) (last relation))
+      [map-opts relation])))
+
+(defn- wrap-maps [map-opts relation]
+  (reduce (fn [relation opts] [:map opts relation]) relation (rseq map-opts)))
+
+(defn- maps-movable-below? [map-opts filtering-rhs]
+  (and (not-any? (comp numbers-rows? :projections) map-opts)
+       (not-any? (set (relation-columns filtering-rhs))
+                 (for [{:keys [projections]} map-opts, p projections]
+                   (->projected-column p)))))
+
+(defn- push-literal-rows-semi-join-below-filtering-join [z]
+  (r/zmatch z
+    [:semi-join join-opts lhs rhs]
+    ;;=>
+    (when (literal-rows? rhs)
+      (let [[map-opts [inner-op inner-opts inner-lhs inner-rhs :as inner]] (peel-maps lhs)]
+        (when (and (filtering-join? inner)
+                   ;; two literal-rows semi-joins would swap forever
+                   (not (literal-rows-semi-join? inner))
+                   (maps-movable-below? map-opts inner-rhs))
+          [inner-op inner-opts
+           [:semi-join join-opts (wrap-maps map-opts inner-lhs) rhs]
+           inner-rhs])))))
+
+(defn- at-most-one-row? [relation]
+  (case (first relation)
+    :group-by (every? map? (:columns (second relation)))
+    (:project :map :rename :select) (recur (last relation))
+    false))
+
+(defn- push-select-and-single-join-below-filtering-join [z]
+  (r/zmatch z
+    [:select select-opts
+     [:single-join sj-opts lhs rhs]]
+    ;;=>
+    (when (and (at-most-one-row? rhs)
+               (some (set (relation-columns rhs)) (expr-symbols (:predicate select-opts))))
+      (let [[map-opts [inner-op inner-opts inner-lhs inner-rhs :as inner]] (peel-maps lhs)]
+        (when (and (filtering-join? inner)
+                   (not (literal-rows-semi-join? inner))
+                   (maps-movable-below? map-opts inner-rhs)
+                   (not-any? (set (relation-columns inner-rhs)) (relation-columns rhs)))
+          [inner-op inner-opts
+           [:select select-opts
+            [:single-join sj-opts (wrap-maps map-opts inner-lhs) rhs]]
+           inner-rhs])))))
+
 (defn- promote-selection-to-mega-join [z]
   (r/zmatch
     z
@@ -1478,6 +1543,20 @@
                                    (:rel %)) indexed-rels)]
           [:mega-join {:conditions output-join-conditions} output-rels])))))
 
+(defn- push-left-outer-join-conditions-to-rhs [z]
+  (r/zmatch
+    z
+    [:left-outer-join opts lhs rhs]
+    ;;=>
+    (let [{rhs-preds true, join-conditions false}
+          (->> (:conditions opts)
+               (mapcat #(if (map? %) [%] (flatten-expr and-predicate? %)))
+               (group-by #(boolean (and (not (map? %)) (all-columns-in-relation? % rhs)))))]
+      (when (seq rhs-preds)
+        [:left-outer-join {:conditions (vec join-conditions)}
+         lhs
+         (reduce (fn [rel pred] [:select {:predicate pred} rel]) rhs rhs-preds)]))))
+
 (def ^:private push-correlated-selection-down-past-join (partial push-selection-down-past-join true))
 (def ^:private push-correlated-selection-down-past-rename (partial push-selection-down-past-rename true))
 (def ^:private push-correlated-selection-down-past-project (partial push-selection-down-past-project true))
@@ -1503,6 +1582,7 @@
    #'split-conjunctions-in-mega-join
    #'push-predicates-from-mega-join-to-child-relations
    #'push-selection-down-past-apply
+   #'push-left-outer-join-conditions-to-rhs
    #'push-correlated-selection-down-past-join
    #'push-correlated-selection-down-past-rename
    #'push-correlated-selection-down-past-project
@@ -1514,6 +1594,8 @@
    #'remove-superseded-projects
    #'merge-selections-around-scan
    #'push-semi-and-anti-joins-down
+   #'push-literal-rows-semi-join-below-filtering-join
+   #'push-select-and-single-join-below-filtering-join
    #'add-selection-to-scan-predicate
    #'push-sort-bounds-down-towards-sort
    #'fuse-sorts])

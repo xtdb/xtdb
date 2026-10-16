@@ -2270,6 +2270,57 @@
            (-> (xt/q tu/*node* "SELECT foo.x, bar.x bar_x FROM foo LEFT JOIN bar ON bar.x = (SELECT baz.x FROM baz WHERE baz.x = foo.x)")
                set))))
 
+(t/deftest left-join-on-predicate-on-null-supplying-side-6170
+  (let [q "SELECT c._id, o._id AS o_id FROM customer AS c LEFT JOIN orders AS o ON c._id = o.custkey AND o.comment <> 'special' AND c.active"]
+    (t/is (=plan-file
+           "left-join-on-predicate-on-null-supplying-side"
+           (sql/plan q {:table-info {#xt/table customer #{"_id" "active"}
+                                     #xt/table orders #{"_id" "custkey" "comment"}}}))
+          "the orders predicate moves into the orders scan; the customer predicate stays in the join")
+
+    (xt/execute-tx tu/*node* [[:sql "INSERT INTO customer RECORDS {_id: 1, active: true}, {_id: 2, active: true}, {_id: 3, active: false}"]
+                              [:sql "INSERT INTO orders RECORDS {_id: 10, custkey: 1, comment: 'ok'}, {_id: 20, custkey: 2, comment: 'special'}, {_id: 30, custkey: 3, comment: 'ok'}"]])
+
+    (t/is (= #{{:xt/id 1, :o-id 10} {:xt/id 2} {:xt/id 3}}
+             (set (xt/q tu/*node* q))))))
+
+(t/deftest literal-list-semi-joins-run-before-anti-join-6169
+  (let [q "SELECT c._id FROM customer AS c
+           WHERE substring(c.phone, 1, 2) IN ('13', '31')
+             AND c.region IN ('eu', 'us')
+             AND NOT EXISTS (SELECT 1 FROM orders AS o WHERE o.custkey = c._id)"]
+    (t/is (=plan-file
+           "literal-list-semi-joins-below-anti-join"
+           (sql/plan q {:table-info {#xt/table customer #{"_id" "phone" "region"}
+                                     #xt/table orders #{"_id" "custkey"}}})))
+
+    (xt/execute-tx tu/*node* [[:sql "INSERT INTO customer RECORDS {_id: 1, phone: '13-1', region: 'eu'}, {_id: 2, phone: '31-2', region: 'us'}, {_id: 3, phone: '99-3', region: 'eu'}, {_id: 4, phone: '13-4', region: 'asia'}"]
+                              [:sql "INSERT INTO orders RECORDS {_id: 10, custkey: 1}"]])
+
+    (t/is (= [{:xt/id 2}] (xt/q tu/*node* q)))))
+
+(t/deftest scalar-subquery-filter-runs-before-anti-join-6169
+  (let [table-info {#xt/table customer #{"_id" "phone" "bal"}
+                    #xt/table orders #{"_id" "custkey"}}
+        aggregate-q "SELECT c._id FROM customer AS c
+                     WHERE substring(c.phone, 1, 2) IN ('13', '31')
+                       AND c.bal > (SELECT AVG(c2.bal) FROM customer AS c2)
+                       AND NOT EXISTS (SELECT 1 FROM orders AS o WHERE o.custkey = c._id)"
+        lookup-q "SELECT c._id FROM customer AS c
+                  WHERE substring(c.phone, 1, 2) IN ('13', '31')
+                    AND c.bal > (SELECT c2.bal FROM customer AS c2 WHERE c2._id = 1)
+                    AND NOT EXISTS (SELECT 1 FROM orders AS o WHERE o.custkey = c._id)"]
+    (t/is (=plan-file "scalar-aggregate-filter-below-anti-join" (sql/plan aggregate-q {:table-info table-info})))
+
+    (t/is (=plan-file "scalar-lookup-filter-above-anti-join" (sql/plan lookup-q {:table-info table-info}))
+          "a scalar subquery that may return more than one row keeps its single-join above the anti-join")
+
+    (xt/execute-tx tu/*node* [[:sql "INSERT INTO customer RECORDS {_id: 1, phone: '13-1', bal: 10}, {_id: 2, phone: '31-2', bal: 20}, {_id: 3, phone: '13-3', bal: 1}, {_id: 4, phone: '31-4', bal: 30}, {_id: 5, phone: '99-5', bal: 0}"]
+                              [:sql "INSERT INTO orders RECORDS {_id: 10, custkey: 4}"]])
+
+    (t/is (= [{:xt/id 2}] (xt/q tu/*node* aggregate-q)))
+    (t/is (= [{:xt/id 2}] (xt/q tu/*node* lookup-q)))))
+
 (t/deftest test-erase-with-subquery
   (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id :foo :bar 1}]])
   (t/is (xt/execute-tx tu/*node* [[:sql "ERASE FROM docs WHERE docs._id IN (SELECT docs._id FROM docs WHERE docs.bar = 1)"]]))
