@@ -18,6 +18,7 @@ return rr.Diagram(rr.Sequence(createTable, rr.Optional(colNames, "skip")))
 
 * Column names are optional and do not yet support a type declaration.
 * `CREATE TABLE` does not fail if the table exists; any columns declared will be added to the existing table.
+* `CREATE TABLE` doesn't take a system-time of its own, so a later transaction may still backfill data with an earlier [`SYSTEM_TIME`](/reference/main/sql/txs#set-transaction-v22).
 
 e.g.:
 

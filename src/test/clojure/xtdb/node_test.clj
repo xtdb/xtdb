@@ -378,21 +378,21 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
 (t/deftest test-txs-table-485
   (logging/with-log-level "xtdb.indexer.Indexer" :error
-    (t/is (= (serde/->TxKey 0 #xt/instant "2020-01-01T00:00:00Z")
+    (t/is (= (serde/->TxKey 0 #xt/instant "2020-01-01T00:00:00Z" #xt/instant "2020-01-01T00:00:00Z")
              (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id :foo}]])))
 
     (t/is (anomalous? [:conflict] (xt/execute-tx tu/*node* [["ASSERT 1 = 2"]])))
 
-    (t/is (= (serde/->TxKey 2 #xt/instant "2020-01-03T00:00:00Z")
+    (t/is (= (serde/->TxKey 2 #xt/instant "2020-01-03T00:00:00Z" #xt/instant "2020-01-03T00:00:00Z")
              (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id :bar}]])))
 
     (t/is (anomalous? [:conflict :xtdb/assert-failed "boom"]
                       (xt/execute-tx tu/*node* ["ASSERT 1 = 2, 'boom'"])))
 
     (t/is (= #{{:tx-id 0, :system-time (time/->zdt #inst "2020-01-01"), :committed? true}
-               {:tx-id 1, :system-time (time/->zdt #inst "2020-01-02"), :committed? false}
+               {:tx-id 1, :committed? false}
                {:tx-id 2, :system-time (time/->zdt #inst "2020-01-03"), :committed? true}
-               {:tx-id 3, :system-time (time/->zdt #inst "2020-01-04"), :committed? false}}
+               {:tx-id 3, :committed? false}}
              (set (xt/q tu/*node*
                         '(from :xt/txs [{:xt/id tx-id, :system-time system-time, :committed committed?}])))))
 

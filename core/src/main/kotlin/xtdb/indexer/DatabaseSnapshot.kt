@@ -4,6 +4,7 @@ import xtdb.api.TransactionKey
 import xtdb.api.TableRef
 import xtdb.trie.ColumnName
 import xtdb.table.Oid
+import xtdb.database.ClockBasis
 import xtdb.database.Database
 import xtdb.util.closeAll
 import java.time.Instant
@@ -21,7 +22,7 @@ import java.time.Instant
 class DatabaseSnapshot(val partitions: List<Snapshot>) : AutoCloseable {
 
     interface Source {
-        fun openSnapshot(minBasis: List<Instant?>?): DatabaseSnapshot
+        fun openSnapshot(minBasis: List<ClockBasis>?): DatabaseSnapshot
     }
 
     init {

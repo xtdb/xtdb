@@ -13,6 +13,7 @@ import xtdb.api.TransactionKey
 import xtdb.api.storage.ObjectStore
 import xtdb.api.tx.BlockDetails
 import xtdb.api.tx.ExternalSourceToken
+import xtdb.api.tx.TxHead
 import xtdb.arrow.MergeTypes.Companion.mergeTypes
 import xtdb.arrow.VectorType
 import xtdb.arrow.VectorType.Companion.asType
@@ -20,6 +21,7 @@ import xtdb.arrow.VectorType.Companion.field
 import xtdb.block.proto.Block
 import xtdb.block.proto.Partition
 import xtdb.block.proto.TableBlock
+import xtdb.block.proto.TxKey as BlockTxKey
 import xtdb.block.proto.block
 import xtdb.block.proto.txKey
 import xtdb.database.proto.DatabaseConfig
@@ -58,12 +60,21 @@ private fun Block.tableEntries(): List<TableEntry> =
         ?: tableNamesList.sorted()
             .mapIndexed { idx, name -> TableEntry.mint(TableEntry.FIRST_OID + idx, fromSchemaAndTable(name)) }
 
-// The proto is the storage format, so this is the only place that reads its presence flags: everything
-// downstream sees ordinary Kotlin nullability.
+fun BlockTxKey.toTransactionKey(): TransactionKey =
+    if (hasIngestTime())
+        TransactionKey(txId, ingestTime.microsAsInstant, systemTime.microsAsInstant.takeIf { hasSystemTime() })
+    else
+        systemTime.microsAsInstant.let { TransactionKey(txId, it, it) }
+
 private fun Block.asBlockDetails() = BlockDetails(
     blockIndex = blockIndex,
-    latestCompletedTx = takeIf { it.hasLatestCompletedTx() }?.latestCompletedTx
-        ?.let { TransactionKey(it.txId, it.systemTime.microsAsInstant) },
+    head = takeIf { it.hasLatestCompletedTx() }?.latestCompletedTx?.let { tx ->
+        TxHead(
+            tx.toTransactionKey(),
+            if (tx.hasIngestTime()) latestSystemTime.microsAsInstant.takeIf { hasLatestSystemTime() }
+            else tx.systemTime.microsAsInstant,
+        )
+    },
     latestProcessedMsgId = latestProcessedMsgId.takeIf { hasLatestProcessedMsgId() },
     boundaryReplicaMsgId = boundaryReplicaMsgId.takeIf { hasBoundaryReplicaMsgId() },
     termId = termId,
@@ -182,7 +193,9 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
 
     val currentBlockIndex: BlockIndex? get() = snap().blockIdx
 
-    val latestCompletedTx: TransactionKey? get() = snap().block?.latestCompletedTx
+    val head: TxHead? get() = snap().block?.head
+
+    val latestCompletedTx: TransactionKey? get() = head?.latestCompletedTx
 
     val latestProcessedMsgId: MessageId?
         get() = snap().block.let { it?.latestProcessedMsgId ?: it?.latestCompletedTx?.txId }
@@ -303,7 +316,7 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
 
     fun buildBlock(
         blockIndex: BlockIndex,
-        latestCompletedTx: TransactionKey?,
+        head: TxHead?,
         latestProcessedMsgId: MessageId,
         boundaryReplicaMsgId: MessageId?,
         tables: Collection<TableEntry>,
@@ -319,11 +332,14 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
 
         return block {
             this.blockIndex = blockIndex
-            latestCompletedTx?.also { tx ->
+            head?.also { head ->
+                val tx = head.latestCompletedTx
                 this.latestCompletedTx = txKey {
                     txId = tx.txId
-                    systemTime = tx.systemTime.asMicros
+                    ingestTime = tx.ingestTime.asMicros
+                    tx.systemTime?.let { systemTime = it.asMicros }
                 }
+                head.systemTime?.let { latestSystemTime = it.asMicros }
             }
             this.latestProcessedMsgId = latestProcessedMsgId
             boundaryReplicaMsgId?.let { this.boundaryReplicaMsgId = it }

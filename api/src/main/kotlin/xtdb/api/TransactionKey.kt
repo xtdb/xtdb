@@ -28,32 +28,37 @@ interface TransactionKey : Comparable<TransactionKey> {
 
         override val descriptor: SerialDescriptor = buildClassSerialDescriptor("xtdb.api.TransactionKey") {
             element<Long>("txId")
+            element("ingestTime", InstantSerde.descriptor)
             element("systemTime", InstantSerde.descriptor)
         }
 
         override fun deserialize(decoder: Decoder): TransactionKey {
             var txId: Long? = null
+            var ingestTime: Instant? = null
             var systemTime: Instant? = null
             decoder.decodeStructure(descriptor) {
                 loop@ while (true) {
                     when (val index = decodeElementIndex(descriptor)) {
                         CompositeDecoder.DECODE_DONE -> break@loop
                         0 -> txId = decodeLongElement(descriptor, 0)
-                        1 -> systemTime = decodeSerializableElement(descriptor, 1, InstantSerde)
+                        1 -> ingestTime = decodeSerializableElement(descriptor, 1, InstantSerde)
+                        2 -> systemTime = decodeSerializableElement(descriptor, 2, InstantSerde)
                         else -> throw SerializationException("Unknown index $index")
                     }
                 }
             }
             return TransactionKey(
                 txId ?: throw SerializationException("Missing txId"),
-                systemTime ?: throw SerializationException("Missing systemTime")
+                ingestTime ?: systemTime ?: throw SerializationException("Missing ingestTime"),
+                systemTime,
             )
         }
 
         override fun serialize(encoder: Encoder, value: TransactionKey) =
             encoder.encodeStructure(descriptor) {
                 encodeLongElement(descriptor, 0, value.txId)
-                encodeSerializableElement(descriptor, 1, InstantSerde, value.systemTime)
+                encodeSerializableElement(descriptor, 1, InstantSerde, value.ingestTime)
+                value.systemTime?.let { encodeSerializableElement(descriptor, 2, InstantSerde, it) }
             }
     }
 
@@ -63,9 +68,17 @@ interface TransactionKey : Comparable<TransactionKey> {
     val txId: Long
 
     /**
-     * the time as recorded by the log.
+     * when the transaction was ingested - strictly increasing across a database's transactions.
+     * DDL effects, and the transaction's own `xt.txs` row, take effect at this time.
      */
-    val systemTime: Instant
+    val ingestTime: Instant
+
+    /**
+     * the system time the transaction's data writes take effect at, or null if it wrote no data rows -
+     * DDL-only, aborted and empty transactions, for example.
+     * An explicit `SYSTEM_TIME` may put it behind [ingestTime].
+     */
+    val systemTime: Instant?
 
     /**
      * @suppress
@@ -73,8 +86,8 @@ interface TransactionKey : Comparable<TransactionKey> {
     override fun compareTo(other: TransactionKey) = txId.compareTo(other.txId)
 
     companion object {
-        operator fun invoke(txId: Long, systemTime: Instant) =
-            requiringResolve("xtdb.serde/->TxKey")(txId, systemTime) as TransactionKey
+        operator fun invoke(txId: Long, ingestTime: Instant, systemTime: Instant?) =
+            requiringResolve("xtdb.serde/->TxKey")(txId, ingestTime, systemTime) as TransactionKey
     }
 }
 

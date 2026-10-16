@@ -89,11 +89,12 @@ class Database(
     val watchers: Watchers get() = partition0.watchers
     val compactorOrNull: Compactor.ForDatabase? get() = partition0.compactorOrNull
 
-    override fun openSnapshot(minBasis: List<Instant?>?): DatabaseSnapshot =
+    override fun openSnapshot(minBasis: List<ClockBasis>?): DatabaseSnapshot =
         DatabaseSnapshot(partitions.mapIndexed { idx, part -> part.openSnapshot(minBasis?.getOrNull(idx)) })
 
-    /** This database's read basis right now — latest-completed system-time per partition, in partition-index order. */
-    fun currentBasis(): List<Instant?> = partitions.map { it.liveIndex.latestCompletedTx?.systemTime }
+    /** This database's read basis right now — both clocks per partition, in partition-index order. */
+    fun currentBasis(): List<ClockBasis> =
+        partitions.map { part -> part.liveIndex.head.let { ClockBasis(it?.ingestTime, it?.systemTime) } }
 
     val tableCatalog: TableCatalog get() = partition0.tableCatalog
 
@@ -577,12 +578,10 @@ class Database(
 
         val primary: Database get() = databaseOrNull("xtdb")!!
 
-        // a read snapshot pinned to now: each database's latest-completed system-time per partition,
-        // encoded as a time-basis token, so a connection can pin a begin-time read basis.
         fun snapshotToken(): String =
-            latestCompletedTxs()
-                .mapValues { (_, txs) -> txs.map { it?.systemTime } }
-                .encodeTimeBasisToken()
+            databaseNames.mapNotNull { dbName -> databaseOrNull(dbName)?.let { dbName to it.currentBasis() } }
+                .toMap()
+                .encodeClockBasisToken()
 
         // each database's latest-completed tx per partition, surfaced through Xtdb.latestCompletedTxs and
         // pgwire's `SHOW LATEST_COMPLETED_TXS`. Partition order is positional, so it lines up with the

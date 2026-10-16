@@ -155,6 +155,24 @@ internal class ExternalSourceTest : LeaderTermTest() {
     }
 
     @Test
+    fun `an external tx that only creates a table takes no system time`() = runTest {
+        val extSource = InMemoryExternalSource(index = {
+            executeTx(it) { tx ->
+                tx.executeSql("CREATE TABLE foo (_id)")
+                TxResult.Committed()
+            }
+        })
+        val term = extTerm(extSource)
+
+        extSource.channel.send(null)
+        term.watchers.awaitTx(0)
+
+        val resolved = term.resolvedTxs().single()
+        assertTrue(resolved.committed)
+        assertNull(resolved.txKey.systemTime)
+    }
+
+    @Test
     fun `execute threads resumeToken to watchers`() = runTest {
         val extSource = InMemoryExternalSource()
         val term = extTerm(extSource)

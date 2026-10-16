@@ -40,14 +40,31 @@ fun String.decodeTxBasisToken(): TxBasisToken =
                 .associate { it.key to it.value.messageIdsList }
         }
 
+/** A read bound on one partition's two clocks; either is null where that clock hasn't moved. */
+data class ClockBasis(val ingestTime: Instant?, val systemTime: Instant?)
+
+typealias ClockBasisToken = Map<DatabaseName, List<ClockBasis>>
+
+private val Instant?.asTimestamp: Timestamp
+    get() = this?.let { Timestamp.newBuilder().setSeconds(it.epochSecond).setNanos(it.nano).build() }
+        ?: Timestamp.getDefaultInstance()
+
 fun TimeBasisToken.encodeTimeBasisToken(): String =
     timeBasis {
         entries.forEach { (dbName, sysTimes) ->
+            databases.put(dbName, systemTimes { systemTimes.addAll(sysTimes.map { it.asTimestamp }) })
+        }
+    }
+        .toByteArray()
+        .let { Base64.encode(it) }
+
+fun ClockBasisToken.encodeClockBasisToken(): String =
+    timeBasis {
+        entries.forEach { (dbName, clocks) ->
             databases.put(dbName, systemTimes {
-                systemTimes.addAll(sysTimes.map {
-                    it?.let { Timestamp.newBuilder().setSeconds(it.epochSecond).setNanos(it.nano).build() }
-                        ?: Timestamp.getDefaultInstance()
-                })
+                systemTimes.addAll(clocks.map { it.systemTime.asTimestamp })
+                if (clocks.any { it.ingestTime != it.systemTime })
+                    ingestTimes.addAll(clocks.map { it.ingestTime.asTimestamp })
             })
         }
     }

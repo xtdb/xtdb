@@ -37,13 +37,13 @@ class WatchersTest {
         assertThrows<TimeoutCancellationException> { withTimeout(50) { await5.await() } }
         assertThrows<TimeoutCancellationException> { withTimeout(50) { await4.await() } }
 
-        val res4 = TransactionResult.Committed(TransactionKey(4, Instant.parse("2021-01-01T00:00:00Z")))
+        val res4 = TransactionResult.Committed(TransactionKey(4, Instant.parse("2021-01-01T00:00:00Z"), Instant.parse("2021-01-01T00:00:00Z")))
         watchers.notifyApplied(4, res4)
 
         assertThrows<TimeoutCancellationException> { withTimeout(50) { await5.await() } }
         assertEquals(res4, await4.await())
 
-        val res5 = TransactionResult.Aborted(TransactionKey(5, Instant.parse("2021-01-02T00:00:00Z")), Exception("test"))
+        val res5 = TransactionResult.Aborted(TransactionKey(5, Instant.parse("2021-01-02T00:00:00Z"), Instant.parse("2021-01-02T00:00:00Z")), Exception("test"))
         watchers.notifyApplied(5, res5)
 
         assertEquals(res5, await5.await())
@@ -59,7 +59,7 @@ class WatchersTest {
         // `sourceMsgId` and the next ResolvedTx tripped the `txId > latestTxId` invariant.
         val watchers = Watchers(latestTxId = 5, latestSourceMsgId = 100)
 
-        val tx6 = TransactionResult.Committed(TransactionKey(6, Instant.parse("2026-05-01T00:00:00Z")))
+        val tx6 = TransactionResult.Committed(TransactionKey(6, Instant.parse("2026-05-01T00:00:00Z"), Instant.parse("2026-05-01T00:00:00Z")))
         // ext-source path: srcMsgId stays at the prior latestSourceMsgId.
         watchers.notifyApplied(watchers.latestSourceMsgId, tx6)
 

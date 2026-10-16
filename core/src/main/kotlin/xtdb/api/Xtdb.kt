@@ -110,7 +110,9 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
     /** The transaction goes to [TxOpts.dbName], defaulting to the primary database `xtdb`, and may only refer to tables within it — see [Connection]. */
     fun submitTx(ops: List<TxOp>, opts: TxOpts = TxOpts()): SubmittedTx
 
-    data class ExecutedTx(val txId: MessageId, val systemTime: Instant, val committed: Boolean, val error: Throwable?)
+    data class ExecutedTx(val txKey: TransactionKey, val committed: Boolean, val error: Throwable?) {
+        val txId: MessageId get() = txKey.txId
+    }
 
     /** The transaction goes to [TxOpts.dbName], defaulting to the primary database `xtdb`, and may only refer to tables within it — see [Connection]. */
     fun executeTx(ops: List<TxOp>, opts: TxOpts = TxOpts()): ExecutedTx
@@ -223,12 +225,8 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
         private val initialTz = defaultTz
 
-        data class LastSubmittedTx(
-            val txId: MessageId,
-            val systemTime: Instant?,
-            val committed: Boolean?,
-            val error: Throwable?,
-        )
+        /** [executed] is null for a fire-and-forget submit, which doesn't wait for the outcome. */
+        data class LastSubmittedTx(val txId: MessageId, val executed: ExecutedTx?)
 
         var lastSubmittedTx: LastSubmittedTx? = null
             private set
@@ -284,12 +282,12 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         // advances the token and captures the last-submitted-tx in one place, so the two can't drift apart.
         private fun SubmittedTx.record(dbName: DatabaseName): SubmittedTx = also {
             recordTx(dbName, txId)
-            lastSubmittedTx = LastSubmittedTx(txId, null, null, null)
+            lastSubmittedTx = LastSubmittedTx(txId, null)
         }
 
         private fun ExecutedTx.record(dbName: DatabaseName): ExecutedTx = also {
             recordTx(dbName, txId)
-            lastSubmittedTx = LastSubmittedTx(txId, systemTime, committed, error)
+            lastSubmittedTx = LastSubmittedTx(txId, this)
         }
 
         private inline fun <T> Timer?.timed(body: () -> T): T {
@@ -347,7 +345,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
         private fun TransactionResult.toExecutedTx() =
             ExecutedTx(
-                txKey.txId, txKey.systemTime,
+                txKey,
                 this is TransactionResult.Committed,
                 (this as? TransactionResult.Aborted)?.error
             )
@@ -357,7 +355,8 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                 if (txRes.txKey.txId == txId) return txRes.toExecutedTx()
             }
 
-            val sql = "SELECT system_time, committed, error FROM xt.txs FOR ALL VALID_TIME WHERE _id = $txId"
+            val sql =
+                "SELECT _system_from AS ingest_time, system_time, committed, error FROM xt.txs FOR ALL VALID_TIME WHERE _id = $txId"
             return openStatement(parseStatement(sql), awaitDb)
                 .openQuery(QueryOpts(null, defaultTz))
                 .use { c ->
@@ -365,8 +364,11 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                     c.tryAdvance { rel ->
                         if (rel.rowCount > 0)
                             result = ExecutedTx(
-                                txId,
-                                (rel["system_time"].getObject(0) as ZonedDateTime).toInstant(),
+                                TransactionKey(
+                                    txId,
+                                    (rel["ingest_time"].getObject(0) as ZonedDateTime).toInstant(),
+                                    (rel["system_time"].getObject(0) as ZonedDateTime?)?.toInstant(),
+                                ),
                                 rel["committed"].getObject(0) as Boolean,
                                 rel["error"].getObject(0) as? Throwable,
                             )
@@ -1165,10 +1167,11 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             )
 
             return when (val variable = stmt.variable) {
-                // 0 rows until this connection's first submit; system_time/committed/error null for a fire-and-forget submit
+                // 0 rows until this connection's first submit; ingest_time/system_time/committed/error null for a fire-and-forget submit
                 "latest_submitted_tx" -> show(
                     linkedMapOf(
                         "tx_id" to VectorType.maybe(VectorType.I64),
+                        "ingest_time" to VectorType.maybe(VectorType.INSTANT),
                         "system_time" to VectorType.maybe(VectorType.INSTANT),
                         "committed" to VectorType.maybe(VectorType.BOOL),
                         "error" to VectorType.maybe(VectorType.TRANSIT),
@@ -1178,8 +1181,10 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                     lastSubmittedTx?.let {
                         listOf(
                             mapOf(
-                                "tx_id" to it.txId, "system_time" to it.systemTime,
-                                "committed" to it.committed, "error" to it.error,
+                                "tx_id" to it.txId,
+                                "ingest_time" to it.executed?.txKey?.ingestTime,
+                                "system_time" to it.executed?.txKey?.systemTime,
+                                "committed" to it.executed?.committed, "error" to it.executed?.error,
                                 "await_token" to effectiveAwaitToken
                             )
                         )
@@ -1198,6 +1203,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                     linkedMapOf(
                         "db_name" to VectorType.UTF8, "part" to VectorType.I32,
                         "tx_id" to VectorType.maybe(VectorType.I64),
+                        "ingest_time" to VectorType.maybe(VectorType.INSTANT),
                         "system_time" to VectorType.maybe(VectorType.INSTANT)
                     )
                 ) {
@@ -1206,7 +1212,8 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                         txs.mapIndexed { part, txKey ->
                             mapOf(
                                 "db_name" to dbName, "part" to part,
-                                "tx_id" to txKey?.txId, "system_time" to txKey?.systemTime
+                                "tx_id" to txKey?.txId, "ingest_time" to txKey?.ingestTime,
+                                "system_time" to txKey?.systemTime
                             )
                         }
                     }

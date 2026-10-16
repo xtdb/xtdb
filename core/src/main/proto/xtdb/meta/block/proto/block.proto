@@ -36,7 +36,10 @@ message TableBlock {
 
 message TxKey {
     int64 tx_id = 1;
-    int64 system_time = 2;
+    // Absent where the tx wrote no data rows.
+    int64 system_time = 2 [features.field_presence = EXPLICIT];
+    // Absent: the tx's ingest time is its system_time.
+    int64 ingest_time = 3 [features.field_presence = EXPLICIT];
 }
 
 message TableEntry {
@@ -75,4 +78,8 @@ message Block {
     // boundary knows the next position its term expects. Absent for blocks written before
     // this field, or whose boundary carried none. See #6105.
     int64 boundary_term_seq = 10;
+
+    // The latest system time any tx took up to latest_completed_tx; absent until one wrote data rows.
+    // Where latest_completed_tx has no ingest_time, it is latest_completed_tx's system_time instead.
+    int64 latest_system_time = 11 [features.field_presence = EXPLICIT];
 }

@@ -13,13 +13,12 @@
            (xtdb.api ICursor)
            (xtdb.arrow Relation RelationReader VectorReader)
            (xtdb.block.proto Block TableBlock)
-           (xtdb.catalog TableCatalog)
+           (xtdb.catalog TableCatalog TableCatalogKt)
            (xtdb.database Database)
            (xtdb.log.proto TrieDetails)
            (xtdb.operator SelectionSpec)
            (xtdb.storage BufferPool)
            (xtdb.api TableRef)
-           (xtdb.time InstantUtil)
            (xtdb.trie Trie)
            (xtdb.util HyperLogLog StringUtil)))
 
@@ -111,7 +110,7 @@
   (let [has-tx? (.hasLatestCompletedTx block)]
     {"block_idx" (->lex-hex (.getBlockIndex block))
      "tx_id" (when has-tx? (.getTxId (.getLatestCompletedTx block)))
-     "system_time" (when has-tx? (InstantUtil/fromMicros (.getSystemTime (.getLatestCompletedTx block))))
+     "system_time" (when has-tx? (.getSystemTime (TableCatalogKt/toTransactionKey (.getLatestCompletedTx block))))
      "latest_processed_msg_id" (.getLatestProcessedMsgId block)
      "table_names" (pr-str (vec (.getTableNamesList block)))
      "boundary_replica_msg_id" (when (.hasBoundaryReplicaMsgId block) (.getBoundaryReplicaMsgId block))

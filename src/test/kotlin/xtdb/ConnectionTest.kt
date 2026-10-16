@@ -34,6 +34,7 @@ class ConnectionTest {
         every { db.awaitTxBlocking(any(), any()) } answers {
             TransactionResult.Committed(mockk<TransactionKey> {
                 every { txId } returns nextTxId
+                every { ingestTime } returns Instant.EPOCH
                 every { systemTime } returns Instant.EPOCH
             })
         }
@@ -146,9 +147,9 @@ class ConnectionTest {
 
         val last = conn.lastSubmittedTx!!
         assertEquals(13L, last.txId)
-        assertEquals(Instant.EPOCH, last.systemTime)
-        assertEquals(true, last.committed)
-        assertNull(last.error)
+        assertEquals(Instant.EPOCH, last.executed!!.txKey.systemTime)
+        assertEquals(true, last.executed!!.committed)
+        assertNull(last.executed!!.error)
     }
 
     @Test
@@ -160,8 +161,6 @@ class ConnectionTest {
 
         val last = conn.lastSubmittedTx!!
         assertEquals(17L, last.txId)
-        assertNull(last.systemTime)
-        assertNull(last.committed)
-        assertNull(last.error)
+        assertNull(last.executed)
     }
 }
