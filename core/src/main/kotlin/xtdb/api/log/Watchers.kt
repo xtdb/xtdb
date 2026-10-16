@@ -1,7 +1,6 @@
 package xtdb.api.log
 
 import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.future.await
 import xtdb.api.TransactionResult
 import xtdb.api.error.Interrupted
 import xtdb.api.TxId
@@ -13,6 +12,10 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentSkipListMap
 
 private val LOG = Watchers::class.logger
+
+private const val RECENT_SOURCE_TXS = 64
+
+private data class SourceTx(val srcMsgId: MessageId, val result: TransactionResult)
 
 /** @suppress */
 class Watchers(
@@ -31,8 +34,12 @@ class Watchers(
         override val latestSourceMsgId: MessageId,
         override val latestTxId: TxId,
         val latestTxResult: TransactionResult?,
+        val recentSourceTxs: List<SourceTx>,
         override val externalSourceToken: ExternalSourceToken? = null,
-    ) : State
+    ) : State {
+        fun sourceTxResult(srcMsgId: MessageId): TransactionResult? =
+            recentSourceTxs.lastOrNull { it.srcMsgId == srcMsgId }?.result
+    }
 
     private data class Failed(
         override val latestSourceMsgId: MessageId,
@@ -42,7 +49,7 @@ class Watchers(
     ) : State
 
     private val state =
-        MutableStateFlow<State>(Active(latestSourceMsgId, latestTxId, null, externalSourceToken))
+        MutableStateFlow<State>(Active(latestSourceMsgId, latestTxId, null, emptyList(), externalSourceToken))
 
     private fun State.activeOrThrow(): Active = when (this) {
         is Active -> this
@@ -61,18 +68,18 @@ class Watchers(
 
     // A waiter registers before reading the state, and a notify swaps the state before scanning the waiters,
     // so at least one of the two sees the other and the waiter can't be missed.
-    private val txWaiters = ConcurrentSkipListMap<TxId, CompletableFuture<TransactionResult?>>()
+    private val sourceTxWaiters = ConcurrentSkipListMap<MessageId, CompletableFuture<TransactionResult?>>()
 
-    private fun releaseTxWaiters(state: State) {
+    private fun releaseSourceTxWaiters(state: State) {
         val released = when (state) {
-            is Active -> txWaiters.headMap(state.latestTxId, true)
-            is Failed -> txWaiters
+            is Active -> sourceTxWaiters.headMap(state.latestSourceMsgId, true)
+            is Failed -> sourceTxWaiters
         }
 
-        for ((txId, waiter) in released) {
-            if (!released.remove(txId, waiter)) continue
+        for ((srcMsgId, waiter) in released) {
+            if (!released.remove(srcMsgId, waiter)) continue
             when (state) {
-                is Active -> waiter.complete(state.latestTxResult?.takeIf { it.txKey.txId == txId })
+                is Active -> waiter.complete(state.sourceTxResult(srcMsgId))
                 is Failed -> waiter.completeExceptionally(state.exception)
             }
         }
@@ -109,15 +116,20 @@ class Watchers(
                 "srcMsgId $srcMsgId < latestSourceMsgId ${it.latestSourceMsgId}"
             }
 
+            // an external-source tx carries the source position it resolved at without moving it,
+            // so only the tx submitted at a position moves the watermark onto it
+            val sourceTx = if (txResult != null && srcMsgId != null && srcMsgId > it.latestSourceMsgId) SourceTx(srcMsgId, txResult) else null
+
             it.copy(
                 latestSourceMsgId = srcMsgId ?: it.latestSourceMsgId,
                 latestTxId = txId ?: it.latestTxId,
                 latestTxResult = txResult ?: it.latestTxResult,
+                recentSourceTxs = sourceTx?.let { tx -> (it.recentSourceTxs + tx).takeLast(RECENT_SOURCE_TXS) } ?: it.recentSourceTxs,
                 externalSourceToken = extSourceToken ?: it.externalSourceToken,
             )
         }
 
-        if (txId != null) releaseTxWaiters(applied)
+        if (srcMsgId != null) releaseSourceTxWaiters(applied)
     }
 
     fun notifyError(exception: Throwable) {
@@ -131,30 +143,35 @@ class Watchers(
             )
         }
 
-        releaseTxWaiters(failed)
+        releaseSourceTxWaiters(failed)
     }
 
     /**
-     * Completes with the result of the transaction [txId] once it has been applied, or with null if the
-     * watermark passes [txId] without its result being the latest - a non-transaction position, or a result
-     * already superseded by the time the caller asked.
+     * Completes once the source position [srcMsgId] has been applied, with the result of the transaction submitted
+     * there - or with null if that position carried no transaction, or its result is no longer among the
+     * most recent few.
      * Fails with [IngestionStoppedException] if ingestion stops first.
      *
-     * Cancelling the returned future doesn't affect other callers awaiting the same transaction.
+     * Cancelling the returned future doesn't affect other callers awaiting the same position.
      */
-    fun awaitTxAsync(txId: TxId): CompletableFuture<TransactionResult?> {
-        val waiter = txWaiters.computeIfAbsent(txId) { CompletableFuture() }
-        releaseTxWaiters(state.value)
+    fun awaitSourceTxAsync(srcMsgId: MessageId): CompletableFuture<TransactionResult?> {
+        val waiter = sourceTxWaiters.computeIfAbsent(srcMsgId) { CompletableFuture() }
+        releaseSourceTxWaiters(state.value)
         return waiter.copy()
     }
 
-    suspend fun awaitTx(txId: TxId): TransactionResult? = awaitTxAsync(txId).await()
+    /**
+     * Returns the result of the transaction [txId] once it has been applied, or null if the watermark passes
+     * [txId] without its result being the latest.
+     */
+    suspend fun awaitTx(txId: TxId): TransactionResult? =
+        activeState.first { it.latestTxId >= txId }.latestTxResult?.takeIf { it.txKey.txId == txId }
 
     /** Fails every transaction still awaited, as the database is going away. */
     override fun close() {
         val closed = Interrupted("database closed", "xtdb/database-closed")
-        for ((txId, waiter) in txWaiters)
-            if (txWaiters.remove(txId, waiter)) waiter.completeExceptionally(closed)
+        for ((srcMsgId, waiter) in sourceTxWaiters)
+            if (sourceTxWaiters.remove(srcMsgId, waiter)) waiter.completeExceptionally(closed)
     }
 
     suspend fun awaitSource(srcMsgId: MessageId) {

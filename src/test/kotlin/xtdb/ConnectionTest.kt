@@ -30,7 +30,7 @@ class ConnectionTest {
     private fun connection(dbName: DatabaseName): Xtdb.Connection {
         db = mockk()
         every { db.submitTxBlocking(any(), any()) } answers { nextTxId }
-        every { db.awaitTxAsync(any()) } answers {
+        every { db.awaitSourceTxAsync(any()) } answers {
             CompletableFuture.completedFuture(TransactionResult.Committed(mockk<TransactionKey> {
                 every { txId } returns nextTxId
                 every { ingestTime } returns Instant.EPOCH

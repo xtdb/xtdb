@@ -124,8 +124,8 @@ class Database(
     /** Whether an ingestion error here should take the whole node out of service. */
     val isCritical: Boolean get() = name == "xtdb" || config.critical
 
-    fun awaitTxAsync(txId: Long): CompletableFuture<TransactionResult?> =
-        if (isIndexing) watchers.awaitTxAsync(txId)
+    fun awaitSourceTxAsync(srcMsgId: MessageId): CompletableFuture<TransactionResult?> =
+        if (isIndexing) watchers.awaitSourceTxAsync(srcMsgId)
         else CompletableFuture.failedFuture(IllegalStateException("log processor not initialised"))
 
     fun awaitTxBlocking(txId: Long, timeout: Duration? = null): TransactionResult? =

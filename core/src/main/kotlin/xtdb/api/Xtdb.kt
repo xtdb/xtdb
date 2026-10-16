@@ -336,9 +336,9 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         fun submitTx(ops: List<TxOp>, opts: TxOpts = TxOpts()): Future<ExecutedTx> =
             awaitSubmitted(metrics?.txSubmitTimer.timed { doSubmit(ops, opts) }, opts.dbName ?: dbName)
 
-        private fun awaitSubmitted(txId: MessageId, awaitDb: DatabaseName): Future<ExecutedTx> {
-            recordSubmitted(awaitDb, txId)
-            return awaitTxAsync(txId, awaitDb)
+        private fun awaitSubmitted(srcMsgId: MessageId, awaitDb: DatabaseName): Future<ExecutedTx> {
+            recordSubmitted(awaitDb, srcMsgId)
+            return awaitTxAsync(srcMsgId, awaitDb)
         }
 
         /** The transaction goes to [TxOpts.dbName] (default [dbName]) and may only refer to tables within it — see [Connection]. */
@@ -364,11 +364,11 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                 throw e.cause ?: e
             }
 
-        private fun awaitTx(txId: MessageId, awaitDb: DatabaseName = dbName): ExecutedTx =
-            awaitTxAsync(txId, awaitDb).getUnwrapped()
+        private fun awaitTx(srcMsgId: MessageId, awaitDb: DatabaseName = dbName): ExecutedTx =
+            awaitTxAsync(srcMsgId, awaitDb).getUnwrapped()
 
-        private fun awaitTxAsync(txId: MessageId, awaitDb: DatabaseName): Future<ExecutedTx> =
-            ExecutedTxFuture(db(awaitDb).awaitTxAsync(txId)) { lookUpTx(txId, awaitDb) }
+        private fun awaitTxAsync(srcMsgId: MessageId, awaitDb: DatabaseName): Future<ExecutedTx> =
+            ExecutedTxFuture(db(awaitDb).awaitSourceTxAsync(srcMsgId)) { lookUpTx(srcMsgId, awaitDb) }
 
         // on a connection of its own: the reader of a submitted tx's future needn't be this connection's thread
         private fun lookUpTx(txId: MessageId, awaitDb: DatabaseName): ExecutedTx =

@@ -115,18 +115,18 @@ class WatchersTest {
         TransactionResult.Committed(Instant.EPOCH.plusSeconds(txId).let { TransactionKey(txId, it, it) })
 
     @Test
-    fun `a waiter for the latest applied tx completes at once with its result`() {
+    fun `a waiter for a recently applied tx completes at once with its result`() {
         val watchers = Watchers(latestTxId = 3, latestSourceMsgId = 3)
         watchers.notifyApplied(4, committed(4))
 
-        assertEquals(committed(4), watchers.awaitTxAsync(4).getNow(null))
+        assertEquals(committed(4), watchers.awaitSourceTxAsync(4).getNow(null))
     }
 
     @Test
     fun `cancelling one waiter leaves another on the same tx waiting`() {
         val watchers = Watchers(latestTxId = 3, latestSourceMsgId = 3)
-        val cancelled = watchers.awaitTxAsync(4)
-        val waiting = watchers.awaitTxAsync(4)
+        val cancelled = watchers.awaitSourceTxAsync(4)
+        val waiting = watchers.awaitSourceTxAsync(4)
 
         cancelled.cancel(true)
         watchers.notifyApplied(4, committed(4))
@@ -140,14 +140,14 @@ class WatchersTest {
         val ex = Exception("test")
         watchers.notifyError(ex)
 
-        assertThrows<ExecutionException> { watchers.awaitTxAsync(4).get(1, TimeUnit.SECONDS) }
+        assertThrows<ExecutionException> { watchers.awaitSourceTxAsync(4).get(1, TimeUnit.SECONDS) }
             .also { assertEquals(ex, it.cause?.cause) }
     }
 
     @Test
     fun `closing fails every pending waiter`() {
         val watchers = Watchers(latestTxId = 3, latestSourceMsgId = 3)
-        val waiter = watchers.awaitTxAsync(4)
+        val waiter = watchers.awaitSourceTxAsync(4)
 
         watchers.close()
 
@@ -164,12 +164,36 @@ class WatchersTest {
             for (txId in 1..txCount) watchers.notifyApplied(txId, committed(txId))
         }
 
-        val waiters = (1..txCount).map { txId -> txId to watchers.awaitTxAsync(txId) }
+        val waiters = (1..txCount).map { txId -> txId to watchers.awaitSourceTxAsync(txId) }
         applier.join()
 
         for ((txId, waiter) in waiters) {
             val res = waiter.get(1, TimeUnit.SECONDS)
             if (res != null) assertEquals(committed(txId), res)
         }
+    }
+
+    @Test
+    fun `a waiter registered after later txs applied still gets its tx's result`() {
+        val watchers = Watchers(latestTxId = 3, latestSourceMsgId = 3)
+        for (txId in 4L..10L) watchers.notifyApplied(txId, committed(txId))
+
+        assertEquals(committed(4), watchers.awaitSourceTxAsync(4).getNow(null))
+    }
+
+    @Test
+    fun `an external-source tx isn't taken for the tx submitted at its source position`() {
+        val watchers = Watchers(latestTxId = 3, latestSourceMsgId = 3)
+        watchers.notifyApplied(3, committed(4))
+
+        assertNull(watchers.awaitSourceTxAsync(3).getNow(committed(0)))
+    }
+
+    @Test
+    fun `a source position that carried no tx completes with no result`() {
+        val watchers = Watchers(latestTxId = 3, latestSourceMsgId = 3)
+        watchers.notifyApplied(4)
+
+        assertNull(watchers.awaitSourceTxAsync(4).getNow(committed(0)))
     }
 }
