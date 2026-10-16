@@ -30,6 +30,7 @@ class InMemoryBucket(
     // so a plain TreeMap would corrupt under concurrent mutation — the same reason `calls` is synchronized.
     val buffers: NavigableMap<Path, ByteBuffer> = ConcurrentSkipListMap()
 ) {
+    val id: UUID = UUID.randomUUID()
 
     /**
      * A store that has accepted a write it will never answer (#5850).

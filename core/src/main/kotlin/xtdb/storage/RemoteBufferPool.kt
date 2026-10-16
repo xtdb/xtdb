@@ -28,7 +28,6 @@ import xtdb.arrow.ArrowUtil.toByteBuffer
 import xtdb.arrow.Relation
 import xtdb.cache.DiskCache
 import xtdb.cache.MemoryCache
-import xtdb.database.DatabaseName
 import xtdb.multipart.SupportsMultipart
 import xtdb.multipart.SupportsMultipart.Companion.uploadMultipartBuffers
 import xtdb.trie.FileSize
@@ -44,12 +43,10 @@ import kotlin.io.path.fileSize
 internal class RemoteBufferPool(
     allocator: BufferAllocator,
     val objectStore: ObjectStore,
-    val memoryCache: MemoryCache,
-    val diskCache: DiskCache,
+    private val memoryCache: MemoryCache.Scope,
+    private val diskCache: DiskCache.Scope,
     meterRegistry: MeterRegistry? = null,
     override val epoch: StorageEpoch,
-    dbName: DatabaseName,
-    partition: Int,
 ) : BufferPool, IEvictBufferTest, Closeable {
 
     private val allocator = allocator.openChildAllocator("buffer-pool")
@@ -63,11 +60,6 @@ internal class RemoteBufferPool(
     private val diskCacheMisses: Counter? = meterRegistry?.counter("disk-cache-misses")
     private val networkWrite: Counter? = meterRegistry?.counter("buffer-pool.network.write")
     private val networkRead: Counter? = meterRegistry?.counter("buffer-pool.network.read")
-
-    // we scope the cache keys by dbName/partition as the caches are shared between multiple
-    // databases (and, at N>1, multiple partitions of the same database)
-    // the caches themselves have no knowledge of this
-    private val cacheRootPath = dbName.asPath.resolve(partition.toString())
 
     companion object {
         internal var minMultipartPartSize = 5 * 1024 * 1024
@@ -129,20 +121,20 @@ internal class RemoteBufferPool(
         }
 
     override fun getByteArray(key: Path): ByteArray = runBlocking {
-        memoryCache.get(cacheRootPath.resolve(key)) { path ->
+        memoryCache.get(key) { k ->
             memCacheMisses?.increment()
-            diskCache.get(path) { k, tmpFile ->
+            diskCache.get(k) { _, tmpFile ->
                 diskCacheMisses?.increment()
-                getObject(cacheRootPath.relativize(k), tmpFile)
+                getObject(k, tmpFile)
             }.thenApply { entry -> Pair(entry.path, entry) }.await()
         }.use { it.toByteArray() }
     }
 
     override fun getFooter(key: Path): ArrowFooter = arrowFooterCache.get(key) {
         diskCache
-            .get(cacheRootPath.resolve(key)) { k, tmpFile ->
+            .get(key) { k, tmpFile ->
                 diskCacheMisses?.increment()
-                getObject(cacheRootPath.relativize(k), tmpFile)
+                getObject(k, tmpFile)
             }.get()
             .use { entry -> entry.path.openReadableChannel().readArrowFooter() }
     }
@@ -155,13 +147,13 @@ internal class RemoteBufferPool(
             ?: throw IndexOutOfBoundsException("Record batch index out of bounds of arrow file")
 
         return memoryCache.get(
-            cacheRootPath.resolve(key),
+            key,
             MemoryCache.Slice(arrowBlock.offset, arrowBlock.metadataLength + arrowBlock.bodyLength)
-        ) { path ->
+        ) { k ->
             memCacheMisses?.increment()
-            diskCache.get(path) { k, tmpFile ->
+            diskCache.get(k) { _, tmpFile ->
                 diskCacheMisses?.increment()
-                getObject(cacheRootPath.relativize(k), tmpFile)
+                getObject(k, tmpFile)
             }.thenApply { entry -> Pair(entry.path, entry) }.await()
         }.use { arrowBuf ->
             arrowBuf.arrowBufToRecordBatch(
@@ -197,7 +189,7 @@ internal class RemoteBufferPool(
                             objectStore.uploadArrowFile(key, tmpPath)
                             networkWrite?.increment(size.toDouble())
 
-                            diskCache.put(cacheRootPath.resolve(key), tmpPath)
+                            diskCache.put(key, tmpPath)
                             return size
                         }
 
