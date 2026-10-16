@@ -99,4 +99,5 @@ private fun leastUpperBound2(left: Mono, right: Mono): Mono? =
 fun leastUpperBound(types: Collection<VectorType>): Mono? =
     types
         .flatMap { it.legs }
-        .reduceOrNull { l, r -> leastUpperBound2(l, r) ?: return null }
+        .ifEmpty { listOf(VectorType.Null) }
+        .reduce { l, r -> leastUpperBound2(l, r) ?: return null }
