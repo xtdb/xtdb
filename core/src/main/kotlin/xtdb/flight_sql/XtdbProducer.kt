@@ -117,7 +117,9 @@ private fun Throwable.asFlightException(): FlightRuntimeException =
 private fun Xtdb.Connection.LastSubmittedTx.toCommitResult(awaitToken: String?) = Result(
     encodeToBytes(
         mapOf(
-            "txId" to txId, "systemTime" to systemTime, "committed" to committed, "error" to error,
+            "txId" to (executed?.txId ?: srcMsgId),
+            "ingestTime" to executed?.txKey?.ingestTime, "systemTime" to executed?.txKey?.systemTime,
+            "committed" to executed?.committed, "error" to executed?.error,
             "awaitToken" to awaitToken
         )
     )
@@ -719,7 +721,8 @@ class XtdbProducer(
          * A commit that submits a transaction sends one result, ahead of completion or of the commit's error, as a
          * JSON object:
          * - `txId`;
-         * - `systemTime` and `committed`, both null for an async commit, which doesn't wait for the outcome;
+         * - `ingestTime`, `systemTime` and `committed`, all null for an async commit, which doesn't wait for the outcome;
+         *   `systemTime` is also null for a transaction that wrote no data rows - DDL, aborted or empty;
          * - `error`, null unless the transaction aborted: its `category` (an anomaly category, or `error` for any
          *   other throwable), and `code`, `message` and `data` where present;
          * - `awaitToken`, which bounds a read to one that sees this transaction.

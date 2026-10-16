@@ -50,8 +50,12 @@
                    :numbers {:min 0.0, :max 8835.0}}
                   {:col-name "system_time",
                    :root-col? true,
+                   :count 5,
+                   :date-times {:min 1.5778368E9, :max 1.5781824E9}}
+                  {:col-name "src_msg_id",
+                   :root-col? true,
                    :count 6,
-                   :date-times {:min 1.5778368E9, :max 1.5782688E9}}
+                   :numbers {:min 0.0, :max 8835.0}}
                   {:col-name "committed",
                    :root-col? true,
                    :count 6,

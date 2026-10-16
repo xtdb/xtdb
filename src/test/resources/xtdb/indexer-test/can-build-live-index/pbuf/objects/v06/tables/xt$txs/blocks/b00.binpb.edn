@@ -1,22 +1,24 @@
 {:row-count 6,
  :fields
  {"_id" #xt/field {"_id" :i64},
-  "system_time" #xt/field {"system_time" :instant},
+  "system_time" #xt/field {"system_time" [:? :instant]},
+  "src_msg_id" #xt/field {"src_msg_id" :i64},
   "committed" #xt/field {"committed" :bool},
   "user_metadata" #xt/field {"user_metadata" [:? :struct]},
   "error" #xt/field {"error" [:? :transit]}},
  :hlls
  {"_id" [-7113863 6.01764709272061],
-  "system_time" [-2034527697 6.01764709272061],
+  "system_time" [1604109904 5.012246913769684],
+  "src_msg_id" [-7113863 6.01764709272061],
   "committed" [1743138479 1.0004885993744506],
   "user_metadata" [1742602241 0.0],
-  "error" [456783840 1.0004885993744506]},
+  "error" [2031421631 1.0004885993744506]},
  :partitions
  [{:level 0,
    :part [],
    :tries
    [{:trie-key "l00-rc-b00",
-     :data-file-size 3534,
+     :data-file-size 3806,
      :trie-metadata
      {:min-valid-from #xt/instant "2020-01-01T00:00:00Z",
       :max-valid-from #xt/instant "2020-01-06T00:00:00Z",

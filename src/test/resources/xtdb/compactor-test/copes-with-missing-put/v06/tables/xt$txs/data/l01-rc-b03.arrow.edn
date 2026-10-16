@@ -9,6 +9,7 @@
                 [:struct
                  {"_id" :i64,
                   "system_time" :instant,
+                  "src_msg_id" :i64,
                   "committed" :bool,
                   "user_metadata" [:? :struct],
                   "error" [:? :transit]}],
@@ -22,6 +23,7 @@
     #xt/tagged [:put
                 {:xt/id 4448,
                  :system-time #xt/zdt "2020-01-04T00:00Z[UTC]",
+                 :src-msg-id 4448,
                  :committed true}],
     :xt/iid #bytes "513c8a53849605977fe10894e2bab6ac"}
    {:xt/system-from #xt/zdt "2020-01-01T00:00Z[UTC]",
@@ -31,6 +33,7 @@
     #xt/tagged [:put
                 {:xt/id 0,
                  :system-time #xt/zdt "2020-01-01T00:00Z[UTC]",
+                 :src-msg-id 0,
                  :committed true}],
     :xt/iid #bytes "a4e167a76a05add8a8654c169b07b044"}
    {:xt/system-from #xt/zdt "2020-01-02T00:00Z[UTC]",
@@ -40,6 +43,7 @@
     #xt/tagged [:put
                 {:xt/id 1858,
                  :system-time #xt/zdt "2020-01-02T00:00Z[UTC]",
+                 :src-msg-id 1858,
                  :committed true}],
     :xt/iid #bytes "a7d503d21b1f1706261dec553f74bde7"}
    {:xt/system-from #xt/zdt "2020-01-03T00:00Z[UTC]",
@@ -49,5 +53,6 @@
     #xt/tagged [:put
                 {:xt/id 3155,
                  :system-time #xt/zdt "2020-01-03T00:00Z[UTC]",
+                 :src-msg-id 3155,
                  :committed true}],
     :xt/iid #bytes "f932c8ef922689f028084c35fdbdb6e8"}])}

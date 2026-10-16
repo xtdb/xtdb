@@ -248,8 +248,9 @@
       (err/fault code message data))))
 
 (defn- ->commit-outcome [^Result result]
-  (let [{:strs [txId systemTime error awaitToken]} (JsonSerde/decode (String. (.getBody result) StandardCharsets/UTF_8))]
+  (let [{:strs [txId ingestTime systemTime error awaitToken]} (JsonSerde/decode (String. (.getBody result) StandardCharsets/UTF_8))]
     {:tx-id txId
+     :ingest-time (some-> ingestTime time/->instant)
      :system-time (some-> systemTime time/->instant)
      :error (some-> error ->anomaly)
      :await-token awaitToken}))
@@ -317,15 +318,16 @@
 
   (-submit-tx [this tx-ops opts]
     (xtp/check-no-database this opts)
-    {:tx-id (:tx-id (submit-tx* allocator client flight-client tx-ops (assoc opts :async? true)))})
+    (let [{:keys [tx-id await-token]} (submit-tx* allocator client flight-client tx-ops (assoc opts :async? true))]
+      (xtp/lazy-tx-future #(xtp/await-tx-key this tx-id await-token))))
 
   (-execute-tx [this tx-ops opts]
     (xtp/check-no-database this opts)
-    (let [{:keys [tx-id system-time error]} (submit-tx* allocator client flight-client tx-ops (assoc opts :async? false))]
+    (let [{:keys [tx-id ingest-time system-time error]} (submit-tx* allocator client flight-client tx-ops (assoc opts :async? false))]
       (when error
         (throw error))
 
-      (serde/->TxKey tx-id system-time)))
+      (serde/->TxKey tx-id ingest-time system-time)))
 
   (-status [this] (xtp/build-status this))
 

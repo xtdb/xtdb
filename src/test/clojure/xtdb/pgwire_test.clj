@@ -1190,9 +1190,9 @@
            (q conn ["SELECT version, _valid_from, _valid_to FROM foo"])))
 
     (t/is (= {:sql-state "0B000",
-              :message "system-time (2024-01-01T00:00:00Z) is after the latest completed tx (#xt/tx-key {:tx-id 0, :system-time #xt/instant \"2020-01-01T00:00:00Z\"})",
+              :message "system-time (2024-01-01T00:00:00Z) is after the latest completed tx (#xt/tx-key {:tx-id 0, :ingest-time #xt/instant \"2020-01-01T00:00:00Z\", :system-time #xt/instant \"2020-01-01T00:00:00Z\"})",
               :detail #xt/illegal-arg [:xtdb/unindexed-tx
-                                       "system-time (2024-01-01T00:00:00Z) is after the latest completed tx (#xt/tx-key {:tx-id 0, :system-time #xt/instant \"2020-01-01T00:00:00Z\"})"
+                                       "system-time (2024-01-01T00:00:00Z) is after the latest completed tx (#xt/tx-key {:tx-id 0, :ingest-time #xt/instant \"2020-01-01T00:00:00Z\", :system-time #xt/instant \"2020-01-01T00:00:00Z\"})"
                                        {:latest-completed-tx #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"},
                                         :system-time #xt/instant "2024-01-01T00:00:00Z"}]}
              (reading-ex
@@ -1514,9 +1514,10 @@
     (t/is (= [{:xt/id 2, :committed false,
                :error #xt/error [:conflict :xtdb/assert-failed "Assert failed"
                                  {:sql "ASSERT 1 = (SELECT COUNT(*) FROM foo)", :tx-op-idx 0
-                                  :tx-key #xt/tx-key {:tx-id 2, :system-time #xt/instant "2020-01-03T00:00:00Z"}}]}
-              {:xt/id 1, :committed true}
-              {:xt/id 0, :committed true}]
+                                  :tx-key #xt/tx-key {:tx-id 2, :system-time #xt/instant "2020-01-03T00:00:00Z"}}]
+               :src-msg-id 2}
+              {:xt/id 1, :committed true, :src-msg-id 1}
+              {:xt/id 0, :committed true, :src-msg-id 0}]
              (q conn ["SELECT * EXCLUDE system_time FROM xt.txs"])))))
 
 (deftest test-untyped-null-type
@@ -2004,7 +2005,7 @@
     (t/is (= [{:await-token (basis/->tx-basis-str {"xtdb" [0]})}]
              (q conn ["SHOW AWAIT_TOKEN"])))
 
-    (t/is (= [{:db-name "xtdb", :part 0, :tx-id 0, :system-time #xt/zdt "2020-01-01Z[UTC]"}]
+    (t/is (= [{:db-name "xtdb", :part 0, :tx-id 0, :ingest-time #xt/zdt "2020-01-01Z[UTC]", :system-time #xt/zdt "2020-01-01Z[UTC]"}]
              (q conn ["SHOW LATEST_COMPLETED_TXS"])))
 
     (jdbc/execute! conn ["INSERT INTO foo (_id) VALUES (2)"])
@@ -2017,7 +2018,7 @@
     (t/is (= [{:await-token (basis/->tx-basis-str {"xtdb" [0]})}]
              (q conn ["SHOW AWAIT_TOKEN"])))
 
-    (t/is (= [{:db-name "xtdb", :part 0, :tx-id 1, :system-time #xt/zdt "2020-01-02Z[UTC]"}]
+    (t/is (= [{:db-name "xtdb", :part 0, :tx-id 1, :ingest-time #xt/zdt "2020-01-02Z[UTC]", :system-time #xt/zdt "2020-01-02Z[UTC]"}]
              (q conn ["SHOW LATEST_COMPLETED_TXS"])))
 
     (jdbc/execute! conn ["INSERT INTO foo (_id) VALUES (2)"])
@@ -2046,7 +2047,7 @@
 
     (jdbc/execute! conn ["INSERT INTO users RECORDS ?" {:xt/id "jms", :given-name "James"}])
 
-    (t/is (= [{:tx-id 0, :system-time #xt/zdt "2020-01-01T00:00Z[UTC]", :committed true,
+    (t/is (= [{:tx-id 0, :ingest-time #xt/zdt "2020-01-01T00:00Z[UTC]", :system-time #xt/zdt "2020-01-01T00:00Z[UTC]", :committed true,
                :await-token (basis/->tx-basis-str {"xtdb" [0]})}]
              (q conn ["SHOW LATEST_SUBMITTED_TX"])))
 
@@ -2055,7 +2056,7 @@
 
     (t/is (thrown? PSQLException (jdbc/execute! conn ["ASSERT FALSE"])))
 
-    (t/is (= [{:tx-id 1, :system-time #xt/zdt "2020-01-02T00:00Z[UTC]", :committed false,
+    (t/is (= [{:tx-id 1, :ingest-time #xt/zdt "2020-01-02T00:00Z[UTC]", :committed false,
                :error #xt/error [:conflict :xtdb/assert-failed "Assert failed"
                                  {:sql "ASSERT FALSE", :tx-op-idx 0,
                                   :tx-key #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-02T00:00:00Z"}}]
@@ -2647,14 +2648,15 @@ ORDER BY t.oid DESC LIMIT 1"
 
     (t/is (= [{:xt/id 0,
                :committed true,
+               :src-msg-id 0,
                :system-time (time/->zdt #inst "2020-01-01")}
               {:xt/id 1,
                :committed false,
                :error #xt/illegal-arg [:invalid-system-time
                                        "specified system-time must be later than current tx"
-                                       {:tx-key #xt/tx-key {:tx-id 1, :system-time #xt/instant "2019-01-01T00:00:00Z"}
-                                        :latest-completed-tx #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"}}],
-               :system-time (time/->zdt #inst "2020-01-02")}]
+                                       {:tx-key #xt/tx-key {:tx-id 1, :ingest-time #xt/instant "2020-01-02T00:00:00Z", :system-time #xt/instant "2019-01-01T00:00:00Z"}
+                                        :latest-completed-tx #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"}}]
+               :src-msg-id 1}]
 
              (jdbc/execute! conn ["SELECT * FROM xt.txs ORDER BY _id"]
                             {:builder-fn xt-jdbc/builder-fn})))))

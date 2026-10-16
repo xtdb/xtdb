@@ -18,24 +18,26 @@ import xtdb.tx.TxOpts
 import java.time.InstantSource
 import java.time.Instant
 import java.time.ZoneOffset
+import java.util.concurrent.CompletableFuture
 
 class ConnectionTest {
 
     private var nextTxId: MessageId = 0
 
+    private var resolvedTxId: MessageId? = null
+
     private lateinit var db: Database
     private lateinit var dbCat: Database.Catalog
 
-    // components mocked only to feed return values — submitTxBlocking yields the next tx id and
-    // awaitTxBlocking returns it committed; the assertions observe the connection's real await-token.
     private fun connection(dbName: DatabaseName): Xtdb.Connection {
         db = mockk()
-        every { db.submitTxBlocking(any(), any()) } answers { Xtdb.SubmittedTx(nextTxId) }
-        every { db.awaitTxBlocking(any(), any()) } answers {
-            TransactionResult.Committed(mockk<TransactionKey> {
-                every { txId } returns nextTxId
+        every { db.submitTxBlocking(any(), any()) } answers { nextTxId }
+        every { db.awaitSourceTxAsync(any()) } answers {
+            CompletableFuture.completedFuture(TransactionResult.Committed(mockk<TransactionKey> {
+                every { txId } returns (resolvedTxId ?: nextTxId)
+                every { ingestTime } returns Instant.EPOCH
                 every { systemTime } returns Instant.EPOCH
-            })
+            }))
         }
 
         dbCat = mockk(relaxed = true)
@@ -145,10 +147,24 @@ class ConnectionTest {
         conn.executeTx(emptyList())
 
         val last = conn.lastSubmittedTx!!
-        assertEquals(13L, last.txId)
-        assertEquals(Instant.EPOCH, last.systemTime)
-        assertEquals(true, last.committed)
-        assertNull(last.error)
+        assertEquals(13L, last.srcMsgId)
+        assertEquals(Instant.EPOCH, last.executed!!.txKey.systemTime)
+        assertEquals(true, last.executed!!.committed)
+        assertNull(last.executed!!.error)
+    }
+
+    @Test
+    fun `executeTx records the source position it submitted at, not the tx-id it resolved to`() {
+        nextTxId = 5
+        resolvedTxId = 1001
+        val conn = connection("mydb")
+
+        conn.executeTx(emptyList())
+
+        assertEquals(mapOf("mydb" to listOf(5L)), tokenOf(conn.awaitToken))
+        val last = conn.lastSubmittedTx!!
+        assertEquals(5L, last.srcMsgId)
+        assertEquals(1001L, last.executed!!.txId)
     }
 
     @Test
@@ -159,9 +175,7 @@ class ConnectionTest {
         conn.submitTx(emptyList())
 
         val last = conn.lastSubmittedTx!!
-        assertEquals(17L, last.txId)
-        assertNull(last.systemTime)
-        assertNull(last.committed)
-        assertNull(last.error)
+        assertEquals(17L, last.srcMsgId)
+        assertNull(last.executed)
     }
 }

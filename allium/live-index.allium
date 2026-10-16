@@ -32,7 +32,7 @@
 --        THIS is where a committed transaction becomes queryable, and where an external caller's durability handle completes.
 --
 --   Resolution and apply never interleave, so a transaction is never half-applied.
---   Applying does not refresh the shared snapshot: that is a lazily-advanced cache, rebuilt on the next demanding read (see RefreshSharedSnapshot).
+--   Applying a transaction does not refresh the shared snapshot: that is a lazily-advanced cache, rebuilt on the next read whose basis it falls short of on either clock (see OpenExternalSnapshot).
 --
 --   A FOLLOWER has no resolver and no read-back: the messages it imports are already durable, so it advances the durable head directly.
 --
@@ -49,11 +49,12 @@
 --
 --   Two heads, two homes — callers choose:
 --     - the RESOLVED head, on the resolver: the highest transaction RESOLVED, and so staged.
---       Advanced at STAGE. Drives resolution — the next tx_id, system-time smoothing, read-your-writes.
+--       Advanced at STAGE. Drives resolution — the next tx_id, the smoothing of both clocks, read-your-writes.
 --     - the DURABLE head, on the live index: the highest transaction APPLIED, i.e. read back and imported.
 --       Advanced at APPLY. The query basis.
 --   Resolved LEADS; durable LAGS it by exactly everything staged but not yet applied.
 --   ("Applied" throughout this file means the far end — imported into the durable live index — never merely staged.)
+--   Each head is a TxHead: the transaction, and where the ingest and DML clocks stand after it (see db.allium, Two clocks per partition).
 --
 --   The queue belongs to the RESOLVER rather than to the live index, and that is forced by read-your-writes: a transaction resolving now must see every predecessor not yet applied, so whoever resolves has to hold the staged transactions.
 --   The live index stays the durable layer, and stays resolver-agnostic.
@@ -72,8 +73,10 @@
 ------------------------------------------------------------
 
 external entity TransactionKey {
+    -- A transaction's id, its ingest time and, iff it staged rows in a data table, its system time. See: db.allium TransactionKey.
     tx_id: Integer
-    system_time: Timestamp
+    ingest_time: Timestamp
+    system_time: Timestamp?
 }
 
 external entity TableRef {
@@ -106,6 +109,15 @@ external entity DurabilityHandle {}
 ------------------------------------------------------------
 -- Value Types
 ------------------------------------------------------------
+
+value TxHead {
+    -- A partition's latest completed transaction, and where its two clocks stand after it. See: db.allium TxHead.
+    latest_completed_tx: TransactionKey
+    system_time: Timestamp?   -- the DML clock, carried forward over transactions that take no system time
+
+    -- Derived
+    ingest_time: latest_completed_tx.ingest_time   -- the ingest clock
+}
 
 value ValidTimeRange {
     from: Timestamp
@@ -145,7 +157,8 @@ entity LiveIndex {
     --
     -- The RESOLVED head, which drives resolution, is NOT here: on a leader it lives on the resolver.
     -- The live index knows only the durable layer, and callers choose which head to read.
-    latest_completed_tx: TransactionKey?
+    head: TxHead?
+    latest_completed_tx: head?.latest_completed_tx
 
     rows_per_block: Integer
 
@@ -157,7 +170,7 @@ entity LiveIndex {
     tables: LiveTable with index = this
 
     -- The current shared external snapshot: a lazily-advanced cache, rebuilt only when a reader demands a basis it does not satisfy.
-    -- Apply and NextBlock leave it stale. Its basis is the durable head as of the last rebuild.
+    -- NextBlock and every transaction's apply leave it stale. Its basis is the durable head as of the last rebuild.
     shared_snap: Snapshot
 
     row_count: tables.sum(t => t.row_count)
@@ -175,9 +188,9 @@ entity TxResolver {
     index: LiveIndex
 
     -- RESOLVED head: the highest transaction RESOLVED, and so staged — not the highest applied.
-    -- Drives RESOLUTION: the next external-source tx_id is one past it, system-time smoothing reads it, and resolution layers read-your-writes over the staged transactions.
+    -- Drives RESOLUTION: on a database with an external source every transaction's tx_id is one past it, a transaction's system time is smoothed against its DML clock and its ingest time against its ingest clock (see db.allium TransactionKey), and resolution layers read-your-writes over the staged transactions.
     -- Seeded from the durable head, then advanced at STAGE rather than at apply, so it LEADS the durable head by exactly the transactions staged but not yet applied.
-    latest_completed_tx: TransactionKey?
+    head: TxHead?
 
     -- The staged transactions, oldest first (resolution order).
     -- Stage appends; ApplyResolvedTx removes the head after importing it.
@@ -226,7 +239,11 @@ entity OpenTx {
     -- Always present: open transactions exist only on a leader, where the resolver exists.
     resolver: TxResolver
 
-    tx_key: TransactionKey
+    -- The resolver decides both times before the transaction starts (see db.allium TransactionKey).
+    -- system_time is the one the transaction takes if it stages rows in a data table: the specified one, else ingest_time.
+    tx_id: Integer
+    ingest_time: Timestamp
+    system_time: Timestamp
     status: active | committed | aborted
 
     transitions status {
@@ -237,7 +254,14 @@ entity OpenTx {
 
     table_txs: LiveTableTx with transaction = this
 
-    system_from: tx_key.system_time
+    -- Decided as the transaction writes its own xt.txs row, from the rows it has staged by then.
+    -- It takes a system time iff it staged a row in a table other than an ingest table, and otherwise moves the ingest clock alone.
+    -- So a transaction that only defines (CREATE TABLE, GRANT, REVOKE), and one whose statements matched no rows, leave the DML clock where it was.
+    tx_key: TransactionKey{
+        tx_id: tx_id,
+        ingest_time: ingest_time,
+        system_time: if table_txs.any(tt => tt.wrote_data): system_time else: null
+    }
 }
 
 entity LiveTableTx {
@@ -248,6 +272,10 @@ entity LiveTableTx {
 
     rows: Set<Row>           -- uncommitted rows in this transaction
     row_count: rows.count
+
+    -- The ingest tables, xt.txs and xt.role_membership, are written at the ingest time and move no system time.
+    is_ingest_table: table_ref.schemaName = "xt" and (table_ref.tableName = "txs" or table_ref.tableName = "role_membership")
+    wrote_data: not is_ingest_table and row_count > 0
 }
 
 ------------------------------------------------------------
@@ -293,7 +321,7 @@ entity LiveTableTx {
 ------------------------------------------------------------
 
 entity Snapshot {
-    basis_tx: TransactionKey?
+    head: TxHead?
 
     table_snapshots: TableSnapshot with snapshot = this
 
@@ -352,14 +380,16 @@ default ValidTimeRange erase_valid_time = { from: MIN_TIMESTAMP, to: MAX_TIMESTA
 
 rule StartTransaction {
     -- Started by the resolver, which hands itself to the transaction so it can resolve against durable ⊕ staged (read-your-writes).
-    when: StartTransaction(index, resolver, tx_key)
+    when: StartTransaction(index, resolver, tx_id, ingest_time, system_time)
 
     requires: resolver.index = index
 
     ensures: OpenTx.created(
         index: index,
         resolver: resolver,
-        tx_key: tx_key,
+        tx_id: tx_id,
+        ingest_time: ingest_time,
+        system_time: system_time,
         status: active
     )
 }
@@ -387,6 +417,9 @@ rule GetTableTx {
 
 ------------------------------------------------------------
 -- Rules: Row operations
+--
+-- system_from_for(tx, table_ref) is the transaction's ingest_time for an ingest table (xt.txs, xt.role_membership), and its system_time for every other.
+-- A row in an ingest table also takes its valid-from at the ingest_time.
 ------------------------------------------------------------
 
 rule LogPut {
@@ -396,7 +429,7 @@ rule LogPut {
 
     ensures: table_tx.rows.add(Row{
         iid: iid,
-        system_from: table_tx.transaction.system_from,
+        system_from: system_from_for(table_tx.transaction, table_tx.table_ref),
         valid_time: valid_time,
         op: Op{ put: Put{ doc: doc } }
     })
@@ -409,7 +442,7 @@ rule LogDelete {
 
     ensures: table_tx.rows.add(Row{
         iid: iid,
-        system_from: table_tx.transaction.system_from,
+        system_from: system_from_for(table_tx.transaction, table_tx.table_ref),
         valid_time: valid_time,
         op: Op{ delete: Delete{} }
     })
@@ -422,7 +455,7 @@ rule LogErase {
 
     ensures: table_tx.rows.add(Row{
         iid: iid,
-        system_from: table_tx.transaction.system_from,
+        system_from: system_from_for(table_tx.transaction, table_tx.table_ref),
         valid_time: erase_valid_time,
         op: Op{ erase: Erase{} }
     })
@@ -446,16 +479,18 @@ rule CommitTransaction {
     requires: tx.status = active
 
     let resolver = tx.resolver
+    let tx_key = tx.tx_key
 
     ensures: tx.status = committed
-    ensures: resolver.latest_completed_tx = tx.tx_key
+    -- head_after(head, tx_key) is the head recording tx_key as its latest completed transaction, and the DML clock at tx_key.system_time where present, else where head left it.
+    ensures: resolver.head = head_after(resolver.head, tx_key)
 
     -- Stage the transaction at the tail, in resolution order, retaining its per-table rows.
     -- Tables the transaction wrote no rows to are skipped.
     ensures:
         let staged_tx = StagedTx.created(
             resolver: resolver,
-            tx_key: tx.tx_key,
+            tx_key: tx_key,
             durability: durability
         )
         for table_tx in tx.table_txs where table_tx.rows.count > 0:
@@ -474,7 +509,8 @@ rule AbortTransaction {
     ensures: tx.status = aborted
     -- The RESOLVED head tracks "resolved up to", not "successfully committed up to": an aborted transaction consumes a tx_id and advances the head, so the next tx_id is correct.
     -- It is staged and appended like any other, so it too is read back and applied.
-    ensures: tx.resolver.latest_completed_tx = tx.tx_key
+    -- Its record is written by a fresh transaction holding no rows but its xt.txs row, so it moves the ingest clock alone.
+    ensures: tx.resolver.head = head_after(tx.resolver.head, TransactionKey{ tx_id: tx.tx_id, ingest_time: tx.ingest_time, system_time: null })
 }
 
 ------------------------------------------------------------
@@ -507,7 +543,7 @@ rule ApplyResolvedTx {
     -- The head must match the transaction just read back; a mismatch is a fault.
     --
     -- The DURABLE head advance ALONE makes the transaction queryable.
-    -- The shared external snapshot is a lazily-advanced cache, rebuilt on the next demanding read, and is not refreshed here.
+    -- The shared external snapshot is a lazily-advanced cache, rebuilt on the next demanding read, so the apply leaves it stale.
     when: RecordApplied(resolver)
 
     requires: not resolver.is_empty
@@ -531,7 +567,7 @@ rule ApplyResolvedTx {
             live_table.rows.addAll(staged_table.rows)
 
         -- Advance the DURABLE head. The RESOLVED head passed this transaction at stage time.
-        index.latest_completed_tx = staged_tx.tx_key
+        index.head = head_after(index.head, staged_tx.tx_key)
 
         -- Complete an external caller's handle now that the transaction is durable, and last of all, so the caller unblocks after the transaction is queryable rather than before.
         if staged_tx.durability != null:
@@ -569,7 +605,8 @@ rule ResolverEnds {
 
 rule OpenExternalSnapshot {
     -- Called by queries outside any transaction.
-    -- min_basis is the caller's minimum read basis, and may be absent.
+    -- min_basis is the caller's minimum read basis for this partition, and may be absent.
+    -- It bounds both clocks, ingest_time and system_time, either of which may be absent.
     --
     -- The index holds a single shared snapshot, whose basis is the durable head as of its last rebuild and whose rows are the DURABLE live rows only.
     -- It is a lazily-advanced cache: where the caller has no minimum basis, or the cache already satisfies it, the cache is returned as it stands; otherwise it is rebuilt first.
@@ -579,7 +616,13 @@ rule OpenExternalSnapshot {
 
     ensures:
         -- Rebuild only when the cache is too stale for the requested basis.
-        if min_basis != null and index.shared_snap.basis_tx.system_time < min_basis:
+        -- The cache must reach min_basis on each clock it constrains; a cache whose head has not moved a constrained clock falls short of it.
+        let cached = index.shared_snap.head
+        let min_ingest = min_basis?.ingest_time
+        let min_system = min_basis?.system_time
+        let ingest_reached = min_ingest = null or (cached?.ingest_time != null and cached.ingest_time >= min_ingest)
+        let system_reached = min_system = null or (cached?.system_time != null and cached.system_time >= min_system)
+        if not (ingest_reached and system_reached):
             RefreshSharedSnapshot(index)
         index.shared_snap
 }
@@ -595,7 +638,9 @@ rule OpenTransactionSnapshot {
     requires: tx.status = active
 
     ensures:
-        let snap = Snapshot.created(basis_tx: tx.tx_key)
+        let snap = Snapshot.created(
+            head: TxHead{ latest_completed_tx: TransactionKey{ tx_id: tx.tx_id, ingest_time: tx.ingest_time, system_time: tx.system_time }, system_time: tx.system_time }
+        )
         let resolver = tx.resolver
 
         -- One TableSnapshot per table the transaction touched, over the transaction's own view — which already carries the applied rows and every staged predecessor's.
@@ -621,7 +666,7 @@ rule OpenTransactionSnapshot {
 
 rule RefreshSharedSnapshot {
     -- The rebuild primitive for the shared external snapshot.
-    -- NOT triggered by apply or NextBlock — the cache is advanced lazily.
+    -- NOT triggered by a transaction's apply or by NextBlock — the cache is advanced lazily.
     -- It is invoked by OpenExternalSnapshot where the cache is too stale for the requested basis, and out of band by compaction, which changes the trie catalog without advancing the durable head.
     -- Readers already holding the previous shared snapshot keep it, and it stays valid for as long as they do.
     when: RefreshSharedSnapshot(index)
@@ -629,7 +674,7 @@ rule RefreshSharedSnapshot {
     ensures:
         let new_snap = Snapshot.created(
             -- DURABLE basis: an external snapshot sees only durably-replicated transactions, never the RESOLVED head.
-            basis_tx: index.latest_completed_tx
+            head: index.head
         )
         for table in index.tables:
             TableSnapshot.created(

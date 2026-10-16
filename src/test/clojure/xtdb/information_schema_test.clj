@@ -28,6 +28,7 @@
                     [xtdb xt/txs _id :i64]
                     [xtdb xt/txs committed :bool]
                     [xtdb xt/txs error [:? :transit]]
+                    [xtdb xt/txs src_msg_id :i64]
                     [xtdb xt/txs system_time :instant]
                     [xtdb xt/txs user_metadata [:? :struct {}]]
                     ;; seeded but unused - declared columns read as the lattice bottom `Nothing`
@@ -96,7 +97,7 @@
                   (xt/q tu/*node* "SELECT column_name FROM information_schema.columns
                                    WHERE table_schema = 'xt' AND table_name = 'txs'")))]
     (let [seeded (txs-data-cols)]
-      (t/is (= #{"_id" "system_time" "committed" "user_metadata" "error"} seeded)
+      (t/is (= #{"_id" "system_time" "src_msg_id" "committed" "user_metadata" "error"} seeded)
             "fresh-node xt.txs exposes exactly the seeded data columns")
       (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 1}]])
       (t/is (= seeded (txs-data-cols))
@@ -135,7 +136,7 @@
                                                                   [txs "_valid_to" 5 1184 8]
                                                                   [txs "committed" 6 16 1]
                                                                   [txs "error" 7 16384 -1]
-                                                                  [txs "system_time" 8 1184 8]]]
+                                                                  [txs "system_time" 9 1184 8]]]
                   {:atttypmod -1,
                    :attrelid attrelid,
                    :attidentity "",
@@ -477,7 +478,7 @@
              :level 1, :trie-state "live", :data-file-size 1382}
 
             {:schema-name "xt", :table-name "txs", :trie-key "l01-rc-b00",
-             :level 1, :trie-state "live", :row-count 1, :data-file-size 2894,
+             :level 1, :trie-state "live", :row-count 1, :data-file-size 3078,
              :temporal-metadata {:min-valid-from (time/->zdt #inst "2020-01-01")
                                  :max-valid-from (time/->zdt #inst "2020-01-01")
                                  :min-valid-to (time/->zdt time/end-of-time)
@@ -504,6 +505,7 @@
             ["xt" "txs" "_id" :i64]
             ["xt" "txs" "committed" :bool]
             ["xt" "txs" "error" [:? :transit]]
+            ["xt" "txs" "src_msg_id" :i64]
             ["xt" "txs" "system_time" :instant]
             ["xt" "txs" "user_metadata" [:? :struct {}]]]
            (->> (xt/q tu/*node* "SELECT * FROM xt.live_columns ORDER BY schema_name, table_name, col_name")

@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Tag
+import xtdb.database.ClockBasis
 import xtdb.NodeBase
 import xtdb.NodeBase.Companion.openBase
 import xtdb.RepeatableSimulationTest
@@ -153,7 +154,7 @@ class LogProcessorSimTest : SimulationTestBase() {
                         is SimAction.Commit -> {
                             val table = openTx.table(docsTable)
                             for (id in action.rows) {
-                                table.writePut(mapOf("_id" to id, "tx_id" to openTx.txKey.txId))
+                                table.writePut(mapOf("_id" to id, "tx_id" to openTx.txId))
                             }
                             TxResult.Committed()
                         }
@@ -483,7 +484,7 @@ class LogProcessorSimTest : SimulationTestBase() {
     }
 
     private fun assertSnapshotHasNoAbortedRows(node: SimNode, abortedTxIds: Set<MessageId>) {
-        node.liveIndex.openSnapshot(node.liveIndex.latestCompletedTx?.systemTime).use { snap ->
+        node.liveIndex.openSnapshot(node.liveIndex.head?.let { ClockBasis(it.ingestTime, it.systemTime) }).use { snap ->
             assertEquals(
                 node.liveIndex.latestCompletedTx?.txId, snap.txBasis?.txId,
                 "snapshot basis should equal liveIndex.latestCompletedTx (seed=$currentSeed)"

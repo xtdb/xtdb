@@ -12,7 +12,6 @@ import org.apache.arrow.memory.BufferAllocator
 import xtdb.NodeBase
 import xtdb.api.TransactionKey
 import xtdb.api.TransactionResult
-import xtdb.api.Xtdb
 import xtdb.api.YAML_SERDE
 import xtdb.api.log.IngestionStoppedException
 import xtdb.api.log.Log
@@ -53,6 +52,7 @@ import io.micrometer.core.instrument.MeterRegistry
 import java.time.Duration
 import java.time.Instant
 import java.util.*
+import java.util.concurrent.CompletableFuture
 import xtdb.api.tx.ExternalSource
 
 private val LOG = Database::class.logger
@@ -89,11 +89,12 @@ class Database(
     val watchers: Watchers get() = partition0.watchers
     val compactorOrNull: Compactor.ForDatabase? get() = partition0.compactorOrNull
 
-    override fun openSnapshot(minBasis: List<Instant?>?): DatabaseSnapshot =
+    override fun openSnapshot(minBasis: List<ClockBasis>?): DatabaseSnapshot =
         DatabaseSnapshot(partitions.mapIndexed { idx, part -> part.openSnapshot(minBasis?.getOrNull(idx)) })
 
-    /** This database's read basis right now — latest-completed system-time per partition, in partition-index order. */
-    fun currentBasis(): List<Instant?> = partitions.map { it.liveIndex.latestCompletedTx?.systemTime }
+    /** This database's read basis right now — both clocks per partition, in partition-index order. */
+    fun currentBasis(): List<ClockBasis> =
+        partitions.map { part -> part.liveIndex.head.let { ClockBasis(it?.ingestTime, it?.systemTime) } }
 
     val tableCatalog: TableCatalog get() = partition0.tableCatalog
 
@@ -122,6 +123,10 @@ class Database(
 
     /** Whether an ingestion error here should take the whole node out of service. */
     val isCritical: Boolean get() = name == "xtdb" || config.critical
+
+    fun awaitSourceTxAsync(srcMsgId: MessageId): CompletableFuture<TransactionResult?> =
+        if (isIndexing) watchers.awaitSourceTxAsync(srcMsgId)
+        else CompletableFuture.failedFuture(IllegalStateException("log processor not initialised"))
 
     fun awaitTxBlocking(txId: Long, timeout: Duration? = null): TransactionResult? =
         runBlocking {
@@ -154,15 +159,7 @@ class Database(
         (partitions + listOf(logs, allocator)).closeAll()
     }
 
-    fun submitTxBlocking(ops: List<TxOp>, opts: TxOpts): Xtdb.SubmittedTx {
-        if (config.externalSource != null)
-            throw Incorrect(
-                "Cannot submit transactions to database '$name': it has an external source configured. " +
-                        "External-source databases use a separate txId sequence — submit through the source instead.",
-                "xtdb/submit-tx-to-external-source-db",
-                mapOf("db-name" to name)
-            )
-
+    fun submitTxBlocking(ops: List<TxOp>, opts: TxOpts): MessageId {
         val defaultTz = checkNotNull(opts.defaultTz) { "missing defaultTz" }
         val txMsg = SourceMessage.Tx(
             txOps = ops.toArrowBytes(allocator),
@@ -171,8 +168,7 @@ class Database(
             user = opts.user,
             userMetadata = opts.userMetadata?.let { serializeUserMetadata(allocator, it) }
         )
-        val meta = sourceLog.appendMessageBlocking(txMsg)
-        return Xtdb.SubmittedTx(meta.msgId)
+        return sourceLog.appendMessageBlocking(txMsg).msgId
     }
 
     fun sendFlushBlockMessage(): Log.MessageMetadata = runBlocking {
@@ -577,12 +573,10 @@ class Database(
 
         val primary: Database get() = databaseOrNull("xtdb")!!
 
-        // a read snapshot pinned to now: each database's latest-completed system-time per partition,
-        // encoded as a time-basis token, so a connection can pin a begin-time read basis.
         fun snapshotToken(): String =
-            latestCompletedTxs()
-                .mapValues { (_, txs) -> txs.map { it?.systemTime } }
-                .encodeTimeBasisToken()
+            databaseNames.mapNotNull { dbName -> databaseOrNull(dbName)?.let { dbName to it.currentBasis() } }
+                .toMap()
+                .encodeClockBasisToken()
 
         // each database's latest-completed tx per partition, surfaced through Xtdb.latestCompletedTxs and
         // pgwire's `SHOW LATEST_COMPLETED_TXS`. Partition order is positional, so it lines up with the

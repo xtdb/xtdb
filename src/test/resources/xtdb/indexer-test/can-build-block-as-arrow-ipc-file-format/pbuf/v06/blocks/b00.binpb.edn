@@ -1,6 +1,9 @@
 {:block-idx 0,
  :latest-completed-tx
- {:tx-id 4039, :system-time #xt/instant "2020-01-02T00:00:00Z"},
+ {:tx-id 4039,
+  :ingest-time #xt/instant "2020-01-02T00:00:00Z",
+  :system-time #xt/instant "2020-01-02T00:00:00Z"},
+ :latest-system-time #xt/instant "2020-01-02T00:00:00Z",
  :latest-processed-msg-id 8086,
  :table-names
  #{"xt/txs"

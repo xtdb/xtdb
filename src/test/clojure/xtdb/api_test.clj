@@ -18,7 +18,7 @@
 
 (t/deftest test-simple-query
   (let [tx (xt/execute-tx *node* [[:put-docs :docs {:xt/id :foo, :inst #inst "2021"}]])]
-    (t/is (= (serde/->TxKey 0 (time/->instant #inst "2020-01-01")) tx))
+    (t/is (= (serde/->TxKey 0 (time/->instant #inst "2020-01-01") (time/->instant #inst "2020-01-01")) tx))
 
     (t/is (= [{:e :foo, :inst (time/->zdt #inst "2021")}]
              (xt/q *node* '(from :docs [{:xt/id e} inst]))))))
@@ -36,7 +36,7 @@
   (let [tx (xt/execute-tx *node* [[:put-docs :docs {:xt/id :foo, :list [1 2 ["foo" "bar"]]}]
                                  [:sql "INSERT INTO docs (_id, list) VALUES ('bar', ARRAY[?, 2, 3 + 5])"
                                   [4]]])]
-    (t/is (= (serde/->TxKey 0 (time/->instant #inst "2020-01-01")) tx))
+    (t/is (= (serde/->TxKey 0 (time/->instant #inst "2020-01-01") (time/->instant #inst "2020-01-01")) tx))
 
     (t/is (= [{:id :foo, :list [1 2 ["foo" "bar"]]}
               {:id "bar", :list [4 2 8]}]
@@ -51,7 +51,7 @@
 
 (t/deftest round-trips-sets
   (let [tx (xt/execute-tx *node* [[:put-docs :docs {:xt/id :foo, :v #{1 2 #{"foo" "bar"}}}]])]
-    (t/is (= (serde/->TxKey 0 (time/->instant #inst "2020-01-01")) tx))
+    (t/is (= (serde/->TxKey 0 (time/->instant #inst "2020-01-01") (time/->instant #inst "2020-01-01")) tx))
 
     (t/is (= [{:id :foo, :v #{1 2 #{"foo" "bar"}}}]
              (xt/q *node* '(from :docs [{:xt/id id} v]))))
@@ -62,7 +62,7 @@
 (t/deftest round-trips-structs
   (let [tx (xt/execute-tx *node* [[:put-docs :docs {:xt/id :foo, :struct {:a 1, :b {:c "bar"}}}]
                                  [:put-docs :docs {:xt/id :bar, :struct {:a true, :d 42.0}}]])]
-    (t/is (= (serde/->TxKey 0 (time/->instant #inst "2020-01-01")) tx))
+    (t/is (= (serde/->TxKey 0 (time/->instant #inst "2020-01-01") (time/->instant #inst "2020-01-01")) tx))
 
     (t/is (= #{{:id :foo, :struct {:a 1, :b {:c "bar"}}}
                {:id :bar, :struct {:a true, :d 42.0}}}
@@ -109,7 +109,7 @@
 
         tx3 (xt/execute-tx *node* [[:put-docs :docs {:xt/id :baz}]])]
 
-    (t/is (= (serde/->TxKey 0 (time/->instant #inst "2012"))
+    (t/is (= (serde/->TxKey 0 (time/->instant #inst "2012") (time/->instant #inst "2012"))
              tx1))
 
     (letfn [(q-at [tx]
@@ -125,11 +125,10 @@
                 :system-time #xt/zoned-date-time "2012-01-01T00:00Z[UTC]",
                 :committed? true}
                {:tx-id 1,
-                :system-time #xt/zoned-date-time "2020-01-02T00:00Z[UTC]",
                 :committed? false,
                 :error #xt/error [:incorrect :invalid-system-time
                                   "specified system-time must be later than current tx"
-                                  {:tx-key #xt/tx-key {:tx-id 1, :system-time #xt/instant "2011-01-01T00:00:00Z"}
+                                  {:tx-key #xt/tx-key {:tx-id 1, :ingest-time #xt/instant "2020-01-02T00:00:00Z", :system-time #xt/instant "2011-01-01T00:00:00Z"}
                                    :latest-completed-tx #xt/tx-key {:tx-id 0, :system-time #xt/instant "2012-01-01T00:00:00Z"}}]}
                {:tx-id 2,
                 :system-time #xt/zoned-date-time "2020-01-03T00:00Z[UTC]",
@@ -147,12 +146,11 @@
 
   (t/is (= [{:v "a"}] (xt/q *node* "SELECT v FROM docs")))
 
-  (t/is (= [{:tx-id 1, :system-time #xt/zoned-date-time "2026-01-01T00:00:00.000001Z[UTC]"}]
-           (xt/q *node* "SELECT _id AS tx_id, system_time FROM xt.txs WHERE NOT committed"))
-        "the rejected tx takes the smoothed system-time, advancing the clock past the one it asked for")
+  (t/is (= [{:tx-id 1}]
+           (xt/q *node* "SELECT _id AS tx_id FROM xt.txs WHERE NOT committed")))
 
   (xt/execute-tx *node* [[:sql "INSERT INTO docs (_id, v) VALUES (1, 'c')"]]
-                 {:system-time #xt/instant "2026-01-01T00:00:00.000002Z"})
+                 {:system-time #xt/instant "2026-01-01T00:00:00.000001Z"})
 
   (t/is (= [{:v "c"}] (xt/q *node* "SELECT v FROM docs"))))
 
@@ -165,7 +163,7 @@
 (t/deftest test-sql-roundtrip
   (let [tx (xt/submit-tx *node* devs)]
 
-    (t/is (= {:tx-id 0} tx))
+    (t/is (= 0 (:tx-id @tx)))
 
     (t/is (= [{:name "James"}]
              (xt/q *node* "SELECT u.name FROM users u WHERE u.name = 'James'")))))
@@ -201,7 +199,7 @@
                          ["Alan" "Andrews", (time/->zdt #inst "2020"), nil]
                          ["Susan" "Smith", (time/->zdt #inst "2021") nil]}]
 
-      (t/is (= (serde/->TxKey 0 (time/->instant #inst "2020-01-01")) tx1))
+      (t/is (= (serde/->TxKey 0 (time/->instant #inst "2020-01-01") (time/->instant #inst "2020-01-01")) tx1))
 
       (t/is (= tx1-expected (all-users tx1)))
 
@@ -230,14 +228,14 @@
           (t/is (= tx1-expected (all-users tx1))))))))
 
 (deftest test-sql-insert
-  (t/is (= (serde/->TxKey 0 (time/->instant #inst "2020-01-01"))
+  (t/is (= (serde/->TxKey 0 (time/->instant #inst "2020-01-01") (time/->instant #inst "2020-01-01"))
            (xt/execute-tx *node*
                           [[:sql "INSERT INTO users (_id, name, _valid_from) VALUES (?, ?, ?)"
                             ["dave", "Dave", #inst "2018"]
                             ["claire", "Claire", #inst "2019"]]])))
 
 
-  (t/is (= (serde/->TxKey 1 (time/->instant #inst "2020-01-02"))
+  (t/is (= (serde/->TxKey 1 (time/->instant #inst "2020-01-02") (time/->instant #inst "2020-01-02"))
            (xt/execute-tx *node*
                           ["INSERT INTO people (_id, renamed_name)
                             SELECT users._id, users.name
@@ -247,7 +245,7 @@
   (t/is (= [{:renamed-name "Claire"}]
            (xt/q *node* "SELECT renamed_name FROM people")))
 
-  (t/is (= (serde/->TxKey 2 (time/->instant #inst "2020-01-03"))
+  (t/is (= (serde/->TxKey 2 (time/->instant #inst "2020-01-03") (time/->instant #inst "2020-01-03"))
            (xt/execute-tx *node*
                           ["INSERT INTO people (_id, renamed_name, _valid_from)
                             SELECT users._id, users.name, users._valid_from
@@ -261,7 +259,7 @@
   (let [tx (xt/submit-tx *node*
                          ["INSERT INTO foo (_id, _valid_from) VALUES ('foo', DATE '2018-01-01')"])]
 
-    (t/is (= {:tx-id 0} tx))
+    (t/is (= 0 (:tx-id @tx)))
 
     ;; the DATE is read in the node's default zone — UTC here, this node not configuring one
     (t/is (= [{:xt/id "foo", :xt/valid-from (time/->zdt #inst "2018")}]
@@ -708,6 +706,15 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
 
     (t/is (= expected (set (xt/q tu/*node* "SELECT * FROM foo"))))))
 
+(t/deftest a-submitted-tx-raises-its-error-on-deref
+  (t/is (anomalous? [:conflict :xtdb/assert-failed "boom"]
+                    @(xt/submit-tx tu/*node* ["ASSERT 1 = 2, 'boom'"]))
+        "in-process")
+
+  (t/is (anomalous? [:conflict :xtdb/assert-failed "boom"]
+                    @(xt/submit-tx (xt/client {:port (.getServerPort tu/*node*)}) ["ASSERT 1 = 2, 'boom'"]))
+        "over pgwire"))
+
 (t/deftest test-remote-client
   (let [client (xt/client {:port (.getServerPort tu/*node*)})]
     (xt/execute-tx client [[:put-docs :docs {:xt/id :foo, :name "Foo"}]])
@@ -721,7 +728,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
           "original node")
 
     (with-open [conn (jdbc/get-connection client)]
-      (t/is (= {:tx-id 1} (xt/submit-tx conn [[:put-docs :docs {:xt/id :bar, :name "Bar"}]])))
+      (t/is (= 1 (:tx-id @(xt/submit-tx conn [[:put-docs :docs {:xt/id :bar, :name "Bar"}]]))))
 
       (t/is (= [{:name "Bar", :xt/id :bar}
                 {:xt/id :foo, :name "Foo"}]

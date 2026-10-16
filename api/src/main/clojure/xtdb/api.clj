@@ -270,9 +270,10 @@
 
      \"UPDATE foo SET b = 1\"]
 
-  Returns a map:
-   - :tx-id (long)
-     transaction ID of the submitted transaction
+  Returns once the transaction is on the log, with a future: deref it for what `execute-tx` would have returned,
+  including the error it would have thrown if the transaction aborts.
+  Over a remote connection, the first deref reads the outcome from the server on the dereffing thread, so a deref
+  timeout doesn't cut that read short.
 
   opts (map):
    - :database (keyword/string)
@@ -414,6 +415,9 @@
 ;; delegating; `DataSource` additionally threads its await-token. The in-process `Xtdb.Connection`
 ;; impl lives in `xtdb.node.impl`.
 
+(defn- ->tx-key [{:keys [tx-id ingest-time system-time]}]
+  (serde/->TxKey tx-id (time/->instant ingest-time) (some-> system-time time/->instant)))
+
 (extend-protocol xtp/Connectable
   Connection
   (-plan-q [conn sql args opts]
@@ -421,11 +425,11 @@
     (->jdbc-plan-q (fn [] [conn false]) sql args opts))
   (-submit-tx [conn tx-ops opts]
     (xtp/check-no-database conn opts)
-    {:tx-id (:tx-id (submit-tx* conn tx-ops (assoc opts :async? true)))})
+    (let [{:keys [tx-id await-token]} (submit-tx* conn tx-ops (assoc opts :async? true))]
+      (xtp/lazy-tx-future #(xtp/await-tx-key conn tx-id await-token))))
   (-execute-tx [conn tx-ops opts]
     (xtp/check-no-database conn opts)
-    (let [{:keys [tx-id system-time]} (submit-tx* conn tx-ops (assoc opts :async? false))]
-      (serde/->TxKey tx-id (time/->instant system-time))))
+    (->tx-key (submit-tx* conn tx-ops (assoc opts :async? false))))
   (-status [conn] (xtp/build-status conn))
 
   DataSource
@@ -437,12 +441,13 @@
     (with-open [conn (open-ds-conn ds opts)]
       (let [{:keys [tx-id await-token]} (submit-tx* conn tx-ops (assoc opts :async? true))]
         (.setAwaitToken ds await-token)
-        {:tx-id tx-id})))
+        (xtp/lazy-tx-future #(with-open [conn (open-ds-conn ds opts)]
+                               (xtp/await-tx-key conn tx-id await-token))))))
   (-execute-tx [ds tx-ops opts]
     (with-open [conn (open-ds-conn ds opts)]
-      (let [{:keys [tx-id system-time await-token]} (submit-tx* conn tx-ops (assoc opts :async? false))]
+      (let [{:keys [await-token] :as tx} (submit-tx* conn tx-ops (assoc opts :async? false))]
         (.setAwaitToken ds await-token)
-        (serde/->TxKey tx-id (time/->instant system-time)))))
+        (->tx-key tx))))
   (-status [ds]
     (with-open [conn (open-ds-conn ds {})]
       (xtp/-status conn)))
@@ -453,13 +458,14 @@
     (->jdbc-plan-q (fn [] [(jdbc/get-connection connectable) true]) sql args opts))
   (-submit-tx [connectable tx-ops opts]
     (xtp/check-no-database connectable opts)
-    (with-open [^Connection conn (jdbc/get-connection connectable)]
-      {:tx-id (:tx-id (submit-tx* conn tx-ops (assoc opts :async? true)))}))
+    (let [{:keys [tx-id await-token]} (with-open [^Connection conn (jdbc/get-connection connectable)]
+                                        (submit-tx* conn tx-ops (assoc opts :async? true)))]
+      (xtp/lazy-tx-future #(with-open [^Connection conn (jdbc/get-connection connectable)]
+                             (xtp/await-tx-key conn tx-id await-token)))))
   (-execute-tx [connectable tx-ops opts]
     (xtp/check-no-database connectable opts)
     (with-open [^Connection conn (jdbc/get-connection connectable)]
-      (let [{:keys [tx-id system-time]} (submit-tx* conn tx-ops (assoc opts :async? false))]
-        (serde/->TxKey tx-id (time/->instant system-time)))))
+      (->tx-key (submit-tx* conn tx-ops (assoc opts :async? false)))))
   (-status [connectable]
     (xtp/check-no-database connectable {})
     (with-open [^Connection conn (jdbc/get-connection connectable)]

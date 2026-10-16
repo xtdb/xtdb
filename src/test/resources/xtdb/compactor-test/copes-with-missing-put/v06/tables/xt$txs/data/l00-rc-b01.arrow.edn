@@ -11,6 +11,7 @@
                 [:struct
                  {"_id" :i64,
                   "system_time" :instant,
+                  "src_msg_id" :i64,
                   "committed" :bool,
                   "user_metadata" [:? :struct],
                   "error" [:? :transit]}]}]}),
@@ -22,5 +23,6 @@
     #xt/tagged [:put
                 {:xt/id 1858,
                  :system-time #xt/zdt "2020-01-02T00:00Z[UTC]",
+                 :src-msg-id 1858,
                  :committed true}],
     :xt/iid #bytes "a7d503d21b1f1706261dec553f74bde7"}])}

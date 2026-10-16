@@ -4,12 +4,16 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.RepeatedTest
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import xtdb.api.TransactionKey
 import xtdb.api.TransactionResult
+import xtdb.api.error.Interrupted
 import java.time.Instant
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.TimeUnit
 import kotlin.time.Duration.Companion.seconds
 
 class WatchersTest {
@@ -37,13 +41,13 @@ class WatchersTest {
         assertThrows<TimeoutCancellationException> { withTimeout(50) { await5.await() } }
         assertThrows<TimeoutCancellationException> { withTimeout(50) { await4.await() } }
 
-        val res4 = TransactionResult.Committed(TransactionKey(4, Instant.parse("2021-01-01T00:00:00Z")))
+        val res4 = TransactionResult.Committed(TransactionKey(4, Instant.parse("2021-01-01T00:00:00Z"), Instant.parse("2021-01-01T00:00:00Z")))
         watchers.notifyApplied(4, res4)
 
         assertThrows<TimeoutCancellationException> { withTimeout(50) { await5.await() } }
         assertEquals(res4, await4.await())
 
-        val res5 = TransactionResult.Aborted(TransactionKey(5, Instant.parse("2021-01-02T00:00:00Z")), Exception("test"))
+        val res5 = TransactionResult.Aborted(TransactionKey(5, Instant.parse("2021-01-02T00:00:00Z"), Instant.parse("2021-01-02T00:00:00Z")), Exception("test"))
         watchers.notifyApplied(5, res5)
 
         assertEquals(res5, await5.await())
@@ -59,7 +63,7 @@ class WatchersTest {
         // `sourceMsgId` and the next ResolvedTx tripped the `txId > latestTxId` invariant.
         val watchers = Watchers(latestTxId = 5, latestSourceMsgId = 100)
 
-        val tx6 = TransactionResult.Committed(TransactionKey(6, Instant.parse("2026-05-01T00:00:00Z")))
+        val tx6 = TransactionResult.Committed(TransactionKey(6, Instant.parse("2026-05-01T00:00:00Z"), Instant.parse("2026-05-01T00:00:00Z")))
         // ext-source path: srcMsgId stays at the prior latestSourceMsgId.
         watchers.notifyApplied(watchers.latestSourceMsgId, tx6)
 
@@ -105,5 +109,91 @@ class WatchersTest {
             assertThrows<IngestionStoppedException> { watchers.awaitSource(5) }
                 .also { assertEquals(ex, it.cause) }
         }
+    }
+
+    private fun committed(txId: Long) =
+        TransactionResult.Committed(Instant.EPOCH.plusSeconds(txId).let { TransactionKey(txId, it, it) })
+
+    @Test
+    fun `a waiter for a recently applied tx completes at once with its result`() {
+        val watchers = Watchers(latestTxId = 3, latestSourceMsgId = 3)
+        watchers.notifyApplied(4, committed(4))
+
+        assertEquals(committed(4), watchers.awaitSourceTxAsync(4).getNow(null))
+    }
+
+    @Test
+    fun `cancelling one waiter leaves another on the same tx waiting`() {
+        val watchers = Watchers(latestTxId = 3, latestSourceMsgId = 3)
+        val cancelled = watchers.awaitSourceTxAsync(4)
+        val waiting = watchers.awaitSourceTxAsync(4)
+
+        cancelled.cancel(true)
+        watchers.notifyApplied(4, committed(4))
+
+        assertEquals(committed(4), waiting.get(1, TimeUnit.SECONDS))
+    }
+
+    @Test
+    fun `a waiter registered after ingestion stops fails`() {
+        val watchers = Watchers(latestTxId = 3, latestSourceMsgId = 3)
+        val ex = Exception("test")
+        watchers.notifyError(ex)
+
+        assertThrows<ExecutionException> { watchers.awaitSourceTxAsync(4).get(1, TimeUnit.SECONDS) }
+            .also { assertEquals(ex, it.cause?.cause) }
+    }
+
+    @Test
+    fun `closing fails every pending waiter`() {
+        val watchers = Watchers(latestTxId = 3, latestSourceMsgId = 3)
+        val waiter = watchers.awaitSourceTxAsync(4)
+
+        watchers.close()
+
+        assertThrows<ExecutionException> { waiter.get(1, TimeUnit.SECONDS) }
+            .also { assertTrue(it.cause is Interrupted) }
+    }
+
+    @RepeatedTest(20)
+    fun `a waiter registered while its tx applies is never left waiting`() {
+        val watchers = Watchers(latestTxId = 0, latestSourceMsgId = 0)
+        val txCount = 1_000L
+
+        val applier = Thread.ofPlatform().start {
+            for (txId in 1..txCount) watchers.notifyApplied(txId, committed(txId))
+        }
+
+        val waiters = (1..txCount).map { txId -> txId to watchers.awaitSourceTxAsync(txId) }
+        applier.join()
+
+        for ((txId, waiter) in waiters) {
+            val res = waiter.get(1, TimeUnit.SECONDS)
+            if (res != null) assertEquals(committed(txId), res)
+        }
+    }
+
+    @Test
+    fun `a waiter registered after later txs applied still gets its tx's result`() {
+        val watchers = Watchers(latestTxId = 3, latestSourceMsgId = 3)
+        for (txId in 4L..10L) watchers.notifyApplied(txId, committed(txId))
+
+        assertEquals(committed(4), watchers.awaitSourceTxAsync(4).getNow(null))
+    }
+
+    @Test
+    fun `an external-source tx isn't taken for the tx submitted at its source position`() {
+        val watchers = Watchers(latestTxId = 3, latestSourceMsgId = 3)
+        watchers.notifyApplied(3, committed(4))
+
+        assertNull(watchers.awaitSourceTxAsync(3).getNow(committed(0)))
+    }
+
+    @Test
+    fun `a source position that carried no tx completes with no result`() {
+        val watchers = Watchers(latestTxId = 3, latestSourceMsgId = 3)
+        watchers.notifyApplied(4)
+
+        assertNull(watchers.awaitSourceTxAsync(4).getNow(committed(0)))
     }
 }

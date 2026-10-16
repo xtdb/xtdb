@@ -2,6 +2,20 @@
 title: Clojure SQL Cookbook
 ---
 
+<details>
+<summary>Changelog (last updated v2.2)</summary>
+
+v2.2: `submit-tx` returns a future of the transaction's result
+
+: [`submit-tx`](#sql-transactions) returns a future that derefs to what `execute-tx` would have returned, throwing its error if the transaction aborts.
+
+  Previously it returned `{:tx-id n}`, and finding out whether that transaction committed meant querying `xt.txs` by its id.
+  The id was a handle to look the outcome up by; the future is the outcome itself.
+
+  To upgrade: deref the result — `(:tx-id @(xt/submit-tx node tx-ops))` for the id — or keep discarding it, which still submits without waiting.
+
+</details>
+
 SQL queries are submitted through `xtdb.api/q`:
 
 - `(xt/q <node> <query> <opts>?)` returns the query results as a vector of maps.
@@ -23,7 +37,7 @@ For example:
 
 SQL transactions are submitted through `xtdb.api/execute-tx` and `xtdb.api/submit-tx`.
 
-- `(xt/submit-tx <node> <tx-ops> <opts>?)`: returns the transaction key of the submitted transaction.
+- `(xt/submit-tx <node> <tx-ops> <opts>?)`: returns once the transaction is on the log, with a future: deref it for what `execute-tx` would have returned, including its error if the transaction aborts.
     - `tx-ops`: vector of [transaction operations](#tx-ops).
     - `opts` (map):
         - `:default-tz` (`java.time.ZoneRegion`): time zone to be used
