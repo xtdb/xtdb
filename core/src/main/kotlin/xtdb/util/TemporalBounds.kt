@@ -3,6 +3,8 @@ package xtdb.util
 
 import xtdb.log.proto.TemporalMetadata
 import java.time.Instant
+import kotlin.math.max
+import kotlin.math.min
 
 data class TemporalDimension(
     var lower: Long = Long.MIN_VALUE,
@@ -13,6 +15,13 @@ data class TemporalDimension(
 
     /** True where this dimension spans a single chronon — an `AS OF`, or a `BETWEEN t AND t`. */
     val isPoint get() = upper - lower == 1L
+
+    /**
+     * Narrows both ends.
+     * The ends are independent half-bounds — a range passes [intersects] when it ends after [lower] and starts before [upper] —
+     * so the result can have `lower > upper`, which still admits a range spanning that gap.
+     */
+    fun intersect(other: TemporalDimension) = TemporalDimension(max(lower, other.lower), min(upper, other.upper))
 
     override fun toString(): String {
         val l = Instant.ofEpochMilli(lower / 1000)
