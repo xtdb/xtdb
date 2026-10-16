@@ -13,9 +13,7 @@
      [:group-by
       {:columns [c.1/_id {_count_out_3 (count o.2/_id)}]}
       [:left-outer-join
-       {:conditions
-        [{c.1/_id o.2/o_custkey}
-         (not (like o.2/o_comment "%special%requests%"))]}
+       {:conditions [{c.1/_id o.2/o_custkey}]}
        [:rename
         {:prefix c.1}
         [:scan
@@ -25,4 +23,5 @@
         [:scan
          {:db-name "xtdb",
           :table #xt/table orders,
-          :columns [_id o_comment o_custkey]}]]]]]]]]]
+          :columns
+          [_id {o_comment (not (like o_comment "%special%requests%"))} o_custkey]}]]]]]]]]]

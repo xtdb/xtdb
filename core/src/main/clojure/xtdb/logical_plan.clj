@@ -1436,47 +1436,57 @@
       (when (columns-in-predicate-present-in-relation? [:mega-join mega-join-opts rels] predicate)
         [:mega-join {:conditions (conj conditions predicate)} rels]))))
 
-(defn- split-conjunctions-in-mega-join [z]
-  (r/zmatch
-    z
-    [:mega-join opts rels]
-    ;;=>
-    (let [{:keys [conditions]} opts]
+(defn- split-conjunctions-in-join-conditions [z]
+  (r/zcase z
+    (:mega-join :join :semi-join :anti-join :left-outer-join :single-join :full-outer-join)
+    (let [[op {:keys [conditions] :as opts} & rels] (r/znode z)]
       (when (some and-predicate? conditions)
-        [:mega-join {:conditions (vec (mapcat #(flatten-expr and-predicate? %) conditions))} rels]))))
+        (into [op (assoc opts :conditions (vec (mapcat #(flatten-expr and-predicate? %) conditions)))] rels)))
 
-(defn- push-predicates-from-mega-join-to-child-relations [z]
+    nil))
+
+(def ^:private join-condition-pushable-sides
+  {:join #{0 1}
+   :semi-join #{0 1}
+   ;; these still output a left row that fails a left-only condition
+   :anti-join #{1}
+   :left-outer-join #{1}
+   :single-join #{1}})
+
+(defn- push-conditions-into-relations [conditions rels pushable-rel-idx?]
+  (let [pushes (for [[cond-idx condition] (map-indexed vector conditions)
+                     ;; an XTQL unification map {v v} names one column on both inputs, so it looks local to each
+                     :when (not (map? condition))
+                     [rel-idx rel] (map-indexed vector rels)
+                     :when (and (pushable-rel-idx? rel-idx)
+                                (columns-in-predicate-present-in-relation? rel condition))]
+                 {:cond-idx cond-idx, :rel-idx rel-idx, :condition condition})]
+    (when (seq pushes)
+      (let [pushed-cond-idxs (into #{} (map :cond-idx) pushes)
+            pushes-by-rel (group-by :rel-idx pushes)]
+        {:conditions (into [] (keep-indexed (fn [idx condition]
+                                              (when-not (pushed-cond-idxs idx) condition)))
+                           conditions)
+         :rels (into [] (map-indexed (fn [idx rel]
+                                       (reduce (fn [rel {:keys [condition]}]
+                                                 [:select {:predicate condition} rel])
+                                               rel
+                                               (get pushes-by-rel idx))))
+                     rels)}))))
+
+(defn- push-join-conditions-into-inputs [z]
   (r/zmatch
     z
     [:mega-join opts rels]
     ;;=>
-    (let [{:keys [conditions]} opts
-          indexed-rels (map-indexed (fn [idx rel] {:idx idx
-                                                   :rel rel
-                                                   :preds []}) rels)
-          indexed-preds (map-indexed (fn [idx pred] {:idx idx
-                                                     :pred pred}) conditions)]
-      (when-let [moveable-preds
-                 (seq
-                   (for [{:keys [pred] :as predicate} indexed-preds
-                         {:keys [rel] :as relation} indexed-rels
-                         :when (columns-in-predicate-present-in-relation? rel pred)]
-                     (update relation :preds conj predicate)))]
-        (let [updated-rels (-> (group-by :idx moveable-preds)
-                               (update-vals (fn [updates-for-rel]
-                                              (reduce
-                                                (fn [rel pred]
-                                                  [:select {:predicate (:pred pred)}
-                                                   rel])
-                                                (:rel (first updates-for-rel))
-                                                (mapcat :preds updates-for-rel)))))
-              pushed-down-preds (set (keys (group-by :idx (mapcat :preds moveable-preds))))
+    (when-let [{:keys [conditions rels]} (push-conditions-into-relations (:conditions opts) rels (constantly true))]
+      [:mega-join (assoc opts :conditions conditions) rels])
 
-              output-join-conditions (mapv :pred (remove #(pushed-down-preds (:idx %)) indexed-preds))
-              output-rels (mapv #(if-let [updated-rel (get updated-rels (:idx %))]
-                                   updated-rel
-                                   (:rel %)) indexed-rels)]
-          [:mega-join {:conditions output-join-conditions} output-rels])))))
+    [join-op opts lhs rhs]
+    ;;=>
+    (when-let [pushable-sides (join-condition-pushable-sides join-op)]
+      (when-let [{:keys [conditions], [lhs rhs] :rels} (push-conditions-into-relations (:conditions opts) [lhs rhs] pushable-sides)]
+        [join-op (assoc opts :conditions conditions) lhs rhs]))))
 
 (def ^:private push-correlated-selection-down-past-join (partial push-selection-down-past-join true))
 (def ^:private push-correlated-selection-down-past-rename (partial push-selection-down-past-rename true))
@@ -1500,8 +1510,8 @@
   [#'promote-selection-cross-join-to-join
    #'promote-selection-to-join
    #'promote-selection-to-mega-join
-   #'split-conjunctions-in-mega-join
-   #'push-predicates-from-mega-join-to-child-relations
+   #'split-conjunctions-in-join-conditions
+   #'push-join-conditions-into-inputs
    #'push-selection-down-past-apply
    #'push-correlated-selection-down-past-join
    #'push-correlated-selection-down-past-rename
