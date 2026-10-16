@@ -16,6 +16,11 @@ v2.2: only transactions that write data take a system-time
 
   Upgrade: code that reads a transaction's system-time has to allow for it being null; to order or find the latest transactions, use `_id` or the ingest time instead.
 
+v2.2: `xt.txs` has a `src_msg_id` column
+
+: The position in the database's log that a client's transaction was submitted at, and null for a transaction from an [external source](/ops/external-sources/overview).
+  On an external-source database it is how a client finds its transaction, since `_id` there doesn't match the position it submitted at.
+
 </details>
 
 For examples on how to submit SQL transactions in each client library, see the [individual driver documentation](/drivers).

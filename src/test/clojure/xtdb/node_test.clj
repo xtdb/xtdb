@@ -1358,12 +1358,15 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
              (xt/q conn ["SELECT _id from foo ORDER BY _id"])))
 
     (t/is (= [{:xt/id 0, :system-time #xt/zdt "2020-01-01T00:00Z[UTC]"
+               :src-msg-id 0
                :committed true,
                :user-metadata {:source "mobile-app", :tags ["tag1" "tag2"]}}
               {:xt/id 1, :system-time #xt/zdt "2020-01-02T00:00Z[UTC]",
+               :src-msg-id 1
                :committed true,
                :user-metadata {:source "browser", :tags ["tag2" "tag3"]}}
               {:xt/id 2, :system-time #xt/zdt "2020-01-03T00:00Z[UTC]"
+               :src-msg-id 2
                :committed true,
                :user-metadata {:source "clojure-api", :tags ["api-test"], :request-id "req-12345"}}]
              (xt/q conn ["SELECT * FROM xt.txs ORDER BY _id"])))))

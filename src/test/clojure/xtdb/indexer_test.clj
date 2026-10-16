@@ -583,6 +583,7 @@ INSERT INTO docs (_id, _valid_from, _valid_to)
            (xt/q tu/*node* "SELECT * FROM docs")))
 
   (t/is (= [{:xt/id 1,
+             :src-msg-id 1,
              :committed false,
              :error #xt/error [:incorrect ::err/illegal-arg "No matching clause: [<List> <Int(64, true)>]"
                                {:sql "UPDATE docs SET list = list || [3]", :tx-op-idx 0

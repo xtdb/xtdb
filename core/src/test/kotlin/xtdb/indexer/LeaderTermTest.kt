@@ -99,6 +99,7 @@ internal abstract class LeaderTermTest {
     protected fun liveIndexMock(configure: LiveIndex.() -> Unit = {}) =
         mockk<LiveIndex>(relaxed = true) {
             every { rowsPerBlock } returns IndexerConfig().rowsPerBlock
+            every { head } returns null
             configure()
         }
 

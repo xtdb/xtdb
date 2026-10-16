@@ -51,8 +51,10 @@ external entity Frontend {
 }
 
 external entity Database {
-    -- The db.allium submit/execute boundary. submitTx is fire-and-forget; executeTx
-    -- submits then awaits the result. A Writing commit drains the buffer across this
+    -- The db.allium submit/execute boundary.
+    -- submitTx returns a future of the transaction's result, which the caller may await or drop; executeTx submits then awaits it.
+    -- Either learns the outcome by the source position the transaction was submitted at, not by its tx_id (db.allium, TransactionSubmission).
+    -- A Writing commit drains the buffer across this
     -- boundary — submitting when async, executing-and-awaiting when sync, where the choice is
     -- the commit's own COMMIT SYNC / COMMIT ASYNC if stated, else the tx's begin-time async
     -- flag. See: dev/doc/db.allium, database/Database.kt
@@ -203,7 +205,7 @@ enum SessionAccessMode {
 
 enum CommitMode {
     -- A commit-time submit-vs-execute override carried on a SQL COMMIT [SYNC | ASYNC].
-    -- `sync` forces execute-and-await, `async` forces fire-and-forget submit. Passed as an
+    -- `sync` forces execute-and-await, `async` forces a submit that is not awaited. Passed as an
     -- optional CommitTransaction parameter (null = no commit-time override, defer to the
     -- transaction's begin-time CommitOpts.async flag). Distinct from that begin-time flag: it
     -- lets a single COMMIT override the mode fixed by the transaction's ASYNC option.
@@ -857,7 +859,7 @@ rule TxControlAsSqlRejected {
 
 rule CommitWriting {
     -- Commit of a Writing transaction drains the buffer and crosses the Database
-    -- boundary EVEN IF the buffer is empty: async commit submits (fire-and-forget),
+    -- boundary EVEN IF the buffer is empty: async commit submits, handing back the future without awaiting it,
     -- sync commit executes-and-awaits. The submit anchors in the tx's tx_default_tz. COMMIT
     -- also writes the tx's session_default_tz back to the connection, so a mid-tx SET TIME
     -- ZONE persists past the tx while a BEGIN or SET TRANSACTION TIMEZONE (which never touches session_default_tz) does not.

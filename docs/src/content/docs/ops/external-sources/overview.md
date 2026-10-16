@@ -5,7 +5,10 @@ title: External Sources
 A secondary database can be backed by an external source.
 Rather than accepting transactions from clients, it subscribes to an upstream feed and records what it reads as XTDB transactions.
 
-The database is then a read-only mirror of that upstream — it rejects writes from the [Postgres wire-compatible server](/ops/config#postgres-wire-compatible-server) and the [Flight SQL server](/ops/config#flight-sql-server), and tracks the upstream as it changes.
+The database is then a mirror of that upstream, and tracks the upstream as it changes.
+The upstream is its only writer of data: a transaction submitted through the [Postgres wire-compatible server](/ops/config#postgres-wire-compatible-server) or the [Flight SQL server](/ops/config#flight-sql-server) that writes data aborts.
+DDL is accepted — `CREATE TABLE`, for instance, declares a table before the upstream first writes to it, so that queries against it return no rows rather than failing.
+It takes no system-time, so it doesn't hold back the upstream's.
 
 ## Supported sources
 

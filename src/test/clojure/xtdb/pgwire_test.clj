@@ -1514,9 +1514,10 @@
     (t/is (= [{:xt/id 2, :committed false,
                :error #xt/error [:conflict :xtdb/assert-failed "Assert failed"
                                  {:sql "ASSERT 1 = (SELECT COUNT(*) FROM foo)", :tx-op-idx 0
-                                  :tx-key #xt/tx-key {:tx-id 2, :system-time #xt/instant "2020-01-03T00:00:00Z"}}]}
-              {:xt/id 1, :committed true}
-              {:xt/id 0, :committed true}]
+                                  :tx-key #xt/tx-key {:tx-id 2, :system-time #xt/instant "2020-01-03T00:00:00Z"}}]
+               :src-msg-id 2}
+              {:xt/id 1, :committed true, :src-msg-id 1}
+              {:xt/id 0, :committed true, :src-msg-id 0}]
              (q conn ["SELECT * EXCLUDE system_time FROM xt.txs"])))))
 
 (deftest test-untyped-null-type
@@ -2647,13 +2648,15 @@ ORDER BY t.oid DESC LIMIT 1"
 
     (t/is (= [{:xt/id 0,
                :committed true,
+               :src-msg-id 0,
                :system-time (time/->zdt #inst "2020-01-01")}
               {:xt/id 1,
                :committed false,
                :error #xt/illegal-arg [:invalid-system-time
                                        "specified system-time must be later than current tx"
                                        {:tx-key #xt/tx-key {:tx-id 1, :ingest-time #xt/instant "2020-01-02T00:00:00Z", :system-time #xt/instant "2019-01-01T00:00:00Z"}
-                                        :latest-completed-tx #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"}}]}]
+                                        :latest-completed-tx #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"}}]
+               :src-msg-id 1}]
 
              (jdbc/execute! conn ["SELECT * FROM xt.txs ORDER BY _id"]
                             {:builder-fn xt-jdbc/builder-fn})))))

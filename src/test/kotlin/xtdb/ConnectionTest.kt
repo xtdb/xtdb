@@ -24,6 +24,8 @@ class ConnectionTest {
 
     private var nextTxId: MessageId = 0
 
+    private var resolvedTxId: MessageId? = null
+
     private lateinit var db: Database
     private lateinit var dbCat: Database.Catalog
 
@@ -32,7 +34,7 @@ class ConnectionTest {
         every { db.submitTxBlocking(any(), any()) } answers { nextTxId }
         every { db.awaitSourceTxAsync(any()) } answers {
             CompletableFuture.completedFuture(TransactionResult.Committed(mockk<TransactionKey> {
-                every { txId } returns nextTxId
+                every { txId } returns (resolvedTxId ?: nextTxId)
                 every { ingestTime } returns Instant.EPOCH
                 every { systemTime } returns Instant.EPOCH
             }))
@@ -145,10 +147,24 @@ class ConnectionTest {
         conn.executeTx(emptyList())
 
         val last = conn.lastSubmittedTx!!
-        assertEquals(13L, last.txId)
+        assertEquals(13L, last.srcMsgId)
         assertEquals(Instant.EPOCH, last.executed!!.txKey.systemTime)
         assertEquals(true, last.executed!!.committed)
         assertNull(last.executed!!.error)
+    }
+
+    @Test
+    fun `executeTx records the source position it submitted at, not the tx-id it resolved to`() {
+        nextTxId = 5
+        resolvedTxId = 1001
+        val conn = connection("mydb")
+
+        conn.executeTx(emptyList())
+
+        assertEquals(mapOf("mydb" to listOf(5L)), tokenOf(conn.awaitToken))
+        val last = conn.lastSubmittedTx!!
+        assertEquals(5L, last.srcMsgId)
+        assertEquals(1001L, last.executed!!.txId)
     }
 
     @Test
@@ -159,7 +175,7 @@ class ConnectionTest {
         conn.submitTx(emptyList())
 
         val last = conn.lastSubmittedTx!!
-        assertEquals(17L, last.txId)
+        assertEquals(17L, last.srcMsgId)
         assertNull(last.executed)
     }
 }

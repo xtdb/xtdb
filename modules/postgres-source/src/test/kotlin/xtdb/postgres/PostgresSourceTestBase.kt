@@ -99,6 +99,12 @@ abstract class PostgresSourceTestBase {
         }
     }
 
+    protected fun xtExecute(node: Xtdb, database: String, sql: String) {
+        node.createConnectionBuilder().database(database).build().use { c ->
+            c.createStatement().use { s -> s.execute(sql) }
+        }
+    }
+
     protected fun xtQuery(node: Xtdb, database: String, sql: String): List<Map<String, Any?>> =
         node.createConnectionBuilder().database(database).build().use { c ->
             c.createStatement().use { s ->

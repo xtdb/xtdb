@@ -21,7 +21,7 @@
 --
 -- Two heads, two homes — callers choose:
 --   RESOLVED head (on the resolver): the highest transaction resolved, and so staged.
---     Drives resolution — the next external-source tx_id, the smoothing of both clocks, read-your-writes.
+--     Drives resolution — the next tx_id on a database with an external source, the smoothing of both clocks, read-your-writes.
 --   DURABLE head (on the live index): the highest transaction applied, i.e. read back and imported. The QUERY BASIS.
 --   Resolved leads; durable lags by everything staged but not yet applied.
 --   Each head also records where the partition's two clocks stand after it (see TxHead).
@@ -48,9 +48,8 @@
 --   An external source is an OPTIONAL COLLABORATOR of the leader rather than a separate processor: flush, tries and block coordination and the whole resolve → append → read back → apply pipeline are identical either way.
 --   The two differ only in where a transaction enters and how its tx_id is assigned.
 --     - No external source: client-driven. The leader subscribes to the source log, resolves transaction messages, and takes each tx_id from the source-log position.
---     - External source configured: transactions arrive through the indexing callback, and tx_id is assigned off the RESOLVED head.
---       A client submit is rejected with xtdb/submit-tx-to-external-source-db.
---       The source log is still consumed, for flush, tries and block coordination only.
+--     - External source configured: data arrives through the indexing callback, and the source log carries DDL alongside flush, tries and block coordination.
+--       Every transaction, from the source log and the source alike, takes the next tx_id in the one sequence, off the RESOLVED head.
 
 use "./trie-cat.allium" as trie_cat
 use "./compaction.allium" as compaction
@@ -95,8 +94,9 @@ external entity Compactor {
 external entity ExternalSource {
     -- A system outside XTDB that feeds a database by change data capture, e.g. Postgres logical replication.
     -- On assignment it is handed an indexing callback and an opaque resume token to start after, and feeds transactions in directly.
-    -- An external-source database assigns its own monotonically increasing tx_id off the RESOLVED head rather than taking it from the source-log position.
-    -- A client submit is rejected for such a database: transactions enter only through the source.
+    -- It is the database's only writer of data: the database's own source log carries DDL only (see LeaderProcessesTx).
+    -- An external-source database numbers every transaction off the RESOLVED head, in one sequence its source's transactions and its source log's share.
+    -- Its DML clock belongs to the upstream: DDL takes no system time, so only the source moves it.
 }
 
 ---- Entities
@@ -125,7 +125,7 @@ entity Database {
     replica_log: Log
 
     -- The configured external source, if any.
-    -- This — not this node's role — is what rejects a client submit: the source log is shared, so any node's submit path has to reach the same decision whether or not it happens to be the leader.
+    -- Where present, it decides how every transaction is numbered, and that a source-log transaction writing data aborts.
     -- Opened and closed with the database on each node that could lead it, so one source spans every leader term that node serves.
     -- A node that indexes nothing, or holds the database read-only, can never lead and opens no source.
     external_source: ExternalSource?
@@ -175,7 +175,7 @@ variant Leader : LogProcessor {
     --   The boundary the outgoing leader cut is uploaded under the INCOMING term — see The block cycle.
     --   The records the follower was holding drain at the adopt, each having met the fence at its own position in the log on the way in.
     --
-    -- external_source is present iff the database has one configured; it makes this leader externally fed rather than client-driven.
+    -- external_source is present iff the database has one configured; this leader then takes its data from the source, and only DDL from the source log.
     external_source: ExternalSource?
 
     -- This leader's fencing term: one above the highest term this node had read when it claimed (see log-processor-lifecycle.allium).
@@ -211,7 +211,7 @@ entity TxResolver {
     -- It exists for the length of one leader term, seeded from the durable head. Absent while following.
     --
     -- RESOLVED head: the highest transaction resolved, and so staged, and where both clocks stand after it.
-    -- Drives resolution — the next external-source tx_id, the smoothing of both clocks, read-your-writes.
+    -- Drives resolution — the next tx_id on a database with an external source, the smoothing of both clocks, read-your-writes.
     -- Leads the durable head by exactly the transactions staged but not yet applied.
     head: TxHead?
 
@@ -243,7 +243,7 @@ entity TableCatalog {
 entity Watchers {
     -- The DURABLE watermarks for one database, plus the external-source resume token where it has one.
     -- Whichever role is live advances them only once a message has been applied.
-    -- Clients await a tx_id to learn a transaction's result; a promotion reads a source position from here to resume from.
+    -- A submitting client awaits the source position its transaction was submitted at to learn its result; a promotion reads a source position from here to resume from.
     --
     -- A block's covered source position is reported on the ADOPT, by whichever role adopts the block: a node that has not recorded the block claims none of the position it covers, so a caller that flushes a block and then awaits this watermark is told of it once the flush is done.
     --
@@ -252,6 +252,12 @@ entity Watchers {
     latest_source_msg_id: MessageId
     latest_tx_result: TransactionResult?
     external_source_token: ExternalSourceToken?
+
+    -- The results of the most recent source-log transactions, at most config.recent_source_txs of them, each keyed by the source position it was submitted at.
+    -- An applied transaction is recorded as the one submitted at position k iff it moves latest_source_msg_id onto k.
+    -- An external-source transaction carries the source watermark without moving it, so it is never recorded.
+    -- An await on position k completes once latest_source_msg_id reaches k, with the result recorded at k, or with none where k carried no transaction or its result has left this buffer (see TransactionSubmission).
+    recent_source_txs: List<SourceTxResult>
 
     -- Monotonicity obligations, enforced as records are applied rather than expressible as state properties:
     --   a transaction notification must supply tx_id strictly greater than latest_tx_id;
@@ -283,7 +289,10 @@ value TransactionKey {
     -- A transaction's id, and the two times the leader decides, once, for it.
     -- What a submit returns, and the times of the transaction's xt.txs row.
     --
-    -- tx_id is monotonically increasing, assigned by the source log or off the RESOLVED head for an external-source database.
+    -- tx_id is monotonically increasing.
+    --   On a database without an external source, a source-log transaction's tx_id is its source position.
+    --   On a database with one, every transaction, from the source log or the source, takes the RESOLVED head's tx_id plus one.
+    --   A submitting client learns its transaction's outcome by the source position it was submitted at, not by tx_id (see TransactionSubmission).
     --
     -- ingest_time — the INGEST clock: the transaction's candidate time where that is strictly after the ingest clock's current value, else one microsecond past it.
     --   The candidate is the specified system time where there is one, else the log timestamp — for an external source's transaction, the leader's clock.
@@ -322,6 +331,25 @@ value TransactionResult {
     tx_key: TransactionKey
     committed: Boolean
     error: Throwable?  -- present iff not committed
+}
+
+value SourceTxResult {
+    -- A source-log transaction's result, keyed by the source position it was submitted at. Held on the watchers.
+    src_msg_id: MessageId
+    result: TransactionResult
+}
+
+value TxsRow {
+    -- A transaction's row in xt.txs, written by the transaction itself on every database, whatever it wrote and however it ended.
+    -- Its valid-from and system-from are the transaction's ingest time.
+    tx_id: Integer                -- _id
+    system_time: Timestamp?       -- present iff the transaction took one
+    -- The source position the transaction was submitted at; null for an external-source transaction.
+    -- Absent on rows written before the column existed, on which a source-log transaction of a database without an external source has its source position as its tx_id.
+    src_msg_id: MessageId?
+    committed: Boolean
+    user_metadata: Map<String, Any>?
+    error: Throwable?             -- present iff not committed
 }
 
 value Block {
@@ -465,7 +493,7 @@ variant ResolvedTxMessage : ReplicaMessage {
     -- A record with no ingest time reads with both times standing at its system time.
     tx_key: TransactionKey
     tx_id: tx_key.tx_id                       -- the source-log position of the original message,
-                                              -- or the resolver-assigned tx_id for an external-source database
+                                              -- or the resolver-assigned tx_id on a database with an external source
     committed: Boolean
     error: Throwable?                         -- the abort reason, null if committed
     db_op: DbOp?                              -- an attach or detach side-effect, if any
@@ -544,6 +572,8 @@ config {
     -- The worst-case interval over which an external source's upstream must retain its log, so the value bounds more than block cadence.
     flush_timeout: Duration = 15.minutes
     rows_per_block: Integer = 102400
+    -- How many source-log transactions' results the watchers hold for submitting clients to await.
+    recent_source_txs: Integer = 64
 }
 
 ---- Rules: Role Transitions
@@ -747,9 +777,9 @@ rule TransitionToFollower {
 
 rule ClientSubmitsTransaction {
     -- A client submits a transaction: it is appended to the SOURCE log, which every node shares, so this succeeds whether or not this node happens to be the leader.
+    -- The submit hands back the position the message was appended at, by which the client learns the transaction's outcome (see TransactionSubmission).
+    -- On a database with an external source it is accepted alike, and the leader aborts it on resolution if it writes data (LeaderProcessesTx).
     when: ClientSubmitsTx(client, database, tx_ops, opts)
-
-    requires: database.external_source = null
 
     ensures:
         let msg = TxMessage.created(
@@ -759,20 +789,6 @@ rule ClientSubmitsTransaction {
             user_metadata: opts.user_metadata
         )
         msg appended to database.source_log
-}
-
-rule ClientSubmitsTransactionToExternalSourceDb {
-    -- Rejected: submit is not a valid entry point for an external-source database, which assigns its own tx_id sequence off the resolved head and accepts transactions only through its source.
-    -- Decided from the DATABASE's configuration, not this node's role.
-    when: ClientSubmitsTx(client, database, tx_ops, opts)
-
-    requires: database.external_source != null
-
-    ensures:
-        SubmitTxRejected(
-            error_code: `xtdb/submit-tx-to-external-source-db`,
-            db_name: database.name
-        )
 }
 
 ---- Rules: Leader Mode — resolve side
@@ -795,7 +811,9 @@ rule LeaderProcessesTx {
     ensures:
         -- Resolve and stage on the resolver's queue, advancing the RESOLVED head.
         -- An aborted transaction is staged too, and still consumes a tx_id (live-index.allium, AbortTransaction).
-        let resolved = ResolveTx(tx_resolver, msg)
+        -- On a database with an external source the source log carries DDL only: a transaction that stages a row in a data table aborts with xtdb/data-write-to-external-source-db.
+        -- That is decided from what the transaction staged, not from which statements it ran.
+        let resolved = ResolveTx(tx_resolver, msg, ddl_only: database.external_source != null)
         AppendTx(resolved, src_msg_id: msg.msg_id)
 }
 
@@ -1119,9 +1137,9 @@ rule LeaderFlushTimeout {
 
 ---- Rules: External Source
 
--- An external-source leader does NOT take transactions from the source log.
+-- An external-source leader takes its data from the source alone.
 -- The source is handed an indexing callback on assignment and feeds transactions in directly.
--- Flush and tries coordination still use the source log, so the leader also reads it — but transaction, attach and detach messages MUST NOT appear there, being rejected at submit time (ClientSubmitsTransactionToExternalSourceDb).
+-- The leader also reads the source log, for flush and tries coordination and for DDL; a source-log transaction that writes data aborts (LeaderProcessesTx).
 
 rule ExternalSourceAssigned {
     -- On assignment the external source receives an indexing callback and the resume token to start after.
@@ -1142,7 +1160,7 @@ rule ExternalSourceIndexesTx {
     -- The per-transaction entry point. The source supplies an opaque resume token, an optional system time, and a writer that populates a transaction with the transformed row data.
     -- It may await the result or not; the indexing below is identical either way, and the difference is caller-side.
     --
-    -- Unlike a client-driven transaction, tx_id here is assigned off the RESOLVED head, not off a source-log position and not off the durable head.
+    -- Its tx_id is the RESOLVED head's plus one, the sequence the source log's DDL transactions share (see TransactionKey).
     -- Its system time is the source's, smoothed strictly greater than the DML clock's current value so that it never aborts the transaction, else its ingest time.
     -- Its ingest time derives from the source's system time, else the leader's clock, as for any transaction (see TransactionKey).
     -- A writer that stages no data row takes no system time, as on the source-log path.
@@ -1241,7 +1259,7 @@ rule HandleReplicaMessage {
                 if msg.db_op.kind = Detach:
                     database.catalog.detach(msg.db_op.db_name)
             -- The stamped position where present.
-            -- On an older record it is absent, and the fallback differs by database: an external-source tx_id is an independent counter, so it says nothing about the source log and the tracked watermark has to stand in; a source-log tx_id IS a source-log position.
+            -- On an older record it is absent, and the fallback differs by database: on a database with an external source tx_id is a counter, so it says nothing about the source log and the tracked watermark has to stand in; a source-log tx_id IS a source-log position.
             let effective_src_msg_id =
                 msg.src_msg_id
                     ?? (if database.external_source != null:
@@ -1451,14 +1469,20 @@ surface TransactionSubmission {
 
     provides:
         ClientSubmitsTx(caller, db, tx_ops, opts)
-            when db.external_source = null
 
     @guarantee OrderedProcessing
         -- Transactions are processed in the order they appear in the source log.
 
     @guarantee SubmitIsRoleAgnostic
         -- Submission appends to the shared source log, so it succeeds from any node regardless of which node leads this database.
-        -- Whether the transaction has been INDEXED is a separate question, answered by awaiting its tx_id on the watchers.
+        -- Whether the transaction has been INDEXED is a separate question, answered by the source position it was submitted at.
+
+    @guarantee OutcomeBySourcePosition
+        -- A submitting client learns its transaction's outcome by the source position k it was submitted at: tx_id is k only on a database without an external source.
+        -- In process, the submit's future awaits k on the watchers, and completes with the result they recorded at k.
+        -- Where they hold none, the client reads the xt.txs row whose src_msg_id is k, else the row whose tx_id is k and which has no src_msg_id, at a basis covering k.
+        -- A remote client waits on its await token and makes the same two reads.
+        -- Either way the outcome carries the transaction's own TransactionKey, and an abort surfaces as the transaction's error.
 }
 
 surface QueryAccess {
@@ -1484,6 +1508,8 @@ surface QueryAccess {
 deferred ResolveTx
   -- Resolve a source-log transaction — the put, delete and erase logic — stage it on the resolver's queue and advance the RESOLVED head.
   -- Covers the legacy payload form too.
+  -- Its tx_id is the message's source position, or with ddl_only the RESOLVED head's plus one; with ddl_only, a transaction that staged a row in a data table aborts in place of committing.
+  -- Its xt.txs row records the message's source position as src_msg_id.
   -- See: live-index.allium CommitTransaction / AbortTransaction
 deferred ResolveExternalSourceTx
   -- Assign the next tx_id off the RESOLVED head, decide the transaction's times against the clocks it records, run the caller's writer against a fresh transaction, and stage the result with the caller's durability handle.

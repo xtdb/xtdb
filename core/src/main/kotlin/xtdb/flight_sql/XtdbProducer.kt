@@ -117,7 +117,7 @@ private fun Throwable.asFlightException(): FlightRuntimeException =
 private fun Xtdb.Connection.LastSubmittedTx.toCommitResult(awaitToken: String?) = Result(
     encodeToBytes(
         mapOf(
-            "txId" to txId,
+            "txId" to (executed?.txId ?: srcMsgId),
             "ingestTime" to executed?.txKey?.ingestTime, "systemTime" to executed?.txKey?.systemTime,
             "committed" to executed?.committed, "error" to executed?.error,
             "awaitToken" to awaitToken

@@ -58,20 +58,24 @@
 
 (defn await-tx-key
   "Reads a submitted tx's outcome through `conn`, once the await token says it's indexed.
+  `src-msg-id` is the source position the tx was submitted at.
   Returns its TxKey, or throws its error as `execute-tx` would."
-  [conn tx-id await-token]
-  (let [{:keys [ingest-time system-time committed error] :as tx}
-        (first (into [] (-plan-q conn (str "SELECT _system_from AS ingest_time, system_time, committed, error FROM xt.txs FOR ALL VALID_TIME WHERE _id = " tx-id)
-                                 nil {:await-token await-token})))]
+  [conn src-msg-id await-token]
+  (let [read-tx (fn [where]
+                  (first (into [] (-plan-q conn (str "SELECT _id, _system_from AS ingest_time, system_time, committed, error FROM xt.txs FOR ALL VALID_TIME WHERE " where)
+                                           nil {:await-token await-token}))))
+        {:keys [xt/id ingest-time system-time committed error] :as tx}
+        (or (read-tx (str "src_msg_id = " src-msg-id))
+            (read-tx (str "_id = " src-msg-id " AND src_msg_id IS NULL")))]
     (when-not tx
-      (throw (err/fault :xtdb/tx-await-missing (str "tx " tx-id " not found after await"))))
+      (throw (err/fault :xtdb/tx-await-missing (str "tx " src-msg-id " not found after await"))))
 
     (when-not committed
       (throw (if (instance? Throwable error)
                error
                (err/fault :xtdb/tx-aborted "Transaction aborted" {:error error}))))
 
-    (serde/->TxKey tx-id (time/->instant ingest-time) (some-> system-time time/->instant))))
+    (serde/->TxKey id (time/->instant ingest-time) (some-> system-time time/->instant))))
 
 (defn build-status
   "Shapes a node's status out of the metrics tables and the `SHOW` statements behind it.

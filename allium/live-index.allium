@@ -188,7 +188,7 @@ entity TxResolver {
     index: LiveIndex
 
     -- RESOLVED head: the highest transaction RESOLVED, and so staged — not the highest applied.
-    -- Drives RESOLUTION: the next external-source tx_id is one past it, a transaction's system time is smoothed against its DML clock and its ingest time against its ingest clock (see db.allium TransactionKey), and resolution layers read-your-writes over the staged transactions.
+    -- Drives RESOLUTION: on a database with an external source every transaction's tx_id is one past it, a transaction's system time is smoothed against its DML clock and its ingest time against its ingest clock (see db.allium TransactionKey), and resolution layers read-your-writes over the staged transactions.
     -- Seeded from the durable head, then advanced at STAGE rather than at apply, so it LEADS the durable head by exactly the transactions staged but not yet applied.
     head: TxHead?
 

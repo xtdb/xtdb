@@ -103,7 +103,7 @@ internal class BlockCutterTest {
                         endPut()
                     }
                 }
-                val txKey = tx.writeTxRow(null, null)
+                val txKey = tx.writeTxRow(null, null, null)
                 tx.sealTables().associateTo(mutableMapOf()) { it.ref to it.liveTable }
                     .closeAllOnCatch { liveIndex.applyTx(txKey, it) }
             }

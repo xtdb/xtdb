@@ -12,6 +12,7 @@ import xtdb.api.TransactionKey
 import xtdb.api.TransactionResult
 import xtdb.api.error.Anomaly
 import xtdb.api.error.Fault
+import xtdb.api.TxId
 import xtdb.api.error.Incorrect
 import xtdb.api.log.DbOp
 import xtdb.api.log.SourceMessage
@@ -97,7 +98,20 @@ internal class TxResolver(
     resolvedSrcMsgId: MessageId,
     resolvedExtToken: ExternalSourceToken?,
     private val instantSource: InstantSource,
+    private val sourceLogRole: SourceLogRole,
 ) : AutoCloseable {
+
+    /** What the database's source log carries, which decides how its transactions are numbered. */
+    enum class SourceLogRole {
+        /** Every transaction; each takes its source position as its tx-id. */
+        TRANSACTIONS,
+
+        /**
+         * DDL only: an external-source database's data comes from its source, so a source-log tx that writes
+         * data rows aborts, and every tx takes the next tx-id in the one sequence the source's txs share.
+         */
+        DDL,
+    }
 
     private val bufferPool = partitionStorage.bufferPool
 
@@ -183,17 +197,24 @@ internal class TxResolver(
 
     private fun nextIngestTime(candidate: Instant) = candidate.after(head?.ingestTime)
 
+    private fun nextTxId(): TxId = (head?.latestCompletedTx?.txId ?: -1) + 1
+
+    private fun sourceTxId(msgId: MessageId): TxId = when (sourceLogRole) {
+        SourceLogRole.TRANSACTIONS -> msgId
+        SourceLogRole.DDL -> nextTxId()
+    }
+
     private fun nextSystemTime(candidate: Instant) = candidate.after(head?.systemTime)
 
     // Stage a fresh tx committing a single skip / abort / invalid-system-time row. `countError` mirrors the
     // pre-staging behaviour: skipped txs don't count as errors.
     private fun stageStandaloneTx(
-        msgId: MessageId, ingestTime: Instant, error: Throwable, userMetadata: Map<*, *>?, countError: Boolean,
+        txId: TxId, msgId: MessageId, ingestTime: Instant, error: Throwable, userMetadata: Map<*, *>?, countError: Boolean,
     ): ResolvedTx {
         if (countError) txErrorCounter?.increment()
 
-        return openTx(msgId, ingestTime, null, null).use { openTx ->
-            stage(openTx, msgId, openTx.writeTxRow(error, userMetadata), error, dbOp = null, pending = null)
+        return openTx(txId, ingestTime, null, null).use { openTx ->
+            stage(openTx, msgId, openTx.writeTxRow(msgId, error, userMetadata), error, dbOp = null, pending = null)
         }
     }
 
@@ -210,6 +231,7 @@ internal class TxResolver(
         attributes = mapOf("operations.count" to (txOps?.valueCount ?: 0).toString()),
     ) {
         val userMetadataMap = userMetadata as? Map<*, *>
+        val txId = sourceTxId(msgId)
         // The RESOLVED head (the queue), not the durable head: a tx must smooth against the queued
         // predecessors it resolves behind, which lead the durable index.
         val lcTx = head?.latestCompletedTx
@@ -223,24 +245,24 @@ internal class TxResolver(
                 "specified system-time must be later than current tx",
                 "invalid-system-time",
                 mapOf(
-                    "tx-key" to TransactionKey(msgId, ingestTime, systemTime),
+                    "tx-key" to TransactionKey(txId, ingestTime, systemTime),
                     "latest-completed-tx" to lcTx,
                 ),
             )
             LOG.warn { "specified system-time '$systemTime' not later than current tx '$lcTx'" }
 
-            return@withSpan stageStandaloneTx(msgId, ingestTime, err, userMetadataMap, countError = true)
+            return@withSpan stageStandaloneTx(txId, msgId, ingestTime, err, userMetadataMap, countError = true)
         }
 
         if (txOps == null)
-            return@withSpan stageStandaloneTx(msgId, nextIngestTime(msgTimestamp), SKIPPED_EXN, userMetadataMap, countError = false)
+            return@withSpan stageStandaloneTx(txId, msgId, nextIngestTime(msgTimestamp), SKIPPED_EXN, userMetadataMap, countError = false)
 
         val ingestTime = nextIngestTime(systemTime ?: msgTimestamp)
 
-        val openTx = openTx(msgId, ingestTime, systemTime, null)
+        val openTx = openTx(txId, ingestTime, systemTime, null)
         val result = try {
             val opts = SourceLogTxIndexer.TxOpts(
-                txKey = TransactionKey(msgId, ingestTime, openTx.systemTime),
+                txKey = TransactionKey(txId, ingestTime, openTx.systemTime),
                 currentTime = openTx.systemTime,
                 systemTime = openTx.systemTimeMicros,
                 defaultTz = defaultTz,
@@ -251,18 +273,28 @@ internal class TxResolver(
             openTx.close(); throw e
         }
 
-        when (result) {
+        val error = when (result) {
             is TxResult.Committed ->
-                openTx.use {
-                    stage(it, msgId, it.writeTxRow(null, userMetadataMap), error = null, dbOp = null, pending = null)
-                }
+                if (sourceLogRole == SourceLogRole.DDL && openTx.wroteData)
+                    Incorrect(
+                        "Cannot write data to database '$dbName': it has an external source configured, which is its only writer of data.",
+                        "xtdb/data-write-to-external-source-db",
+                        mapOf("db-name" to dbName)
+                    )
+                else null
 
-            is TxResult.Aborted -> {
-                LOG.debug(result.error) { "aborted tx" }
-                // fresh tx for the abort row — the original openTx may hold partial writes
-                openTx.close()
-                stageStandaloneTx(msgId, ingestTime, result.error, userMetadataMap, countError = true)
+            is TxResult.Aborted -> result.error
+        }
+
+        if (error == null)
+            openTx.use {
+                stage(it, msgId, it.writeTxRow(msgId, null, userMetadataMap), error = null, dbOp = null, pending = null)
             }
+        else {
+            LOG.debug(error) { "aborted tx" }
+            // fresh tx for the abort row — the original openTx may hold partial writes
+            openTx.close()
+            stageStandaloneTx(txId, msgId, ingestTime, error, userMetadataMap, countError = true)
         }
     }
 
@@ -328,7 +360,7 @@ internal class TxResolver(
      * promotion it resumes the source log where the leader was rather than replaying a covered boundary.
      */
     suspend fun indexTx(msg: ExtSourceMessage): ResolvedTx {
-        val txId = (head?.latestCompletedTx?.txId ?: -1) + 1
+        val txId = nextTxId()
         val systemTime = msg.systemTime?.let { nextSystemTime(it) }
         val ingestTime = nextIngestTime(systemTime ?: instantSource.instant())
 
@@ -338,14 +370,14 @@ internal class TxResolver(
         try {
             return try {
                 val (txKey, error) = when (val writerResult = msg.writer(openTx)) {
-                    is TxResult.Committed -> openTx.writeTxRow(null, writerResult.userMetadata) to null
+                    is TxResult.Committed -> openTx.writeTxRow(null, null, writerResult.userMetadata) to null
 
                     is TxResult.Aborted -> {
                         txErrorCounter?.increment()
                         openTx.close()
                         // fresh tx for the abort row — the original openTx may hold partial writes
                         openTx = openTx(txId, ingestTime, systemTime, msg.externalSourceToken)
-                        openTx.writeTxRow(writerResult.error, writerResult.userMetadata) to writerResult.error
+                        openTx.writeTxRow(null, writerResult.error, writerResult.userMetadata) to writerResult.error
                     }
                 }
 
@@ -365,14 +397,14 @@ internal class TxResolver(
     fun indexDbOp(msgId: MessageId, msgTimestamp: Instant, dbOp: DbOp): ResolvedTx {
         val ingestTime = nextIngestTime(msgTimestamp)
 
-        return openTx(msgId, ingestTime, null, null).use { openTx ->
-            stage(openTx, msgId, openTx.writeTxRow(null, null), error = null, dbOp, pending = null)
+        return openTx(sourceTxId(msgId), ingestTime, null, null).use { openTx ->
+            stage(openTx, msgId, openTx.writeTxRow(msgId, null, null), error = null, dbOp, pending = null)
         }
     }
 
     /** Stage the abort row for a database attach/detach the catalog rejected. */
     fun indexFailedDbOp(msgId: MessageId, msgTimestamp: Instant, error: Anomaly.Caller): ResolvedTx =
-        stageStandaloneTx(msgId, nextIngestTime(msgTimestamp), error, null, countError = false)
+        stageStandaloneTx(sourceTxId(msgId), msgId, nextIngestTime(msgTimestamp), error, null, countError = false)
 
     /**
      * Called in the leader's close, once its persister is joined so nothing live still touches the slices.

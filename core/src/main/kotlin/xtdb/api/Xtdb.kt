@@ -229,8 +229,11 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
         private val initialTz = defaultTz
 
-        /** [executed] is null for a fire-and-forget submit, which doesn't wait for the outcome. */
-        data class LastSubmittedTx(val txId: MessageId, val executed: ExecutedTx?)
+        /**
+         * [srcMsgId] is the source position the tx was submitted at, which is its tx-id only on a database without an external source.
+         * [executed] is null for a fire-and-forget submit, which doesn't wait for the outcome.
+         */
+        data class LastSubmittedTx(val srcMsgId: MessageId, val executed: ExecutedTx?)
 
         var lastSubmittedTx: LastSubmittedTx? = null
             private set
@@ -284,14 +287,14 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         }
 
         // advances the token and captures the last-submitted-tx in one place, so the two can't drift apart.
-        private fun recordSubmitted(dbName: DatabaseName, txId: MessageId) {
-            recordTx(dbName, txId)
-            lastSubmittedTx = LastSubmittedTx(txId, null)
+        private fun recordSubmitted(dbName: DatabaseName, srcMsgId: MessageId) {
+            recordTx(dbName, srcMsgId)
+            lastSubmittedTx = LastSubmittedTx(srcMsgId, null)
         }
 
-        private fun ExecutedTx.record(dbName: DatabaseName): ExecutedTx = also {
-            recordTx(dbName, txId)
-            lastSubmittedTx = LastSubmittedTx(txId, this)
+        private fun ExecutedTx.record(dbName: DatabaseName, srcMsgId: MessageId): ExecutedTx = also {
+            recordTx(dbName, srcMsgId)
+            lastSubmittedTx = LastSubmittedTx(srcMsgId, this)
         }
 
         private inline fun <T> Timer?.timed(body: () -> T): T {
@@ -344,18 +347,21 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         /** The transaction goes to [TxOpts.dbName] (default [dbName]) and may only refer to tables within it — see [Connection]. */
         fun executeTx(ops: List<TxOp>, opts: TxOpts = TxOpts()): ExecutedTx =
             metrics?.txExecuteTimer.timed {
-                val submitted = awaitSubmitted(doSubmit(ops, opts), opts.dbName ?: dbName)
+                val awaitDb = opts.dbName ?: dbName
+                val srcMsgId = doSubmit(ops, opts)
+                val submitted = awaitSubmitted(srcMsgId, awaitDb)
                 metrics?.txAwaitTimer.timed { submitted.getUnwrapped() }
                     // a tx that came back aborted is an error for the client that submitted it, whichever
                     // frontend that was — the indexer counts its own side separately.
                     .also { if (!it.committed) metrics?.txErrorCounter?.increment() }
-            }.record(opts.dbName ?: dbName)
+                    .record(awaitDb, srcMsgId)
+            }
 
         fun attachDb(dbName: DatabaseName, config: Database.Config): ExecutedTx =
-            dbCat.primary.let { awaitTx(it.sendAttachDbMessage(dbName, config).msgId, it.name).record(it.name) }
+            dbCat.primary.let { db -> db.sendAttachDbMessage(dbName, config).msgId.let { awaitTx(it, db.name).record(db.name, it) } }
 
         fun detachDb(dbName: DatabaseName): ExecutedTx =
-            dbCat.primary.let { awaitTx(it.sendDetachDbMessage(dbName).msgId, it.name).record(it.name) }
+            dbCat.primary.let { db -> db.sendDetachDbMessage(dbName).msgId.let { awaitTx(it, db.name).record(db.name, it) } }
 
         private fun <T> Future<T>.getUnwrapped(): T =
             try {
@@ -371,12 +377,16 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             ExecutedTxFuture(db(awaitDb).awaitSourceTxAsync(srcMsgId)) { lookUpTx(srcMsgId, awaitDb) }
 
         // on a connection of its own: the reader of a submitted tx's future needn't be this connection's thread
-        private fun lookUpTx(txId: MessageId, awaitDb: DatabaseName): ExecutedTx =
+        private fun lookUpTx(srcMsgId: MessageId, awaitDb: DatabaseName): ExecutedTx =
             Connection(allocator, dbCat, qSrc, sqlPlanner, awaitDb, clock, defaultTz, tracer, null)
-                .use { it.readTxRow(txId) }
+                .use { it.readTxRow(srcMsgId) }
 
-        private fun readTxRow(txId: MessageId): ExecutedTx {
-            val sql = "SELECT _system_from AS ingest_time, system_time, committed, error FROM xt.txs FOR ALL VALID_TIME WHERE _id = $txId"
+        private fun readTxRow(srcMsgId: MessageId): ExecutedTx =
+            readTxRow("src_msg_id = $srcMsgId") ?: readTxRow("_id = $srcMsgId AND src_msg_id IS NULL")
+                ?: throw Fault("tx $srcMsgId not found after await", "xtdb/tx-await-missing")
+
+        private fun readTxRow(where: String): ExecutedTx? {
+            val sql = "SELECT _id, _system_from AS ingest_time, system_time, committed, error FROM xt.txs FOR ALL VALID_TIME WHERE $where"
             return openStatement(parseStatement(sql))
                 .openQuery(QueryOpts(null, defaultTz))
                 .use { c ->
@@ -385,7 +395,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                         if (rel.rowCount > 0)
                             result = ExecutedTx(
                                 TransactionKey(
-                                    txId,
+                                    rel["_id"].getLong(0),
                                     (rel["ingest_time"].getObject(0) as ZonedDateTime).toInstant(),
                                     (rel["system_time"].getObject(0) as ZonedDateTime?)?.toInstant(),
                                 ),
@@ -393,7 +403,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                                 rel["error"].getObject(0) as? Throwable,
                             )
                     }
-                    result ?: throw Fault("tx $txId not found after await", "xtdb/tx-await-missing")
+                    result
                 }
         }
 
@@ -1201,7 +1211,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                     lastSubmittedTx?.let {
                         listOf(
                             mapOf(
-                                "tx_id" to it.txId,
+                                "tx_id" to (it.executed?.txId ?: it.srcMsgId),
                                 "ingest_time" to it.executed?.txKey?.ingestTime,
                                 "system_time" to it.executed?.txKey?.systemTime,
                                 "committed" to it.executed?.committed, "error" to it.executed?.error,

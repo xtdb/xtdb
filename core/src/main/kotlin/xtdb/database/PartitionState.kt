@@ -62,7 +62,7 @@ class PartitionState(
                 // until the first transaction / GRANT. Seed them (as empty CREATE TABLEs) so they're
                 // always resolvable - the columns mirror `OpenTx.writeTxRow` / the GRANT path. On a node
                 // that already has these tables, the loaded types win (no-op seed).
-                it.seedTable(TableRef("xt", "txs"), listOf("_id", "system_time", "committed", "user_metadata", "error"))
+                it.seedTable(TableRef("xt", "txs"), listOf("_id", "system_time", "src_msg_id", "committed", "user_metadata", "error"))
                 it.seedTable(TableRef("xt", "role_membership"), listOf("user", "role"))
             }
 
