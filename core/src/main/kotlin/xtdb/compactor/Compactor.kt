@@ -32,6 +32,11 @@ typealias JobKey = Pair<TableRef, TrieKey>
 
 private val LOGGER = Compactor::class.logger
 
+private sealed interface QueuedJob {
+    data object Running : QueuedJob
+    class Failed(val cause: Throwable) : QueuedJob
+}
+
 interface Compactor : AutoCloseable {
 
     interface Job {
@@ -184,7 +189,7 @@ interface Compactor : AutoCloseable {
             @Volatile
             private var availableJobs = emptyMap<JobKey, Job>()
 
-            private val queuedJobs = mutableSetOf<JobKey>()
+            private val queuedJobs = mutableMapOf<JobKey, QueuedJob>()
 
             private val jobTimer: Timer? = meterRegistry?.let {
                 Timer.builder("compactor.job.timer")
@@ -192,7 +197,7 @@ interface Compactor : AutoCloseable {
                     .register(it)
             }
 
-            private val doneCh = Channel<JobKey>()
+            private val doneCh = Channel<Pair<JobKey, Result<Unit>>>()
             private val wakeupCh = Channel<Unit>(1, onBufferOverflow = DROP_OLDEST)
             private var compactAllPromise: CompletableDeferred<Unit>? = null
 
@@ -212,50 +217,72 @@ interface Compactor : AutoCloseable {
                                 jobCalculator.availableJobs(trieCatalog)
                                     .associateBy { JobKey(it.table, it.outputTrieKey.toString()) }
 
-                            if (availableJobs.isEmpty() && queuedJobs.isEmpty()) {
-                                LOGGER.trace("sending idle")
-                                compactAllPromise?.complete(Unit)
-                            }
-
                             availableJobs.keys.forEach { jobKey ->
-                                if (queuedJobs.add(jobKey)) {
+                                if (queuedJobs.putIfAbsent(jobKey, QueuedJob.Running) == null) {
                                     launch(jobsDispatcher + CoroutineName("job: ${jobKey.first} / ${jobKey.second}")) {
-                                        jobsSemaphore.withPermit {
-                                            // check it's still required
-                                            val job = availableJobs[jobKey]
-                                            if (job != null) {
-                                                LOGGER.debug("compacting '${job.table.sym}' ${job.trieKeys} -> ${job.outputTrieKey}")
-
-                                                val timer = meterRegistry?.let { Timer.start(it) }
-                                                val triesAdded = driver.executeJob(job)
-                                                jobTimer?.let { timer?.stop(it) }
-                                                driver.publishTries(triesAdded)
-
-                                                LOGGER.debug {
-                                                    buildString {
-                                                        append("compacted '${job.table.sym}'")
-                                                        append(" -> ")
-                                                        append(
-                                                            triesAdded.tries
-                                                                .joinToString(prefix = "(", postfix = ")") { it.trieKey })
-                                                    }
-                                                }
-                                            }
+                                        val result = try {
+                                            runJob(jobKey)
+                                            Result.success(Unit)
+                                        } catch (e: CancellationException) {
+                                            throw e
+                                        } catch (e: Throwable) {
+                                            Result.failure(e)
                                         }
 
-                                        // intentionally outside try/finally - if the job fails, we leave it in queuedJobs
-                                        // so this node doesn't attempt it again
-                                        doneCh.send(jobKey)
+                                        doneCh.send(jobKey to result)
                                     }
                                 }
                             }
 
+                            if (queuedJobs.values.none { it == QueuedJob.Running }) {
+                                val failure = queuedJobs.values.filterIsInstance<QueuedJob.Failed>().firstOrNull()
+
+                                if (failure == null) {
+                                    LOGGER.trace("sending idle")
+                                    compactAllPromise?.complete(Unit)
+                                } else {
+                                    LOGGER.trace("sending failure")
+                                    compactAllPromise?.completeExceptionally(failure.cause)
+                                }
+                            }
+
                             select {
-                                doneCh.onReceive { queuedJobs.remove(it) }
+                                doneCh.onReceive { (jobKey, result) ->
+                                    result.fold(
+                                        onSuccess = { queuedJobs.remove(jobKey) },
+                                        // a failed job stays queued so that this node doesn't attempt it again
+                                        onFailure = { queuedJobs[jobKey] = QueuedJob.Failed(it) }
+                                    )
+                                }
 
                                 wakeupCh.onReceive {
                                     LOGGER.trace("wakey wakey")
                                 }
+                            }
+                        }
+                    }
+                }
+            }
+
+            private suspend fun runJob(jobKey: JobKey) {
+                jobsSemaphore.withPermit {
+                    // check it's still required
+                    val job = availableJobs[jobKey]
+                    if (job != null) {
+                        LOGGER.debug("compacting '${job.table.sym}' ${job.trieKeys} -> ${job.outputTrieKey}")
+
+                        val timer = meterRegistry?.let { Timer.start(it) }
+                        val triesAdded = driver.executeJob(job)
+                        jobTimer?.let { timer?.stop(it) }
+                        driver.publishTries(triesAdded)
+
+                        LOGGER.debug {
+                            buildString {
+                                append("compacted '${job.table.sym}'")
+                                append(" -> ")
+                                append(
+                                    triesAdded.tries
+                                        .joinToString(prefix = "(", postfix = ")") { it.trieKey })
                             }
                         }
                     }
