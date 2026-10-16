@@ -17,7 +17,6 @@ import xtdb.util.requiringResolve
 import xtdb.util.trace
 import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
-import java.lang.foreign.ValueLayout.JAVA_BYTE
 import java.nio.file.Path
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.TimeUnit
@@ -35,10 +34,10 @@ class CacheSimulationTest : SimulationTestBase() {
     class TestPathLoader : MemoryCache.PathLoader {
         private val loadCounts = mutableMapOf<Path, Int>()
 
-        override fun load(path: Path, slice: Slice, arena: Arena): MemorySegment {
-            val count = loadCounts.compute(path) { _, c -> (c ?: 0) + 1 }!!
-            return arena.allocate(slice.length)
-                .also { it.set(JAVA_BYTE, 0, 1.toByte()) }
+        override fun load(path: Path, arena: Arena): MemorySegment {
+            loadCounts.compute(path) { _, c -> (c ?: 0) + 1 }
+            return arena.allocate(path.fileName.toString().toLongOrNull() ?: 1000)
+                .also { it.fill(1.toByte()) }
         }
 
         fun getLoadCount(path: Path) = loadCounts[path] ?: 0
@@ -59,12 +58,12 @@ class CacheSimulationTest : SimulationTestBase() {
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
     fun `deterministic single fetch and evict`() = runTest {
         val loader = TestPathLoader()
+        var evicted = false
+        val onEvict = AutoCloseable { evicted = true }
+
         MemoryCache(allocator, 250, loader, dispatcher).use { cache ->
             val sliceSize = rand.nextLong(1L, 250L)
             val path = Path.of("test/$sliceSize")
-
-            var evicted = false
-            val onEvict = AutoCloseable { evicted = true }
 
             cache.get(path, Slice(0, sliceSize)) { it to onEvict }.use { buf ->
                 Assertions.assertNotNull(buf)
@@ -72,10 +71,11 @@ class CacheSimulationTest : SimulationTestBase() {
                 assertEquals(MemoryCache.Stats(sliceSize, 250L - sliceSize), cache.stats0)
             }
 
-            Assertions.assertTrue(evicted)
             assertEquals(MemoryCache.Stats(0L, 250L), cache.stats0)
             assertEquals(1, loader.getLoadCount(path))
         }
+
+        Assertions.assertTrue(evicted)
     }
 
     @RepeatableSimulationTest
@@ -173,6 +173,32 @@ class CacheSimulationTest : SimulationTestBase() {
 
     @RepeatableSimulationTest
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    fun `a failed fetch fails every concurrent waiter, and the slice can be fetched again`() = runTest {
+        val loader = TestPathLoader()
+        MemoryCache(allocator, 250, loader, dispatcher).use { cache ->
+            val sliceSize = rand.nextLong(1L, 250L)
+            val path = Path.of("test/$sliceSize")
+            val slice = Slice(0, sliceSize)
+            val concurrentFetches = rand.nextInt(2, 10)
+
+            val failures = async(dispatcher) {
+                (1..concurrentFetches).map {
+                    async(dispatcher) {
+                        shouldThrow<IllegalStateException> { cache.get(path, slice) { error("no such object") } }
+                    }
+                }
+            }.await().awaitAll()
+
+            assertEquals(List(concurrentFetches) { "no such object" }, failures.map { it.message })
+
+            cache.get(path, slice) { it to null }.use { buf -> assertEquals(sliceSize, buf.readableBytes()) }
+
+            assertEquals(MemoryCache.Stats(0L, 250L), cache.stats0)
+        }
+    }
+
+    @RepeatableSimulationTest
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
     fun `deterministic concurrent different slices of same path`() = runTest {
         val loader = TestPathLoader()
         val concurrentFetches = rand.nextInt(2, 10)
@@ -204,6 +230,9 @@ class CacheSimulationTest : SimulationTestBase() {
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
     fun `cancelled fetch on cache hit does not leak`() = runTest {
         val loader = TestPathLoader()
+        var mapped = 0
+        var unmapped = 0
+
         MemoryCache(allocator, 250, loader, dispatcher).use { cache ->
             val path = Path.of("test/100")
             val slice = Slice(0, 100)
@@ -211,7 +240,10 @@ class CacheSimulationTest : SimulationTestBase() {
             async(dispatcher) {
                 val jobs = (0..1).map {
                     launch {
-                        cache.get(path, slice) { it to null }.use { yield() }
+                        cache.get(path, slice) { k ->
+                            mapped++
+                            k to AutoCloseable { unmapped++ }
+                        }.use { yield() }
                     }
                 }
                 yield()
@@ -221,6 +253,8 @@ class CacheSimulationTest : SimulationTestBase() {
 
             assertEquals(MemoryCache.Stats(0L, 250L), cache.stats0)
         }
+
+        assertEquals(mapped, unmapped)
     }
 
     @RepeatableSimulationTest
@@ -236,7 +270,7 @@ class CacheSimulationTest : SimulationTestBase() {
                 (0 until concurrentFetches).map { i ->
                     async(dispatcher) {
                         val size = if (i % 2 == 0) 10L else 150L
-                        val path = Path.of("test/$i")
+                        val path = Path.of("test/$i/$size")
                         val slice = Slice(0, size)
 
                         runCatching {
@@ -270,5 +304,47 @@ class CacheSimulationTest : SimulationTestBase() {
 
             assertEquals(MemoryCache.Stats(0L, 100L), cache.stats0)
         }
+    }
+
+    @RepeatableSimulationTest
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    fun `every file mapped is unmapped, however the fetches interleave`() = runTest {
+        val loader = TestPathLoader()
+        val mapped = mutableListOf<Path>()
+        val unmapped = mutableListOf<Path>()
+
+        MemoryCache(allocator, 100L, loader, dispatcher).use { cache ->
+            val files = rand.nextInt(4, 8)
+            val gets = rand.nextInt(10, 30)
+
+            val results = async(dispatcher) {
+                (0 until gets).map {
+                    async(dispatcher) {
+                        val path = Path.of("test/${rand.nextInt(files)}/${rand.nextLong(10L, 40L)}")
+                        runCatching {
+                            cache.get(path, Slice(0, 10)) { k ->
+                                mapped.add(k)
+                                k to AutoCloseable { unmapped.add(k) }
+                            }.use { buf ->
+                                yield()
+                                buf.getByte(0)
+                            }
+                        }
+                    }
+                }
+            }.await().awaitAll()
+
+            results.forEach { r ->
+                Assertions.assertTrue(
+                    r.isSuccess || r.exceptionOrNull() is OutOfMemoryException,
+                    "unexpected failure: ${r.exceptionOrNull()}"
+                )
+                r.getOrNull()?.let { assertEquals(1.toByte(), it) }
+            }
+
+            assertEquals(MemoryCache.Stats(0L, 100L), cache.stats0)
+        }
+
+        assertEquals(mapped.sorted(), unmapped.sorted())
     }
 }

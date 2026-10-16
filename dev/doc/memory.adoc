@@ -1,0 +1,123 @@
+= Memory in XTDB
+
+:written: 2026-10-11
+
+Where a node's memory goes, what bounds each part, and how a page read from a file reaches a query.
+The memory cache's current design came in with link:https://github.com/xtdb/xtdb/pull/6178[#6178], whose description carries the measurements and the alternatives it rejected.
+
+== Four budgets
+
+A node's footprint is four separately-bounded things, and only the first two are the JVM's own:
+
+Heap::
+`-Xmx`, as for any JVM.
+Plans, Clojure data, Caffeine caches' keys, and the objects wrapping Arrow buffers live here; the buffers themselves don't.
+
+Arrow allocations::
+Vectors, relations, the live index and query intermediates, all accounted by the node's `RootAllocator`, whose limit is 0.9 × `maxDirectMemory` (`NodeBase`).
+`maxDirectMemory` is `-XX:MaxDirectMemorySize` where set, else the heap size.
+This is accounting, not allocation: the root allocator refuses an allocation that would take it over its limit, whatever the OS has left.
+
+Mapped files::
+Files the memory cache has mapped, read through `ArrowBuf`s over the mapping.
+These are page-cache pages, not JVM memory: `MaxDirectMemorySize` doesn't count them, and the root allocator counts only the slices in use, not the mapping.
+Bounded by the memory cache's `maxSizeBytes` (default 0.5 × `maxDirectMemory`) — see <<the-memory-cache>>.
+
+Disk cache::
+Remote storage only: object-store files copied to local disk before they are mapped.
+Bounded by `diskCache.maxSizeBytes` (default 0.75 of the volume) — see <<the-disk-cache>>.
+
+== The allocator tree
+
+Every Arrow allocation sits under the node's root allocator, in a tree that follows ownership:
+
+* the root, with `memory-cache` directly under it — the cache is node-level, shared by every database;
+* `database/<name>`, and under it `live-index`, `buffer-pool`, `compactor`, `tx-resolver`, `follower-log-processor` and `metadata-mgr`;
+* one child per query (`BoundQuery/openCursor`, `query-source`), per pgwire connection, and `flight-sql`.
+
+Arrow won't close an allocator while a child or a buffer under it is still open, so teardown frees children before parents — the two-phase shape in link:coroutines.adoc[].
+A buffer leaked by a query shows up as that query's allocator failing to close; the `arrow-leaks` skill covers tracking one down.
+
+== Reading a page
+
+A data page goes from file to query in three steps, and its accounting moves with it:
+
+. `BufferPool.getRecordBatch` asks the memory cache for the record batch's byte range of the file.
+  The cache returns an `ArrowBuf` over that range of the file's mapping, accounted to `memory-cache`.
+. `ArrowUtil` reads the record batch from it — the header through a byte-buffer view, the body as a retained slice whose column buffers are slices in turn — and `getRecordBatch` releases the cache's `ArrowBuf` before returning the batch.
+. `Relation.load` transfers the body's slices into the reading relation's allocator, so from here the page is accounted to the query, and the batch is closed.
+
+The bytes are never copied: the relation's vectors read the mapped file directly.
+An L0 page is no exception, since its same-transaction events are resolved when it's compacted rather than when it's read.
+
+The memory cache counts a slice as in use from the `get` until the last buffer over it is released, wherever transfers have moved it — it keeps the count in the allocation's `release0`, which Arrow calls once every ledger over the memory has gone.
+
+[[the-memory-cache]]
+== The memory cache
+
+`MemoryCache` maps each file once, read-only, in its own shared `Arena`, and hands out slices of that mapping.
+
+* *A file stays mapped while any slice of it is in use, or while the cache keeps it.*
+  `MappedFile.state` counts both in one `AtomicInteger` — bit 0 the cache's hold, the rest the live slices — and the file is unmapped when it reaches zero.
+  A retain fails at zero rather than resurrecting a file mid-unmap; the caller maps it afresh.
+* *A Caffeine `AsyncCache` decides which idle files to keep*, and deduplicates concurrent requests for a file that isn't mapped yet.
+  Evicting a file drops the cache's hold; the file is unmapped once its last slice goes too.
+* *`maxSizeBytes` bounds two things separately.*
+** The distinct slices in use, hard: a `get` that would exceed it throws `OutOfMemoryException`, and two readers of the same slice count it once.
+** The idle files kept mapped, soft, each weighed by its file size: a file with a slice in use weighs nothing, and the cache unmaps idle files beyond the bound.
+* *A buffer pool invalidates its `<db>/<partition>` key prefix when it closes*, so a database re-attached under the same name maps its own files rather than the previous one's.
+
+Its gauges: `memory-cache.pinnedBytes` (slices in use), `memory-cache.evictableBytes` (idle mapped files) and `memory-cache.freeBytes` (what the hard bound has left).
+
+Mapped memory can exceed `maxSizeBytes`: a file with a slice in use stays mapped in full, though only the pages read take up memory.
+
+[[the-disk-cache]]
+== The disk cache
+
+With remote storage, a file is fetched into the disk cache before the memory cache maps it, and stays pinned there while it's mapped.
+The disk cache evicts only unpinned files, to stay within `maxSizeBytes` less what's pinned.
+
+So idle mapped files hold disk-cache pins too, and a memory cache configured larger than the disk cache can hold the disk cache over its limit, by up to the difference.
+
+== In a container
+
+The kernel charges a container's memory cgroup for its anonymous memory and for the page-cache pages it touches:
+
+* *Anonymous memory is what gets a container OOM-killed*: heap, Arrow allocations, metaspace, thread stacks.
+  `-Xmx` + `MaxDirectMemorySize` + the JVM's overheads is the figure to size a container's limit by.
+* *Mapped file pages are clean page cache, which the kernel reclaims before it considers the OOM killer*, including pages still mapped.
+  So `memory.current` sitting at the container's limit is normal for a node that has read more data than its limit.
+* *The kubelet's working set excludes `inactive_file`*, and pages faulted through a long-lived mapping stay there unless reclaim promotes them.
+  Unmapping a page moves it to `active_file`, which the working set counts; keeping files mapped keeps the working set lower than mapping each page and unmapping it.
+* *Each mapped file is one of the process's memory mappings*, which the kernel caps at `vm.max_map_count` (65530 by default) — a JVM that reaches it aborts.
+  The memory cache bounds its idle files' bytes, not their number, so this is reachable only with tens of thousands of small files cached at once.
+
+== How it got here
+
+Each step, and what drove it — the constraints a change here has to keep come from these.
+
+* *Until Oct 2024, whole files were mapped as ``MappedByteBuffer``s*, with a Caffeine evictor pinning them on local disk.
+* *link:https://github.com/xtdb/xtdb/pull/3828[#3828] (Oct 2024) split the memory cache from the disk cache.*
+  Azure nodes deadlocked inside the evictor's nested `compute` calls (link:https://github.com/xtdb/xtdb/issues/3770[#3770]).
+* *link:https://github.com/xtdb/xtdb/pull/3919[#3919] (Dec 2024) made the page, not the file, what the buffer pool hands out.*
+  A whole-file mapping was charged at the file's size, and the cache never blocked when it was over its limit (link:https://github.com/xtdb/xtdb/issues/3891[#3891], link:https://github.com/xtdb/xtdb/issues/3872[#3872]).
+* *link:https://github.com/xtdb/xtdb/pull/3954[#3954] (Dec 2024) dropped mmap, reading pages into Netty direct buffers*, so that every off-heap byte was counted by one allocator (link:https://github.com/xtdb/xtdb/issues/3952[#3952]).
+  link:https://github.com/xtdb/xtdb/pull/4805[#4805] (Sep 2025) reworked memory handling in that load path.
+* *link:https://github.com/xtdb/xtdb/pull/4831[#4831] (Sep 2025) went back to mmap, each page in its own shared `Arena`, unmapped as soon as the page was released.*
+  A page read into a direct buffer was charged to the container twice — once for the copy, once for the page cache — and Kubernetes OOM-killed nodes.
+* *link:https://github.com/xtdb/xtdb/pull/4951[#4951] (Nov 2025) put one fetch-loop coroutine in front of the mapping*, so that concurrent queries opening the same page stopped mapping and counting it once each (link:https://github.com/xtdb/xtdb/issues/4938[#4938]).
+* *In Nov 2025 XTDB vendored Arrow's `BufferLedger` with a compare-and-set `retain`* (link:https://github.com/xtdb/xtdb/issues/5013[#5013], upstream link:https://github.com/apache/arrow-java/issues/906[arrow-java#906]).
+  A `retain` on a released buffer could resurrect it, and a read through it then segfaulted on unmapped memory.
+* *link:https://github.com/xtdb/xtdb/pull/5038[#5038] and link:https://github.com/xtdb/xtdb/pull/5529[#5529] (Nov 2025 – May 2026) simulated the fetch loop deterministically, and fixed two buffer leaks on cancellation.*
+* *link:https://github.com/xtdb/xtdb/pull/6178[#6178] (Oct 2026) maps each file once and keeps idle files mapped between queries.*
+  Closing a shared arena is a handshake with every live thread, 80–160µs a page, and with the fetch loop's round trip it was most of what a scan spent loading pages.
+  The arena protected nothing: `ArrowBuf` reads raw addresses, never through the arena-scoped segment.
+
+What the current design keeps from these:
+
+* a file is unmapped deterministically once nothing uses it and the cache has let it go (#4831);
+* the slices in use are bounded, and exceeding the bound fails the query rather than the node (#3919);
+* concurrent readers of one page don't each pay for it (#4938);
+* nothing reads a file after it's unmapped — the file-level counter fails a `retain` at zero, as the vendored ledger does per buffer (#5013);
+* a cancelled request leaks nothing, and the cache runs under the deterministic simulation (#5529, #5038);
+* a remote file stays pinned in the disk cache while it's mapped.
