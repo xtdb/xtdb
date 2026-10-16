@@ -9,32 +9,35 @@
     [:mega-join
      {:conditions [{t1.1/a1 t2.2/a2}]}
      [[:semi-join
-       {:conditions [{t3.3/c1 xt.values.9/_column_1}]}
+       {:conditions [{t3.3/c1 z}]}
        [:rename
         {:prefix t3.3}
         [:scan {:db-name "xtdb", :table #xt/table t3, :columns [c1]}]]
-       [:rename
-        {:prefix xt.values.9}
-        [:table
-         {:output-cols [_column_1],
-          :rows [{:_column_1 792} {:_column_1 14}]}]]]
+       [:project
+        {:projections [{z u.9/z}]}
+        [:rename
+         {:prefix u.9}
+         [:scan {:db-name "xtdb", :table #xt/table u, :columns [z]}]]]]
       [:semi-join
-       {:conditions [{t1.1/b1 xt.values.5/_column_1}]}
+       {:conditions [{t1.1/b1 x}]}
        [:rename
         {:prefix t1.1}
-        [:scan {:db-name "xtdb", :table #xt/table t1, :columns [a1 b1]}]]
-       [:rename
-        {:prefix xt.values.5}
-        [:table
-         {:output-cols [_column_1],
-          :rows [{:_column_1 532} {:_column_1 593}]}]]]
+        [:scan
+         {:db-name "xtdb", :table #xt/table t1, :columns [a1 b1]}]]
+       [:project
+        {:projections [{x u.5/x}]}
+        [:rename
+         {:prefix u.5}
+         [:scan {:db-name "xtdb", :table #xt/table u, :columns [x]}]]]]
       [:semi-join
-       {:conditions [{t2.2/b1 xt.values.7/_column_1}]}
+       {:conditions [{t2.2/b1 y}]}
        [:rename
         {:prefix t2.2}
-        [:scan {:db-name "xtdb", :table #xt/table t2, :columns [a2 b1]}]]
-       [:rename
-        {:prefix xt.values.7}
-        [:table
-         {:output-cols [_column_1],
-          :rows [{:_column_1 808} {:_column_1 662}]}]]]]]]]]]
+        [:scan
+         {:db-name "xtdb", :table #xt/table t2, :columns [a2 b1]}]]
+       [:project
+        {:projections [{y u.7/y}]}
+        [:rename
+         {:prefix u.7}
+         [:scan
+          {:db-name "xtdb", :table #xt/table u, :columns [y]}]]]]]]]]]]
