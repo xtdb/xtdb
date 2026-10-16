@@ -21,9 +21,19 @@
 --
 -- Two heads, two homes — callers choose:
 --   RESOLVED head (on the resolver): the highest transaction resolved, and so staged.
---     Drives resolution — the next external-source tx_id, system-time smoothing, read-your-writes.
+--     Drives resolution — the next external-source tx_id, the smoothing of both clocks, read-your-writes.
 --   DURABLE head (on the live index): the highest transaction applied, i.e. read back and imported. The QUERY BASIS.
 --   Resolved leads; durable lags by everything staged but not yet applied.
+--   Each head also records where the partition's two clocks stand after it (see TxHead).
+--
+-- Two clocks per partition, both decided once by the leader for each transaction (see TransactionKey):
+--   INGEST clock: moved by every transaction, whatever it wrote and however it ended.
+--     DDL effects land at it, and so does each transaction's own xt.txs row.
+--   DML clock (system time): moved only by a transaction that stages a row in a DATA table — any table but the ingest tables.
+--     Data rows land at it.
+--   The INGEST TABLES, xt.txs and xt.role_membership, are written with valid-from and system-from at the transaction's ingest time, and read on the ingest clock.
+--   A read's basis is one point on each clock per partition: the snapshot_token's where it has one, else the head's, each capped by snapshot_time.
+--   It reads the ingest tables at its ingest-time basis and every data table at its system-time basis, so a snapshot_token pins both.
 --
 -- Two source watermarks, and the tell that they differ:
 --   The leader's RESOLVE-side watermark is what gets STAMPED onto each replica record.
@@ -94,11 +104,11 @@ external entity ExternalSource {
 entity LiveIndex {
     -- See: live-index.allium. Shared between this node's two roles.
     --
-    -- latest_completed_tx — DURABLE head / QUERY BASIS: the highest transaction in the durable live tables, and what external snapshots open at.
+    -- head — DURABLE head / QUERY BASIS: the highest transaction in the durable live tables and where both clocks stand after it, and what external snapshots open at.
     --   On a leader it is advanced by apply on READ-BACK, so it lags the resolved head by everything staged but not yet read back.
     --   On a follower it is advanced by the import itself, with no lag, every message a follower imports being already durable.
     -- The RESOLVED head is NOT a field here: on a leader it lives on the resolver, and the live index stays resolver-agnostic.
-    latest_completed_tx: TransactionKey?
+    head: TxHead?
     is_full: Boolean
 
     -- Rows APPLIED into the currently-open block, and the gauge the leader cuts on.
@@ -106,7 +116,8 @@ entity LiveIndex {
     block_row_count: Integer
 
     -- Derived
-    has_data: latest_completed_tx != null
+    latest_completed_tx: head?.latest_completed_tx
+    has_data: head != null
 }
 
 entity Database {
@@ -199,10 +210,10 @@ entity TxResolver {
     --
     -- It exists for the length of one leader term, seeded from the durable head. Absent while following.
     --
-    -- RESOLVED head: the highest transaction resolved, and so staged.
-    -- Drives resolution — the next external-source tx_id, system-time smoothing, read-your-writes.
+    -- RESOLVED head: the highest transaction resolved, and so staged, and where both clocks stand after it.
+    -- Drives resolution — the next external-source tx_id, the smoothing of both clocks, read-your-writes.
     -- Leads the durable head by exactly the transactions staged but not yet applied.
-    latest_completed_tx: TransactionKey?
+    head: TxHead?
 
     -- The queue itself is not modelled here.
     -- What db.allium relies on is the ORDER PROPERTY that makes the queue head predictable: resolution order = append order = read-back order, and terms are unique per leader.
@@ -269,12 +280,41 @@ value ExternalSourceToken {
 }
 
 value TransactionKey {
+    -- A transaction's id, and the two times the leader decides, once, for it.
+    -- What a submit returns, and the times of the transaction's xt.txs row.
+    --
     -- tx_id is monotonically increasing, assigned by the source log or off the RESOLVED head for an external-source database.
-    -- system_time is strictly increasing across a partition's committed transactions.
-    -- A client MAY specify one, and a specified system_time that does not advance on the latest completed transaction aborts the transaction.
-    -- Strictness is what lets a read basis name a transaction by its system_time — see snapshot_token.
+    --
+    -- ingest_time — the INGEST clock: the transaction's candidate time where that is strictly after the ingest clock's current value, else one microsecond past it.
+    --   The candidate is the specified system time where there is one, else the log timestamp — for an external source's transaction, the leader's clock.
+    --   For a transaction rejected for its specified system time it is the log timestamp.
+    --   ingest_time therefore strictly increases across a database's transactions.
+    -- system_time — the DML clock: decided before the transaction runs, and taken iff it stages a row in a data table.
+    --   A client MAY specify one, as an external source MAY for its transactions.
+    --   Otherwise it is ingest_time, which is strictly after the DML clock's current value because the ingest clock never stands behind it.
+    --   A client-specified system_time not after the DML clock's current value aborts the transaction; an external source's is smoothed strictly greater than it instead, so never aborts it.
+    --   Strictness is what lets a read basis name a point on the DML clock — see snapshot_token.
+    --   A specified system time behind the ingest clock leaves ingest_time ahead of it; one ahead of it carries the ingest clock forward.
+    --   ingest_time never lies behind system_time.
+    --
+    -- A transaction that stages no data row moves the ingest clock alone, and leaves system_time absent, a client-specified one included.
+    -- That covers one that only defines (CREATE TABLE, GRANT, REVOKE), one whose statements matched no rows, an empty one, an attach or detach, and one that aborts or is skipped.
+    -- Its xt.txs row then has a null system_time.
     tx_id: Integer
-    system_time: Timestamp
+    ingest_time: Timestamp
+    system_time: Timestamp?
+}
+
+value TxHead {
+    -- A partition's latest completed transaction, and where its two clocks stand after it.
+    -- Advanced by every transaction; its system_time only by one that takes a system time.
+    latest_completed_tx: TransactionKey
+    -- The DML clock: the latest system time any transaction has taken, carried forward over transactions that take none.
+    -- Absent until a transaction has taken one.
+    system_time: Timestamp?
+
+    -- Derived
+    ingest_time: latest_completed_tx.ingest_time   -- the ingest clock
 }
 
 value TransactionResult {
@@ -287,7 +327,11 @@ value TransactionResult {
 value Block {
     -- A persisted block in the object store.
     block_index: Integer
-    latest_completed_tx: TransactionKey
+    -- The latest completed transaction and where both clocks stood after it, so that both clocks survive a restart.
+    -- latest_completed_tx carries its tx_id, its ingest_time, and its system_time where it took one.
+    -- latest_system_time is the head's DML clock, present iff some transaction has taken a system time.
+    -- A block whose latest_completed_tx has no ingest_time reads with both clocks standing at its system_time.
+    head: TxHead
     latest_processed_msg_id: MessageId           -- source log
     boundary_replica_msg_id: MessageId?          -- replica log: the position of this block's boundary
     external_source_token: ExternalSourceToken?  -- the last token seen at block time
@@ -321,7 +365,7 @@ value PendingBlock {
 }
 
 value Snapshot {
-    as_of: TransactionKey
+    as_of: TxHead?
 }
 
 value TableMetadata {
@@ -417,9 +461,11 @@ variant ResolvedTxMessage : ReplicaMessage {
     -- A resolved transaction: put, delete and erase events that require no database reads.
     -- An attach or detach result is carried as a database operation within it.
     -- For an external-source database it carries the resume token as at the transaction boundary.
-    tx_id: MessageId                          -- the source-log position of the original message,
+    -- The transaction's id and the times the leader decided: its system time is present iff the transaction took one.
+    -- A record with no ingest time reads with both times standing at its system time.
+    tx_key: TransactionKey
+    tx_id: tx_key.tx_id                       -- the source-log position of the original message,
                                               -- or the resolver-assigned tx_id for an external-source database
-    system_time: Timestamp                    -- the resolved system time
     committed: Boolean
     error: Throwable?                         -- the abort reason, null if committed
     db_op: DbOp?                              -- an attach or detach side-effect, if any
@@ -662,7 +708,7 @@ rule TransitionToLeader {
             block_in_progress: pending_block != null
         )
         TxResolver.created(
-            latest_completed_tx: live_index.latest_completed_tx
+            head: live_index.head
         )
 
         -- The new leader produces the block the outgoing one left behind, before it reads a source message.
@@ -1097,7 +1143,9 @@ rule ExternalSourceIndexesTx {
     -- It may await the result or not; the indexing below is identical either way, and the difference is caller-side.
     --
     -- Unlike a client-driven transaction, tx_id here is assigned off the RESOLVED head, not off a source-log position and not off the durable head.
-    -- system_time is smoothed strictly greater than the previous transaction's.
+    -- Its system time is the source's, smoothed strictly greater than the DML clock's current value so that it never aborts the transaction, else its ingest time.
+    -- Its ingest time derives from the source's system time, else the leader's clock, as for any transaction (see TransactionKey).
+    -- A writer that stages no data row takes no system time, as on the source-log path.
     --
     -- The caller's handle completes on READ-BACK (LeaderAppliesOwnTx), so it means durably replicated AND confirmed unfenced.
     -- Every path on which the transaction will never be applied MUST fail it instead, or the caller waits forever — see live-index.allium.
@@ -1285,11 +1333,14 @@ rule CompactionJobConfirmed {
 rule ClientOpensSnapshot {
     -- External queries open at the DURABLE head, never the resolved head.
     -- A query must never see a transaction that could vanish if the leader crashed before its replica-log write landed, nor one a newer-term leader superseded.
+    -- Its basis per partition is the snapshot_token's two clocks where one is given, else the head's ingest and DML clocks, each capped by snapshot_time.
+    -- It reads the ingest tables at the ingest-time basis, and every data table at the system-time basis.
+    -- A snapshot_token whose system time is after the head's DML clock names a transaction not yet indexed, and is refused (xtdb/unindexed-tx); its ingest time is not checked.
     when: ClientOpensSnapshot(client, database)
 
     ensures:
         Snapshot.created(
-            as_of: live_index.latest_completed_tx
+            as_of: live_index.head
         )
 }
 
@@ -1435,7 +1486,7 @@ deferred ResolveTx
   -- Covers the legacy payload form too.
   -- See: live-index.allium CommitTransaction / AbortTransaction
 deferred ResolveExternalSourceTx
-  -- Assign the next tx_id off the RESOLVED head, smooth the system time strictly greater than the previous transaction's, run the caller's writer against a fresh transaction, and stage the result with the caller's durability handle.
+  -- Assign the next tx_id off the RESOLVED head, decide the transaction's times against the clocks it records, run the caller's writer against a fresh transaction, and stage the result with the caller's durability handle.
   -- See: live-index.allium CommitTransaction
 deferred ResolveDbOp
   -- Resolve an attach or detach as a transaction carrying the database operation, for the catalog to be brought into line with when the record is read back.

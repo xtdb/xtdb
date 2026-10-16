@@ -5,6 +5,7 @@
             [xtdb.arrow-edn-test :as aet]
             [xtdb.db-catalog :as db]
             [xtdb.node :as xtn]
+            [xtdb.serde :as serde]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
             [xtdb.tx-ops :as tx-ops]
@@ -342,7 +343,7 @@
                       (writeTo [_ _]))]
 
     (.appendMessageBlocking replica-log
-                            (ReplicaMessage$ResolvedTx. 0 (Instant/now)
+                            (ReplicaMessage$ResolvedTx. (let [now (Instant/now)] (serde/->TxKey 0 now now))
                                                         true nil {} nil nil nil 0 nil)
                             0)
 
@@ -370,7 +371,7 @@
                       (writeTo [_ _]))]
 
     (.appendMessageBlocking replica-log
-                            (ReplicaMessage$ResolvedTx. 0 (Instant/now)
+                            (ReplicaMessage$ResolvedTx. (let [now (Instant/now)] (serde/->TxKey 0 now now))
                                                         true nil {} nil nil nil 0 nil)
                             0)
 

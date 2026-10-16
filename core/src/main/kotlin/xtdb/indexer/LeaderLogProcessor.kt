@@ -102,7 +102,7 @@ internal class LeaderLogProcessor(
     val pendingBlock get() = blockCutter.pendingBlock
 
     private fun applyResolvedTx(msg: ReplicaMessage.ResolvedTx) {
-        val txKey = TransactionKey(msg.txId, msg.systemTime)
+        val txKey = msg.txKey
 
         msg.loadTableData(al).useAll { tables -> liveIndex.commitTx(txKey, tables) }
 

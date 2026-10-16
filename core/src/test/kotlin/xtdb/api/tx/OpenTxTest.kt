@@ -11,7 +11,6 @@ import org.junit.jupiter.api.Test
 import xtdb.NodeBase
 import xtdb.NodeBase.Companion.openBase
 import xtdb.TestPartition
-import xtdb.api.TransactionKey
 import xtdb.storage.MemoryStorage
 import java.time.Instant
 
@@ -37,7 +36,7 @@ class OpenTxTest {
             TestPartition(allocator, bp).use { partition ->
                 OpenTx(
                     allocator, nodeBase, partition.storage, partition.state, dbName,
-                    TransactionKey(0, Instant.EPOCH), null
+                    0, Instant.EPOCH, Instant.EPOCH, null
                 ).use(f)
             }
         }

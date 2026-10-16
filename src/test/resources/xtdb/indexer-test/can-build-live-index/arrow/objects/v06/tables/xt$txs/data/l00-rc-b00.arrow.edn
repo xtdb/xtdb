@@ -10,7 +10,7 @@
                 "put"
                 [:struct
                  {"_id" :i64,
-                  "system_time" :instant,
+                  "system_time" [:? :instant],
                   "committed" :bool,
                   "user_metadata" [:? :struct],
                   "error" [:? :transit]}]}]}),
@@ -48,10 +48,9 @@
     :op
     #xt/tagged [:put
                 {:xt/id 8835,
-                 :system-time #xt/zdt "2020-01-06T00:00Z[UTC]",
                  :committed false,
                  :error
-                  #xt/error [:incorrect :xtdb.indexer/invalid-valid-times "Invalid valid times" {:table #xt/table foo, :valid-from #xt/instant "2020-01-01T00:00:00Z", :tx-key #xt/tx-key {:tx-id 8835, :system-time #xt/instant "2020-01-06T00:00:00Z"}, :valid-to #xt/instant "2019-01-01T00:00:00Z", :tx-op-idx 0}]}],
+                  #xt/error [:incorrect :xtdb.indexer/invalid-valid-times "Invalid valid times" {:table #xt/table foo, :valid-from #xt/instant "2020-01-01T00:00:00Z", :tx-key #xt/tx-key {:tx-id 8835, :ingest-time #xt/instant "2020-01-06T00:00:00Z", :system-time #xt/instant "2020-01-06T00:00:00Z"}, :valid-to #xt/instant "2019-01-01T00:00:00Z", :tx-op-idx 0}]}],
     :xt/iid #bytes "80d9918bb263653bf433c77ffd72153c"}
    {:xt/system-from #xt/zdt "2020-01-01T00:00Z[UTC]",
     :xt/valid-from #xt/zdt "2020-01-01T00:00Z[UTC]",

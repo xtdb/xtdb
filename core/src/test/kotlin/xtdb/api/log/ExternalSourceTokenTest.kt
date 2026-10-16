@@ -54,7 +54,7 @@ class ExternalSourceTokenTest {
 
         val block = tableCatalog.buildBlock(
             blockIndex = 0,
-            latestCompletedTx = null,
+            head = null,
             latestProcessedMsgId = 100,
             boundaryReplicaMsgId = null,
             tables = emptySet(),
@@ -77,7 +77,7 @@ class ExternalSourceTokenTest {
 
         val block = tableCatalog.buildBlock(
             blockIndex = 0,
-            latestCompletedTx = null,
+            head = null,
             latestProcessedMsgId = 100,
             boundaryReplicaMsgId = null,
             tables = emptySet(),
@@ -97,7 +97,7 @@ class ExternalSourceTokenTest {
 
         val block = tableCatalog.buildBlock(
             blockIndex = 0,
-            latestCompletedTx = null,
+            head = null,
             latestProcessedMsgId = 100,
             boundaryReplicaMsgId = null,
             tables = emptySet(),

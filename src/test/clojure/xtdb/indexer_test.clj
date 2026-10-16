@@ -76,7 +76,7 @@
 (t/deftest can-build-block-as-arrow-ipc-file-format
   (binding [c/*ignore-signal-block?* true]
     (let [node-dir (util/->path "target/can-build-block-as-arrow-ipc-file-format")
-          last-tx-key (serde/->TxKey magic-last-tx-id (time/->instant #inst "2020-01-02"))]
+          last-tx-key (serde/->TxKey magic-last-tx-id (time/->instant #inst "2020-01-02") (time/->instant #inst "2020-01-02"))]
       (util/delete-dir node-dir)
 
       (util/with-open [node (tu/->local-node {:node-dir node-dir :compactor-threads 0})]
@@ -295,7 +295,7 @@
 
 (t/deftest can-stop-node-without-writing-blocks
   (let [node-dir (util/->path "target/can-stop-node-without-writing-blocks")
-        last-tx-key (serde/->TxKey magic-last-tx-id (time/->instant #inst "2020-01-02"))]
+        last-tx-key (serde/->TxKey magic-last-tx-id (time/->instant #inst "2020-01-02") (time/->instant #inst "2020-01-02"))]
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir})]
@@ -347,7 +347,7 @@
                                      (xt/submit-tx node tx-ops))
                                    nil
                                    (partition-all 100 tx-ops))
-              last-tx-key (serde/->TxKey last-tx-id (time/->instant #inst "2020-04-19"))]
+              last-tx-key (serde/->TxKey last-tx-id (time/->instant #inst "2020-04-19") (time/->instant #inst "2020-04-19"))]
 
           (xt-log/sync-node node (Duration/ofSeconds 15))
           (t/is (= {"xtdb" [last-tx-key]} (tu/latest-completed-txs node)))
@@ -515,13 +515,13 @@
         (let [table-cat (.getTableCatalog (db/primary-db node))]
           (t/is (nil? (.getCurrentBlockIndex table-cat)))
 
-          (t/is (= (serde/->TxKey 0 (time/->instant #inst "2020-01-01"))
+          (t/is (= (serde/->TxKey 0 (time/->instant #inst "2020-01-01") (time/->instant #inst "2020-01-01"))
                    (xt/execute-tx node [[:sql "INSERT INTO table (_id, foo, bar, baz) VALUES (?, ?, ?, ?)"
                                          [0, 2, "hello", 12]
                                          [1, 1, "world", 3.3]]]
                                   {:default-tz #xt/zone "Europe/London"})))
 
-          (t/is (= {"xtdb" [(serde/->TxKey 0 (time/->instant #inst "2020-01-01"))]}
+          (t/is (= {"xtdb" [(serde/->TxKey 0 (time/->instant #inst "2020-01-01") (time/->instant #inst "2020-01-01"))]}
                    (tu/latest-completed-txs node)))
 
           (tu/flush-block! node)
@@ -586,8 +586,7 @@ INSERT INTO docs (_id, _valid_from, _valid_to)
              :committed false,
              :error #xt/error [:incorrect ::err/illegal-arg "No matching clause: [<List> <Int(64, true)>]"
                                {:sql "UPDATE docs SET list = list || [3]", :tx-op-idx 0
-                                :tx-key #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-02T00:00:00Z"}}],
-             :system-time #xt/zoned-date-time "2020-01-02T00:00Z[UTC]"}]
+                                :tx-key #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-02T00:00:00Z"}}]}]
            (xt/q tu/*node* "SELECT * FROM xt.txs WHERE NOT committed"))))
 
 (t/deftest test-copes-with-missing-put

@@ -112,15 +112,31 @@
                 {:user "bob", :role "analyst"}]
                (pgw-test/q conn [membership-q-xt]))))))
 
+(t/deftest grant-and-dml-in-one-tx-under-an-explicit-system-time
+  (with-open [node (xtn/start-node)
+              conn (jdbc/get-connection node)]
+    (jdbc/execute! conn ["BEGIN READ WRITE WITH (SYSTEM_TIME = TIMESTAMP '2020-01-01T00:00:00Z')"])
+    (jdbc/execute! conn ["GRANT analyst TO alice"])
+    (jdbc/execute! conn ["INSERT INTO docs (_id) VALUES (1)"])
+    (jdbc/execute! conn ["COMMIT"])
+
+    (t/is (= [{:role "analyst", :member "alice"}]
+             (pgw-test/q conn [membership-q]))
+          "the grant lands at the tx's ingest time")
+
+    (t/is (= [{:xt/id 1, :xt/system-from #xt/zoned-date-time "2020-01-01T00:00Z[UTC]"}]
+             (pgw-test/q conn ["SELECT _id, _system_from FROM docs"]))
+          "the insert lands at the explicit system time")))
+
 ;; The acceptance test on #5683: REVOKE is a system-time soft-close, so membership
 ;; history stays queryable as-of any past system-time.
 (t/deftest membership-queryable-as-of-system-time
   (with-open [node (xtn/start-node)
               conn (jdbc/get-connection node)]
     (jdbc/execute! conn ["GRANT analyst TO alice"])
-    (let [t1 (.toInstant (:system-time (first (pgw-test/q conn ["SHOW LATEST_SUBMITTED_TX"]))))]
+    (let [t1 (.toInstant (:ingest-time (first (pgw-test/q conn ["SHOW LATEST_SUBMITTED_TX"]))))]
       (jdbc/execute! conn ["REVOKE analyst FROM alice"])
-      (let [t2 (.toInstant (:system-time (first (pgw-test/q conn ["SHOW LATEST_SUBMITTED_TX"]))))]
+      (let [t2 (.toInstant (:ingest-time (first (pgw-test/q conn ["SHOW LATEST_SUBMITTED_TX"]))))]
 
         (t/is (= [{:user "alice", :role "analyst"}]
                  (xt/q conn membership-q-xt {:snapshot-time t1}))

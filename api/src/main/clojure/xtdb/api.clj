@@ -414,6 +414,9 @@
 ;; delegating; `DataSource` additionally threads its await-token. The in-process `Xtdb.Connection`
 ;; impl lives in `xtdb.node.impl`.
 
+(defn- ->tx-key [{:keys [tx-id ingest-time system-time]}]
+  (serde/->TxKey tx-id (time/->instant ingest-time) (some-> system-time time/->instant)))
+
 (extend-protocol xtp/Connectable
   Connection
   (-plan-q [conn sql args opts]
@@ -424,8 +427,7 @@
     {:tx-id (:tx-id (submit-tx* conn tx-ops (assoc opts :async? true)))})
   (-execute-tx [conn tx-ops opts]
     (xtp/check-no-database conn opts)
-    (let [{:keys [tx-id system-time]} (submit-tx* conn tx-ops (assoc opts :async? false))]
-      (serde/->TxKey tx-id (time/->instant system-time))))
+    (->tx-key (submit-tx* conn tx-ops (assoc opts :async? false))))
   (-status [conn] (xtp/build-status conn))
 
   DataSource
@@ -440,9 +442,9 @@
         {:tx-id tx-id})))
   (-execute-tx [ds tx-ops opts]
     (with-open [conn (open-ds-conn ds opts)]
-      (let [{:keys [tx-id system-time await-token]} (submit-tx* conn tx-ops (assoc opts :async? false))]
+      (let [{:keys [await-token] :as tx} (submit-tx* conn tx-ops (assoc opts :async? false))]
         (.setAwaitToken ds await-token)
-        (serde/->TxKey tx-id (time/->instant system-time)))))
+        (->tx-key tx))))
   (-status [ds]
     (with-open [conn (open-ds-conn ds {})]
       (xtp/-status conn)))
@@ -458,8 +460,7 @@
   (-execute-tx [connectable tx-ops opts]
     (xtp/check-no-database connectable opts)
     (with-open [^Connection conn (jdbc/get-connection connectable)]
-      (let [{:keys [tx-id system-time]} (submit-tx* conn tx-ops (assoc opts :async? false))]
-        (serde/->TxKey tx-id (time/->instant system-time)))))
+      (->tx-key (submit-tx* conn tx-ops (assoc opts :async? false)))))
   (-status [connectable]
     (xtp/check-no-database connectable {})
     (with-open [^Connection conn (jdbc/get-connection connectable)]

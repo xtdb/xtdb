@@ -110,8 +110,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
     private fun processRecord(record: Log.Record<ReplicaMessage>) {
         when (val msg = record.message) {
             is ReplicaMessage.ResolvedTx -> resolvedTxTimer.timed {
-                val systemTime = msg.systemTime
-                val txKey = TransactionKey(msg.txId, systemTime)
+                val txKey = msg.txKey
 
                 val tables = msg.loadTableData(allocator)
                 try {

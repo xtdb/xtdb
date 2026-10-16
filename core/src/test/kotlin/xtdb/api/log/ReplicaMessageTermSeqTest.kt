@@ -4,6 +4,7 @@ import io.mockk.mockk
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
+import xtdb.api.TransactionKey
 import xtdb.catalog.TableCatalog
 import xtdb.storage.BufferPool
 import java.time.Instant
@@ -15,7 +16,7 @@ class ReplicaMessageTermSeqTest {
     @Test
     fun `every message kind carries its term position through the codec`() {
         val msgs = listOf(
-            ReplicaMessage.ResolvedTx(1, Instant.EPOCH, true, null, emptyMap(), srcMsgId = 1, termId = 3),
+            ReplicaMessage.ResolvedTx(TransactionKey(1, Instant.EPOCH, Instant.EPOCH), true, null, emptyMap(), srcMsgId = 1, termId = 3),
             ReplicaMessage.TriesAdded(1, 0, emptyList(), sourceMsgId = 1, termId = 3),
             ReplicaMessage.BlockBoundary(0, 1, termId = 3),
             ReplicaMessage.BlockUploaded(1, 0, 0, 1, emptyList(), termId = 3),
@@ -44,7 +45,7 @@ class ReplicaMessageTermSeqTest {
                 cat.refresh(
                     cat.buildBlock(
                         blockIndex = 0,
-                        latestCompletedTx = null,
+                        head = null,
                         latestProcessedMsgId = 100,
                         boundaryReplicaMsgId = 42,
                         tables = emptySet(),

@@ -20,4 +20,6 @@ message TimeBasis {
 
 message SystemTimes {
     repeated google.protobuf.Timestamp system_times = 1;
+    // Parallel to system_times; empty where each partition's ingest time is its system time.
+    repeated google.protobuf.Timestamp ingest_times = 2;
 }

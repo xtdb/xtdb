@@ -122,7 +122,8 @@
      (let [^ReplicaMessage$ResolvedTx m msg]
        (cond-> {:type :resolved-tx
                 :tx-id (.getTxId m)
-                :system-time (.getSystemTime m)
+                :ingest-time (.getIngestTime (.getTxKey m))
+                :system-time (.getSystemTime (.getTxKey m))
                 :committed (.getCommitted m)
                 :error (some-> (.getError m) str)
                 :table-names (vec (keys (.getTableData m)))}

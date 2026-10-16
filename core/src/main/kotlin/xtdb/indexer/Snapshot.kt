@@ -22,6 +22,8 @@ import kotlin.collections.component1
 import kotlin.collections.component2
 import kotlin.collections.iterator
 import xtdb.api.tx.OpenTx
+import xtdb.api.tx.TxHead
+import xtdb.database.ClockBasis
 
 /**
  * A frozen view of **one partition** at a point in time — see [DatabaseSnapshot] for the whole database.
@@ -31,7 +33,7 @@ import xtdb.api.tx.OpenTx
  * respect to each other, though — see [open].
  */
 class Snapshot(
-    val txBasis: TransactionKey?,
+    val head: TxHead?,
     val trieCatSnap: TrieCatalog.Snap,
     val tableCatSnap: TableCatalog.State,
     // A table already has several of these on a transaction snapshot - the live-index segment, one
@@ -46,6 +48,8 @@ class Snapshot(
     val tableInfo: Map<TableRef, Set<ColumnName>>,
 ) : AutoCloseable {
 
+    val txBasis: TransactionKey? get() = head?.latestCompletedTx
+
     /**
      * Where [table]'s files live, as of this snapshot — so the slugs a scan reads by are the ones recorded
      * in the block whose trie state it planned against.
@@ -56,7 +60,7 @@ class Snapshot(
     val tableOids: Map<TableRef, Oid> get() = tableCatSnap.entries.associate { it.table to it.oid }
 
     interface Source {
-        fun openSnapshot(minSystemTime: Instant?): Snapshot
+        fun openSnapshot(minBasis: ClockBasis?): Snapshot
     }
 
     fun table(table: TableRef): List<TableSnapshot> = tableSnaps[table].orEmpty()
@@ -189,7 +193,9 @@ class Snapshot(
             val tableInfo = tableCatSnap.buildTableInfo(liveColumnNames)
 
             Snapshot(
-                ownTx?.txKey ?: liveIndex.latestCompletedTx, trieCatSnap, tableCatSnap,
+                ownTx?.let { TxHead(TransactionKey(it.txId, it.ingestTime, it.systemTime), it.systemTime) }
+                    ?: liveIndex.head,
+                trieCatSnap, tableCatSnap,
                 byTable, supersededLiveTypes, tableInfo
             )
         }

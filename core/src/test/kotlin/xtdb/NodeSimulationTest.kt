@@ -14,6 +14,7 @@ import xtdb.SimulationTestUtils.Companion.createTrieCatalog
 import xtdb.SimulationTestUtils.Companion.prefix
 import xtdb.SimulationTestUtils.Companion.setLogLevel
 import xtdb.api.TransactionKey
+import xtdb.api.tx.TxHead
 import xtdb.api.log.Watchers
 import xtdb.catalog.TableCatalog
 import xtdb.catalog.TableCatalog.Companion.latestBlock
@@ -180,7 +181,7 @@ class NodeSimulationTest : SimulationTestBase() {
         for (blockIndex in 1L..3L) {
             val block = tableCatalog.buildBlock(
                 blockIndex = blockIndex,
-                latestCompletedTx = TransactionKey(txId = blockIndex, systemTime = Instant.now()),
+                head = Instant.now().let { TxHead(TransactionKey(txId = blockIndex, ingestTime = it, systemTime = it), it) },
                 latestProcessedMsgId = blockIndex,
                 boundaryReplicaMsgId = null,
                 tables = tableCatalog.resolveTables(listOf(table)),
@@ -240,7 +241,7 @@ class NodeSimulationTest : SimulationTestBase() {
         for (blockIndex in 5L..7L) {
             val block = tableCatalog.buildBlock(
                 blockIndex = blockIndex,
-                latestCompletedTx = TransactionKey(txId = blockIndex, systemTime = Instant.now()),
+                head = Instant.now().let { TxHead(TransactionKey(txId = blockIndex, ingestTime = it, systemTime = it), it) },
                 latestProcessedMsgId = blockIndex,
                 boundaryReplicaMsgId = null,
                 tables = tableCatalog.resolveTables(listOf(table)),
@@ -319,7 +320,7 @@ class NodeSimulationTest : SimulationTestBase() {
         for (blockIndex in 5L..7L) {
             val block = tableCatalog.buildBlock(
                 blockIndex = blockIndex,
-                latestCompletedTx = TransactionKey(txId = blockIndex, systemTime = Instant.now()),
+                head = Instant.now().let { TxHead(TransactionKey(txId = blockIndex, ingestTime = it, systemTime = it), it) },
                 latestProcessedMsgId = blockIndex,
                 boundaryReplicaMsgId = null,
                 tables = tableCatalog.resolveTables(listOf(table)),
@@ -392,7 +393,7 @@ class NodeSimulationTest : SimulationTestBase() {
             for (blockIndex in 5L..7L) {
                 val block = db.tableCatalog.buildBlock(
                     blockIndex = blockIndex,
-                    latestCompletedTx = TransactionKey(txId = blockIndex, systemTime = Instant.now()),
+                    head = Instant.now().let { TxHead(TransactionKey(txId = blockIndex, ingestTime = it, systemTime = it), it) },
                     latestProcessedMsgId = blockIndex,
                     boundaryReplicaMsgId = null,
                     tables = db.tableCatalog.resolveTables(listOf(table)),
@@ -466,7 +467,7 @@ class NodeSimulationTest : SimulationTestBase() {
             for (blockIndex in 5L..7L) {
                 val block = db.tableCatalog.buildBlock(
                     blockIndex = blockIndex,
-                    latestCompletedTx = TransactionKey(txId = blockIndex, systemTime = Instant.now()),
+                    head = Instant.now().let { TxHead(TransactionKey(txId = blockIndex, ingestTime = it, systemTime = it), it) },
                     latestProcessedMsgId = blockIndex,
                     boundaryReplicaMsgId = null,
                     tables = db.tableCatalog.resolveTables(listOf(table)),
@@ -563,7 +564,7 @@ class NodeSimulationTest : SimulationTestBase() {
         for (blockIndex in 1L..15L) {
             val block = tableCatalog.buildBlock(
                 blockIndex = blockIndex,
-                latestCompletedTx = TransactionKey(txId = blockIndex, systemTime = Instant.now()),
+                head = Instant.now().let { TxHead(TransactionKey(txId = blockIndex, ingestTime = it, systemTime = it), it) },
                 latestProcessedMsgId = blockIndex,
                 boundaryReplicaMsgId = null,
                 tables = tableCatalog.resolveTables(listOf(table)),
@@ -616,7 +617,7 @@ class NodeSimulationTest : SimulationTestBase() {
             for (blockIndex in 1L..15L) {
                 val block = db.tableCatalog.buildBlock(
                     blockIndex = blockIndex,
-                    latestCompletedTx = TransactionKey(txId = blockIndex, systemTime = Instant.now()),
+                    head = Instant.now().let { TxHead(TransactionKey(txId = blockIndex, ingestTime = it, systemTime = it), it) },
                     latestProcessedMsgId = blockIndex,
                     boundaryReplicaMsgId = null,
                     tables = db.tableCatalog.resolveTables(listOf(table)),
@@ -708,7 +709,7 @@ class NodeSimulationTest : SimulationTestBase() {
             for (blockIndex in 0L..13L) {
                 val block = db.tableCatalog.buildBlock(
                     blockIndex = blockIndex,
-                    latestCompletedTx = TransactionKey(txId = blockIndex, systemTime = Instant.now()),
+                    head = Instant.now().let { TxHead(TransactionKey(txId = blockIndex, ingestTime = it, systemTime = it), it) },
                     latestProcessedMsgId = blockIndex,
                     boundaryReplicaMsgId = null,
                     tables = db.tableCatalog.resolveTables(listOf(table)),

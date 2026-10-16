@@ -5,6 +5,7 @@ import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
 import xtdb.indexer.LiveIndex
 import xtdb.api.tx.ExternalSource
+import xtdb.database.ClockBasis
 import xtdb.indexer.LogProcessor
 import xtdb.indexer.Snapshot
 import xtdb.metadata.PageMetadata
@@ -33,7 +34,7 @@ class DatabasePartition(
     val compactor: Compactor.ForDatabase
         get() = compactorOrNull ?: error("compactor not initialised")
 
-    fun openSnapshot(minSystemTime: Instant?): Snapshot = state.liveIndex.openSnapshot(minSystemTime)
+    fun openSnapshot(minBasis: ClockBasis?): Snapshot = state.liveIndex.openSnapshot(minBasis)
 
     override fun close() {
         // The source outlives every leader term, so it goes after the processor that borrows it.

@@ -28,10 +28,14 @@
            (xtdb.types ClojureForm ZonedDateTimeRange)
            xtdb.util.NormalForm))
 
-(defrecord TxKey [tx-id system-time]
+(defrecord TxKey [tx-id ingest-time system-time]
   TransactionKey
   (getTxId [_] tx-id)
+  (getIngestTime [_] ingest-time)
   (getSystemTime [_] system-time))
+
+(defn read-tx-key [{:keys [tx-id ingest-time system-time]}]
+  (->TxKey tx-id (or ingest-time system-time) system-time))
 
 (defmethod print-dup TxKey [^TxKey tx-key, ^Writer w]
   (.write w (str "#xt/tx-key " (pr-str (into {} tx-key)))))
@@ -39,11 +43,11 @@
 (defmethod print-method TxKey [tx-key w]
   (print-dup tx-key w))
 
-(defn ->tx-committed [tx-id system-time]
-  (TransactionResult$Committed. (->TxKey tx-id system-time)))
+(defn ->tx-committed [tx-id ingest-time system-time]
+  (TransactionResult$Committed. (->TxKey tx-id ingest-time system-time)))
 
-(defn ->tx-aborted [tx-id system-time error]
-  (TransactionResult$Aborted. (->TxKey tx-id system-time) error))
+(defn ->tx-aborted [tx-id ingest-time system-time error]
+  (TransactionResult$Aborted. (->TxKey tx-id ingest-time system-time) error))
 
 (defn period-duration-reader [[p d]]
   (PeriodDuration. (Period/parse p) (Duration/parse d)))
@@ -167,7 +171,7 @@
             "xtdb/exception-info" (transit/read-handler #(ex-info (first %) (second %)))
 
             "xtdb/clj-form" (transit/read-handler ClojureForm/new)
-            "xtdb/tx-key" (transit/read-handler map->TxKey)
+            "xtdb/tx-key" (transit/read-handler read-tx-key)
             "xtdb/key-fn" (transit/read-handler read-key-fn)
             "xtdb/period-duration" period-duration-reader
             "xtdb/interval" (transit/read-handler interval-reader)

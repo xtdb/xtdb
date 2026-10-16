@@ -232,7 +232,7 @@ internal class BlockCutter(
         val externalSourceToken = boundary.externalSourceToken
 
         val block = tableCatalog.buildBlock(
-            blockIdx, liveIndex.latestCompletedTx, latestProcessedMsgId,
+            blockIdx, liveIndex.head, latestProcessedMsgId,
             boundaryReplicaMsgId, entries.values, secondaryDatabasesForBlock,
             externalSourceToken,
             boundary.termId, // not leaderTerm - #6059

@@ -99,9 +99,10 @@ value TxBasisToken {
 }
 
 value TimeBasisToken {
-    -- An opaque snapshot token: per-database latest-completed system-times, the upper bound
-    -- on the data a read observes. Captured from the Database catalog at a transaction's
-    -- first query to pin its snapshot. See: database/encodeTimeBasisToken, Database.Catalog.snapshotToken.
+    -- An opaque snapshot token: per database, each partition's ingest and DML clocks, the upper bound on what a read observes.
+    -- A read takes xt.txs and xt.role_membership at its ingest clock and every other table at its DML clock (see db.allium, Two clocks per partition).
+    -- A token carrying DML clocks alone reads each partition's ingest clock as standing at its DML clock.
+    -- Captured from the Database catalog at a transaction's first query to pin its snapshot. See: database/encodeClockBasisToken, Database.Catalog.snapshotToken.
 }
 
 value ReadBasis {
@@ -112,10 +113,9 @@ value ReadBasis {
     -- current-time at the pin; the ReadOnly characteristics declared at BEGIN override
     -- individual fields.
     -- The options are grammar-scoped to READ ONLY (readOnlyTxOption in the SQL grammar).
-    --   snapshot_token — the data snapshot's upper bound, a TimeBasisToken (per-database
-    --                    latest-completed system-times). Distinct from the await_token, which
-    --                    is a TxBasisToken of message-ids the read awaits before snapshotting.
-    --   snapshot_time  — observe state as of a wall-clock instant.
+    --   snapshot_token — the snapshot's upper bound, a TimeBasisToken (per-database ingest and DML clocks).
+    --                    Distinct from the await_token, which is a TxBasisToken of message-ids the read awaits before snapshotting.
+    --   snapshot_time  — observe state as of a wall-clock instant, on both clocks.
     --   clock_time     — pin the transaction's notion of "now".
     snapshot_token: TimeBasisToken?
     snapshot_time: Timestamp?

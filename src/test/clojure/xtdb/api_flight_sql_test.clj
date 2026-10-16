@@ -17,7 +17,7 @@
 
 (deftest execute-tx-and-query
   (with-open [conn (open-conn)]
-    (t/is (= (serde/->TxKey 0 (time/->instant #inst "2020-01-01"))
+    (t/is (= (serde/->TxKey 0 (time/->instant #inst "2020-01-01") (time/->instant #inst "2020-01-01"))
              (xt/execute-tx conn [[:put-docs :docs {:xt/id :foo, :n 1}]]))
           "execute-tx over a FlightSQL connection returns the tx-key")
 
@@ -120,7 +120,7 @@
 
 (deftest tx-opts
   (with-open [conn (open-conn)]
-    (t/is (= (serde/->TxKey 0 (time/->instant #inst "2021-06-01"))
+    (t/is (= (serde/->TxKey 0 (time/->instant #inst "2021-06-01") (time/->instant #inst "2021-06-01"))
              (xt/execute-tx conn [[:put-docs :docs {:xt/id :foo}]] {:system-time #inst "2021-06-01"}))
           ":system-time is honoured")
 

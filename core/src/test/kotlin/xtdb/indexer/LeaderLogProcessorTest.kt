@@ -20,6 +20,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import xtdb.api.TransactionKey
 import xtdb.api.DatabaseName
 import xtdb.api.TableRef
 import xtdb.api.TransactionResult
@@ -140,7 +141,7 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
         proc.applyReplicaMessage(
             Log.Record(
                 0, 0, Instant.now(),
-                ReplicaMessage.ResolvedTx(0, Instant.now(), true, null, emptyMap(), srcMsgId = null, termId = 0)
+                ReplicaMessage.ResolvedTx(Instant.now().let { TransactionKey(0, it, it) }, true, null, emptyMap(), srcMsgId = null, termId = 0)
             )
         )
 
@@ -156,7 +157,7 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
             proc.applyReplicaMessage(
                 Log.Record(
                     0, 0, Instant.now(),
-                    ReplicaMessage.ResolvedTx(0, Instant.now(), true, null, emptyMap(), srcMsgId = 0, termId = 1)
+                    ReplicaMessage.ResolvedTx(Instant.now().let { TransactionKey(0, it, it) }, true, null, emptyMap(), srcMsgId = 0, termId = 1)
                 )
             )
         }
@@ -216,7 +217,7 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
         proc.applyReplicaMessage(
             record(
                 1,
-                ReplicaMessage.ResolvedTx(7, Instant.now(), true, null, emptyMap(), srcMsgId = 6, termId = 0)
+                ReplicaMessage.ResolvedTx(Instant.now().let { TransactionKey(7, it, it) }, true, null, emptyMap(), srcMsgId = 6, termId = 0)
             )
         )
 

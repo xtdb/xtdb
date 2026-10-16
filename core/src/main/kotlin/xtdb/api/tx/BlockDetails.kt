@@ -15,7 +15,7 @@ import xtdb.types.MessageId
  */
 data class BlockDetails(
     val blockIndex: BlockIndex,
-    val latestCompletedTx: TransactionKey?,
+    val head: TxHead?,
     val latestProcessedMsgId: MessageId?,
     val boundaryReplicaMsgId: MessageId?,
     // the leader term that produced this block's boundary; 0 for blocks written before
@@ -27,4 +27,6 @@ data class BlockDetails(
     /** The tables this block records — so, the tables with a per-table block file beside it. */
     val tables: List<TableEntry>,
     val secondaryDatabases: Map<String, DatabaseConfig>,
-)
+) {
+    val latestCompletedTx: TransactionKey? get() = head?.latestCompletedTx
+}
