@@ -3,7 +3,7 @@
 ;; The time-literals license is available at https://github.com/henryw374/time-literals/blob/2a1c7e195a91dcf3638df1a2876445fc7b7872ef/LICENSE
 ;; https://github.com/henryw374/time-literals
 
-{xt/tx-key xtdb.serde/map->TxKey
+{xt/tx-key xtdb.serde/read-tx-key
  xt/clj-form xtdb.api/->ClojureForm
  xt/illegal-arg xtdb.serde/iae-reader
  xt/runtime-err xtdb.serde/runex-reader

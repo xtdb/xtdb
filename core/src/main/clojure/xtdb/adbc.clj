@@ -150,4 +150,4 @@
         (when-not (.getCommitted executed)
           (throw (or (.getError executed)
                      (err/fault :xtdb/tx-aborted "Transaction aborted"))))
-        (serde/->TxKey (.getTxId executed) (.getSystemTime executed))))))
+        (.getTxKey executed)))))

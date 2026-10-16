@@ -48,6 +48,8 @@
            (xtdb.antlr Sql$DirectlyExecutableStatementContext)
            (xtdb.api ICursor ResultCursor)
            (xtdb.api.query PrepareOpts)
+           (xtdb.api.tx TxHead)
+           (xtdb.database ClockBasis)
            (xtdb.arrow RelationReader VectorReader VectorType)
            (xtdb.indexer DatabaseSnapshot Snapshot)
            xtdb.NodeBase
@@ -144,25 +146,37 @@
   (doseq [[db-name ^DatabaseSnapshot snap] snaps
           [partition-idx ^Snapshot part-snap] (map-indexed vector (.getPartitions snap))]
     (let [snap-tx (.getTxBasis part-snap)
+          head-system-time (some-> (.getHead part-snap) (.getSystemTime))
           system-time (get-in basis [db-name partition-idx])]
       (when (and system-time
-                 (or (nil? snap-tx)
-                     (neg? (compare (.getSystemTime snap-tx) system-time))))
+                 (or (nil? head-system-time)
+                     (neg? (compare head-system-time system-time))))
         (throw (err/incorrect :xtdb/unindexed-tx
                               (format "system-time (%s) is after the latest completed tx (%s)"
                                       (str system-time) (pr-str snap-tx))
                               {:latest-completed-tx snap-tx
                                :system-time system-time}))))))
 
-(defn- default-basis [snaps]
+(defn- head-basis [snaps head-time]
   (->> (for [[db-name ^DatabaseSnapshot snap] snaps
-             :let [sys-times (->> (.getPartitions snap)
-                                  (mapv (fn [^Snapshot part-snap]
-                                          (some-> (.getTxBasis part-snap) (.getSystemTime)))))]
-             :when (some identity sys-times)]
-         [db-name sys-times])
+             :let [times (->> (.getPartitions snap)
+                              (mapv (fn [^Snapshot part-snap]
+                                      (some-> (.getHead part-snap) head-time))))]
+             :when (some identity times)]
+         [db-name times])
        (into {})
        (not-empty)))
+
+(defn- default-basis [snaps]
+  (head-basis snaps (fn [^TxHead head] (.getSystemTime head))))
+
+(defn- default-ingest-basis [snaps]
+  (head-basis snaps (fn [^TxHead head] (.getIngestTime head))))
+
+(defn- ->min-basis [clock-basis]
+  (update-vals clock-basis
+               (fn [clocks]
+                 (mapv (fn [{:keys [ingest-time system-time]}] (ClockBasis. ingest-time system-time)) clocks))))
 
 (defn- plan-query [parsed-query query-opts]
   (cond
@@ -363,13 +377,13 @@
                       (instance? Sql$DirectlyExecutableStatementContext parsed-query) (ast-source-text parsed-query))
           ;; the connection's read basis at prepare time — so prepare-time schema (table-info) sees tables
           ;; committed up to what this connection has awaited. nil for basis-less callers (they get "whatever").
-          prepare-min-basis (some-> (.getSnapshotToken ^PrepareOpts query-opts) basis/<-time-basis-str)
+          prepare-min-basis (some-> (.getSnapshotToken ^PrepareOpts query-opts) basis/<-clock-basis-str ->min-basis)
           {:keys [default-tz query-text] :as query-opts} (-> (->prepare-opts-map query-opts)
                                                               (update :default-tz (fnil identity expr/*default-tz*))
                                                               (cond-> qtext (assoc :query-text qtext))
                                                               (assoc :db-names (vec (sort (.getDatabaseNames db-cat)))
                                                                      :tx-scoped? (.getTxScoped db-cat)))]
-      ;; min-basis is {db-name [system-time per partition]} — the caller's already-awaited read basis, so the
+      ;; min-basis is {db-name [ClockBasis per partition]} — the caller's already-awaited read basis, so the
       ;; live index can hand back its cached snapshot when it's fresh enough. nil = "don't care" (schema/prepare).
       (letfn [(resolve-dbs [] (into {} (.resolveDbs db-cat)))
 
@@ -424,7 +438,7 @@
                     ;; schema consistent with the data it'll read. This same token, decoded and (below) capped by
                     ;; any SETTING/SNAPSHOT_TIME, is the effective read basis; capping only lowers the bound, so
                     ;; gating on the resolved token stays safe.
-                    min-basis (some-> (.getSnapshotToken opts) basis/<-time-basis-str)
+                    min-basis (some-> (.getSnapshotToken opts) basis/<-clock-basis-str ->min-basis)
                     dbs (resolve-dbs)]
               ;; we own the args from here: closed on any failure below, else handed to the cursor (which
               ;; closes them on close). the caller must not close them itself.
@@ -446,12 +460,18 @@
                       ;; names it directly and `SNAPSHOT_TIME` caps it, so it can sit below the `min-basis`
                       ;; the snapshots were opened at: the floor picks the snapshot, this picks what's
                       ;; visible within it.
-                      system-time-basis (cond-> (or (some-> (:snapshot-token planned-query (.getSnapshotToken opts))
-                                                            (expr->value {:args args})
-                                                            (basis/<-time-basis-str)
-                                                            (doto (validate-basis-not-before snaps)))
+                      token-basis (some-> (:snapshot-token planned-query (.getSnapshotToken opts))
+                                          (expr->value {:args args})
+                                          (basis/<-clock-basis-str))
 
+                      system-time-basis (cond-> (or (some-> token-basis
+                                                            (basis/system-times)
+                                                            (doto (validate-basis-not-before snaps)))
                                                     (default-basis snaps))
+                                          (.getSnapshotTime opts) (basis/cap-basis (time/->instant (.getSnapshotTime opts))))
+
+                      ingest-time-basis (cond-> (or (some-> token-basis (basis/ingest-times))
+                                                    (default-ingest-basis snaps))
                                           (.getSnapshotTime opts) (basis/cap-basis (time/->instant (.getSnapshotTime opts))))
 
                       tracer (.getTracer opts)
@@ -471,7 +491,8 @@
 
                               ;; the string is the SQL `SNAPSHOT_TOKEN` function's return value, and the
                               ;; only reason it's still encoded — operators take the map.
-                              expr/*snapshot-token* (some-> system-time-basis (basis/->time-basis-str))]
+                              expr/*snapshot-token* (when (or system-time-basis ingest-time-basis)
+                                                      (basis/->time-basis-str system-time-basis ingest-time-basis))]
 
                       (if (:explain? planned-query)
                         (let [explain-plan (->explain-plan emitted-query)]
@@ -486,6 +507,7 @@
                                                     :dbs dbs
                                                     :snaps snaps
                                                     :system-time-basis system-time-basis
+                                                    :ingest-time-basis ingest-time-basis
                                                     :current-time current-time
                                                     :args args, :schema table-info
                                                     :explain-analyze? (:explain-analyze? planned-query)

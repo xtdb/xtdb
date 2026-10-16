@@ -60,6 +60,7 @@ class PostgresSourceMetricsTest {
 
         private val txKey = object : TransactionKey {
             override val txId = 1L
+            override val ingestTime: Instant = Instant.EPOCH
             override val systemTime: Instant = Instant.EPOCH
         }
 

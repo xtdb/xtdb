@@ -33,7 +33,7 @@
      :latest-completed-txs (-> (status-q "SHOW LATEST_COMPLETED_TXS")
                                (->> (group-by :db-name))
                                (update-vals (fn [txs]
-                                              (mapv #(serde/map->TxKey (select-keys % [:tx-id :system-time])) txs))))
+                                              (mapv #(serde/map->TxKey (select-keys % [:tx-id :ingest-time :system-time])) txs))))
 
      :latest-submitted-msg-ids (-> (status-q "SHOW LATEST_SUBMITTED_MSG_IDS")
                                    (->> (group-by :db-name))

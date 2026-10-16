@@ -1,6 +1,7 @@
 package xtdb.api.log
 
 import com.google.protobuf.ByteString
+import xtdb.api.TransactionKey
 import xtdb.api.tx.ExternalSourceToken
 import xtdb.database.Database
 import xtdb.types.MessageId
@@ -68,8 +69,11 @@ sealed interface ReplicaMessage {
                                 else -> null
                             }
                             ResolvedTx(
-                                it.txId,
-                                fromMicros(it.systemTimeMicros),
+                                TransactionKey(
+                                    it.txId,
+                                    fromMicros(if (it.hasIngestTimeMicros()) it.ingestTimeMicros else it.systemTimeMicros),
+                                    if (it.hasSystemTimeMicros()) fromMicros(it.systemTimeMicros) else null,
+                                ),
                                 it.committed,
                                 it.error.toByteArray().let { bs ->
                                     if (bs.isEmpty()) null else readTransit(bs, MSGPACK) as Throwable
@@ -131,8 +135,7 @@ sealed interface ReplicaMessage {
     }
 
     data class ResolvedTx(
-        val txId: MessageId,
-        val systemTime: Instant,
+        val txKey: TransactionKey,
         val committed: Boolean,
         val error: Throwable?,
         val tableData: Map<String, ByteString>,
@@ -146,12 +149,15 @@ sealed interface ReplicaMessage {
         override val termId: Long,
         override val termSeq: Long? = null,
     ) : ProtobufMessage() {
+        val txId get() = txKey.txId
+
         override fun withTermSeq(termSeq: Long) = copy(termSeq = termSeq)
 
         override fun toLogMessage() = replicaLogMessage {
             resolvedTx = resolvedTx {
-                this.txId = this@ResolvedTx.txId
-                this.systemTimeMicros = this@ResolvedTx.systemTime.asMicros
+                this.txId = this@ResolvedTx.txKey.txId
+                this.ingestTimeMicros = this@ResolvedTx.txKey.ingestTime.asMicros
+                this@ResolvedTx.txKey.systemTime?.let { this.systemTimeMicros = it.asMicros }
                 this.committed = this@ResolvedTx.committed
                 this.error = this@ResolvedTx.error?.let { ByteString.copyFrom(writeTransit(it, MSGPACK)) } ?: ByteString.EMPTY
                 this.tableData.putAll(this@ResolvedTx.tableData)

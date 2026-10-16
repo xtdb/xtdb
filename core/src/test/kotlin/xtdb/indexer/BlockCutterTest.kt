@@ -23,7 +23,6 @@ import xtdb.NodeBase.Companion.openBase
 import xtdb.TestPartition
 import xtdb.api.IndexerConfig
 import xtdb.api.TableRef
-import xtdb.api.TransactionKey
 import xtdb.api.log.ReplicaMessage.BlockBoundary
 import xtdb.api.log.ReplicaMessage.BlockUploaded
 import xtdb.api.tx.OpenTx
@@ -94,7 +93,7 @@ internal class BlockCutterTest {
         fun applyRows(txId: Long, rows: Int) {
             OpenTx(
                 allocator, nodeBase, partitionStorage, partitionState, "test",
-                TransactionKey(txId, Instant.EPOCH), null
+                txId, Instant.EPOCH, Instant.EPOCH, null
             ).use { tx ->
                 repeat(rows) {
                     tx.table(table).apply {
@@ -104,9 +103,9 @@ internal class BlockCutterTest {
                         endPut()
                     }
                 }
-                tx.writeTxRow(null, null)
+                val txKey = tx.writeTxRow(null, null)
                 tx.sealTables().associateTo(mutableMapOf()) { it.ref to it.liveTable }
-                    .closeAllOnCatch { liveIndex.applyTx(tx.txKey, it) }
+                    .closeAllOnCatch { liveIndex.applyTx(txKey, it) }
             }
         }
 

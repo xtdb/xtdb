@@ -12,7 +12,7 @@
 
 (deftest execute-tx-and-query
   (with-open [conn (xt/open-adbc-conn *node*)]
-    (t/is (= (serde/->TxKey 0 (time/->instant #inst "2020-01-01"))
+    (t/is (= (serde/->TxKey 0 (time/->instant #inst "2020-01-01") (time/->instant #inst "2020-01-01"))
              (xt/execute-tx conn [[:put-docs :docs {:xt/id :foo, :n 1}]]))
           "execute-tx over an Xtdb.Connection returns the tx-key")
 

@@ -4,6 +4,7 @@ import io.micrometer.core.instrument.MeterRegistry
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.error.Incorrect
 import xtdb.api.query.PrepareOpts
+import xtdb.database.ClockBasis
 import xtdb.database.DatabaseName
 import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
@@ -59,7 +60,7 @@ interface IQuerySource : AutoCloseable {
          */
         fun openSnapshots(
             dbs: Map<DatabaseName, QueryDatabase>,
-            minBasis: Map<DatabaseName, List<Instant?>>?
+            minBasis: Map<DatabaseName, List<ClockBasis>>?
         ): Map<DatabaseName, DatabaseSnapshot> =
             mutableMapOf<DatabaseName, DatabaseSnapshot>().closeAllOnCatch { snaps ->
                 dbs.forEach { (dbName, db) -> snaps[dbName] = db.openSnapshot(minBasis?.get(dbName)) }

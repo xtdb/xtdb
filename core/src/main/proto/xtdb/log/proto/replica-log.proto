@@ -35,7 +35,8 @@ message TriesDeleted {
 
 message ResolvedTx {
     int64 tx_id = 1;
-    int64 system_time_micros = 2;
+    // Absent where the tx wrote no data rows.
+    int64 system_time_micros = 2 [features.field_presence = EXPLICIT];
     bool committed = 3;
     bytes error = 4;
     map<string, bytes> table_data = 5;
@@ -50,6 +51,9 @@ message ResolvedTx {
     // Set when this tx came from the source log; absent for ext-source txs whose tx_id is an
     // independent counter rather than a source-log msgId.
     int64 src_msg_id = 9 [features.field_presence = EXPLICIT];
+
+    // Absent: both times are system_time_micros.
+    int64 ingest_time_micros = 10 [features.field_presence = EXPLICIT];
 }
 
 message BlockBoundary {

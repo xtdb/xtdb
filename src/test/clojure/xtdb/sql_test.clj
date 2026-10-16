@@ -2120,7 +2120,7 @@
 
 (t/deftest test-tx-ops-sql-params
   (t/testing "correct number of args"
-    (t/is (= (serde/->TxKey 0 #xt/instant "2020-01-01T00:00:00Z")
+    (t/is (= (serde/->TxKey 0 #xt/instant "2020-01-01T00:00:00Z" #xt/instant "2020-01-01T00:00:00Z")
              (xt/execute-tx tu/*node* [[:sql "INSERT INTO users RECORDS {_id: ?, u_name: ?}" [1 "dan"] [2 "james"]]])))
 
     (t/is (= [{:u-name "dan", :xt/id 1}

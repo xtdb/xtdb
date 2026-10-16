@@ -307,7 +307,7 @@ class PostgresSource(
                     // so the snapshot aborts whether or not anything was awaiting that batch.
                     txIndexer.submitTx(token) { openTx ->
                         // snapshot has no upstream commit time — use the tx's system-time
-                        val snapshotTx = PostgresDriver.Transaction(snapshot.slotLsn, openTx.txKey.systemTime, batch)
+                        val snapshotTx = PostgresDriver.Transaction(snapshot.slotLsn, openTx.systemTime, batch)
                         indexer.indexTx(snapshotTx, openTx)
                         TxResult.Committed()
                     }

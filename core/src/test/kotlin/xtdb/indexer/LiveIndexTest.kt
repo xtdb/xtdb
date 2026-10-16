@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import xtdb.database.ClockBasis
 import xtdb.util.closeAllOnCatch
 import xtdb.NodeBase
 import xtdb.NodeBase.Companion.openBase
@@ -64,13 +65,13 @@ class LiveIndexTest {
         fun openTx(txId: Long, systemTime: Instant) =
             OpenTx(
                 allocator, nodeBase, partition.storage, partition.state, dbName,
-                TransactionKey(txId, systemTime), null
+                txId, systemTime, systemTime, null
             )
 
         fun commitTx(openTx: OpenTx) {
-            openTx.writeTxRow(null, null)
+            val txKey = openTx.writeTxRow(null, null)
             openTx.sealTables().associateTo(mutableMapOf()) { it.ref to it.liveTable }
-                .closeAllOnCatch { liveIndex.applyTx(openTx.txKey, it) }
+                .closeAllOnCatch { liveIndex.applyTx(txKey, it) }
         }
 
         override fun close() {
@@ -179,7 +180,7 @@ class LiveIndexTest {
                 db.commitTx(tx)
             }
 
-            db.liveIndex.openSnapshot(Instant.parse("2020-01-01T00:00:00Z")).use { snap ->
+            db.liveIndex.openSnapshot(ClockBasis(null, Instant.parse("2020-01-01T00:00:00Z"))).use { snap ->
                 assertEquals(1, snap.table(table).single().relation.rowCount)
             }
         }
@@ -195,7 +196,7 @@ class LiveIndexTest {
                 db.commitTx(tx1)
             }
 
-            db.liveIndex.openSnapshot(Instant.parse("2020-01-01T00:00:00Z")).use { snapBefore ->
+            db.liveIndex.openSnapshot(ClockBasis(null, Instant.parse("2020-01-01T00:00:00Z"))).use { snapBefore ->
                 val before = snapBefore.table(table).single()
                 assertEquals(1, before.relation.rowCount)
 
@@ -206,7 +207,7 @@ class LiveIndexTest {
 
                 assertEquals(1, before.relation.rowCount)
 
-                db.liveIndex.openSnapshot(Instant.parse("2020-01-02T00:00:00Z")).use { snapAfter ->
+                db.liveIndex.openSnapshot(ClockBasis(null, Instant.parse("2020-01-02T00:00:00Z"))).use { snapAfter ->
                     assertEquals(2, snapAfter.table(table).single().relation.rowCount)
                 }
             }
@@ -248,7 +249,7 @@ class LiveIndexTest {
                 db.commitTx(tx)
             }
 
-            db.liveIndex.openSnapshot(Instant.parse("2020-01-01T00:00:00Z")).use { snap ->
+            db.liveIndex.openSnapshot(ClockBasis(null, Instant.parse("2020-01-01T00:00:00Z"))).use { snap ->
                 assertEquals(3, snap.table(table).single().relation.rowCount)
             }
         }
@@ -329,7 +330,7 @@ class LiveIndexTest {
                 db.commitTx(tx)
             }
 
-            db.liveIndex.openSnapshot(Instant.parse("2000-01-01T00:00:00Z")).use { snap ->
+            db.liveIndex.openSnapshot(ClockBasis(null, Instant.parse("2000-01-01T00:00:00Z"))).use { snap ->
                 val before = snap.table(table).single().relation.rowCount
                 runBlocking { db.liveIndex.finishBlock(db.bp, 0L) }
                 assertEquals(before, snap.table(table).single().relation.rowCount)
@@ -391,18 +392,18 @@ class LiveIndexTest {
                 db.commitTx(tx)
             }
 
-            db.liveIndex.openSnapshot(Instant.parse("2020-01-01T00:00:00Z")).use { snap0 ->
+            db.liveIndex.openSnapshot(ClockBasis(null, Instant.parse("2020-01-01T00:00:00Z"))).use { snap0 ->
                 // a second commit, with no read in between — must not eagerly rebuild the cached snapshot
                 db.openTx(1, Instant.parse("2020-01-02T00:00:00Z")).use { tx ->
                     tx.put(table, UUID.randomUUID())
                     db.commitTx(tx)
                 }
 
-                db.liveIndex.openSnapshot(Instant.parse("2020-01-01T00:00:00Z")).use { reused ->
+                db.liveIndex.openSnapshot(ClockBasis(null, Instant.parse("2020-01-01T00:00:00Z"))).use { reused ->
                     assertSame(snap0, reused, "a basis the cache already satisfies reuses it — the commit did not rebuild the snapshot")
                 }
 
-                db.liveIndex.openSnapshot(Instant.parse("2020-01-02T00:00:00Z")).use { rebuilt ->
+                db.liveIndex.openSnapshot(ClockBasis(null, Instant.parse("2020-01-02T00:00:00Z"))).use { rebuilt ->
                     assertNotSame(snap0, rebuilt, "a newer basis rebuilds the snapshot on demand")
                 }
             }
@@ -419,7 +420,7 @@ class LiveIndexTest {
                 db.commitTx(tx)
             }
 
-            db.liveIndex.openSnapshot(Instant.parse("2020-01-01T00:00:00Z")).use { snap ->
+            db.liveIndex.openSnapshot(ClockBasis(null, Instant.parse("2020-01-01T00:00:00Z"))).use { snap ->
                 assertEquals(
                     Instant.parse("2020-01-01T00:00:00Z"), snap.txBasis?.systemTime,
                     "snapshot basis covers the demanded tx"
@@ -458,12 +459,12 @@ class LiveIndexTest {
         TestDb().use { db ->
             db.openTx(0, Instant.parse("2020-01-01T00:00:00Z")).use { tx ->
                 tx.put(TableRef("public", "docs"), UUID.randomUUID())
-                tx.writeTxRow(null, null)
+                val txKey = tx.writeTxRow(null, null)
 
                 val tables = tx.sealTables().associateTo(mutableMapOf()) { it.ref to it.liveTable }
                 assertTrue(tables.isNotEmpty())
 
-                db.liveIndex.applyTx(tx.txKey, tables)
+                db.liveIndex.applyTx(txKey, tables)
 
                 assertTrue(
                     tables.isEmpty(),

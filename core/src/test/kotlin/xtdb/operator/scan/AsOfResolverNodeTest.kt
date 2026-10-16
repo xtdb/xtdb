@@ -69,14 +69,14 @@ class AsOfResolverNodeTest {
         else -> "ERASE FROM docs WHERE _id = $id"
     }
 
-    /** Submits one transaction per op — so each gets its own system time — and returns those times. */
+    /** Submits one transaction per op — so each gets its own time — and returns their ingest times. */
     private fun Xtdb.submitOps(ops: List<Op>, flushAfter: Int?): List<Instant> {
         // a DELETE against a table that doesn't exist yet is a planning error, so the table is seeded
         // rather than left to whichever op the generator puts first. Entity 0 is outside the generated range.
         val seeded = listOf(Op("put", 0, VALID_TIMES.first(), null)) + ops
 
         return seeded.mapIndexed { idx, op ->
-            executeTx(listOf(TxOp.Sql(op.toSql()))).systemTime
+            executeTx(listOf(TxOp.Sql(op.toSql()))).txKey.ingestTime
                 .also { if (idx == flushAfter) flushAndCompact() }
         }
     }

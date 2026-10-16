@@ -26,6 +26,7 @@
            (xtdb.bloom BloomUtils)
            (xtdb Bytes)
            (xtdb.api ICursor)
+           (xtdb.api.tx IngestTables)
            (xtdb.indexer DatabaseSnapshot Snapshot Snapshot$Source TableSnapshot)
            (xtdb.database PartitionStorage)
            (xtdb.metadata MetadataPredicate PageMetadata)
@@ -64,6 +65,16 @@
        (case col-tag
          :column col-arg
          :select (key (first col-arg)))])))
+
+(defn- partition-basis
+  "A database the basis names, with no time on that clock yet, has nothing on it to read."
+  [basis db-name]
+  ;; TODO (#5835) partition 0's slot for every partition. Wrong rather than
+  ;; absent at N>1: each would apply partition 0's temporal bound, so the
+  ;; scan returns wrong rows rather than failing. The basis is
+  ;; already indexed by partition — the walk over partitions is what's missing.
+  (when-let [[_ times] (find basis db-name)]
+    (or (nth times 0 nil) time/start-of-time)))
 
 (defn ->temporal-bounds [^BufferAllocator alloc, ^RelationReader args,
                          {:keys [for-valid-time for-system-time]}, ^Instant snapshot-token]
@@ -309,7 +320,7 @@
 
          :vec-types (->> vec-types (into {} (keep (fn [[k v]] (when v [k v])))))
          :stats {:row-count row-count}
-         :->cursor (fn [{:keys [allocator, query-source, db-cat, dbs, snaps, system-time-basis, schema, args
+         :->cursor (fn [{:keys [allocator, query-source, db-cat, dbs, snaps, system-time-basis, ingest-time-basis, schema, args
                                 pushdown-blooms pushdown-iids explain-analyze? tracer query-span] :as opts}]
                      (let [^IQuerySource$QueryDatabase db (db-or-throw dbs db-name)
                            storage (.getStorage db)
@@ -359,12 +370,9 @@
                                ^ScanMetrics metrics (ScanMetrics. db-name
                                                                   (str (.getSchemaName table) "." (.getTableName table)))
 
-                               ;; TODO (#5835) partition 0's slot for every partition. Wrong rather than
-                               ;; absent at N>1: each would apply partition 0's temporal bound, so the
-                               ;; scan returns wrong rows rather than failing. `system-time-basis` is
-                               ;; already indexed by partition — the walk over partitions is what's missing.
                                temporal-bounds (->temporal-bounds allocator args scan-opts
-                                                                  (get-in system-time-basis [db-name 0]))
+                                                                  (partition-basis (if (IngestTables/contains table) ingest-time-basis system-time-basis)
+                                                                                   db-name))
 
                                trace? (or explain-analyze? (and tracer query-span))
                                trace-attrs (when trace?

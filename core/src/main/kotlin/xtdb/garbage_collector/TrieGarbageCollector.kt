@@ -8,6 +8,7 @@ import kotlinx.coroutines.channels.Channel.Factory.CONFLATED
 import kotlinx.coroutines.channels.Channel.Factory.UNLIMITED
 import kotlinx.coroutines.selects.select
 import xtdb.catalog.TableCatalog.Companion.blockFromLatest
+import xtdb.catalog.toTransactionKey
 import xtdb.api.DatabaseName
 import xtdb.database.PartitionState
 import xtdb.storage.BufferPool
@@ -128,7 +129,7 @@ class TrieGarbageCollector(
 
     private fun defaultGarbageAsOf(): Instant? =
         bufferPool.blockFromLatest(blocksToKeep)
-            ?.let { it.latestCompletedTx.systemTime.microsAsInstant - garbageLifetime }
+            ?.let { it.latestCompletedTx.toTransactionKey().ingestTime - garbageLifetime }
 
     suspend fun garbageCollectTries(garbageAsOf: Instant? = null) {
         val asOf = garbageAsOf ?: defaultGarbageAsOf() ?: return
