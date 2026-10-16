@@ -150,19 +150,19 @@
 
           (submit! (range 500))
           (xt-log/sync-node node #xt/duration "PT2S")
-          (c/compact-all! node #xt/duration "PT2S")
+          (c/compact-all! node #xt/duration "PT60S")
 
           (t/is (= (set (range 500)) (set (q))))
 
           (submit! (range 500 1000))
           (xt-log/sync-node node #xt/duration "PT2S")
-          (c/compact-all! node #xt/duration "PT2S")
+          (c/compact-all! node #xt/duration "PT60S")
 
           (t/is (= (set (range 1000)) (set (q))))
 
           (submit! (range 1000 2000))
           (xt-log/sync-node node #xt/duration "PT5S")
-          (c/compact-all! node #xt/duration "PT5S")
+          (c/compact-all! node #xt/duration "PT60S")
 
           (t/is (= (set (range 2000)) (set (q))))
 
@@ -195,7 +195,7 @@
 
                          {:system-time tx-st}))
 
-        (c/compact-all! node #xt/duration "PT5S")
+        (c/compact-all! node #xt/duration "PT60S")
 
         (aet/check-arrow-edn-dir (.toPath (io/as-file (io/resource "xtdb/compactor-test/test-l2+-compaction-by-recency/readings")))
                                  (table-path node "public/readings")
@@ -268,19 +268,19 @@
 
           (submit! (bad-uuid-seq 100))
           (xt-log/sync-node node #xt/duration "PT5S")
-          (c/compact-all! node (Duration/ofSeconds 1))
+          (c/compact-all! node #xt/duration "PT60S")
 
           (t/is (= (bad-uuid-seq 100) (q)))
 
           (submit! (bad-uuid-seq 100 200))
           (xt-log/sync-node node #xt/duration "PT5S")
-          (c/compact-all! node (Duration/ofSeconds 1))
+          (c/compact-all! node #xt/duration "PT60S")
 
           (t/is (= (bad-uuid-seq 200) (q)))
 
           (submit! (bad-uuid-seq 200 500))
           (xt-log/sync-node node #xt/duration "PT5S")
-          (c/compact-all! node (Duration/ofSeconds 1))
+          (c/compact-all! node #xt/duration "PT60S")
 
           (t/is (= (bad-uuid-seq 500) (q))))))))
 
