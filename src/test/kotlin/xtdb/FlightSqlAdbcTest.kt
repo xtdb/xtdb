@@ -800,6 +800,58 @@ class FlightSqlAdbcTest {
     }
 
     @Test
+    fun `a failed ASSERT sent as an update is INVALID_ARGUMENT, carrying the assert's message`() {
+        val ex = assertThrows(FlightRuntimeException::class.java) {
+            fsqlClient.executeUpdate("ASSERT 1 = 2, 'one is not two'", *emptyCallOpts)
+        }
+        assertEquals(FlightStatusCode.INVALID_ARGUMENT, ex.status().code())
+        assertEquals("one is not two", ex.status().description())
+
+        assertEquals(-1L, fsqlClient.executeUpdate("ASSERT TRUE", *emptyCallOpts))
+    }
+
+    @Test
+    fun `a prepared ASSERT holds or fails on the arguments bound to it`() {
+        insertData("INSERT INTO users (_id) VALUES (1)")
+
+        fun assertNotExists(vararg ids: Long) =
+            fsqlClient.prepare("ASSERT NOT EXISTS (SELECT 1 FROM users WHERE _id = ?)", *emptyCallOpts).use { ps ->
+                VectorSchemaRoot.create(Schema(listOf(Field.nullable("", ArrowType.Int(64, true)))), al).use { root ->
+                    val idVec = root.getVector(0) as BigIntVector
+                    ids.forEachIndexed { i, id -> idVec.setSafe(i, id) }
+                    root.rowCount = ids.size
+                    ps.setParameters(root)
+                    ps.executeUpdate(*emptyCallOpts)
+                }
+            }
+
+        assertEquals(-1L, assertNotExists(2))
+
+        for (ids in listOf(longArrayOf(1), longArrayOf(2, 1))) {
+            val ex = assertThrows(FlightRuntimeException::class.java, { assertNotExists(*ids) }, ids.toList().toString())
+            assertEquals(FlightStatusCode.INVALID_ARGUMENT, ex.status().code())
+            assertEquals("Assert failed", ex.status().description())
+        }
+    }
+
+    @Test
+    fun `a failed ASSERT in a Flight SQL transaction fails its commit, and none of the transaction's writes land`() {
+        val txn = fsqlClient.beginTransaction(*emptyCallOpts)
+        fsqlClient.executeUpdate("INSERT INTO users (_id) VALUES (1)", txn, *emptyCallOpts)
+        fsqlClient.executeUpdate("ASSERT NOT EXISTS (SELECT 1 FROM users WHERE _id = 1)", txn, *emptyCallOpts)
+
+        val ex = assertThrows(FlightRuntimeException::class.java) { fsqlClient.commit(txn, *emptyCallOpts) }
+        assertEquals(FlightStatusCode.INVALID_ARGUMENT, ex.status().code())
+        assertEquals("Assert failed", ex.status().description())
+
+        insertData("INSERT INTO users (_id) VALUES (2)")
+        assertEquals(
+            listOf(mapOf("_id" to 2L)),
+            fsqlClient.execute("SELECT _id FROM users", *emptyCallOpts).readRows()
+        )
+    }
+
+    @Test
     fun `the XTDB commit action returns no outcome for a transaction that wrote nothing`() {
         val txn = fsqlClient.beginTransaction(*emptyCallOpts)
         fsqlClient.execute("SELECT 1 one", txn, *emptyCallOpts).readRows()

@@ -62,6 +62,42 @@
     (t/is (= [{:xt/id :seed}] (xt/q conn "SELECT _id FROM docs"))
           "and the put in the same tx didn't land - the ops are one transaction")))
 
+(deftest failed-asserts-surface-from-execute-tx
+  (with-open [conn (open-conn)]
+    (xt/execute-tx conn [[:put-docs :docs {:xt/id 1}]])
+
+    (t/is (anomalous? [:conflict :xtdb/assert-failed "one is not two"]
+                      (xt/execute-tx conn [[:sql "ASSERT 1 = 2, 'one is not two'"]]))
+          "the assert's own message comes back")
+
+    (t/is (anomalous? [:conflict :xtdb/assert-failed "Assert failed"]
+                      (xt/execute-tx conn [[:sql "ASSERT NOT EXISTS (SELECT 1 FROM docs WHERE _id = ?)" [1]]])))
+
+    (t/is (anomalous? [:conflict :xtdb/assert-failed "Assert failed"]
+                      (xt/execute-tx conn [[:sql "ASSERT NOT EXISTS (SELECT 1 FROM docs WHERE _id = ?)" [2] [1]]]))
+          "any one of a batch's arg-rows failing aborts the tx")
+
+    (t/is (anomalous? [:conflict :xtdb/assert-failed "Assert failed"]
+                      (xt/execute-tx conn [[:sql "ASSERT NOT EXISTS (SELECT 1 FROM docs WHERE _id = ?)" [1]]
+                                           [:put-docs :docs {:xt/id 1, :v "clobbered"}]])))
+
+    (xt/execute-tx conn [[:sql "ASSERT NOT EXISTS (SELECT 1 FROM docs WHERE _id = ?)" [2]]
+                         [:put-docs :docs {:xt/id 2}]])
+
+    (t/is (= #{{:xt/id 1} {:xt/id 2}} (set (xt/q conn "SELECT * FROM docs")))
+          "only the tx whose assert held wrote anything")))
+
+(deftest a-failed-assert-from-submit-tx-is-recorded-against-its-tx
+  (with-open [conn (open-conn)]
+    (let [{:keys [tx-id]} (xt/submit-tx conn [[:sql "ASSERT FALSE"]])
+          [{:keys [committed error]}] (xt/q conn ["SELECT committed, error FROM xt.txs WHERE _id = ?" tx-id])]
+      (t/is (false? committed))
+      (t/is (= "Assert failed" (ex-message error))))
+
+    (xt/execute-tx conn [[:put-docs :docs {:xt/id 1, :n 1}]])
+    (t/is (= [{:n 1}] (xt/q conn "SELECT n FROM docs"))
+          "the connection is still usable afterwards")))
+
 (deftest multi-row-batches
   (with-open [conn (open-conn)]
     (xt/execute-tx conn [[:sql "INSERT INTO docs (_id, n) VALUES (?, ?)" [1 10] [2 20] [3 30]]])
