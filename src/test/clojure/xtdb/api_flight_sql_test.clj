@@ -87,6 +87,24 @@
     (t/is (= #{{:xt/id 1} {:xt/id 2}} (set (xt/q conn "SELECT * FROM docs")))
           "only the tx whose assert held wrote anything")))
 
+(deftest a-created-table-takes-assert-guards-before-its-first-row
+  (with-open [conn (open-conn)]
+    (t/is (anomalous? [:incorrect nil #"Table not found: docs"]
+                      (xt/execute-tx conn [[:sql "ASSERT NOT EXISTS (SELECT 1 FROM docs WHERE _id = ?)" [1]]]))
+          "without it, the guard's reference to the table doesn't plan")
+
+    (xt/execute-tx conn [[:sql "CREATE TABLE docs (_id)"]])
+
+    (letfn [(put-once! [v]
+              (xt/execute-tx conn [[:sql "ASSERT NOT EXISTS (SELECT 1 FROM docs WHERE _id = ?)" [1]]
+                                   [:put-docs :docs {:xt/id 1, :v v}]]))]
+      (put-once! "first")
+
+      (t/is (anomalous? [:conflict :xtdb/assert-failed "Assert failed"]
+                        (put-once! "second")))
+
+      (t/is (= [{:xt/id 1, :v "first"}] (xt/q conn "SELECT * FROM docs"))))))
+
 (deftest a-failed-assert-from-submit-tx-is-recorded-against-its-tx
   (with-open [conn (open-conn)]
     (let [{:keys [tx-id]} (xt/submit-tx conn [[:sql "ASSERT FALSE"]])
