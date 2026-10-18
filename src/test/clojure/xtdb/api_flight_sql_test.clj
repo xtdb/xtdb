@@ -244,3 +244,12 @@
 
     (t/is (= [{:xt/id 1, :v "str"} {:xt/id 2, :v 42}]
              (xt/q conn "SELECT _id, v FROM docs ORDER BY _id")))))
+
+(deftest mixed-type-args-round-trip
+  (with-open [conn (open-conn)]
+    (xt/execute-tx conn [[:put-docs :docs {:xt/id 1, :v "str"} {:xt/id 2, :v 42}]
+                         [:put-docs :docs {:xt/id 3, :v [1 "x"]}]
+                         [:sql "INSERT INTO docs (_id, v) VALUES (?, ?)" [4 {:a [1 "x"]}]]])
+
+    (t/is (= [{:xt/id 1, :v "str"} {:xt/id 2, :v 42} {:xt/id 3, :v [1 "x"]} {:xt/id 4, :v {:a [1 "x"]}}]
+             (xt/q conn "SELECT _id, v FROM docs ORDER BY _id")))))

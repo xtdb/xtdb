@@ -77,7 +77,7 @@ class Relation(
     }
 
     fun openAsRoot(al: BufferAllocator): VectorSchemaRoot =
-        VectorSchemaRoot.create(schema, al)
+        VectorSchemaRoot.create(Schema(schema.fields.map { it.withUnionTypeIds() }), al)
             .also { vsr ->
                 openArrowRecordBatch().use { recordBatch ->
                     VectorLoader(vsr).load(recordBatch)
