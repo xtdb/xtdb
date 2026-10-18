@@ -2391,6 +2391,25 @@
   (t/is (= [{:xt/id "james", :name "James", :email "james@example.com"}]
            (xt/q tu/*node* "SELECT * FROM users"))))
 
+(t/deftest test-assert-correlated-not-exists
+  (xt/execute-tx tu/*node* [[:put-docs :customers {:xt/id 1} {:xt/id 2}]
+                            [:put-docs :orders {:xt/id 10, :customer-id 1} {:xt/id 11, :customer-id 2}]])
+
+  (let [no-orphan-orders "ASSERT NOT EXISTS (SELECT 1 FROM orders o WHERE NOT EXISTS (SELECT 1 FROM customers c WHERE c._id = o.customer_id))"]
+    (xt/execute-tx tu/*node* [[:sql no-orphan-orders]
+                              [:put-docs :orders {:xt/id 12, :customer-id 1}]])
+
+    (t/is (anomalous? [:conflict :xtdb/assert-failed "Assert failed"]
+                      (xt/execute-tx tu/*node* [[:put-docs :orders {:xt/id 13, :customer-id 3}]
+                                                [:sql no-orphan-orders]]))
+          "the assert sees the order written earlier in its own tx"))
+
+  (t/is (anomalous? [:conflict :xtdb/assert-failed "Assert failed"]
+                    (xt/execute-tx tu/*node* [[:sql "ASSERT EXISTS (SELECT 1 FROM customers c WHERE c._id = ? AND EXISTS (SELECT 1 FROM orders o WHERE o.customer_id = c._id AND o._id > ?))" [2 11]]]))
+        "a correlated EXISTS takes the statement's parameters too")
+
+  (t/is (= #{10 11 12} (set (map :xt/id (xt/q tu/*node* "SELECT _id FROM orders"))))))
+
 (t/deftest test-date-id-caught-3446
   (t/is (anomalous? [:incorrect nil #"Invalid ID type: java.time.LocalDate"]
                     (xt/execute-tx tu/*node* [[:sql "INSERT into readings (_id, value) VALUES (DATE '2020-01-06', 4)"]])))
