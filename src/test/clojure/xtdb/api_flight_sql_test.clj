@@ -87,6 +87,17 @@
     (t/is (= #{{:xt/id 1} {:xt/id 2}} (set (xt/q conn "SELECT * FROM docs")))
           "only the tx whose assert held wrote anything")))
 
+(deftest a-failed-assert-names-the-op-that-failed
+  (with-open [conn (open-conn)]
+    (t/is (= {:tx-op-idx 2, :sql "ASSERT FALSE, 'third'"}
+             (try
+               (xt/execute-tx conn [[:put-docs :docs {:xt/id 1}]
+                                    [:sql "ASSERT TRUE"]
+                                    [:sql "ASSERT FALSE, 'third'"]])
+               nil
+               (catch Exception e
+                 (select-keys (ex-data e) [:tx-op-idx :sql])))))))
+
 (deftest a-created-table-takes-assert-guards-before-its-first-row
   (with-open [conn (open-conn)]
     (t/is (anomalous? [:incorrect nil #"Table not found: docs"]
