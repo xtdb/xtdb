@@ -179,3 +179,11 @@
 
     (t/is (= [{:xt/id 1, :v "str"} {:xt/id 2, :v 42}]
              (xt/q conn "SELECT _id, v FROM docs ORDER BY _id")))))
+
+(deftest mixed-type-argument-reaches-the-server
+  (with-open [conn (open-conn)]
+    (xt/execute-tx conn [[:put-docs :docs {:xt/id 1, :v [1 "x"]}]])
+    (xt/execute-tx conn [[:put-docs :docs {:xt/id 2, :v "str"} {:xt/id 3, :v 42}]])
+
+    (t/is (= [{:xt/id 1, :v [1 "x"]} {:xt/id 2, :v "str"} {:xt/id 3, :v 42}]
+             (xt/q conn "SELECT _id, v FROM docs ORDER BY _id")))))
