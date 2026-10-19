@@ -51,7 +51,7 @@ nothing: Nothing
 circle: Circle
 square: Square
 string: String
-shape: Shape
+shape_type: Shape
 any: "Any"
 anyq: "Any? (the top)" {
   style.bold: true
@@ -62,9 +62,9 @@ nothing -> circle
 nothing -> square
 nothing -> string
 nothing -> nullq
-circle -> shape
-square -> shape
-shape -> any
+circle -> shape_type
+square -> shape_type
+shape_type -> any
 string -> any
 any -> anyq
 nullq -> anyq
