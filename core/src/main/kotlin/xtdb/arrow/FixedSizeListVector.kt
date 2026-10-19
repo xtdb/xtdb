@@ -6,6 +6,7 @@ import org.apache.arrow.memory.util.ByteFunctionHelpers
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
+import org.apache.arrow.vector.types.pojo.Field
 import xtdb.InternalApi
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.VectorType.Listy
@@ -142,10 +143,21 @@ class FixedSizeListVector private constructor(
         }
     }
 
-    override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
+    private fun unloadOwnPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         nodes.add(ArrowFieldNode(valueCount.toLong(), if (nullable) -1 else 0))
         if (nullable) validityBuffer?.unloadBuffer(buffers) else buffers.add(al.empty)
+    }
+
+    override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
+        unloadOwnPage(nodes, buffers)
         elVector.unloadPage(nodes, buffers)
+    }
+
+    override fun unloadPage(target: Field, unloader: ConformingUnloader) {
+        if (target.type != arrowType) return unloader.copy(this, target)
+
+        unloadOwnPage(unloader.nodes, unloader.buffers)
+        unloader.unload(elVector, target.children.single())
     }
 
     @InternalApi

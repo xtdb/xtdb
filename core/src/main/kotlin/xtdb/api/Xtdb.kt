@@ -1329,21 +1329,18 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         }
 
         private fun ResultCursor.toArrowReader(): ArrowReader {
-            val schema = Schema(resultTypes.map { (name, type) -> type.toField(name).withUnionTypeIds() })
+            val pageSchema = Schema(resultTypes.map { (name, type) -> type.toField(name) })
+            val schema = Schema(pageSchema.fields.map { it.withUnionTypeIds() })
 
             return object : ArrowReader(allocator) {
                 override fun readSchema() = schema
 
                 override fun loadNextBatch(): Boolean =
                     tryAdvance { inRel ->
-                        // VectorLoader matches buffers by position, but a page only has the struct fields and union legs its own rows use, in its own order.
-                        // Copying by name into the declared schema first gives every page the root's exact layout.
-                        Relation(this.allocator, schema).use { rel ->
-                            inRel.rowCopier(rel).copyRange(0, inRel.rowCount)
-                            val loader = VectorLoader(this.vectorSchemaRoot)
-                            rel.openArrowRecordBatch().use { rb ->
-                                loader.load(rb)
-                            }
+                        // a page only has the struct fields and union legs its own rows use, in its own order,
+                        // but VectorLoader takes buffers by position - so the page is unloaded in the declared layout
+                        inRel.openArrowRecordBatch(this.allocator, pageSchema).use { rb ->
+                            VectorLoader(this.vectorSchemaRoot).load(rb)
                         }
                     }
 

@@ -100,6 +100,14 @@ sealed class Vector : VectorReader, VectorWriter {
 
     internal abstract fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>)
 
+    /**
+     * Unloads this page in the layout of [target] - see [ConformingUnloader].
+     * Vectors with children override this to match them to the target's by name.
+     */
+    internal open fun unloadPage(target: Field, unloader: ConformingUnloader) =
+        if (target.type == arrowType && vectors.none()) unloadPage(unloader.nodes, unloader.buffers)
+        else unloader.copy(this, target)
+
     @InternalApi
     abstract override fun write(out: PageOutput, startIdx: Int, len: Int)
 

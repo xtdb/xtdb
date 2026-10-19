@@ -5,6 +5,7 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
+import org.apache.arrow.vector.types.pojo.Field
 import xtdb.InternalApi
 import xtdb.TaggedValue
 import xtdb.api.query.IKeyFn
@@ -401,6 +402,29 @@ class DenseUnionVector private constructor(
         offsetBuffer.unloadBuffer(buffers)
 
         legVectors.forEach { it.unloadPage(nodes, buffers) }
+    }
+
+    override fun unloadPage(target: Field, unloader: ConformingUnloader) {
+        if (target.type !is ArrowType.Union) return unloader.copy(this, target)
+
+        val targetLegIdxs = legVectors.map { leg ->
+            target.children.indexOfFirst { it.name == leg.name }.also { if (it < 0) unloader.notInTarget(leg, target) }
+        }
+
+        unloader.nodes.add(ArrowFieldNode(valueCount.toLong(), -1))
+
+        if (targetLegIdxs == targetLegIdxs.indices.toList()) typeBuffer.unloadBuffer(unloader.buffers)
+        else unloader.unloadTypeIds(valueCount) { idx ->
+            // a negative type-id is an undefined row, which has no leg
+            typeBuffer.getByte(idx).let { if (it < 0) it else targetLegIdxs[it.toInt()].toByte() }
+        }
+
+        offsetBuffer.unloadBuffer(unloader.buffers)
+
+        for ((idx, leg) in target.children.withIndex()) {
+            val legIdx = targetLegIdxs.indexOf(idx)
+            if (legIdx >= 0) unloader.unload(legVectors[legIdx], leg) else unloader.empty(leg)
+        }
     }
 
     @InternalApi

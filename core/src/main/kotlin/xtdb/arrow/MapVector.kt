@@ -5,6 +5,7 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
+import org.apache.arrow.vector.types.pojo.Field
 import xtdb.InternalApi
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.VectorType.Listy
@@ -99,6 +100,10 @@ class MapVector(private val listVector: ListVector, private val keysSorted: Bool
 
     override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) =
         listVector.unloadPage(nodes, buffers)
+
+    override fun unloadPage(target: Field, unloader: ConformingUnloader) =
+        if (target.type == arrowType) listVector.unloadPageWithElements(target.children.single(), unloader)
+        else unloader.copy(this, target)
 
     @InternalApi
     override fun write(out: PageOutput, startIdx: Int, len: Int) = listVector.write(out, startIdx, len)

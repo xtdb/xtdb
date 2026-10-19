@@ -4,6 +4,8 @@ import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
+import org.apache.arrow.vector.types.pojo.Field
+import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.InternalApi
 import xtdb.util.Hasher
 import xtdb.arrow.extensions.XtExtensionVector
@@ -51,6 +53,11 @@ abstract class ExtensionVector : MonoVector() {
 
     override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) =
         inner.unloadPage(nodes, buffers)
+
+    override fun unloadPage(target: Field, unloader: ConformingUnloader) =
+        if (target.type == arrowType)
+            inner.unloadPage(Field(target.name, FieldType(target.isNullable, inner.arrowType, null), target.children), unloader)
+        else unloader.copy(this, target)
 
     @InternalApi
     override fun write(out: PageOutput, startIdx: Int, len: Int) = inner.write(out, startIdx, len)
