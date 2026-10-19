@@ -242,6 +242,15 @@
              (tu/query-ra '[:group-by {:columns [a {n (avg b)}]}
                             [:table {:rows [{:a 42, :b nil} {:a 45, :b 1}]}]])))))
 
+(t/deftest test-aggregates-over-nothing-typed-column-return-nil-6133
+  (letfn [(run [agg]
+            (tu/query-ra [:group-by {:columns [{'n (list agg 'a)}]}
+                          '[::tu/pages {a #xt/type :nothing} []]]))]
+    (t/are [agg] (= [{}] (run agg))
+      'sum 'avg 'var-pop 'var-samp 'stddev-pop 'stddev-samp)
+
+    (t/is (= [{:n 0}] (run 'count)) "count over a Nothing-typed column is 0, not NULL")))
+
 (t/deftest test-min-of-empty-rel-returns-nil
   (t/is (= [{}]
            (tu/query-ra '[:group-by {:columns [{n (min a)}]}

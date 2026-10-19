@@ -96,7 +96,8 @@ private fun leastUpperBound2(left: Mono, right: Mono): Mono? =
     }
 
 @JvmName("of")
-fun leastUpperBound(types: Collection<VectorType>): Mono? =
-    types
-        .flatMap { it.legs }
-        .reduceOrNull { l, r -> leastUpperBound2(l, r) ?: return null }
+fun leastUpperBound(types: Collection<VectorType>): VectorType? {
+    val legs = types.flatMap { it.legs }
+    if (legs.isEmpty()) return VectorType.Nothing
+    return legs.reduce { l, r -> leastUpperBound2(l, r) ?: return null }
+}
