@@ -18,7 +18,8 @@
             [xtdb.serde :as serde]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.vector.writer :as vw])
   (:import (java.io InputStream)
            (java.lang Thread$State)
            (java.net InetAddress Socket)
@@ -547,6 +548,18 @@
       (is (wait-for-close server-conn 2000))
       (check-conn-resources-freed server-conn)
       (future-cancel query))))
+
+(deftest a-portal-closed-with-its-conn-is-not-closed-again-test
+  (let [conn (pgw/map->Connection {:cid -1
+                                   :server {:server-state (atom {})}
+                                   :allocator (util/->child-allocator tu/*allocator* "pg-conn-test")
+                                   :conn-state (atom {:portals {"p" {:stmt-name "s"
+                                                                     :cursor (vw/open-args tu/*allocator* [42 "x"])}}
+                                                      :prepared-statements {"s" {:portals #{"p"}}}})})]
+    (.close conn)
+    (is (empty? (:portals @(:conn-state conn))))
+
+    (#'pgw/close-all-portals conn)))
 
 (deftest server-close-closes-idle-conns-test
   (with-open [^Server server (serve {:drain-wait 0})]

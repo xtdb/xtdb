@@ -123,6 +123,8 @@
 
 ;; all postgres client IO arrives as either an untyped (startup) or typed message
 
+(declare close-all-portals)
+
 (defrecord Connection [^BufferAllocator allocator
                        ^Server server, frontend, node
 
@@ -133,12 +135,11 @@
                        !closing? conn-state]
 
   Closeable
-  (close [_]
+  (close [this]
     (log/debug "Closing connection..." {:cid cid})
     (util/close frontend)
 
-    (doseq [portal (vals (:portals @conn-state))]
-      (util/close (:cursor portal)))
+    (close-all-portals this)
 
     (doseq [prepared-stmt (vals (:prepared-statements @conn-state))]
       (util/close (:statement prepared-stmt)))
@@ -516,11 +517,17 @@
 
 (defn- close-portal
   [{:keys [conn-state, cid]} portal-name]
-  (when-some [portal (get-in @conn-state [:portals portal-name])]
-    (log/trace "Closing portal" {:cid cid, :portal portal-name})
-    (util/close (:cursor portal))
-    (swap! conn-state update-in [:prepared-statements (:stmt-name portal) :portals] disj portal-name)
-    (swap! conn-state update :portals dissoc portal-name)))
+  ;; whoever removes the portal closes it - the server's force-close and the conn thread can both get here
+  (let [[old-state _] (swap-vals! conn-state
+                                  (fn [cs]
+                                    (if-some [{:keys [stmt-name]} (get-in cs [:portals portal-name])]
+                                      (-> cs
+                                          (update-in [:prepared-statements stmt-name :portals] disj portal-name)
+                                          (update :portals dissoc portal-name))
+                                      cs)))]
+    (when-some [portal (get-in old-state [:portals portal-name])]
+      (log/trace "Closing portal" {:cid cid, :portal portal-name})
+      (util/close (:cursor portal)))))
 
 (defn- close-all-portals [{:keys [conn-state] :as conn}]
   (doseq [portal-name (keys (:portals @conn-state))]
