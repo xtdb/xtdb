@@ -317,7 +317,10 @@
      :explain? (= PlanCacheKey$Explain/PLAN explain)
      :explain-analyze? (= PlanCacheKey$Explain/ANALYZE explain)
      :arg-fields (.getArgFields k)
-     :table-info (.getTableInfo k)}))
+     :table-info (into {}
+                       (for [[db-name table-info] (.getTableInfo k)
+                             [table-ref cols] table-info]
+                         [[db-name table-ref] (set cols)]))}))
 
 (defn- load-plan [^PlanCacheKey k]
   (let [plan (plan-query (.getAst k) (plan-key->opts k))
@@ -387,20 +390,23 @@
                                                (map (fn [[table-ref cols]]
                                                       [[db-name table-ref] {:cols (set cols), :oid (get oids table-ref)}])))))))))
 
-              (plan-query* [table-info]
-                (-plan-query this parsed-query query-opts (update-vals table-info :cols)))]
+              (->plan-schema [snaps]
+                (update-vals snaps #(.tableInfo ^DatabaseSnapshot %)))
 
-        (let [!table-info (atom (util/with-open [snaps (open-snaps (resolve-dbs) prepare-min-basis)]
-                                  (->table-info snaps)))]
+              (plan-query* [plan-schema]
+                (-plan-query this parsed-query query-opts plan-schema))]
+
+        (let [!plan-schema (atom (util/with-open [snaps (open-snaps (resolve-dbs) prepare-min-basis)]
+                                   (->plan-schema snaps)))]
 
           (reify PreparedQuery
-            (getParamCount [_] (:param-count (plan-query* @!table-info)))
+            (getParamCount [_] (:param-count (plan-query* @!plan-schema)))
             ;; the plan carries these as symbols; the PreparedQuery contract is List<String>
-            (getColumnNames [_] (mapv str (:col-names (plan-query* @!table-info))))
+            (getColumnNames [_] (mapv str (:col-names (plan-query* @!plan-schema))))
             (getParsed [_] stmt)
 
             (getColumnFields [_ param-fields]
-              (let [planned-query (plan-query* @!table-info)
+              (let [planned-query (plan-query* @!plan-schema)
                     dbs (resolve-dbs)]
                 (util/with-open [snaps (open-snaps dbs prepare-min-basis)]
                   (let [emitted-query (emit-query planned-query scan-emitter dbs snaps
@@ -416,7 +422,7 @@
                             (.toField vec-type col-name))
                           vec-types)))))
 
-            (getWarnings [_] (:warnings (plan-query* @!table-info)))
+            (getWarnings [_] (:warnings (plan-query* @!plan-schema)))
 
             (openQuery [_ args opts]
               (let [default-tz (or (.getDefaultTz opts) default-tz)
@@ -434,8 +440,8 @@
                                                                       (RootAllocator.))
                                          snaps (open-snaps dbs min-basis)]
                 (let [query-opts (-> query-opts (assoc :default-tz default-tz))
-                      table-info (reset! !table-info (->table-info snaps))
-                      planned-query (plan-query* table-info)
+                      table-info (->table-info snaps)
+                      planned-query (plan-query* (reset! !plan-schema (->plan-schema snaps)))
 
                       {:keys [vec-types ->cursor] :as emitted-query} (emit-query planned-query scan-emitter dbs snaps (->arg-types args) query-opts)
                       current-time (or (some-> (or (:current-time planned-query) (.getCurrentTime opts))
