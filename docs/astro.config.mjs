@@ -115,6 +115,7 @@ export default defineConfig({
                         'about/dbs-in-xtdb',
                         'about/txs-in-xtdb',
                         'about/time-in-xtdb',
+                        'about/types-in-xtdb',
                         { label: 'Community', link: '/intro/community'}
                     ]
                 },
