@@ -176,7 +176,7 @@ class Relation(
                 check(it == MessageHeader.RecordBatch) { "unexpected Type message type: $it" }
             }
 
-            MessageSerializer.deserializeRecordBatch(msg.message, msg.bodyBuffer ?: al.empty)
+            MessageSerializer.deserializeRecordBatch(msg.message, msg.bodyBuffer ?: al.newEmptyBuffer())
                 .use { rel.load(it) }
 
             return true

@@ -99,7 +99,7 @@ class BitVector private constructor(
         if (nullable) {
             validityBuffer?.unloadBuffer(buffers)
         } else {
-            buffers.add(al.empty)
+            buffers.add(al.newEmptyBuffer())
         }
         dataBuffer.unloadBuffer(buffers)
     }

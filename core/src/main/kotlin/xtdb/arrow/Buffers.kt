@@ -2,6 +2,7 @@ package xtdb.arrow
 
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
+import org.apache.arrow.memory.ReferenceManager
 import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.memory.util.hash.ArrowBufHasher
 import org.apache.arrow.vector.util.DecimalUtility
@@ -16,14 +17,24 @@ internal val NULL_CHECKS =
         ?: System.getProperty("xtdb.vector.null-checks")?.toBoolean()
         ?: true
 
+// `allocator.empty` (and so `allocator.buffer(0)`) is one ArrowBuf for the whole JVM, and its reader/writer indices are mutable:
+// shared, concurrent queries and the indexer read and move each other's lengths.
+// So every zero-length buffer we hold or hand out is our own - and as a no-op buffer 'transfers' to itself, it's never shared either.
+internal fun BufferAllocator.newEmptyBuffer() = ArrowBuf(ReferenceManager.NO_OP, null, 0, empty.memoryAddress())
+
+internal fun BufferAllocator.newBuffer(size: Long): ArrowBuf = if (size == 0L) newEmptyBuffer() else buffer(size)
+
+internal fun ArrowBuf.transferTo(al: BufferAllocator): ArrowBuf =
+    if (capacity() == 0L) al.newEmptyBuffer() else referenceManager.transferOwnership(this, al).transferredBuffer
+
 internal class ExtensibleBuffer private constructor(private val allocator: BufferAllocator, private var buf: ArrowBuf) :
     AutoCloseable {
 
-    constructor(allocator: BufferAllocator) : this(allocator, allocator.empty)
+    constructor(allocator: BufferAllocator) : this(allocator, allocator.newEmptyBuffer())
 
     constructor(
         allocator: BufferAllocator, initialSize: Long
-    ) : this(allocator, allocator.buffer(initialSize).apply { setZero(0, capacity()) })
+    ) : this(allocator, allocator.newBuffer(initialSize).apply { setZero(0, capacity()) })
 
     private fun newCapacity(currentCapacity: Long, targetCapacity: Long): Long {
         var newCapacity = max(currentCapacity, 128)
@@ -174,16 +185,15 @@ internal class ExtensibleBuffer private constructor(private val allocator: Buffe
     }
 
     internal fun unloadBuffer(buffers: MutableList<ArrowBuf>) =
-        buffers.add(buf.readerIndex(0))
+        buffers.add(if (buf.capacity() == 0L) allocator.newEmptyBuffer() else buf.readerIndex(0))
 
     internal fun loadBuffer(arrowBuf: ArrowBuf, writerIndex: Long = arrowBuf.writerIndex()) {
         buf.close()
-        buf = arrowBuf.writerIndex(writerIndex)
-            .let { it.referenceManager.transferOwnership(it, allocator).transferredBuffer }
+        buf = if (arrowBuf.capacity() == 0L) allocator.newEmptyBuffer() else arrowBuf.writerIndex(writerIndex).transferTo(allocator)
     }
 
     fun openSlice(al: BufferAllocator) =
-        ExtensibleBuffer(al, buf.referenceManager.transferOwnership(buf, al).transferredBuffer)
+        ExtensibleBuffer(al, buf.transferTo(al))
 
     fun clear() {
         buf.setZero(0, buf.capacity())

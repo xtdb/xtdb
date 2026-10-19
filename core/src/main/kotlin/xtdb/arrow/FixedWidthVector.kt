@@ -217,7 +217,7 @@ sealed class FixedWidthVector : MonoVector() {
 
     final override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         nodes.add(ArrowFieldNode(valueCount.toLong(), if (nullable) -1 else 0))
-        if (nullable) validityBuffer?.unloadBuffer(buffers) else buffers.add(al.empty)
+        if (nullable) validityBuffer?.unloadBuffer(buffers) else buffers.add(al.newEmptyBuffer())
         dataBuffer.unloadBuffer(buffers)
     }
 

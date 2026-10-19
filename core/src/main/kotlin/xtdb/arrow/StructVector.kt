@@ -207,7 +207,7 @@ class StructVector private constructor(
 
     override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         nodes.add(ArrowFieldNode(valueCount.toLong(), if (nullable) -1 else 0))
-        if (nullable) validityBuffer?.unloadBuffer(buffers) else buffers.add(allocator.empty)
+        if (nullable) validityBuffer?.unloadBuffer(buffers) else buffers.add(allocator.newEmptyBuffer())
 
         childWriters.sequencedValues().forEach { it.unloadPage(nodes, buffers) }
     }

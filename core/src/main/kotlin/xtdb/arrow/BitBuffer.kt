@@ -15,13 +15,13 @@ internal class BitBuffer private constructor(
         private fun bufferSize(bitCount: Int) = BitVectorHelper.getValidityBufferSizeFromCount(bitCount).toLong()
     }
 
-    constructor(allocator: BufferAllocator) : this(allocator, allocator.empty, 0)
+    constructor(allocator: BufferAllocator) : this(allocator, allocator.newEmptyBuffer(), 0)
 
     constructor(
         allocator: BufferAllocator, initialBitCapacity: Int
     ) : this(
         allocator,
-        allocator.buffer(bufferSize(initialBitCapacity))
+        allocator.newBuffer(bufferSize(initialBitCapacity))
             .apply { setZero(0, capacity()) },
         0
     )
@@ -208,8 +208,10 @@ internal class BitBuffer private constructor(
     }
 
     internal fun unloadBuffer(buffers: MutableList<ArrowBuf>) {
-        val writerByteIndex = bufferSize(writerBitIndex)
-        buffers.add(buf.readerIndex(0).writerIndex(writerByteIndex))
+        buffers.add(
+            if (buf.capacity() == 0L) allocator.newEmptyBuffer()
+            else buf.readerIndex(0).writerIndex(bufferSize(writerBitIndex))
+        )
     }
 
     internal fun loadBuffer(arrowBuf: ArrowBuf, bitCount: Int) {
@@ -220,18 +222,17 @@ internal class BitBuffer private constructor(
             // at the moment, we allocate one and fill it with ones,
             // but we could optimise this away - i.e. only allocate when we need to write a zero
             writerBitIndex = 0
-            buf = allocator.buffer(bufferSize(bitCount))
+            buf = allocator.newBuffer(bufferSize(bitCount))
             writeOnes(bitCount)
         } else {
-            buf = arrowBuf.writerIndex(bufferSize(bitCount))
-                .let { it.referenceManager.transferOwnership(it, allocator).transferredBuffer }
+            buf = arrowBuf.writerIndex(bufferSize(bitCount)).transferTo(allocator)
 
             writerBitIndex = bitCount
         }
     }
 
     fun openSlice(al: BufferAllocator) =
-        BitBuffer(al, buf.referenceManager.transferOwnership(buf, al).transferredBuffer, writerBitIndex)
+        BitBuffer(al, buf.transferTo(al), writerBitIndex)
 
     fun clear() {
         buf.setZero(0, buf.capacity())
