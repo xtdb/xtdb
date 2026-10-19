@@ -95,7 +95,7 @@ internal class SourceLogProcessorTest : LeaderTermTest() {
 
         val txResolver = TxResolver(
             allocator, nodeBase, partitionStorage, partitionState, dbName, mockk(relaxed = true), skipTxs,
-            resolvedSrcMsgId = -1, resolvedExtToken = null, InstantSource.system()
+            resolvedSrcMsgId = -1, resolvedExtToken = null, InstantSource.system(), TxResolver.DataSource.SOURCE_LOG
         ).also { resolversToClose += it }
 
         val blockCutter = BlockCutter(

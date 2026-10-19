@@ -142,15 +142,16 @@ class OpenTx
             ?: partitionState.liveIndex.openTable(ref, micros)
     }
 
+    internal val wroteData: Boolean
+        get() = tableTxs.any { (ref, table) -> !IngestTables.contains(ref) && table.wroteRows }
+
     /**
-     * Writes this tx's `xt.txs` row, and returns the tx's key - with [systemTime] iff it wrote rows to a data table.
+     * Writes this tx's `xt.txs` row, and returns the tx's key - with [systemTime] iff it [wroteData].
+     * [srcMsgId], where given, is recorded as the source position the tx was submitted at - only where that isn't its tx-id.
      * Call it before [sealTables], which hands the staged tables over.
      */
-    internal fun writeTxRow(error: Throwable?, userMetadata: Map<*, *>?): TransactionKey {
-        val txKey = TransactionKey(
-            txId, ingestTime,
-            systemTime.takeIf { tableTxs.any { (ref, table) -> !IngestTables.contains(ref) && table.wroteRows } },
-        )
+    internal fun writeTxRow(srcMsgId: MessageId?, error: Throwable?, userMetadata: Map<*, *>?): TransactionKey {
+        val txKey = TransactionKey(txId, ingestTime, systemTime.takeIf { wroteData })
 
         val liveTable = table(TableRef("xt", "txs"))
         val docWriter = liveTable.putDocWriter
@@ -161,6 +162,7 @@ class OpenTx
         docWriter.vectorFor("_id", I64.arrowType, false).writeLong(txId)
         docWriter.vectorFor("system_time", INSTANT.arrowType, txKey.systemTime == null)
             .let { w -> txKey.systemTime?.let { w.writeLong(it.asMicros) } ?: w.writeNull() }
+        srcMsgId?.let { docWriter.vectorFor("src_msg_id", I64.arrowType, false).writeLong(it) }
         docWriter.vectorFor("committed", BOOL.arrowType, false).writeBoolean(error == null)
         docWriter.vectorFor("user_metadata", VectorType.structOf().arrowType, true).writeObject(userMetadata)
 

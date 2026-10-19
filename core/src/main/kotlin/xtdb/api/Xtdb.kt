@@ -40,6 +40,7 @@ import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.cache.DiskCache
 import xtdb.cache.MemoryCache
 import xtdb.database.Database
+import xtdb.database.Database.AppendedTx
 import xtdb.database.DatabaseName
 import xtdb.database.DatabasePartition
 import xtdb.database.decodeTxBasisToken
@@ -275,18 +276,22 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
         private fun db(dbName: DatabaseName): Database = dbCat.databaseOrThrow(dbName)
 
-        private fun recordTx(dbName: DatabaseName, txId: MessageId) {
-            awaitToken = mergeTxBasisTokens(awaitToken, mapOf(dbName to listOf(txId)).encodeTxBasisToken())
+        // the await-token waits on the source position, which is the tx-id only on a database without an external source
+        private data class LoggedTx(val dbName: DatabaseName, val srcMsgId: MessageId, val txId: TxId)
+
+        private fun recordTx(tx: LoggedTx) {
+            awaitToken = mergeTxBasisTokens(awaitToken, mapOf(tx.dbName to listOf(tx.srcMsgId)).encodeTxBasisToken())
         }
 
         // advances the token and captures the last-submitted-tx in one place, so the two can't drift apart.
-        private fun SubmittedTx.record(dbName: DatabaseName): SubmittedTx = also {
-            recordTx(dbName, txId)
+        private fun LoggedTx.recordSubmitted(): SubmittedTx {
+            recordTx(this)
             lastSubmittedTx = LastSubmittedTx(txId, null)
+            return SubmittedTx(txId)
         }
 
-        private fun ExecutedTx.record(dbName: DatabaseName): ExecutedTx = also {
-            recordTx(dbName, txId)
+        private fun ExecutedTx.record(tx: LoggedTx): ExecutedTx = also {
+            recordTx(tx)
             lastSubmittedTx = LastSubmittedTx(txId, this)
         }
 
@@ -304,16 +309,19 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         private fun ResultCursor.metered(): ResultCursor =
             metrics?.let { MeteredCursor(this, it) } ?: this
 
-        private fun doSubmit(ops: List<TxOp>, opts: TxOpts): SubmittedTx {
+        private fun doSubmit(ops: List<TxOp>, opts: TxOpts): LoggedTx {
             if (isTxOpen)
                 throw Incorrect(
                     "Cannot submit a transaction while another is in progress on this connection - commit or roll back first",
                     "xtdb/tx-already-in-progress"
                 )
 
-            return try {
+            val txDbName = opts.dbName ?: dbName
+            val db = db(txDbName)
+
+            val appended = try {
                 try {
-                    db(opts.dbName ?: dbName).submitTxBlocking(ops, opts.withFallbackTz(defaultTz))
+                    db.submitTxBlocking(ops, opts.withFallbackTz(defaultTz))
                 } catch (e: ExecutionException) {
                     throw e.cause ?: e
                 }
@@ -321,27 +329,55 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                 metrics?.txErrorCounter?.increment()
                 throw e
             }
+
+            return logged(appended, db, txDbName)
+        }
+
+        private fun logged(appended: AppendedTx, db: Database, txDbName: DatabaseName): LoggedTx =
+            LoggedTx(
+                txDbName, appended.srcMsgId,
+                when (appended) {
+                    is AppendedTx.Numbered -> appended.txId
+                    is AppendedTx.Unnumbered -> resolveTxId(appended.srcMsgId, db)
+                }
+            )
+
+        private fun resolveTxId(srcMsgId: MessageId, db: Database): TxId {
+            db.awaitSourceTxBlocking(srcMsgId)?.let { return it.txKey.txId }
+
+            val sql = "SELECT _id FROM xt.txs FOR ALL VALID_TIME WHERE src_msg_id = $srcMsgId"
+            return openStatement(parseStatement(sql), db.name)
+                .openQuery(QueryOpts(null, defaultTz))
+                .use { c ->
+                    var txId: TxId? = null
+                    c.tryAdvance { rel -> if (rel.rowCount > 0) txId = rel["_id"].getLong(0) }
+                    txId ?: throw Fault("tx at source position $srcMsgId not found after await", "xtdb/tx-await-missing")
+                }
         }
 
         /** The transaction goes to [TxOpts.dbName] (default [dbName]) and may only refer to tables within it — see [Connection]. */
         fun submitTx(ops: List<TxOp>, opts: TxOpts = TxOpts()): SubmittedTx =
-            metrics?.txSubmitTimer.timed { doSubmit(ops, opts) }.record(opts.dbName ?: dbName)
+            metrics?.txSubmitTimer.timed { doSubmit(ops, opts) }.recordSubmitted()
 
         /** The transaction goes to [TxOpts.dbName] (default [dbName]) and may only refer to tables within it — see [Connection]. */
         fun executeTx(ops: List<TxOp>, opts: TxOpts = TxOpts()): ExecutedTx =
             metrics?.txExecuteTimer.timed {
-                val txId = doSubmit(ops, opts).txId
-                metrics?.txAwaitTimer.timed { awaitTx(txId, opts.dbName ?: dbName) }
+                val tx = doSubmit(ops, opts)
+                metrics?.txAwaitTimer.timed { awaitTx(tx.txId, tx.dbName) }
                     // a tx that came back aborted is an error for the client that submitted it, whichever
                     // frontend that was — the indexer counts its own side separately.
                     .also { if (!it.committed) metrics?.txErrorCounter?.increment() }
-            }.record(opts.dbName ?: dbName)
+                    .record(tx)
+            }
 
         fun attachDb(dbName: DatabaseName, config: Database.Config): ExecutedTx =
-            dbCat.primary.let { awaitTx(it.sendAttachDbMessage(dbName, config).msgId, it.name).record(it.name) }
+            dbCat.primary.let { db -> executeDbOp(db.sendAttachDbMessage(dbName, config).msgId, db) }
 
         fun detachDb(dbName: DatabaseName): ExecutedTx =
-            dbCat.primary.let { awaitTx(it.sendDetachDbMessage(dbName).msgId, it.name).record(it.name) }
+            dbCat.primary.let { db -> executeDbOp(db.sendDetachDbMessage(dbName).msgId, db) }
+
+        private fun executeDbOp(msgId: MessageId, db: Database): ExecutedTx =
+            logged(db.appendedTx(msgId), db, db.name).let { tx -> awaitTx(tx.txId, db.name).record(tx) }
 
         private fun TransactionResult.toExecutedTx() =
             ExecutedTx(

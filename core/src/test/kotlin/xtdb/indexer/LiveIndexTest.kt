@@ -69,7 +69,7 @@ class LiveIndexTest {
             )
 
         fun commitTx(openTx: OpenTx) {
-            val txKey = openTx.writeTxRow(null, null)
+            val txKey = openTx.writeTxRow(null, null, null)
             openTx.sealTables().associateTo(mutableMapOf()) { it.ref to it.liveTable }
                 .closeAllOnCatch { liveIndex.applyTx(txKey, it) }
         }
@@ -459,7 +459,7 @@ class LiveIndexTest {
         TestDb().use { db ->
             db.openTx(0, Instant.parse("2020-01-01T00:00:00Z")).use { tx ->
                 tx.put(TableRef("public", "docs"), UUID.randomUUID())
-                val txKey = tx.writeTxRow(null, null)
+                val txKey = tx.writeTxRow(null, null, null)
 
                 val tables = tx.sealTables().associateTo(mutableMapOf()) { it.ref to it.liveTable }
                 assertTrue(tables.isNotEmpty())
@@ -480,7 +480,7 @@ class LiveIndexTest {
             db.openTx(0, Instant.parse("2020-01-01T00:00:00Z")).use { tx ->
                 tx.put(TableRef("public", "docs"), UUID.randomUUID())
                 tx.put(TableRef("public", "more_docs"), UUID.randomUUID())
-                tx.writeTxRow(null, null)
+                tx.writeTxRow(null, null, null)
 
                 assertThrows<IllegalStateException> {
                     tx.sealTables().associateTo(mutableMapOf()) { it.ref to it.liveTable }

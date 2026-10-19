@@ -205,6 +205,7 @@ return rr.Diagram(rr.Choice(0, begin, commit, 'ROLLBACK'))
 * `COMMIT` (v2.2+) optionally takes `SYNC` or `ASYNC`, choosing whether the connection waits for the transaction to be indexed before returning.
   `COMMIT SYNC` waits for indexing; `COMMIT ASYNC` returns as soon as the transaction is submitted to the log.
   When given, this takes precedence over the transaction's `ASYNC` option; otherwise that option applies, defaulting to `SYNC`.
+  On a database with an [external source](/ops/external-sources/overview), every commit waits for indexing, so `COMMIT ASYNC` behaves as `COMMIT SYNC`.
 * N.B. `READ WRITE` is a misnomer in XTDB here - this is to align with standard SQL syntax.
   XTDB doesn't have interactive read-write transactions, so any attempt to (e.g.) `SELECT` in this transaction will error.
 * For read-only transactions, see the [query reference](/reference/main/sql/queries#begin--commit--rollback).

@@ -10,6 +10,10 @@ import xtdb.util.logger
 
 private val LOG = Watchers::class.logger
 
+private const val RECENT_TXS = 64
+
+private data class AppliedTx(val submittedAt: MessageId?, val result: TransactionResult)
+
 /** @suppress */
 class Watchers(
     latestTxId: TxId,
@@ -26,9 +30,15 @@ class Watchers(
     private data class Active(
         override val latestSourceMsgId: MessageId,
         override val latestTxId: TxId,
-        val latestTxResult: TransactionResult?,
+        val recentTxs: List<AppliedTx>,
         override val externalSourceToken: ExternalSourceToken? = null,
-    ) : State
+    ) : State {
+        fun sourceTxResult(srcMsgId: MessageId): TransactionResult? =
+            recentTxs.lastOrNull { it.submittedAt == srcMsgId }?.result
+
+        fun txResult(txId: TxId): TransactionResult? =
+            recentTxs.lastOrNull { it.result.txKey.txId == txId }?.result
+    }
 
     private data class Failed(
         override val latestSourceMsgId: MessageId,
@@ -38,7 +48,7 @@ class Watchers(
     ) : State
 
     private val state =
-        MutableStateFlow<State>(Active(latestSourceMsgId, latestTxId, null, externalSourceToken))
+        MutableStateFlow<State>(Active(latestSourceMsgId, latestTxId, emptyList(), externalSourceToken))
 
     private fun State.activeOrThrow(): Active = when (this) {
         is Active -> this
@@ -87,10 +97,15 @@ class Watchers(
                 "srcMsgId $srcMsgId < latestSourceMsgId ${it.latestSourceMsgId}"
             }
 
+            // an external-source tx carries the source position it resolved at without moving it,
+            // so only the tx submitted at a position moves the watermark onto it
+            val latestSourceMsgId = it.latestSourceMsgId
+            val appliedTx = txResult?.let { res -> AppliedTx(srcMsgId?.takeIf { pos -> pos > latestSourceMsgId }, res) }
+
             it.copy(
                 latestSourceMsgId = srcMsgId ?: it.latestSourceMsgId,
                 latestTxId = txId ?: it.latestTxId,
-                latestTxResult = txResult ?: it.latestTxResult,
+                recentTxs = appliedTx?.let { tx -> (it.recentTxs + tx).takeLast(RECENT_TXS) } ?: it.recentTxs,
                 externalSourceToken = extSourceToken ?: it.externalSourceToken,
             )
         }
@@ -108,9 +123,19 @@ class Watchers(
         }
     }
 
-    suspend fun awaitTx(txId: TxId) =
-        activeState.first { it.latestTxId >= txId }
-            .latestTxResult?.takeIf { it.txKey.txId == txId }
+    /**
+     * Returns the result of the transaction [txId] once it has been applied, or null if the watermark passes
+     * [txId] without it - a tx-id no transaction took, or a result no longer among the most recent few.
+     */
+    suspend fun awaitTx(txId: TxId): TransactionResult? =
+        activeState.first { it.latestTxId >= txId }.txResult(txId)
+
+    /**
+     * Returns the result of the transaction submitted at source position [srcMsgId] once it has been applied,
+     * or null if that position carried no transaction, or its result is no longer among the most recent few.
+     */
+    suspend fun awaitSourceTx(srcMsgId: MessageId): TransactionResult? =
+        activeState.first { it.latestSourceMsgId >= srcMsgId }.sourceTxResult(srcMsgId)
 
     suspend fun awaitSource(srcMsgId: MessageId) {
         activeState.first { it.latestSourceMsgId >= srcMsgId }

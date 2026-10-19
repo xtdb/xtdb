@@ -96,6 +96,7 @@ value TxBasisToken {
     -- An opaque await-token: the read basis carried between connection and Database so
     -- a connection's reads observe (at least) its own prior writes. Each write advances
     -- it; each read threads it through. See: database/encodeTxBasisToken.
+    -- It holds the source positions the connection's writes were submitted at.
 }
 
 value TimeBasisToken {
@@ -147,6 +148,7 @@ value CommitOpts {
     --   async         — true: commit submits without awaiting; false: execute-and-await.
     --                    The begin-time default; a COMMIT SYNC / COMMIT ASYNC (see CommitMode)
     --                    overrides it for that one commit.
+    --                    On a database with an external source a submit always waits for the transaction to be resolved and applied, so async behaves as sync there.
     system_time: Timestamp?
     user_metadata: Bytes?
     async: Boolean

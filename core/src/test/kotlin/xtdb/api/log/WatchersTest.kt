@@ -50,6 +50,34 @@ class WatchersTest {
     }
 
     @Test
+    fun `a tx awaited after a later one was applied still gets its result`() = runTest(timeout = 1.seconds) {
+        val watchers = Watchers(latestTxId = 3, latestSourceMsgId = 3)
+        val res4 = TransactionResult.Committed(TransactionKey(4, Instant.parse("2021-01-01T00:00:00Z"), null))
+        val res5 = TransactionResult.Committed(TransactionKey(5, Instant.parse("2021-01-02T00:00:00Z"), null))
+
+        watchers.notifyApplied(4, res4)
+        watchers.notifyApplied(5, res5)
+
+        assertEquals(res4, watchers.awaitTx(4))
+    }
+
+    @Test
+    fun `a source position resumes with the result of the tx submitted there, not an external source's`() =
+        runTest(timeout = 1.seconds) {
+            val watchers = Watchers(latestTxId = 5, latestSourceMsgId = 100)
+            val await101 = async { watchers.awaitSourceTx(101) }
+
+            val ddl = TransactionResult.Committed(TransactionKey(6, Instant.parse("2026-05-01T00:00:00Z"), null))
+            val ext = TransactionResult.Committed(TransactionKey(7, Instant.parse("2026-05-02T00:00:00Z"), null))
+            watchers.notifyApplied(101, ddl)
+            watchers.notifyApplied(101, ext)
+
+            assertEquals(ddl, await101.await())
+            assertEquals(ddl, watchers.awaitSourceTx(101))
+            assertNull(watchers.awaitSourceTx(100))
+        }
+
+    @Test
     fun `seeded latestTxId can lag latestSourceMsgId`() = runTest(timeout = 1.seconds) {
         // Production shape from #5580: ext-source databases persist `latestProcessedMsgId` via
         // the block catalog (a source-msg-id watermark) and `latestCompletedTx` separately (a

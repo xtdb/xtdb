@@ -17,21 +17,18 @@ import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import xtdb.SimulationTestUtils.Companion.createTrieCatalog
+import xtdb.api.TransactionResult
 import xtdb.api.log.*
-import xtdb.api.error.Incorrect
 import xtdb.api.tx.TxIndexer.TxResult
 import xtdb.catalog.TableCatalog
-import xtdb.database.Database
-import xtdb.database.DatabaseLogs
-import xtdb.database.DatabasePartition
-import xtdb.database.PartitionState
-import xtdb.database.PartitionStorage
 import xtdb.indexer.LeaderTermTest
 import xtdb.indexer.LiveIndex
 import xtdb.indexer.LogProcessor.LogsDriver
 import xtdb.indexer.supersede
 import xtdb.storage.MemoryStorage
-import xtdb.tx.TxOpts
+import xtdb.tx.TxOp
+import xtdb.tx.toArrowBytes
+import java.time.Instant
 import java.time.InstantSource
 import java.time.ZoneId
 import kotlin.time.Duration.Companion.milliseconds
@@ -76,6 +73,7 @@ internal class ExternalSourceTest : LeaderTermTest() {
 
     private class ExtTerm(
         val watchers: Watchers,
+        val sourceLog: InMemoryLog<SourceMessage>,
         private val replicaLog: InMemoryLog<ReplicaMessage>,
         private val termJob: Job,
     ) {
@@ -109,18 +107,24 @@ internal class ExternalSourceTest : LeaderTermTest() {
         liveIndex: LiveIndex = this@ExternalSourceTest.liveIndex,
         wrapDriver: (LogsDriver) -> LogsDriver = { it },
     ): ExtTerm {
+        val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0)
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
         val termJob = SupervisorJob(backgroundScope.coroutineContext.job)
 
         leaderProc(
             StandardTestDispatcher(testScheduler),
-            replicaLog = replicaLog, bufferPool = bufferPool, liveIndex = liveIndex,
+            sourceLog = sourceLog, replicaLog = replicaLog, bufferPool = bufferPool, liveIndex = liveIndex,
             watchers = watchers, extSource = extSource, wrapDriver = wrapDriver,
             termJob = termJob,
         )
 
-        return ExtTerm(watchers, replicaLog, termJob)
+        return ExtTerm(watchers, sourceLog, replicaLog, termJob)
+    }
+
+    private suspend fun ExtTerm.submitSql(sql: String, systemTime: Instant? = null): TransactionResult? {
+        val tx = SourceMessage.Tx(listOf(TxOp.Sql(sql)).toArrowBytes(allocator), systemTime, ZoneId.of("UTC"), null, null)
+        return watchers.awaitSourceTx(sourceLog.appendMessage(tx).msgId)
     }
 
     @Test
@@ -313,30 +317,47 @@ internal class ExternalSourceTest : LeaderTermTest() {
     }
 
     @Test
-    fun `submitTxBlocking rejects when externalSource is configured`() {
-        val extFactory = mockk<ExternalSource.Factory>()
-        val config = Database.Config(externalSource = extFactory)
+    fun `DDL submitted to the source log takes the next tx-id after the external source's, and no system time`() =
+        runTest {
+            val extSource = InMemoryExternalSource()
+            val term = extTerm(extSource)
 
-        // note: not .use — Database.close() would close `allocator`, which @AfterEach also closes
-        val partition = DatabasePartition(
-            storage = PartitionStorage(DatabaseLogs(null, null), null, null),
-            state = PartitionState(null, null, null),
-            watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1),
-        )
-        val db = Database(
-            allocator = allocator,
-            config = config,
-            name = "cdc",
-            logs = DatabaseLogs(null, null),
-            isIndexing = false,
-            partitions = listOf(partition),
-            meterRegistry = null,
-        )
+            extSource.channel.send(null)
+            term.watchers.awaitTx(0)
 
-        val ex = assertThrows(Incorrect::class.java) {
-            db.submitTxBlocking(emptyList(), TxOpts(defaultTz = ZoneId.of("UTC")))
+            val ddl = term.submitSql("CREATE TABLE foo (_id)")
+            assertTrue(ddl is TransactionResult.Committed, "committed: $ddl")
+            assertEquals(1L, ddl!!.txKey.txId)
+            assertNull(ddl.txKey.systemTime)
+
+            extSource.channel.send(null)
+            term.watchers.awaitTx(2)
+
+            assertEquals(listOf(0L, 1L, 2L), term.resolvedTxs().map { it.txId })
         }
-        assertTrue(ex.message!!.contains("external source"), "message mentions external source")
+
+    @Test
+    fun `DDL submitted to the source log with a system time aborts`() = runTest {
+        val term = extTerm(InMemoryExternalSource())
+
+        val ddl = term.submitSql("CREATE TABLE foo (_id)", systemTime = Instant.parse("2020-01-01T00:00:00Z"))
+        assertTrue(ddl is TransactionResult.Aborted, "aborted: $ddl")
+        assertTrue(
+            (ddl as TransactionResult.Aborted).error?.message!!.contains("system-time"),
+            "the error names the system-time: ${ddl.error}"
+        )
+    }
+
+    @Test
+    fun `a data write submitted to the source log aborts`() = runTest {
+        val term = extTerm(InMemoryExternalSource())
+
+        val write = term.submitSql("INSERT INTO foo RECORDS {_id: 1}")
+        assertTrue(write is TransactionResult.Aborted, "aborted: $write")
+        assertTrue(
+            (write as TransactionResult.Aborted).error?.message!!.contains("external source"),
+            "the error names the external source: ${write.error}"
+        )
     }
 
     // Both apply paths: a tx this term resolved is applied by `applyTx`, one read back without having been

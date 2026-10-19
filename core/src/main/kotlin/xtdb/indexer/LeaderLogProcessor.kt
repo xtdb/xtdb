@@ -73,7 +73,8 @@ internal class LeaderLogProcessor(
         TxResolver(
             al, nodeBase, partitionStorage, partitionState, dbName, crashLogger, skipTxs,
             resolvedSrcMsgId = watchers.latestSourceMsgId, resolvedExtToken = watchers.externalSourceToken,
-            instantSource
+            instantSource,
+            dataSource = if (extSource != null) TxResolver.DataSource.EXTERNAL_SOURCE else TxResolver.DataSource.SOURCE_LOG,
         )
 
     val gc = GarbageCollector(

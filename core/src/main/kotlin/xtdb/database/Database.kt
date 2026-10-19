@@ -12,7 +12,7 @@ import org.apache.arrow.memory.BufferAllocator
 import xtdb.NodeBase
 import xtdb.api.TransactionKey
 import xtdb.api.TransactionResult
-import xtdb.api.Xtdb
+import xtdb.api.TxId
 import xtdb.api.YAML_SERDE
 import xtdb.api.log.IngestionStoppedException
 import xtdb.api.log.Log
@@ -130,6 +130,12 @@ class Database(
             if (timeout == null) watchers.awaitTx(txId) else withTimeout(timeout) { watchers.awaitTx(txId) }
         }
 
+    fun awaitSourceTxBlocking(srcMsgId: MessageId, timeout: Duration? = null): TransactionResult? =
+        runBlocking {
+            check(isIndexing) { "log processor not initialised" }
+            if (timeout == null) watchers.awaitSourceTx(srcMsgId) else withTimeout(timeout) { watchers.awaitSourceTx(srcMsgId) }
+        }
+
     fun awaitSourceBlocking(sourceMsgId: MessageId, timeout: Duration? = null) =
         runBlocking {
             check(isIndexing) { "log processor not initialised" }
@@ -155,15 +161,23 @@ class Database(
         (partitions + listOf(logs, allocator)).closeAll()
     }
 
-    fun submitTxBlocking(ops: List<TxOp>, opts: TxOpts): Xtdb.SubmittedTx {
-        if (config.externalSource != null)
-            throw Incorrect(
-                "Cannot submit transactions to database '$name': it has an external source configured. " +
-                        "External-source databases use a separate txId sequence — submit through the source instead.",
-                "xtdb/submit-tx-to-external-source-db",
-                mapOf("db-name" to name)
-            )
+    /** A transaction on the source log - numbered by its position there, unless the database has an external source. */
+    sealed interface AppendedTx {
+        val srcMsgId: MessageId
 
+        data class Numbered(override val srcMsgId: MessageId) : AppendedTx {
+            val txId: TxId get() = srcMsgId
+        }
+
+        /** Takes the next tx-id in the sequence the external source's txs share, known once it's resolved. */
+        data class Unnumbered(override val srcMsgId: MessageId) : AppendedTx
+    }
+
+    /** The transaction appended to this database's source log at [msgId]. */
+    fun appendedTx(msgId: MessageId): AppendedTx =
+        if (config.externalSource == null) AppendedTx.Numbered(msgId) else AppendedTx.Unnumbered(msgId)
+
+    fun submitTxBlocking(ops: List<TxOp>, opts: TxOpts): AppendedTx {
         val defaultTz = checkNotNull(opts.defaultTz) { "missing defaultTz" }
         val txMsg = SourceMessage.Tx(
             txOps = ops.toArrowBytes(allocator),
@@ -172,8 +186,7 @@ class Database(
             user = opts.user,
             userMetadata = opts.userMetadata?.let { serializeUserMetadata(allocator, it) }
         )
-        val meta = sourceLog.appendMessageBlocking(txMsg)
-        return Xtdb.SubmittedTx(meta.msgId)
+        return appendedTx(sourceLog.appendMessageBlocking(txMsg).msgId)
     }
 
     fun sendFlushBlockMessage(): Log.MessageMetadata = runBlocking {

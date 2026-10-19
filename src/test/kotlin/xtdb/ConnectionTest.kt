@@ -30,7 +30,8 @@ class ConnectionTest {
     // awaitTxBlocking returns it committed; the assertions observe the connection's real await-token.
     private fun connection(dbName: DatabaseName): Xtdb.Connection {
         db = mockk()
-        every { db.submitTxBlocking(any(), any()) } answers { Xtdb.SubmittedTx(nextTxId) }
+        every { db.submitTxBlocking(any(), any()) } answers { Database.AppendedTx.Numbered(nextTxId) }
+        every { db.appendedTx(any()) } answers { Database.AppendedTx.Numbered(firstArg()) }
         every { db.awaitTxBlocking(any(), any()) } answers {
             TransactionResult.Committed(mockk<TransactionKey> {
                 every { txId } returns nextTxId
@@ -162,5 +163,18 @@ class ConnectionTest {
         val last = conn.lastSubmittedTx!!
         assertEquals(17L, last.txId)
         assertNull(last.executed)
+    }
+
+    @Test
+    fun `a submit to an external-source database returns the tx-id it resolved to, and its token the source position`() {
+        val conn = connection("mydb")
+        every { db.submitTxBlocking(any(), any()) } returns Database.AppendedTx.Unnumbered(5)
+        every { db.awaitSourceTxBlocking(5, any()) } returns TransactionResult.Committed(
+            TransactionKey(1001, Instant.EPOCH, null)
+        )
+
+        assertEquals(1001L, conn.submitTx(emptyList()).txId)
+        assertEquals(mapOf("mydb" to listOf(5L)), tokenOf(conn.awaitToken))
+        assertEquals(1001L, conn.lastSubmittedTx!!.txId)
     }
 }
