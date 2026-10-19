@@ -1,5 +1,6 @@
 (ns xtdb.api-test
-  (:require [clojure.test :as t :refer [deftest]]
+  (:require [clojure.string :as str]
+            [clojure.test :as t :refer [deftest]]
             [next.jdbc :as jdbc]
             [xtdb.api :as xt]
             [xtdb.basis :as basis]
@@ -8,8 +9,11 @@
             [xtdb.test-util :as tu :refer [*node*]]
             [xtdb.time :as time]
             [xtdb.util :as util])
-  (:import (java.lang AutoCloseable)
-           (java.time Duration ZoneId)))
+  (:import (com.github.benmanes.caffeine.cache Cache)
+           (java.lang AutoCloseable)
+           (java.time Duration ZoneId)
+           (org.antlr.v4.runtime ParserRuleContext)
+           (xtdb.query PlanCacheKey)))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
@@ -741,3 +745,29 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
   (let [{:keys [latest-submitted-msg-ids latest-processed-msg-ids]} (xt/status tu/*node*)]
     (t/is (seq latest-submitted-msg-ids))
     (t/is (= latest-submitted-msg-ids latest-processed-msg-ids))))
+
+(t/deftest concurrent-writers-awaits-share-one-plan-6216
+  (xt/execute-tx *node* [[:put-docs :docs {:xt/id -1}]])
+
+  (let [^Cache plan-cache (:plan-cache (.getQuerySource (util/node-base *node*)))
+        tx-await-plan-count (fn []
+                              (->> (keys (.asMap plan-cache))
+                                   (filter (fn [^PlanCacheKey k]
+                                             (let [ast (.getAst k)]
+                                               (and (instance? ParserRuleContext ast)
+                                                    (str/includes? (.getText ^ParserRuleContext ast) "xt.txs")))))
+                                   count))]
+
+    (loop [round 0]
+      (->> (range 4)
+           (mapv (fn [writer]
+                   (future
+                     (dotimes [i 25]
+                       (xt/execute-tx *node* [[:put-docs :docs {:xt/id (+ (* writer 100) i)}]])))))
+           (run! deref))
+
+      (when (and (zero? (tx-await-plan-count)) (< round 20))
+        (recur (inc round))))
+
+    (t/is (= 1 (tx-await-plan-count))
+          "every writer whose await falls back to xt.txs reuses the one plan")))

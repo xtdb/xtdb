@@ -357,10 +357,12 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                 if (txRes.txKey.txId == txId) return txRes.toExecutedTx()
             }
 
-            val sql = "SELECT system_time, committed, error FROM xt.txs FOR ALL VALID_TIME WHERE _id = $txId"
-            return openStatement(parseStatement(sql), awaitDb)
-                .openQuery(QueryOpts(null, defaultTz))
-                .use { c ->
+            val sql = "SELECT system_time, committed, error FROM xt.txs FOR ALL VALID_TIME WHERE _id = ?"
+            return openStatement(parseStatement(sql), awaitDb).use { stmt ->
+                stmt.prepare()
+                Relation.openFromRows(allocator, listOf(mapOf("?_0" to txId))).use { stmt.bind(it) }
+
+                stmt.openQuery(QueryOpts(null, defaultTz)).use { c ->
                     var result: ExecutedTx? = null
                     c.tryAdvance { rel ->
                         if (rel.rowCount > 0)
@@ -373,6 +375,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                     }
                     result ?: throw Fault("tx $txId not found after await", "xtdb/tx-await-missing")
                 }
+            }
         }
 
         fun prepareStatement(sql: String): Statement = createStatement(sql).apply { prepare() }
