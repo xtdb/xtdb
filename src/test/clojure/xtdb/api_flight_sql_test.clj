@@ -4,6 +4,7 @@
   (:require [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
             [xtdb.flight-sql :as fsql]
+            [xtdb.node :as xtn]
             [xtdb.serde :as serde]
             [xtdb.test-util :as tu :refer [*node*]]
             [xtdb.time :as time])
@@ -187,3 +188,35 @@
 
     (t/is (= [{:xt/id 1, :v [1 "x"]} {:xt/id 2, :v "str"} {:xt/id 3, :v 42}]
              (xt/q conn "SELECT _id, v FROM docs ORDER BY _id")))))
+
+(deftest pages-shaped-differently-from-the-declared-result-type
+  (with-open [^Xtdb node (xtn/start-node {:flight-sql {:port 0}, :indexer {:rows-per-block 20}})
+              conn (fsql/open-conn {:port (.getFlightSqlPort node)})]
+    (doseq [i (range 50)]
+      (xt/execute-tx node [[:sql (str "INSERT INTO obs RECORDS {_id: 'f" i "', vq: {value: 1.0, unit: 'mg'}, v: 1}")]]))
+    (xt/execute-tx node [[:sql "INSERT INTO obs RECORDS {_id: 'live', vq: {value: 2.0}, v: 'str'}"]])
+
+    (t/is (= [{:xt/id "live", :vq {:value 2.0}, :v "str"}]
+             (xt/q conn "SELECT * FROM obs WHERE _id = 'live'"))
+          "a live row whose struct lacks a field that flushed rows have")
+
+    (t/is (= [{:xt/id "f1", :vq {:value 1.0, :unit "mg"}, :v 1}]
+             (xt/q conn "SELECT * FROM obs WHERE _id = 'f1'"))
+          "a flushed row, where the declared type of `v` is a union of long and string")
+
+    (t/is (= (set (xt/q node "SELECT * FROM obs"))
+             (set (xt/q conn "SELECT * FROM obs"))))))
+
+(deftest struct-field-order-differs-between-nodes
+  (let [vals {"fso_alpha" "A", "fso_bravo" "B", "fso_charlie" "C"}]
+    (doseq [[table ks] [["fso_first" ["fso_alpha" "fso_bravo" "fso_charlie"]]
+                        ["fso_second" ["fso_charlie" "fso_alpha" "fso_bravo"]]]]
+      (with-open [^Xtdb node (xtn/start-node {:flight-sql {:port 0}})
+                  conn (fsql/open-conn {:port (.getFlightSqlPort node)})]
+        (xt/execute-tx node [[:sql (str "INSERT INTO " table " (_id, s) VALUES (?, ?)")
+                              ["s1" (apply array-map (mapcat (juxt identity vals) ks))]]])
+        (let [q (str "SELECT _id, s FROM " table)]
+          (t/is (= [{:xt/id "s1", :s {:fso-alpha "A", :fso-bravo "B", :fso-charlie "C"}}]
+                   (xt/q node q)
+                   (xt/q conn q))
+                table))))))

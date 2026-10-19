@@ -1336,7 +1336,10 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
                 override fun loadNextBatch(): Boolean =
                     tryAdvance { inRel ->
-                        inRel.openDirectSlice(this.allocator).use { rel ->
+                        // VectorLoader matches buffers by position, but a page only has the struct fields and union legs its own rows use, in its own order.
+                        // Copying by name into the declared schema first gives every page the root's exact layout.
+                        Relation(this.allocator, schema).use { rel ->
+                            inRel.rowCopier(rel).copyRange(0, inRel.rowCount)
                             val loader = VectorLoader(this.vectorSchemaRoot)
                             rel.openArrowRecordBatch().use { rb ->
                                 loader.load(rb)
