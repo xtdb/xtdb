@@ -182,7 +182,8 @@
 (defn- assert-supported-min-max-type [to-type]
   (let [to-col-type (types/vec-type->col-type to-type)
         to-col-type-head (types/col-type-head to-col-type)]
-    (when-not (or (isa? types/col-type-hierarchy to-col-type-head :num)
+    (when-not (or (= :nothing to-col-type-head)
+                  (isa? types/col-type-hierarchy to-col-type-head :num)
                   (contains? #{:duration :date :timestamp-local :timestamp-tz :time-local :null}
                              to-col-type-head)
                   (contains? var-width-comparable-types to-col-type-head))
