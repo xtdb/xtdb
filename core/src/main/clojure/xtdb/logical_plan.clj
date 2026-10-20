@@ -431,15 +431,7 @@
     (let [{:keys [predicate]} opts
           {:keys [conditions]} join-opts]
       (when (columns-in-both-relations? predicate lhs rhs)
-        [:join {:conditions (conj conditions predicate)} lhs rhs]))
-
-    [:select opts
-     [:semi-join join-opts lhs rhs]]
-    ;;=>
-    (let [{:keys [predicate]} opts
-          {:keys [conditions]} join-opts]
-      (when (columns-in-both-relations? predicate lhs rhs)
-        [:semi-join {:conditions (conj conditions predicate)} lhs rhs]))))
+        [:join {:conditions (conj conditions predicate)} lhs rhs]))))
 
 (defn columns-in-predicate-present-in-relation? [relation predicate]
   (set/superset? (set (relation-columns relation)) (expr-symbols predicate)))
