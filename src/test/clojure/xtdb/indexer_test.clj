@@ -611,8 +611,8 @@ INSERT INTO docs (_id, _valid_from, _valid_to)
                      {:default-tz #xt/zone "Europe/London"})
       (tu/flush-block! node)
 
-      (aet/check-arrow-edn-dir (io/as-file (io/resource "xtdb/indexer-test/copes-with-missing-put/arrow"))
-                               node-dir)
+      (aet/check-arrow-edn-dir (io/as-file (io/resource "xtdb/indexer-test/copes-with-missing-put/arrow/objects/v06/tables/public$docs"))
+                               (.resolve node-dir "objects/v06/tables/public$docs"))
 
       (t/is (= [{:xt/id "foo", :a 1,
                  :xt/valid-from #xt/zdt "2020-01-01Z[UTC]",

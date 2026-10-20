@@ -573,8 +573,8 @@
 
         (c/compact-all! node #xt/duration "PT2S")
 
-        (aet/check-arrow-edn-dir (.toPath (io/as-file (io/resource "xtdb/compactor-test/copes-with-missing-put")))
-                                 (.resolve node-dir "objects"))
+        (aet/check-arrow-edn-dir (.toPath (io/as-file (io/resource "xtdb/compactor-test/copes-with-missing-put/v06/tables/public$docs")))
+                                 (.resolve node-dir "objects/v06/tables/public$docs"))
 
         (t/is (= [{:xt/id "foo", :a 1,
                    :xt/valid-from #xt/zdt "2020-01-01Z[UTC]",
