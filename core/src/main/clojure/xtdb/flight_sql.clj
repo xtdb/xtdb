@@ -66,25 +66,31 @@
         ex))
     ex))
 
-;; the server maps an anomaly's category to a Flight status and its message to the description; this
-;; is the inverse, so a wire error surfaces as the same category of `xtdb.error` anomaly the other
-;; connectables throw. The error code doesn't cross the wire, so it comes back nil.
+(declare json->anomaly)
+
 (extend-protocol err/ToAnomaly
   FlightRuntimeException
   (->anomaly [ex data]
     (let [ex (unwrap-flight-ex ex)
+          status (.status ex)
           msg (.getMessage ex)
-          data (into {::err/cause ex} data)]
-      (condp = (.code (.status ex))
-        FlightStatusCode/INVALID_ARGUMENT (err/incorrect nil msg data)
-        FlightStatusCode/UNIMPLEMENTED (err/unsupported nil msg data)
-        FlightStatusCode/NOT_FOUND (err/not-found nil msg data)
-        FlightStatusCode/UNAUTHENTICATED (err/forbidden nil msg data)
-        FlightStatusCode/UNAUTHORIZED (err/forbidden nil msg data)
-        FlightStatusCode/CANCELLED (err/interrupted nil msg data)
-        FlightStatusCode/RESOURCE_EXHAUSTED (err/busy nil msg data)
-        FlightStatusCode/UNAVAILABLE (err/unavailable nil msg data)
-        (err/fault nil msg data)))))
+          data (into {::err/cause ex} data)
+          metadata (.metadata status)]
+      (if (some-> metadata (.containsKey XtdbProducer/ANOMALY_METADATA_KEY))
+        (-> (into {} (JsonSerde/decode (String. (.getByte metadata XtdbProducer/ANOMALY_METADATA_KEY) StandardCharsets/UTF_8)))
+            (assoc "message" msg)
+            (json->anomaly data))
+
+        (condp = (.code status)
+          FlightStatusCode/INVALID_ARGUMENT (err/incorrect nil msg data)
+          FlightStatusCode/UNIMPLEMENTED (err/unsupported nil msg data)
+          FlightStatusCode/NOT_FOUND (err/not-found nil msg data)
+          FlightStatusCode/UNAUTHENTICATED (err/forbidden nil msg data)
+          FlightStatusCode/UNAUTHORIZED (err/forbidden nil msg data)
+          FlightStatusCode/CANCELLED (err/interrupted nil msg data)
+          FlightStatusCode/RESOURCE_EXHAUSTED (err/busy nil msg data)
+          FlightStatusCode/UNAVAILABLE (err/unavailable nil msg data)
+          (err/fault nil msg data))))))
 
 ;; -- SQL literals --
 ;;
@@ -233,9 +239,9 @@
     (catch Throwable t
       (log/warn t "couldn't roll back the FlightSQL transaction"))))
 
-(defn- ->anomaly [{:strs [category code message data]}]
+(defn- json->anomaly [{:strs [category code message data]} extra-data]
   (let [code (some-> code keyword)
-        data (update-keys (into {} data) keyword)]
+        data (into (update-keys (into {} data) keyword) extra-data)]
     (case category
       "incorrect" (err/incorrect code message data)
       "conflict" (err/conflict code message data)
@@ -251,7 +257,7 @@
   (let [{:strs [txId systemTime error awaitToken]} (JsonSerde/decode (String. (.getBody result) StandardCharsets/UTF_8))]
     {:tx-id txId
      :system-time (some-> systemTime time/->instant)
-     :error (some-> error ->anomaly)
+     :error (some-> error (json->anomaly {}))
      :await-token awaitToken}))
 
 (defn- commit!

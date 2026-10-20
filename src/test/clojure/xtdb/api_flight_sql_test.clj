@@ -157,6 +157,17 @@
                       (xt/q conn "SELECT DATE 'not-a-date'"))
           "a server-side anomaly comes back as the same category of anomaly")))
 
+(deftest anomaly-code-crosses-the-wire
+  (with-open [conn (open-conn)]
+    (t/is (anomalous? [:incorrect :xtql/malformed-from]
+                      #_{:clj-kondo/ignore [:xtql/type-mismatch]}
+                      (xt/q conn '(from docs [name]))))))
+
+(deftest a-flight-status-without-an-anomaly-maps-from-its-status
+  (with-open [conn (open-conn)]
+    (t/is (anomalous? [:incorrect nil #"DML statements should be submitted via executeUpdate"]
+                      (xt/q conn "INSERT INTO docs (_id) VALUES (1)")))))
+
 (deftest a-committed-write-is-visible-to-another-connection
   (with-open [conn1 (open-conn)
               conn2 (open-conn)]

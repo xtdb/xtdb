@@ -93,6 +93,7 @@ private val Xtdb.Statement.isDml get() = parsedStatement is ParsedStatement.Dml
  */
 private val ERROR_CODE: Keyword = Keyword.intern("xtdb.error", "code")
 private val NOT_A_QUERY: Keyword = Keyword.intern("xtdb", "not-a-query")
+private const val MAX_ANOMALY_METADATA_BYTES = 4096
 
 private fun Anomaly.flightDescription(): String {
     val msg = message ?: toString()
@@ -111,7 +112,16 @@ private fun Throwable.asFlightException(): FlightRuntimeException =
             is Unavailable -> CallStatus.UNAVAILABLE
             is Fault -> CallStatus.INTERNAL
         }
-        status.withDescription(anom.flightDescription()).withCause(anom).toRuntimeException()
+        val anomBytes = encodeToBytes(anom)
+
+        status.withDescription(anom.flightDescription()).withCause(anom)
+            .run {
+                // grpc-java refuses inbound metadata over 8 KiB by default, failing the whole call
+                if (anomBytes.size <= MAX_ANOMALY_METADATA_BYTES)
+                    withMetadata(ErrorFlightMetadata().apply { insert(XtdbProducer.ANOMALY_METADATA_KEY, anomBytes) })
+                else this
+            }
+            .toRuntimeException()
     }
 
 private fun Xtdb.Connection.LastSubmittedTx.toCommitResult(awaitToken: String?) = Result(
@@ -710,6 +720,16 @@ class XtdbProducer(
         // GET_SQL_INFO `value` dense-union leg type ids (FlightSqlProducer.Schemas.GET_SQL_INFO_SCHEMA).
         private const val STRING_LEG: Byte = 0
         private const val INT32_BITMASK_LEG: Byte = 3
+
+        /**
+         * The error-metadata key under which a failed call carries the XTDB anomaly behind it, as a JSON object of the
+         * same shape as [COMMIT_TRANSACTION_ACTION]'s `error`.
+         *
+         * The status code carries only a coarse mapping of the anomaly's category, and the description only its message;
+         * this carries the category, `code` and `data` as well.
+         * Absent on errors raised by Flight itself rather than by XTDB, and on an anomaly whose JSON exceeds 4 KiB.
+         */
+        const val ANOMALY_METADATA_KEY = "xtdb-anomaly-bin"
 
         /**
          * An XTDB-specific action committing a Flight SQL transaction, as `EndTransaction` does, but returning the
