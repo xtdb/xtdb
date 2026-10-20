@@ -43,7 +43,7 @@
            [java.util.concurrent.atomic AtomicBoolean]
            (org.antlr.v4.runtime.misc Interval)
            (org.apache.arrow.memory BufferAllocator RootAllocator)
-           org.apache.arrow.vector.types.pojo.Field
+           (org.apache.arrow.vector.types.pojo Field Schema)
            (xtdb PagesCursor)
            (xtdb.antlr Sql$DirectlyExecutableStatementContext)
            (xtdb.api ICursor ResultCursor)
@@ -233,17 +233,21 @@
   (LinkedHashMap. ^Map (identity {"depth" #xt/type :utf8
                                   "op" #xt/type :keyword
                                   ;; struct (not transit) so it renders as JSON over pgwire — readable in Metabase
-                                  "attributes" #xt/type [:struct {"scan_db" :utf8, "scan_source" :utf8
-                                                                  "scan_files_pruned" :i64, "scan_files_used" :i64
-                                                                  "scan_pages_pruned" :i64, "scan_pages_used" :i64
-                                                                  "scan_rows_read" :i64}]
+                                  "attributes" #xt/type [:? :struct {"scan_db" :utf8, "scan_source" :utf8
+                                                                     "scan_files_pruned" :i64, "scan_files_used" :i64
+                                                                     "scan_pages_pruned" :i64, "scan_pages_used" :i64
+                                                                     "scan_rows_read" :i64}]
                                   "total_time" #xt/type [:duration :micro]
                                   "self_time" #xt/type [:duration :micro]
                                   ;; null for a branch the plan never advanced — a LIMIT 0 above it, or an unreferenced CTE
                                   "time_to_first_page" #xt/type [:? :duration :micro]
                                   "page_count" #xt/type :i64
                                   "row_count" #xt/type :i64
-                                  "pushdowns" #xt/type :transit})))
+                                  "pushdowns" #xt/type [:? :transit]})))
+
+(def ^:private ^Schema explain-analyze-schema
+  (Schema. (for [[col-name ^VectorType vec-type] explain-analyze-types]
+             (.toField vec-type col-name))))
 
 (defn- truncate-pushdown-val [k v]
   (case k
@@ -275,7 +279,7 @@
                                            total-time
                                            child-results)
                         :time-to-first-page (.getTimeToFirstPage ea)
-                        :page-count (.getPageCount ea)
+                        :page-count (long (.getPageCount ea))
                         :row-count (.getRowCount ea)
                         :pushdowns (not-empty (truncate-pushdowns (.getPushdowns ea)))}]
                       cat
@@ -497,7 +501,7 @@
                           (if (:explain-analyze? planned-query)
                             (try
                               (.forEachRemaining cursor (fn [_]))
-                              (-> (PagesCursor. allocator nil [(explain-analyze-results cursor)])
+                              (-> (PagesCursor. allocator explain-analyze-schema [(explain-analyze-results cursor)])
                                   (wrap-result-types explain-analyze-types)
                                   (wrap-closeables ref-ctr [closeable-query-span args snaps allocator]))
                               (finally

@@ -504,153 +504,148 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
                "dummy-arg-because-pgjdbc-expects-one"]))))
 
 (t/deftest test-explain-analyze
-  (when-not (= :flight-sql tu/*server*)
-    (xt/submit-tx *conn* [[:put-docs :people {:xt/id 1 :name "Dave" :age 30}]
-                          [:put-docs :people {:xt/id 2 :name "John" :age 40}]])
+  (xt/submit-tx *conn* [[:put-docs :people {:xt/id 1 :name "Dave" :age 30}]
+                        [:put-docs :people {:xt/id 2 :name "John" :age 40}]])
 
-    (letfn [(elide [row]
-              (-> row
-                  (update :total-time class)
-                  (update :self-time class)
-                  (update :time-to-first-page class)
-                  ;; the scan's runtime metrics vary with storage layout — asserted separately below
-                  (cond-> (contains? row :attributes)
-                    (update :attributes select-keys [:scan-db :scan-source]))))]
+  (letfn [(elide [row]
+            (-> row
+                (update :total-time class)
+                (update :self-time class)
+                (update :time-to-first-page class)
+                ;; the scan's runtime metrics vary with storage layout — asserted separately below
+                (cond-> (contains? row :attributes)
+                  (update :attributes select-keys [:scan-db :scan-source]))))]
 
-      (t/is (= [{:depth "->", :op :project,
-                 :page-count 1, :row-count 1
-                 :total-time Duration, :self-time Duration, :time-to-first-page Duration}
-                {:depth "  ->", :op :scan,
-                 :attributes {:scan-db "xtdb", :scan-source "public.people"}
-                 :page-count 1, :row-count 1
-                 :total-time Duration, :self-time Duration, :time-to-first-page Duration}]
-               (->> (xt/q *conn*
-                       [(format "EXPLAIN ANALYZE XTQL ($$ %s $$, ?)"
-                                (pr-str '#(from :people [{:xt/id %} name age xt/valid-from xt/valid-to])))
-                        1])
-                    (mapv elide))))
+    (t/is (= [{:depth "->", :op :project,
+               :page-count 1, :row-count 1
+               :total-time Duration, :self-time Duration, :time-to-first-page Duration}
+              {:depth "  ->", :op :scan,
+               :attributes {:scan-db "xtdb", :scan-source "public.people"}
+               :page-count 1, :row-count 1
+               :total-time Duration, :self-time Duration, :time-to-first-page Duration}]
+             (->> (xt/q *conn*
+                     [(format "EXPLAIN ANALYZE XTQL ($$ %s $$, ?)"
+                              (pr-str '#(from :people [{:xt/id %} name age xt/valid-from xt/valid-to])))
+                      1])
+                  (mapv elide))))
 
-      (t/is (= [{:depth "->", :op :project,
-                 :page-count 1, :row-count 1
-                 :total-time Duration, :self-time Duration, :time-to-first-page Duration}
-                {:depth "  ->", :op :rename,
-                 :page-count 1, :row-count 1
-                 :total-time Duration, :self-time Duration, :time-to-first-page Duration}
-                {:depth "    ->", :op :scan,
-                 :attributes {:scan-db "xtdb", :scan-source "public.people"}
-                 :page-count 1, :row-count 1
-                 :total-time Duration, :self-time Duration, :time-to-first-page Duration}]
-               (->> (xt/q *conn*
-                       ["EXPLAIN ANALYZE SELECT name, age, _valid_from, _valid_to FROM people WHERE _id = ?" 1])
-                    (mapv elide))))
+    (t/is (= [{:depth "->", :op :project,
+               :page-count 1, :row-count 1
+               :total-time Duration, :self-time Duration, :time-to-first-page Duration}
+              {:depth "  ->", :op :rename,
+               :page-count 1, :row-count 1
+               :total-time Duration, :self-time Duration, :time-to-first-page Duration}
+              {:depth "    ->", :op :scan,
+               :attributes {:scan-db "xtdb", :scan-source "public.people"}
+               :page-count 1, :row-count 1
+               :total-time Duration, :self-time Duration, :time-to-first-page Duration}]
+             (->> (xt/q *conn*
+                     ["EXPLAIN ANALYZE SELECT name, age, _valid_from, _valid_to FROM people WHERE _id = ?" 1])
+                  (mapv elide))))
 
-      (t/testing "scan attributes carry pruned/used/read metrics"
-        (let [scan-row (->> (xt/q *conn* ["EXPLAIN ANALYZE SELECT name FROM people WHERE _id = ?" 1])
-                            (filter #(= :scan (:op %)))
-                            first)
-              {:keys [scan-files-pruned scan-files-used scan-pages-pruned scan-pages-used scan-rows-read]
-               :as attrs} (:attributes scan-row)
-              metrics [scan-files-pruned scan-files-used scan-pages-pruned scan-pages-used scan-rows-read]]
-          (t/is (every? some? metrics) (str "all five metrics present: " attrs))
-          (t/is (every? #(and (int? %) (<= 0 %)) metrics) "metrics are non-negative integers")
-          ;; rows read off the pages is the throughput denominator — never fewer than the rows emitted
-          (t/is (>= scan-rows-read (:row-count scan-row)))
-          (t/is (pos? scan-rows-read) "read at least the row we emitted"))))))
+    (t/testing "scan attributes carry pruned/used/read metrics"
+      (let [scan-row (->> (xt/q *conn* ["EXPLAIN ANALYZE SELECT name FROM people WHERE _id = ?" 1])
+                          (filter #(= :scan (:op %)))
+                          first)
+            {:keys [scan-files-pruned scan-files-used scan-pages-pruned scan-pages-used scan-rows-read]
+             :as attrs} (:attributes scan-row)
+            metrics [scan-files-pruned scan-files-used scan-pages-pruned scan-pages-used scan-rows-read]]
+        (t/is (every? some? metrics) (str "all five metrics present: " attrs))
+        (t/is (every? #(and (int? %) (<= 0 %)) metrics) "metrics are non-negative integers")
+        ;; rows read off the pages is the throughput denominator — never fewer than the rows emitted
+        (t/is (>= scan-rows-read (:row-count scan-row)))
+        (t/is (pos? scan-rows-read) "read at least the row we emitted")))))
 
 (t/deftest test-explain-analyze-self-time-is-total-time-less-the-children
-  (when-not (= :flight-sql tu/*server*)
-    (xt/submit-tx *conn* [[:put-docs :docs {:xt/id 7 :name "seven"}]
-                          [:put-docs :docs {:xt/id 8 :name "eight"}]])
+  (xt/submit-tx *conn* [[:put-docs :docs {:xt/id 7 :name "seven"}]
+                        [:put-docs :docs {:xt/id 8 :name "eight"}]])
 
-    (let [rows (xt/q *conn* "EXPLAIN ANALYZE SELECT d._id FROM docs d JOIN docs e ON d._id = e._id")
-          depth (fn [row] (count (:depth row)))
-          children-of (fn [i]
-                        (let [d (depth (nth rows i))]
-                          (->> (drop (inc i) rows)
-                               (take-while #(> (depth %) d))
-                               (filter #(= (depth %) (+ d 2))))))]
-      (t/is (> (count rows) 2))
-      (doseq [[i row] (map-indexed vector rows)]
-        (t/is (= (:self-time row)
-                 (reduce #(.minus ^Duration %1 ^Duration (:total-time %2)) (:total-time row) (children-of i)))
-              (str (:op row) " self_time = total_time - children's total_time"))))))
+  (let [rows (xt/q *conn* "EXPLAIN ANALYZE SELECT d._id FROM docs d JOIN docs e ON d._id = e._id")
+        depth (fn [row] (count (:depth row)))
+        children-of (fn [i]
+                      (let [d (depth (nth rows i))]
+                        (->> (drop (inc i) rows)
+                             (take-while #(> (depth %) d))
+                             (filter #(= (depth %) (+ d 2))))))]
+    (t/is (> (count rows) 2))
+    (doseq [[i row] (map-indexed vector rows)]
+      (t/is (= (:self-time row)
+               (reduce #(.minus ^Duration %1 ^Duration (:total-time %2)) (:total-time row) (children-of i)))
+            (str (:op row) " self_time = total_time - children's total_time")))))
 
 (t/deftest test-explain-analyze-covers-the-whole-plan
-  (when-not (= :flight-sql tu/*server*)
-    (xt/submit-tx *conn* [[:put-docs :docs {:xt/id 7 :name "seven"}]
-                          [:put-docs :docs {:xt/id 8 :name "eight"}]])
+  (xt/submit-tx *conn* [[:put-docs :docs {:xt/id 7 :name "seven"}]
+                        [:put-docs :docs {:xt/id 8 :name "eight"}]])
 
-    (letfn [(nodes [prefix q]
-              (mapv (juxt :depth :op) (xt/q *conn* (str prefix q))))]
+  (letfn [(nodes [prefix q]
+            (mapv (juxt :depth :op) (xt/q *conn* (str prefix q))))]
 
-      (doseq [q ["SELECT d._id FROM docs d WHERE d._id IN (SELECT v.x FROM (VALUES (1),(7)) v(x)) OR d.name IS NULL"
-                 "WITH MATERIALIZED shared AS (SELECT _id, name FROM docs WHERE name IS NOT NULL) SELECT a._id FROM shared a JOIN shared b ON a._id = b._id"
-                 "SELECT d._id FROM docs d WHERE d._id IN (SELECT _id FROM docs)"
-                 "SELECT d._id FROM docs d JOIN docs e ON d._id = e._id"
-                 "SELECT d._id FROM docs d LEFT JOIN docs e ON d._id = e._id"
-                 "SELECT d._id FROM docs d WHERE NOT EXISTS (SELECT 1 FROM docs e WHERE e._id = d._id)"]]
-        (t/is (= (nodes "EXPLAIN " q) (nodes "EXPLAIN ANALYZE " q)) q)))))
+    (doseq [q ["SELECT d._id FROM docs d WHERE d._id IN (SELECT v.x FROM (VALUES (1),(7)) v(x)) OR d.name IS NULL"
+               "WITH MATERIALIZED shared AS (SELECT _id, name FROM docs WHERE name IS NOT NULL) SELECT a._id FROM shared a JOIN shared b ON a._id = b._id"
+               "SELECT d._id FROM docs d WHERE d._id IN (SELECT _id FROM docs)"
+               "SELECT d._id FROM docs d JOIN docs e ON d._id = e._id"
+               "SELECT d._id FROM docs d LEFT JOIN docs e ON d._id = e._id"
+               "SELECT d._id FROM docs d WHERE NOT EXISTS (SELECT 1 FROM docs e WHERE e._id = d._id)"]]
+      (t/is (= (nodes "EXPLAIN " q) (nodes "EXPLAIN ANALYZE " q)) q))))
 
 (t/deftest test-explain-analyze-of-an-unadvanced-plan
-  (when-not (= :flight-sql tu/*server*)
-    (xt/submit-tx *conn* [[:put-docs :docs {:xt/id 7 :name "seven"}]])
+  (xt/submit-tx *conn* [[:put-docs :docs {:xt/id 7 :name "seven"}]])
 
-    (doseq [[what q] {"a join the limit never advances"
-                      "SELECT d._id FROM docs d JOIN docs e ON d._id = e._id LIMIT 0"
+  (doseq [[what q] {"a join the limit never advances"
+                    "SELECT d._id FROM docs d JOIN docs e ON d._id = e._id LIMIT 0"
 
-                      "a materialized CTE nothing references"
-                      "WITH MATERIALIZED unused AS (SELECT _id FROM docs) SELECT 1 AS one"}]
-      (let [rows (xt/q *conn* (str "EXPLAIN ANALYZE " q))
-            unadvanced (filter (comp nil? :time-to-first-page) rows)]
-        (t/is (seq rows) what)
-        (t/is (seq unadvanced)
-              (str what " — the branch that never ran is still in the output"))
-        (t/is (every? (comp zero? :row-count) unadvanced)
-              (str what " — an unadvanced operator reports no first page and no rows"))))))
+                    "a materialized CTE nothing references"
+                    "WITH MATERIALIZED unused AS (SELECT _id FROM docs) SELECT 1 AS one"}]
+    (let [rows (xt/q *conn* (str "EXPLAIN ANALYZE " q))
+          unadvanced (filter (comp nil? :time-to-first-page) rows)]
+      (t/is (seq rows) what)
+      (t/is (seq unadvanced)
+            (str what " — the branch that never ran is still in the output"))
+      (t/is (every? (comp zero? :row-count) unadvanced)
+            (str what " — an unadvanced operator reports no first page and no rows")))))
 
 (t/deftest test-explain-analyze-pushdowns
-  (when-not (= :flight-sql tu/*server*)
-    (let [id1 #uuid "00000000-0000-0000-0000-000000000001"
-          id2 #uuid "00000000-0000-0000-0000-000000000002"
-          id3 #uuid "00000000-0000-0000-0000-000000000003"]
-      (xt/submit-tx *conn* [[:put-docs :foo {:xt/id id1 :v "x"}]
-                            [:put-docs :foo {:xt/id id2 :v "y"}]
-                            [:put-docs :bar {:xt/id id1 :w "a"}]
-                            [:put-docs :bar {:xt/id id2 :w "b"}]
-                            [:put-docs :bar {:xt/id id3 :w "c"}]]))
+  (let [id1 #uuid "00000000-0000-0000-0000-000000000001"
+        id2 #uuid "00000000-0000-0000-0000-000000000002"
+        id3 #uuid "00000000-0000-0000-0000-000000000003"]
+    (xt/submit-tx *conn* [[:put-docs :foo {:xt/id id1 :v "x"}]
+                          [:put-docs :foo {:xt/id id2 :v "y"}]
+                          [:put-docs :bar {:xt/id id1 :w "a"}]
+                          [:put-docs :bar {:xt/id id2 :w "b"}]
+                          [:put-docs :bar {:xt/id id3 :w "c"}]]))
 
-    (letfn [(scan-rows [results]
-              (filter #(= :scan (:op %)) results))]
+  (letfn [(scan-rows [results]
+            (filter #(= :scan (:op %)) results))]
 
-      (t/testing "join on _id pushes bloom + iids to probe-side scan"
-        (let [scans (scan-rows
-                     (xt/q *conn*
-                        "EXPLAIN ANALYZE SELECT f.v, b.w FROM foo f JOIN bar b ON f._id = b._id"))
-              bar-scan (first (filter #(= "public.bar" (get-in % [:attributes :scan-source])) scans))]
-          (t/is (some? bar-scan) "bar scan should be present")
+    (t/testing "join on _id pushes bloom + iids to probe-side scan"
+      (let [scans (scan-rows
+                   (xt/q *conn*
+                      "EXPLAIN ANALYZE SELECT f.v, b.w FROM foo f JOIN bar b ON f._id = b._id"))
+            bar-scan (first (filter #(= "public.bar" (get-in % [:attributes :scan-source])) scans))]
+        (t/is (some? bar-scan) "bar scan should be present")
 
-          (let [[id-pd] (:pushdowns bar-scan)]
-            (t/is (= "_id" (:column id-pd)))
-            (t/is (pos-int? (get-in id-pd [:bloom-filter :cardinality])))
-            (t/is (= {:count 2} (:iids id-pd))))))
+        (let [[id-pd] (:pushdowns bar-scan)]
+          (t/is (= "_id" (:column id-pd)))
+          (t/is (pos-int? (get-in id-pd [:bloom-filter :cardinality])))
+          (t/is (= {:count 2} (:iids id-pd))))))
 
-      (t/testing "join on non-id column pushes only bloom filter"
-        (let [scans (scan-rows
-                     (xt/q *conn*
-                        "EXPLAIN ANALYZE SELECT f.v, b.w FROM foo f JOIN bar b ON f.v = b.w"))
-              bar-scan (first (filter #(= "public.bar" (get-in % [:attributes :scan-source])) scans))]
-          (t/is (some? bar-scan))
+    (t/testing "join on non-id column pushes only bloom filter"
+      (let [scans (scan-rows
+                   (xt/q *conn*
+                      "EXPLAIN ANALYZE SELECT f.v, b.w FROM foo f JOIN bar b ON f.v = b.w"))
+            bar-scan (first (filter #(= "public.bar" (get-in % [:attributes :scan-source])) scans))]
+        (t/is (some? bar-scan))
 
-          (let [[pd] (:pushdowns bar-scan)]
-            (t/is (= "w" (:column pd)))
-            (t/is (pos-int? (get-in pd [:bloom-filter :cardinality])))
-            (t/is (nil? (:iids pd))))))
+        (let [[pd] (:pushdowns bar-scan)]
+          (t/is (= "w" (:column pd)))
+          (t/is (pos-int? (get-in pd [:bloom-filter :cardinality])))
+          (t/is (nil? (:iids pd))))))
 
-      (t/testing "simple scan without join has no pushdowns"
-        (let [scans (scan-rows
-                     (xt/q *conn*
-                        "EXPLAIN ANALYZE SELECT * FROM foo"))]
-          (t/is (every? #(nil? (:pushdowns %)) scans)))))))
+    (t/testing "simple scan without join has no pushdowns"
+      (let [scans (scan-rows
+                   (xt/q *conn*
+                      "EXPLAIN ANALYZE SELECT * FROM foo"))]
+        (t/is (every? #(nil? (:pushdowns %)) scans))))))
 
 (t/deftest test-transit-encoding-of-ast-objects-3019
   (t/is (anomalous? [:incorrect nil #"Not all variables in expression are in scope"]
