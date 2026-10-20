@@ -425,6 +425,11 @@ allprojects {
                 forkOptions.run {
                     jvmArgs = defaultJvmArgs
                 }
+
+                // clojurephant 0.9.1's prepl handshake `require`s dev.clojurephant.prepl while its fork is still creating it;
+                // without a file to find, the failed require removes the namespace, the fork dies and the task hangs (#6206, clojurephant#208).
+                // Remove once clojurephant's client stops requiring that namespace.
+                classpath.from(rootProj.layout.projectDirectory.dir("gradle/clojurephant-prepl"))
             }
 
             // Ensure test Clojure/Kotlin compilation depends on testFixtures compilation
