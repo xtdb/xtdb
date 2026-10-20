@@ -7,7 +7,8 @@
 TPC-H::
 `./gradlew tpch -PscaleFactor=0.01`
 +
-Runs hand-written logical plans for the 22 queries (`xtdb.datasets.tpch.ra`), so it measures execution, not the SQL planner or the optimiser.
+By default it runs hand-written logical plans for the 22 queries (`xtdb.datasets.tpch.ra`), so it measures execution, not the SQL planner or the optimiser.
+`-PqueryLanguage=sql` runs the SQL queries (`xtdb.datasets.tpch/sql-query`) through the planner instead.
 
 AuctionMark::
 `./gradlew auctionmark -Pduration=PT30S -Pthreads=8 -PscaleFactor=0.1`

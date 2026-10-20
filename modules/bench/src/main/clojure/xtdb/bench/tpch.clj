@@ -1,6 +1,7 @@
 (ns xtdb.bench.tpch
   (:require [clojure.test :as t]
             [clojure.tools.logging :as log]
+            [xtdb.api :as xt]
             [xtdb.bench :as b]
             [xtdb.datasets.tpch :as tpch]
             [xtdb.datasets.tpch.ra :as tpch-ra]
@@ -12,40 +13,49 @@
   (-> (into #{} (range 1 (inc (count tpch-ra/queries))))
       (disj 21)))
 
-(defn query-tpch [stage-name i]
+(defn query-tpch [stage-name query-language i]
   (let [q (nth tpch-ra/queries i)
         stage-name (keyword (str (name stage-name) "-" (:name (meta q))))
-        q @q
-        {::tpch-ra/keys [args]} (meta q)]
+        run-query (case query-language
+                    :ra (let [q @q
+                              {::tpch-ra/keys [args]} (meta q)]
+                          #(tu/query-ra q {:node %, :args args}))
+                    :sql (let [sql (tpch/sql-query (inc i))]
+                           #(xt/q % sql)))]
     {:t :call, :stage stage-name
      :f (fn [{:keys [node]}]
           (try
-            (count (tu/query-ra q {:node node, :args args}))
+            (count (run-query node))
             (catch Exception e
               (.printStackTrace e)
               (throw e))))}))
 
-(defn queries-stage [stage-name]
+(defn queries-stage [stage-name query-language]
   {:t :do, :stage stage-name
    :tasks (vec (for [i (range (count tpch-ra/queries))
                      :when (contains? *qs* (inc i))]
-                 (query-tpch stage-name i)))})
+                 (query-tpch stage-name query-language i)))})
 
 (defmethod b/cli-flags :tpch [_]
   [["-s" "--scale-factor SCALE_FACTOR" "TPC-H scale factor to use"
     :parse-fn parse-double
     :default 0.01]
 
+   [nil "--query-language LANGUAGE" "ra: the hand-written plans in xtdb.datasets.tpch.ra; sql: the SQL queries, through the planner"
+    :parse-fn keyword
+    :default :ra
+    :validate [#{:ra :sql} "query language must be one of ra, sql"]]
+
    ["-h" "--help"]])
 
-(defmethod b/->benchmark :tpch [_ {:keys [scale-factor seed no-load?],
-                                   :or {scale-factor 0.01, seed 0}}]
-  (log/info {:scale-factor scale-factor :seed seed :no-load? no-load?})
+(defmethod b/->benchmark :tpch [_ {:keys [scale-factor query-language seed no-load?],
+                                   :or {scale-factor 0.01, query-language :ra, seed 0}}]
+  (log/info {:scale-factor scale-factor :query-language query-language :seed seed :no-load? no-load?})
 
   {:title "TPC-H (OLAP)"
    :benchmark-type :tpch
    :seed seed
-   :parameters {:scale-factor scale-factor :seed seed :no-load? no-load?}
+   :parameters {:scale-factor scale-factor :query-language query-language :seed seed :no-load? no-load?}
    :->state #(do {:!state (atom {})})
    :tasks [{:t :do
             :stage :ingest
@@ -62,9 +72,9 @@
                       {:t :call, :stage :compact
                        :f (fn [{:keys [node]}] (b/compact! node))}])}
 
-           (queries-stage :cold-queries)
+           (queries-stage :cold-queries query-language)
 
-           (queries-stage :hot-queries)]})
+           (queries-stage :hot-queries query-language)]})
 
 (t/deftest ^:bench tpch-benchmark
   (binding [*qs* #{1}]
