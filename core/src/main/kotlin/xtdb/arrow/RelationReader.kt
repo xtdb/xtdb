@@ -3,6 +3,7 @@ package xtdb.arrow
 import clojure.lang.*
 import com.google.protobuf.ByteString
 import org.apache.arrow.memory.BufferAllocator
+import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
 import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.InternalApi
 import xtdb.api.query.IKeyFn
@@ -41,6 +42,22 @@ interface RelationReader : ILookup, Seqable, Counted, AutoCloseable {
         vectors
             .safeMap { it.openSlice(al) }
             .closeAllOnCatch { slicedVecs -> from(slicedVecs, rowCount) }
+
+    /**
+     * This page as one record batch in the layout of [schema] - its struct fields and union legs, in its order -
+     * reusing the page's own buffers wherever they already fit; see [ConformingUnloader].
+     * Columns the page doesn't have are all-null.
+     */
+    fun openArrowRecordBatch(al: BufferAllocator, schema: Schema): ArrowRecordBatch =
+        ConformingUnloader(al).use { unloader ->
+            val targetCols = schema.fields.associateBy { it.name }
+            vectors.firstOrNull { it.name !in targetCols }?.let { unloader.notInTarget(it, schema) }
+
+            for (field in schema.fields)
+                vectorForOrNull(field.name)?.let { unloader.unload(it, field) } ?: unloader.nulls(field, rowCount)
+
+            unloader.openRecordBatch(rowCount)
+        }
 
     fun openDirectSlice(al: BufferAllocator) =
         vectors

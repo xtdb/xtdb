@@ -8,6 +8,7 @@ import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.complex.NonNullableStructVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
+import org.apache.arrow.vector.types.pojo.Field
 import xtdb.InternalApi
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.VectorIndirection.Companion.Slice
@@ -205,11 +206,26 @@ class StructVector private constructor(
         }
     }
 
-    override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
+    private fun unloadOwnPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         nodes.add(ArrowFieldNode(valueCount.toLong(), if (nullable) -1 else 0))
         if (nullable) validityBuffer?.unloadBuffer(buffers) else buffers.add(allocator.empty)
+    }
 
+    override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
+        unloadOwnPage(nodes, buffers)
         childWriters.sequencedValues().forEach { it.unloadPage(nodes, buffers) }
+    }
+
+    override fun unloadPage(target: Field, unloader: ConformingUnloader) {
+        if (target.type != arrowType) return unloader.copy(this, target)
+
+        val targetChildren = target.children.associateBy { it.name }
+        childWriters.values.firstOrNull { it.name !in targetChildren }?.let { unloader.notInTarget(it, target) }
+
+        unloadOwnPage(unloader.nodes, unloader.buffers)
+
+        for (child in target.children)
+            childWriters[child.name]?.let { unloader.unload(it, child) } ?: unloader.nulls(child, valueCount)
     }
 
     @InternalApi
