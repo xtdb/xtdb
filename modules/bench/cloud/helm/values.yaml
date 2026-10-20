@@ -10,6 +10,7 @@ auctionmark:
 
 tpch:
   scaleFactor: 0.01
+  queryLanguage: ra
 
 # Kubernetes Job settings
 job:

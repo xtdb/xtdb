@@ -1,5 +1,5 @@
 name: Nightly Benchmark TPC-H
-run-name: "TPC-H (SF: ${{ inputs.scale_factor || '1.0' }})"
+run-name: "TPC-H (SF: ${{ inputs.scale_factor || '1.0' }}, ${{ inputs.query_language || 'ra' }})"
 
 on:
   workflow_dispatch:
@@ -9,6 +9,14 @@ on:
         required: false
         default: '1.0'
         type: string
+      query_language:
+        description: 'Query form: ra (hand-written plans) or sql (through the planner)'
+        required: false
+        default: 'ra'
+        type: choice
+        options:
+          - ra
+          - sql
       run_queue:
         description: 'Part of nightly benchmark queue (set by suite workflow)'
         required: false
@@ -36,5 +44,6 @@ jobs:
       branch: ${{ github.ref_name }}
       timeout_minutes: 90
       benchmark_timeout: PT2H
+      tpch_query_language: ${{ inputs.query_language || 'ra' }}
       run_queue: ${{ inputs.run_queue || 'false' }}
     secrets: inherit

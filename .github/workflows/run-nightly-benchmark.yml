@@ -126,6 +126,11 @@ on:
         required: false
         default: ''
         type: string
+      tpch_query_language:
+        description: 'Query form for the tpch benchmark (ra, sql)'
+        required: false
+        default: ''
+        type: string
       fusion_device_count:
         description: 'Device count for fusion benchmark'
         required: false
@@ -370,6 +375,7 @@ jobs:
           PATCH_PATCH_COUNT: ${{ inputs.patch_patch_count }}
           PRODUCTS_LIMIT: ${{ inputs.products_limit }}
           TS_DEVICES_SIZE: ${{ inputs.ts_devices_size }}
+          TPCH_QUERY_LANGUAGE: ${{ inputs.tpch_query_language }}
           FUSION_DEVICE_COUNT: ${{ inputs.fusion_device_count }}
           FUSION_READING_COUNT: ${{ inputs.fusion_reading_count }}
           FUSION_DURATION: ${{ inputs.fusion_duration }}
@@ -471,6 +477,9 @@ jobs:
           fi
           if [ -n "$TS_DEVICES_SIZE" ]; then
             HELM_ARGS+=(--set "ts-devices.size=${TS_DEVICES_SIZE}")
+          fi
+          if [ -n "$TPCH_QUERY_LANGUAGE" ]; then
+            HELM_ARGS+=(--set "tpch.queryLanguage=${TPCH_QUERY_LANGUAGE}")
           fi
           if [ -n "$FUSION_DEVICE_COUNT" ]; then
             HELM_ARGS+=(--set "fusion.devices=${FUSION_DEVICE_COUNT}")
@@ -611,6 +620,7 @@ jobs:
           PATCH_PATCH_COUNT: ${{ inputs.patch_patch_count }}
           PRODUCTS_LIMIT: ${{ inputs.products_limit }}
           TS_DEVICES_SIZE: ${{ inputs.ts_devices_size }}
+          TPCH_QUERY_LANGUAGE: ${{ inputs.tpch_query_language }}
           CLICKBENCH_SIZE: ${{ inputs.clickbench_size }}
           CLICKBENCH_LIMIT: ${{ inputs.clickbench_limit }}
           TSBS_DEVICE_COUNT: ${{ inputs.tsbs_device_count }}
@@ -657,6 +667,7 @@ jobs:
           [ -n "$TSBS_BURN_IN" ] && CONFIG_PARTS+=("Burn-In: ${TSBS_BURN_IN}")
           [ -n "$PRODUCTS_LIMIT" ] && CONFIG_PARTS+=("Limit: ${PRODUCTS_LIMIT}")
           [ -n "$TS_DEVICES_SIZE" ] && CONFIG_PARTS+=("Size: ${TS_DEVICES_SIZE}")
+          [ -n "$TPCH_QUERY_LANGUAGE" ] && CONFIG_PARTS+=("Query language: ${TPCH_QUERY_LANGUAGE}")
           [ -n "$FUSION_DEVICE_COUNT" ] && CONFIG_PARTS+=("Devices: ${FUSION_DEVICE_COUNT}")
           [ -n "$FUSION_READING_COUNT" ] && CONFIG_PARTS+=("Readings: ${FUSION_READING_COUNT}")
           [ -n "$FUSION_DURATION" ] && CONFIG_PARTS+=("Duration: ${FUSION_DURATION}")

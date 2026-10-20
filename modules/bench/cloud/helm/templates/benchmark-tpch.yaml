@@ -109,6 +109,8 @@ spec:
             - "/var/lib/xtdb-config/xtdbconfig.yaml"
             - --scale-factor
             - {{ .Values.tpch.scaleFactor | quote }}
+            - --query-language
+            - {{ .Values.tpch.queryLanguage | quote }}
             {{- if .Values.timeout }}
             - --timeout
             - {{ .Values.timeout | quote }}
