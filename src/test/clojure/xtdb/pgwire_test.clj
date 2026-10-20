@@ -3486,5 +3486,35 @@ ORDER BY 1,2;")
     (with-open [stmt (.prepareStatement conn "SELECT '{1,2}'::BIGINT[] AS a, [1, 2]::VARCHAR ARRAY AS b")]
       (t/is (= [{"a" [1 2] "b" ["1" "2"]}] (rs->maps (.executeQuery stmt)))))))
 
+(t/deftest test-duration-jdbc-roundtrip
+  (t/is (= [{:d #xt/duration "PT1H30M"}]
+           (jdbc/execute! tu/*node* ["SELECT ? AS d" #xt/duration "PT1H30M"]))))
+
+(t/deftest test-remote-client
+  (let [client (xt/client {:port (.getServerPort tu/*node*)})]
+    (xt/execute-tx client [[:put-docs :docs {:xt/id :foo, :name "Foo"}]])
+
+    (t/is (= [{:xt/id :foo, :name "Foo"}]
+             (xt/q client "SELECT * FROM docs"))
+          "through the client")
+
+    (t/is (= [{:xt/id :foo, :name "Foo"}]
+             (xt/q tu/*node* "SELECT * FROM docs"))
+          "original node")
+
+    (with-open [conn (jdbc/get-connection client)]
+      (t/is (= {:tx-id 1} (xt/submit-tx conn [[:put-docs :docs {:xt/id :bar, :name "Bar"}]])))
+
+      (t/is (= [{:name "Bar", :xt/id :bar}
+                {:xt/id :foo, :name "Foo"}]
+               (xt/q client "SELECT * FROM docs ORDER BY _id"))
+
+            "submit-tx through a connection awaits the previous transaction"))))
+
+(t/deftest execute-two-transactions-4809
+  (let [client (xt/client {:port (.getServerPort tu/*node*)})]
+    (xt/execute-tx client [[:put-docs :docs {:xt/id :foo, :name "Foo"}]])
+    (xt/execute-tx client [[:put-docs :docs {:xt/id :bar, :name "Bar"}]])))
+
 (comment
   (user/set-log-level! 'xtdb.pgwire :trace))

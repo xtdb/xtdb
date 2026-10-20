@@ -1,19 +1,14 @@
 (ns xtdb.api-test
-  (:require [clojure.string :as str]
-            [clojure.test :as t :refer [deftest]]
-            [next.jdbc :as jdbc]
+  (:require [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
             [xtdb.basis :as basis]
             [xtdb.compactor :as c]
             [xtdb.serde :as serde]
-            [xtdb.test-util :as tu :refer [*conn* *node*]]
+            [xtdb.test-util :as tu :refer [*conn*]]
             [xtdb.time :as time]
             [xtdb.util :as util])
-  (:import (com.github.benmanes.caffeine.cache Cache)
-           (java.lang AutoCloseable)
-           (java.time Duration ZoneId)
-           (org.antlr.v4.runtime ParserRuleContext)
-           (xtdb.query PlanCacheKey)))
+  (:import (java.lang AutoCloseable)
+           (java.time Duration ZoneId)))
 
 (t/use-fixtures :each (tu/with-each-connectable (t/join-fixtures [tu/with-mock-clock tu/with-node])))
 
@@ -184,10 +179,6 @@
 (t/deftest start-and-query-empty-node-re-231-test
   (xt/execute-tx *conn* [[:sql "CREATE TABLE a (a)"]])
   (t/is (= [] (xt/q *conn* "select a.a from a a" {}))))
-
-(t/deftest test-duration-jdbc-roundtrip
-  (t/is (= [{:d #xt/duration "PT1H30M"}]
-           (jdbc/execute! tu/*node* ["SELECT ? AS d" #xt/duration "PT1H30M"]))))
 
 (t/deftest test-basic-sql-dml
   (letfn [(all-users [{:keys [system-time]}]
@@ -716,32 +707,6 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
 
       (t/is (= expected (set (xt/q *conn* "SELECT * FROM foo")))))))
 
-(t/deftest test-remote-client
-  (let [client (xt/client {:port (.getServerPort tu/*node*)})]
-    (xt/execute-tx client [[:put-docs :docs {:xt/id :foo, :name "Foo"}]])
-
-    (t/is (= [{:xt/id :foo, :name "Foo"}]
-             (xt/q client "SELECT * FROM docs"))
-          "through the client")
-
-    (t/is (= [{:xt/id :foo, :name "Foo"}]
-             (xt/q tu/*node* "SELECT * FROM docs"))
-          "original node")
-
-    (with-open [conn (jdbc/get-connection client)]
-      (t/is (= {:tx-id 1} (xt/submit-tx conn [[:put-docs :docs {:xt/id :bar, :name "Bar"}]])))
-
-      (t/is (= [{:name "Bar", :xt/id :bar}
-                {:xt/id :foo, :name "Foo"}]
-               (xt/q client "SELECT * FROM docs ORDER BY _id"))
-
-            "submit-tx through a connection awaits the previous transaction"))))
-
-(t/deftest execute-two-transactions-4809
-  (let [client (xt/client {:port (.getServerPort tu/*node*)})]
-    (xt/execute-tx client [[:put-docs :docs {:xt/id :foo, :name "Foo"}]])
-    (xt/execute-tx client [[:put-docs :docs {:xt/id :bar, :name "Bar"}]])))
-
 (t/deftest processed-msg-ids-equal-to-submitted-msg-ids-4813
   (xt/execute-tx *conn* [[:put-docs :docs {:xt/id :foo, :name "Foo"}]])
   (tu/flush-block! tu/*node*)
@@ -749,29 +714,3 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
   (let [{:keys [latest-submitted-msg-ids latest-processed-msg-ids]} (xt/status *conn*)]
     (t/is (seq latest-submitted-msg-ids))
     (t/is (= latest-submitted-msg-ids latest-processed-msg-ids))))
-
-(t/deftest concurrent-writers-awaits-share-one-plan-6216
-  (xt/execute-tx *node* [[:put-docs :docs {:xt/id -1}]])
-
-  (let [^Cache plan-cache (:plan-cache (.getQuerySource (util/node-base *node*)))
-        tx-await-plan-count (fn []
-                              (->> (keys (.asMap plan-cache))
-                                   (filter (fn [^PlanCacheKey k]
-                                             (let [ast (.getAst k)]
-                                               (and (instance? ParserRuleContext ast)
-                                                    (str/includes? (.getText ^ParserRuleContext ast) "xt.txs")))))
-                                   count))]
-
-    (loop [round 0]
-      (->> (range 4)
-           (mapv (fn [writer]
-                   (future
-                     (dotimes [i 25]
-                       (xt/execute-tx *node* [[:put-docs :docs {:xt/id (+ (* writer 100) i)}]])))))
-           (run! deref))
-
-      (when (and (zero? (tx-await-plan-count)) (< round 20))
-        (recur (inc round))))
-
-    (t/is (= 1 (tx-await-plan-count))
-          "every writer whose await falls back to xt.txs reuses the one plan")))

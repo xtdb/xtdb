@@ -1,12 +1,17 @@
 (ns xtdb.api-adbc-test
   "Exercises `xtdb.api` over the in-process ADBC path — an explicit `Xtdb.Connection` obtained from
   the node — plus a guard that a plain JDBC connection stays on the pgwire path."
-  (:require [clojure.test :as t :refer [deftest]]
+  (:require [clojure.string :as str]
+            [clojure.test :as t :refer [deftest]]
             [next.jdbc :as jdbc]
             [xtdb.api :as xt]
             [xtdb.serde :as serde]
             [xtdb.test-util :as tu :refer [*node*]]
-            [xtdb.time :as time]))
+            [xtdb.time :as time]
+            [xtdb.util :as util])
+  (:import (com.github.benmanes.caffeine.cache Cache)
+           (org.antlr.v4.runtime ParserRuleContext)
+           (xtdb.query PlanCacheKey)))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
@@ -117,3 +122,29 @@
     (xt/execute-tx conn [[:put-docs :docs {:xt/id :foo, :n 1}]])
     (t/is (= [{:xt/id :foo, :n 1}]
              (xt/q conn "SELECT _id, n FROM docs")))))
+
+(t/deftest concurrent-writers-awaits-share-one-plan-6216
+  (xt/execute-tx *node* [[:put-docs :docs {:xt/id -1}]])
+
+  (let [^Cache plan-cache (:plan-cache (.getQuerySource (util/node-base *node*)))
+        tx-await-plan-count (fn []
+                              (->> (keys (.asMap plan-cache))
+                                   (filter (fn [^PlanCacheKey k]
+                                             (let [ast (.getAst k)]
+                                               (and (instance? ParserRuleContext ast)
+                                                    (str/includes? (.getText ^ParserRuleContext ast) "xt.txs")))))
+                                   count))]
+
+    (loop [round 0]
+      (->> (range 4)
+           (mapv (fn [writer]
+                   (future
+                     (dotimes [i 25]
+                       (xt/execute-tx *node* [[:put-docs :docs {:xt/id (+ (* writer 100) i)}]])))))
+           (run! deref))
+
+      (when (and (zero? (tx-await-plan-count)) (< round 20))
+        (recur (inc round))))
+
+    (t/is (= 1 (tx-await-plan-count))
+          "every writer whose await falls back to xt.txs reuses the one plan")))
