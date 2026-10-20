@@ -9,6 +9,7 @@
             [xtdb.basis :as basis]
             [xtdb.db-catalog :as db]
             [xtdb.error :as err]
+            [xtdb.flight-sql :as fsql]
             [xtdb.log :as xt-log]
             [xtdb.logical-plan :as lp]
             [xtdb.node :as xtn]
@@ -79,6 +80,34 @@
   (util/with-open [node (xtn/start-node *node-opts*)]
     (binding [*node* node]
       (f))))
+
+#_{:clj-kondo/ignore [:uninitialized-var]}
+(def ^:dynamic *conn*)
+
+#_{:clj-kondo/ignore [:uninitialized-var]}
+(def ^:dynamic *server*)
+
+(def ^:private connectables
+  {:adbc (fn [node f] (f node))
+   :pgwire (fn [^Xtdb node f] (f (xt/client {:port (.getServerPort node)})))
+   :flight-sql (fn [^Xtdb node f]
+                 (with-open [conn (fsql/open-conn {:port (.getFlightSqlPort node)})]
+                   (f conn)))})
+
+(defn with-each-connectable
+  "Returns a fixture that runs each test once per server - in-process ADBC, pgwire and FlightSQL -
+  each time against a fresh node set up by `node-fixture`, with `*conn*` bound to a client of that server
+  and `*server*` to `:adbc`, `:pgwire` or `:flight-sql`."
+  [node-fixture]
+  (fn [f]
+    (doseq [[server with-conn] connectables]
+      (t/testing (name server)
+        (node-fixture
+         (fn []
+           (with-conn *node*
+             (fn [conn]
+               (binding [*conn* conn, *server* server]
+                 (f))))))))))
 
 (defn free-port ^long []
   (with-open [s (ServerSocket. 0)]

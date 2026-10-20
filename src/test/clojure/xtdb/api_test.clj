@@ -6,7 +6,7 @@
             [xtdb.basis :as basis]
             [xtdb.compactor :as c]
             [xtdb.serde :as serde]
-            [xtdb.test-util :as tu :refer [*node*]]
+            [xtdb.test-util :as tu :refer [*conn* *node*]]
             [xtdb.time :as time]
             [xtdb.util :as util])
   (:import (com.github.benmanes.caffeine.cache Cache)
@@ -15,62 +15,62 @@
            (org.antlr.v4.runtime ParserRuleContext)
            (xtdb.query PlanCacheKey)))
 
-(t/use-fixtures :each tu/with-mock-clock tu/with-node)
+(t/use-fixtures :each (tu/with-each-connectable (t/join-fixtures [tu/with-mock-clock tu/with-node])))
 
 (t/deftest test-status
-  (t/is (map? (xt/status *node*))))
+  (t/is (map? (xt/status *conn*))))
 
 (t/deftest test-simple-query
-  (let [tx (xt/execute-tx *node* [[:put-docs :docs {:xt/id :foo, :inst #inst "2021"}]])]
+  (let [tx (xt/execute-tx *conn* [[:put-docs :docs {:xt/id :foo, :inst #inst "2021"}]])]
     (t/is (= (serde/->TxKey 0 (time/->instant #inst "2020-01-01")) tx))
 
     (t/is (= [{:e :foo, :inst (time/->zdt #inst "2021")}]
-             (xt/q *node* '(from :docs [{:xt/id e} inst]))))))
+             (xt/q *conn* '(from :docs [{:xt/id e} inst]))))))
 
 (t/deftest test-validation-errors
   (t/is (anomalous? [:incorrect nil]
-                    (-> (xt/submit-tx *node* [[:pot :docs {:xt/id :foo}]])
+                    (-> (xt/submit-tx *conn* [[:pot :docs {:xt/id :foo}]])
                         (util/rethrowing-cause))))
 
   (t/is (anomalous? [:incorrect nil]
-                    (-> (xt/submit-tx *node* [[:put-docs :docs {}]])
+                    (-> (xt/submit-tx *conn* [[:put-docs :docs {}]])
                         (util/rethrowing-cause)))))
 
 (t/deftest round-trips-lists
-  (let [tx (xt/execute-tx *node* [[:put-docs :docs {:xt/id :foo, :list [1 2 ["foo" "bar"]]}]
+  (let [tx (xt/execute-tx *conn* [[:put-docs :docs {:xt/id :foo, :list [1 2 ["foo" "bar"]]}]
                                  [:sql "INSERT INTO docs (_id, list) VALUES ('bar', ARRAY[?, 2, 3 + 5])"
                                   [4]]])]
     (t/is (= (serde/->TxKey 0 (time/->instant #inst "2020-01-01")) tx))
 
     (t/is (= [{:id :foo, :list [1 2 ["foo" "bar"]]}
               {:id "bar", :list [4 2 8]}]
-             (xt/q *node* '(from :docs [{:xt/id id} list])
+             (xt/q *conn* '(from :docs [{:xt/id id} list])
                    {:tx-timeout (Duration/ofSeconds 1)})))
 
     (t/is (= [{:xt/id :foo, :list [1 2 ["foo" "bar"]]}
               {:xt/id "bar", :list [4 2 8]}]
-             (xt/q *node*
+             (xt/q *conn*
                    "SELECT b._id, b.list FROM docs b"
                    {:tx-timeout (Duration/ofSeconds 1)})))))
 
 (t/deftest round-trips-sets
-  (let [tx (xt/execute-tx *node* [[:put-docs :docs {:xt/id :foo, :v #{1 2 #{"foo" "bar"}}}]])]
+  (let [tx (xt/execute-tx *conn* [[:put-docs :docs {:xt/id :foo, :v #{1 2 #{"foo" "bar"}}}]])]
     (t/is (= (serde/->TxKey 0 (time/->instant #inst "2020-01-01")) tx))
 
     (t/is (= [{:id :foo, :v #{1 2 #{"foo" "bar"}}}]
-             (xt/q *node* '(from :docs [{:xt/id id} v]))))
+             (xt/q *conn* '(from :docs [{:xt/id id} v]))))
 
     (t/is (= [{:xt/id :foo, :v #{1 2 #{"foo" "bar"}}}]
-             (xt/q *node* "SELECT b._id, b.v FROM docs b")))))
+             (xt/q *conn* "SELECT b._id, b.v FROM docs b")))))
 
 (t/deftest round-trips-structs
-  (let [tx (xt/execute-tx *node* [[:put-docs :docs {:xt/id :foo, :struct {:a 1, :b {:c "bar"}}}]
+  (let [tx (xt/execute-tx *conn* [[:put-docs :docs {:xt/id :foo, :struct {:a 1, :b {:c "bar"}}}]
                                  [:put-docs :docs {:xt/id :bar, :struct {:a true, :d 42.0}}]])]
     (t/is (= (serde/->TxKey 0 (time/->instant #inst "2020-01-01")) tx))
 
     (t/is (= #{{:id :foo, :struct {:a 1, :b {:c "bar"}}}
                {:id :bar, :struct {:a true, :d 42.0}}}
-             (set (xt/q *node* '(from :docs [{:xt/id id} struct])))))))
+             (set (xt/q *conn* '(from :docs [{:xt/id id} struct])))))))
 
 (deftest round-trips-temporal
   (let [vs {:dt #xt/date "2022-08-01"
@@ -80,11 +80,11 @@
             ;; :tmtz #xt/offset-time "11:21:14.932254-08:00" ; TODO #323
             }]
 
-    (xt/execute-tx *node* [[:sql "INSERT INTO foo (_id, dt, ts, tstz, tm) VALUES ('foo', ?, ?, ?, ?)"
+    (xt/execute-tx *conn* [[:sql "INSERT INTO foo (_id, dt, ts, tstz, tm) VALUES ('foo', ?, ?, ?, ?)"
                             (mapv vs [:dt :ts :tstz :tm])]])
 
     (t/is (= [(assoc vs :xt/id "foo")]
-             (xt/q *node* "SELECT f._id, f.dt, f.ts, f.tstz, f.tm FROM foo f"
+             (xt/q *conn* "SELECT f._id, f.dt, f.ts, f.tstz, f.tm FROM foo f"
                    {:default-tz (ZoneId/of "Europe/London")})))
 
     (let [lits [[:dt "DATE '2022-08-01'"]
@@ -95,29 +95,29 @@
                 #_ ; FIXME #323
                 [:tmtz "TIME '11:21:14.932254-08:00'"]]]
 
-      (xt/execute-tx *node* (vec (for [[t lit] lits]
+      (xt/execute-tx *conn* (vec (for [[t lit] lits]
                                    [:sql (format "INSERT INTO bar (_id, v) VALUES (?, %s)" lit)
                                     [(name t)]])))
       (t/is (= (set (for [[t _lit] lits]
                       {:xt/id (name t), :v (get vs t)}))
-               (set (xt/q *node* "SELECT b._id, b.v FROM bar b"
+               (set (xt/q *conn* "SELECT b._id, b.v FROM bar b"
                           {:default-tz (ZoneId/of "Europe/London")})))))))
 
 (t/deftest can-manually-specify-system-time-47
-  (let [tx1 (xt/execute-tx *node* [[:put-docs :docs {:xt/id :foo}]]
+  (let [tx1 (xt/execute-tx *conn* [[:put-docs :docs {:xt/id :foo}]]
                            {:system-time #inst "2012"})
 
         _ (t/is (anomalous? [:incorrect nil]
-                            (xt/execute-tx *node* [[:put-docs :docs {:xt/id :bar}]]
+                            (xt/execute-tx *conn* [[:put-docs :docs {:xt/id :bar}]]
                                            {:system-time #inst "2011"})))
 
-        tx3 (xt/execute-tx *node* [[:put-docs :docs {:xt/id :baz}]])]
+        tx3 (xt/execute-tx *conn* [[:put-docs :docs {:xt/id :baz}]])]
 
     (t/is (= (serde/->TxKey 0 (time/->instant #inst "2012"))
              tx1))
 
     (letfn [(q-at [tx]
-              (->> (xt/q *node* '(from :docs [{:xt/id id}])
+              (->> (xt/q *conn* '(from :docs [{:xt/id id}])
                          {:snapshot-time (:system-time tx)
                           :tx-timeout (Duration/ofSeconds 1)})
                    (into #{} (map :id))))]
@@ -138,27 +138,27 @@
                {:tx-id 2,
                 :system-time #xt/zoned-date-time "2020-01-03T00:00Z[UTC]",
                 :committed? true}}
-             (set (xt/q *node*
+             (set (xt/q *conn*
                         '(from :xt/txs [{:xt/id tx-id, :committed committed?} system-time error])))))))
 
 (t/deftest a-system-time-equal-to-the-latest-completed-tx-is-rejected
-  (xt/execute-tx *node* [[:sql "INSERT INTO docs (_id, v) VALUES (1, 'a')"]]
+  (xt/execute-tx *conn* [[:sql "INSERT INTO docs (_id, v) VALUES (1, 'a')"]]
                  {:system-time #inst "2026-01-01"})
 
   (t/is (anomalous? [:incorrect :invalid-system-time]
-                    (xt/execute-tx *node* [[:sql "INSERT INTO docs (_id, v) VALUES (1, 'b')"]]
+                    (xt/execute-tx *conn* [[:sql "INSERT INTO docs (_id, v) VALUES (1, 'b')"]]
                                    {:system-time #inst "2026-01-01"})))
 
-  (t/is (= [{:v "a"}] (xt/q *node* "SELECT v FROM docs")))
+  (t/is (= [{:v "a"}] (xt/q *conn* "SELECT v FROM docs")))
 
   (t/is (= [{:tx-id 1, :system-time #xt/zoned-date-time "2026-01-01T00:00:00.000001Z[UTC]"}]
-           (xt/q *node* "SELECT _id AS tx_id, system_time FROM xt.txs WHERE NOT committed"))
+           (xt/q *conn* "SELECT _id AS tx_id, system_time FROM xt.txs WHERE NOT committed"))
         "the rejected tx takes the smoothed system-time, advancing the clock past the one it asked for")
 
-  (xt/execute-tx *node* [[:sql "INSERT INTO docs (_id, v) VALUES (1, 'c')"]]
+  (xt/execute-tx *conn* [[:sql "INSERT INTO docs (_id, v) VALUES (1, 'c')"]]
                  {:system-time #xt/instant "2026-01-01T00:00:00.000002Z"})
 
-  (t/is (= [{:v "c"}] (xt/q *node* "SELECT v FROM docs"))))
+  (t/is (= [{:v "c"}] (xt/q *conn* "SELECT v FROM docs"))))
 
 (def ^:private devs
   [[:put-docs :users {:xt/id :jms, :name "James"}]
@@ -167,23 +167,23 @@
    [:put-docs :users {:xt/id :wot, :name "Dan"}]])
 
 (t/deftest test-sql-roundtrip
-  (let [tx (xt/submit-tx *node* devs)]
+  (let [tx (xt/submit-tx *conn* devs)]
 
     (t/is (= {:tx-id 0} tx))
 
     (t/is (= [{:name "James"}]
-             (xt/q *node* "SELECT u.name FROM users u WHERE u.name = 'James'")))))
+             (xt/q *conn* "SELECT u.name FROM users u WHERE u.name = 'James'")))))
 
 (t/deftest test-sql-dynamic-params-103
-  (xt/submit-tx *node* devs)
+  (xt/submit-tx *conn* devs)
 
   (t/is (= #{{:name "James"} {:name "Matt"}}
-           (set (xt/q *node* ["SELECT u.name FROM users u WHERE u.name IN (?, ?)"
+           (set (xt/q *conn* ["SELECT u.name FROM users u WHERE u.name IN (?, ?)"
                               "James" "Matt"])))))
 
 (t/deftest start-and-query-empty-node-re-231-test
-  (xt/execute-tx tu/*node* [[:sql "CREATE TABLE a (a)"]])
-  (t/is (= [] (xt/q tu/*node* "select a.a from a a" {}))))
+  (xt/execute-tx *conn* [[:sql "CREATE TABLE a (a)"]])
+  (t/is (= [] (xt/q *conn* "select a.a from a a" {}))))
 
 (t/deftest test-duration-jdbc-roundtrip
   (t/is (= [{:d #xt/duration "PT1H30M"}]
@@ -191,11 +191,11 @@
 
 (t/deftest test-basic-sql-dml
   (letfn [(all-users [{:keys [system-time]}]
-            (->> (xt/q *node* "SELECT u.first_name, u.last_name, u._valid_from, u._valid_to FROM users FOR ALL VALID_TIME u"
+            (->> (xt/q *conn* "SELECT u.first_name, u.last_name, u._valid_from, u._valid_to FROM users FOR ALL VALID_TIME u"
                        {:snapshot-token (basis/->time-basis-str {"xtdb" [system-time]})})
                  (into #{} (map (juxt :first-name :last-name :xt/valid-from :xt/valid-to)))))]
 
-    (let [tx1 (xt/execute-tx *node* [[:sql "INSERT INTO users (_id, first_name, last_name, _valid_from) VALUES (?, ?, ?, ?)"
+    (let [tx1 (xt/execute-tx *conn* [[:sql "INSERT INTO users (_id, first_name, last_name, _valid_from) VALUES (?, ?, ?, ?)"
                                       ["dave", "Dave", "Davis", #inst "2018"]
                                       ["claire", "Claire", "Cooper", #inst "2019"]
                                       ["alan", "Alan", "Andrews", #inst "2020"]
@@ -209,7 +209,7 @@
 
       (t/is (= tx1-expected (all-users tx1)))
 
-      (let [tx2 (xt/execute-tx *node* [["DELETE FROM users FOR PORTION OF VALID_TIME FROM DATE '2020-05-01' TO NULL AS u WHERE u._id = ?" "dave"]]
+      (let [tx2 (xt/execute-tx *conn* [["DELETE FROM users FOR PORTION OF VALID_TIME FROM DATE '2020-05-01' TO NULL AS u WHERE u._id = ?" "dave"]]
                                {:default-tz #xt/zone "UTC"})
             tx2-expected #{["Dave" "Davis", (time/->zdt #inst "2018"), (time/->zdt #inst "2020-05-01")]
                            ["Claire" "Cooper", (time/->zdt #inst "2019"), nil]
@@ -219,7 +219,7 @@
         (t/is (= tx2-expected (all-users tx2)))
         (t/is (= tx1-expected (all-users tx1)))
 
-        (let [tx3 (xt/execute-tx *node* [["UPDATE users FOR PORTION OF VALID_TIME FROM DATE '2021-07-01' TO NULL AS u SET first_name = 'Sue' WHERE u._id = ?"
+        (let [tx3 (xt/execute-tx *conn* [["UPDATE users FOR PORTION OF VALID_TIME FROM DATE '2021-07-01' TO NULL AS u SET first_name = 'Sue' WHERE u._id = ?"
                                           "susan"]]
                                  {:default-tz #xt/zone "UTC"})
 
@@ -235,80 +235,82 @@
 
 (deftest test-sql-insert
   (t/is (= (serde/->TxKey 0 (time/->instant #inst "2020-01-01"))
-           (xt/execute-tx *node*
+           (xt/execute-tx *conn*
                           [[:sql "INSERT INTO users (_id, name, _valid_from) VALUES (?, ?, ?)"
                             ["dave", "Dave", #inst "2018"]
                             ["claire", "Claire", #inst "2019"]]])))
 
 
   (t/is (= (serde/->TxKey 1 (time/->instant #inst "2020-01-02"))
-           (xt/execute-tx *node*
+           (xt/execute-tx *conn*
                           ["INSERT INTO people (_id, renamed_name)
                             SELECT users._id, users.name
                             FROM users
                             WHERE users.name = 'Claire'"])))
 
   (t/is (= [{:renamed-name "Claire"}]
-           (xt/q *node* "SELECT renamed_name FROM people")))
+           (xt/q *conn* "SELECT renamed_name FROM people")))
 
   (t/is (= (serde/->TxKey 2 (time/->instant #inst "2020-01-03"))
-           (xt/execute-tx *node*
+           (xt/execute-tx *conn*
                           ["INSERT INTO people (_id, renamed_name, _valid_from)
                             SELECT users._id, users.name, users._valid_from
                             FROM users FOR VALID_TIME AS OF DATE '2019-06-01'
                             WHERE users.name = 'Dave'"])))
 
   (t/is (= [{:renamed-name "Dave"}]
-           (xt/q *node* "SELECT renamed_name FROM people FOR VALID_TIME AS OF DATE '2019-06-01'"))))
+           (xt/q *conn* "SELECT renamed_name FROM people FOR VALID_TIME AS OF DATE '2019-06-01'"))))
 
 (deftest test-sql-insert-app-time-date-398
-  (let [tx (xt/submit-tx *node*
+  (let [tx (xt/submit-tx *conn*
                          ["INSERT INTO foo (_id, _valid_from) VALUES ('foo', DATE '2018-01-01')"])]
 
     (t/is (= {:tx-id 0} tx))
 
-    ;; the DATE is read in the node's default zone — UTC here, this node not configuring one
-    (t/is (= [{:xt/id "foo", :xt/valid-from (time/->zdt #inst "2018")}]
-             (xt/q *node* "SELECT foo._id, foo._valid_from, foo._valid_to FROM foo")))))
+    ;; the DATE is read in the session's zone - pgjdbc announces the client JVM's, the others take the node's (UTC)
+    (let [^ZoneId session-zone (if (= :pgwire tu/*server*) (ZoneId/systemDefault) (ZoneId/of "UTC"))]
+      (t/is (= [{:xt/id "foo", :xt/valid-from (-> (.atStartOfDay #xt/date "2018-01-01" session-zone)
+                                                  (.withZoneSameInstant (ZoneId/of "UTC")))}]
+               (xt/q *conn* "SELECT foo._id, foo._valid_from, foo._valid_to FROM foo"))))))
 
 (deftest test-dql-as-of-now-flag-339
   (let [tt1 (time/->zdt #inst "2020-01-01")
         tt2 (time/->zdt #inst "2020-01-02")]
-    (xt/submit-tx *node*
+    (xt/submit-tx *conn*
                   [["INSERT INTO foo (_id, version) VALUES (?, ?)"
                     "foo" 0]])
 
     (t/is (= [{:version 0, :xt/valid-from tt1}]
-             (xt/q *node*
+             (xt/q *conn*
                    "SELECT foo.version, foo._valid_from, foo._valid_to FROM foo")))
 
     (t/is (= [{:version 0, :xt/valid-from tt1}]
-             (xt/q *node*
+             (xt/q *conn*
                    "SELECT foo.version, foo._valid_from, foo._valid_to FROM foo")))
 
-    (xt/submit-tx *node*
+    (xt/submit-tx *conn*
                   ["UPDATE foo SET version = 1 WHERE foo._id = 'foo'"])
 
     (t/is (= [{:version 1, :xt/valid-from tt2}]
-             (xt/q *node*
+             (xt/q *conn*
                    "SELECT foo.version, foo._valid_from, foo._valid_to FROM foo"))
           "without flag it returns as of now")
 
     (t/is (= #{{:version 0, :xt/valid-from tt1, :xt/valid-to tt2}
                {:version 1, :xt/valid-from tt2}}
-             (set (xt/q *node*
+             (set (xt/q *conn*
                         "SELECT foo.version, foo._valid_from, foo._valid_to FROM foo FOR ALL VALID_TIME"))))))
 
 (t/deftest test-erase
   (letfn [(q [{:keys [system-time]}]
-            (set (xt/q *node*
+            (set (xt/q *conn*
                        "SELECT foo._id, foo.version, foo._valid_from, foo._valid_to FROM foo FOR ALL VALID_TIME"
                        {:snapshot-token (basis/->time-basis-str {"xtdb" [system-time]})})))]
-    (let [tx1 (xt/execute-tx *node*
+    (let [tx1 (xt/execute-tx *conn*
                              [[:sql "INSERT INTO foo (_id, version) VALUES (?, ?)"
                                ["foo", 0]
                                ["bar", 0]]])
-          tx2 (xt/execute-tx *node* ["UPDATE foo SET version = 1"])
+          tx2 (xt/execute-tx *conn* ["UPDATE foo SET version = 1"])
           v0 {:version 0,
               :xt/valid-from (time/->zdt #inst "2020-01-01"),
               :xt/valid-to (time/->zdt #inst "2020-01-02")}
@@ -328,7 +330,7 @@
                  (assoc v1 :xt/id "bar")}
                (q tx2)))
 
-      (let [tx3 (xt/execute-tx *node*
+      (let [tx3 (xt/execute-tx *conn*
                                ["ERASE FROM foo WHERE foo._id = 'foo'"])]
         (t/is (= #{(assoc v0 :xt/id "bar") (assoc v1 :xt/id "bar")} (q tx3)))
         (t/is (= #{(assoc v0 :xt/id "bar") (assoc v1 :xt/id "bar")} (q tx2)))
@@ -339,22 +341,22 @@
 
 (t/deftest execute-tx-throws-dml-errors
   (t/is (anomalous? [:incorrect nil #"Errors parsing SQL statement"]
-                    (xt/execute-tx tu/*node* ["INSERT INTO foo (_id, dt) VALUES ('id', DATE \"2020-01-01\")"])))
+                    (xt/execute-tx *conn* ["INSERT INTO foo (_id, dt) VALUES ('id', DATE \"2020-01-01\")"])))
 
   (t/testing "still an active node"
-    (xt/submit-tx tu/*node* ["INSERT INTO users (_id, name) VALUES ('dave', 'Dave')"])
+    (xt/submit-tx *conn* ["INSERT INTO users (_id, name) VALUES ('dave', 'Dave')"])
 
     (t/is (= [{:name "Dave"}]
-             (xt/q tu/*node* "SELECT users.name FROM users")))))
+             (xt/q *conn* "SELECT users.name FROM users")))))
 
 (t/deftest aborts-insert-if-end-lt-start-401-425
   (letfn [(q-all []
-            (->> (xt/q tu/*node* "SELECT foo._id, foo._valid_from, foo._valid_to FROM foo")
+            (->> (xt/q *conn* "SELECT foo._id, foo._valid_from, foo._valid_to FROM foo")
                  (into {} (map (juxt :xt/id (juxt :xt/valid-from :xt/valid-to))))))]
 
-    (xt/submit-tx tu/*node* ["INSERT INTO foo (_id) VALUES (1)"])
+    (xt/submit-tx *conn* ["INSERT INTO foo (_id) VALUES (1)"])
 
-    (xt/submit-tx tu/*node* ["
+    (xt/submit-tx *conn* ["
 INSERT INTO foo (_id, _valid_from, _valid_to)
 VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
 
@@ -362,43 +364,43 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
              (q-all)))
 
     (t/testing "continues indexing after abort"
-      (xt/submit-tx tu/*node* ["INSERT INTO foo (_id) VALUES (3)"])
+      (xt/submit-tx *conn* ["INSERT INTO foo (_id) VALUES (3)"])
 
       (t/is (= {1 [(time/->zdt #inst "2020-01-01") nil]
                 3 [(time/->zdt #inst "2020-01-03") nil]}
                (q-all))))))
 
 (deftest test-insert-from-other-table-with-as-of-now
-  (xt/submit-tx *node*
+  (xt/submit-tx *conn*
                 ["INSERT INTO posts (_id, user_id, body, _valid_from)
                   VALUES (9012, 5678, 'Happy 2050!', DATE '2050-01-01')"])
 
   (t/is (= [{:body "Happy 2050!"}]
-           (xt/q *node* "SELECT posts.body FROM posts FOR VALID_TIME AS OF DATE '2050-01-02'")))
+           (xt/q *conn* "SELECT posts.body FROM posts FOR VALID_TIME AS OF DATE '2050-01-02'")))
 
   (t/is (= []
-           (xt/q *node* "SELECT posts.body FROM posts")))
+           (xt/q *conn* "SELECT posts.body FROM posts")))
 
-  (xt/submit-tx *node* [[:sql "CREATE TABLE t1 (_id, body)"]])
-  (xt/submit-tx *node*
+  (xt/submit-tx *conn* [[:sql "CREATE TABLE t1 (_id, body)"]])
+  (xt/submit-tx *conn*
                 ["INSERT INTO t1 SELECT posts._id, posts.body FROM posts"])
 
   (t/is (= []
-           (xt/q *node* "SELECT t1.body FROM t1 FOR ALL VALID_TIME"))))
+           (xt/q *conn* "SELECT t1.body FROM t1 FOR ALL VALID_TIME"))))
 
 (deftest test-submit-tx-system-time-opt
   (t/is (anomalous? [:incorrect nil]
-                    (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1}]]
-                                  {:system-time "foo"}))))
+                    (xt/submit-tx *conn* [[:put-docs :docs {:xt/id 1}]]
+                               {:system-time "foo"}))))
 
 (t/deftest test-xtql-with-param-2933
-  (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id :petr :name "Petr"}]])
+  (xt/submit-tx *conn* [[:put-docs :docs {:xt/id :petr :name "Petr"}]])
 
   (t/is (= [{:name "Petr"}]
-           (xt/q tu/*node* ['#(from :docs [{:xt/id %} name]) :petr]))))
+           (xt/q *conn* ['#(from :docs [{:xt/id %} name]) :petr]))))
 
 (t/deftest test-close-node-multiple-times
-  (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id :petr :name "Petr"}]])
+  (xt/submit-tx *conn* [[:put-docs :docs {:xt/id :petr :name "Petr"}]])
   (let [^AutoCloseable node tu/*node*]
     (.close node)
     (.close node)))
@@ -406,51 +408,51 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
 (t/deftest test-query-with-errors
   (t/is (anomalous? [:incorrect :xtql/malformed-from]
                     #_{:clj-kondo/ignore [:xtql/type-mismatch]}
-                    (xt/q tu/*node* '(from docs [name]))))
+                    (xt/q *conn* '(from docs [name]))))
 
   (t/is (anomalous? [:incorrect nil #"data exception - division by zero"]
-                    (xt/q tu/*node* '(-> (rel [{}] [])
-                                         (with {:foo (/ 1 0)})))))
+                    (xt/q *conn* '(-> (rel [{}] [])
+                                      (with {:foo (/ 1 0)})))))
 
   ;; Might need to get updated if this kind of error gets handled differently.
-  (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 :name 2}]])
+  (xt/submit-tx *conn* [[:put-docs :docs {:xt/id 1 :name 2}]])
   (t/is (anomalous? [:incorrect nil #"upper not applicable to types i64"]
-                    (xt/q tu/*node* "SELECT UPPER(docs.name) AS name FROM docs"))))
+                    (xt/q *conn* "SELECT UPPER(docs.name) AS name FROM docs"))))
 
 (def ivan+petr
   [[:put-docs :docs {:xt/id :ivan, :first-name "Ivan", :last-name "Ivanov"}]
    [:put-docs :docs {:xt/id :petr, :first-name "Petr", :last-name "Petrov"}]])
 
 (t/deftest normalisation-option
-  (xt/submit-tx tu/*node* ivan+petr)
+  (xt/submit-tx *conn* ivan+petr)
 
   (t/is (= [{:xt/id :petr :first-name "Petr", :last-name "Petrov"}
             {:xt/id :ivan :first-name "Ivan", :last-name "Ivanov"}]
-           (xt/q tu/*node* '(from :docs [xt/id first-name last-name])
-                 {:key-fn :kebab-case-keyword})))
+           (xt/q *conn* '(from :docs [xt/id first-name last-name])
+              {:key-fn :kebab-case-keyword})))
 
   (t/is (= [{"_id" :petr "first-name" "Petr", "last-name" "Petrov"}
             {"_id" :ivan "first-name" "Ivan", "last-name" "Ivanov"}]
-           (xt/q tu/*node* '(from :docs [xt/id first-name last-name])
-                 {:key-fn :kebab-case-string})))
+           (xt/q *conn* '(from :docs [xt/id first-name last-name])
+              {:key-fn :kebab-case-string})))
 
   (t/is (= [{:xt/id :petr, :first_name "Petr", :last_name "Petrov"}
             {:xt/id :ivan, :first_name "Ivan", :last_name "Ivanov"}]
-           (xt/q tu/*node* '(from :docs [xt/id first-name last-name])
-                 {:key-fn :snake-case-keyword})))
+           (xt/q *conn* '(from :docs [xt/id first-name last-name])
+              {:key-fn :snake-case-keyword})))
 
   (t/is (= [{"_id" :petr, "first_name" "Petr", "last_name" "Petrov"}
             {"_id" :ivan, "first_name" "Ivan", "last_name" "Ivanov"}]
-           (xt/q tu/*node* '(from :docs [xt/id first-name last-name])
-                 {:key-fn :snake-case-string})))
+           (xt/q *conn* '(from :docs [xt/id first-name last-name])
+              {:key-fn :snake-case-string})))
 
   (t/is (anomalous? [:incorrect nil #"Invalid key-fn"]
-                    (xt/q tu/*node* '(from :docs [first-name last-name])
-                          {:key-fn :foo-bar}))))
+                    (xt/q *conn* '(from :docs [first-name last-name])
+                       {:key-fn :foo-bar}))))
 
 (t/deftest dynamic-xtql-queries
-  (xt/submit-tx tu/*node* [[:put-docs :posts {:xt/id :uk, :text "Hello from England!", :likes 68, :author-name "James"}]
-                           [:put-docs :posts {:xt/id :de, :text "Hallo aus Deutschland!", :likes 127, :author-name "Finn"}]])
+  (xt/submit-tx *conn* [[:put-docs :posts {:xt/id :uk, :text "Hello from England!", :likes 68, :author-name "James"}]
+                        [:put-docs :posts {:xt/id :de, :text "Hallo aus Deutschland!", :likes 127, :author-name "Finn"}]])
 
   (letfn [(build-posts-query [{:keys [with-author? popular?]}]
             (xt/template (-> (from :posts [{:xt/id id} text
@@ -463,21 +465,21 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
 
     (t/is (= #{{:id :uk, :text "Hello from England!"}
                {:id :de, :text "Hallo aus Deutschland!"}}
-             (set (xt/q tu/*node* (build-posts-query {})))))
+             (set (xt/q *conn* (build-posts-query {})))))
 
     (t/is (= #{{:id :uk, :text "Hello from England!", :author-name "James"}
                {:id :de, :text "Hallo aus Deutschland!", :author-name "Finn"}}
-             (set (xt/q tu/*node* (build-posts-query {:with-author? true})))))
+             (set (xt/q *conn* (build-posts-query {:with-author? true})))))
 
     (t/is (= #{{:id :de, :text "Hallo aus Deutschland!", :likes 127}}
-             (set (xt/q tu/*node* (build-posts-query {:popular? true})))))
+             (set (xt/q *conn* (build-posts-query {:popular? true})))))
 
     (t/is (= #{{:id :de, :text "Hallo aus Deutschland!", :likes 127, :author-name "Finn"}}
-             (set (xt/q tu/*node* (build-posts-query {:popular? true, :with-author? true})))))))
+             (set (xt/q *conn* (build-posts-query {:popular? true, :with-author? true})))))))
 
 (t/deftest test-explain-plan-2383
-  (xt/submit-tx tu/*node* [[:put-docs :people {:xt/id 1 :name "Dave" :age 30}]
-                           [:put-docs :people {:xt/id 2 :name "John" :age 40}]])
+  (xt/submit-tx *conn* [[:put-docs :people {:xt/id 1 :name "Dave" :age 30}]
+                        [:put-docs :people {:xt/id 2 :name "John" :age 40}]])
 
   (t/is (= '[{:depth "->", :op :project,
               :explain {:append? false, :project "[{name name} {age age} {_valid_from _valid_from} {_valid_to _valid_to}]"}}
@@ -485,10 +487,10 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
               :explain {:table "xtdb.public.people",
                         :columns ["_valid_from" "age" "name" "_valid_to" "_id"],
                         :predicates ["(== _id ?_0)"]}}]
-           (xt/q tu/*node*
-                 [(format "EXPLAIN XTQL ($$ %s $$, ?)"
-                          (pr-str '#(from :people [{:xt/id %} name age xt/valid-from xt/valid-to])))
-                  1])))
+           (xt/q *conn*
+              [(format "EXPLAIN XTQL ($$ %s $$, ?)"
+                       (pr-str '#(from :people [{:xt/id %} name age xt/valid-from xt/valid-to])))
+               1])))
 
   (t/is (= '[{:depth "->", :op :project,
               :explain {:append? false, :project "[{name people.1/name} {age people.1/age} {_valid_from people.1/_valid_from} {_valid_to people.1/_valid_to}]"}}
@@ -497,220 +499,227 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
               :explain {:table "xtdb.public.people"
                         :columns ["_valid_from" "age" "name" "_valid_to" "_id"]
                         :predicates ["(== _id ?_0)"]}}]
-           (xt/q tu/*node*
-                 ["EXPLAIN SELECT name, age, _valid_from, _valid_to FROM people WHERE _id = ?"
-                  "dummy-arg-because-pgjdbc-expects-one"]))))
+           (xt/q *conn*
+              ["EXPLAIN SELECT name, age, _valid_from, _valid_to FROM people WHERE _id = ?"
+               "dummy-arg-because-pgjdbc-expects-one"]))))
 
 (t/deftest test-explain-analyze
-  (xt/submit-tx tu/*node* [[:put-docs :people {:xt/id 1 :name "Dave" :age 30}]
-                           [:put-docs :people {:xt/id 2 :name "John" :age 40}]])
+  (when-not (= :flight-sql tu/*server*)
+    (xt/submit-tx *conn* [[:put-docs :people {:xt/id 1 :name "Dave" :age 30}]
+                          [:put-docs :people {:xt/id 2 :name "John" :age 40}]])
 
-  (letfn [(elide [row]
-            (-> row
-                (update :total-time class)
-                (update :self-time class)
-                (update :time-to-first-page class)
-                ;; the scan's runtime metrics vary with storage layout — asserted separately below
-                (cond-> (contains? row :attributes)
-                  (update :attributes select-keys [:scan-db :scan-source]))))]
+    (letfn [(elide [row]
+              (-> row
+                  (update :total-time class)
+                  (update :self-time class)
+                  (update :time-to-first-page class)
+                  ;; the scan's runtime metrics vary with storage layout — asserted separately below
+                  (cond-> (contains? row :attributes)
+                    (update :attributes select-keys [:scan-db :scan-source]))))]
 
-    (t/is (= [{:depth "->", :op :project,
-               :page-count 1, :row-count 1
-               :total-time Duration, :self-time Duration, :time-to-first-page Duration}
-              {:depth "  ->", :op :scan,
-               :attributes {:scan-db "xtdb", :scan-source "public.people"}
-               :page-count 1, :row-count 1
-               :total-time Duration, :self-time Duration, :time-to-first-page Duration}]
-             (->> (xt/q tu/*node*
-                        [(format "EXPLAIN ANALYZE XTQL ($$ %s $$, ?)"
-                                 (pr-str '#(from :people [{:xt/id %} name age xt/valid-from xt/valid-to])))
-                         1])
-                  (mapv elide))))
+      (t/is (= [{:depth "->", :op :project,
+                 :page-count 1, :row-count 1
+                 :total-time Duration, :self-time Duration, :time-to-first-page Duration}
+                {:depth "  ->", :op :scan,
+                 :attributes {:scan-db "xtdb", :scan-source "public.people"}
+                 :page-count 1, :row-count 1
+                 :total-time Duration, :self-time Duration, :time-to-first-page Duration}]
+               (->> (xt/q *conn*
+                       [(format "EXPLAIN ANALYZE XTQL ($$ %s $$, ?)"
+                                (pr-str '#(from :people [{:xt/id %} name age xt/valid-from xt/valid-to])))
+                        1])
+                    (mapv elide))))
 
-    (t/is (= [{:depth "->", :op :project,
-               :page-count 1, :row-count 1
-               :total-time Duration, :self-time Duration, :time-to-first-page Duration}
-              {:depth "  ->", :op :rename,
-               :page-count 1, :row-count 1
-               :total-time Duration, :self-time Duration, :time-to-first-page Duration}
-              {:depth "    ->", :op :scan,
-               :attributes {:scan-db "xtdb", :scan-source "public.people"}
-               :page-count 1, :row-count 1
-               :total-time Duration, :self-time Duration, :time-to-first-page Duration}]
-             (->> (xt/q tu/*node*
-                        ["EXPLAIN ANALYZE SELECT name, age, _valid_from, _valid_to FROM people WHERE _id = ?" 1])
-                  (mapv elide))))
+      (t/is (= [{:depth "->", :op :project,
+                 :page-count 1, :row-count 1
+                 :total-time Duration, :self-time Duration, :time-to-first-page Duration}
+                {:depth "  ->", :op :rename,
+                 :page-count 1, :row-count 1
+                 :total-time Duration, :self-time Duration, :time-to-first-page Duration}
+                {:depth "    ->", :op :scan,
+                 :attributes {:scan-db "xtdb", :scan-source "public.people"}
+                 :page-count 1, :row-count 1
+                 :total-time Duration, :self-time Duration, :time-to-first-page Duration}]
+               (->> (xt/q *conn*
+                       ["EXPLAIN ANALYZE SELECT name, age, _valid_from, _valid_to FROM people WHERE _id = ?" 1])
+                    (mapv elide))))
 
-    (t/testing "scan attributes carry pruned/used/read metrics"
-      (let [scan-row (->> (xt/q tu/*node* ["EXPLAIN ANALYZE SELECT name FROM people WHERE _id = ?" 1])
-                          (filter #(= :scan (:op %)))
-                          first)
-            {:keys [scan-files-pruned scan-files-used scan-pages-pruned scan-pages-used scan-rows-read]
-             :as attrs} (:attributes scan-row)
-            metrics [scan-files-pruned scan-files-used scan-pages-pruned scan-pages-used scan-rows-read]]
-        (t/is (every? some? metrics) (str "all five metrics present: " attrs))
-        (t/is (every? #(and (int? %) (<= 0 %)) metrics) "metrics are non-negative integers")
-        ;; rows read off the pages is the throughput denominator — never fewer than the rows emitted
-        (t/is (>= scan-rows-read (:row-count scan-row)))
-        (t/is (pos? scan-rows-read) "read at least the row we emitted")))))
+      (t/testing "scan attributes carry pruned/used/read metrics"
+        (let [scan-row (->> (xt/q *conn* ["EXPLAIN ANALYZE SELECT name FROM people WHERE _id = ?" 1])
+                            (filter #(= :scan (:op %)))
+                            first)
+              {:keys [scan-files-pruned scan-files-used scan-pages-pruned scan-pages-used scan-rows-read]
+               :as attrs} (:attributes scan-row)
+              metrics [scan-files-pruned scan-files-used scan-pages-pruned scan-pages-used scan-rows-read]]
+          (t/is (every? some? metrics) (str "all five metrics present: " attrs))
+          (t/is (every? #(and (int? %) (<= 0 %)) metrics) "metrics are non-negative integers")
+          ;; rows read off the pages is the throughput denominator — never fewer than the rows emitted
+          (t/is (>= scan-rows-read (:row-count scan-row)))
+          (t/is (pos? scan-rows-read) "read at least the row we emitted"))))))
 
 (t/deftest test-explain-analyze-self-time-is-total-time-less-the-children
-  (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 7 :name "seven"}]
-                           [:put-docs :docs {:xt/id 8 :name "eight"}]])
+  (when-not (= :flight-sql tu/*server*)
+    (xt/submit-tx *conn* [[:put-docs :docs {:xt/id 7 :name "seven"}]
+                          [:put-docs :docs {:xt/id 8 :name "eight"}]])
 
-  (let [rows (xt/q tu/*node* "EXPLAIN ANALYZE SELECT d._id FROM docs d JOIN docs e ON d._id = e._id")
-        depth (fn [row] (count (:depth row)))
-        children-of (fn [i]
-                      (let [d (depth (nth rows i))]
-                        (->> (drop (inc i) rows)
-                             (take-while #(> (depth %) d))
-                             (filter #(= (depth %) (+ d 2))))))]
-    (t/is (> (count rows) 2))
-    (doseq [[i row] (map-indexed vector rows)]
-      (t/is (= (:self-time row)
-               (reduce #(.minus ^Duration %1 ^Duration (:total-time %2)) (:total-time row) (children-of i)))
-            (str (:op row) " self_time = total_time - children's total_time")))))
+    (let [rows (xt/q *conn* "EXPLAIN ANALYZE SELECT d._id FROM docs d JOIN docs e ON d._id = e._id")
+          depth (fn [row] (count (:depth row)))
+          children-of (fn [i]
+                        (let [d (depth (nth rows i))]
+                          (->> (drop (inc i) rows)
+                               (take-while #(> (depth %) d))
+                               (filter #(= (depth %) (+ d 2))))))]
+      (t/is (> (count rows) 2))
+      (doseq [[i row] (map-indexed vector rows)]
+        (t/is (= (:self-time row)
+                 (reduce #(.minus ^Duration %1 ^Duration (:total-time %2)) (:total-time row) (children-of i)))
+              (str (:op row) " self_time = total_time - children's total_time"))))))
 
 (t/deftest test-explain-analyze-covers-the-whole-plan
-  (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 7 :name "seven"}]
-                           [:put-docs :docs {:xt/id 8 :name "eight"}]])
+  (when-not (= :flight-sql tu/*server*)
+    (xt/submit-tx *conn* [[:put-docs :docs {:xt/id 7 :name "seven"}]
+                          [:put-docs :docs {:xt/id 8 :name "eight"}]])
 
-  (letfn [(nodes [prefix q]
-            (mapv (juxt :depth :op) (xt/q tu/*node* (str prefix q))))]
+    (letfn [(nodes [prefix q]
+              (mapv (juxt :depth :op) (xt/q *conn* (str prefix q))))]
 
-    (doseq [q ["SELECT d._id FROM docs d WHERE d._id IN (SELECT v.x FROM (VALUES (1),(7)) v(x)) OR d.name IS NULL"
-               "WITH MATERIALIZED shared AS (SELECT _id, name FROM docs WHERE name IS NOT NULL) SELECT a._id FROM shared a JOIN shared b ON a._id = b._id"
-               "SELECT d._id FROM docs d WHERE d._id IN (SELECT _id FROM docs)"
-               "SELECT d._id FROM docs d JOIN docs e ON d._id = e._id"
-               "SELECT d._id FROM docs d LEFT JOIN docs e ON d._id = e._id"
-               "SELECT d._id FROM docs d WHERE NOT EXISTS (SELECT 1 FROM docs e WHERE e._id = d._id)"]]
-      (t/is (= (nodes "EXPLAIN " q) (nodes "EXPLAIN ANALYZE " q)) q))))
+      (doseq [q ["SELECT d._id FROM docs d WHERE d._id IN (SELECT v.x FROM (VALUES (1),(7)) v(x)) OR d.name IS NULL"
+                 "WITH MATERIALIZED shared AS (SELECT _id, name FROM docs WHERE name IS NOT NULL) SELECT a._id FROM shared a JOIN shared b ON a._id = b._id"
+                 "SELECT d._id FROM docs d WHERE d._id IN (SELECT _id FROM docs)"
+                 "SELECT d._id FROM docs d JOIN docs e ON d._id = e._id"
+                 "SELECT d._id FROM docs d LEFT JOIN docs e ON d._id = e._id"
+                 "SELECT d._id FROM docs d WHERE NOT EXISTS (SELECT 1 FROM docs e WHERE e._id = d._id)"]]
+        (t/is (= (nodes "EXPLAIN " q) (nodes "EXPLAIN ANALYZE " q)) q)))))
 
 (t/deftest test-explain-analyze-of-an-unadvanced-plan
-  (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 7 :name "seven"}]])
+  (when-not (= :flight-sql tu/*server*)
+    (xt/submit-tx *conn* [[:put-docs :docs {:xt/id 7 :name "seven"}]])
 
-  (doseq [[what q] {"a join the limit never advances"
-                    "SELECT d._id FROM docs d JOIN docs e ON d._id = e._id LIMIT 0"
+    (doseq [[what q] {"a join the limit never advances"
+                      "SELECT d._id FROM docs d JOIN docs e ON d._id = e._id LIMIT 0"
 
-                    "a materialized CTE nothing references"
-                    "WITH MATERIALIZED unused AS (SELECT _id FROM docs) SELECT 1 AS one"}]
-    (let [rows (xt/q tu/*node* (str "EXPLAIN ANALYZE " q))
-          unadvanced (filter (comp nil? :time-to-first-page) rows)]
-      (t/is (seq rows) what)
-      (t/is (seq unadvanced)
-            (str what " — the branch that never ran is still in the output"))
-      (t/is (every? (comp zero? :row-count) unadvanced)
-            (str what " — an unadvanced operator reports no first page and no rows")))))
+                      "a materialized CTE nothing references"
+                      "WITH MATERIALIZED unused AS (SELECT _id FROM docs) SELECT 1 AS one"}]
+      (let [rows (xt/q *conn* (str "EXPLAIN ANALYZE " q))
+            unadvanced (filter (comp nil? :time-to-first-page) rows)]
+        (t/is (seq rows) what)
+        (t/is (seq unadvanced)
+              (str what " — the branch that never ran is still in the output"))
+        (t/is (every? (comp zero? :row-count) unadvanced)
+              (str what " — an unadvanced operator reports no first page and no rows"))))))
 
 (t/deftest test-explain-analyze-pushdowns
-  (let [id1 #uuid "00000000-0000-0000-0000-000000000001"
-        id2 #uuid "00000000-0000-0000-0000-000000000002"
-        id3 #uuid "00000000-0000-0000-0000-000000000003"]
-    (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id id1 :v "x"}]
-                             [:put-docs :foo {:xt/id id2 :v "y"}]
-                             [:put-docs :bar {:xt/id id1 :w "a"}]
-                             [:put-docs :bar {:xt/id id2 :w "b"}]
-                             [:put-docs :bar {:xt/id id3 :w "c"}]]))
+  (when-not (= :flight-sql tu/*server*)
+    (let [id1 #uuid "00000000-0000-0000-0000-000000000001"
+          id2 #uuid "00000000-0000-0000-0000-000000000002"
+          id3 #uuid "00000000-0000-0000-0000-000000000003"]
+      (xt/submit-tx *conn* [[:put-docs :foo {:xt/id id1 :v "x"}]
+                            [:put-docs :foo {:xt/id id2 :v "y"}]
+                            [:put-docs :bar {:xt/id id1 :w "a"}]
+                            [:put-docs :bar {:xt/id id2 :w "b"}]
+                            [:put-docs :bar {:xt/id id3 :w "c"}]]))
 
-  (letfn [(scan-rows [results]
-            (filter #(= :scan (:op %)) results))]
+    (letfn [(scan-rows [results]
+              (filter #(= :scan (:op %)) results))]
 
-    (t/testing "join on _id pushes bloom + iids to probe-side scan"
-      (let [scans (scan-rows
-                   (xt/q tu/*node*
-                         "EXPLAIN ANALYZE SELECT f.v, b.w FROM foo f JOIN bar b ON f._id = b._id"))
-            bar-scan (first (filter #(= "public.bar" (get-in % [:attributes :scan-source])) scans))]
-        (t/is (some? bar-scan) "bar scan should be present")
+      (t/testing "join on _id pushes bloom + iids to probe-side scan"
+        (let [scans (scan-rows
+                     (xt/q *conn*
+                        "EXPLAIN ANALYZE SELECT f.v, b.w FROM foo f JOIN bar b ON f._id = b._id"))
+              bar-scan (first (filter #(= "public.bar" (get-in % [:attributes :scan-source])) scans))]
+          (t/is (some? bar-scan) "bar scan should be present")
 
-        (let [[id-pd] (:pushdowns bar-scan)]
-          (t/is (= "_id" (:column id-pd)))
-          (t/is (pos-int? (get-in id-pd [:bloom-filter :cardinality])))
-          (t/is (= {:count 2} (:iids id-pd))))))
+          (let [[id-pd] (:pushdowns bar-scan)]
+            (t/is (= "_id" (:column id-pd)))
+            (t/is (pos-int? (get-in id-pd [:bloom-filter :cardinality])))
+            (t/is (= {:count 2} (:iids id-pd))))))
 
-    (t/testing "join on non-id column pushes only bloom filter"
-      (let [scans (scan-rows
-                   (xt/q tu/*node*
-                         "EXPLAIN ANALYZE SELECT f.v, b.w FROM foo f JOIN bar b ON f.v = b.w"))
-            bar-scan (first (filter #(= "public.bar" (get-in % [:attributes :scan-source])) scans))]
-        (t/is (some? bar-scan))
+      (t/testing "join on non-id column pushes only bloom filter"
+        (let [scans (scan-rows
+                     (xt/q *conn*
+                        "EXPLAIN ANALYZE SELECT f.v, b.w FROM foo f JOIN bar b ON f.v = b.w"))
+              bar-scan (first (filter #(= "public.bar" (get-in % [:attributes :scan-source])) scans))]
+          (t/is (some? bar-scan))
 
-        (let [[pd] (:pushdowns bar-scan)]
-          (t/is (= "w" (:column pd)))
-          (t/is (pos-int? (get-in pd [:bloom-filter :cardinality])))
-          (t/is (nil? (:iids pd))))))
+          (let [[pd] (:pushdowns bar-scan)]
+            (t/is (= "w" (:column pd)))
+            (t/is (pos-int? (get-in pd [:bloom-filter :cardinality])))
+            (t/is (nil? (:iids pd))))))
 
-    (t/testing "simple scan without join has no pushdowns"
-      (let [scans (scan-rows
-                   (xt/q tu/*node*
-                         "EXPLAIN ANALYZE SELECT * FROM foo"))]
-        (t/is (every? #(nil? (:pushdowns %)) scans))))))
+      (t/testing "simple scan without join has no pushdowns"
+        (let [scans (scan-rows
+                     (xt/q *conn*
+                        "EXPLAIN ANALYZE SELECT * FROM foo"))]
+          (t/is (every? #(nil? (:pushdowns %)) scans)))))))
 
 (t/deftest test-transit-encoding-of-ast-objects-3019
   (t/is (anomalous? [:incorrect nil #"Not all variables in expression are in scope"]
-                    (xt/q tu/*node*
-                          '(-> (from :album [xt/id])
-                               (return foo)))))
+                    (xt/q *conn*
+                       '(-> (from :album [xt/id])
+                            (return foo)))))
   (t/is (anomalous? [:incorrect nil #"Scalar subquery must only return a single column"]
-                    (xt/q tu/*node*
-                          '(-> (from :album [xt/id])
-                               (with {:foo (q (from :artist [xt/id name]))})))))
+                    (xt/q *conn*
+                       '(-> (from :album [xt/id])
+                            (with {:foo (q (from :artist [xt/id name]))})))))
   (t/is (anomalous? [:incorrect nil #"\* is not a valid in from when inside a unify context"]
-                    (xt/q tu/*node*
-                          '(unify (from :album [*])
-                                  (from :album [*]))))))
+                    (xt/q *conn*
+                       '(unify (from :album [*])
+                               (from :album [*]))))))
 
 (deftest test-plan-q
   (doseq [batch (->> (range 2000)
                      (map #(hash-map :xt/id % :num %))
                      (partition-all 1000))]
-    (xt/execute-tx tu/*node* [(into [:put-docs :docs] batch)]))
+    (xt/execute-tx *conn* [(into [:put-docs :docs] batch)]))
 
-  (t/is (= 10 (->> (xt/plan-q tu/*node* "SELECT docs.num FROM docs LIMIT 10")
+  (t/is (= 10 (->> (xt/plan-q *conn* "SELECT docs.num FROM docs LIMIT 10")
                    (reduce (fn [acc _] (inc acc)) 0))))
 
-  (t/is (= 10 (->> (xt/plan-q tu/*node* "SELECT docs.num FROM docs")
+  (t/is (= 10 (->> (xt/plan-q *conn* "SELECT docs.num FROM docs")
                    (reduce (fn [acc _] (let [acc (inc acc)] (if (== 10 acc) (reduced acc) acc))) 0))))
 
   #_ ; FIXME pgwire batching
-  (t/is (= 10 (->> (xt/plan-q tu/*node* "(SELECT docs.num FROM docs)
+  (t/is (= 10 (->> (xt/plan-q *conn* "(SELECT docs.num FROM docs)
                                          UNION ALL
                                          (SELECT 1 / 0)")
                    (reduce (fn [acc _] (let [acc (inc acc)] (if (== 10 acc) (reduced acc) acc))) 0)))))
 
 (t/deftest first-class-tstz-ranges
-  (xt/submit-tx tu/*node* [[:put-docs :users {:xt/id :dave, :name "Dave"}]])
-  (xt/submit-tx tu/*node* [[:put-docs :users {:xt/id :claire, :name "Claire"}]])
-  (xt/submit-tx tu/*node* [[:delete-docs :users :dave]])
+  ;; TODO #5569: pgwire reads a tstz-range's bounds back at offset `Z` rather than zone `UTC`
+  (when-not (= :pgwire tu/*server*)
+    (xt/submit-tx *conn* [[:put-docs :users {:xt/id :dave, :name "Dave"}]])
+    (xt/submit-tx *conn* [[:put-docs :users {:xt/id :claire, :name "Claire"}]])
+    (xt/submit-tx *conn* [[:delete-docs :users :dave]])
 
-  (t/is (= [{:name "Dave", :xt/valid-time #xt/tstz-range [#xt/zoned-date-time "2020-01-01T00:00Z[UTC]"
-                                                          #xt/zoned-date-time "2020-01-03T00:00Z[UTC]"]}
-            {:name "Claire", :xt/valid-time #xt/tstz-range [#xt/zoned-date-time "2020-01-02T00:00Z[UTC]" nil]}]
-           (xt/q tu/*node* "SELECT name, _valid_time FROM users FOR ALL VALID_TIME")))
+    (t/is (= [{:name "Dave", :xt/valid-time #xt/tstz-range [#xt/zoned-date-time "2020-01-01T00:00Z[UTC]"
+                                                            #xt/zoned-date-time "2020-01-03T00:00Z[UTC]"]}
+              {:name "Claire", :xt/valid-time #xt/tstz-range [#xt/zoned-date-time "2020-01-02T00:00Z[UTC]" nil]}]
+             (xt/q *conn* "SELECT name, _valid_time FROM users FOR ALL VALID_TIME")))
 
-  (xt/submit-tx tu/*node* [[:put-docs :foo
-                            {:xt/id 1, :for-range (tu/->tstz-range #inst "2020-01-01" nil)}]
+    (xt/submit-tx *conn* [[:put-docs :foo
+                           {:xt/id 1, :for-range (tu/->tstz-range #inst "2020-01-01" nil)}]
 
-                           ["INSERT INTO foo (_id, for_range)
-                             VALUES (2, ?)"
-                            (tu/->tstz-range #inst "2020-03-01" #inst "2021-01-01")]
+                          ["INSERT INTO foo (_id, for_range)
+                               VALUES (2, ?)"
+                           (tu/->tstz-range #inst "2020-03-01" #inst "2021-01-01")]
 
-                           "INSERT INTO foo (_id, for_range)
-                            VALUES (3, PERIOD(DATE '2021-08-01'::timestamptz, DATE '2022-01-01'::timestamptz))"]
-                {:default-tz #xt/zone "UTC"})
+                          "INSERT INTO foo (_id, for_range)
+                              VALUES (3, PERIOD(DATE '2021-08-01'::timestamptz, DATE '2022-01-01'::timestamptz))"]
+               {:default-tz #xt/zone "UTC"})
 
-  (let [expected #{{:xt/id 1,
-                    :for-range #xt/tstz-range [#xt/zoned-date-time "2020-01-01T00:00Z[UTC]" nil]}
-                   {:xt/id 2,
-                    :for-range #xt/tstz-range [#xt/zoned-date-time "2020-03-01T00:00Z[UTC]" #xt/zoned-date-time "2021-01-01T00:00Z[UTC]"]}
-                   {:xt/id 3,
-                    :for-range #xt/tstz-range [#xt/zoned-date-time "2021-08-01T00:00Z[UTC]" #xt/zoned-date-time "2022-01-01T00:00Z[UTC]"]}}]
+    (let [expected #{{:xt/id 1,
+                      :for-range #xt/tstz-range [#xt/zoned-date-time "2020-01-01T00:00Z[UTC]" nil]}
+                     {:xt/id 2,
+                      :for-range #xt/tstz-range [#xt/zoned-date-time "2020-03-01T00:00Z[UTC]" #xt/zoned-date-time "2021-01-01T00:00Z[UTC]"]}
+                     {:xt/id 3,
+                      :for-range #xt/tstz-range [#xt/zoned-date-time "2021-08-01T00:00Z[UTC]" #xt/zoned-date-time "2022-01-01T00:00Z[UTC]"]}}]
 
-    (t/is (= expected (set (xt/q tu/*node* "SELECT * FROM foo"))))
+      (t/is (= expected (set (xt/q *conn* "SELECT * FROM foo"))))
 
-    (tu/flush-block! tu/*node*)
-    (c/compact-all! tu/*node* #xt/duration "PT2S")
+      (tu/flush-block! tu/*node*)
+      (c/compact-all! tu/*node* #xt/duration "PT2S")
 
-    (t/is (= expected (set (xt/q tu/*node* "SELECT * FROM foo"))))))
+      (t/is (= expected (set (xt/q *conn* "SELECT * FROM foo")))))))
 
 (t/deftest test-remote-client
   (let [client (xt/client {:port (.getServerPort tu/*node*)})]
@@ -739,10 +748,10 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
     (xt/execute-tx client [[:put-docs :docs {:xt/id :bar, :name "Bar"}]])))
 
 (t/deftest processed-msg-ids-equal-to-submitted-msg-ids-4813
-  (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id :foo, :name "Foo"}]])
+  (xt/execute-tx *conn* [[:put-docs :docs {:xt/id :foo, :name "Foo"}]])
   (tu/flush-block! tu/*node*)
 
-  (let [{:keys [latest-submitted-msg-ids latest-processed-msg-ids]} (xt/status tu/*node*)]
+  (let [{:keys [latest-submitted-msg-ids latest-processed-msg-ids]} (xt/status *conn*)]
     (t/is (seq latest-submitted-msg-ids))
     (t/is (= latest-submitted-msg-ids latest-processed-msg-ids))))
 
