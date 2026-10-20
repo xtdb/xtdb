@@ -5,6 +5,7 @@
   (:import (org.apache.arrow.adbc.core AdbcConnection)
            org.apache.arrow.adbc.driver.flightsql.FlightSqlDriver
            (org.apache.arrow.flight CallOption FlightCallHeaders FlightClient FlightEndpoint FlightInfo HeaderCallOption Location)
+           (org.apache.arrow.flight.client ClientCookieMiddleware$Factory)
            (org.apache.arrow.flight.sql FlightSqlClient)
            (org.apache.arrow.vector VectorLoader VectorSchemaRoot)
            org.apache.arrow.vector.types.pojo.Schema
@@ -22,10 +23,12 @@
   (fn [f]
     (let [port (.getFlightSqlPort ^Xtdb tu/*node*)]
       (with-open [flight-client (-> (FlightClient/builder tu/*allocator* (Location/forGrpcInsecure "127.0.0.1" port))
+                                    (.intercept (ClientCookieMiddleware$Factory.))
                                     (.build))
                   client (FlightSqlClient. flight-client)
                   adbc-db (-> (FlightSqlDriver. tu/*allocator*)
-                              (.open  {"uri" (str "grpc+tcp://127.0.0.1:" port)}))
+                              (.open {"uri" (str "grpc+tcp://127.0.0.1:" port)
+                                      "adbc.flight.sql.rpc.with_cookie_middleware" true}))
                   adbc-conn (.connect adbc-db)]
 
         (binding [*client* client, *adbc-conn* adbc-conn]
@@ -285,3 +288,20 @@
       ;; still empty on default db
       (t/is (= [] (-> (.execute *client* "SELECT _id, name FROM users" empty-call-opts)
                        (flight-info->rows)))))))
+
+(t/deftest set-time-zone-sets-the-session-zone
+  (with-open [stmt (.createStatement *adbc-conn*)]
+    (.setSqlQuery stmt "SET TIME ZONE 'America/New_York'")
+    (.executeUpdate stmt)
+
+    (.setSqlQuery stmt "SELECT CAST(DATE '2020-08-01' AS TIMESTAMP WITH TIME ZONE) AS tstz")
+
+    (with-open [rdr (.getReader (.executeQuery stmt))]
+      (with-open [root (.getVectorSchemaRoot rdr)]
+        (t/is (true? (.loadNextBatch rdr)))
+
+        (with-open [rel (Relation/fromRoot tu/*allocator* root)]
+          (t/is (= [#xt/instant "2020-08-01T04:00:00Z"]
+                   (->> (.getAsMaps rel)
+                        (mapv (comp #(.toInstant ^java.time.ZonedDateTime %) :tstz))))
+                "the DATE is read at midnight in the session's zone"))))))
