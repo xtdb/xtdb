@@ -9,7 +9,7 @@
   (:import (java.time Duration)))
 
 (def ^:dynamic *qs*
-  (-> (into #{} (range (count tpch-ra/queries)))
+  (-> (into #{} (range 1 (inc (count tpch-ra/queries))))
       (disj 21)))
 
 (defn query-tpch [stage-name i]
