@@ -40,3 +40,7 @@ Three patterns, by the size of the change:
 - **A single commit** can go straight onto `main`, once reviewed.
 - **`git switch main && git merge --no-ff <branch>`** where you want the original commits visible — for `git blame`, say.
   It marks out a block of work, preserves the commits, and keeps the history linear.
+
+**An external contributor's PR MUST be merged with its commits untouched** — a merge commit (`git merge --no-ff` of the PR head, or GitHub's "Create a merge commit") or a fast-forward.
+Their signed commit carrying `CLA-Agreed:` is the CLA signature (see `CONTRIBUTING.md`), and squashing, rebasing, cherry-picking or amending it produces a new commit without that signature.
+This overrides the linear-history preference above; fixes go on top as your own commits.
