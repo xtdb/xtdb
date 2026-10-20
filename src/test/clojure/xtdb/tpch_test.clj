@@ -154,9 +154,6 @@
             *xtql-qs* #{1}]
     (t/run-test test-01-xtql)))
 
-(defn slurp-sql-query [query-no]
-  (slurp (io/resource (str "xtdb/sql/tpch/" (format "q%02d.sql" query-no)))))
-
 (def tpch-table-info
   {#xt/table customer #{"_id" "c_name" "c_address" "c_nationkey" "c_phone" "c_acctbal" "c_mktsegment" "c_comment"}
    #xt/table lineitem #{"_id" "l_orderkey" "l_partkey" "l_suppkey" "l_linenumber" "l_quantity" "l_extendedprice" "l_discount" "l_tax" "l_returnflag" "l_linestatus" "l_shipdate" "l_commitdate" "l_receiptdate" "l_shipinstruct" "l_shipmode" "l_comment"}
@@ -172,7 +169,7 @@
     (let [n (inc n)]
       (when (contains? *qs* n)
         (t/is (=plan-file (format "tpch/q%02d" n)
-                          (sql/plan (slurp-sql-query n)
+                          (sql/plan (tpch/sql-query n)
                                     {:table-info tpch-table-info}))
               (format "Q%02d" n))))))
 
@@ -181,7 +178,7 @@
   ([opts n res]
    (let [q (inc n)]
      (when (contains? *qs* q)
-       (t/is (is-equal? res (xt/q *node* (slurp-sql-query q) opts))
+       (t/is (is-equal? res (xt/q *node* (tpch/sql-query q) opts))
              (format "Q%02d" (inc n)))))))
 
 (t/deftest test-001-sql
@@ -198,10 +195,10 @@
       (dotimes [n 22]
         (let [q (inc n)]
           (when (contains? *qs* q)
-            (t/is (xt/q *node* (str "EXPLAIN " (slurp-sql-query q)))
+            (t/is (xt/q *node* (str "EXPLAIN " (tpch/sql-query q)))
                   (format "EXPLAIN Q%02d" (inc n)))
 
-            (t/is (xt/q *node* (str "EXPLAIN ANALYZE " (slurp-sql-query q)))
+            (t/is (xt/q *node* (str "EXPLAIN ANALYZE " (tpch/sql-query q)))
                   (format "EXPLAIN ANALYZE Q%02d" (inc n)))))))))
 
 (t/deftest ^:integration test-01-sql

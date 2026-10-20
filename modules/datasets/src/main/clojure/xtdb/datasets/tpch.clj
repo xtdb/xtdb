@@ -1,5 +1,6 @@
 (ns xtdb.datasets.tpch
-  (:require [clojure.string :as str]
+  (:require [clojure.java.io :as io]
+            [clojure.string :as str]
             [clojure.tools.logging :as log]
             [next.jdbc :as jdbc]
             [xtdb.api :as xt]
@@ -215,6 +216,11 @@
                                               (count param-batch)))
                                        + 0))]
          (log/debug "Transacted" doc-count (.getTableName table)))))))
+
+(defn sql-query
+  "TPC-H query `n` (1-22) as SQL over the tables `submit-*!` load."
+  [n]
+  (slurp (io/resource (format "xtdb/datasets/tpch/sql/q%02d.sql" n))))
 
 (comment
   (with-open [conn (jdbc/get-connection {:dbname "xtdb"
