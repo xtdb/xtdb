@@ -23,11 +23,11 @@
              (xt/q *conn* '(from :docs [{:xt/id e} inst]))))))
 
 (t/deftest test-validation-errors
-  (t/is (anomalous? [:incorrect nil]
+  (t/is (anomalous? [:incorrect :xtql/unknown-tx-op]
                     (-> (xt/submit-tx *conn* [[:pot :docs {:xt/id :foo}]])
                         (util/rethrowing-cause))))
 
-  (t/is (anomalous? [:incorrect nil]
+  (t/is (anomalous? [:incorrect :missing-id]
                     (-> (xt/submit-tx *conn* [[:put-docs :docs {}]])
                         (util/rethrowing-cause)))))
 
@@ -331,7 +331,7 @@
                  (q tx1)))))))
 
 (t/deftest execute-tx-throws-dml-errors
-  (t/is (anomalous? [:incorrect nil #"Errors parsing SQL statement"]
+  (t/is (anomalous? [:incorrect :xtdb/sql-error #"Errors parsing SQL statement"]
                     (xt/execute-tx *conn* ["INSERT INTO foo (_id, dt) VALUES ('id', DATE \"2020-01-01\")"])))
 
   (t/testing "still an active node"
@@ -401,14 +401,33 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
                     #_{:clj-kondo/ignore [:xtql/type-mismatch]}
                     (xt/q *conn* '(from docs [name]))))
 
-  (t/is (anomalous? [:incorrect nil #"data exception - division by zero"]
+  (t/is (anomalous? [:incorrect :xtdb.expression/division-by-zero #"data exception - division by zero"]
                     (xt/q *conn* '(-> (rel [{}] [])
                                       (with {:foo (/ 1 0)})))))
 
   ;; Might need to get updated if this kind of error gets handled differently.
   (xt/submit-tx *conn* [[:put-docs :docs {:xt/id 1 :name 2}]])
-  (t/is (anomalous? [:incorrect nil #"upper not applicable to types i64"]
+  (t/is (anomalous? [:incorrect :xtdb.expression/function-type-mismatch #"upper not applicable to types i64"]
                     (xt/q *conn* "SELECT UPPER(docs.name) AS name FROM docs"))))
+
+(t/deftest an-error-keeps-its-category-and-code-on-every-server
+  (t/is (anomalous? [:incorrect :xtdb/sql-error #"Errors parsing SQL statement"]
+                    (xt/q *conn* "SELEC 1")))
+
+  (t/is (anomalous? [:incorrect :xtdb/sql-error #"Unknown function: nope_fn"]
+                    (xt/q *conn* "SELECT nope_fn(1) AS x")))
+
+  (t/is (anomalous? [:incorrect :xtdb.expression/number-format-error]
+                    (xt/q *conn* "SELECT CAST('x' AS INTEGER) AS x")))
+
+  (t/is (anomalous? [:unsupported :xtdb.sql/recursive-ctes]
+                    (xt/q *conn* "WITH RECURSIVE r (n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM r) SELECT * FROM r")))
+
+  (t/is (anomalous? [:incorrect :missing-id]
+                    (xt/execute-tx *conn* [[:sql "INSERT INTO docs (foo) VALUES (1)"]])))
+
+  (t/is (anomalous? [:conflict :xtdb/assert-failed]
+                    (xt/execute-tx *conn* [[:sql "ASSERT 1 = 2"]]))))
 
 (def ivan+petr
   [[:put-docs :docs {:xt/id :ivan, :first-name "Ivan", :last-name "Ivanov"}]
