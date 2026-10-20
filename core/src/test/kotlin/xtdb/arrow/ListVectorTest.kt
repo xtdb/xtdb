@@ -2,6 +2,7 @@ package xtdb.arrow
 
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
+import org.apache.arrow.vector.VectorUnloader
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
@@ -75,5 +76,31 @@ class ListVectorTest {
             listVec.writeObject(listOf(1))
             assertEquals(listTypeOf(VectorType.I32), listVec.type, "the first element promotes it")
         }
+    }
+
+    @Test
+    fun `an empty list's batch survives Arrow's unloader without moving the shared empty buffer`() {
+        Relation(allocator, listOf(ListVector(allocator, "l", false, NullVector($$"$data$"))), 0).use { rel ->
+            rel.openAsRoot(allocator).use { root ->
+                VectorUnloader(root).recordBatch.use { rb -> rb.buffers.forEach { it.nioBuffer() } }
+            }
+        }
+
+        assertEquals(0, allocator.empty.writerIndex())
+    }
+
+    @Test
+    fun `an empty list leg's batch survives Arrow's unloader without moving the shared empty buffer`() {
+        Relation.openFromRows(allocator, listOf(mapOf("l" to listOf(1L), "u" to listOf("a")), mapOf("u" to 1L))).use { rel ->
+            Relation(allocator, rel.schema).use { empty ->
+                for (r in listOf(empty, rel)) {
+                    r.openAsRoot(allocator).use { root ->
+                        VectorUnloader(root).recordBatch.use { rb -> rb.buffers.forEach { it.nioBuffer() } }
+                    }
+                }
+            }
+        }
+
+        assertEquals(0, allocator.empty.writerIndex())
     }
 }

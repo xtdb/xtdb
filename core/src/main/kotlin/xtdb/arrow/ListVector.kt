@@ -159,6 +159,9 @@ class ListVector private constructor(
     private fun unloadOwnPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         nodes.add(ArrowFieldNode(valueCount.toLong(), if (nullable) -1 else 0))
         if (nullable) validityBuffer?.unloadBuffer(buffers) else buffers.add(al.empty)
+        // Arrow's ListVector sets an empty list's offset writerIndex to 4 whatever the capacity (apache/arrow-java#1194),
+        // which would otherwise land on `al.empty`, shared JVM-wide (#6231).
+        if (valueCount == 0) offsetBuffer.ensureCapacity(Int.SIZE_BYTES.toLong())
         offsetBuffer.unloadBuffer(buffers)
     }
 
