@@ -434,14 +434,6 @@
         [:join {:conditions (conj conditions predicate)} lhs rhs]))
 
     [:select opts
-     [:anti-join join-opts lhs rhs]]
-    ;;=>
-    (let [{:keys [predicate]} opts
-          {:keys [conditions]} join-opts]
-      (when (columns-in-both-relations? predicate lhs rhs)
-        [:anti-join {:conditions (conj conditions predicate)} lhs rhs]))
-
-    [:select opts
      [:semi-join join-opts lhs rhs]]
     ;;=>
     (let [{:keys [predicate]} opts
