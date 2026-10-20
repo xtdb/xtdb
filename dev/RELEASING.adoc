@@ -11,35 +11,36 @@ We use https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md[Bre
 
 == Git tag:
 
-. find/replace `<previous-version>` -> `<next-version>`, commit
-. `git tag --annotate --sign <next-version>` (magit `t -a -s t`), add release notes to tag.
-. `git push origin main <next-version>`
+Tags are `v`-prefixed - `v2.10.4`, `v2.2.0-rc2`.
+
+. (Final releases only) find/replace `<previous-version>` -> `<next-version>` wherever the repo names the current release (`git grep`), commit
+. `git tag --annotate --sign --cleanup=verbatim -F <release-notes.md> v<next-version>`, with the release notes as the tag message.
+  Without `--cleanup=verbatim`, git strips the notes' `## ` headings as comment lines.
+. `git push <xtdb/xtdb remote> v<next-version>`
 
 == Github Action
 
-This one tags and publishes the Docker images: https://github.com/xtdb/xtdb/actions/workflows/tag.yml
+Pushing the tag kicks off the Docker image builds: https://github.com/xtdb/xtdb/actions/workflows/tag.yml (only on `xtdb/xtdb`, not on a fork).
 
 == JARs
 
 To build the XTDB release artifacts locally and deploy them to Maven Central, run:
 
-Build and deploy release jars:
+Build and deploy release jars - Gradle's toolchains pick the JDK, so there's no need to choose one:
 
-. `java -version` -> java-21-openjdk
 . `git clean -dXf`
-. `export XTDB_VERSION=2.0.0` (`set -x XTDB_VERSION=2.0.0` for the fish people)
-. `./gradlew clean jreleaserDeploy`
+. `XTDB_VERSION=2.10.4 ./gradlew clean jreleaserDeploy` (`env XTDB_VERSION=2.10.4 ./gradlew clean jreleaserDeploy` for the fish people) - no `v` prefix here.
 
 Release the artifacts to central:
 
 . Head over to https://central.sonatype.com/publishing
-. Quick smoke-check of all of the packages are as you'd expect (api, core, 3x clouds; all at the correct version).
+. Quick smoke-check of all of the packages are as you'd expect (api, core, main, aws, azure, google-cloud, kafka, postgres-source, datasets; all at the correct version).
 . Publish
 . Check https://repo1.maven.org/maven2/com/xtdb to see when the artifacts have been mirrored across Maven Central.
 
 It may be sensible to update `2.x-SNAPSHOT` in response to the release, unless it is already ahead.
 
-. `unset XTDB_VERSION` and deploy the new release as link:#releasing-snapshots[2.x-SNAPSHOT]
+. Deploy the new release as link:#releasing-snapshots[2.x-SNAPSHOT] - i.e. without `XTDB_VERSION` set.
 
 [NOTE]
 ====
@@ -54,17 +55,19 @@ We use https://jreleaser.org/[JReleaser] to deploy the JARs to Maven.
 
 The documentation site (https://docs.xtdb.com) is deployed through this repo too.
 
-Push a commit to the `origin/docs-live` branch, then AWS Amplify will release it based on a GitHub hook.
+Push a commit to the `docs-live` branch on `xtdb/xtdb`, then AWS Amplify will release it based on a GitHub hook.
+
+We deploy `docs-live` continually rather than at release time, but check that it's caught up with the release's docs changes: `git log <xtdb/xtdb remote>/docs-live..v<next-version> -- docs/` should be empty.
 
 == Github release:
 
-. Create a new milestone and ensure that all issues in the "Awaiting Release" column are updated
+. (Final releases only) Close the release's milestone, and create the next one.
+  Betas and RCs share their final release's milestone.
 . Locate tag on https://github.com/xtdb/xtdb/releases[releases page], click 'Edit tag'
-. Copy release notes into release description
-. Await artifacts, upload artifacts to release
-. Await JARs deploying, and ensure 'docs' section is complete - people get notified at this point.
+. Copy the release notes into the release description
+. Betas and RCs: tick 'Set as a pre-release'.
+. Await the JARs being mirrored to Maven Central - people get notified at this point.
 . 'Publish release'
-. 'Archive all cards' for the "Awaiting Release" column
 
 NOTE: we could do a fair bit of this through JReleaser too, but for now I prefer the fine-grained control over the release process.
 
@@ -72,14 +75,12 @@ NOTE: we could do a fair bit of this through JReleaser too, but for now I prefer
 
 * Discord
 * Clojurians' Slack - #announcements for a major, additionally #releases for a minor if it's 'interesting', additionally #xtdb for a patch.
-* LinkedIn
-* BlueSky, if appropriate
+* LinkedIn - final releases only.
 
 [#releasing-snapshots]
 == Building locally and releasing JAR snapshots:
 
 .  (none of the above sections are required)
-.  `java -version` → java-21-openjdk
 .  `git clean -dXf`
 .  `./gradlew clean jreleaserDeploy`
 .  (nothing to be done in Sonatype!)
