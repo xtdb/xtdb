@@ -208,9 +208,22 @@ class MemoryCache @JvmOverloads internal constructor(
         }
     }
 
+    /**
+     * A view of this cache whose keys are namespaced under [prefix].
+     *
+     * The cache is shared by every buffer pool on the node; each pool reads through its own scope,
+     * passing keys relative to its store — [get]'s [Fetch] is handed the same relative key.
+     */
+    inner class Scope internal constructor(private val prefix: Path) {
+        suspend fun get(key: Path, slice: Slice? = null, fetch: Fetch): ArrowBuf =
+            this@MemoryCache.get(prefix.resolve(key), slice) { cacheKey -> fetch(prefix.relativize(cacheKey)) }
+    }
+
+    fun scope(prefix: Path) = Scope(prefix)
+
     @OptIn(ExperimentalCoroutinesApi::class)
     @Suppress("NAME_SHADOWING")
-    suspend fun get(key: Path, slice: Slice? = null, fetch: Fetch): ArrowBuf {
+    internal suspend fun get(key: Path, slice: Slice? = null, fetch: Fetch): ArrowBuf {
         LOGGER.debug("Sending get for $key / $slice...")
         val pathSlice = PathSlice(key, slice)
 

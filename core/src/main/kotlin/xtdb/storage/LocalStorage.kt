@@ -16,7 +16,6 @@ import xtdb.arrow.ArrowUtil.readArrowFooter
 import xtdb.arrow.ArrowUtil.toByteArray
 import xtdb.arrow.Relation
 import xtdb.cache.MemoryCache
-import xtdb.database.DatabaseName
 import xtdb.trie.FileSize
 import xtdb.util.*
 import java.io.Closeable
@@ -31,11 +30,9 @@ import kotlin.io.path.*
 
 internal class LocalStorage(
     allocator: BufferAllocator,
-    private val memoryCache: MemoryCache,
+    private val memoryCache: MemoryCache.Scope,
     meterRegistry: MeterRegistry? = null,
     override val epoch: StorageEpoch,
-    dbName: DatabaseName,
-    partition: Int,
     val rootPath: Path,
 ) : BufferPool, IEvictBufferTest, Closeable {
 
@@ -44,11 +41,6 @@ internal class LocalStorage(
     private val arrowFooterCache: Cache<Path, ArrowFooter> = arrowFooterCache()
     private val recordBatchRequests: Counter? = meterRegistry?.counter("record-batch-requests")
     private val memCacheMisses: Counter? = meterRegistry?.counter("memory-cache-misses")
-
-    // we scope the cache keys by dbName/partition as the cache is shared between multiple
-    // databases (and, at N>1, multiple partitions of the same database)
-    // the cache itself has no knowledge of this
-    private val cacheRootPath = dbName.asPath.resolve(partition.toString())
 
     companion object {
         private fun Path.createTempUploadFile(): Path {
@@ -63,13 +55,9 @@ internal class LocalStorage(
 
     override fun getByteArray(key: Path): ByteArray =
         runBlocking {
-            memoryCache.get(cacheRootPath.resolve(key)) { path ->
+            memoryCache.get(key) { k ->
                 memCacheMisses?.increment()
-                val bufferCachePath = this@LocalStorage.rootPath
-                    .resolve(cacheRootPath.relativize(path))
-                    .orThrowIfMissing(key)
-
-                Pair(bufferCachePath, null)
+                Pair(this@LocalStorage.rootPath.resolve(k).orThrowIfMissing(key), null)
             }.use { it.toByteArray() }
         }
 
@@ -90,15 +78,11 @@ internal class LocalStorage(
             ?: throw IndexOutOfBoundsException("Record batch index out of bounds of arrow file")
 
         return memoryCache.get(
-            cacheRootPath.resolve(key),
+            key,
             MemoryCache.Slice(arrowBlock.offset, arrowBlock.metadataLength + arrowBlock.bodyLength)
-        ) { path ->
+        ) { k ->
             memCacheMisses?.increment()
-            val bufferCachePath =
-                rootPath.resolve(cacheRootPath.relativize(path))
-                    .takeIf { it.exists() } ?: throw objectMissingException(path)
-
-            Pair(bufferCachePath, null)
+            Pair(rootPath.resolve(k).orThrowIfMissing(k), null)
         }.use { arrowBuf ->
             arrowBuf.arrowBufToRecordBatch(
                 0,
