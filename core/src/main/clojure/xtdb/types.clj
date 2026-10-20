@@ -193,7 +193,9 @@
       (.isNullable field) col-type->nullable-col-type)))
 
 (defn ^:deprecated vec-type->col-type [^VectorType vec-type]
-  (field->col-type (VectorType/field vec-type)))
+  (if (= vec-type #xt/type :nothing)
+    :nothing
+    (field->col-type (VectorType/field vec-type))))
 
 (defn nullable-vec-type? [^VectorType vec-type]
   (boolean (some VectorType/.getNullable (.getLegs vec-type))))

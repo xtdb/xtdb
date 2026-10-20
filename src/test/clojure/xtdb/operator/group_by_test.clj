@@ -242,6 +242,51 @@
              (tu/query-ra '[:group-by {:columns [a {n (avg b)}]}
                             [:table {:rows [{:a 42, :b nil} {:a 45, :b 1}]}]])))))
 
+(t/deftest test-aggregates-over-nothing-typed-column-return-nil-6133
+  (letfn [(run [agg]
+            (tu/query-ra [:group-by {:columns [{'n (list agg 'a)}]}
+                          '[::tu/pages {a #xt/type :nothing} []]]))]
+    (t/are [agg] (= [{}] (run agg))
+      'sum 'avg 'var-pop 'var-samp 'stddev-pop 'stddev-samp)
+
+    (t/is (= [{:n 0}] (run 'count)) "count over a Nothing-typed column is 0, not NULL")))
+
+(t/deftest test-min-max-over-nothing-typed-column-return-nil-6133
+  (letfn [(run [agg]
+            (tu/query-ra [:group-by {:columns [{'n (list agg 'a)}]}
+                          '[::tu/pages {a #xt/type :nothing} []]]))]
+    (t/is (= [{}] (run 'min)) "min over a Nothing-typed column")
+    (t/is (= [{}] (run 'max)) "max over a Nothing-typed column")))
+
+(t/deftest test-min-max-over-union-of-nothing-typed-columns-return-nil-6133
+  (letfn [(run [agg]
+            (tu/query-ra [:group-by {:columns [{'n (list agg 'a)}]}
+                          '[:union-all {}
+                            [::tu/pages {a #xt/type :nothing} []]
+                            [::tu/pages {a #xt/type :nothing} []]]]))]
+    (t/is (= [{}] (run 'min)) "min over a union of Nothing-typed columns")
+    (t/is (= [{}] (run 'max)) "max over a union of Nothing-typed columns")))
+
+(t/deftest test-min-max-over-declared-empty-column-return-nil-6133
+  (xt/execute-tx tu/*node* [[:sql "CREATE TABLE docs (v)"]])
+
+  (t/is (= [{}]
+           (xt/q tu/*node* "SELECT MIN(v) AS mn, MAX(v) AS mx FROM docs"))
+        "directly over the scan")
+
+  (t/is (= [{}]
+           (xt/q tu/*node* "SELECT MIN(v) AS mn, MAX(v) AS mx
+                            FROM (SELECT v FROM docs UNION ALL SELECT v FROM docs) t"))
+        "over a UNION ALL of the scan"))
+
+(t/deftest test-min-max-over-declared-column-absent-from-written-rows-return-nil-6133
+  (xt/execute-tx tu/*node* [[:sql "CREATE TABLE docs (v)"]
+                            [:put-docs :docs {:xt/id 1}]])
+
+  (t/is (= [{}]
+           (xt/q tu/*node* "SELECT MIN(v) AS mn, MAX(v) AS mx
+                            FROM (SELECT v FROM docs UNION ALL SELECT v FROM docs) t"))))
+
 (t/deftest test-min-of-empty-rel-returns-nil
   (t/is (= [{}]
            (tu/query-ra '[:group-by {:columns [{n (min a)}]}
