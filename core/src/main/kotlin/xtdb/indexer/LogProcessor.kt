@@ -1,5 +1,6 @@
 package xtdb.indexer
 
+import com.google.protobuf.ByteString
 import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.coroutines.future.await
@@ -33,6 +34,7 @@ import xtdb.util.error
 import xtdb.util.logger
 import xtdb.util.warn
 import java.nio.ByteBuffer
+import java.nio.channels.Channels
 import java.nio.channels.ClosedByInterruptException
 import java.time.Duration
 import java.time.Instant
@@ -165,6 +167,17 @@ class LogProcessor(
                         result
                     }
 
+                    is Message.ProtobufTx -> {
+                        val result =
+                            if (skipTxs.isNotEmpty() && skipTxs.contains(msgId)) skipTx(msgId, record.logTimestamp, msg)
+                            else indexProtobufTx(msgId, record.logTimestamp, msg)
+
+                        if (liveIndex.isFull())
+                            toFinishBlock = true
+
+                        result
+                    }
+
                     is Message.FlushBlock -> {
                         val expectedBlockIdx = msg.expectedBlockIdx
                         if (expectedBlockIdx != null && expectedBlockIdx == (blockCatalog.currentBlockIndex ?: -1L))
@@ -250,11 +263,11 @@ class LogProcessor(
         }
     }
 
-    private fun skipTx(msgId: MessageId, logTimestamp: Instant, msg: Message.Tx): TransactionResult {
+    private fun skipTx(msgId: MessageId, logTimestamp: Instant, msg: Message): TransactionResult {
         LOG.warn("Skipping transaction id $msgId - within XTDB_SKIP_TXS")
 
         val skippedTxPath = "skipped-txs/${msgId.asLexDec}".asPath
-        db.bufferPool.putObject(skippedTxPath, ByteBuffer.wrap(msg.payload))
+        db.bufferPool.putObject(skippedTxPath, ByteBuffer.wrap(msg.encode()))
         LOG.debug("Stored skipped transaction to $skippedTxPath")
 
         // use abort flow in indexTx
@@ -280,6 +293,28 @@ class LogProcessor(
                 }
             }
         }
+
+    private fun <R> ByteString.withRelation(f: (Relation) -> R): R =
+        Channels.newChannel(newInput()).use { ch ->
+            Relation.StreamLoader(allocator, ch).use { loader ->
+                Relation(allocator, loader.schema).use { rel ->
+                    loader.loadNextPage(rel)
+                    f(rel)
+                }
+            }
+        }
+
+    private fun indexProtobufTx(msgId: MessageId, logTimestamp: Instant, msg: Message.ProtobufTx): TransactionResult {
+        val userMetadata = msg.userMetadata?.withRelation { it["user-metadata"].getObject(0) }
+
+        return msg.txOps.withRelation { rel ->
+            indexer.indexTx(
+                msgId, logTimestamp,
+                rel["tx-ops"],
+                msg.systemTime, msg.defaultTz, msg.user, userMetadata
+            )
+        }
+    }
 
     fun finishBlock() {
         val blockIdx = (blockCatalog.currentBlockIndex ?: -1) + 1
