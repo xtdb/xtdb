@@ -13,6 +13,10 @@ Postgres
 
 : Change-data-capture from a Postgres database — see [Postgres External Source](/ops/external-sources/postgres/setup).
 
+MySQL (2-NEXT+)
+
+: Change-data-capture from a MySQL database's binlog — see [MySQL External Source](/ops/external-sources/mysql/setup).
+
 Kafka Connect
 
 : Records from a Kafka Connect topic — see [Kafka Connect External Source](/ops/external-sources/kafka-connect/setup).

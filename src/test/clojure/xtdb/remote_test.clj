@@ -1,7 +1,8 @@
 (ns xtdb.remote-test
   (:require [clojure.test :as t]
             [xtdb.node :as xtn])
-  (:import [xtdb.postgres PostgresRemote$Factory]))
+  (:import [xtdb.mysql MySqlRemote$Factory]
+           [xtdb.postgres PostgresRemote$Factory]))
 
 (t/deftest resolves-postgres-remote-from-config
   (let [config (xtn/->config {:remotes {:pg [:postgres {:host "localhost" :database "gleif"
@@ -14,6 +15,15 @@
     (t/is (= "gleif" (.getDatabase pg)))
     (t/is (= "postgres" (.getUsername pg)))
     (t/is (= "postgres" (.getPassword pg)))))
+
+(t/deftest resolves-mysql-remote-from-config
+  (let [config (xtn/->config {:remotes {:my [:mysql {:host "localhost" :username "xtdb" :password "secret"}]}})
+        mysql (get (.getRemotes config) "my")]
+    (t/is (instance? MySqlRemote$Factory mysql))
+    (t/is (= "localhost" (.getHostname mysql)))
+    (t/is (= 3306 (.getPort mysql)) "port defaults to 3306")
+    (t/is (= "xtdb" (.getUsername mysql)))
+    (t/is (= "secret" (.getPassword mysql)))))
 
 (t/deftest unknown-remote-type-throws
   (t/is (thrown-with-msg? clojure.lang.ExceptionInfo #"Unknown remote type"

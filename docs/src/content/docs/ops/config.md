@@ -108,7 +108,7 @@ diskCache:
 
 ## Remotes
 
-`remotes` is a registry of named connections to the external systems XTDB authenticates against — Postgres instances, Kafka clusters, cloud identities (AWS/Azure/GCP), etc.
+`remotes` is a registry of named connections to the external systems XTDB authenticates against — Postgres and MySQL instances, Kafka clusters, cloud identities (AWS/Azure/GCP), etc.
 
 You define a connection once here under an alias, then reference it by that alias from the parts of the config that use it — the [transaction log](config/log), [object storage](config/storage), and external sources.
 

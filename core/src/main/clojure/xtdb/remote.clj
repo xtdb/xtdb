@@ -26,6 +26,9 @@
 (defmethod ->remote-factory :postgres [_ opts]
   (->remote-factory :xtdb.postgres/remote opts))
 
+(defmethod ->remote-factory :mysql [_ opts]
+  (->remote-factory :xtdb.mysql/remote opts))
+
 (defmethod xtn/apply-config! ::remotes [^Xtdb$Config config _ remotes]
   (doseq [[alias [tag opts]] remotes]
     (.remote config (str (symbol alias)) (->remote-factory tag opts)))

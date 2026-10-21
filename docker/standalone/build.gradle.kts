@@ -9,6 +9,7 @@ plugins {
 dependencies {
     implementation(project(":xtdb-main"))
     implementation(project(":modules:xtdb-postgres-source"))
+    implementation(project(":modules:xtdb-mysql-source"))
 }
 
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))

@@ -251,6 +251,15 @@ export default defineConfig({
                                     ],
                                 },
                                 {
+                                    label: 'MySQL External Source',
+                                    collapsed: true,
+                                    items: [
+                                        { label: 'Setup guide', link: '/ops/external-sources/mysql/setup' },
+                                        { label: 'Troubleshooting', link: '/ops/external-sources/mysql/troubleshooting' },
+                                        { label: 'Reference', link: '/ops/external-sources/mysql/reference' },
+                                    ],
+                                },
+                                {
                                     label: 'Kafka Connect External Source',
                                     collapsed: true,
                                     items: [

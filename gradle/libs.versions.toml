@@ -74,6 +74,8 @@ junit-jupiter-engine = { group = "org.junit.jupiter", name = "junit-jupiter-engi
 junit-platform-launcher = { group = "org.junit.platform", name = "junit-platform-launcher", version.ref = "junit" }
 
 pgjdbc = { group = "org.postgresql", name = "postgresql", version = "42.7.10" }
+mysql-connector-j = { group = "com.mysql", name = "mysql-connector-j", version = "26.7.0" }
+mysql-binlog-connector = { group = "com.zendesk", name = "mysql-binlog-connector-java", version = "0.31.0" }
 jdbi-core = { group = "org.jdbi", name = "jdbi3-core", version = "3.54.0" }
 jdbi-kotlin = { group = "org.jdbi", name = "jdbi3-kotlin", version = "3.54.0" }
 exposed-core = { module = "org.jetbrains.exposed:exposed-core", version.ref = "exposed" }
@@ -109,6 +111,7 @@ ring-jetty9-adapter = { group = "info.sunng", name = "ring-jetty9-adapter", vers
 testcontainers = { group = "org.testcontainers", name = "testcontainers", version.ref = "testcontainers" }
 testcontainers-kafka = { group = "org.testcontainers", name = "testcontainers-kafka", version.ref = "testcontainers" }
 testcontainers-postgresql = { group = "org.testcontainers", name = "testcontainers-postgresql", version.ref = "testcontainers" }
+testcontainers-mysql = { group = "org.testcontainers", name = "testcontainers-mysql", version.ref = "testcontainers" }
 testcontainers-keycloak = { group = "com.github.dasniko", name = "testcontainers-keycloak", version = "4.4.0" }
 
 micrometer-core = { group = "io.micrometer", name = "micrometer-core", version.ref = "micrometer" }
