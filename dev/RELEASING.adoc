@@ -1,6 +1,16 @@
 = Releasing XTDB
 
-We could automate more of this than we do, but here's a checklist in the meantime.
+`dev/release.sh <version> <release-notes-file> [<ref>]` runs the checklist below, from a fresh worktree of `<ref>` (default: the xtdb/xtdb remote's `main`).
+It stops for you at the three steps that publish something: pushing the tag, publishing on Sonatype, and publishing the GitHub release, which it creates as a draft.
+
+[source,sh]
+----
+dev/release.sh 2.2.0 ~/notes/v2.2.0.md
+dev/release.sh 2.1.1 ~/notes/v2.1.1.md upstream/2.1.x
+----
+
+The milestone, the snapshot deploy and publicising are still yours.
+The checklist is what the script does, for when you need to do a step by hand.
 
 You can kick off a couple of these in parallel.
 
