@@ -3,9 +3,9 @@ title: Standard Library
 ---
 
 <details>
-<summary>Changelog (last updated v2.3)</summary>
+<summary>Changelog (last updated v2.2)</summary>
 
-v2.3: SQL operator precedence follows PostgreSQL
+v2.2: SQL operator precedence follows PostgreSQL
 
 : Operators bind as in the [operator precedence](#operator-precedence) table below.
 
