@@ -338,9 +338,9 @@
            [:project {:projections [l_partkey {small_avg_qty (* 0.2 avg_qty)}]}
             [:group-by {:columns [l_partkey {avg_qty (avg l_quantity)}]}
              [:scan {:db-name "xtdb", :table #xt/table lineitem, :columns [l_partkey l_quantity]}]]]
-           [:scan {:db-name "xtdb", :table #xt/table lineitem, :columns [l_partkey l_quantity]}]]]]]
+           [:scan {:db-name "xtdb", :table #xt/table lineitem, :columns [l_partkey l_quantity l_extendedprice]}]]]]]
       (with-args {:brand "Brand#23"
-                  :container "MED_BOX"})))
+                  :container "MED BOX"})))
 
 (def q18-large-volume-customer
   (-> '[:sort {:limit 100}
@@ -370,7 +370,7 @@
                                        (>= p_size 1)
                                        (<= p_size 5))
                                   (and (== p_brand ?brand2)
-                                       (or (== p_container "MED CASE")
+                                       (or (== p_container "MED BAG")
                                            (== p_container "MED BOX")
                                            (== p_container "MED PACK")
                                            (== p_container "MED PKG"))
@@ -393,7 +393,7 @@
              {l_shipmode (or (== l_shipmode "AIR") (== l_shipmode "AIR REG"))}
              {l_shipinstruct (== l_shipinstruct "DELIVER IN PERSON")}]}]]]]]
       (with-args {:qty1 1, :qty2 10, :qty3 20
-                  :brand1 "Brand#12", :brand2 "Brand23", :brand3 "Brand#34"})))
+                  :brand1 "Brand#12", :brand2 "Brand#23", :brand3 "Brand#34"})))
 
 (def q20-potential-part-promotion
   (-> '[:sort {:order-specs [[s_name]]}
