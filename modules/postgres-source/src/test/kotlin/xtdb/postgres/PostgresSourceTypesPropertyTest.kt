@@ -96,10 +96,10 @@ class PostgresSourceTypesPropertyTest : PostgresSourceTestBase() {
 
     private data class Col(val name: String, val ddl: String, val arb: Arb<out Any>)
 
-    // "c" + lowercase alphanumerics: always a valid identifier — can't lead with a digit or collide
-    // with a reserved word, and lowercasing sidesteps PG's quoting / case-folding rules
+    // names go into SQL unquoted, and no PG system column nor PG/XTDB keyword begins "c_".
+    // lowercasing sidesteps PG's case-folding
     private val colName: Arb<String> =
-        Arb.string(1..MAX_COL_NAME_LEN, Codepoint.alphanumeric()).map { "c" + it.lowercase() }
+        Arb.string(1..MAX_COL_NAME_LEN, Codepoint.alphanumeric()).map { "c_" + it.lowercase() }
 
     // n columns with distinct names, each assigned a random type from the pool
     private fun schema(minCols: Int, maxCols: Int): Arb<List<Col>> = arbitrary {
