@@ -1,5 +1,6 @@
 package xtdb.indexer
 
+import com.google.protobuf.ByteString
 import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.coroutines.future.await
@@ -8,6 +9,7 @@ import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.TransactionAborted
 import xtdb.api.TransactionCommitted
 import xtdb.api.TransactionKey
+import xtdb.api.TransactionResult
 import xtdb.api.log.Log
 import xtdb.api.log.Log.Message
 import xtdb.api.log.MessageId
@@ -32,6 +34,7 @@ import xtdb.util.error
 import xtdb.util.logger
 import xtdb.util.warn
 import java.nio.ByteBuffer
+import java.nio.channels.Channels
 import java.nio.channels.ClosedByInterruptException
 import java.time.Duration
 import java.time.Instant
@@ -154,44 +157,20 @@ class LogProcessor(
             try {
                 val res = when (val msg = record.message) {
                     is Message.Tx -> {
-                        val result = if (skipTxs.isNotEmpty() && skipTxs.contains(msgId)) {
-                            LOG.warn("Skipping transaction id $msgId - within XTDB_SKIP_TXS")
-                            
-                            // Store skipped transaction to object store
-                            val skippedTxPath = "skipped-txs/${msgId.asLexDec}".asPath
-                            db.bufferPool.putObject(skippedTxPath, ByteBuffer.wrap(msg.payload))
-                            LOG.debug("Stored skipped transaction to $skippedTxPath")
-                            
-                            // use abort flow in indexTx
-                            indexer.indexTx(
-                                msgId, record.logTimestamp,
-                                null, null, null, null, null
-                            )
-                        } else {
-                            msg.payload.asChannel.use { txOpsCh ->
-                                Relation.StreamLoader(allocator, txOpsCh).use { loader ->
-                                    Relation(allocator, loader.schema).use { rel ->
-                                        loader.loadNextPage(rel)
+                        val result =
+                            if (skipTxs.isNotEmpty() && skipTxs.contains(msgId)) skipTx(msgId, record.logTimestamp, msg)
+                            else indexLegacyTx(msgId, record.logTimestamp, msg)
 
-                                        val systemTime =
-                                            (rel["system-time"].getObject(0) as ZonedDateTime?)?.toInstant()
+                        if (liveIndex.isFull())
+                            toFinishBlock = true
 
-                                        val defaultTz =
-                                            (rel["default-tz"].getObject(0) as String?).let { ZoneId.of(it) }
+                        result
+                    }
 
-                                        val user = rel["user"].getObject(0) as String?
-
-                                        val userMetadata = rel.vectorForOrNull("user-metadata")?.getObject(0)
-
-                                        indexer.indexTx(
-                                            msgId, record.logTimestamp,
-                                            rel["tx-ops"].listElements,
-                                            systemTime, defaultTz, user, userMetadata
-                                        )
-                                    }
-                                }
-                            }
-                        }
+                    is Message.ProtobufTx -> {
+                        val result =
+                            if (skipTxs.isNotEmpty() && skipTxs.contains(msgId)) skipTx(msgId, record.logTimestamp, msg)
+                            else indexProtobufTx(msgId, record.logTimestamp, msg)
 
                         if (liveIndex.isFull())
                             toFinishBlock = true
@@ -281,6 +260,59 @@ class LogProcessor(
             }
 
             LOG.debug("Processed message $msgId")
+        }
+    }
+
+    private fun skipTx(msgId: MessageId, logTimestamp: Instant, msg: Message): TransactionResult {
+        LOG.warn("Skipping transaction id $msgId - within XTDB_SKIP_TXS")
+
+        val skippedTxPath = "skipped-txs/${msgId.asLexDec}".asPath
+        db.bufferPool.putObject(skippedTxPath, ByteBuffer.wrap(msg.encode()))
+        LOG.debug("Stored skipped transaction to $skippedTxPath")
+
+        // use abort flow in indexTx
+        return indexer.indexTx(msgId, logTimestamp, null, null, null, null, null)
+    }
+
+    private fun indexLegacyTx(msgId: MessageId, logTimestamp: Instant, msg: Message.Tx): TransactionResult =
+        msg.payload.asChannel.use { txOpsCh ->
+            Relation.StreamLoader(allocator, txOpsCh).use { loader ->
+                Relation(allocator, loader.schema).use { rel ->
+                    loader.loadNextPage(rel)
+
+                    val systemTime = (rel["system-time"].getObject(0) as ZonedDateTime?)?.toInstant()
+                    val defaultTz = (rel["default-tz"].getObject(0) as String?).let { ZoneId.of(it) }
+                    val user = rel["user"].getObject(0) as String?
+                    val userMetadata = rel.vectorForOrNull("user-metadata")?.getObject(0)
+
+                    indexer.indexTx(
+                        msgId, logTimestamp,
+                        rel["tx-ops"].listElements,
+                        systemTime, defaultTz, user, userMetadata
+                    )
+                }
+            }
+        }
+
+    private fun <R> ByteString.withRelation(f: (Relation) -> R): R =
+        Channels.newChannel(newInput()).use { ch ->
+            Relation.StreamLoader(allocator, ch).use { loader ->
+                Relation(allocator, loader.schema).use { rel ->
+                    loader.loadNextPage(rel)
+                    f(rel)
+                }
+            }
+        }
+
+    private fun indexProtobufTx(msgId: MessageId, logTimestamp: Instant, msg: Message.ProtobufTx): TransactionResult {
+        val userMetadata = msg.userMetadata?.withRelation { it["user-metadata"].getObject(0) }
+
+        return msg.txOps.withRelation { rel ->
+            indexer.indexTx(
+                msgId, logTimestamp,
+                rel["tx-ops"],
+                msg.systemTime, msg.defaultTz, msg.user, userMetadata
+            )
         }
     }
 

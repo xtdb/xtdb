@@ -2,6 +2,7 @@
 
 package xtdb.api.log
 
+import com.google.protobuf.ByteString
 import kotlinx.serialization.UseSerializers
 import kotlinx.serialization.modules.PolymorphicModuleBuilder
 import kotlinx.serialization.modules.SerializersModule
@@ -16,11 +17,14 @@ import xtdb.database.proto.DatabaseConfig.LogCase.*
 import xtdb.log.proto.*
 import xtdb.log.proto.LogMessage.MessageCase
 import xtdb.storage.StorageEpoch
+import xtdb.time.InstantUtil
+import xtdb.time.InstantUtil.asMicros
 import xtdb.trie.BlockIndex
 import xtdb.util.asPath
 import java.nio.ByteBuffer
 import java.nio.file.Path
 import java.time.Instant
+import java.time.ZoneId
 import java.util.*
 import java.util.concurrent.CompletableFuture
 import com.google.protobuf.Any as ProtoAny
@@ -105,9 +109,37 @@ interface Log : AutoCloseable {
 
                                 MessageCase.DETACH_DATABASE -> DetachDatabase(msg.detachDatabase.dbName)
 
+                                MessageCase.TX -> msg.tx.let {
+                                    ProtobufTx(
+                                        txOps = it.txOps,
+                                        systemTime = if (it.hasSystemTimeMicros()) InstantUtil.fromMicros(it.systemTimeMicros) else null,
+                                        defaultTz = ZoneId.of(it.defaultTz),
+                                        user = if (it.hasUser()) it.user else null,
+                                        userMetadata = if (it.userMetadata.isEmpty) null else it.userMetadata
+                                    )
+                                }
+
                                 else -> throw IllegalArgumentException("Unknown protobuf message type: $msgCase")
                             }
                         }
+            }
+        }
+
+        data class ProtobufTx(
+            val txOps: ByteString,
+            val systemTime: Instant?,
+            val defaultTz: ZoneId,
+            val user: String?,
+            val userMetadata: ByteString?
+        ) : ProtobufMessage() {
+            override fun toLogMessage() = logMessage {
+                tx = tx {
+                    txOps = this@ProtobufTx.txOps
+                    this@ProtobufTx.systemTime?.let { systemTimeMicros = it.asMicros }
+                    defaultTz = this@ProtobufTx.defaultTz.id
+                    this@ProtobufTx.user?.let { user = it }
+                    this@ProtobufTx.userMetadata?.let { userMetadata = it }
+                }
             }
         }
 

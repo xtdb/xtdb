@@ -3,6 +3,7 @@
             [clojure.test :as t]
             [xtdb.api :as xt]
             [xtdb.arrow-edn-test :as aet]
+            [xtdb.db-catalog :as db]
             [xtdb.log :as log]
             [xtdb.node :as xtn]
             [xtdb.serde :as serde]
@@ -11,7 +12,7 @@
             [xtdb.tx-ops :as tx-ops]
             [xtdb.util :as util])
   (:import [java.time Instant]
-           [xtdb.api.log Log]
+           [xtdb.api.log Log Log$Message]
            xtdb.arrow.Relation
            [xtdb.util MsgIdUtil]))
 
@@ -121,6 +122,22 @@
                                           :tags ["high-value" "priority"]
                                           :correlation-id "abc123"}
                           :authn {:user "jms"}}))
+
+(t/deftest indexes-a-tx-written-by-2-2-6248
+  (with-open [node (xtn/start-node)]
+    (let [msg (Log$Message/parse (with-open [in (io/input-stream (io/resource "xtdb/tx-log-test/protobuf-tx.binpb"))]
+                                   (.readAllBytes in)))]
+      @(.appendMessage (.getLog (db/primary-db node)) msg)
+      (log/sync-node node #xt/duration "PT5S")
+
+      (t/is (= [{:xt/id 1, :v "one"}] (xt/q node "SELECT * FROM foo")))
+      (t/is (= [{:xt/id 1, :n 11}] (xt/q node "SELECT * FROM bar")))
+      (t/is (= [{:xt/id 1, :s "a"} {:xt/id 2, :s "b"}] (xt/q node "SELECT * FROM baz ORDER BY _id")))
+
+      (t/is (= [{:committed true
+                 :system-time (time/->zdt #inst "2024-01-01")
+                 :user-metadata {:author "rollback-test"}}]
+               (xt/q node "SELECT committed, system_time, user_metadata FROM xt.txs"))))))
 
 (t/deftest validate-offset-returns-proper-errors
   (letfn [(->simulated-log [epoch latest-submitted-offset]
