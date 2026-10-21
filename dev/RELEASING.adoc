@@ -22,19 +22,24 @@ Tags are `v`-prefixed - `v2.10.4`, `v2.2.0-rc2`.
 
 Pushing the tag kicks off the Docker image builds: https://github.com/xtdb/xtdb/actions/workflows/tag.yml (only on `xtdb/xtdb`, not on a fork).
 
+A final release's tag also moves the images' `latest` tag (`docker/metadata-action`'s default `latest=auto`), whichever line it's on - see link:#older-line-patches[patch releases on an older line].
+
 == JARs
 
 To build the XTDB release artifacts locally and deploy them to Maven Central, run:
 
-Build and deploy release jars - Gradle's toolchains pick the JDK, so there's no need to choose one:
+Build and deploy release jars from a fresh worktree of the tag - Gradle's toolchains pick the JDK, so there's no need to choose one.
+A fresh worktree holds no build output, so it needs no `git clean -dXf` - which, in your working checkout, also deletes everything else git ignores there (`.claude/settings.local.json`, IDE config, dev-node data), none of which git can bring back.
 
-. `git clean -dXf`
+. `git worktree add --detach ../xtdb-release v<next-version>`, and run the rest from there
 . `XTDB_VERSION=2.10.4 ./gradlew clean jreleaserDeploy` (`env XTDB_VERSION=2.10.4 ./gradlew clean jreleaserDeploy` for the fish people) - no `v` prefix here.
+. `git worktree remove ../xtdb-release` once the deploy has finished
 
 Release the artifacts to central:
 
 . Head over to https://central.sonatype.com/publishing
 . Quick smoke-check of all of the packages are as you'd expect (api, core, main, aws, azure, google-cloud, kafka, postgres-source, datasets; all at the correct version).
+  The module list is the release's line's - 2.1 has no postgres-source, for example.
 . Publish
 . Check https://repo1.maven.org/maven2/com/xtdb to see when the artifacts have been mirrored across Maven Central.
 
@@ -63,11 +68,11 @@ We deploy `docs-live` continually rather than at release time, but check that it
 
 . (Final releases only) Close the release's milestone, and create the next one.
   Betas and RCs share their final release's milestone.
-. Locate tag on https://github.com/xtdb/xtdb/releases[releases page], click 'Edit tag'
-. Copy the release notes into the release description
-. Betas and RCs: tick 'Set as a pre-release'.
+. `gh release create v<next-version> --repo xtdb/xtdb --verify-tag --draft --title <next-version> --notes-file <release-notes.md>`, with the same notes file as the tag.
+  Add `--prerelease` for betas and RCs.
+  GitHub's 'Edit tag' page doesn't copy the tag's message into the release, so a release made there starts with an empty description.
 . Await the JARs being mirrored to Maven Central - people get notified at this point.
-. 'Publish release'
+. `gh release edit v<next-version> --repo xtdb/xtdb --draft=false` to publish it.
 
 NOTE: we could do a fair bit of this through JReleaser too, but for now I prefer the fine-grained control over the release process.
 
@@ -77,11 +82,24 @@ NOTE: we could do a fair bit of this through JReleaser too, but for now I prefer
 * Clojurians' Slack - #announcements for a major, additionally #releases for a minor if it's 'interesting', additionally #xtdb for a patch.
 * LinkedIn - final releases only.
 
+[#older-line-patches]
+== Patch releases on an older line:
+
+A patch to an earlier minor - e.g. 2.1.1 after 2.2 is out - is cut from that line's maintenance branch (`2.1.x`), not `main`, and follows the checklist above with these differences:
+
+* **Tag the maintenance branch's commit**, once it has a green CI run of its own.
+* **Docker `latest` moves back to the older line** when its tag builds, because `latest=auto` doesn't compare versions.
+  Re-point it at the newest release afterwards, or skip `latest` for that build.
+* **Create the GitHub release with `--latest=false`**, or the repo's 'Latest' badge moves to it.
+* **Skip the docs and the `2.x-SNAPSHOT` update** - `docs-live` and the snapshot follow `main`, which is already ahead.
+* **A PR into the maintenance branch doesn't close its issue** - GitHub only acts on `Resolves #N` when the PR merges into the default branch, so close the issue by hand.
+
 [#releasing-snapshots]
 == Building locally and releasing JAR snapshots:
 
 .  (none of the above sections are required)
-.  `git clean -dXf`
+.  `git worktree add --detach ../xtdb-release <xtdb/xtdb remote>/main`, and run the rest from there
 .  `./gradlew clean jreleaserDeploy`
+.  `git worktree remove ../xtdb-release`
 .  (nothing to be done in Sonatype!)
 .  Confirm snapshot is live at https://central.sonatype.com/service/rest/repository/browse/maven-snapshots/com/xtdb/
