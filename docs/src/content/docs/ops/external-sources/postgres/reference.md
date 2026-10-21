@@ -69,7 +69,7 @@ remotes:
     username: my_role
 
     # The password for the role connecting to Postgres.
-    password: !ENV PG_PASSWORD
+    password: !Env PG_PASSWORD
 ```
 
 ## Phases
