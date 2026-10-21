@@ -15,6 +15,8 @@ import java.nio.ByteBuffer
 import java.nio.file.Files
 import java.nio.file.Files.createTempDirectory
 import java.nio.file.Path
+import kotlin.concurrent.thread
+import kotlin.io.path.deleteIfExists
 import kotlin.io.path.exists
 import kotlin.io.path.readBytes
 
@@ -74,6 +76,26 @@ class LocalStorageTest : PartitionedStorageTest() {
             partitionedPath.resolve(Storage.storageRoot(Storage.VERSION, 0))
                 .resolve("blocks/b00.binpb").exists()
         )
+    }
+
+    @Test
+    fun `listing skips objects deleted while it runs`() {
+        val localStorage = localBufferPool as LocalStorage
+        val keys = (0 until 2000).map { "blocks/b${"%04x".format(it)}.binpb".asPath }
+        keys.forEach { localStorage.putObjectSync(it, ByteBuffer.wrap(ByteArray(1))) }
+
+        val deleter = thread { keys.forEach { localStorage.rootPath.resolve(it).deleteIfExists() } }
+
+        try {
+            do {
+                val listed = localStorage.listAllObjects("blocks".asPath).map { it.key }
+                assertTrue(keys.containsAll(listed))
+            } while (deleter.isAlive)
+        } finally {
+            deleter.join()
+        }
+
+        assertEquals(emptyList<Path>(), localStorage.listAllObjects("blocks".asPath).map { it.key })
     }
 
     @Test
