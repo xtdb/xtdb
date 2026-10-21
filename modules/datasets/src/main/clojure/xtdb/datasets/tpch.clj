@@ -222,6 +222,32 @@
   [n]
   (slurp (io/resource (format "xtdb/datasets/tpch/sql/q%02d.sql" n))))
 
+(defn results
+  "Our pinned results for TPC-H queries 1-22 at `scale-factor`, as read with `:key-fn :snake-case-keyword` - a vector indexed by query number less one - or nil where none are pinned."
+  [scale-factor]
+  (some-> (io/resource (format "xtdb/datasets/tpch/results-sf%s.edn"
+                               (.toPlainString (.stripTrailingZeros (bigdec scale-factor)))))
+          slurp
+          read-string))
+
+(defn- cell-matches? [expected actual]
+  (if (and (number? expected) (number? actual))
+    (<= (abs (- (double expected) (double actual)))
+        (max 0.001 (* 1e-9 (abs (double expected)))))
+    (= expected actual)))
+
+(defn result-mismatch
+  "Compares `actual` against `expected`, both a query's rows in order.
+   Numbers match within 0.001, or within a part in 10^9 of a larger expected value.
+   Returns nil when they match, otherwise a map describing the first difference."
+  [expected actual]
+  (if (not= (count expected) (count actual))
+    {:expected-row-count (count expected), :actual-row-count (count actual)}
+    (first (for [[idx expected-row actual-row] (map vector (range) expected actual)
+                 :when (not (and (= (set (keys expected-row)) (set (keys actual-row)))
+                                 (every? (fn [[k v]] (cell-matches? v (get actual-row k))) expected-row)))]
+             {:row idx, :expected expected-row, :actual actual-row}))))
+
 (comment
   (with-open [conn (jdbc/get-connection {:dbname "xtdb"
                                          :host "localhost"

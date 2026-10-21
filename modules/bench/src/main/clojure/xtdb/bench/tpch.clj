@@ -5,6 +5,7 @@
             [xtdb.bench :as b]
             [xtdb.datasets.tpch :as tpch]
             [xtdb.datasets.tpch.ra :as tpch-ra]
+            [xtdb.error :as err]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
   (:import (java.time Duration)))
@@ -13,28 +14,32 @@
   (-> (into #{} (range 1 (inc (count tpch-ra/queries))))
       (disj 21)))
 
-(defn query-tpch [stage-name query-language i]
+(defn query-tpch [stage-name query-language expected i]
   (let [q (nth tpch-ra/queries i)
         stage-name (keyword (str (name stage-name) "-" (:name (meta q))))
         run-query (case query-language
                     :ra (let [q @q
                               {::tpch-ra/keys [args]} (meta q)]
-                          #(tu/query-ra q {:node %, :args args}))
+                          #(tu/query-ra q {:node %, :args args, :key-fn :snake-case-keyword}))
                     :sql (let [sql (tpch/sql-query (inc i))]
-                           #(xt/q % sql)))]
-    {:t :call, :stage stage-name
-     :f (fn [{:keys [node]}]
-          (try
-            (count (run-query node))
-            (catch Exception e
-              (.printStackTrace e)
-              (throw e))))}))
+                           #(xt/q % sql {:key-fn :snake-case-keyword})))]
+    (cond-> {:t :call, :stage stage-name
+             :f (fn [{:keys [node]}]
+                  (try
+                    (run-query node)
+                    (catch Exception e
+                      (.printStackTrace e)
+                      (throw e))))}
+      expected (assoc :verify (fn [rows]
+                                (when-let [mismatch (tpch/result-mismatch expected rows)]
+                                  (throw (err/fault ::wrong-result (format "Q%02d doesn't match its pinned result: %s" (inc i) (pr-str mismatch)) mismatch))))))))
 
-(defn queries-stage [stage-name query-language]
-  {:t :do, :stage stage-name
-   :tasks (vec (for [i (range (count tpch-ra/queries))
-                     :when (contains? *qs* (inc i))]
-                 (query-tpch stage-name query-language i)))})
+(defn queries-stage [stage-name query-language scale-factor]
+  (let [results (tpch/results scale-factor)]
+    {:t :do, :stage stage-name
+     :tasks (vec (for [i (range (count tpch-ra/queries))
+                       :when (contains? *qs* (inc i))]
+                   (query-tpch stage-name query-language (get results i) i)))}))
 
 (defmethod b/cli-flags :tpch [_]
   [["-s" "--scale-factor SCALE_FACTOR" "TPC-H scale factor to use"
@@ -72,9 +77,9 @@
                       {:t :call, :stage :compact
                        :f (fn [{:keys [node]}] (b/compact! node))}])}
 
-           (queries-stage :cold-queries query-language)
+           (queries-stage :cold-queries query-language scale-factor)
 
-           (queries-stage :hot-queries query-language)]})
+           (queries-stage :hot-queries query-language scale-factor)]})
 
 (t/deftest ^:bench tpch-benchmark
   (binding [*qs* #{1}]

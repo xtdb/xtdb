@@ -1,11 +1,11 @@
 (ns xtdb.tpch-test
-  (:require [clojure.java.io :as io]
-            [clojure.test :as t]
+  (:require [clojure.test :as t]
             [xtdb.api :as xt]
             [xtdb.compactor :as c]
             [xtdb.datasets.tpch :as tpch]
             [xtdb.datasets.tpch.ra :as tpch-ra]
             [xtdb.datasets.tpch.xtql :as tpch-xtql]
+            [xtdb.error :as err]
             [xtdb.log :as xt-log]
             [xtdb.operator.join :as join]
             [xtdb.sql :as sql]
@@ -41,38 +41,12 @@
         (binding [*node* node]
           (f))))))
 
-(defn is-equal?
-  [expected actual]
-  (t/is (= (count expected) (count actual)) (pr-str [expected actual]))
-  (if (or (empty? expected) (empty? actual))
-    (t/is (= expected actual))
-    (->> (for [[expected-row actual-row] (map vector expected actual)]
-           (let [row-cols (keys expected-row)]
-             (boolean
-               (and
-                 (t/is (= (set row-cols) (set (keys actual-row))))
-                 (->> row-cols
-                      (mapv
-                        (fn [col]
-                          (let [x (col expected-row)
-                                y (col actual-row)
-                                msg (pr-str [col expected-row actual-row])]
-                            (if (and (number? x) (number? y))
-                              (let [epsilon 0.001
-                                    diff (Math/abs (- (double x) (double y)))]
-                                (t/is (<= diff epsilon) msg))
-                              (t/is (= x y) msg)))))
-                     (every? true?))))))
-         (every? true?))))
-
 (def ^:private ^:dynamic *qs*
   (set (range 1 23)))
 
-(def results-sf-001
-  (-> (io/resource "xtdb/tpch/results-sf-001.edn") slurp read-string))
-
-(def results-sf-01
-  (-> (io/resource "xtdb/tpch/results-sf-01.edn") slurp read-string))
+(defn- pinned-results [scale-factor]
+  (or (tpch/results scale-factor)
+      (throw (err/fault ::no-pinned-results (format "No pinned TPC-H results at SF %s" scale-factor)))))
 
 (defn test-ra-query [n res]
   (when (contains? *qs* (inc n))
@@ -80,7 +54,7 @@
           {::tpch-ra/keys [args]} (meta q)]
       (tu/with-allocator
         (fn []
-          (t/is (is-equal? res (tu/query-ra q {:node *node*, :args args, :key-fn :snake-case-keyword}))
+          (t/is (nil? (tpch/result-mismatch res (tu/query-ra q {:node *node*, :args args, :key-fn :snake-case-keyword})))
                 (format "Q%02d" (inc n))))))))
 
 (t/deftest test-001-ra
@@ -88,7 +62,7 @@
                    :node-dir (util/->path "target/tpch-queries-ra-sf-001")}
     (fn []
       (dorun
-       (map-indexed test-ra-query results-sf-001)))))
+       (map-indexed test-ra-query (pinned-results 0.001))))))
 
 (comment
   (binding [*qs* #{11 17}]
@@ -100,7 +74,7 @@
                      :node-dir (util/->path "target/tpch-queries-ra-sf-01")}
       (fn []
         (dorun
-          (map-indexed test-ra-query results-sf-01))))))
+          (map-indexed test-ra-query (pinned-results 0.01)))))))
 
 (t/deftest ^:integration test-01-ra-dbj
   (with-tpch-data {:method :docs, :scale-factor 0.01
@@ -108,7 +82,7 @@
     (fn []
       (binding [join/*disk-join-threshold-rows* 1000]
         (dorun
-         (map-indexed test-ra-query results-sf-01))))))
+         (map-indexed test-ra-query (pinned-results 0.01)))))))
 
 (comment
   (binding [*qs* #{11 17}]
@@ -128,7 +102,7 @@
   (let [q (inc n)]
     (when (contains? *xtql-qs* q)
       (let [query+args @(nth tpch-xtql/queries n)]
-        (t/is (is-equal? expected-res (xt/q *node* query+args {:key-fn :snake-case-keyword}))
+        (t/is (nil? (tpch/result-mismatch expected-res (xt/q *node* query+args {:key-fn :snake-case-keyword})))
               (format "Q%02d" (inc n)))))))
 
 (t/deftest test-001-xtql
@@ -136,14 +110,14 @@
                    :node-dir (util/->path "target/tpch-queries-xtql-sf-001")}
     (fn []
       (dorun
-       (map-indexed test-xtql-query results-sf-001)))))
+       (map-indexed test-xtql-query (pinned-results 0.001))))))
 
 (t/deftest ^:integration test-01-xtql
   (with-tpch-data {:method :docs, :scale-factor 0.01
                    :node-dir (util/->path "target/tpch-queries-xtql-sf-01")}
     (fn []
       (dorun
-       (map-indexed test-xtql-query results-sf-01)))))
+       (map-indexed test-xtql-query (pinned-results 0.01))))))
 
 (comment
   (binding [*xtql-qs* #{2}]
@@ -178,7 +152,7 @@
   ([opts n res]
    (let [q (inc n)]
      (when (contains? *qs* q)
-       (t/is (is-equal? res (xt/q *node* (tpch/sql-query q) opts))
+       (t/is (nil? (tpch/result-mismatch res (xt/q *node* (tpch/sql-query q) opts)))
              (format "Q%02d" (inc n)))))))
 
 (t/deftest test-001-sql
@@ -186,7 +160,7 @@
                    :node-dir (util/->path "target/tpch-queries-sql-sf-001")}
     (fn []
       (dorun
-       (map-indexed test-sql-query results-sf-001)))))
+       (map-indexed test-sql-query (pinned-results 0.001))))))
 
 (t/deftest test-001-sql-explain
   (with-tpch-data {:method :dml, :scale-factor 0.001
@@ -206,7 +180,7 @@
                    :node-dir (util/->path "target/tpch-queries-sql-sf-01")}
     (fn []
       (dorun
-       (map-indexed test-sql-query results-sf-01)))))
+       (map-indexed test-sql-query (pinned-results 0.01))))))
 
 (comment
   (binding [*qs* #{1}]
