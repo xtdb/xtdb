@@ -274,4 +274,4 @@ Gotchas, all of which have cost real time:
 - **Both toggles are tagged `<<no-commit>>`** and the `.githooks/pre-commit` hook aborts a commit whose staged diff contains that marker.
   If the hook fires, you left a toggle on — don't `--no-verify` past it.
 - **Never pin `xt$txs` in a golden file.**
-  A tx-id is a message id derived from the log offset, so the same sequence of transactions yields different tx-ids from run to run.
+  A tx-id is the tx's position in the source log, and block closes and compaction append `TriesAdded` there asynchronously, so a tx can land either side of one and get a different tx-id from run to run.
