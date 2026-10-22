@@ -26,7 +26,9 @@ import java.util.BitSet
 import java.util.Properties
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.TimeSource
 
 private val LOG = MySqlWireDriver::class.logger
 
@@ -49,6 +51,7 @@ class MySqlWireDriver(
     private val password: String,
     private val serverId: Long,
     private val tables: Set<TableId>,
+    private val heartbeatInterval: Duration,
 ) : MySqlDriver {
 
     private fun openConnection(): Connection =
@@ -301,6 +304,9 @@ class MySqlWireDriver(
 
         @Volatile private var closed = false
 
+        @Volatile private var lastHeard = TimeSource.Monotonic.markNow()
+        private val silenceLimit = heartbeatInterval * 3
+
         // written by the deserializer and read by the row deserializers, both on the client's thread
         private val tableMaps = HashMap<Long, TableMapEventData>()
 
@@ -310,10 +316,15 @@ class MySqlWireDriver(
             // its keep-alive reconnects from a position the client tracks for itself — the only position is ours
             client.isKeepAlive = false
             client.gtidSet = from.toString()
+            client.heartbeatInterval = heartbeatInterval.inWholeMilliseconds
             client.setThreadFactory { r -> Thread(r, "xtdb-mysql-binlog-$dbName").also { it.isDaemon = true } }
             client.setEventDeserializer(deserializer())
 
-            client.registerEventListener { event -> hand(Received.Ev(event)) }
+            // after the hand-over, which blocks while the poller is held back: that wait isn't the upstream's silence
+            client.registerEventListener { event ->
+                hand(Received.Ev(event))
+                lastHeard = TimeSource.Monotonic.markNow()
+            }
             client.registerLifecycleListener(object : BinaryLogClient.AbstractLifecycleListener() {
                 override fun onCommunicationFailure(c: BinaryLogClient, ex: Exception) {
                     hand(Received.Failure(
@@ -368,6 +379,8 @@ class MySqlWireDriver(
                     else -> connectionLost("couldn't open the binlog connection to $hostname:$port: ${e.message}", e)
                 }
             }
+
+            lastHeard = TimeSource.Monotonic.markNow()
         }
 
         private var position = from
@@ -380,7 +393,11 @@ class MySqlWireDriver(
         override suspend fun poll(): MySqlDriver.Transaction.Committed? {
             while (currentCoroutineContext().isActive) {
                 val item = runInterruptible(Dispatchers.IO) { received.poll(IDLE_POLL.inWholeMilliseconds, TimeUnit.MILLISECONDS) }
-                    ?: return null
+
+                if (item == null) {
+                    if (lastHeard.elapsedNow() > silenceLimit) throw connectionLost("nothing heard from the upstream, not even a heartbeat, for $silenceLimit")
+                    return null
+                }
 
                 when (item) {
                     is Received.Failure -> throw item.cause

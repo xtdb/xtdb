@@ -10,7 +10,9 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import xtdb.api.error.Incorrect
+import xtdb.api.error.Unavailable
 import xtdb.api.error.Unsupported
+import kotlin.time.Duration.Companion.seconds
 
 @Tag("integration")
 class MySqlWireDriverTest : MySqlSourceTestBase() {
@@ -30,9 +32,9 @@ class MySqlWireDriverTest : MySqlSourceTestBase() {
         )
     }
 
-    private fun driver(vararg tables: String) = MySqlWireDriver(
-        "test", upstream.host, upstream.port, upstream.user, upstream.password, serverId(),
-        tables.map { TableId(db, it) }.toSet(),
+    private fun driver(vararg tables: String, port: Int = upstream.port) = MySqlWireDriver(
+        "test", upstream.host, port, upstream.user, upstream.password, serverId(),
+        tables.map { TableId(db, it) }.toSet(), 1.seconds,
     )
 
     private fun executed() = GtidSet.parse(mysqlQuery("SELECT @@global.gtid_executed AS g")[0]["g"] as String)
@@ -102,6 +104,29 @@ class MySqlWireDriverTest : MySqlSourceTestBase() {
         driver("docs").openStream(start).use { stream ->
             val first = pollOne(stream)
             driver("docs").openStream(first.position).use { again -> assertTrue(pollOne(again).ops.isEmpty(), "the first transaction isn't presented again") }
+        }
+    }
+
+    @Test
+    fun `an idle stream stays open on the upstream's heartbeats`() = runBlocking {
+        driver("docs").openStream(executed()).use { stream ->
+            val until = System.currentTimeMillis() + 5_000
+            while (System.currentTimeMillis() < until) assertEquals(null, stream.poll())
+        }
+    }
+
+    @Test
+    fun `a connection that goes silent is reported lost`() = runBlocking {
+        FreezableProxy(upstream.host, upstream.port).use { proxy ->
+            driver("docs", port = proxy.port).openStream(executed()).use { stream ->
+                stream.poll()
+                proxy.frozen = true
+
+                val e = assertThrows(Unavailable::class.java) {
+                    runBlocking { repeat(200) { stream.poll() } }
+                }
+                assertEquals("xtdb.mysql/binlog-connection-lost", e.errorCode())
+            }
         }
     }
 

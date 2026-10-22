@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test
 import xtdb.api.error.Incorrect
 import xtdb.api.nodeConfig
 import xtdb.database.Database
+import kotlin.time.Duration.Companion.seconds
 
 class MySqlSourceFactoryTest {
 
@@ -98,7 +99,7 @@ class MySqlSourceFactoryTest {
         assertTrue(extSource is MySqlSource.Factory)
     }
 
-    private fun open(factory: MySqlSource.Factory, remotes: Map<String, xtdb.api.Remote> = mapOf("mysql" to MySqlRemote("h", 3306, "u", "p"))) =
+    private fun open(factory: MySqlSource.Factory, remotes: Map<String, xtdb.api.Remote> = mapOf("mysql" to MySqlRemote("h", 3306, "u", "p", 10.seconds))) =
         factory.open("db", remotes, null)
 
     @Test

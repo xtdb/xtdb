@@ -81,6 +81,11 @@ streaming
 :   Translates transactions from the MySQL binlog into XTDB transactions — one XTDB transaction per MySQL transaction, all of its rows across all the included tables.
     A MySQL transaction that touches none of the included tables, or only changes schema, still becomes an XTDB transaction, empty, so that XTDB's position in the binlog keeps up with MySQL.
 
+When the binlog connection drops — or goes silent, missing three of MySQL's heartbeats — the source reopens it after the last transaction it read, and keeps trying until it reconnects.
+Ingestion pauses while it retries, and each attempt is logged as a warning.
+The database stays queryable.
+See [troubleshooting](/ops/external-sources/mysql/troubleshooting#ingestion-has-paused-and-the-logs-repeat-binlog-stream-failed) for a source that doesn't come back.
+
 Changes to a table's columns are picked up row by row, so an `ALTER TABLE ... ADD COLUMN` on an included table needs nothing further.
 No other DDL is replicated.
 

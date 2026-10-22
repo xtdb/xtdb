@@ -164,6 +164,29 @@ class MySqlSourceIntegrationTest : MySqlSourceTestBase() {
     }
 
     @Test
+    fun `reconnects when the binlog connection is killed, without loss or duplication`() = runTest(timeout = 180.seconds) {
+        mysqlExecute("CREATE TABLE $db.docs (_id INT PRIMARY KEY)")
+
+        val node = open()
+        attach(node, "docs")
+        awaitStreaming(node)
+
+        mysqlExecute("INSERT INTO $db.docs VALUES (1)")
+        eventually(30.seconds) { assertEquals(1, q("SELECT _id FROM $db.docs").size) }
+
+        val dumpThreads = mysqlQuery("SELECT ID FROM information_schema.PROCESSLIST WHERE COMMAND LIKE 'Binlog Dump%'")
+        assertTrue(dumpThreads.isNotEmpty(), "our binlog connection is up")
+        dumpThreads.forEach { mysqlExecute("KILL ${it["ID"]}") }
+
+        mysqlExecute("INSERT INTO $db.docs VALUES (2)")
+        Thread.sleep(500)
+        mysqlExecute("INSERT INTO $db.docs VALUES (3)")
+
+        eventually(60.seconds) { assertEquals(listOf(1L, 2L, 3L), q("SELECT _id FROM $db.docs ORDER BY _id").map { it["_id"] }) }
+        assertEquals(3, q("SELECT _id FROM $db.docs FOR ALL SYSTEM_TIME").size, "one version per row")
+    }
+
+    @Test
     fun `transactions on other tables, and DDL, still advance the position`() = runTest(timeout = 120.seconds) {
         mysqlExecute(
             "CREATE TABLE $db.docs (_id INT PRIMARY KEY)",

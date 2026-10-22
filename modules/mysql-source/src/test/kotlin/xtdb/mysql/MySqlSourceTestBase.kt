@@ -66,6 +66,7 @@ abstract class MySqlSourceTestBase {
         remote("mysql", MySqlRemote.Factory(
             hostname = upstream.host, port = upstream.port,
             username = upstream.user, password = upstream.password,
+            heartbeatInterval = 1.seconds,
         ))
     }
 

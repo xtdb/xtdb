@@ -65,6 +65,27 @@ Most often, another replica — another XTDB source, or a MySQL replica — conn
 **Resolution:**
 Give each source a `serverId` of its own, distinct from every MySQL server and replica in the topology, then restart the node.
 
+## Ingestion has paused and the logs repeat `Binlog stream failed`
+
+**Symptom:**
+New rows stop reaching XTDB, the database reports no ingestion error, and the node logs a warning like this on every attempt:
+
+```
+[mysql_shop] Binlog stream failed (failure 7 since it last made progress); reopening after GTID set '3e11fa47-71ca-11e1-9e33-c80aa9429562:1-5' in 30s
+```
+
+**Cause:**
+The source lost its binlog connection, or heard nothing from MySQL for three heartbeats, and is retrying it.
+It carries on retrying until it reconnects, so if the cause clears by itself — a restart, a failover or a network blip — you don't need to do anything.
+The exception attached to the warning says which cause it is: a connection error against the configured host, an authentication error after the user's credentials changed, or `nothing heard from the upstream`.
+
+**Resolution:**
+
+1. Fix the upstream, or the `!MySQL` remote's configuration; the source reconnects on its next attempt.
+
+2. To stop the retries, make the database dormant.
+   This needs a node restart; see [Skipping Databases](/ops/troubleshooting#skipping-databases-v22).
+
 ## Recovering from a failed initial snapshot
 
 **Symptom:**

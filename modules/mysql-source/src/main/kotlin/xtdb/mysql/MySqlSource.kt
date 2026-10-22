@@ -75,9 +75,12 @@ class MySqlSource(
                     errorCode = "xtdb.mysql/no-tables",
                 )
 
-            val driver = MySqlWireDriver(
-                dbName, mysql.hostname, mysql.port, mysql.username, mysql.password,
-                serverId, tables.map(TableId::parse).toSet(),
+            val driver = ResilientDriver(
+                dbName,
+                MySqlWireDriver(
+                    dbName, mysql.hostname, mysql.port, mysql.username, mysql.password,
+                    serverId, tables.map(TableId::parse).toSet(), mysql.heartbeatInterval,
+                ),
             )
 
             return MySqlSource(dbName, driver)
