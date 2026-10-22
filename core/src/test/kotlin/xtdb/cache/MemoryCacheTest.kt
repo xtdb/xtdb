@@ -86,6 +86,17 @@ class MemoryCacheTest {
     }
 
     @Test
+    fun `a slice whose end overflows past the file is rejected, and holds nothing`() = runTest {
+        MemoryCache(allocator, 250, PathLoader()).use { cache ->
+            shouldThrow<IllegalArgumentException> {
+                cache.get(Path.of("t1/100"), Slice(Long.MAX_VALUE, 10)) { it to null }
+            }
+
+            assertEquals(MemoryCache.Stats(0, 250), cache.stats0)
+        }
+    }
+
+    @Test
     fun `invalidating a prefix unmaps its idle files, and a later get fetches afresh`() = runTest {
         var fetches = 0
         var unmapped = 0

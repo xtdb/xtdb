@@ -167,7 +167,7 @@ class MemoryCache @JvmOverloads internal constructor(
             val (offset, length) = slice
 
             try {
-                require(offset >= 0 && length >= 0 && offset + length <= size) {
+                require(offset in 0..size && length in 0..(size - offset)) {
                     "slice ($offset, $length) out of bounds of $path ($size bytes)"
                 }
 
