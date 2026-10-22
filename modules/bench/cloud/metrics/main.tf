@@ -246,20 +246,29 @@ locals {
   }
 
   # TPC-H individual query breakdown KQL (cold and hot)
-  # Note: query-level logs don't have "benchmark" field, so we match on stage pattern
+  # Note: query-level logs carry only the run's bench-id, so the run's benchmark, scale factor, repo and branch come from its init record
   tpch_query_types = ["cold", "hot"]
   tpch_query_kql = {
     for query_type in local.tpch_query_types : query_type => trimspace(<<-KQL
+      let runs = ContainerLog
+      | where LogEntry startswith "{" and LogEntry has "benchmark"
+      | extend log = parse_json(LogEntry)
+      | where tostring(log.stage) == "init"
+          and tostring(log.benchmark) == "${local.benchmarks.tpch.name}"
+          and todouble(log.parameters['scale-factor']) == ${var.tpch_anomaly_scale_factor}
+          and tostring(log['github-repo']) == "${var.anomaly_repo}"
+          and tostring(log['git-branch']) == "${var.anomaly_branch}"
+      | distinct bench_id = tostring(log['bench-id']);
       let raw = ContainerLog
       | where LogEntry startswith "{" and LogEntry contains "${query_type}-queries-q"
       | extend log = parse_json(LogEntry)
       | extend stage = tostring(log.stage),
                duration_ms = todouble(log['time-taken-ms']),
                bench_id = tostring(log['bench-id'])
-      // TODO: add repo/branch filtering once metadata is added to query-level logs
       | where stage startswith "${query_type}-queries-q"
       | extend query_name = extract("${query_type}-queries-(q[0-9]+-[a-z-]+)", 1, stage)
       | where isnotempty(query_name)
+      | where bench_id in (runs)
       | summarize duration_ms = max(duration_ms) by bench_id, query_name, TimeGenerated;
       let thresholds = raw | summarize p20 = percentile(duration_ms, 20) by query_name;
       raw

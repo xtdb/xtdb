@@ -335,6 +335,7 @@ render_query() {
     sed "s/\${each.value.metric_path}/${METRIC_PATH}/g" | \
     sed "s/\${each.value.metric_name}/${METRIC_NAME}/g" | \
     sed "s/\${each.value.name}/${BENCH_NAME}/g" | \
+    sed "s/\${local.benchmarks.tpch.name}/${BENCH_NAME}/g" | \
     sed "s/\${bench.param_path}/${PARAM_PATH}/g" | \
     sed "s/\${bench.param_value}/${PARAM_VALUE}/g" | \
     sed "s/\${bench.metric_path}/${METRIC_PATH}/g" | \
