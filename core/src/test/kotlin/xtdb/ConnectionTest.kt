@@ -1,5 +1,3 @@
-@file:OptIn(InternalApi::class)
-
 package xtdb
 
 import io.mockk.every

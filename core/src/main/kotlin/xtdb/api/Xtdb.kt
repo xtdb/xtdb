@@ -265,7 +265,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
      * The narrowing is deliberate: XTDB guarantees serializability within a database and not between databases,
      * so a transaction that read across them would have no consistent basis to read at.
      */
-    class Connection(
+    class Connection internal constructor(
         val allocator: BufferAllocator,
         private val dbCat: Database.Catalog,
         private val qSrc: IQuerySource,
@@ -281,11 +281,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         private val tracer: Tracer?,
         private val metrics: ConnectionMetrics?,
 
-        // `@InternalApi` rather than `internal` because pgwire (Clojure) sets it once its handshake succeeds.
-        // TODO(#5793): goes once pgwire authenticates through the node, which hands back a Connection already carrying its Principal.
-        /** @suppress */
-        @property:InternalApi
-        var principal: Principal?,
+        private var principal: Principal?,
     ) : AdbcConnection {
 
         var awaitToken: String? = null
