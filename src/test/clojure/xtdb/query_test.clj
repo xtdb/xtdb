@@ -10,12 +10,57 @@
             [xtdb.trie :as trie]
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
-  (:import (java.time LocalTime)
+  (:import (com.github.benmanes.caffeine.cache Cache)
+           (java.time LocalTime)
+           (org.antlr.v4.runtime ParserRuleContext)
+           (xtdb.indexer DatabaseSnapshot)
            (xtdb.metadata PageMetadata)
+           (xtdb.query PlanCacheKey)
            (xtdb.table TableSlug)))
 
 (t/use-fixtures :once tu/with-allocator)
 (t/use-fixtures :each tu/with-node)
+
+(defn- plan-keys [node ast-text]
+  (let [^Cache plan-cache (:plan-cache (.getQuerySource (util/node-base node)))]
+    (->> (keys (.asMap plan-cache))
+         (filterv (fn [^PlanCacheKey k]
+                    (let [ast (.getAst k)]
+                      (and (instance? ParserRuleContext ast)
+                           (= ast-text (.getText ^ParserRuleContext ast)))))))))
+
+(t/deftest the-plan-cache-misses-only-when-the-catalog-changes-6217
+  (let [node tu/*node*
+        q! #(xt/q node "SELECT a FROM docs")
+        plan-count #(count (plan-keys node "SELECTaFROMdocs"))]
+    (xt/execute-tx node [[:put-docs :docs {:xt/id 1, :a 1}]])
+    (q!)
+    (q!)
+    (t/is (= 1 (plan-count)) "a second run against the same snapshot hits")
+
+    (xt/execute-tx node [[:put-docs :docs {:xt/id 2, :a 2}]])
+    (q!)
+    (t/is (= 1 (plan-count)) "a new snapshot over an unchanged catalog hits")
+
+    (xt/execute-tx node [[:put-docs :other {:xt/id 1}]])
+    (q!)
+    (t/is (= 2 (plan-count)) "a new table misses, even one the query doesn't name")
+
+    (xt/execute-tx node [[:put-docs :docs {:xt/id 3, :a 3, :b 3}]])
+    (q!)
+    (t/is (= 3 (plan-count)) "a new column misses")))
+
+(t/deftest the-plan-key-holds-the-snapshots-own-table-info-6217
+  (let [node tu/*node*]
+    (xt/execute-tx node [[:put-docs :docs {:xt/id 1, :a 1}]])
+    (xt/q node "SELECT a FROM docs")
+    (xt/q node "SELECT a FROM docs")
+
+    (let [[^PlanCacheKey k & more] (plan-keys node "SELECTaFROMdocs")]
+      (t/is (nil? more))
+      (with-open [^DatabaseSnapshot snap (.openSnapshot (db/primary-db node) nil)]
+        (t/is (identical? (.tableInfo snap) (get (.getTableInfo k) "xtdb"))
+              "the key holds the snapshot's own table-info rather than a copy of it")))))
 
 (defn with-page-metadata [node meta-file-path f]
   (let [metadata-mgr (.getMetadataManager (db/primary-db node))]
