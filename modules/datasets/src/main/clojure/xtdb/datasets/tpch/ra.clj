@@ -1,8 +1,15 @@
 (ns xtdb.datasets.tpch.ra
+  (:require [xtdb.datasets.tpch :as tpch])
   (:import [java.time LocalDate]))
 
 (defn- with-args [q args]
   (vary-meta q assoc ::args args))
+
+(defn args
+  "The parameters for plan `q` at `scale-factor`.
+   A parameter that depends on the scale factor is stored as a fn of it, and called with it here."
+  [q scale-factor]
+  (update-vals (::args (meta q)) #(if (fn? %) (% scale-factor) %)))
 
 (def q1-pricing-summary-report
   (-> '[:sort {:order-specs [[l_returnflag] [l_linestatus]]}
@@ -232,7 +239,7 @@
             [:group-by {:columns [{total (sum value)}]}
              [:relation {:cte-id PartSupp :col-names [ps_partkey value]}]]]]]]]
       (with-args {:nation "GERMANY"
-                  :fraction 0.0001})))
+                  :fraction tpch/q11-fraction})))
 
 (def q12-shipping-modes-and-order-priority
   (-> '[:sort {:order-specs [[l_shipmode]]}

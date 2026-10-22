@@ -217,10 +217,21 @@
                                        + 0))]
          (log/debug "Transacted" doc-count (.getTableName table)))))))
 
-(defn sql-query
-  "TPC-H query `n` (1-22) as SQL over the tables `submit-*!` load."
+(defn q11-fraction
+  "TPC-H Q11's FRACTION at `scale-factor`: the spec's 0.0001/SF."
+  [scale-factor]
+  (/ 0.0001 (double scale-factor)))
+
+(defn sql-text
+  "TPC-H query `n` (1-22) as SQL over the tables `submit-*!` load, with a `?` for each parameter `sql-query` binds."
   [n]
   (slurp (io/resource (format "xtdb/datasets/tpch/sql/q%02d.sql" n))))
+
+(defn sql-query
+  "TPC-H query `n` (1-22) at `scale-factor`, as `[sql & args]` for `xt/q`."
+  [n scale-factor]
+  (into [(sql-text n)]
+        (when (= n 11) [(q11-fraction scale-factor)])))
 
 (defn results
   "Our pinned results for TPC-H queries 1-22 at `scale-factor`, as read with `:key-fn :snake-case-keyword` - a vector indexed by query number less one - or nil where none are pinned."

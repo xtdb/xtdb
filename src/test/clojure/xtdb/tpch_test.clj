@@ -48,10 +48,10 @@
   (or (tpch/results scale-factor)
       (throw (err/fault ::no-pinned-results (format "No pinned TPC-H results at SF %s" scale-factor)))))
 
-(defn test-ra-query [n res]
+(defn test-ra-query [scale-factor n res]
   (when (contains? *qs* (inc n))
     (let [q @(nth tpch-ra/queries n)
-          {::tpch-ra/keys [args]} (meta q)]
+          args (tpch-ra/args q scale-factor)]
       (tu/with-allocator
         (fn []
           (t/is (nil? (tpch/result-mismatch res (tu/query-ra q {:node *node*, :args args, :key-fn :snake-case-keyword})))
@@ -62,7 +62,7 @@
                    :node-dir (util/->path "target/tpch-queries-ra-sf-001")}
     (fn []
       (dorun
-       (map-indexed test-ra-query (pinned-results 0.001))))))
+       (map-indexed (partial test-ra-query 0.001) (pinned-results 0.001))))))
 
 (comment
   (binding [*qs* #{11 17}]
@@ -74,7 +74,7 @@
                      :node-dir (util/->path "target/tpch-queries-ra-sf-01")}
       (fn []
         (dorun
-          (map-indexed test-ra-query (pinned-results 0.01)))))))
+          (map-indexed (partial test-ra-query 0.01) (pinned-results 0.01)))))))
 
 (t/deftest ^:integration test-01-ra-dbj
   (with-tpch-data {:method :docs, :scale-factor 0.01
@@ -82,7 +82,7 @@
     (fn []
       (binding [join/*disk-join-threshold-rows* 1000]
         (dorun
-         (map-indexed test-ra-query (pinned-results 0.01)))))))
+         (map-indexed (partial test-ra-query 0.01) (pinned-results 0.01)))))))
 
 (comment
   (binding [*qs* #{11 17}]
@@ -143,16 +143,16 @@
     (let [n (inc n)]
       (when (contains? *qs* n)
         (t/is (=plan-file (format "tpch/q%02d" n)
-                          (sql/plan (tpch/sql-query n)
+                          (sql/plan (tpch/sql-text n)
                                     {:table-info tpch-table-info}))
               (format "Q%02d" n))))))
 
 (defn test-sql-query
-  ([n res] (test-sql-query {:decorrelate? true, :key-fn :snake-case-keyword} n res))
-  ([opts n res]
+  ([scale-factor n res] (test-sql-query {:decorrelate? true, :key-fn :snake-case-keyword} scale-factor n res))
+  ([opts scale-factor n res]
    (let [q (inc n)]
      (when (contains? *qs* q)
-       (t/is (nil? (tpch/result-mismatch res (xt/q *node* (tpch/sql-query q) opts)))
+       (t/is (nil? (tpch/result-mismatch res (xt/q *node* (tpch/sql-query q scale-factor) opts)))
              (format "Q%02d" (inc n)))))))
 
 (t/deftest test-001-sql
@@ -160,7 +160,7 @@
                    :node-dir (util/->path "target/tpch-queries-sql-sf-001")}
     (fn []
       (dorun
-       (map-indexed test-sql-query (pinned-results 0.001))))))
+       (map-indexed (partial test-sql-query 0.001) (pinned-results 0.001))))))
 
 (t/deftest test-001-sql-explain
   (with-tpch-data {:method :dml, :scale-factor 0.001
@@ -169,10 +169,10 @@
       (dotimes [n 22]
         (let [q (inc n)]
           (when (contains? *qs* q)
-            (t/is (xt/q *node* (str "EXPLAIN " (tpch/sql-query q)))
+            (t/is (xt/q *node* (update (tpch/sql-query q 0.001) 0 #(str "EXPLAIN " %)))
                   (format "EXPLAIN Q%02d" (inc n)))
 
-            (t/is (xt/q *node* (str "EXPLAIN ANALYZE " (tpch/sql-query q)))
+            (t/is (xt/q *node* (update (tpch/sql-query q 0.001) 0 #(str "EXPLAIN ANALYZE " %)))
                   (format "EXPLAIN ANALYZE Q%02d" (inc n)))))))))
 
 (t/deftest ^:integration test-01-sql
@@ -180,7 +180,7 @@
                    :node-dir (util/->path "target/tpch-queries-sql-sf-01")}
     (fn []
       (dorun
-       (map-indexed test-sql-query (pinned-results 0.01))))))
+       (map-indexed (partial test-sql-query 0.01) (pinned-results 0.01))))))
 
 (comment
   (binding [*qs* #{1}]

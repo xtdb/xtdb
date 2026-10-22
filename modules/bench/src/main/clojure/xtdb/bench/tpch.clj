@@ -14,15 +14,15 @@
   (-> (into #{} (range 1 (inc (count tpch-ra/queries))))
       (disj 21)))
 
-(defn query-tpch [stage-name query-language expected i]
+(defn query-tpch [stage-name query-language scale-factor expected i]
   (let [q (nth tpch-ra/queries i)
         stage-name (keyword (str (name stage-name) "-" (:name (meta q))))
         run-query (case query-language
                     :ra (let [q @q
-                              {::tpch-ra/keys [args]} (meta q)]
+                              args (tpch-ra/args q scale-factor)]
                           #(tu/query-ra q {:node %, :args args, :key-fn :snake-case-keyword}))
-                    :sql (let [sql (tpch/sql-query (inc i))]
-                           #(xt/q % sql {:key-fn :snake-case-keyword})))]
+                    :sql (let [query+args (tpch/sql-query (inc i) scale-factor)]
+                           #(xt/q % query+args {:key-fn :snake-case-keyword})))]
     (cond-> {:t :call, :stage stage-name
              :f (fn [{:keys [node]}]
                   (try
@@ -39,7 +39,7 @@
     {:t :do, :stage stage-name
      :tasks (vec (for [i (range (count tpch-ra/queries))
                        :when (contains? *qs* (inc i))]
-                   (query-tpch stage-name query-language (get results i) i)))}))
+                   (query-tpch stage-name query-language scale-factor (get results i) i)))}))
 
 (defmethod b/cli-flags :tpch [_]
   [["-s" "--scale-factor SCALE_FACTOR" "TPC-H scale factor to use"
