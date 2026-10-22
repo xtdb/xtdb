@@ -6,7 +6,7 @@
            [java.net URI] 
            [java.time Instant InstantSource]
            [org.keycloak.representations.idm ClientRepresentation CredentialRepresentation UserRepresentation RealmRepresentation]
-           [xtdb.api Authenticator OAuthPasswordResult OAuthClientCredentialsResult]))
+           [xtdb.api Authenticator]))
  
 (defonce ^KeycloakContainer container
   (KeycloakContainer. "quay.io/keycloak/keycloak:26.0"))
@@ -75,9 +75,9 @@
     (t/is (nil? (authn/calculate-expires-at {} (Instant/parse "2020-01-01T12:00:00Z")))))
 
   (t/testing "token-expired?"
-    (let [oauth-result (OAuthPasswordResult. "user-id" (Instant/parse "2020-01-01T12:00:00Z") "access-token" "refresh-token")]
-      (t/is (authn/token-expired? oauth-result (Instant/parse "2020-01-01T13:00:00Z")))
-      (t/is (not (authn/token-expired? oauth-result (Instant/parse "2020-01-01T11:00:00Z")))))))
+    (let [expires-at (Instant/parse "2020-01-01T12:00:00Z")]
+      (t/is (authn/token-expired? expires-at (Instant/parse "2020-01-01T13:00:00Z")))
+      (t/is (not (authn/token-expired? expires-at (Instant/parse "2020-01-01T11:00:00Z")))))))
 
 (t/deftest test-invalid-issuer-url
   (t/testing "error caught when issuer URL is invalid"
@@ -92,16 +92,6 @@
                          #"Failed to discover OIDC configuration from"]
                         (authn/discover-oidc-config unknown-realm-url))))))
 
-(t/deftest test-refresh-token-errors
-  (let [issuer-url (.toURL (URI. (str (.getAuthServerUrl container) "/realms/master")))
-        oidc-config (authn/discover-oidc-config issuer-url)
-        authn (authn/->OpenIdConnect oidc-config "xtdb" "xtdb-secret"
-                                     (authn/->rules-cfg [{:method :password}])
-                                     (InstantSource/system))]
-
-    (t/is (anomalous? [:forbidden :xtdb.authn/refresh-failed "No valid token or refresh token available for refresh"]
-                      (authn/refresh-token authn nil)))))
-
 (t/deftest test-revalidate
   (let [issuer-url (.toURL (URI. (str (.getAuthServerUrl container) "/realms/master")))
         oidc-config (authn/discover-oidc-config issuer-url)
@@ -115,15 +105,15 @@
         {:keys [client-id client-secret]} (:test clients)]
     
     (t/testing "revalidate returns nil for valid token"
-      (let [auth-result (.verifyClientCredentials authn client-id client-secret)] ; uses base-time
-        (t/is (nil? (.revalidate authn auth-result))))) ; uses base-time - token still valid
+      (let [principal (.verifyClientCredentials authn client-id client-secret)] ; uses base-time
+        (t/is (nil? (.revalidate principal))))) ; uses base-time - token still valid
     
     (t/testing "revalidate returns refreshed token for expired token"
-      (let [auth-result (.verifyClientCredentials authn client-id client-secret) ; uses base-time
-            refreshed-result (.revalidate authn auth-result)] ; uses after-expiry - token expired, fetched a new token at after-expiry
-        (t/is (some? refreshed-result))
-        (t/is (= client-id (.getClientId refreshed-result)))
-        (t/is (.isAfter (.getExpiresAt refreshed-result) (.getExpiresAt auth-result)))))))
+      (let [principal (.verifyClientCredentials authn client-id client-secret) ; uses base-time
+            refreshed (.revalidate principal)] ; uses after-expiry - token expired, fetched a new token at after-expiry
+        (t/is (some? refreshed))
+        (t/is (= client-id (:client-id refreshed)))
+        (t/is (.isAfter ^Instant (:expires-at refreshed) (:expires-at principal)))))))
 
 (t/deftest test-oidc-password-flow
   (let [test-user-id (-> (seed! container) 
@@ -139,8 +129,8 @@
                (.methodFor authn "test-user" "127.0.0.1"))))
 
     (t/testing "successful password authentication"
-      (let [^OAuthPasswordResult auth-result (.verifyPassword authn "test-user" "password124")]
-        (t/is (= test-user-id (.getUserId auth-result)))))
+      (let [principal (.verifyPassword authn "test-user" "password124")]
+        (t/is (= test-user-id (.getUserId principal)))))
 
     (t/testing "authentication failures"
       (t/is (anomalous? [:forbidden :xtdb.authn/failed "Password authentication failed for user: test-user"] 
@@ -159,10 +149,10 @@
       (t/is (= #xt.authn/method :client-credentials (.methodFor authn "oid-client" "127.0.0.1"))))
 
     (t/testing "successful client credentials authentication"
-      (let [^OAuthClientCredentialsResult auth-result (.verifyClientCredentials authn client-id client-secret)]
-        (t/is (= service-account-user-id (.getUserId auth-result)))
-        (t/is (= client-id (.getClientId auth-result)))
-        (t/is (= client-secret (.getClientSecret auth-result)))))
+      (let [principal (.verifyClientCredentials authn client-id client-secret)]
+        (t/is (= service-account-user-id (.getUserId principal)))
+        (t/is (= client-id (:client-id principal)))
+        (t/is (= client-secret (:client-secret principal)))))
 
     (t/testing "authentication failures" 
       (t/is (anomalous? [:forbidden :xtdb.authn/failed "Client credentials authentication failed for client: bad-client"]

@@ -33,7 +33,7 @@
            [javax.net.ssl KeyManagerFactory SSLContext]
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector.types.pojo ArrowType$List ArrowType$Null Field)
-           (xtdb.api Authenticator DataSource DataSource$ConnectionBuilder OAuthResult ServerConfig Xtdb Xtdb$Config Xtdb$Connection Xtdb$Statement Xtdb$ExecutedTx Xtdb$SubmittedTx)
+           (xtdb.api Authenticator DataSource DataSource$ConnectionBuilder Principal Principal$Static ServerConfig Xtdb Xtdb$Config Xtdb$Connection Xtdb$Statement Xtdb$ExecutedTx Xtdb$SubmittedTx)
            xtdb.api.module.XtdbModule
            (xtdb.arrow Relation Relation$ILoader VectorType)
            xtdb.arrow.RelationReader
@@ -288,10 +288,8 @@
           (log/error ex "Uncaught exception processing message")
           {::severity :error, ::error-code "XX000"})))))
 
-(defn validate-and-refresh-token [{:keys [conn-state ^Authenticator authn]}]
-  (when-let [^OAuthResult authn-state (:authn-state @conn-state)]
-    (when-let [revalidated-state (.revalidate authn authn-state)]
-      (swap! conn-state assoc :authn-state revalidated-state))))
+(defn validate-and-refresh-token [{:keys [conn-state]}]
+  (.revalidate ^Xtdb$Connection (:node-conn @conn-state)))
 
 (defmacro with-auth-check
   [conn & body]
@@ -355,7 +353,7 @@
       (set-time-zone conn v)
       (set-session-parameter conn k v))))
 
-(defn startup-ok [{:keys [server] :as conn} startup-opts]
+(defn startup-ok [{:keys [server] :as conn} startup-opts ^Principal principal]
   (let [{:keys [server-state]} server]
 
     (swap! (:conn-state conn) assoc :startup-params
@@ -364,7 +362,7 @@
     (apply-startup-params conn)
 
     ;; thread the authenticated user onto the connection — it goes into every write's TxOpts (audit trail)
-    (.setUser ^Xtdb$Connection (:node-conn @(:conn-state conn)) (get startup-opts "user"))
+    (.setPrincipal ^Xtdb$Connection (:node-conn @(:conn-state conn)) principal)
 
     (-> conn
         ;; backend key data (used to identify conn for cancellation)
@@ -403,14 +401,14 @@
                     (when-let [clock (:clock @(:server-state server))]
                       (.setClock node-conn clock))
                     node-conn)
-        conn (assoc conn :node node, :authn authn, :db db)
+        conn (assoc conn :node node, :db db)
         _ (swap! (:conn-state conn) assoc :node-conn node-conn)]
     (if authn
       (condp = (.methodFor authn user (pgio/host-address frontend))
         #xt.authn/method :trust
         (do
           (pgio/cmd-write-msg conn pgio/msg-auth {:result 0})
-          (startup-ok conn startup-opts))
+          (startup-ok conn startup-opts (some-> user (Principal$Static.))))
 
         #xt.authn/method :password
         (do
@@ -422,12 +420,9 @@
             (if (not= :msg-password msg-name)
               (throw (err-invalid-auth-spec (str "password authentication failed for user: " user)))
 
-              (let [auth-result (.verifyPassword authn user (:password msg))
-                    user-id (.getUserId auth-result)]
+              (let [principal (.verifyPassword authn user (:password msg))]
                 (pgio/cmd-write-msg conn pgio/msg-auth {:result 0})
-                (when (instance? OAuthResult auth-result)
-                  (swap! (:conn-state conn) assoc :authn-state auth-result))
-                (startup-ok conn (assoc startup-opts "user" user-id))))))
+                (startup-ok conn (assoc startup-opts "user" (.getUserId principal)) principal)))))
 
         #xt.authn/method :device-auth
         (let [device-auth-resp (.startDeviceAuth authn user)]
@@ -435,10 +430,8 @@
           (pgio/cmd-send-notice conn (notice (str "\nHello! Please head over here to authenticate:"
                                                   (str "\n\n" (.getUrl device-auth-resp))
                                                   "\n")))
-          (let [auth-result (.await device-auth-resp)
-                user-id (.getUserId auth-result)]
-            (swap! (:conn-state conn) assoc :authn-state auth-result)
-            (startup-ok conn (assoc startup-opts "user" user-id))))
+          (let [principal (.await device-auth-resp)]
+            (startup-ok conn (assoc startup-opts "user" (.getUserId principal)) principal)))
 
         #xt.authn/method :client-credentials
         (do
@@ -451,11 +444,9 @@
               (throw (err-invalid-auth-spec (str "client credentials authentication failed for user: " user)))
 
               (let [{:keys [client-id client-secret]} (parse-client-creds (:password msg))
-                    auth-result (.verifyClientCredentials authn client-id client-secret)
-                    user-id (.getUserId auth-result)]
+                    principal (.verifyClientCredentials authn client-id client-secret)]
                 (pgio/cmd-write-msg conn pgio/msg-auth {:result 0})
-                (swap! (:conn-state conn) assoc :authn-state auth-result)
-                (startup-ok conn (assoc startup-opts "user" user-id))))))
+                (startup-ok conn (assoc startup-opts "user" (.getUserId principal)) principal)))))
 
         (throw (err/forbidden :xtdb.authn/no-matching-rule (str "no authentication record found for user: " user))))
       conn)))
@@ -1567,7 +1558,7 @@
   (throw (err/unsupported ::unknown-client-msg (str "unknown client message: " msg-name)
                           {:msg-name msg-name})))
 
-(defn handle-msg [{:keys [cid ^Authenticator authn conn-state] :as conn} {:keys [msg-name] :as msg}]
+(defn handle-msg [{:keys [cid conn-state] :as conn} {:keys [msg-name] :as msg}]
   (try
     (log/trace "Read client msg" {:cid cid, :msg msg})
 
@@ -1667,7 +1658,7 @@
   freed at the end of this function. So the connections lifecycle should be totally enclosed over the lifetime of a connect call.
 
   See comment 'Connection lifecycle'."
-  [{:keys [node, ^Authenticator authn, server-state, port, allocator, authn-timeout-ms, tx-error-counter, tx-latency-timer, ^Counter total-connections-counter, ^Counter cancelled-connections-counter, query-tracer] :as server} ^Socket conn-socket]
+  [{:keys [node, server-state, port, allocator, authn-timeout-ms, tx-error-counter, tx-latency-timer, ^Counter total-connections-counter, ^Counter cancelled-connections-counter, query-tracer] :as server} ^Socket conn-socket]
   (let [close-promise (promise)
         {:keys [cid !closing?] :as conn} (util/with-close-on-catch [_ conn-socket]
                                            (let [cid (:next-cid (swap! server-state update :next-cid (fnil inc 0)))
@@ -1683,7 +1674,7 @@
                                                ;; so the deadline survives it.
                                                (.setSoTimeout conn-socket (int authn-timeout-ms))
 
-                                               (-> (map->Connection {:cid cid, :node node, :authn authn, :server server,
+                                               (-> (map->Connection {:cid cid, :node node, :server server,
                                                                      :frontend (pgio/->socket-frontend conn-socket),
                                                                      :!closing? !closing?
                                                                      :allocator (util/->child-allocator allocator (str "pg-conn-" cid))

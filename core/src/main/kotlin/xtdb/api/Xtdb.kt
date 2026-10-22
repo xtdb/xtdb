@@ -241,7 +241,20 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
         fun latestSubmittedMsgIds(): Map<DatabaseName, List<MessageId>> = dbCat.latestSubmittedMsgIds()
 
-        var user: String? = null
+        // `@InternalApi` rather than `internal` because pgwire (Clojure) sets it once its handshake succeeds.
+        // TODO(#5793): goes once frontends authenticate through the node, which hands back a Connection already carrying its Principal.
+        /** @suppress */
+        @InternalApi
+        var principal: Principal? = null
+
+        val user: String? get() = principal?.userId
+
+        // `@InternalApi` rather than `internal` because pgwire (Clojure) calls it before each query.
+        /** @suppress */
+        @InternalApi
+        fun revalidate() {
+            principal?.revalidate()?.let { principal = it }
+        }
 
         // how long to wait for this connection's writes to become visible before giving up, shared by every
         // read this connection prepares or snapshots
