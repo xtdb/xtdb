@@ -354,6 +354,7 @@ The `nightly-benchmark-suite.yml` workflow kicks off nightly at midnight UTC, di
 When each benchmark's cleanup job completes, it dispatches the next one via `workflow_dispatch`.
 The queue order is defined in the "Dispatch Next Benchmark in Queue" step of `nightly-benchmark-cleanup.yml`.
 To add a new benchmark to the nightly suite, you must add it to that queue array as well as creating its own workflow file.
+An entry needn't be its own bench type: `tpch-sql` runs the `tpch` bench with `--query-language sql`, and passes `queue_entry: tpch-sql` so that its cleanup dispatches the entry after it, and posts its own chart rather than RA's.
 You can also start from a specific benchmark using the suite's `start_from` input.
 
 The full pipeline touches several areas — benchmark code, workflows, Helm, Terraform metrics, and summary scripts.

@@ -151,6 +151,11 @@ on:
         required: false
         default: ''
         type: string
+      queue_entry:
+        description: 'The nightly queue entry this run is, when it differs from bench_type (e.g. tpch-sql); the cleanup dispatches its successor and charts its series'
+        required: false
+        default: ''
+        type: string
       run_queue:
         description: 'Whether this run is part of the nightly benchmark queue'
         required: false
@@ -381,6 +386,7 @@ jobs:
           FUSION_DURATION: ${{ inputs.fusion_duration }}
           FUSION_THREADS: ${{ inputs.fusion_threads }}
           RUN_QUEUE: ${{ inputs.run_queue }}
+          QUEUE_ENTRY: ${{ inputs.queue_entry }}
         run: |
           helm dependency update ./modules/bench/cloud/helm
           HELM_ARGS=(
@@ -495,6 +501,9 @@ jobs:
           fi
           if [ "$RUN_QUEUE" = "true" ]; then
             HELM_ARGS+=(--set "providerConfig.env.RUN_QUEUE=true")
+          fi
+          if [ -n "$QUEUE_ENTRY" ]; then
+            HELM_ARGS+=(--set "providerConfig.env.QUEUE_ENTRY=${QUEUE_ENTRY}")
           fi
 
           helm upgrade --install "xtdb-benchmark" ./modules/bench/cloud/helm "${HELM_ARGS[@]}"

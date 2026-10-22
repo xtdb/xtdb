@@ -88,6 +88,11 @@
                  :filter-param "scale-factor"
                  :filter-value 1.0
                  :filter-is-string false}
+   "tpch-sql" {:benchmark-name "TPC-H (OLAP, SQL)"
+               :title "TPC-H (SQL) Benchmark Performance"
+               :filter-param "scale-factor"
+               :filter-value 1.0
+               :filter-is-string false}
    "yakbench"   {:benchmark-name "Yakbench"
                  :title "Yakbench Benchmark Performance"
                  :filter-param "scale-factor"

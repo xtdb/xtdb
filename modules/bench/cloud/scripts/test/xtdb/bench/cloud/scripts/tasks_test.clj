@@ -1027,6 +1027,16 @@
       (let [result (k8s/derive-benchmark-status "tpch")]
         (is (= {:status "unknown"} result))))))
 
+(deftest plot-benchmark-timeseries-tpch-sql-is-its-own-series-test
+  (let [captured-opts (atom nil)]
+    (with-redefs [azure/fetch-azure-benchmark-timeseries (fn [opts]
+                                                           (reset! captured-opts opts)
+                                                           [{:timestamp "2024-01-01" :value 1000}])
+                  charts/plot-timeseries-vega (fn [& _] nil)]
+      (charts/plot-benchmark-timeseries "tpch-sql" {:filter-value 1.0})
+      (is (= "TPC-H (OLAP, SQL)" (:benchmark @captured-opts)))
+      (is (= 1.0 (:filter-value @captured-opts))))))
+
 (deftest plot-benchmark-timeseries-filter-override-test
   (testing "scale-factor override applies to tpch (filter-param = scale-factor)"
     (let [captured-opts (atom nil)]

@@ -579,6 +579,7 @@
       (let [node-id (System/getenv "XTDB_NODE_ID")
             git-branch (or (get-env "GIT_BRANCH") "main")
             run-queue (System/getenv "RUN_QUEUE")
+            queue-entry (get-env "QUEUE_ENTRY")
             workflow-url (or (get-env "GITHUB_ACTION_URL") default-github-action-url)]
         (http/post workflow-url
                    {:headers {"Accept" "application/vnd.github+json"
@@ -588,7 +589,8 @@
                                            "inputs" (cond-> {"benchType" (name benchmark-type)
                                                              "status" (if success? "success" "failure")
                                                              "nodeId" node-id}
-                                                      run-queue (assoc "runQueue" "true"))})})
+                                                      run-queue (assoc "runQueue" "true")
+                                                      queue-entry (assoc "queueEntry" queue-entry))})})
         (log/info "Triggered cleanup workflow for" benchmark-type "on" git-branch))
       (catch Exception e
         (log/warn e "Failed to trigger cleanup workflow")))))
