@@ -7,6 +7,7 @@
             [clojure.tools.logging :as log]
             [xtdb.api :as xt]
             [xtdb.compactor :as c]
+            [xtdb.error :as err]
             [xtdb.log :as xt-log]
             [xtdb.logging :as logging]
             [xtdb.node :as xtn]
@@ -206,20 +207,25 @@
                             :max-ms (/ (.max timer TimeUnit/MILLISECONDS) 1.0)}]))))
          (into {}))))
 
-(defn wrap-stage [f {:keys [stage setup?]}]
+(defn wrap-stage
+  "Times the stage `f` and logs its report.
+   A task's `:verify`, when given, receives `f`'s return value once the clock has stopped, so the stage's time excludes it; if it throws, the stage doesn't report."
+  [f {:keys [stage setup? verify]}]
   (fn instrumented-stage [worker]
     (if setup?
       (log/info "Starting stage:" stage "(setup)")
       (log/info "Starting stage:" stage))
-    (let [start-ms (System/currentTimeMillis)]
-      (f worker)
-      (let [elapsed-ms (- (System/currentTimeMillis) start-ms)]
-        (when setup?
-          (swap! (:setup-time-ms worker) + elapsed-ms))
-        (log-report worker {:stage stage
-                            :time-taken-ms elapsed-ms
-                            :setup setup?}))
-      (log/info "Done stage:" stage))))
+    (let [start-ms (System/currentTimeMillis)
+          result (f worker)
+          elapsed-ms (- (System/currentTimeMillis) start-ms)]
+      (when verify
+        (verify result))
+      (when setup?
+        (swap! (:setup-time-ms worker) + elapsed-ms))
+      (log-report worker {:stage stage
+                          :time-taken-ms elapsed-ms
+                          :setup setup?}))
+    (log/info "Done stage:" stage)))
 
 (defn wrap-transaction [f {:keys [transaction labels]}]
   (let [timer-delay (delay
@@ -238,7 +244,9 @@
         (f worker)))))
 
 (defn wrap-task [f task]
-  (let [{:keys [stage, transaction]} task]
+  (let [{:keys [t, stage, transaction, verify]} task]
+    (when (and verify (not (and stage (= :call t))))
+      (throw (err/incorrect ::verify-needs-a-staged-call "a task's `:verify` needs a `:stage` and `:t :call`")))
     (cond
       stage (wrap-stage f task)
       transaction (wrap-transaction f task)
