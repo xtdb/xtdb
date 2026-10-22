@@ -56,7 +56,9 @@
                                    :or {scale-factor 0.01, query-language :ra, seed 0}}]
   (log/info {:scale-factor scale-factor :query-language query-language :seed seed :no-load? no-load?})
 
-  {:title "TPC-H (OLAP)"
+  {:title (case query-language
+            :ra "TPC-H (OLAP)"
+            :sql "TPC-H (OLAP, SQL)")
    :benchmark-type :tpch
    :seed seed
    :parameters {:scale-factor scale-factor :query-language query-language :seed seed :no-load? no-load?}
