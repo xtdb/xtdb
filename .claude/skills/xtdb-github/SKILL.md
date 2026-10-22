@@ -97,7 +97,7 @@ Removing a milestone leaves the board card and its fields untouched, so it is th
 
 ## Labels
 
-We don't make heavy use of labels, but two conventions matter for release notes:
+We don't make heavy use of labels, but these conventions matter:
 
 - **`breaking change`** (note: space, not hyphen): you MUST apply this to any issue/PR that's a user-impacting breaking change.
   Same scope as the commit-message `!` rule documented in `AGENTS.md` — SQL syntax, pgwire protocol, config YAML, public Java/Kotlin API.
@@ -105,6 +105,10 @@ We don't make heavy use of labels, but two conventions matter for release notes:
 - **Component labels**: long-tailed set of area tags (`sql`, `pgwire`, `kafka`, `compactor`, `indexing`, `logical-plan`, `expression engine`, `xtql`, `docker`, `docs`, `dev-experience`, `performance`, etc.).
   You MAY apply one where a single area is obviously the subject.
   You MUST fetch the current list with `gh api '/repos/xtdb/xtdb/labels?per_page=100' --jq '.[].name'` rather than guessing at a name.
+- **Blocked is a blocked-by edge where there's an issue to block on, and the `blocked` label only where there isn't.**
+  Where a card waits on another issue, you MUST mark it with a blocked-by edge on the waiting card, pointing at that issue (the chalk `github` agent's `addBlockedBy`), rather than the label.
+  The edge names the blocker, and the card shows as unblocked once the blocker closes; the label does neither.
+  Where nothing the card waits on has a natural issue, it takes the `blocked` label, with a comment saying what it waits on.
 
 ## Starting work on a card
 
