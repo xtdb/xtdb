@@ -71,7 +71,7 @@ object StringUtil {
         var cp = -1
         run {
             var i = target.position()
-            while (i < target.remaining() && cp < startCodepoint) {
+            while (i < target.limit() && cp < startCodepoint) {
                 if (isUtf8Char(target[i])) {
                     cp++
                 }
@@ -85,7 +85,7 @@ object StringUtil {
             !useLen -> target.duplicate().apply { position(startIndex) }
             else -> {
                 var charsConsumed = 0
-                for (i in startIndex until target.remaining()) {
+                for (i in startIndex until target.limit()) {
                     if (charsConsumed == len && isUtf8Char(target[i]))
                         return target.duplicate().apply { position(startIndex); limit(i) }
 

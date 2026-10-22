@@ -234,6 +234,32 @@
   (t/is (= [{:pos 0}]
            (xt/q tu/*node* "SELECT POSITION('x' IN SUBSTRING('hello:world' FROM 3)) as pos"))))
 
+(t/deftest test-substring-for-length-on-nested-substring
+  (t/is (= [{:sub "cdefg"}]
+           (xt/q tu/*node* "SELECT SUBSTRING(SUBSTRING('abcdefghij' FROM 3) FROM 1 FOR 5) as sub")))
+  (t/is (= [{:sub "cdefgh"}]
+           (xt/q tu/*node* "SELECT SUBSTRING(SUBSTRING('abcdefghij' FROM 3) FROM 1 FOR 6) as sub")))
+
+  (t/is (= [{:sub "cdefghij"}]
+           (xt/q tu/*node* "SELECT SUBSTRING(SUBSTRING('abcdefghij' FROM 3) FROM 1 FOR 8) as sub"))
+        "FOR length exactly matching the inner result's own length")
+
+  (t/is (= [{:sub "cdefghij"}]
+           (xt/q tu/*node* "SELECT SUBSTRING(SUBSTRING('abcdefghij' FROM 3) FROM 1 FOR 20) as sub"))
+        "FOR length longer than the inner result clamps to what's there")
+
+  (t/is (= [{:sub "cdef"}]
+           (xt/q tu/*node* "SELECT SUBSTRING(SUBSTRING(SUBSTRING('abcdefghij' FROM 2) FROM 2) FROM 1 FOR 4) as sub"))
+        "triple-nested SUBSTRING")
+
+  (t/is (= [{:sub "ef"}]
+           (xt/q tu/*node* "SELECT SUBSTRING(SUBSTRING('abcdefghij' FROM 3) FROM 3 FOR 2) as sub"))
+        "non-zero FROM on the outer call, not just FOR")
+
+  (t/is (= [{:sub "llo wö"}]
+           (xt/q tu/*node* "SELECT SUBSTRING(SUBSTRING('héllo wörld' FROM 3) FROM 1 FOR 6) as sub"))
+        "multi-byte UTF-8 characters straddling the FOR boundary"))
+
 (t/deftest test-length-expr
   (t/is (= '(length f/a) (plan-expr-with-foo "LENGTH(foo.a)")))
   (t/is (= '(length "abc") (plan-expr-with-foo "LENGTH('abc')")))
