@@ -303,6 +303,7 @@ class MySqlWireDriver(
         private val received = LinkedBlockingQueue<Received>(1024)
 
         @Volatile private var closed = false
+        @Volatile private var up = false
 
         @Volatile private var lastHeard = TimeSource.Monotonic.markNow()
         private val silenceLimit = heartbeatInterval * 3
@@ -327,6 +328,7 @@ class MySqlWireDriver(
             }
             client.registerLifecycleListener(object : BinaryLogClient.AbstractLifecycleListener() {
                 override fun onCommunicationFailure(c: BinaryLogClient, ex: Exception) {
+                    up = false
                     hand(Received.Failure(
                         if (ex is ServerException && ex.errorCode == ER_SOURCE_FATAL_ERROR_READING_BINLOG) binlogRefused(from, ex)
                         else connectionLost("binlog connection failed: ${ex.message}", ex)
@@ -339,6 +341,7 @@ class MySqlWireDriver(
                 }
 
                 override fun onDisconnect(c: BinaryLogClient) {
+                    up = false
                     if (!closed) hand(Received.Failure(connectionLost("binlog connection closed")))
                 }
             })
@@ -381,6 +384,7 @@ class MySqlWireDriver(
             }
 
             lastHeard = TimeSource.Monotonic.markNow()
+            up = true
         }
 
         private var position = from
@@ -400,7 +404,7 @@ class MySqlWireDriver(
                 }
 
                 when (item) {
-                    is Received.Failure -> throw item.cause
+                    is Received.Failure -> { up = false; throw item.cause }
                     is Received.Ev -> handle(item.event)?.let { return it }
                 }
             }
@@ -531,12 +535,17 @@ class MySqlWireDriver(
             return MySqlDriver.Transaction.Committed(current.gtid, current.commitTime, current.ops, position)
         }
 
+        override val connected get() = up
+
         override fun close() {
             closed = true
+            up = false
             runCatching { client.disconnect() }
             received.clear()
         }
     }
+
+    override fun queryExecutedGtids(): GtidSet = withConnection { it.executedGtids() }
 
     override fun close() = Unit
 

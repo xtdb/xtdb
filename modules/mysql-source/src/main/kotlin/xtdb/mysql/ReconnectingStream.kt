@@ -46,7 +46,7 @@ class ReconnectingStream private constructor(
         class Open(val stream: MySqlDriver.ChangeStream, val openedAt: TimeMark) : Conn
     }
 
-    private var conn: Conn = Conn.Down
+    @Volatile private var conn: Conn = Conn.Down
 
     private var presented = from
 
@@ -91,6 +91,8 @@ class ReconnectingStream private constructor(
         presented = tx.position
         return tx
     }
+
+    override val connected: Boolean get() = (conn as? Conn.Open)?.stream?.connected == true
 
     override fun close() =
         when (val c = conn) {

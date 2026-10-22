@@ -7,6 +7,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.currentTime
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import xtdb.api.error.Incorrect
@@ -15,6 +16,7 @@ import java.time.Instant
 import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
@@ -35,6 +37,8 @@ class ReconnectingStreamTest {
     private class ScriptedStream(steps: List<Any?>) : MySqlDriver.ChangeStream {
         private val steps = ArrayDeque(steps)
         var closed = false
+
+        override val connected get() = !closed
 
         override suspend fun poll(): MySqlDriver.Transaction.Committed? = when (val s = if (steps.isEmpty()) null else steps.removeFirst()) {
             is Throwable -> throw s
@@ -109,6 +113,21 @@ class ReconnectingStreamTest {
         stream.poll()
 
         assertEquals(policy.initialDelay, opener.gaps.last())
+    }
+
+    @Test
+    fun `the stream reports itself disconnected while a reopen is pending`() = runTest {
+        val opener = ScriptedOpener(this, listOf(ScriptedStream(listOf(connectionLost())), ScriptedStream(emptyList())))
+
+        val stream = open(opener)
+        assertTrue(stream.connected)
+
+        launch { stream.poll() }
+        runCurrent()
+        assertFalse(stream.connected, "between the failure and the reopen")
+
+        advanceUntilIdle()
+        assertTrue(stream.connected, "once reopened")
     }
 
     @Test

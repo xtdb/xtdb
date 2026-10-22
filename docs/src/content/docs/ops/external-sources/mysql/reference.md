@@ -98,6 +98,21 @@ The system time of rows depends on the phase of the MySQL External Source.
 | Snapshot | XTDB's internal system time (i.e. it is unrelated to the upstream MySQL's clock) |
 | Streaming | The commit time of the MySQL transaction, to the microsecond — on a replica, when it first committed on its original server |
 
+## Metrics
+
+Each is tagged with the XTDB database (`db`), the remote's alias (`source`) and `source_type=mysql`.
+
+| Metric | Meaning |
+| --- | --- |
+| `xtdb.mysql_source.events.total` | Row changes ingested. |
+| `xtdb.mysql_source.commits.total` | MySQL transactions applied, including those with no rows in the included tables. |
+| `xtdb.mysql_source.commit_lag_seconds` | Wall-clock seconds between a MySQL transaction committing and XTDB applying it. |
+| `xtdb.mysql_source.last_event_time` | Epoch seconds of the latest applied MySQL commit; 0 on a node that isn't ingesting. |
+| `xtdb.mysql_source.connection_state` | 1 while the binlog connection is up, otherwise 0. |
+| `xtdb.mysql_source.gtid_lag` | Transactions MySQL has executed that XTDB hasn't applied yet; NaN while this node isn't ingesting, or MySQL can't be read. |
+
+`gtid_lag` keeps counting during the initial snapshot, which is when MySQL's binlog accumulates behind XTDB.
+
 ## Types
 
 Each MySQL column lands as the same XTDB value whether the snapshot or the binlog read it.

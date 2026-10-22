@@ -20,6 +20,7 @@ class MySqlSourceTest {
         override fun checkUpstream() = Unit
         override fun openSnapshot() = error("never snapshots")
         override suspend fun openStream(from: GtidSet) = error("never streams")
+        override fun queryExecutedGtids() = error("never queried")
         override fun close() = Unit
     }
 
@@ -34,7 +35,7 @@ class MySqlSourceTest {
         val token = mySqlSourceToken { gtidSet = ""; snapshotCompleted = false }.toByteArray()
 
         val e = assertThrows<Fault> {
-            MySqlSource("db", UnusedDriver).onPartitionAssigned(0, token, UnusedIndexer)
+            MySqlSource("db", "mysql", UnusedDriver).onPartitionAssigned(0, token, UnusedIndexer)
         }
 
         assertEquals("xtdb.mysql/incomplete-snapshot", e.errorCode())

@@ -42,6 +42,15 @@ class GtidSetTest {
     }
 
     @Test
+    fun `counts what the other set is missing`() {
+        val executed = GtidSet.parse("$a:1-10,$b:1-3")
+        assertEquals(0, executed.countNotIn(executed))
+        assertEquals(13, executed.countNotIn(GtidSet.EMPTY))
+        assertEquals(5 + 3, executed.countNotIn(GtidSet.parse("$a:1-5")))
+        assertEquals(1, executed.countNotIn(GtidSet.parse("$a:1-3:5-10,$b:1-3")))
+    }
+
+    @Test
     fun `a tagged GTID set is refused`() {
         assertEquals("xtdb.mysql/tagged-gtid", assertThrows<Unsupported> { GtidSet.parse("$a:1-5,$a:etl:1-3") }.errorCode())
     }

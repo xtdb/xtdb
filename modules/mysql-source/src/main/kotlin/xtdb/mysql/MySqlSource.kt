@@ -1,6 +1,10 @@
 package xtdb.mysql
 
+import io.micrometer.core.instrument.Counter
+import io.micrometer.core.instrument.DistributionSummary
+import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
+import io.micrometer.core.instrument.Tag
 import kotlinx.coroutines.*
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -15,11 +19,15 @@ import xtdb.api.tx.ExternalSource
 import xtdb.api.tx.ExternalSourceToken
 import xtdb.api.tx.TxIndexer
 import xtdb.api.tx.TxIndexer.TxResult
+import xtdb.mysql.MySqlSource.Assignment.Assigned
+import xtdb.mysql.MySqlSource.Assignment.Unassigned
 import xtdb.mysql.proto.MySqlSourceConfig
 import xtdb.mysql.proto.MySqlSourceToken
 import xtdb.mysql.proto.mySqlSourceConfig
 import xtdb.mysql.proto.mySqlSourceToken
 import xtdb.util.*
+import java.time.Instant
+import java.util.concurrent.atomic.AtomicReference
 import com.google.protobuf.Any as ProtoAny
 
 private val LOG = MySqlSource::class.logger
@@ -30,8 +38,96 @@ private const val MAX_SERVER_ID = 4_294_967_295L
 
 class MySqlSource(
     private val dbName: String,
+    private val sourceName: String,
     private val driver: MySqlDriver,
+    private val meterRegistry: MeterRegistry? = null,
 ) : ExternalSource {
+
+    private val tags = listOf(
+        Tag.of("db", dbName),
+        Tag.of("source", sourceName),
+        Tag.of("source_type", "mysql"),
+    )
+
+    private val eventsCounter: Counter? = meterRegistry?.let {
+        Counter.builder("xtdb.mysql_source.events.total")
+            .description("binlog row changes ingested")
+            .tags(tags)
+            .register(it)
+    }
+
+    private val commitsCounter: Counter? = meterRegistry?.let {
+        Counter.builder("xtdb.mysql_source.commits.total")
+            .description("source transactions committed")
+            .tags(tags)
+            .register(it)
+    }
+
+    private val commitLag: DistributionSummary? = meterRegistry?.let {
+        DistributionSummary.builder("xtdb.mysql_source.commit_lag_seconds")
+            .description("wall-clock seconds between source commit and apply")
+            .baseUnit("seconds")
+            .publishPercentiles(0.5, 0.95, 0.99)
+            .tags(tags)
+            .register(it)
+    }
+
+    /**
+     * Whether a partition is assigned to this node, and if so everything that assignment accumulates.
+     * [Assigned] is mutated in place by the poll loop that owns it, which is the sole writer.
+     */
+    private sealed interface Assignment {
+
+        /** Another node holds the partition, so this one has no business querying the upstream. */
+        data object Unassigned : Assignment
+
+        class Assigned(
+            @Volatile var stream: MySqlDriver.ChangeStream? = null,
+            /** Epoch seconds of the latest applied commit; 0 until this assignment's first. */
+            @Volatile var lastEventEpochSeconds: Long = 0,
+            @Volatile var position: GtidSet? = null,
+        ) : Assignment
+    }
+
+    private val assignment = AtomicReference<Assignment>(Unassigned)
+
+    private fun gtidLag(): Double =
+        when (val a = assignment.get()) {
+            Unassigned -> Double.NaN
+            is Assigned ->
+                a.position?.let { position ->
+                    try {
+                        driver.queryExecutedGtids().countNotIn(position).toDouble()
+                    } catch (e: Exception) {
+                        LOG.debug(e) { "[$dbName] Failed to query the upstream's executed GTIDs" }
+                        Double.NaN
+                    }
+                } ?: Double.NaN
+        }
+
+    private val gauges: List<Gauge> = meterRegistry?.let { reg ->
+        listOf(
+            Gauge.builder("xtdb.mysql_source.last_event_time", assignment) {
+                (it.get() as? Assigned)?.lastEventEpochSeconds?.toDouble() ?: 0.0
+            }
+                .description("epoch seconds of the most recently applied source commit")
+                .baseUnit("seconds")
+                .tags(tags)
+                .register(reg),
+
+            Gauge.builder("xtdb.mysql_source.connection_state", assignment) {
+                if ((it.get() as? Assigned)?.stream?.connected == true) 1.0 else 0.0
+            }
+                .description("1 if a binlog stream is currently open, 0 otherwise")
+                .tags(tags)
+                .register(reg),
+
+            Gauge.builder("xtdb.mysql_source.gtid_lag", this) { it.gtidLag() }
+                .description("transactions the upstream has executed that this node hasn't applied; NaN if we can't read it")
+                .tags(tags)
+                .register(reg),
+        )
+    }.orEmpty()
 
     @Serializable
     @SerialName("!MySQL")
@@ -83,7 +179,7 @@ class MySqlSource(
                 ),
             )
 
-            return MySqlSource(dbName, driver)
+            return MySqlSource(dbName, remote, driver, meterRegistry)
         }
 
         class Registration : ExternalSource.Registration<Factory> {
@@ -119,6 +215,7 @@ class MySqlSource(
         val token = afterToken?.let { MySqlSourceToken.parseFrom(it) }
         LOG.debug { "[$dbName] Recovered token: ${token ?: "none"}" }
 
+        val assigned = Assigned().also { assignment.set(it) }
         try {
             runInterruptible(Dispatchers.IO) { driver.checkUpstream() }
 
@@ -137,17 +234,19 @@ class MySqlSource(
 
                 else -> {
                     LOG.info("[$dbName] Starting initial snapshot")
-                    initialSnapshot(txIndexer)
+                    initialSnapshot(txIndexer, assigned)
                         .also { LOG.info("[$dbName] Snapshot complete, switching to streaming after GTID set '$it'") }
                 }
             }
 
-            streamChanges(txIndexer, resumeFrom)
+            streamChanges(txIndexer, resumeFrom, assigned)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             LOG.error(e, "[$dbName] External source failed")
             throw e
+        } finally {
+            assignment.set(Unassigned)
         }
     }
 
@@ -171,8 +270,11 @@ class MySqlSource(
             this.snapshotCompleted = snapshotCompleted
         }.toByteArray()
 
-    private suspend fun initialSnapshot(txIndexer: TxIndexer): GtidSet {
+    private suspend fun initialSnapshot(txIndexer: TxIndexer, assigned: Assigned): GtidSet {
         runInterruptible(Dispatchers.IO) { driver.openSnapshot() }.use { snapshot ->
+            // what the binlog accumulates while the snapshot reads is exactly the lag worth seeing
+            assigned.position = snapshot.position
+
             closeOnCancel(snapshot) {
                 val batchToken = token(snapshot.position, snapshotCompleted = false)
 
@@ -198,36 +300,60 @@ class MySqlSource(
         }
     }
 
-    private suspend fun streamChanges(txIndexer: TxIndexer, from: GtidSet) {
+    private suspend fun streamChanges(txIndexer: TxIndexer, from: GtidSet, assigned: Assigned) {
         // Submitted to the indexer but not yet applied, in submission (= commit) order. We submit ahead
         // so back-to-back CDC txs pipeline through the double-buffered indexer; `submitTx`'s bounded
         // hand-off buffer suspends us under backpressure, keeping this bounded.
-        val awaitingApply = ArrayDeque<Deferred<TransactionResult>>()
+        val awaitingApply = ArrayDeque<Pair<MySqlDriver.Transaction.Committed, Deferred<TransactionResult>>>()
+
+        // Drains the completed prefix rather than awaiting the head, so a slow tx can't stall the poll loop.
+        // `await()` rethrows an ingest failure, which closes the stream without having moved past anything.
+        suspend fun drainApplied() {
+            while (awaitingApply.firstOrNull()?.second?.isCompleted == true) {
+                val (tx, handle) = awaitingApply.removeFirst()
+                handle.await()
+                assigned.position = tx.position
+                eventsCounter?.increment(tx.ops.size.toDouble())
+                commitsCounter?.increment()
+                assigned.lastEventEpochSeconds = tx.commitTime.epochSecond
+                // a negative sample, from an upstream clock ahead of ours, would be dropped rather than recorded
+                commitLag?.record(maxOf(0.0, (Instant.now().toEpochMilli() - tx.commitTime.toEpochMilli()) / 1000.0))
+            }
+        }
+
+        assigned.position = from
 
         driver.openStream(from).use { stream ->
-            while (currentCoroutineContext().isActive) {
-                // Every upstream transaction is an XT one, those with no included rows too: its token is what keeps a
-                // restart clear of binlog the upstream has since purged.
-                stream.poll()?.let { tx ->
-                    awaitingApply.addLast(
-                        txIndexer.submitTx(token(tx.position, snapshotCompleted = true), systemTime = tx.commitTime) { openTx ->
+            assigned.stream = stream
+
+            try {
+                while (currentCoroutineContext().isActive) {
+                    // Every upstream transaction is an XT one, those with no included rows too: its token is what keeps a
+                    // restart clear of binlog the upstream has since purged.
+                    stream.poll()?.let { tx ->
+                        val handle = txIndexer.submitTx(token(tx.position, snapshotCompleted = true), systemTime = tx.commitTime) { openTx ->
                             DirectMirror.indexTx(tx, openTx)
                             TxResult.Committed()
                         }
-                    )
+                        awaitingApply.addLast(tx to handle)
+                    }
+
+                    drainApplied()
                 }
 
-                // Drains the completed prefix rather than awaiting the head, so a slow tx can't stall the poll loop.
-                // `await()` rethrows an ingest failure, which closes the stream without having moved past anything.
-                while (awaitingApply.firstOrNull()?.isCompleted == true) awaitingApply.removeFirst().await()
+                throw CancellationException("[$dbName] Streaming stood down")
+            } finally {
+                assigned.stream = null
             }
-
-            throw CancellationException("[$dbName] Streaming stood down")
         }
     }
 
     override fun close() {
         LOG.info("[$dbName] Closing external source")
+        // Before the driver goes: gtid_lag queries it on scrape.
+        meterRegistry?.let { reg ->
+            (gauges + listOfNotNull(eventsCounter, commitsCounter, commitLag)).forEach { reg.remove(it) }
+        }
         driver.close()
     }
 }

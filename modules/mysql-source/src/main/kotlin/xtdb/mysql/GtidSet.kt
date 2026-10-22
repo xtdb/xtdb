@@ -30,6 +30,12 @@ class GtidSet private constructor(private val intervals: Map<UUID, List<LongRang
             ranges.all { r -> theirs.any { t -> r.first >= t.first && r.last <= t.last } }
         }
 
+    fun countNotIn(other: GtidSet): Long =
+        intervals.entries.sumOf { (id, ranges) ->
+            val theirs = other.intervals[id].orEmpty()
+            ranges.sumOf { r -> (r.last - r.first + 1) - theirs.sumOf { t -> maxOf(0L, minOf(r.last, t.last) - maxOf(r.first, t.first) + 1) } }
+        }
+
     override fun equals(other: Any?) = other is GtidSet && intervals == other.intervals
     override fun hashCode() = intervals.hashCode()
 
