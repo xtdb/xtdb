@@ -1,5 +1,6 @@
 package xtdb.postgres
 
+import xtdb.util.ReconnectPolicy
 import kotlin.time.TimeSource
 
 /**

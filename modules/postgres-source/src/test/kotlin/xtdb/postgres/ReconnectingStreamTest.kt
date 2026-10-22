@@ -1,5 +1,6 @@
 package xtdb.postgres
 
+import xtdb.util.ReconnectPolicy
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch

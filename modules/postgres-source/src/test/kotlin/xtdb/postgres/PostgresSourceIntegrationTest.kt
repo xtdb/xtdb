@@ -1,5 +1,6 @@
 package xtdb.postgres
 
+import xtdb.util.ReconnectPolicy
 import clojure.lang.ILookup
 import clojure.lang.Keyword
 import io.micrometer.core.instrument.MeterRegistry

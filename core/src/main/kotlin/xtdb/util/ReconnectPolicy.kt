@@ -1,4 +1,4 @@
-package xtdb.postgres
+package xtdb.util
 
 import xtdb.api.error.Incorrect
 import kotlin.math.ceil
@@ -10,7 +10,7 @@ import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * How long to wait before reopening a replication stream that has failed, and when that wait starts over.
+ * How long to wait before reopening an upstream connection that has failed, and when that wait starts over.
  *
  * The wait doubles with each consecutive failure up to [maxDelay], and carries jitter so that sources
  * reconnecting to the same upstream after a failover don't do so in lockstep.
@@ -32,7 +32,7 @@ data class ReconnectPolicy(
         if (!initialDelay.isPositive() || maxDelay < initialDelay || maxDelay.isInfinite())
             throw Incorrect(
                 "A reconnect policy needs a positive initial delay no greater than a finite maximum, got $initialDelay and $maxDelay",
-                errorCode = "xtdb.postgres/invalid-reconnect-policy",
+                errorCode = "xtdb/invalid-reconnect-policy",
             )
     }
 

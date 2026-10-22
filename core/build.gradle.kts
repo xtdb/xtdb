@@ -91,6 +91,7 @@ dependencies {
     api(libs.hato)
     testImplementation(libs.pgjdbc)
     testImplementation(libs.mockk)
+    testImplementation(kotlin("test"))
     testImplementation(libs.kotest.props)
     testImplementation(libs.clojure.test.check)
     testImplementation(testFixtures(project(":")))

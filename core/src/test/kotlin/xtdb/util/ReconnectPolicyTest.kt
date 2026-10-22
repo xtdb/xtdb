@@ -1,4 +1,4 @@
-package xtdb.postgres
+package xtdb.util
 
 import org.junit.jupiter.api.Test
 import xtdb.api.error.Incorrect
