@@ -47,7 +47,9 @@ import xtdb.database.encodeTxBasisToken
 import xtdb.database.mergeTxBasisTokens
 import xtdb.api.error.Anomaly
 import xtdb.api.error.Fault
+import xtdb.api.error.Forbidden
 import xtdb.api.error.Incorrect
+import xtdb.api.error.Unsupported
 import xtdb.query.*
 import xtdb.query.ParsedStatement.TxOptionValue
 import xtdb.query.ParsedStatement.TxOptions
@@ -60,6 +62,7 @@ import xtdb.util.closeOnCatch
 import xtdb.util.requiringResolve
 import xtdb.util.useAll
 import xtdb.util.XtdbVersion
+import java.net.URL
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.*
@@ -104,6 +107,66 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
     /** Opens an in-process connection to the named database. */
     fun connect(dbName: DatabaseName): Connection
+
+    /**
+     * The authentication method the node's configured `authn` rules ask of a caller claiming [user] from [remoteAddress],
+     * or null if no rule matches and the caller is to be rejected.
+     *
+     * Pick the matching `connect...` method below: [connectTrusted] for [Authenticator.Method.TRUST],
+     * [connectWithPassword] for [Authenticator.Method.PASSWORD],
+     * [connectWithClientCredentials] for [Authenticator.Method.CLIENT_CREDENTIALS],
+     * and [startDeviceAuth] for [Authenticator.Method.DEVICE_AUTH].
+     */
+    fun authMethodFor(user: String?, remoteAddress: String?): Authenticator.Method?
+
+    /**
+     * Opens a connection to [dbName] as [user], taken at its word: neither credentials nor the node's `authn` rules are checked,
+     * so this opens a connection as any user, superuser included.
+     * Where the rules should decide, consult [authMethodFor] first.
+     *
+     * The connection's [Connection.user] is [user]; with a null [user], the connection has no user.
+     */
+    fun connectTrusted(dbName: DatabaseName, user: String?): Connection
+
+    /**
+     * Opens a connection to [dbName] as [user], having verified [password] with the node's authenticator.
+     * The connection's [Connection.user] is the user id the authenticator resolves — for OIDC, the token's subject.
+     *
+     * @throws Forbidden (`xtdb.authn/failed`) if the credentials are rejected.
+     * @throws Unsupported if the node's authenticator doesn't support password authentication.
+     */
+    fun connectWithPassword(dbName: DatabaseName, user: String, password: String): Connection
+
+    /**
+     * Opens a connection to [dbName], having verified [clientId] and [clientSecret] with the node's authenticator
+     * (the OAuth client-credentials flow).
+     * The connection's [Connection.user] is the user id the authenticator resolves for that client.
+     *
+     * @throws Forbidden (`xtdb.authn/failed`) if the credentials are rejected.
+     * @throws Unsupported if the node's authenticator doesn't support client credentials.
+     */
+    fun connectWithClientCredentials(dbName: DatabaseName, clientId: String, clientSecret: String): Connection
+
+    /**
+     * Starts the OAuth device-authorisation flow for [user] against [dbName].
+     * Show the caller [DeviceAuth.url], then call [DeviceAuth.await], which blocks until they approve.
+     *
+     * @throws Unsupported if the node's authenticator doesn't support device authorisation.
+     */
+    fun startDeviceAuth(dbName: DatabaseName, user: String): DeviceAuth
+
+    interface DeviceAuth {
+        /** Where the caller goes to approve this connection. */
+        val url: URL
+
+        /**
+         * Blocks until the caller has approved at [url], then opens the connection,
+         * whose [Connection.user] is the user id the authenticator resolves.
+         *
+         * @throws Forbidden (`xtdb.authn/failed`) if the authorisation fails or expires.
+         */
+        fun await(): Connection
+    }
 
     data class SubmittedTx(val txId: MessageId)
 
@@ -217,6 +280,12 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         var defaultTz: ZoneId,
         private val tracer: Tracer?,
         private val metrics: ConnectionMetrics?,
+
+        // `@InternalApi` rather than `internal` because pgwire (Clojure) sets it once its handshake succeeds.
+        // TODO(#5793): goes once pgwire authenticates through the node, which hands back a Connection already carrying its Principal.
+        /** @suppress */
+        @property:InternalApi
+        var principal: Principal?,
     ) : AdbcConnection {
 
         var awaitToken: String? = null
@@ -241,12 +310,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
         fun latestSubmittedMsgIds(): Map<DatabaseName, List<MessageId>> = dbCat.latestSubmittedMsgIds()
 
-        // `@InternalApi` rather than `internal` because pgwire (Clojure) sets it once its handshake succeeds.
-        // TODO(#5793): goes once frontends authenticate through the node, which hands back a Connection already carrying its Principal.
-        /** @suppress */
-        @InternalApi
-        var principal: Principal? = null
-
+        /** The authenticated user this connection's writes are attributed to; null for an unauthenticated [Xtdb.connect]. */
         val user: String? get() = principal?.userId
 
         // `@InternalApi` rather than `internal` because pgwire (Clojure) calls it before each query.

@@ -19,7 +19,7 @@
            (org.apache.arrow.memory BufferAllocator)
            xtdb.NodeBase
            xtdb.XtdbInternal
-           (xtdb.api DataSource Xtdb Xtdb$CompactorNode Xtdb$Config Xtdb$Connection)
+           (xtdb.api Authenticator DataSource Principal Principal$Static Xtdb Xtdb$CompactorNode Xtdb$Config Xtdb$Connection Xtdb$DeviceAuth)
            (xtdb.api.metrics ConnectionMetrics Healthz)
            xtdb.api.module.XtdbModule$Factory
            (xtdb.database Database$Catalog)
@@ -101,15 +101,16 @@
 
 (defn- ->node-connection ^Xtdb$Connection [^Database$Catalog db-cat ^BufferAllocator allocator
                                            ^IQuerySource q-src ^SqlPlanner sql-planner query-tracer default-tz
-                                           ^ConnectionMetrics conn-metrics db-name]
-  (Xtdb$Connection. allocator db-cat q-src sql-planner db-name (InstantSource/system) default-tz query-tracer conn-metrics))
+                                           ^ConnectionMetrics conn-metrics db-name ^Principal principal]
+  (Xtdb$Connection. allocator db-cat q-src sql-planner db-name (InstantSource/system) default-tz query-tracer conn-metrics principal))
 
 (defrecord Node [^BufferAllocator allocator, ^Database$Catalog db-cat
                  ^IQuerySource q-src ^SqlPlanner sql-planner
                  ^CompositeMeterRegistry metrics-registry
                  default-tz, ^AtomicReference !await-token
                  system, close-fn,
-                 ^ConnectionMetrics conn-metrics query-tracer]
+                 ^ConnectionMetrics conn-metrics query-tracer
+                 ^Authenticator authn]
   Xtdb
   (getAllocator [_] allocator)
 
@@ -143,7 +144,30 @@
   (connect [this] (.connect this "xtdb"))
 
   (connect [_ db-name]
-    (->node-connection db-cat allocator q-src sql-planner query-tracer default-tz conn-metrics db-name))
+    (->node-connection db-cat allocator q-src sql-planner query-tracer default-tz conn-metrics db-name nil))
+
+  (authMethodFor [_ user remote-address]
+    (.methodFor authn user remote-address))
+
+  (connectTrusted [_ db-name user]
+    (->node-connection db-cat allocator q-src sql-planner query-tracer default-tz conn-metrics db-name
+                       (some-> user (Principal$Static.))))
+
+  (connectWithPassword [_ db-name user password]
+    (->node-connection db-cat allocator q-src sql-planner query-tracer default-tz conn-metrics db-name
+                       (.verifyPassword authn user password)))
+
+  (connectWithClientCredentials [_ db-name client-id client-secret]
+    (->node-connection db-cat allocator q-src sql-planner query-tracer default-tz conn-metrics db-name
+                       (.verifyClientCredentials authn client-id client-secret)))
+
+  (startDeviceAuth [_ db-name user]
+    (let [resp (.startDeviceAuth authn user)]
+      (reify Xtdb$DeviceAuth
+        (getUrl [_] (.getUrl resp))
+        (await [_]
+          (->node-connection db-cat allocator q-src sql-planner query-tracer default-tz conn-metrics db-name
+                             (.await resp))))))
 
   (addMeterRegistry [_ reg]
     (.add metrics-registry reg))

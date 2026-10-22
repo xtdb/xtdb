@@ -75,8 +75,10 @@ external entity SqlPlanner {
 }
 
 external entity User {
-    -- The session identity, established once at authentication. Stamped onto every
-    -- transaction this connection submits. Not a per-transaction option.
+    -- The session identity, established once at authentication: by the frontend's handshake, or by an in-process caller connecting with credentials.
+    -- Stamped onto every transaction this connection submits.
+    -- Not a per-transaction option.
+    -- An in-process connection opened without credentials has none.
 }
 
 ---- Value Types
@@ -226,7 +228,7 @@ enum HandleFailure {
 entity Connection {
     -- A session-scoped handle onto the node, shared by both protocol frontends.
     -- See: core/src/main/kotlin/xtdb/api/Xtdb.kt (Xtdb.Connection)
-    user: User                       -- session identity, set once at authentication
+    user: User?                      -- session identity, set once at authentication; null for an in-process connection opened without credentials
     auto_commit: Boolean
     default_tz: ZoneId
     opened_tz: ZoneId                -- the default_tz the connection was constructed with

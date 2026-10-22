@@ -1,3 +1,5 @@
+@file:OptIn(InternalApi::class)
+
 package xtdb
 
 import io.mockk.every
@@ -51,6 +53,7 @@ class ConnectionTest {
             dbName,
             InstantSource.system(),
             ZoneOffset.UTC,
+            null,
             null,
             null
         )
