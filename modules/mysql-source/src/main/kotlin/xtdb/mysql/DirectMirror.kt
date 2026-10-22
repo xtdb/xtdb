@@ -1,17 +1,26 @@
 package xtdb.mysql
 
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.modules.PolymorphicModuleBuilder
+import kotlinx.serialization.modules.subclass
 import xtdb.api.error.Incorrect
 import xtdb.api.tx.OpenTx
+import xtdb.mysql.proto.DirectMirrorConfig
+import xtdb.mysql.proto.directMirrorConfig
 import xtdb.time.InstantUtil.asMicros
 import java.time.ZonedDateTime
 import java.util.Objects
+import com.google.protobuf.Any as ProtoAny
+
+private const val PROTO_TAG_PREFIX = "proto.xtdb.com"
 
 /**
  * Mirrors the upstream into XT as-is: a row of `shop.users` lands in the `users` table of the XT schema `shop`.
  * `_id` is taken from the row, and explicit `_valid_from`/`_valid_to` columns are honoured — as `TIMESTAMP`
  * columns, which are instants, where a `DATETIME` is a wall-clock reading in no zone.
  */
-internal object DirectMirror {
+class DirectMirror : MySqlIndexer {
     private fun explicitValidTimeMicros(name: String, value: Any?): Long? = when (value) {
         null -> null
         is ZonedDateTime -> value.toInstant().asMicros
@@ -53,7 +62,7 @@ internal object DirectMirror {
         }
     }
 
-    fun indexTx(tx: MySqlDriver.Transaction, openTx: OpenTx) {
+    override fun indexTx(tx: MySqlDriver.Transaction, openTx: OpenTx) {
         for (op in tx.ops) {
             when (op) {
                 is RowOp.Put -> openTx.put(op, op.row)
@@ -64,6 +73,35 @@ internal object DirectMirror {
                 }
 
                 is RowOp.Delete -> openTx.delete(op, op.row)
+            }
+        }
+    }
+
+    @Serializable
+    @SerialName("!DirectMirror")
+    class Factory : MySqlIndexer.Factory {
+
+        override fun open(): MySqlIndexer = DirectMirror()
+
+        override fun equals(other: Any?) = other is Factory
+        override fun hashCode() = javaClass.hashCode()
+
+        class Registration : MySqlIndexer.Registration<Factory> {
+            override val protoTag: String
+                get() = "$PROTO_TAG_PREFIX/xtdb.mysql.proto.DirectMirrorConfig"
+
+            override val factoryClass get() = Factory::class.java
+
+            override fun toProto(factory: Factory): ProtoAny =
+                ProtoAny.pack(directMirrorConfig { }, PROTO_TAG_PREFIX)
+
+            override fun fromProto(msg: ProtoAny): MySqlIndexer.Factory {
+                msg.unpack(DirectMirrorConfig::class.java)
+                return Factory()
+            }
+
+            override fun registerSerde(builder: PolymorphicModuleBuilder<MySqlIndexer.Factory>) {
+                builder.subclass(Factory::class)
             }
         }
     }

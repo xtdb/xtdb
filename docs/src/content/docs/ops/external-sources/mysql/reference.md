@@ -28,7 +28,7 @@ A [user](https://dev.mysql.com/doc/refman/8.0/en/create-user.html) with the foll
 ## Configuration
 
 Configured by [attaching a secondary database](/about/dbs-in-xtdb#attachingdetaching-secondary-databases-v21) with the additional `externalSource` options.
-It reads from MySQL via a [`!MySQL` remote](#remote):
+It reads from MySQL via a [`!MySQL` remote](#remote), and writes through an [indexer](#indexers):
 
 ```sql
 ATTACH DATABASE my_db WITH $$
@@ -43,6 +43,9 @@ externalSource: !MySQL
   # The tables to mirror, as 'database.table', named exactly as MySQL stores them.
   # This one list drives both the snapshot and the binlog stream.
   tables: [shop.users, shop.orders]
+
+  # The indexer used to index MySQL transactions.
+  indexer: !DirectMirror {}
 $$
 ```
 
@@ -139,12 +142,21 @@ Each MySQL column lands as the same XTDB value whether the snapshot or the binlo
 
 MySQL's zero dates (`'0000-00-00'` and the like), and a zero `YEAR`, land as null.
 
-## DirectMirror
+## Indexers
 
-The source mirrors each row into the XTDB table of the same name, in the schema named after its MySQL database — `shop.users` lands as `shop.users`.
+An indexer decides what each MySQL transaction writes to XTDB: it is handed the whole transaction — every row change, across every included table, each with its database, table and primary-key columns — and writes it as one XTDB transaction.
 
-Additional properties are required from the included tables:
+The following indexers are built into XTDB:
+- DirectMirror
+
+### DirectMirror
+
+Mirrors each row into the XTDB table of the same name, in the schema named after its MySQL database — `shop.users` lands as `shop.users`.
+
+Additional properties are required from the tables replicated using this indexer:
 - `_id` is a required column, used as the primary key for the row
   - An `UPDATE` that changes `_id` ends the row under the old `_id`
 - If set, the `_valid_from` and `_valid_to` columns must be of type `TIMESTAMP` — a `DATETIME` is in no time zone, so isn't an instant
   - Like in XTDB, it is incorrect to specify a `_valid_to` without a `_valid_from`
+
+No configuration properties are provided.

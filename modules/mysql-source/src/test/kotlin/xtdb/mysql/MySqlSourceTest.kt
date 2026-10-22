@@ -35,7 +35,7 @@ class MySqlSourceTest {
         val token = mySqlSourceToken { gtidSet = ""; snapshotCompleted = false }.toByteArray()
 
         val e = assertThrows<Fault> {
-            MySqlSource("db", "mysql", UnusedDriver).onPartitionAssigned(0, token, UnusedIndexer)
+            MySqlSource("db", "mysql", UnusedDriver, DirectMirror()).onPartitionAssigned(0, token, UnusedIndexer)
         }
 
         assertEquals("xtdb.mysql/incomplete-snapshot", e.errorCode())

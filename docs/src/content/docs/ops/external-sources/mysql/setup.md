@@ -23,7 +23,7 @@ As with other [external sources](/ops/external-sources/overview) you will need:
 Ensure that you have a transaction log and object store that do not conflict with other databases.
 :::
 
-Additionally you will need MySQL 8.0.20 or later, and tables set up for XTDB — each with an `_id` column, see [DirectMirror](/ops/external-sources/mysql/reference#directmirror).
+Additionally you will need MySQL 8.0.20 or later, and — for the built-in [DirectMirror](/ops/external-sources/mysql/reference#directmirror) indexer — tables set up for XTDB, each with an `_id` column.
 
 ## Check the binlog settings
 
@@ -103,6 +103,7 @@ externalSource: !MySQL
   remote: mysql_remote
   serverId: 5701
   tables: [shop.users, shop.orders]
+  indexer: !DirectMirror {}
 $$
 ```
 

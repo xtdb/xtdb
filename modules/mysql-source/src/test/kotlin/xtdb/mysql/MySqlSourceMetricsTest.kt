@@ -77,7 +77,7 @@ class MySqlSourceMetricsTest {
     private fun resumeToken(from: GtidSet) =
         mySqlSourceToken { gtidSet = from.toString(); snapshotCompleted = true }.toByteArray()
 
-    private fun openSource(reg: SimpleMeterRegistry, driver: MySqlDriver) = MySqlSource("xtdb", "mysql", driver, reg)
+    private fun openSource(reg: SimpleMeterRegistry, driver: MySqlDriver) = MySqlSource("xtdb", "mysql", driver, DirectMirror(), reg)
 
     private fun SimpleMeterRegistry.gtidLag() = get("xtdb.mysql_source.gtid_lag").gauge().value()
     private fun SimpleMeterRegistry.connectionState() = get("xtdb.mysql_source.connection_state").gauge().value()

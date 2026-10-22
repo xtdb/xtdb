@@ -26,7 +26,7 @@ data class TableId(val database: String, val table: String) {
 
 data class ColumnDef(val name: String, val type: MySqlType)
 
-data class TableDef(val id: TableId, val columns: List<ColumnDef>) {
+data class TableDef(val id: TableId, val columns: List<ColumnDef>, val primaryKey: List<String>) {
 
     fun fromBinlog(row: Array<Serializable?>): Map<String, Any?> {
         check(row.size == columns.size) { "row of ${row.size} values for $id's ${columns.size} columns" }
@@ -122,13 +122,15 @@ data class TableDef(val id: TableId, val columns: List<ColumnDef>) {
                 ColumnDef(name, type)
             }
 
-            return TableDef(id, columns)
+            val keyOrdinals = meta.simplePrimaryKeys.orEmpty() + meta.primaryKeysWithPrefix?.keys.orEmpty()
+
+            return TableDef(id, columns, keyOrdinals.map { names[it] })
         }
 
         data class InfoSchemaColumn(val name: String, val dataType: String, val columnType: String, val numericPrecision: Long?, val characterSet: String?)
 
-        fun fromInformationSchema(id: TableId, cols: List<InfoSchemaColumn>): TableDef =
-            TableDef(id, cols.map { ColumnDef(it.name, it.mysqlType(id)) })
+        fun fromInformationSchema(id: TableId, cols: List<InfoSchemaColumn>, primaryKey: List<String>): TableDef =
+            TableDef(id, cols.map { ColumnDef(it.name, it.mysqlType(id)) }, primaryKey)
 
         private fun InfoSchemaColumn.mysqlType(id: TableId): MySqlType {
             val unsigned = "unsigned" in columnType

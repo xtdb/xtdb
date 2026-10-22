@@ -2,12 +2,19 @@ edition = "2023";
 
 package xtdb.mysql.proto;
 
+import "google/protobuf/any.proto";
+
 option java_multiple_files = true;
 
 message MySqlSourceConfig {
     string remote = 1;
     int64 server_id = 2;
     repeated string tables = 3;
+
+    google.protobuf.Any indexer = 4;
+}
+
+message DirectMirrorConfig {
 }
 
 message MySqlSourceToken {

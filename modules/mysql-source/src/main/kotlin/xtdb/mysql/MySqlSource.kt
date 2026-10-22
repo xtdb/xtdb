@@ -9,6 +9,7 @@ import kotlinx.coroutines.*
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.modules.PolymorphicModuleBuilder
+import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.subclass
 import xtdb.api.Remote
 import xtdb.api.RemoteAlias
@@ -40,6 +41,7 @@ class MySqlSource(
     private val dbName: String,
     private val sourceName: String,
     private val driver: MySqlDriver,
+    private val indexer: MySqlIndexer,
     private val meterRegistry: MeterRegistry? = null,
 ) : ExternalSource {
 
@@ -135,6 +137,7 @@ class MySqlSource(
         val remote: RemoteAlias,
         val serverId: Long,
         val tables: List<String>,
+        val indexer: MySqlIndexer.Factory,
     ) : ExternalSource.Factory {
 
         override fun open(
@@ -171,6 +174,8 @@ class MySqlSource(
                     errorCode = "xtdb.mysql/no-tables",
                 )
 
+            val openedIndexer = indexer.open()
+
             val driver = ResilientDriver(
                 dbName,
                 MySqlWireDriver(
@@ -179,7 +184,7 @@ class MySqlSource(
                 ),
             )
 
-            return MySqlSource(dbName, remote, driver, meterRegistry)
+            return MySqlSource(dbName, remote, driver, openedIndexer, meterRegistry)
         }
 
         class Registration : ExternalSource.Registration<Factory> {
@@ -192,16 +197,24 @@ class MySqlSource(
                     remote = factory.remote
                     serverId = factory.serverId
                     tables.addAll(factory.tables)
+                    indexer = MySqlIndexer.Factory.toProto(factory.indexer)
                 }, PROTO_TAG_PREFIX)
 
             override fun fromProto(msg: ProtoAny): Factory {
                 val config = msg.unpack(MySqlSourceConfig::class.java)
-                return Factory(remote = config.remote, serverId = config.serverId, tables = config.tablesList.toList())
+                return Factory(
+                    remote = config.remote,
+                    serverId = config.serverId,
+                    tables = config.tablesList.toList(),
+                    indexer = MySqlIndexer.Factory.fromProto(config.indexer),
+                )
             }
 
             override fun registerSerde(builder: PolymorphicModuleBuilder<ExternalSource.Factory>) {
                 builder.subclass(Factory::class)
             }
+
+            override val serializersModule: SerializersModule = MySqlIndexer.Factory.serializersModule
         }
     }
 
@@ -284,7 +297,7 @@ class MySqlSource(
                     // because a batch ingest failure fails the leader term, which stands this source down —
                     // so the snapshot aborts whether or not anything was awaiting that batch.
                     txIndexer.submitTx(batchToken) { openTx ->
-                        DirectMirror.indexTx(MySqlDriver.Transaction.Snapshot(batch, snapshot.position), openTx)
+                        indexer.indexTx(MySqlDriver.Transaction.Snapshot(batch, snapshot.position), openTx)
                         TxResult.Committed()
                     }
                 }
@@ -332,7 +345,7 @@ class MySqlSource(
                     // restart clear of binlog the upstream has since purged.
                     stream.poll()?.let { tx ->
                         val handle = txIndexer.submitTx(token(tx.position, snapshotCompleted = true), systemTime = tx.commitTime) { openTx ->
-                            DirectMirror.indexTx(tx, openTx)
+                            indexer.indexTx(tx, openTx)
                             TxResult.Committed()
                         }
                         awaitingApply.addLast(tx to handle)
@@ -354,6 +367,8 @@ class MySqlSource(
         meterRegistry?.let { reg ->
             (gauges + listOfNotNull(eventsCounter, commitsCounter, commitLag)).forEach { reg.remove(it) }
         }
+        runCatching { indexer.close() }
+            .onFailure { LOG.warn(it, "[$dbName] Failed to close the indexer") }
         driver.close()
     }
 }

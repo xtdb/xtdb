@@ -2,18 +2,26 @@ package xtdb.mysql
 
 import java.time.Instant
 
-/** @suppress */
+/**
+ * [primaryKey] names the upstream table's primary-key columns, in key order — empty for a table with none.
+ *
+ * @suppress
+ */
 sealed interface RowOp {
     val database: String
     val table: String
+    val primaryKey: List<String>
 
-    data class Put(override val database: String, override val table: String, val row: Map<String, Any?>) : RowOp
+    data class Put(override val database: String, override val table: String, override val primaryKey: List<String>, val row: Map<String, Any?>) : RowOp
 
     /** [before] differs from [row] in its key where the UPDATE changed the key. */
-    data class Update(override val database: String, override val table: String, val before: Map<String, Any?>, val row: Map<String, Any?>) : RowOp
+    data class Update(
+        override val database: String, override val table: String, override val primaryKey: List<String>,
+        val before: Map<String, Any?>, val row: Map<String, Any?>,
+    ) : RowOp
 
     /** [row] is the deleted row's full before-image. */
-    data class Delete(override val database: String, override val table: String, val row: Map<String, Any?>) : RowOp
+    data class Delete(override val database: String, override val table: String, override val primaryKey: List<String>, val row: Map<String, Any?>) : RowOp
 }
 
 /**

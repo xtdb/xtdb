@@ -91,6 +91,7 @@ class MySqlWireDriverTest : MySqlSourceTestBase() {
         driver("docs").openStream(start).use { stream ->
             val first = pollOne(stream)
             assertEquals(listOf("Put", "Update", "Delete"), first.ops.map { it::class.simpleName })
+            assertEquals(listOf("_id"), first.ops[0].primaryKey)
             assertEquals(mapOf("_id" to 1L, "v" to 1L), (first.ops[1] as RowOp.Update).before)
 
             val ddl = pollOne(stream)
@@ -105,6 +106,19 @@ class MySqlWireDriverTest : MySqlSourceTestBase() {
             val first = pollOne(stream)
             driver("docs").openStream(first.position).use { again -> assertTrue(pollOne(again).ops.isEmpty(), "the first transaction isn't presented again") }
         }
+    }
+
+    @Test
+    fun `row changes carry the table's primary-key columns in key order, from the snapshot and the binlog`() = runBlocking {
+        mysqlExecute("CREATE TABLE $db.keyed (a INT, b INT, v INT, PRIMARY KEY (b, a))", "INSERT INTO $db.keyed VALUES (1, 2, 3)")
+
+        driver("keyed").openSnapshot().use { snapshot ->
+            assertEquals(listOf("b", "a"), snapshot.batches().first().single().primaryKey)
+        }
+
+        val start = executed()
+        mysqlExecute("INSERT INTO $db.keyed VALUES (4, 5, 6)")
+        driver("keyed").openStream(start).use { assertEquals(listOf("b", "a"), pollOne(it).ops.single().primaryKey) }
     }
 
     @Test

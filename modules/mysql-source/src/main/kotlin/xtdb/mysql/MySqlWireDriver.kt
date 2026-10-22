@@ -177,7 +177,15 @@ class MySqlWireDriver(
             }
         }
 
-        return TableDef.fromInformationSchema(id, columns)
+        val primaryKey = prepareStatement(
+            """SELECT COLUMN_NAME FROM information_schema.KEY_COLUMN_USAGE
+               WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND CONSTRAINT_NAME = 'PRIMARY' ORDER BY ORDINAL_POSITION"""
+        ).use { ps ->
+            ps.setString(1, id.database); ps.setString(2, id.table)
+            ps.executeQuery().use { rs -> buildList { while (rs.next()) add(rs.getString(1)) } }
+        }
+
+        return TableDef.fromInformationSchema(id, columns, primaryKey)
     }
 
     override fun openSnapshot(): MySqlDriver.SnapshotReader {
@@ -229,7 +237,7 @@ class MySqlWireDriver(
                             .chunked(SNAPSHOT_BATCH_SIZE)
                             .forEach { batch ->
                                 rowCount += batch.size
-                                yield(batch.map { RowOp.Put(def.id.database, def.id.table, it) })
+                                yield(batch.map { RowOp.Put(def.id.database, def.id.table, def.primaryKey, it) })
                             }
                     }
                 }
@@ -472,16 +480,16 @@ class MySqlWireDriver(
                 }
 
                 EventType.WRITE_ROWS, EventType.EXT_WRITE_ROWS -> event.getData<WriteRowsEventData>().let { d ->
-                    addOps(d.tableId, d.includedColumns) { def -> d.rows.map { RowOp.Put(def.id.database, def.id.table, def.fromBinlog(it)) } }
+                    addOps(d.tableId, d.includedColumns) { def -> d.rows.map { RowOp.Put(def.id.database, def.id.table, def.primaryKey, def.fromBinlog(it)) } }
                 }
 
                 EventType.DELETE_ROWS, EventType.EXT_DELETE_ROWS -> event.getData<DeleteRowsEventData>().let { d ->
-                    addOps(d.tableId, d.includedColumns) { def -> d.rows.map { RowOp.Delete(def.id.database, def.id.table, def.fromBinlog(it)) } }
+                    addOps(d.tableId, d.includedColumns) { def -> d.rows.map { RowOp.Delete(def.id.database, def.id.table, def.primaryKey, def.fromBinlog(it)) } }
                 }
 
                 EventType.UPDATE_ROWS, EventType.EXT_UPDATE_ROWS -> event.getData<UpdateRowsEventData>().let { d ->
                     addOps(d.tableId, d.includedColumnsBeforeUpdate, d.includedColumns) { def ->
-                        d.rows.map { (before, after) -> RowOp.Update(def.id.database, def.id.table, def.fromBinlog(before), def.fromBinlog(after)) }
+                        d.rows.map { (before, after) -> RowOp.Update(def.id.database, def.id.table, def.primaryKey, def.fromBinlog(before), def.fromBinlog(after)) }
                     }
                 }
 

@@ -20,7 +20,7 @@ class MySqlSourceFactoryTest {
     @Test
     fun `proto round-trips factory`() {
         val original = MySqlSource.Factory(
-            remote = "mysql", serverId = 5701, tables = listOf("shop.users", "shop.orders"),
+            remote = "mysql", serverId = 5701, tables = listOf("shop.users", "shop.orders"), indexer = DirectMirror.Factory(),
         )
 
         assertEquals(original, protoRoundTrip(original))
@@ -33,6 +33,7 @@ class MySqlSourceFactoryTest {
               remote: mysql
               serverId: 5701
               tables: [shop.users, shop.orders]
+              indexer: !DirectMirror {}
         """.trimIndent()
 
         val factory = Database.Config.fromYaml(yaml).externalSource as MySqlSource.Factory
@@ -40,6 +41,25 @@ class MySqlSourceFactoryTest {
         assertEquals("mysql", factory.remote)
         assertEquals(5701L, factory.serverId)
         assertEquals(listOf("shop.users", "shop.orders"), factory.tables)
+        assertTrue(factory.indexer is DirectMirror.Factory)
+    }
+
+    @Test
+    fun `YAML without an indexer is rejected`() {
+        val yaml = """
+            externalSource: !MySQL
+              remote: mysql
+              serverId: 5701
+              tables: [shop.users]
+        """.trimIndent()
+
+        assertThrows(IllegalArgumentException::class.java) { Database.Config.fromYaml(yaml) }
+    }
+
+    @Test
+    fun `a bespoke indexer round-trips through proto`() {
+        val original = MySqlSource.Factory("mysql", 5701, listOf("shop.users"), TestRerouteIndexer.Factory("gadgets", "secret"))
+        assertEquals(original, protoRoundTrip(original))
     }
 
     @Test
@@ -92,6 +112,7 @@ class MySqlSourceFactoryTest {
               remote: mysql
               serverId: 1234
               tables: [a.b]
+              indexer: !DirectMirror {}
             """.trimIndent()
         ).externalSource
 
@@ -106,7 +127,7 @@ class MySqlSourceFactoryTest {
     fun `a server id outside the 32-bit range is rejected on open`() {
         for (id in listOf(0L, -1L, 4_294_967_296L)) {
             val e = assertThrows(Incorrect::class.java) {
-                open(MySqlSource.Factory("mysql", id, listOf("a.b")))
+                open(MySqlSource.Factory("mysql", id, listOf("a.b"), DirectMirror.Factory()))
             }
             assertEquals("xtdb.mysql/invalid-server-id", e.errorCode())
         }
@@ -114,12 +135,12 @@ class MySqlSourceFactoryTest {
 
     @Test
     fun `an empty include-list and a table that isn't database dot table are rejected on open`() {
-        assertEquals("xtdb.mysql/no-tables", assertThrows(Incorrect::class.java) { open(MySqlSource.Factory("mysql", 1, emptyList())) }.errorCode())
-        assertEquals("xtdb.mysql/invalid-table-name", assertThrows(Incorrect::class.java) { open(MySqlSource.Factory("mysql", 1, listOf("just_a_table"))) }.errorCode())
+        assertEquals("xtdb.mysql/no-tables", assertThrows(Incorrect::class.java) { open(MySqlSource.Factory("mysql", 1, emptyList(), DirectMirror.Factory())) }.errorCode())
+        assertEquals("xtdb.mysql/invalid-table-name", assertThrows(Incorrect::class.java) { open(MySqlSource.Factory("mysql", 1, listOf("just_a_table"), DirectMirror.Factory())) }.errorCode())
     }
 
     @Test
     fun `an unknown remote alias is rejected on open`() {
-        assertEquals("xtdb.mysql/missing-remote", assertThrows(Incorrect::class.java) { open(MySqlSource.Factory("nope", 1, listOf("a.b"))) }.errorCode())
+        assertEquals("xtdb.mysql/missing-remote", assertThrows(Incorrect::class.java) { open(MySqlSource.Factory("nope", 1, listOf("a.b"), DirectMirror.Factory())) }.errorCode())
     }
 }

@@ -72,7 +72,7 @@ abstract class MySqlSourceTestBase {
 
     protected fun attachCdc(
         node: Xtdb, database: String, cdcLog: Path, cdcStorage: Path,
-        serverId: Long, tables: List<String>,
+        serverId: Long, tables: List<String>, indexer: String = "!DirectMirror {}",
     ) {
         node.createConnectionBuilder().build().use { c ->
             c.createStatement().use { s ->
@@ -87,6 +87,7 @@ abstract class MySqlSourceTestBase {
                           remote: mysql
                           serverId: $serverId
                           tables: [${tables.joinToString()}]
+                          indexer: $indexer
                     $$""".trimIndent()
                 )
             }
