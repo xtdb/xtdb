@@ -19,7 +19,7 @@
            (org.apache.arrow.memory BufferAllocator)
            xtdb.NodeBase
            xtdb.XtdbInternal
-           (xtdb.api Authenticator DataSource Principal Principal$Static Xtdb Xtdb$CompactorNode Xtdb$Config Xtdb$Connection Xtdb$DeviceAuth)
+           (xtdb.api Authenticator DataSource Principal Principal$Static Xtdb Xtdb$CompactorNode Xtdb$Config Xtdb$Connection)
            (xtdb.api.metrics ConnectionMetrics Healthz)
            xtdb.api.module.XtdbModule$Factory
            (xtdb.database Database$Catalog)
@@ -146,28 +146,22 @@
   (connect [_ db-name]
     (->node-connection db-cat allocator q-src sql-planner query-tracer default-tz conn-metrics db-name nil))
 
+  (connect [_ db-name principal]
+    (->node-connection db-cat allocator q-src sql-planner query-tracer default-tz conn-metrics db-name principal))
+
   (authMethodFor [_ user remote-address]
     (.methodFor authn user remote-address))
 
-  (connectTrusted [_ db-name user]
-    (->node-connection db-cat allocator q-src sql-planner query-tracer default-tz conn-metrics db-name
-                       (some-> user (Principal$Static.))))
+  (authenticateTrusted [_ user] (Principal$Static. user))
 
-  (connectWithPassword [_ db-name user password]
-    (->node-connection db-cat allocator q-src sql-planner query-tracer default-tz conn-metrics db-name
-                       (.verifyPassword authn user password)))
+  (authenticateWithPassword [_ user password]
+    (.verifyPassword authn user password))
 
-  (connectWithClientCredentials [_ db-name client-id client-secret]
-    (->node-connection db-cat allocator q-src sql-planner query-tracer default-tz conn-metrics db-name
-                       (.verifyClientCredentials authn client-id client-secret)))
+  (authenticateWithClientCredentials [_ client-id client-secret]
+    (.verifyClientCredentials authn client-id client-secret))
 
-  (startDeviceAuth [_ db-name user]
-    (let [resp (.startDeviceAuth authn user)]
-      (reify Xtdb$DeviceAuth
-        (getUrl [_] (.getUrl resp))
-        (await [_]
-          (->node-connection db-cat allocator q-src sql-planner query-tracer default-tz conn-metrics db-name
-                             (.await resp))))))
+  (startDeviceAuth [_ user]
+    (.startDeviceAuth authn user))
 
   (addMeterRegistry [_ reg]
     (.add metrics-registry reg))

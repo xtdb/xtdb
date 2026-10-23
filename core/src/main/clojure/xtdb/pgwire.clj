@@ -403,7 +403,9 @@
 
     (condp = (.authMethodFor node user remote-addr)
       Authenticator$Method/TRUST
-      (let [node-conn (.connectTrusted node db-name user)]
+      (let [node-conn (if user
+                        (.connect node db-name (.authenticateTrusted node user))
+                        (.connect node db-name))]
         (pgio/cmd-write-msg conn pgio/msg-auth {:result 0})
         (connected node-conn))
 
@@ -417,17 +419,17 @@
           (if (not= :msg-password msg-name)
             (throw (err-invalid-auth-spec (str "password authentication failed for user: " user)))
 
-            (let [node-conn (.connectWithPassword node db-name user (:password msg))]
+            (let [node-conn (.connect node db-name (.authenticateWithPassword node user (:password msg)))]
               (pgio/cmd-write-msg conn pgio/msg-auth {:result 0})
               (connected node-conn)))))
 
       Authenticator$Method/DEVICE_AUTH
-      (let [device-auth (.startDeviceAuth node db-name user)]
+      (let [device-auth (.startDeviceAuth node user)]
         (pgio/cmd-write-msg conn pgio/msg-auth {:result 0})
         (pgio/cmd-send-notice conn (notice (str "\nHello! Please head over here to authenticate:"
                                                 (str "\n\n" (.getUrl device-auth))
                                                 "\n")))
-        (connected (.await device-auth)))
+        (connected (.connect node db-name (.await device-auth))))
 
       Authenticator$Method/CLIENT_CREDENTIALS
       (do
@@ -440,7 +442,7 @@
             (throw (err-invalid-auth-spec (str "client credentials authentication failed for user: " user)))
 
             (let [{:keys [client-id client-secret]} (parse-client-creds (:password msg))
-                  node-conn (.connectWithClientCredentials node db-name client-id client-secret)]
+                  node-conn (.connect node db-name (.authenticateWithClientCredentials node client-id client-secret))]
               (pgio/cmd-write-msg conn pgio/msg-auth {:result 0})
               (connected node-conn)))))
 

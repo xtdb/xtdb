@@ -41,23 +41,25 @@ class NodeAuthnTest {
     }
 
     @Test
-    fun `a password connection runs as the user it authenticated as`() {
+    fun `connections opened as a password-authenticated principal run as its user`() {
         val node = openNode(UserList(users))
 
         assertEquals(PASSWORD, node.authMethodFor("alice", null))
 
-        node.connectWithPassword("xtdb", "alice", "alice-pw").use { conn ->
-            assertEquals("alice", conn.user)
-        }
+        val alice = node.authenticateWithPassword("alice", "alice-pw")
+        assertEquals("alice", alice.userId)
+
+        node.connect("xtdb", alice).use { conn -> assertEquals("alice", conn.user) }
+        node.connect("xtdb", alice).use { conn -> assertEquals("alice", conn.user) }
     }
 
     @Test
-    fun `a wrong password opens no connection`() {
+    fun `a wrong password authenticates no one`() {
         val node = openNode(UserList(users))
 
         assertEquals(
             "password authentication failed for user: alice",
-            assertThrows<Forbidden> { node.connectWithPassword("xtdb", "alice", "wrong") }.message
+            assertThrows<Forbidden> { node.authenticateWithPassword("alice", "wrong") }.message
         )
     }
 
@@ -65,11 +67,11 @@ class NodeAuthnTest {
     fun `only a connection authenticated as the superuser may grant role membership`() {
         val node = openNode(UserList(users))
 
-        node.connectWithPassword("xtdb", "xtdb", "root-pw").use { conn ->
+        node.connect("xtdb", node.authenticateWithPassword("xtdb", "root-pw")).use { conn ->
             assertDoesNotThrow { conn.executeUpdate("GRANT analyst TO alice") }
         }
 
-        node.connectWithPassword("xtdb", "alice", "alice-pw").use { conn ->
+        node.connect("xtdb", node.authenticateWithPassword("alice", "alice-pw")).use { conn ->
             assertEquals(
                 "Only a superuser may GRANT/REVOKE role membership.",
                 assertThrows<Incorrect> { conn.executeUpdate("GRANT analyst TO bob") }.message
@@ -85,17 +87,13 @@ class NodeAuthnTest {
     }
 
     @Test
-    fun `a trusted connection runs as the user it names, whatever the rules ask`() {
+    fun `a trusted principal is the user it names, whatever the rules ask`() {
         val node = openNode(UserList(users))
 
         assertEquals(PASSWORD, node.authMethodFor("alice", null))
 
-        node.connectTrusted("xtdb", "alice").use { conn ->
+        node.connect("xtdb", node.authenticateTrusted("alice")).use { conn ->
             assertEquals("alice", conn.user)
-        }
-
-        node.connectTrusted("xtdb", null).use { conn ->
-            assertNull(conn.user)
         }
     }
 
@@ -110,7 +108,7 @@ class NodeAuthnTest {
     fun `an authenticator without OAuth support refuses the OAuth flows`() {
         val node = openNode(UserList(users))
 
-        assertThrows<Unsupported> { node.connectWithClientCredentials("xtdb", "client", "secret") }
-        assertThrows<Unsupported> { node.startDeviceAuth("xtdb", "alice") }
+        assertThrows<Unsupported> { node.authenticateWithClientCredentials("client", "secret") }
+        assertThrows<Unsupported> { node.startDeviceAuth("alice") }
     }
 }

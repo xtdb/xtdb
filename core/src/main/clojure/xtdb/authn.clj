@@ -4,9 +4,9 @@
             [xtdb.node :as xtn]
             [xtdb.error :as err])
   (:import [java.io Writer]
-           (xtdb.api Authenticator Authenticator$DeviceAuthResponse Authenticator$Factory Authenticator$Factory$OpenIdConnect
+           (xtdb.api Authenticator Authenticator$Factory Authenticator$Factory$OpenIdConnect
                      Authenticator$Factory$SingleRootUser Authenticator$Factory$UserList
-                     Authenticator$Method Authenticator$MethodRule Principal Xtdb$Config
+                     Authenticator$Method Authenticator$MethodRule Principal Xtdb$Config Xtdb$DeviceAuth
                      PasswordHash PasswordHash$Argon2id PasswordHash$BCrypt)
            xtdb.NodeBase
            [java.net URI]
@@ -185,7 +185,7 @@
 
 
 (defrecord DeviceAuthResponse [authn url device-code ^Duration interval ^Instant expires-at]
-  Authenticator$DeviceAuthResponse
+  Xtdb$DeviceAuth
   (getUrl [_] url)
 
   (await [_]

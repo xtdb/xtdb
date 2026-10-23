@@ -109,63 +109,69 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
     fun connect(dbName: DatabaseName): Connection
 
     /**
+     * Opens an in-process connection to the named database as [principal]:
+     * the connection's [Connection.user] is the principal's user id.
+     * The node doesn't check [principal] — obtain one from the `authenticate…` methods below.
+     */
+    fun connect(dbName: DatabaseName, principal: Principal): Connection
+
+    /**
      * The authentication method the node's configured `authn` rules ask of a caller claiming [user] from [remoteAddress],
      * or null if no rule matches and the caller is to be rejected.
      *
-     * Pick the matching `connect...` method below: [connectTrusted] for [Authenticator.Method.TRUST],
-     * [connectWithPassword] for [Authenticator.Method.PASSWORD],
-     * [connectWithClientCredentials] for [Authenticator.Method.CLIENT_CREDENTIALS],
+     * Pick the matching method below: [authenticateTrusted] for [Authenticator.Method.TRUST],
+     * [authenticateWithPassword] for [Authenticator.Method.PASSWORD],
+     * [authenticateWithClientCredentials] for [Authenticator.Method.CLIENT_CREDENTIALS],
      * and [startDeviceAuth] for [Authenticator.Method.DEVICE_AUTH].
      */
     fun authMethodFor(user: String?, remoteAddress: String?): Authenticator.Method?
 
     /**
-     * Opens a connection to [dbName] as [user], taken at its word: neither credentials nor the node's `authn` rules are checked,
-     * so this opens a connection as any user, superuser included.
+     * [user], taken at its word: neither credentials nor the node's `authn` rules are checked,
+     * so this authenticates any user, superuser included.
      * Where the rules should decide, consult [authMethodFor] first.
-     *
-     * The connection's [Connection.user] is [user]; with a null [user], the connection has no user.
      */
-    fun connectTrusted(dbName: DatabaseName, user: String?): Connection
+    fun authenticateTrusted(user: String): Principal
 
     /**
-     * Opens a connection to [dbName] as [user], having verified [password] with the node's authenticator.
-     * The connection's [Connection.user] is the user id the authenticator resolves — for OIDC, the token's subject.
+     * [user], having verified [password] with the node's authenticator.
+     * The principal's user id is the one the authenticator resolves — for OIDC, the token's subject.
      *
      * @throws Forbidden (`xtdb.authn/failed`) if the credentials are rejected.
      * @throws Unsupported if the node's authenticator doesn't support password authentication.
      */
-    fun connectWithPassword(dbName: DatabaseName, user: String, password: String): Connection
+    fun authenticateWithPassword(user: String, password: String): Principal
 
     /**
-     * Opens a connection to [dbName], having verified [clientId] and [clientSecret] with the node's authenticator
+     * The client [clientId], having verified [clientSecret] with the node's authenticator
      * (the OAuth client-credentials flow).
-     * The connection's [Connection.user] is the user id the authenticator resolves for that client.
+     * The principal's user id is the one the authenticator resolves for that client.
      *
      * @throws Forbidden (`xtdb.authn/failed`) if the credentials are rejected.
      * @throws Unsupported if the node's authenticator doesn't support client credentials.
      */
-    fun connectWithClientCredentials(dbName: DatabaseName, clientId: String, clientSecret: String): Connection
+    fun authenticateWithClientCredentials(clientId: String, clientSecret: String): Principal
 
     /**
-     * Starts the OAuth device-authorisation flow for [user] against [dbName].
+     * Starts the OAuth device-authorisation flow for [user].
      * Show the caller [DeviceAuth.url], then call [DeviceAuth.await], which blocks until they approve.
      *
+     * @throws Forbidden (`xtdb.authn/failed`) if the provider refuses to start the flow.
      * @throws Unsupported if the node's authenticator doesn't support device authorisation.
      */
-    fun startDeviceAuth(dbName: DatabaseName, user: String): DeviceAuth
+    fun startDeviceAuth(user: String): DeviceAuth
 
     interface DeviceAuth {
-        /** Where the caller goes to approve this connection. */
+        /** Where the caller goes to approve this authorisation. */
         val url: URL
 
         /**
-         * Blocks until the caller has approved at [url], then opens the connection,
-         * whose [Connection.user] is the user id the authenticator resolves.
+         * Blocks until the caller has approved at [url], then returns the principal,
+         * whose user id is the one the authenticator resolves.
          *
          * @throws Forbidden (`xtdb.authn/failed`) if the authorisation fails or expires.
          */
-        fun await(): Connection
+        fun await(): Principal
     }
 
     data class SubmittedTx(val txId: MessageId)

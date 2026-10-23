@@ -20,7 +20,10 @@ import xtdb.api.error.Forbidden
 import xtdb.api.error.Unsupported
 import java.time.InstantSource
 
-/** @suppress */
+/**
+ * An authenticated user, as returned by [Xtdb.authenticateWithPassword] and its siblings.
+ * [Xtdb.connect] opens connections as one, attributing their writes to [userId].
+ */
 interface Principal {
     val userId: String
 
@@ -43,12 +46,7 @@ interface Authenticator : AutoCloseable {
     fun verifyPassword(user: String, password: String): Principal =
         throw Unsupported(errorCode="verifyPassword")
 
-    interface DeviceAuthResponse {
-        val url: URL
-        fun await(): Principal
-    }
-
-    fun startDeviceAuth(user: String): DeviceAuthResponse =
+    fun startDeviceAuth(user: String): Xtdb.DeviceAuth =
         throw Unsupported(errorCode="startDeviceAuth")
 
     fun verifyClientCredentials(clientId: String, clientSecret: String): Principal =
