@@ -2,6 +2,7 @@ package xtdb.operator
 
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.Field
+import xtdb.arrow.IndirectRelation
 import xtdb.arrow.LongVector
 import xtdb.arrow.RelationAsStructReader
 import xtdb.arrow.RelationReader
@@ -25,6 +26,15 @@ interface ProjectionSpec {
         schema: Map<String, Any>,
         args: RelationReader
     ): VectorReader
+
+    /**
+     * Projects the rows `inner[sel[i]]`, as a dense vector of `sel.size` rows - the same as [project] over
+     * `IndirectRelation(inner, sel)`, but implementations may read [inner] at `sel[i]` directly.
+     */
+    fun projectSel(
+        allocator: BufferAllocator, inner: RelationReader, sel: IntArray,
+        schema: Map<String, Any>, args: RelationReader
+    ): VectorReader = project(allocator, IndirectRelation(inner, sel), schema, args)
 
     class Identity(override val toName: FieldName, override val type: VectorType) : ProjectionSpec {
         override fun project(

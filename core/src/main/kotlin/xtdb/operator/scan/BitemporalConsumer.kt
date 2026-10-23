@@ -76,20 +76,24 @@ class BitemporalConsumer private constructor(
                 rel["op"].vectorForOrNull("put")
                     ?.takeIf { putVec -> !putVec.keyNames.isNullOrEmpty() }
 
-            // content columns are indexed by leaf row, so share one selection; the temporal columns are already dense
-            val contentGroup = IndirectRelation.Group(
-                contentColNames.map {
-                    if (it == "_iid") rel["_iid"]
-                    else putReader?.vectorForOrNull(it) ?: NullVector(it, true, rel.rowCount)
-                },
-                selection(selArray)
-            )
+            val contentVecs = contentColNames.map {
+                if (it == "_iid") rel["_iid"]
+                else putReader?.vectorForOrNull(it) ?: NullVector(it, true, rel.rowCount)
+            }
 
-            val temporalGroup = IndirectRelation.Group(
-                listOfNotNull(validFromVec, validToVec, systemFromVec, systemToVec), null
-            )
+            val temporalVecs = listOfNotNull(validFromVec, validToVec, systemFromVec, systemToVec)
 
-            return IndirectRelation.of(listOf(contentGroup, temporalGroup), selArray.size)
+            // content columns are indexed by leaf row; the temporal columns are already dense.
+            // with no temporal columns, the relation's one selection is the content selection
+            return if (temporalVecs.isEmpty())
+                IndirectRelation(RelationReader.from(contentVecs, rel.rowCount), selArray)
+            else {
+                val contentSel = selection(selArray)
+                IndirectRelation(
+                    RelationReader.from(contentVecs.map { IndirectVector(it, contentSel) } + temporalVecs, selArray.size),
+                    null
+                )
+            }
         }
 
         override fun close() {

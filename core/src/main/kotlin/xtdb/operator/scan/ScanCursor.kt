@@ -86,7 +86,7 @@ class ScanCursor(
 
                 bitemporalConsumer.build()
                     .map { childRel ->
-                        colPreds.fold(childRel) { acc, colPred -> acc.select(colPred.select(al, acc, schema, args)) }
+                        colPreds.fold(childRel) { acc, colPred -> SelectionSpec.selectBy(acc, colPred, al, schema, args) }
                     }
                     .filter { it.rowCount > 0 }
                     .safeMap { it.openSlice(al) }

@@ -2510,6 +2510,75 @@
       (util/lru-memoize) ; <<no-commit>>
       wrap-zone-id-cache-buster))
 
+(def ^:private sel-sym (gensym 'sel))
+
+(def ^:private emit-projection-sel
+  "as `emit-projection`, but evaluates the rows `rel[sel[i]]`, writing a dense output"
+  (-> (fn [expr opts]
+        (let [expr (prepare-expr expr)
+              {:keys [return-type continue] :as emitted-expr} (codegen-expr expr opts)
+              {:keys [writer-bindings write-value-out!]} (write-value-out-code return-type)]
+          {:!projection-fn (delay
+                             (-> `(fn [~(-> rel-sym (with-tag RelationReader))
+                                       ~(-> schema-sym (with-tag IPersistentMap))
+                                       ~(-> args-sym (with-tag RelationReader))
+                                       ~(-> sel-sym (with-tag 'ints))
+                                       ~(-> out-vec-sym (with-tag Vector))]
+                                    (let [~@(batch-bindings emitted-expr)
+                                          ~@writer-bindings]
+                                      (dotimes [i# (alength ~sel-sym)]
+                                        (let [~idx-sym (aget ~sel-sym i#)]
+                                          ~(continue (fn [t c]
+                                                       (write-value-out! t c)))))))
+                                 eval))
+           :return-type return-type}))
+      (util/lru-memoize)
+      wrap-zone-id-cache-buster))
+
+(def ^:private emit-refine
+  "a fn filtering `sel` (nil = every row of `rel`) to the inner indices whose row satisfies `expr`"
+  (-> (fn [expr opts]
+        (let [expr (prepare-expr {:op :call, :f :boolean, :args [expr]})
+              {:keys [continue] :as emitted-expr} (codegen-expr expr opts)]
+          {:!refine-fn (delay
+                         (-> `(fn [~(-> rel-sym (with-tag RelationReader))
+                                   ~(-> schema-sym (with-tag IPersistentMap))
+                                   ~(-> args-sym (with-tag RelationReader))
+                                   ~(-> sel-sym (with-tag 'ints))]
+                                (let [~@(batch-bindings emitted-expr)
+                                      n# (if ~sel-sym (alength ~sel-sym) (.getRowCount ~rel-sym))
+                                      out# (int-array n#)]
+                                  (loop [i# 0, j# 0]
+                                    (if (< i# n#)
+                                      (let [~idx-sym (if ~sel-sym (aget ~sel-sym i#) (unchecked-int i#))]
+                                        (if ~(continue (fn [_ c] c))
+                                          (do
+                                            (aset out# j# (unchecked-int ~idx-sym))
+                                            (recur (unchecked-inc i#) (unchecked-inc j#)))
+                                          (recur (unchecked-inc i#) j#)))
+                                      (Arrays/copyOf out# (unchecked-int j#))))))
+                             eval))}))
+      (util/lru-memoize)
+      wrap-zone-id-cache-buster))
+
+(defn- narrow-var-types [^RelationReader rel expr-vars]
+  (into {} (keep (fn [v]
+                   (when-let [iv (.vectorForOrNull rel (str v))]
+                     [v (.getType ^VectorReader iv)])))
+        expr-vars))
+
+(defmacro ^:private with-expr-anomalies [& body]
+  `(try
+     ~@body
+     (catch ArithmeticException e#
+       (throw (arithmetic-ex->anomaly e#)))
+     (catch NumberFormatException e#
+       (throw (err/incorrect :xtdb.expression/number-format-error (ex-message e#) {::err/cause e#})))
+     (catch ClassCastException e#
+       (throw (err/incorrect :xtdb.expression/class-cast-exception (ex-message e#) {::err/cause e#})))
+     (catch IllegalArgumentException e#
+       (throw (err/incorrect :xtdb.expression/illegal-argument-exception (ex-message e#) {::err/cause e#})))))
+
 (defn ->param-types [^RelationReader args]
   (->> args
        (into {} (map (fn [^VectorReader col]
@@ -2559,6 +2628,14 @@
               (catch IllegalArgumentException e
                 (throw (err/incorrect :xtdb.expression/illegal-argument-exception (ex-message e) {::err/cause e}))))
 
+            out-vec)))
+
+      (projectSel [_ allocator inner sel schema args]
+        (let [{:keys [return-type !projection-fn]} (emit-projection-sel expr {:param-types (->param-types args)
+                                                                              :var-types (narrow-var-types inner expr-vars)})]
+          (util/with-close-on-catch [out-vec (Vector/open allocator (str col-name) return-type)]
+            (with-expr-anomalies
+              (@!projection-fn inner schema args sel out-vec))
             out-vec))))))
 
 (defn ->expression-mask-spec ^MaskSpec [expr input-types]
@@ -2569,7 +2646,8 @@
           (VectorMask/open al (.getRowCount in-rel) selection))))))
 
 (defn ->expression-selection-spec ^SelectionSpec [expr input-types]
-  (let [mask-spec (->expression-mask-spec expr input-types)]
+  (let [mask-spec (->expression-mask-spec expr input-types)
+        expr-vars (expr-variables expr)]
     (reify SelectionSpec
       (select [_ al in-rel schema args]
         (with-open [mask (.mask mask-spec al in-rel schema args)]
@@ -2577,4 +2655,10 @@
             (dotimes [idx (.getRowCount in-rel)]
               (when (.isSet mask idx)
                 (.add res idx)))
-            (.toArray (.build res))))))))
+            (.toArray (.build res)))))
+
+      (refine [_ al inner sel schema args]
+        (let [{:keys [!refine-fn]} (emit-refine expr {:param-types (->param-types args)
+                                                      :var-types (narrow-var-types inner expr-vars)})]
+          (with-expr-anomalies
+            (@!refine-fn inner schema args sel)))))))

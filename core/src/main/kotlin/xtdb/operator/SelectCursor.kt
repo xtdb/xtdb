@@ -20,9 +20,9 @@ class SelectCursor(
 
         while (!advanced) {
             inCursor.tryAdvance { inRel ->
-                val sel = selector.select(al, inRel, schema, args)
-                if (sel.isNotEmpty()) {
-                    c.accept(inRel.select(sel))
+                val outRel = SelectionSpec.selectBy(inRel, selector, al, schema, args)
+                if (outRel.rowCount > 0) {
+                    c.accept(outRel)
                     advanced = true
                 }
             } || break
