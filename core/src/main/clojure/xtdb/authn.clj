@@ -131,37 +131,42 @@
   (when expires-at
     (.isAfter now expires-at)))
 
-(defrecord OidcPasswordPrincipal [authn user-id expires-at access-token refresh-token]
+;; refreshed under the principal's lock, so concurrent callers sharing it wait for one refresh rather than each making their own.
+(defrecord OidcPasswordPrincipal [authn user-id !token]
   Principal
   (getUserId [_] user-id)
 
   (revalidate [this]
-    (let [{:keys [^InstantSource instant-src]} authn]
-      (when (token-expired? expires-at (.instant instant-src))
-        (let [{:keys [status body]} (oauth-token authn {:grant_type "refresh_token"
-                                                        :refresh_token refresh-token})]
-          (if (= 200 status)
-            (assoc this :expires-at (:expires-at body))
-            (throw (err/forbidden :xtdb.authn/refresh-failed
-                                  (format "Failed to refresh OAuth token: %s" (:error body))
-                                  {:status status, :body body}))))))))
+    (locking this
+      (let [{:keys [^InstantSource instant-src]} authn
+            {:keys [expires-at refresh-token]} @!token]
+        (when (token-expired? expires-at (.instant instant-src))
+          (let [{:keys [status body]} (oauth-token authn {:grant_type "refresh_token"
+                                                          :refresh_token refresh-token})]
+            (if (= 200 status)
+              (swap! !token assoc :expires-at (:expires-at body))
+              (throw (err/forbidden :xtdb.authn/refresh-failed
+                                    (format "Failed to refresh OAuth token: %s" (:error body))
+                                    {:status status, :body body})))))))))
 
-(defrecord OidcClientCredentialsPrincipal [authn user-id expires-at access-token client-id client-secret]
+(defrecord OidcClientCredentialsPrincipal [authn user-id client-id client-secret !token]
   Principal
   (getUserId [_] user-id)
 
   (revalidate [this]
-    (let [{:keys [^InstantSource instant-src]} authn]
-      (when (token-expired? expires-at (.instant instant-src))
-        (let [{:keys [status body]} (oauth-token authn {:grant_type "client_credentials"
-                                                        :scope "openid"
-                                                        :client_id client-id
-                                                        :client_secret client-secret})]
-          (if (= 200 status)
-            (assoc this :expires-at (:expires-at body))
-            (throw (err/forbidden :xtdb.authn/refresh-failed
-                                  (format "Failed to refresh client credentials token: %s" (:error body))
-                                  {:status status, :body body}))))))))
+    (locking this
+      (let [{:keys [^InstantSource instant-src]} authn
+            {:keys [expires-at]} @!token]
+        (when (token-expired? expires-at (.instant instant-src))
+          (let [{:keys [status body]} (oauth-token authn {:grant_type "client_credentials"
+                                                          :scope "openid"
+                                                          :client_id client-id
+                                                          :client_secret client-secret})]
+            (if (= 200 status)
+              (swap! !token assoc :expires-at (:expires-at body))
+              (throw (err/forbidden :xtdb.authn/refresh-failed
+                                    (format "Failed to refresh client credentials token: %s" (:error body))
+                                    {:status status, :body body})))))))))
 
 (defn oauth-device-info [{:keys [oidc-config client-id client-secret]}]
   (let [device-endpoint (:device_authorization_endpoint oidc-config)]
@@ -207,7 +212,9 @@
                       refresh-token (:refresh_token body)
                       expires-at (calculate-expires-at body (.instant instant-src))
                       {:keys [user-id]} (oauth-userinfo authn access-token)]
-                  (->OidcPasswordPrincipal authn user-id expires-at access-token refresh-token))
+                  (->OidcPasswordPrincipal authn user-id (atom {:expires-at expires-at
+                                                                :access-token access-token
+                                                                :refresh-token refresh-token})))
             400 (if (= "authorization_pending" (:error body))
                   (do (Thread/sleep (.toMillis interval)) (recur))
                   (throw (err/forbidden :xtdb.authn/failed
@@ -226,9 +233,9 @@
     (let [{:keys [status body]} (oauth-token this {:grant_type "password", :scope "openid"
                                                    :username user, :password password})]
       (if (= 200 status)
-        (let [{:keys [access-token refresh-token expires-at]} body
+        (let [{:keys [access-token]} body
               {:keys [user-id]} (oauth-userinfo this access-token)]
-          (->OidcPasswordPrincipal this user-id expires-at access-token refresh-token))
+          (->OidcPasswordPrincipal this user-id (atom (select-keys body [:expires-at :access-token :refresh-token]))))
         (throw (err/forbidden :xtdb.authn/failed
                               (format "Password authentication failed for user: %s" user)
                               {:status status, :body body})))))
@@ -243,9 +250,10 @@
                                                    :client_id client-id
                                                    :client_secret client-secret})]
       (if (= 200 status)
-        (let [{:keys [access-token expires-at]} body
+        (let [{:keys [access-token]} body
               {:keys [user-id]} (oauth-userinfo this access-token)]
-          (->OidcClientCredentialsPrincipal this user-id expires-at access-token client-id client-secret))
+          (->OidcClientCredentialsPrincipal this user-id client-id client-secret
+                                            (atom (select-keys body [:expires-at :access-token]))))
         (throw (err/forbidden :xtdb.authn/failed
                               (format "Client credentials authentication failed for client: %s" client-id)
                               {:status status, :body body}))))))

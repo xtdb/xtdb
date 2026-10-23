@@ -28,13 +28,15 @@ interface Principal {
     val userId: String
 
     /**
-     * The principal with refreshed credentials, or null while these are still valid.
+     * Refreshes this principal's credentials in place if they've expired; a no-op while they're still valid.
+     * Safe to call concurrently from every connection sharing the principal: an expiry is refreshed once.
+     *
      * @throws Forbidden (`xtdb.authn/refresh-failed`) if the credentials can no longer be refreshed.
      */
-    fun revalidate(): Principal?
+    fun revalidate()
 
     data class Static(override val userId: String) : Principal {
-        override fun revalidate(): Principal? = null
+        override fun revalidate() = Unit
     }
 }
 

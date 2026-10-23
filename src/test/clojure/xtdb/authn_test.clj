@@ -6,7 +6,7 @@
            [java.net URI] 
            [java.time Instant InstantSource]
            [org.keycloak.representations.idm ClientRepresentation CredentialRepresentation UserRepresentation RealmRepresentation]
-           [xtdb.api Authenticator]))
+           [xtdb.api Authenticator Principal]))
  
 (defonce ^KeycloakContainer container
   (KeycloakContainer. "quay.io/keycloak/keycloak:26.0"))
@@ -104,16 +104,41 @@
         clients (:clients (seed! container {:access-token-lifespan (int 3600)})) 
         {:keys [client-id client-secret]} (:test clients)]
     
-    (t/testing "revalidate returns nil for valid token"
-      (let [principal (.verifyClientCredentials authn client-id client-secret)] ; uses base-time
-        (t/is (nil? (.revalidate principal))))) ; uses base-time - token still valid
-    
-    (t/testing "revalidate returns refreshed token for expired token"
+    (t/testing "revalidate leaves a valid token alone"
       (let [principal (.verifyClientCredentials authn client-id client-secret) ; uses base-time
-            refreshed (.revalidate principal)] ; uses after-expiry - token expired, fetched a new token at after-expiry
-        (t/is (some? refreshed))
-        (t/is (= client-id (:client-id refreshed)))
-        (t/is (.isAfter ^Instant (:expires-at refreshed) (:expires-at principal)))))))
+            token @(:!token principal)]
+        (.revalidate principal) ; uses base-time - token still valid
+        (t/is (= token @(:!token principal)))))
+
+    (t/testing "revalidate refreshes an expired token in place"
+      (let [principal (.verifyClientCredentials authn client-id client-secret) ; uses base-time
+            {:keys [expires-at]} @(:!token principal)]
+        (.revalidate principal) ; uses after-expiry - token expired, fetched a new token at after-expiry
+        (t/is (.isAfter ^Instant (:expires-at @(:!token principal)) expires-at))))))
+
+(t/deftest concurrent-revalidates-of-one-principal-refresh-once
+  (let [expired-at (Instant/parse "2020-01-01T12:00:00Z")
+        refreshed-at (Instant/parse "2020-01-01T14:00:00Z")
+        authn {:instant-src (InstantSource/fixed (Instant/parse "2020-01-01T13:00:00Z"))}
+        ^Principal principal (authn/->OidcClientCredentialsPrincipal authn "user" "client" "secret" (atom {:expires-at expired-at}))
+        !refreshes (atom 0)
+        refresh-gate (promise)]
+    (with-redefs [authn/oauth-token (fn [_ _]
+                                      (swap! !refreshes inc)
+                                      @refresh-gate
+                                      {:status 200, :body {:expires-at refreshed-at}})]
+      (let [first-caller (future (.revalidate principal))]
+        (while (and (zero? @!refreshes) (not (future-done? first-caller)))
+          (Thread/sleep 10))
+
+        (let [second-caller (future (.revalidate principal))]
+          (Thread/sleep 200)
+          (deliver refresh-gate true)
+          @first-caller
+          @second-caller)))
+
+    (t/is (= 1 @!refreshes))
+    (t/is (= refreshed-at (:expires-at @(:!token principal))))))
 
 (t/deftest test-oidc-password-flow
   (let [test-user-id (-> (seed! container) 

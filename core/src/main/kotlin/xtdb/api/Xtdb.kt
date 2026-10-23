@@ -287,7 +287,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         private val tracer: Tracer?,
         private val metrics: ConnectionMetrics?,
 
-        private var principal: Principal?,
+        private val principal: Principal?,
     ) : AdbcConnection {
 
         var awaitToken: String? = null
@@ -319,7 +319,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         /** @suppress */
         @InternalApi
         fun revalidate() {
-            principal?.revalidate()?.let { principal = it }
+            principal?.revalidate()
         }
 
         // how long to wait for this connection's writes to become visible before giving up, shared by every
