@@ -25,6 +25,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import xtdb.api.Authenticator.Factory.UserList
+import xtdb.api.Authenticator.Method.DEVICE_AUTH
 import xtdb.api.Authenticator.Method.PASSWORD
 import xtdb.api.Authenticator.Method.TRUST
 import xtdb.api.Authenticator.MethodRule
@@ -231,6 +232,21 @@ class FlightSqlAuthnTest {
 
         assertNotFound { ps.execute(bob) }
         ps.execute(alice)
+    }
+
+    @Test
+    fun `malformed client credentials are rejected`() {
+        openNode(listOf(MethodRule(TRUST)))
+        assertUnauthenticated { client().execute("SELECT 1 AS x", headers("authorization" to "Client not-base64!")) }
+    }
+
+    @Test
+    fun `a rule asking for device authorisation is unsupported over Flight SQL`() {
+        openNode(listOf(MethodRule(DEVICE_AUTH)))
+        val ex = assertThrows<FlightRuntimeException> {
+            client().execute("SELECT 1 AS x", headers("authorization" to basic("alice", "alice-pw")))
+        }
+        assertEquals(FlightStatusCode.UNIMPLEMENTED, ex.status().code())
     }
 
     @Test

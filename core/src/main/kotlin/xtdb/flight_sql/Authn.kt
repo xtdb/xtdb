@@ -8,6 +8,7 @@ import xtdb.api.Principal
 import xtdb.api.Xtdb
 import xtdb.api.error.Anomaly.Companion.toAnomaly
 import xtdb.api.error.Fault
+import xtdb.api.error.Unsupported
 import xtdb.database.DatabaseName
 import java.security.MessageDigest
 import java.util.Base64
@@ -28,7 +29,20 @@ internal sealed interface Credentials {
 
     class Basic(header: String, val user: String, val password: String) : Verifiable(header)
 
+    class Client(header: String, val clientId: String, val clientSecret: String) : Verifiable(header)
+
     companion object {
+        private fun decodePair(value: String, scheme: String): Pair<String, String> {
+            val decoded = try {
+                String(Base64.getDecoder().decode(value), Charsets.UTF_8)
+            } catch (_: IllegalArgumentException) {
+                throw unauthenticated("malformed $scheme credentials")
+            }
+            val colon = decoded.indexOf(':')
+            if (colon <= 0) throw unauthenticated("malformed $scheme credentials")
+            return decoded.substring(0, colon) to decoded.substring(colon + 1)
+        }
+
         fun parse(headers: CallHeaders): Credentials {
             val values = headers.getAll("authorization").toList()
             if (values.size > 1) throw unauthenticated("more than one authorization header")
@@ -37,16 +51,11 @@ internal sealed interface Credentials {
             val (scheme, value) = header.trim().split(' ', limit = 2).let { it[0] to it.getOrElse(1) { "" }.trim() }
 
             return when {
-                scheme.equals("Basic", ignoreCase = true) -> {
-                    val decoded = try {
-                        String(Base64.getDecoder().decode(value), Charsets.UTF_8)
-                    } catch (_: IllegalArgumentException) {
-                        throw unauthenticated("malformed Basic credentials")
-                    }
-                    val colon = decoded.indexOf(':')
-                    if (colon <= 0) throw unauthenticated("malformed Basic credentials")
-                    Basic(header, decoded.substring(0, colon), decoded.substring(colon + 1))
-                }
+                scheme.equals("Basic", ignoreCase = true) ->
+                    decodePair(value, "Basic").let { (user, password) -> Basic(header, user, password) }
+
+                scheme.equals("Client", ignoreCase = true) ->
+                    decodePair(value, "Client").let { (id, secret) -> Client(header, id, secret) }
 
                 scheme.equals("Bearer", ignoreCase = true) && value.isNotEmpty() -> Bearer(value)
 
@@ -87,8 +96,14 @@ private inline fun <R> authenticating(f: () -> R): R =
     } catch (t: Throwable) {
         val anom = t.toAnomaly()
         if (anom is Fault) throw CallStatus.INTERNAL.withDescription("authentication failed").withCause(t).toRuntimeException()
+        if (anom is Unsupported) throw CallStatus.UNIMPLEMENTED.withDescription(anom.message).withCause(t).toRuntimeException()
         throw CallStatus.UNAUTHENTICATED.withDescription(anom.message ?: "authentication failed").withCause(t).toRuntimeException()
     }
+
+private fun deviceAuthUnsupported() =
+    Unsupported("device authorisation isn't supported over Flight SQL", errorCode = "xtdb.authn/device-auth-unsupported")
+
+private fun noMatchingRule(user: String) = unauthenticated("no authentication record found for user: $user")
 
 internal class FlightAuthn(private val node: Xtdb) {
 
@@ -113,10 +128,20 @@ internal class FlightAuthn(private val node: Xtdb) {
                 val principal = when (node.authMethodFor(user, remoteAddress)) {
                     Method.TRUST -> node.authenticateTrusted(user)
                     Method.PASSWORD -> node.authenticateWithPassword(user, credentials.password)
-                    Method.CLIENT_CREDENTIALS -> throw unauthenticated("client credentials aren't accepted as Basic credentials")
-                    Method.DEVICE_AUTH -> throw unauthenticated("device authorisation isn't supported over Flight SQL")
-                    null -> throw unauthenticated("no authentication record found for user: $user")
+                    Method.CLIENT_CREDENTIALS ->
+                        throw unauthenticated("send client credentials as `authorization: Client <base64(client-id:client-secret)>`")
+                    Method.DEVICE_AUTH -> throw deviceAuthUnsupported()
+                    null -> throw noMatchingRule(user)
                 }
+                Caller.Authenticated(principal, mac(credentials))
+            }
+
+            is Credentials.Client -> {
+                val clientId = credentials.clientId
+                val principal = node.authenticateWithClientCredentials(clientId, credentials.clientSecret)
+                // same message as a wrong secret, so a caller the rules turn away can't confirm its secret is valid
+                if (node.authMethodFor(principal.userId, remoteAddress) != Method.CLIENT_CREDENTIALS)
+                    throw unauthenticated("Client credentials authentication failed for client: $clientId")
                 Caller.Authenticated(principal, mac(credentials))
             }
         }

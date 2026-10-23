@@ -4,7 +4,12 @@
             [xtdb.authn-test :as authn-test]
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu])
-  (:import [org.postgresql.util PSQLException]))
+  (:import [java.util Base64]
+           [org.apache.arrow.adbc.core AdbcConnection AdbcDatabase AdbcException AdbcStatusCode]
+           [org.apache.arrow.adbc.driver.flightsql FlightSqlDriver]
+           [org.apache.arrow.memory BufferAllocator RootAllocator]
+           [org.postgresql.util PSQLException]
+           [xtdb.api Xtdb]))
 
 (def ^:dynamic *clients* nil)
 
@@ -150,3 +155,56 @@
               (reset! !now #inst "2020-01-01T12:00:05Z") ; past expiry -> revalidate refreshes
               (let [result (jdbc/execute-one! conn ["SELECT 'after-expiry' as status"])]
                 (t/is (= "after-expiry" (:status result)))))))))))
+
+(defn- adbc-with-client-creds ^AdbcDatabase [^BufferAllocator al ^Xtdb node client-id client-secret]
+  (-> (FlightSqlDriver. al)
+      (.open {"uri" (str "grpc+tcp://127.0.0.1:" (.getFlightSqlPort node))
+              "adbc.flight.sql.rpc.call_header.authorization"
+              (str "Client " (.encodeToString (Base64/getEncoder) (.getBytes (str client-id ":" client-secret) "UTF-8")))
+              "adbc.flight.sql.rpc.with_cookie_middleware" true})))
+
+(defn- adbc-row-count [^AdbcConnection conn sql]
+  (with-open [stmt (.createStatement conn)]
+    (.setSqlQuery stmt sql)
+    (with-open [res (.executeQuery stmt)]
+      (let [rdr (.getReader res)]
+        (.loadNextBatch rdr)
+        (.getRowCount (.getVectorSchemaRoot rdr))))))
+
+(defn- flight-sql-oidc-node ^Xtdb [rules]
+  (xtn/start-node {:flight-sql {:port 0}
+                   :authn [:openid-connect {:issuer-url (str (.getAuthServerUrl authn-test/container) "/realms/master")
+                                            :client-id "xtdb"
+                                            :client-secret "xtdb-secret"
+                                            :rules rules}]}))
+
+(defn- client-creds-rejection
+  "nil if a Flight SQL client with these credentials can query `node`, else the ADBC status it's rejected with."
+  [al node client-id client-secret]
+  (with-open [db (adbc-with-client-creds al node client-id client-secret)]
+    (try
+      (with-open [conn (.connect db)]
+        (adbc-row-count conn "SELECT 1 AS x")
+        nil)
+      (catch AdbcException e (.getStatus e)))))
+
+(t/deftest ^:integration test-flight-sql-client-credentials
+  (let [{:keys [client-id client-secret service-account-user-id]} (:test *clients*)]
+    (with-open [al (RootAllocator.)]
+      (with-open [node (flight-sql-oidc-node [{:user service-account-user-id :method :client-credentials}
+                                              {:method :password}])]
+        (with-open [db (adbc-with-client-creds al node client-id client-secret)
+                    conn (.connect db)]
+          (t/is (= 1 (adbc-row-count conn "SELECT 1 AS x")))
+          (t/is (= 1 (adbc-row-count conn "SELECT 2 AS x")) "a later call on the same session"))
+
+        (t/is (= AdbcStatusCode/UNAUTHENTICATED (client-creds-rejection al node client-id "wrong-secret"))))
+
+      (with-open [node (flight-sql-oidc-node [{:user "oid-client" :method :client-credentials}])]
+        (t/is (= AdbcStatusCode/UNAUTHENTICATED (client-creds-rejection al node client-id client-secret))
+              "a rule naming another user doesn't admit the service account"))
+
+      (with-open [node (flight-sql-oidc-node [{:address "127.0.0.1" :method :password}
+                                              {:user service-account-user-id :method :client-credentials}])]
+        (t/is (= AdbcStatusCode/UNAUTHENTICATED (client-creds-rejection al node client-id client-secret))
+              "an earlier rule for the caller's address decides, as for any other caller")))))

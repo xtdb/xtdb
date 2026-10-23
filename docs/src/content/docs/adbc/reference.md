@@ -75,6 +75,9 @@ The FlightSQL listener doesn't serve TLS, so credentials travel in the clear: fr
 The FlightSQL listener applies the node's [authentication](/ops/config/authentication) rules, as pgwire does, matching them against the user a client names and the address it connects from.
 
 A client authenticates with the driver's `username` and `password` options, which it sends as a `Basic` `authorization` header.
+A client authenticating with OAuth client credentials sends them as `authorization: Client <base64(client-id:client-secret)>` instead: with the Go driver, set `adbc.flight.sql.authorization_header`; with the Java driver, set `adbc.flight.sql.rpc.call_header.authorization`, along with `adbc.flight.sql.rpc.with_cookie_middleware=true` so the session carries across calls.
+Such a client names no user, so its credentials are verified with the identity provider first, and the rules are then matched against the user that provider reports for them - for Keycloak, the client's service-account user id - and let it in only where they ask for `CLIENT_CREDENTIALS`.
+A rule admitting it over FlightSQL therefore names that user id, where a pgwire rule names the username its client connects with.
 A client sending no credentials is let in only where the rules ask for `TRUST`.
 Where they ask for `TRUST`, a client sending a username is taken at its word as that user, whatever password it sends, as over pgwire.
 The rules are checked when a session starts, as pgwire checks them when a connection opens.
@@ -83,7 +86,7 @@ The response to the first authenticated call carries `authorization: Bearer <ses
 A session's user doesn't change: a later call presenting different credentials from those the session was authenticated with fails, as does a bearer token naming a closed session.
 Authentication failures are `UNAUTHENTICATED`; a call an authenticated user isn't permitted to make is `UNAUTHORIZED`.
 
-A rule asking for `DEVICE_AUTH` rejects a FlightSQL client: no driver can show the approval URL mid-call.
+A rule asking for `DEVICE_AUTH` rejects a FlightSQL client with `UNIMPLEMENTED`: no driver can show the approval URL mid-call.
 
 ## Statements
 
