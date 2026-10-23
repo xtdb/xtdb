@@ -83,6 +83,20 @@ class BitemporalConsumer private constructor(
 
             val temporalVecs = listOfNotNull(validFromVec, validToVec, systemFromVec, systemToVec)
 
+            // dart(#6285): every content column is a child of the put leg - compose the leg's offsets into the
+            // selection once, and read the put struct's children directly
+            if (temporalVecs.isEmpty() && putReader is DenseUnionVector.LegVector
+                && System.getProperty("xtdb.composePutLeg", "true") == "true"
+                && contentColNames.all { it != "_iid" && putReader.inner.vectorForOrNull(it) != null }
+            ) {
+                val putStruct = putReader.inner
+                val putSel = IntArray(selArray.size) { putReader.getOffset(selArray[it]) }
+                return IndirectRelation(
+                    RelationReader.from(contentColNames.map { putStruct.vectorFor(it) }, putStruct.valueCount),
+                    putSel
+                )
+            }
+
             // content columns are indexed by leaf row; the temporal columns are already dense.
             // with no temporal columns, the relation's one selection is the content selection
             return if (temporalVecs.isEmpty())

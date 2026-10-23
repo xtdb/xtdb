@@ -108,6 +108,11 @@ class DenseUnionVector private constructor(
             }
         }
 
+        override fun sumInto(outVec: Vector): xtdb.arrow.agg.VectorSummer {
+            val innerSummer = inner.sumInto(outVec)
+            return xtdb.arrow.agg.VectorSummer { idx, groupIdx -> innerSummer.sumRow(getOffset(idx), groupIdx) }
+        }
+
         override fun select(idxs: IntArray): VectorReader =
             inner.select(IntArray(idxs.size) { selIdx -> getOffset(idxs[selIdx]) })
 
@@ -140,6 +145,9 @@ class DenseUnionVector private constructor(
     ) : VectorReader by reader, VectorWriter {
 
         override val listElements get() = inner.listElements
+
+        // dart(#6285): lets a caller compose the leg's offsets into its own selection once, and read `inner` directly
+        internal fun getOffset(idx: Int) = reader.getOffset(idx)
 
         override fun vectorForOrNull(name: String) =
             inner.vectorForOrNull(name)?.let { LegVector(typeId, it, true) }

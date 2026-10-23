@@ -872,6 +872,9 @@ fun createBench(benchName: String, properties: Map<String, String>, defaultArgs:
         if (project.hasProperty("narrowVarTypes"))
             jvmArgs("-Dxtdb.narrowVarTypes=true")
 
+        if (project.hasProperty("projectMode"))
+            jvmArgs("-Dxtdb.projectMode=${project.property("projectMode")}")
+
         if (project.hasProperty("qs"))
             jvmArgs("-Dxtdb.bench.qs=${project.property("qs")}")
 
