@@ -29,8 +29,8 @@
              :rows 0, :runs 0}
             (range (.getPageCount loader)))))
 
-(defn- compact! [node-dir]
-  (with-open [node (tu/->local-node {:node-dir node-dir})]
+(defn- compact! [node-dir node-opts]
+  (with-open [node (tu/->local-node (into {:node-dir node-dir} node-opts))]
     (doseq [[v system-time] [[0 #inst "2020-01-01"] [1 #inst "2020-01-02"] [2 #inst "2020-01-03"]]]
       (xt/execute-tx node [(into [:put-docs :foo] (for [id (range 20)] {:xt/id id, :v v}))]
                      {:system-time system-time}))
@@ -44,9 +44,8 @@
 
 (t/deftest compaction-writes-iids-as-runs-when-configured
   (tu/with-tmp-dirs #{plain-dir encoded-dir}
-    (let [plain (compact! plain-dir)
-          encoded (binding [c/*run-encode-iids?* true]
-                    (compact! encoded-dir))]
+    (let [plain (compact! plain-dir {:ree-iids? false})
+          encoded (compact! encoded-dir {:ree-iids? true})]
 
       (t/is (= {:current {:encoded? false, :rows 20, :runs 20}
                 :historical {:encoded? false, :rows 40, :runs 40}}

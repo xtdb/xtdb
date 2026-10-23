@@ -329,7 +329,7 @@
 
 (defn ->local-node ^xtdb.api.Xtdb [{:keys [^Path node-dir ^String buffers-dir
                                            rows-per-block log-limit page-limit instant-src
-                                           compactor-threads healthz-port gc? blocks-to-keep garbage-lifetime
+                                           compactor-threads ree-iids? healthz-port gc? blocks-to-keep garbage-lifetime
                                            instant-source-for-non-tx-msgs? storage-epoch default-tz tracer
                                            skip-dbs]
                                     :or {buffers-dir "objects"
@@ -346,8 +346,8 @@
                                                :epoch storage-epoch}]
                              :indexer (->> {:log-limit log-limit, :page-limit page-limit, :rows-per-block rows-per-block}
                                            (into {} (filter val)))
-                             :compactor (->> {:threads compactor-threads}
-                                             (into {} (filter val)))
+                             :compactor (->> {:threads compactor-threads, :ree-iids? ree-iids?}
+                                             (into {} (filter (comp some? val))))
                              :default-tz default-tz}
                       (not (nil? gc?)) (assoc :garbage-collector
                                               (cond-> {:enabled? gc?}

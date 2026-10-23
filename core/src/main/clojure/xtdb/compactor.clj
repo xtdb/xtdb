@@ -7,14 +7,13 @@
 (def ^:dynamic *recency-partition* nil)
 
 (def ^:dynamic *page-size* 1024)
-(def ^:dynamic *run-encode-iids?* false)
 
 (defn ->factory ^xtdb.compactor.Compactor$Factory []
   (reify Compactor$Factory
     (create [_ meter-registry config]
       (let [threads (.getThreads config)]
         (if (pos? threads)
-          (Compactor$Impl. (Compactor$Driver/real *page-size* *recency-partition* *run-encode-iids?*)
+          (Compactor$Impl. (Compactor$Driver/real *page-size* *recency-partition* (.getReeIids config))
                            meter-registry
                            (jc/->JobCalculator)
                            *ignore-signal-block?* threads)
