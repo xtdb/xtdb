@@ -518,6 +518,34 @@
 
       emitted-expr)))
 
+(def ^:private prim-getter
+  '{.readBoolean .getBoolean, .readByte .getByte, .readShort .getShort, .readInt .getInt,
+    .readLong .getLong, .readFloat .getFloat, .readDouble .getDouble})
+
+(def ^:private direct-get? (not (Boolean/getBoolean "xtdb.noDirectGet")))
+
+(defn- direct-getter-code [^VectorType$Mono vec-type vec-sym i-sym]
+  (when-let [getter (some-> (read-value-code vec-type 'rdr) first prim-getter)]
+    `(~getter ~vec-sym ~i-sym)))
+
+(defn- direct-read-continue
+  "reads the vector directly (`vec.getX(i)`) rather than through a ValueReader - nil where the type isn't a primitive, or nullable primitive"
+  [^VectorType vec-type vec-sym i-sym]
+  (if (instance? VectorType$Mono vec-type)
+    (let [vec-type (.getUnencoded ^VectorType$Mono vec-type)]
+      (when-let [code (direct-getter-code vec-type vec-sym i-sym)]
+        (fn [f] (f vec-type code))))
+
+    (let [legs (set (.getLegs vec-type))
+          nn-legs (disj legs #xt/type :null)]
+      (when (and (contains? legs #xt/type :null) (= 1 (count nn-legs)))
+        (let [nn-type (.getUnencoded ^VectorType$Mono (first nn-legs))]
+          (when-let [code (direct-getter-code nn-type vec-sym i-sym)]
+            (fn [f]
+              `(if (.isNull ~vec-sym ~i-sym)
+                 ~(f #xt/type :null nil)
+                 ~(f nn-type code)))))))))
+
 (defmethod codegen-expr :variable [{:keys [variable rel idx extract-vec-from-rel?],
                                     :or {rel rel-sym, idx idx-sym, extract-vec-from-rel? true}}
                                    {:keys [var-types extract-vecs-from-rel? sel-vars]
@@ -527,9 +555,21 @@
         var-rdr-sym (gensym (util/symbol->normal-form-symbol variable))
         sel? (and extract-vecs-from-rel? extract-vec-from-rel? (= rel rel-sym) (contains? sel-vars variable))
         var-vec-sym (gensym 'vec)
-        var-sel-sym (gensym 'sel)]
+        var-sel-sym (gensym 'sel)
+        var-idx-sym (gensym 'i)]
 
     ;; NOTE: when used from metadata exprs, incoming vectors might not exist
+    (if-let [direct-cont (when (and direct-get? extract-vecs-from-rel? extract-vec-from-rel? (= rel rel-sym))
+                           (direct-read-continue (get var-types variable) (with-tag var-vec-sym VectorReader) var-idx-sym))]
+      {:return-type return-type
+       :batch-bindings (if sel?
+                         [[var-vec-sym `(.getDirect ^VectorReader (.get ~rel ~(str variable)))]
+                          [var-sel-sym `(.getSelIdxs ^VectorReader (.get ~rel ~(str variable)))]]
+                         [[var-vec-sym `(.get ~rel ~(str variable))]])
+       :continue (fn [f]
+                   `(let [~var-idx-sym ~(if sel? `(aget ~(with-tag var-sel-sym 'ints) ~idx) `(int ~idx))]
+                      ~(direct-cont f)))}
+
     {:return-type return-type
      :batch-bindings (cond
                        sel? [[var-vec-sym `(.get ~rel ~(str variable))]
@@ -540,7 +580,7 @@
      :continue (fn [f]
                  `(do
                     (.setPos ~var-rdr-sym ~(if sel? `(aget ~(with-tag var-sel-sym 'ints) ~idx) idx))
-                    ~(continue-read f return-type var-rdr-sym)))}))
+                    ~(continue-read f return-type var-rdr-sym)))})))
 
 (defmethod codegen-expr :param [{:keys [param]} {:keys [param-types]}]
   (codegen-expr {:op :variable, :variable param, :rel args-sym, :idx 0}
