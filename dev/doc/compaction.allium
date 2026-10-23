@@ -211,6 +211,10 @@ contract OutputSegmentLayout {
         -- The meta file's trie schema includes the `branch-recency` node type only when the data carries `_recency`.
         -- A file without `_recency` keeps the earlier meta schema.
 
+    @invariant PageMetadataRecordsRecency
+        -- In a file whose data carries `_recency`, each page's metadata records the minimum and maximum `_recency` of its rows, alongside the other columns' metadata.
+        -- A file whose data carries no `_recency` records none.
+
     @invariant OutputDeterministic
         -- Every output file, including its recency column and its trie, is a deterministic function of the job and the `within_file_recency_branching` setting.
         -- Every node compacting a database has the same setting, so every node that runs the job writes identical files.

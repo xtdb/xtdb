@@ -10,6 +10,7 @@
   (:import (java.nio.file Files Path)
            (org.apache.arrow.memory RootAllocator)
            (xtdb.arrow Relation Relation$Loader)
+           (xtdb.metadata PageMetadata)
            (xtdb.storage LocalStorage)
            (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf)))
 
@@ -40,26 +41,33 @@
          vec)))
 
 (defn- trie-summary
-  "whether the trie branches on recency, and any page holding a row newer than the bound its branches give it"
   [node trie-key]
-  (let [tp (table-path node "public/docs")]
+  (let [tp (table-path node "public/docs")
+        meta-path (.resolve (.resolve tp "meta") ^String trie-key)]
     (with-open [al (RootAllocator.)
-                meta-ldr (Relation/loader al (.resolve (.resolve tp "meta") ^String trie-key))
+                meta-ldr (Relation/loader al meta-path)
                 meta-rel (Relation. al (.getSchema meta-ldr))
+                page-meta (PageMetadata/open al meta-path)
                 ^Relation$Loader data-ldr (Relation/loader al (.resolve (.resolve tp "data") ^String trie-key))
                 data-rel (Relation. al (.getSchema data-ldr))]
       (.loadNextPage meta-ldr meta-rel)
-      (let [nodes (.vectorFor meta-rel "nodes")]
+      (let [nodes (.vectorFor meta-rel "nodes")
+            pages (vec (for [^ArrowHashTrie$Leaf leaf (.getLeaves (ArrowHashTrie. nodes))
+                             :let [page-idx (.getDataPageIndex leaf)
+                                   _ (.loadPage data-ldr page-idx data-rel)
+                                   recency-vec (.vectorFor data-rel "_recency")]]
+                         {:page-idx page-idx
+                          :bound (.getRecencyBound leaf)
+                          :max-recency (.maxRecency page-meta page-idx)
+                          :newest (reduce max Long/MIN_VALUE
+                                          (map #(.getLong recency-vec %) (range (.getRowCount data-rel))))}))]
         {:recency-branched? (contains? (set (.getLegNames nodes)) "branch-recency")
-         :bound-violations (vec (for [^ArrowHashTrie$Leaf leaf (.getLeaves (ArrowHashTrie. nodes))
-                                      :let [page-idx (.getDataPageIndex leaf)
-                                            bound (.getRecencyBound leaf)
-                                            _ (.loadPage data-ldr page-idx data-rel)
-                                            recency-vec (.vectorFor data-rel "_recency")
-                                            newest (reduce max Long/MIN_VALUE
-                                                           (map #(.getLong recency-vec %) (range (.getRowCount data-rel))))]
+         :bound-violations (vec (for [{:keys [page-idx ^long newest ^long bound]} pages
                                       :when (> newest bound)]
-                                  [trie-key page-idx newest bound]))}))))
+                                  [trie-key page-idx newest bound]))
+         :max-recency-mismatches (vec (for [{:keys [page-idx ^long newest max-recency]} pages
+                                            :when (not (and max-recency (<= newest (long max-recency) (inc newest))))]
+                                        [trie-key page-idx newest max-recency]))}))))
 
 (def ^:private window-sql
   "SELECT _id, v, _system_from FROM docs
@@ -96,7 +104,8 @@
 
             (let [summaries (map #(trie-summary node %) (historical-trie-keys node))]
               (t/is (some :recency-branched? summaries) "historical files branch on recency")
-              (t/is (empty? (mapcat :bound-violations summaries)) "no page holds a row newer than its bucket's bound"))
+              (t/is (empty? (mapcat :bound-violations summaries)) "no page holds a row newer than its bucket's bound")
+              (t/is (empty? (mapcat :max-recency-mismatches summaries)) "each page's metadata records its newest recency"))
 
             (t/is (= before (query-results node)) "compaction leaves query results unchanged")
 

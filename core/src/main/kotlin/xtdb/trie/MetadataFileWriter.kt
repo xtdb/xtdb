@@ -56,11 +56,12 @@ class MetadataFileWriter(
     private val validFromVec = dataRel["_valid_from"]
     private val validToVec = dataRel["_valid_to"]
     private val systemFromVec = dataRel["_system_from"]
+    private val recencyVec = dataRel.vectorForOrNull(Trie.RECENCY_COL)
 
     private val opReader = dataRel["op"]
     private val putReader = opReader.vectorForOrNull("put")
 
-    private val metaRel = Relation(al, metaRelSchema(recencyBranches = dataRel.vectorForOrNull(Trie.RECENCY_COL) != null))
+    private val metaRel = Relation(al, metaRelSchema(recencyBranches = recencyVec != null))
 
     private val nodeWtr = metaRel["nodes"]
     private val nullBranchWtr = nodeWtr["nil"]
@@ -126,6 +127,7 @@ class MetadataFileWriter(
         colMetaWriter.writeMetadata(validFromVec)
         colMetaWriter.writeMetadata(validToVec)
         colMetaWriter.writeMetadata(systemFromVec)
+        recencyVec?.let { colMetaWriter.writeMetadata(it) }
 
         rowCount += dataRel.rowCount
         temporalMetaBuilder?.update(validFromVec, validToVec, systemFromVec)
