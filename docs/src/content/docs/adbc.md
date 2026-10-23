@@ -29,5 +29,6 @@ Use whichever fits your stack:
 | Bulk ingest | row-at-a-time `INSERT` / `executemany` | `cur.adbc_ingest(arrow_table)`, one round trip |
 | Result format | rows decoded one at a time | Arrow batches streaming straight into your client |
 | Type fidelity | Postgres-mapped | Arrow-native (preserves Arrow types) |
+| Authentication | the node's [authentication rules](/ops/config/authentication) | the same rules ([details](/adbc/reference#authentication)) |
 
 Both backends talk to the same XTDB node, so you can pick per workload and mix freely.

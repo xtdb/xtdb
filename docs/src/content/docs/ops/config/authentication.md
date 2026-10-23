@@ -4,6 +4,7 @@ title: Authentication
 
 XTDB provides authentication to control database access and secure connections.
 Authentication rules determine which users can connect and what credentials they must provide.
+They apply to pgwire and FlightSQL connections alike: see the [ADBC reference](/adbc/reference#authentication) for how a FlightSQL client presents its credentials.
 
 ## Authentication providers
 
@@ -128,6 +129,10 @@ For complete OIDC configuration, setup guides, and troubleshooting, see [OpenID 
 
 Authentication rules are evaluated in order until the first match.
 If no rules match, the connection is rejected.
+Where the caller's address isn't known, evaluation stops at the first rule that applies to that user and names a `remoteAddress`, and rejects the connection rather than moving on to a rule further down.
+
+A FlightSQL client sending OAuth client credentials names no user, so its rules are matched against the user the identity provider reports for those credentials - for Keycloak, the client's service-account user id - rather than a username it connects with.
+See the [ADBC reference](/adbc/reference#authentication).
 
 **Rule Parameters**
 : - `user` (optional): Match specific username

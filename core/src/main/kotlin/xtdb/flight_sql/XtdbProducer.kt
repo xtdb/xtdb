@@ -162,7 +162,9 @@ private sealed interface PreparedScope {
     data class InTx(val txHandle: TxHandle) : PreparedScope
 }
 
-private class PreparedStatement(val sql: String, val scope: PreparedScope, override val lease: Lease) : Leased {
+private class PreparedStatement(
+    val sql: String, val scope: PreparedScope, val owner: Caller, override val lease: Lease
+) : Leased {
     @Volatile
     var params: QueryParams? = null
 
@@ -222,7 +224,7 @@ class XtdbProducer(
 
     // a tx owns a dedicated connection: autoCommit/pendingOps are connection-scoped, so flipping
     // them on a pooled connection would buffer other clients' autocommit writes into this tx.
-    private class FlightTx(val conn: Xtdb.Connection, override val lease: Lease) : Leased {
+    private class FlightTx(val conn: Xtdb.Connection, val owner: Caller, override val lease: Lease) : Leased {
         override fun close() = conn.close()
     }
 
@@ -230,15 +232,12 @@ class XtdbProducer(
     private val stmts = Leases<PreparedStatementHandle, PreparedStatement>(clock)
     private val sessions = Leases<String, Session>(clock)
 
-    private fun newConnection(dbName: DatabaseName): Xtdb.Connection =
-        (node.connect()).also { it.setCurrentCatalog(dbName) }
-
-    internal val sessionMiddlewareFactory = SessionMiddleware.Factory(sessions) {
+    internal val sessionMiddlewareFactory = SessionMiddleware.Factory(sessions, FlightAuthn(node)) { caller ->
         Session(
             UUID.randomUUID().toString(),
             Lease(clock, config.sessionIdleTimeout, firstLimit = config.sessionUnclaimedTimeout),
-            ::newConnection,
-        )
+            caller,
+        ) { dbName -> caller.connect(node, dbName) }
     }
 
     private fun sessionMiddleware(ctx: CallContext?): SessionMiddleware =
@@ -265,20 +264,26 @@ class XtdbProducer(
         is Leases.Lookup.Found -> value
         is Leases.Lookup.Expired ->
             throw CallStatus.NOT_FOUND.withDescription("$what expired after $after idle").toRuntimeException()
-        Leases.Lookup.Unknown -> throw CallStatus.NOT_FOUND.withDescription("unknown $what").toRuntimeException()
+        Leases.Lookup.Unknown -> throw unknown(what)
     }
 
-    private fun Leases.Lookup<FlightTx>.orNotFound() = orNotFound("transaction")
+    // another caller's handle is reported as unknown, so a guessed or leaked handle reveals nothing
+    private fun unknown(what: String) = CallStatus.NOT_FOUND.withDescription("unknown $what").toRuntimeException()
 
-    private fun preparedStatement(handle: PreparedStatementHandle): PreparedStatement =
+    private fun tx(ctx: CallContext?, txHandle: TxHandle): FlightTx =
+        txs.lookup(txHandle).orNotFound("transaction")
+            .also { if (it.owner !== session(ctx).caller) throw unknown("transaction") }
+
+    private fun preparedStatement(ctx: CallContext?, handle: PreparedStatementHandle): PreparedStatement =
         stmts.lookup(handle).orNotFound("prepared statement")
+            .also { if (it.owner !== session(ctx).caller) throw unknown("prepared statement") }
 
     private inline fun <R> PreparedStatement.withStatement(
         ctx: CallContext?, f: (Xtdb.Connection, Xtdb.Statement) -> R
     ): R {
         val conn = when (scope) {
             is PreparedScope.Session -> connectionFor(ctx, scope.dbName)
-            is PreparedScope.InTx -> txs.lookup(scope.txHandle).orNotFound().conn
+            is PreparedScope.InTx -> tx(ctx, scope.txHandle).conn
         }
 
         return conn.createStatement().use { stmt ->
@@ -289,7 +294,7 @@ class XtdbProducer(
     }
 
     private fun txOrSessionConnection(ctx: CallContext?, txHandle: TxHandle?): Xtdb.Connection =
-        if (txHandle != null) txs.lookup(txHandle).orNotFound().conn
+        if (txHandle != null) tx(ctx, txHandle).conn
         else connectionFor(ctx, resolveDb(ctx))
 
     internal fun sweep() {
@@ -392,7 +397,7 @@ class XtdbProducer(
         ackStream: StreamListener<PutResult>
     ): Runnable = Runnable {
         ackStream.reportingErrors {
-            val ps = preparedStatement(cmd.preparedStatementHandle)
+            val ps = preparedStatement(ctx, cmd.preparedStatementHandle)
             flightStream.next()
             ps.params = QueryParams.of(flightStream.root)
             ackStream.onCompleted()
@@ -406,7 +411,7 @@ class XtdbProducer(
         ackStream: StreamListener<PutResult>
     ): Runnable = Runnable {
         ackStream.reportingErrors {
-            val ps = preparedStatement(cmd.preparedStatementHandle)
+            val ps = preparedStatement(ctx, cmd.preparedStatementHandle)
             flightStream.toRelation(node.allocator).use { acc ->
                 ps.withStatement(ctx) { _, stmt ->
                     stmt.bind(acc)
@@ -469,7 +474,7 @@ class XtdbProducer(
     override fun getFlightInfoPreparedStatement(
         cmd: CommandPreparedStatementQuery, ctx: CallContext?, descriptor: FlightDescriptor
     ): FlightInfo = flightCall {
-        val ps = preparedStatement(cmd.preparedStatementHandle)
+        val ps = preparedStatement(ctx, cmd.preparedStatementHandle)
         ps.withStatement(ctx) { conn, stmt -> queryFlightInfo(stmt, conn.dbName, ps.sql, ps.params, descriptor) }
     }
 
@@ -499,7 +504,10 @@ class XtdbProducer(
             }
 
             val scope = if (txHandle != null) PreparedScope.InTx(txHandle) else PreparedScope.Session(conn.dbName)
-            stmts.add(psId, PreparedStatement(sql, scope, Lease(clock, config.preparedStatementIdleTimeout)))
+            stmts.add(
+                psId,
+                PreparedStatement(sql, scope, session(ctx).caller, Lease(clock, config.preparedStatementIdleTimeout))
+            )
             listener.onNext(packResult(resultBuilder.build()))
             listener.onCompleted()
         }
@@ -508,7 +516,7 @@ class XtdbProducer(
     override fun getSchemaPreparedStatement(
         cmd: CommandPreparedStatementQuery, ctx: CallContext?, descriptor: FlightDescriptor
     ): SchemaResult = flightCall {
-        val ps = preparedStatement(cmd.preparedStatementHandle)
+        val ps = preparedStatement(ctx, cmd.preparedStatementHandle)
         ps.withStatement(ctx) { _, stmt -> SchemaResult(stmt.executeSchema()) }
     }
 
@@ -534,7 +542,10 @@ class XtdbProducer(
         ctx: CallContext?,
         listener: StreamListener<Result>
     ) = listener.reportingErrors {
-        (stmts.take(req.preparedStatementHandle) as? Leases.Lookup.Found)?.value?.close()
+        // closing an unknown or expired statement succeeds, so closing another caller's does too, leaving it be
+        val handle = req.preparedStatementHandle
+        if ((stmts.lookup(handle) as? Leases.Lookup.Found)?.value?.owner === session(ctx).caller)
+            (stmts.take(handle) as? Leases.Lookup.Found)?.value?.close()
         listener.onCompleted()
     }
 
@@ -868,13 +879,13 @@ class XtdbProducer(
     ) = listener.reportingErrors {
         val txHandle = newHandle()
         val dbName = resolveDb(ctx)
-        val session = connectionFor(ctx, dbName)
-        val conn = newConnection(dbName).apply {
-            awaitToken = session.awaitToken
-            defaultTz = session.defaultTz
+        val sessionConn = connectionFor(ctx, dbName)
+        val conn = session(ctx).openConnection(dbName).apply {
+            awaitToken = sessionConn.awaitToken
+            defaultTz = sessionConn.defaultTz
             setAutoCommit(false)
         }
-        txs.add(txHandle, FlightTx(conn, Lease(clock, config.transactionIdleTimeout)))
+        txs.add(txHandle, FlightTx(conn, session(ctx).caller, Lease(clock, config.transactionIdleTimeout)))
 
         listener.onNext(
             ActionBeginTransactionResult.newBuilder()
@@ -885,14 +896,17 @@ class XtdbProducer(
         listener.onCompleted()
     }
 
-    private fun claimTx(txHandle: TxHandle): Xtdb.Connection = txs.take(txHandle).orNotFound().conn
+    private fun claimTx(ctx: CallContext?, txHandle: TxHandle): Xtdb.Connection {
+        tx(ctx, txHandle)
+        return txs.take(txHandle).orNotFound("transaction").conn
+    }
 
     override fun endTransaction(
         req: ActionEndTransactionRequest,
         ctx: CallContext?,
         listener: StreamListener<Result>
     ) = listener.reportingErrors {
-        claimTx(req.transactionId).use { conn ->
+        claimTx(ctx, req.transactionId).use { conn ->
             if (req.action == EndTransaction.END_TRANSACTION_COMMIT) conn.commit() else conn.rollback()
         }
         listener.onCompleted()
@@ -902,7 +916,7 @@ class XtdbProducer(
         if (action.type != COMMIT_TRANSACTION_ACTION) return super.doAction(context, action, listener)
 
         listener.reportingErrors {
-            claimTx(ByteString.copyFrom(action.body)).use { conn ->
+            claimTx(context, ByteString.copyFrom(action.body)).use { conn ->
                 try {
                     conn.commit()
                 } finally {

@@ -72,6 +72,8 @@ with flight_sql.connect("grpc://localhost:3000") as conn:
         print(cur.fetch_arrow_table())
 ```
 
+Where the node's [authentication rules](/ops/config/authentication) ask for a password, pass it as `db_kwargs={"username": "xtdb", "password": "…"}`.
+
 See the [ADBC tutorial](/adbc/tutorial) for an end-to-end Python walkthrough and the [ADBC reference](/adbc/reference) for the supported surface.
 
 ## Examples

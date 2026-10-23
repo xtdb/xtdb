@@ -107,6 +107,20 @@ Uses OAuth Client Credentials flow for service accounts and automated processes.
 PGPASSWORD="your-client-id:your-client-secret" psql -h localhost -p 5432 -U oidc-client -d xtdb
 ```
 
+**Over FlightSQL**
+: - **Header**: `authorization: Client <base64(client-id:client-secret)>` - see the [ADBC reference](/adbc/reference#authentication) for the driver options that send it.
+
+    - **Rule**: a FlightSQL client names no username, so its rules are matched against the user your provider reports for the client - for Keycloak, the client's service-account user id - and its CLIENT_CREDENTIALS rule names that id:
+
+``` yaml
+rules:
+  - user: oidc-client # pgwire: the username the client connects with
+    method: CLIENT_CREDENTIALS
+  - user: 0c8b6d6e-5a1f-4c4e-9d3b-7f2a1e6c9b10 # FlightSQL: the service account's user id
+    method: CLIENT_CREDENTIALS
+  - method: PASSWORD
+```
+
 ### PASSWORD Method
 
 Uses OAuth Resource Owner Password Credentials flow for interactive users.

@@ -51,6 +51,24 @@ class UserListAuthenticatorTest {
     }
 
     @Test
+    fun `a caller whose address is unknown is rejected at the first rule naming an address, not let through a looser one`() {
+        val authn = UserListAuthenticator(
+            users,
+            listOf(
+                MethodRule(PASSWORD, user = "alice", remoteAddress = "10.0.0.5"),
+                MethodRule(PASSWORD, user = "bob"),
+                MethodRule(TRUST),
+            ),
+        )
+
+        assertNull(authn.methodFor("alice", null))
+        assertEquals(PASSWORD, authn.methodFor("alice", "10.0.0.5"))
+        assertEquals(TRUST, authn.methodFor("alice", "10.0.0.6"))
+        assertEquals(PASSWORD, authn.methodFor("bob", null))
+        assertEquals(TRUST, authn.methodFor("carol", null))
+    }
+
+    @Test
     fun `methodFor returns null when no rule matches`() {
         val authn = UserListAuthenticator(users, listOf(MethodRule(PASSWORD, user = "alice")))
 

@@ -3,6 +3,29 @@ title: ADBC reference
 description: The ADBC surface XTDB supports, in-process and over FlightSQL, with its XTDB-specific behaviour.
 ---
 
+<details>
+<summary>Changelog (last updated v2-NEXT)</summary>
+
+v2-NEXT: FlightSQL clients authenticate per the node's authentication rules
+
+: The FlightSQL listener applies the same [authentication](/ops/config/authentication) rules as pgwire, and a session's writes run as the user it authenticated as — see [Authentication](#authentication).
+
+  Previously the listener accepted every caller and its writes ran as no user, so rules restricting pgwire didn't restrict FlightSQL, and a role granted to a user didn't apply to their FlightSQL session.
+
+  Where the rules ask for a password, give FlightSQL clients the driver's `username` and `password` options.
+  Under the default rules nothing changes for a client sending no credentials; one sending a username runs as that user.
+
+v2-NEXT: a FlightSQL transaction or prepared statement belongs to the session that created it
+
+: Another session presenting its handle is told it doesn't exist — see [Session options](#session-options).
+
+  Previously any client presenting a handle could use it, and commit a transaction as whoever began it.
+
+  No upgrade steps for a client that keeps its handles within its own session; one passing a handle to another authenticated session has to stop.
+  Clients sending no credentials share one identity, so they still reach one another's handles.
+
+</details>
+
 XTDB exposes [ADBC](https://arrow.apache.org/adbc/), the Arrow Database Connectivity standard, through two surfaces:
 
 - **In-process**, via `node.connect()` on the JVM, which returns an `org.apache.arrow.adbc.core.AdbcConnection`. Zero copies, direct access to the in-memory Arrow buffers.
@@ -45,7 +68,25 @@ flightSql:
 Then connect with any ADBC FlightSQL driver pointed at `grpc://localhost:3000`.
 Connection setup is driver-specific: see the connection snippet on the [Python](/drivers/python#arrow-native-access-via-adbc), [Java](/drivers/java#arrow-native-access-via-adbc), [Kotlin](/drivers/kotlin#arrow-native-access-via-adbc), or [Go](/drivers/go#arrow-native-access-via-adbc) driver page, or the [Apache ADBC driver matrix](https://arrow.apache.org/adbc/current/driver/flight_sql.html) for other languages.
 
-TLS and authentication are not applied to the FlightSQL listener (XTDB's [authentication](/ops/config/authentication) covers the pgwire listener only); front it with a TLS-terminating proxy in production.
+The FlightSQL listener doesn't serve TLS, so credentials travel in the clear: front it with a TLS-terminating proxy in production.
+
+## Authentication
+
+The FlightSQL listener applies the node's [authentication](/ops/config/authentication) rules, as pgwire does, matching them against the user a client names and the address it connects from.
+
+A client authenticates with the driver's `username` and `password` options, which it sends as a `Basic` `authorization` header.
+A client authenticating with OAuth client credentials sends them as `authorization: Client <base64(client-id:client-secret)>` instead: with the Go driver, set `adbc.flight.sql.authorization_header`; with the Java driver, set `adbc.flight.sql.rpc.call_header.authorization`, along with `adbc.flight.sql.rpc.with_cookie_middleware=true` so the session carries across calls.
+Such a client names no user, so its credentials are verified with the identity provider first, and the rules are then matched against the user that provider reports for them - for Keycloak, the client's service-account user id - and let it in only where they ask for `CLIENT_CREDENTIALS`.
+A rule admitting it over FlightSQL therefore names that user id, where a pgwire rule names the username its client connects with.
+A client sending no credentials is let in only where the rules ask for `TRUST`.
+Where they ask for `TRUST`, a client sending a username is taken at its word as that user, whatever password it sends, as over pgwire.
+The rules are checked when a session starts, as pgwire checks them when a connection opens.
+
+The response to the first authenticated call carries `authorization: Bearer <session>`, which the drivers send back on every later call in place of the credentials.
+A session's user doesn't change: a later call presenting different credentials from those the session was authenticated with fails, as does a bearer token naming a closed session.
+Authentication failures are `UNAUTHENTICATED`; a call an authenticated user isn't permitted to make is `UNAUTHORIZED`.
+
+A rule asking for `DEVICE_AUTH` rejects a FlightSQL client with `UNIMPLEMENTED`: no driver can show the approval URL mid-call.
 
 ## Statements
 
@@ -154,7 +195,7 @@ Both reflect **live data**, not just flushed-to-block state: freshly-inserted ro
 ## Session options
 
 Every call runs in a FlightSQL session.
-A call without the session cookie starts a new one, and its response carries the cookie; the client keeps session state - the catalog, a `SET` - across calls only by sending that cookie back.
+A call naming no session — neither the session cookie nor the bearer token — starts a new one, authenticated from its credentials, and its response carries the cookie; the client keeps session state - the catalog, a `SET` - across calls only by sending that cookie, or the bearer token, back.
 A session is closed once it goes `flightSql.sessionIdleTimeout` (default 30 minutes) without a call presenting its cookie, or `flightSql.sessionUnclaimedTimeout` (default 1 minute) if its cookie never comes back.
 A call presenting the cookie of a closed session fails with `NOT_FOUND`.
 
@@ -166,7 +207,10 @@ A call presenting the cookie of a closed session fails with `NOT_FOUND`.
 
 `closeSession()`
 : ends the session, closes its connections, and invalidates the cookie.
-  An open transaction is left open: a transaction is reached by its handle alone, and ends by commit, rollback, or rolling back once it has gone `flightSql.transactionIdleTimeout` (default 30 minutes) without a call naming it.
+  An open transaction is left open; an anonymous client can still commit or roll it back by its handle, but an authenticated session's is reachable only from that session, so it rolls back once it has gone `flightSql.transactionIdleTimeout` (default 30 minutes) without a call naming it.
+
+A transaction or prepared statement is reached by its handle, from the session that created it: another session presenting the handle is told it doesn't exist.
+Clients connecting without credentials, where the rules allow it, share one identity, so any of them can reach the others' handles, as before.
 
 The schema is not settable: `public` is the only accepted value (a confirming no-op), anything else is rejected.
 
@@ -178,4 +222,5 @@ The schema is not settable: `public` is the only accepted value (a confirming no
 - The Substrait variant of `executeSchema` (`getSchemaSubstraitPlan`): no current driver consumer.
 - `getCurrentCatalog` / `getCurrentDbSchema` on the Java FlightSQL client: an upstream Apache ADBC gap (its Java client doesn't query `getSessionOptions`), not an XTDB limitation. The in-process JVM connection is unaffected.
 - Parameter type inference for `executeSchema` (placeholder types only).
-- TLS / auth on the FlightSQL listener.
+- TLS on the FlightSQL listener.
+- `DEVICE_AUTH` rules over FlightSQL.

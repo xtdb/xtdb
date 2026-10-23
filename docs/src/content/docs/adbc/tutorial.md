@@ -34,6 +34,9 @@ conn = flight_sql.connect("grpc://localhost:3000")
 The connection string is a standard gRPC URI.
 `flight_sql.connect` returns a DB-API 2.0 `Connection` object and can also be used as a context manager.
 
+The Docker image's default rules let in a client sending no credentials.
+Where a node's [authentication rules](/ops/config/authentication) ask for a password, pass `db_kwargs={"username": "xtdb", "password": "…"}` - see the [ADBC reference](/adbc/reference#authentication).
+
 For JVM readers: the in-process `node.connect()` path requires no network hop and no gRPC; see the [reference](/adbc/reference#in-process-kotlin--jvm) for the Kotlin API.
 
 ## 3. Your first query

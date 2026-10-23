@@ -76,7 +76,7 @@ Xtdb.openNode().use { node ->
 }
 ```
 
-The same node also serves the [FlightSQL listener](/adbc/reference#over-the-wire-flightsql), so you can reach it from the Apache ADBC Java FlightSQL client over the wire instead.
+The same node also serves the [FlightSQL listener](/adbc/reference#over-the-wire-flightsql), so you can reach it from the Apache ADBC Java FlightSQL client over the wire instead, with the `username` and `password` options where the node's rules ask for a password (see the [ADBC reference](/adbc/reference#authentication) for OAuth client credentials).
 One caveat there: that client doesn't query `getSessionOptions`, so `getCurrentCatalog` / `getCurrentDbSchema` are unsupported over the wire (an upstream gap, not an XTDB one). The in-process path is unaffected.
 
 See the [ADBC reference](/adbc/reference) for the full supported surface (its examples are in Kotlin).

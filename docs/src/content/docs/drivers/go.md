@@ -88,6 +88,8 @@ conn, _ := db.Open(ctx)
 defer conn.Close()
 ```
 
+Where the node's [authentication rules](/ops/config/authentication) ask for a password, add `adbc.OptionKeyUsername` and `adbc.OptionKeyPassword` to the options; for OAuth client credentials, set `flightsql.OptionAuthorizationHeader` as the [ADBC reference](/adbc/reference#authentication) describes.
+
 See the [ADBC reference](/adbc/reference) for the supported surface and the [Apache ADBC driver matrix](https://arrow.apache.org/adbc/current/driver/flight_sql.html) for install details.
 
 ## Examples
