@@ -72,19 +72,24 @@ class BitemporalConsumer private constructor(
         fun build(): RelationReader {
             val selArray = contentSel.toArray()
 
-            if (MASKED && isStrictlyIncreasing(selArray)) {
-                val mask = java.util.BitSet(rel.rowCount)
-                for (idx in selArray) mask.set(idx)
+            val putLeg = rel["op"].vectorForOrNull("put")?.takeIf { !it.keyNames.isNullOrEmpty() }
 
-                val putVec = rel["op"].vectorForOrNull("put")?.takeIf { !it.keyNames.isNullOrEmpty() }
+            if (MASKED && putLeg is DenseUnionVector.LegReader && isStrictlyIncreasing(selArray)) {
+                // DART (#6285 avenue B): the mask lives in the put struct's own index space - offsets within one leg are monotonic
+                val putStruct = putLeg.inner
+                val structCount = putStruct.valueCount
+                val mask = java.util.BitSet(structCount)
+                for (idx in selArray) mask.set(putLeg.getOffset(idx))
 
                 return MaskedRelation(
-                    contentColNames.map {
-                        if (it == "_iid") rel["_iid"]
-                        else putVec?.vectorForOrNull(it) ?: NullVector(it, true, rel.rowCount)
+                    contentColNames.filter { it != "_iid" }.map {
+                        putStruct.vectorForOrNull(it) ?: NullVector(it, true, structCount)
                     },
-                    rel.rowCount, mask,
-                    listOfNotNull(validFromVec, validToVec, systemFromVec, systemToVec)
+                    structCount, mask,
+                    listOfNotNull(
+                        if ("_iid" in contentColNames) rel["_iid"].select(selArray) else null,
+                        validFromVec, validToVec, systemFromVec, systemToVec
+                    )
                 )
             }
 
