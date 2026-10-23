@@ -30,7 +30,8 @@ You MUST treat a hit from another project as "already tracked, leave it alone".
 When you open an issue *or* PR, you MUST work out whether it's standalone or part of a surrounding issue:
 
 - **There's a surrounding issue** (the PR closes, advances, or is otherwise scoped by an open issue): the **issue** carries the board card, and the milestone if it passes both tests in [Milestones](#milestones) below.
-  The PR does not go on the board and does not get a milestone — it inherits them through the issue.
+  - **A PR that resolves the issue** does not go on the board and does not get a milestone — it inherits them through the issue.
+  - **An interim PR, one step towards the issue**, gets its own board card, but never a milestone — the issue's entry covers it in the release notes.
 - **It's a standalone PR** (no surrounding issue, e.g. a small fix, cleanup, or dependency bump worth noting in release notes): the **PR** goes on the board directly, and takes the milestone on the same two tests.
 
 This mirrors how the release notes are written — one entry per issue-or-standalone-PR, never both.
