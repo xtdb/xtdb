@@ -3,6 +3,7 @@ package xtdb.operator.scan
 import com.carrotsearch.hppc.IntArrayList
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.arrow.*
+import xtdb.arrow.VectorIndirection.Companion.selection
 import xtdb.arrow.Vector.Companion.openVector
 import xtdb.time.TEMPORAL_COL_NAMES
 import xtdb.trie.ColumnName
@@ -74,16 +75,21 @@ class BitemporalConsumer private constructor(
                 // every table mandates an `_id`, and the two predicates agree for every one that does.
                 rel["op"].vectorForOrNull("put")
                     ?.takeIf { putVec -> !putVec.keyNames.isNullOrEmpty() }
-                    ?.select(selArray)
 
-            return RelationReader.from(
-                contentColNames
-                    .map {
-                        if (it == "_iid") rel["_iid"].select(selArray)
-                        else putReader?.vectorForOrNull(it) ?: NullVector(it, true, selArray.size)
-                    }
-                    .plus(listOfNotNull(validFromVec, validToVec, systemFromVec, systemToVec)),
-                selArray.size)
+            // content columns are indexed by leaf row, so share one selection; the temporal columns are already dense
+            val contentGroup = IndirectRelation.Group(
+                contentColNames.map {
+                    if (it == "_iid") rel["_iid"]
+                    else putReader?.vectorForOrNull(it) ?: NullVector(it, true, rel.rowCount)
+                },
+                selection(selArray)
+            )
+
+            val temporalGroup = IndirectRelation.Group(
+                listOfNotNull(validFromVec, validToVec, systemFromVec, systemToVec), null
+            )
+
+            return IndirectRelation.of(listOf(contentGroup, temporalGroup), selArray.size)
         }
 
         override fun close() {
