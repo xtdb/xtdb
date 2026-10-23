@@ -120,7 +120,7 @@ class MutableMemoryHashTrie(override val rootNode: Node, val hashReader: VectorR
         private val pageLimit: Int,
         override val path: ByteArray,
         override val hashChildren: MutableList<Node?>,
-    ) : Node {
+    ) : Node, HashTrie.IidBranch<Leaf> {
 
         override fun add(trie: MutableMemoryHashTrie, newIdx: Int): Node {
             val bucket = trie.bucketFor(newIdx, path.size, trie.reusePtr1)
@@ -185,9 +185,7 @@ class MutableMemoryHashTrie(override val rootNode: Node, val hashReader: VectorR
         private var dataCount: Int = 0,
         private var deletions: RoaringBitmap? = null,
         private var sorted: Boolean = false
-    ) : Node {
-
-        override val hashChildren = null
+    ) : Node, HashTrie.Leaf<Leaf> {
 
         private fun split(trie: MutableMemoryHashTrie): Node {
             val res = Branch(pageLimit, path, MutableList(trie.bucketer.levelWidth) { null })
