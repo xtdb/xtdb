@@ -125,6 +125,23 @@ class RunEndEncodedVectorTest {
     }
 
     @Test
+    fun `an appended iid extends the last run if it holds the same iid`() {
+        openIidRuns().use { vec ->
+            vec.appendLongLong(1, 2)
+            vec.appendLongLong(1, 2)
+            vec.appendLongLong(3, 4)
+            vec.appendLongLong(1, 2)
+
+            assertEquals(listOf(2, 3, 4), (0..<vec.runCount).map { vec.runEnd(it) })
+            assertEquals(listOf(1L to 2L, 1L to 2L, 3L to 4L, 1L to 2L), (0..<vec.valueCount).map { vec.getLongLongHigh(it) to vec.getLongLongLow(it) })
+
+            vec.clear()
+            vec.appendLongLong(1, 2)
+            assertEquals(listOf(1), (0..<vec.runCount).map { vec.runEnd(it) }, "a cleared vector starts a fresh run")
+        }
+    }
+
+    @Test
     fun `the type and the field carry the encoding, the arrow type carries the values`() {
         openI64Runs(10L to 3).use { vec ->
             assertEquals(VectorType.maybe(VectorType.I64).runEndEncoded(), vec.type)

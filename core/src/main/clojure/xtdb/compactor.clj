@@ -10,13 +10,14 @@
 
 (defn ->factory ^xtdb.compactor.Compactor$Factory []
   (reify Compactor$Factory
-    (create [_ meter-registry threads]
-      (if (pos? threads)
-        (Compactor$Impl. (Compactor$Driver/real *page-size* *recency-partition*)
-                         meter-registry
-                         (jc/->JobCalculator)
-                         *ignore-signal-block?* threads)
-        Compactor/NOOP))))
+    (create [_ meter-registry config]
+      (let [threads (.getThreads config)]
+        (if (pos? threads)
+          (Compactor$Impl. (Compactor$Driver/real *page-size* *recency-partition* (.getReeIids config))
+                           meter-registry
+                           (jc/->JobCalculator)
+                           *ignore-signal-block?* threads)
+          Compactor/NOOP)))))
 
 (defn compact-all!
   "`timeout` is now required, explicitly specify `nil` if you want to wait indefinitely."

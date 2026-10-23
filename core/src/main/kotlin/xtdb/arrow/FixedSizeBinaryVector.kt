@@ -26,6 +26,12 @@ class FixedSizeBinaryVector private constructor(
     override fun getLongLongHigh(idx: Int) = reverseBytes(dataBuffer.getLong(idx * 2))
     override fun getLongLongLow(idx: Int) = reverseBytes(dataBuffer.getLong(idx * 2 + 1))
 
+    fun writeLongLong(high: Long, low: Long) {
+        dataBuffer.writeLong(reverseBytes(high))
+        dataBuffer.writeLong(reverseBytes(low))
+        writeNotNull()
+    }
+
     override fun writeObject0(value: Any) = when (value) {
         is ByteBuffer -> writeBytes(value)
         is ByteArray -> writeBytes(ByteBuffer.wrap(value))

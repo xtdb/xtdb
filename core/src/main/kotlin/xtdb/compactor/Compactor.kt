@@ -10,6 +10,7 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.time.withTimeout
+import xtdb.api.CompactorConfig
 import xtdb.api.log.SourceMessage.TriesAdded
 import xtdb.api.log.Watchers
 import xtdb.api.storage.Storage
@@ -52,7 +53,7 @@ interface Compactor : AutoCloseable {
     }
 
     fun interface Factory {
-        fun create(meterRegistry: MeterRegistry?, threads: Int): Compactor
+        fun create(meterRegistry: MeterRegistry?, config: CompactorConfig): Compactor
     }
 
     interface ForDatabase : AutoCloseable {
@@ -79,7 +80,8 @@ interface Compactor : AutoCloseable {
 
         companion object {
             @JvmStatic
-            fun real(pageSize: Int, recencyPartition: RecencyPartition?) =
+            @JvmOverloads
+            fun real(pageSize: Int, recencyPartition: RecencyPartition?, reeIids: Boolean = false) =
                 object : Factory {
                     override fun create(allocator: BufferAllocator, partitionStorage: PartitionStorage, partitionState: PartitionState, watchers: Watchers) = object : Driver {
                         private val al = allocator.openChildAllocator("compactor")
@@ -89,7 +91,7 @@ interface Compactor : AutoCloseable {
                         private val tableCat = partitionState.tableCatalog
 
                         private val trieWriter = PageTrieWriter(al, bp, calculateBlooms = true)
-                        private val segMerge = SegmentMerge(al)
+                        private val segMerge = SegmentMerge(al, reeIids)
 
                         private fun Job.trieDetails(
                             trieKey: TrieKey,
