@@ -173,7 +173,7 @@ class SegmentMergeTest {
     @Test
     fun `with the iid run-end encoded, a merge writes the same rows as one run per entity`() = withSegments { segments ->
         SegmentMerge(al).use { plain ->
-            SegmentMerge(al, runEncodeIids = true).use { encoded ->
+            SegmentMerge(al, reeIids = true).use { encoded ->
                 plain.mergeSegmentsSync(segments, null, RecencyPartitioning.Preserve(null)).use { plainResults ->
                     encoded.mergeSegmentsSync(segments, null, RecencyPartitioning.Preserve(null)).use { encodedResults ->
                         assertEquals(plainResults.map { plain.rowsOf(it) }, encodedResults.map { encoded.rowsOf(it) })
@@ -187,7 +187,7 @@ class SegmentMergeTest {
     @Test
     fun `with the iid run-end encoded, each recency file holds its own runs`() = withSegments { segments ->
         SegmentMerge(al).use { plain ->
-            SegmentMerge(al, runEncodeIids = true).use { encoded ->
+            SegmentMerge(al, reeIids = true).use { encoded ->
                 plain.mergeSegmentsSync(segments, null, RecencyPartitioning.Partition).use { plainResults ->
                     encoded.mergeSegmentsSync(segments, null, RecencyPartitioning.Partition).use { encodedResults ->
                         assertEquals(
@@ -217,8 +217,8 @@ class SegmentMergeTest {
                 val slug = TableSlug.of(foo)
                 val trieWriter = PageTrieWriter(al, bp, calculateBlooms = true)
 
-                fun writeTrie(runEncodeIids: Boolean, trieKey: String, pageSize: Int) =
-                    SegmentMerge(al, runEncodeIids).use { segMerge ->
+                fun writeTrie(reeIids: Boolean, trieKey: String, pageSize: Int) =
+                    SegmentMerge(al, reeIids).use { segMerge ->
                         segMerge.mergeSegmentsSync(segments, null, RecencyPartitioning.Preserve(null)).use { results ->
                             val result = results.single()
                             Relation.loader(al, result.openForRead()).use { loader ->
