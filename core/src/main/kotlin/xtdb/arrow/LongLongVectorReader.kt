@@ -6,6 +6,14 @@ interface LongLongVectorReader : VectorReader {
     fun getLongLongHigh(idx: Int): Long
     fun getLongLongLow(idx: Int): Long
 
+    /**
+     * The end (exclusive) of the run holding [idx] as this reader stores it: `idx + 1` for one that stores each row on its own.
+     * Every row in `[idx, storedRunEnd(idx))` holds [idx]'s value, but the rows after it may hold that value too.
+     *
+     * Requires `0 <= idx < valueCount`.
+     */
+    fun storedRunEnd(idx: Int): Int = idx + 1
+
     private fun sameValueAt(idx: Int, high: Long, low: Long) =
         getLongLongHigh(idx) == high && getLongLongLow(idx) == low
 

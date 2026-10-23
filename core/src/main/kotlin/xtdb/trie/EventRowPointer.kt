@@ -40,12 +40,17 @@ class EventRowPointer(private val relReader: RelationReader, path: ByteArray) {
         return left
     }
 
+    private var iidRunEnd = 0
+
     var index: Int = -1
         private set(value) {
             field = value
             if (value < relReader.rowCount) {
-                iidHigh = iidReader.getLongLongHigh(value)
-                iidLow = iidReader.getLongLongLow(value)
+                if (value >= iidRunEnd) {
+                    iidHigh = iidReader.getLongLongHigh(value)
+                    iidLow = iidReader.getLongLongLow(value)
+                    iidRunEnd = iidReader.storedRunEnd(value)
+                }
                 systemFrom = sysFromReader.getLong(value)
             }
         }
