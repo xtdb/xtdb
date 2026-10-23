@@ -1191,6 +1191,32 @@
       false '(>= (multi-field-interval "1 0" "DAY" 2 "HOUR" 2) (multi-field-interval "1 2" "DAY" 2 "HOUR" 2))
       true '(>= (multi-field-interval "1 2" "DAY" 2 "HOUR" 2) (multi-field-interval "1 0" "DAY" 2 "HOUR" 2)))))
 
+(t/deftest test-date-comparison
+  (let [a-milli (list 'cast 'a (types/->type [:date :milli]))]
+    (t/are [expected expr a b] (= expected (et/project1 expr {:a a, :b b}))
+      true '(< a b) #xt/date "2023-01-01" #xt/date "2023-01-02"
+      false '(< a b) #xt/date "2023-01-02" #xt/date "2023-01-01"
+      false '(< a b) #xt/date "2023-01-01" #xt/date "2023-01-01"
+      true '(<= a b) #xt/date "2023-01-01" #xt/date "2023-01-01"
+      false '(<= a b) #xt/date "2023-01-02" #xt/date "2023-01-01"
+      true '(> a b) #xt/date "2024-02-29" #xt/date "2023-12-31"
+      false '(> a b) #xt/date "2023-01-01" #xt/date "2023-01-01"
+      true '(>= a b) #xt/date "2023-01-01" #xt/date "2023-01-01"
+      false '(>= a b) #xt/date "2022-12-31" #xt/date "2023-01-01"
+      true '(== a b) #xt/date "2023-01-01" #xt/date "2023-01-01"
+      false '(== a b) #xt/date "2023-01-01" #xt/date "2023-01-02"
+
+      true '(< a b) #xt/date "1969-12-31" #xt/date "1970-01-01"
+      true '(> a b) #xt/date "1970-01-01" #xt/date "1969-12-31"
+
+      -1 '(compare_nulls_first a b) #xt/date "2023-01-01" #xt/date "2023-01-02"
+      0 '(compare_nulls_first a b) #xt/date "2023-01-01" #xt/date "2023-01-01"
+      1 '(compare_nulls_first a b) #xt/date "2023-01-02" #xt/date "2023-01-01"
+
+      true (list '< a-milli 'b) #xt/date "2023-01-01" #xt/date "2023-01-02"
+      true (list '== a-milli 'b) #xt/date "2023-01-01" #xt/date "2023-01-01"
+      true (list '> 'b a-milli) #xt/date "2023-01-01" #xt/date "2023-01-02")))
+
 (t/deftest test-uoe-thrown-for-unsupported-div
   (t/is (anomalous? [:unsupported nil]
                     (et/project1 '(/ (+ (single-field-interval 1 "MONTH" 2 0) (single-field-interval 3 "MINUTE" 2 0)) 3) {})))

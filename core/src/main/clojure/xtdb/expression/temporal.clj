@@ -1018,8 +1018,10 @@
   (let [x-unit (st/timestamp-type->unit x)]
     (-> expr (recall-with-cast2 [:timestamp-local x-unit] y))))
 
-(defmethod expr/codegen-call [:compare :date :date] [expr]
-  (-> expr (recall-with-cast2 [:timestamp-local :micro] [:timestamp-local :micro])))
+;; both sides are epoch days whatever their unit - `DateMilliVector` converts millis to days on read
+(defmethod expr/codegen-call [:compare :date :date] [_]
+  {:return-type #xt/type :i32
+   :->call-code #(do `(Long/compare ~@%))})
 
 (doseq [t [:timestamp-tz :timestamp-local]]
   (defmethod expr/codegen-call [:compare :date t] [{[_ t2] :arg-types, :as expr}]
