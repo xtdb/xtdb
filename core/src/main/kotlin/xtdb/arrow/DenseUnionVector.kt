@@ -141,6 +141,9 @@ class DenseUnionVector private constructor(
 
         override val listElements get() = inner.listElements
 
+        override val direct: VectorReader get() = this
+        override val selIdxs: IntArray? get() = null
+
         override fun vectorForOrNull(name: String) =
             inner.vectorForOrNull(name)?.let { LegVector(typeId, it, true) }
 

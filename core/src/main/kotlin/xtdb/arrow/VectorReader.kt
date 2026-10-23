@@ -43,7 +43,21 @@ interface VectorReader : ILookup, AutoCloseable {
 
         override fun openDirectSlice(al: BufferAllocator): Vector =
             inner.openDirectSlice(al).closeOnCatch { it.name = name; it }
+
+        override val direct: VectorReader
+            get() = inner.direct.let { if (it === inner) this else RenamedVector(it, name) }
+
+        override val selIdxs: IntArray? get() = inner.selIdxs
     }
+
+    /**
+     * The vector this one's rows are drawn from, before any row selection - see [selIdxs].
+     * A sel-aware consumer reads `direct` at `selIdxs[i]` rather than this vector at `i`.
+     */
+    val direct: VectorReader get() = this
+
+    /** If non-null, row `i` of this vector is row `selIdxs[i]` of [direct]; null means `direct === this`. */
+    val selIdxs: IntArray? get() = null
 
     fun withName(newName: String): VectorReader = RenamedVector(this, newName)
 

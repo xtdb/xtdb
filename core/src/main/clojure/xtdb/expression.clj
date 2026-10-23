@@ -520,20 +520,26 @@
 
 (defmethod codegen-expr :variable [{:keys [variable rel idx extract-vec-from-rel?],
                                     :or {rel rel-sym, idx idx-sym, extract-vec-from-rel? true}}
-                                   {:keys [var-types extract-vecs-from-rel?]
+                                   {:keys [var-types extract-vecs-from-rel? sel-vars]
                                     :or {extract-vecs-from-rel? true}}]
   (let [return-type (.getUnencoded ^VectorType (or (get var-types variable)
                                                    (throw (AssertionError. (str "unknown variable: " variable)))))
-        var-rdr-sym (gensym (util/symbol->normal-form-symbol variable))]
+        var-rdr-sym (gensym (util/symbol->normal-form-symbol variable))
+        sel? (and extract-vecs-from-rel? extract-vec-from-rel? (= rel rel-sym) (contains? sel-vars variable))
+        var-vec-sym (gensym 'vec)
+        var-sel-sym (gensym 'sel)]
 
     ;; NOTE: when used from metadata exprs, incoming vectors might not exist
     {:return-type return-type
-     :batch-bindings [(if (and extract-vecs-from-rel? extract-vec-from-rel?)
-                        [var-rdr-sym `(.valueReader (.get ~rel ~(str variable)))]
-                        [var-rdr-sym `(some-> ~variable (.valueReader))])]
+     :batch-bindings (cond
+                       sel? [[var-vec-sym `(.get ~rel ~(str variable))]
+                             [var-sel-sym `(.getSelIdxs ~(with-tag var-vec-sym VectorReader))]
+                             [var-rdr-sym `(.valueReader (.getDirect ~(with-tag var-vec-sym VectorReader)))]]
+                       (and extract-vecs-from-rel? extract-vec-from-rel?) [[var-rdr-sym `(.valueReader (.get ~rel ~(str variable)))]]
+                       :else [[var-rdr-sym `(some-> ~variable (.valueReader))]])
      :continue (fn [f]
                  `(do
-                    (.setPos ~var-rdr-sym ~idx)
+                    (.setPos ~var-rdr-sym ~(if sel? `(aget ~(with-tag var-sel-sym 'ints) ~idx) idx))
                     ~(continue-read f return-type var-rdr-sym)))}))
 
 (defmethod codegen-expr :param [{:keys [param]} {:keys [param-types]}]
@@ -2528,6 +2534,7 @@
                                                    :var-types var-types})
                             :return-type)
         narrow? (Boolean/getBoolean "xtdb.narrowVarTypes")
+        sel-aware? (not (Boolean/getBoolean "xtdb.noSelAware"))
         expr-vars (expr-variables expr)]
 
     (reify ProjectionSpec
@@ -2545,8 +2552,13 @@
                                                [(symbol (.getName iv))
                                                 (.getType iv)])))))
 
+              sel-vars (when sel-aware?
+                         (into #{} (filter (fn [v]
+                                             (some-> (.vectorForOrNull in-rel (str v)) (.getSelIdxs))))
+                               expr-vars))
               {:keys [return-type !projection-fn]} (emit-projection expr {:param-types (->param-types args)
-                                                                          :var-types var-types})]
+                                                                          :var-types var-types
+                                                                          :sel-vars sel-vars})]
           (util/with-close-on-catch [out-vec (Vector/open allocator (str col-name) return-type)]
             (try
               (@!projection-fn in-rel schema args out-vec)

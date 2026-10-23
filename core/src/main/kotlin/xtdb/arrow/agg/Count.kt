@@ -23,7 +23,9 @@ class Count(
         return object : AggregateSpec {
 
             override fun aggregate(inRel: RelationReader, groupMapping: GroupMapping, mask: VectorMask) {
-                val inCol = inRel.vectorForOrNull(fromColName) ?: return
+                val inVec = inRel.vectorForOrNull(fromColName) ?: return
+                val sel = if (SEL_AWARE) inVec.selIdxs else null
+                val inCol = if (sel != null) inVec.direct else inVec
 
                 repeat(inRel.rowCount) { idx ->
                     val groupIdx = groupMapping.getInt(idx)
@@ -31,7 +33,7 @@ class Count(
                     if (outVec.valueCount == groupIdx)
                         outVec.writeLong(0L)
 
-                    if (mask.isSet(idx) && !inCol.isNull(idx)) {
+                    if (mask.isSet(idx) && !inCol.isNull(if (sel != null) sel[idx] else idx)) {
                         val currentCount = if (!outVec.isNull(groupIdx)) outVec.getLong(groupIdx) else 0L
                         outVec.setLong(groupIdx, currentCount + 1)
                     }

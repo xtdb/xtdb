@@ -15,7 +15,7 @@ class DistinctRelationMap(
     val allocator: BufferAllocator,
     val vecTypes: VectorTypes,
     val keyColumnNames: List<String>,
-    private val storeFullBuildRel: Boolean,
+    val storeFullBuildRel: Boolean,
     private val comparatorFactory: ComparatorFactory,
     pageLimit: Int = 16, levelBits: Int = 2
 ) : AutoCloseable {

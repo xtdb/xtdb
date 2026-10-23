@@ -64,7 +64,17 @@ interface RelationReader : ILookup, Seqable, Counted, AutoCloseable {
             .safeMap { it.openDirectSlice(al) }
             .closeAllOnCatch { vectors -> Relation(al, vectors, rowCount) }
 
-    fun select(idxs: IntArray): RelationReader = from(vectors.map { it.select(idxs) }, idxs.size)
+    fun select(idxs: IntArray): RelationReader {
+        if (!SEL_REL) return from(vectors.map { it.select(idxs) }, idxs.size)
+
+        // vectors sharing a selection (by identity) share its composition, so it's composed once per selection, not per column
+        val composed = IdentityHashMap<IntArray, IntArray>()
+        return from(vectors.map { v ->
+            val sel = v.selIdxs
+            if (sel == null) v.select(idxs)
+            else IndirectVector(v.direct, VectorIndirection.selection(composed.getOrPut(sel) { IntArray(idxs.size) { sel[idxs[it]] } }))
+        }, idxs.size)
+    }
     fun select(startIdx: Int, len: Int): RelationReader = from(vectors.map { it.select(startIdx, len) }, len)
 
     fun rowCopier(dest: RelationWriter): RowCopier {
@@ -126,6 +136,9 @@ interface RelationReader : ILookup, Seqable, Counted, AutoCloseable {
     }
 
     companion object {
+        @JvmField
+        val SEL_REL = !java.lang.Boolean.getBoolean("xtdb.noSelRel")
+
         fun from(cols: List<VectorReader>): RelationReader =
             FromCols(cols.associateByTo(linkedMapOf()) { it.name }, cols.firstOrNull()?.valueCount ?: 0)
 

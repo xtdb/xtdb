@@ -25,6 +25,20 @@ class Sum(
 
         override fun aggregate(inRel: RelationReader, groupMapping: GroupMapping, mask: VectorMask) {
             val inVec = inRel.vectorForOrNull(fromName) ?: return
+            val sel = if (SEL_AWARE) inVec.selIdxs else null
+
+            if (sel != null) {
+                val summer = inVec.direct.sumInto(outVec)
+
+                repeat(inRel.rowCount) { idx ->
+                    val groupIdx = groupMapping.getInt(idx)
+                    while (outVec.valueCount <= groupIdx) outVec.writeNull()
+
+                    if (mask.isSet(idx)) summer.sumRow(sel[idx], groupIdx)
+                }
+                return
+            }
+
             val summer = inVec.sumInto(outVec)
 
             repeat(inRel.rowCount) { idx ->

@@ -12,6 +12,9 @@ import xtdb.operator.distinct.DistinctRelationMap.Companion.insertedIdx
 
 typealias GroupMapping = VectorReader
 
+@JvmField
+val SEL_AWARE = !java.lang.Boolean.getBoolean("xtdb.noSelAware")
+
 interface GroupMapper : AutoCloseable {
     fun groupMapping(inRelation: RelationReader): GroupMapping
     fun finish(): RelationReader
@@ -38,10 +41,23 @@ interface GroupMapper : AutoCloseable {
 
         override fun groupMapping(inRelation: RelationReader): GroupMapping {
             groupMapping.clear()
-            val builder = relMap.buildFromRelation(inRelation)
 
-            repeat(inRelation.rowCount) { idx ->
-                groupMapping.writeInt(insertedIdx(builder.addIfNotPresent(idx)))
+            val keyCols = relMap.keyColumnNames.map { inRelation[it] }
+            val sel = keyCols.firstOrNull()?.selIdxs
+
+            if (sel != null && SEL_AWARE && !relMap.storeFullBuildRel && keyCols.all { it.selIdxs === sel }) {
+                val directCols = keyCols.map { it.direct }
+                val builder = relMap.buildFromRelation(RelationReader.from(directCols, directCols.first().valueCount))
+
+                repeat(inRelation.rowCount) { idx ->
+                    groupMapping.writeInt(insertedIdx(builder.addIfNotPresent(sel[idx])))
+                }
+            } else {
+                val builder = relMap.buildFromRelation(inRelation)
+
+                repeat(inRelation.rowCount) { idx ->
+                    groupMapping.writeInt(insertedIdx(builder.addIfNotPresent(idx)))
+                }
             }
 
             return groupMapping

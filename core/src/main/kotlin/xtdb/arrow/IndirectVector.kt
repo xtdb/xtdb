@@ -6,6 +6,7 @@ import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import xtdb.InternalApi
 import xtdb.api.query.IKeyFn
+import xtdb.arrow.VectorIndirection.Companion.Selection
 import xtdb.arrow.VectorIndirection.Companion.Slice
 import xtdb.arrow.VectorIndirection.Companion.selection
 import xtdb.arrow.agg.VectorSummer
@@ -20,6 +21,12 @@ class IndirectVector(private val inner: VectorReader, private val sel: VectorInd
     override val field: Field get() = inner.field
     override val childFields: List<Field> get() = inner.childFields
     override val type: VectorType get() = inner.type
+
+    override val direct: VectorReader
+        get() = if (sel is Selection && inner.selIdxs == null) inner else this
+
+    override val selIdxs: IntArray?
+        get() = if (sel is Selection && inner.selIdxs == null) sel.idxs else null
 
     override fun isNull(idx: Int) = inner.isNull(sel[idx])
     override fun getBoolean(idx: Int) = inner.getBoolean(sel[idx])
