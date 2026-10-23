@@ -6,6 +6,7 @@ import kotlinx.serialization.modules.polymorphic
 import org.apache.kafka.connect.sink.SinkRecord
 import xtdb.api.error.Unsupported
 import xtdb.api.tx.TxIndexer
+import xtdb.kafka.connectsrc.proto.KafkaConnectSourceToken
 import java.util.ServiceLoader
 import com.google.protobuf.Any as ProtoAny
 
@@ -17,6 +18,15 @@ interface RecordIndexer : AutoCloseable {
 
     interface Factory {
         fun open(): RecordIndexer
+
+        /**
+         * Opens the indexer for a leader term, handing back the state it persisted.
+         *
+         * @param userToken the `user_token` of the last indexed transaction's [KafkaConnectSourceToken],
+         *   or null if no transaction has been indexed or that token carried none.
+         *   An indexer that keeps state across terms writes it there when it submits a transaction.
+         */
+        fun open(userToken: ByteArray?): RecordIndexer = open()
 
         companion object {
             // Lazy: a Factory implementation's class init can initialise this interface, and loading
