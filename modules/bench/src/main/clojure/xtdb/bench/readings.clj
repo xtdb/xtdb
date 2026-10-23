@@ -1,6 +1,5 @@
 (ns xtdb.bench.readings
-  (:require [clojure.test :as t]
-            [clojure.tools.logging :as log]
+  (:require [clojure.tools.logging :as log]
             [xtdb.api :as xt]
             [xtdb.bench :as b]
             [xtdb.test-util :as tu]
@@ -135,8 +134,7 @@
                   (for [interval [:now :hour :day :week :month :quarter :year]]
                     (->query-stage interval :quarter)))})
 
-;; not intended to be run as a test - more for ease of REPL dev
-(t/deftest ^:benchmark run-readings
+(comment
   (let [path (util/->path "/home/james/tmp/readings-bench")
         no-load? true]
 

@@ -378,9 +378,6 @@
                   (map ->query-stage [:latest :as-of :history]))})
 
 (comment
-  ;; a REPL run against the tiny dataset. A `^:benchmark` deftest, as the other bench namespaces
-  ;; carry, would be discovered by the module's test task — this namespace has a companion test,
-  ;; so it gets loaded there — and would then fail the build reaching for S3.
   (util/with-tmp-dirs #{node-tmp-dir}
     (-> (b/->benchmark :food-prices {:size :tiny})
         (b/run-benchmark {:node-dir node-tmp-dir}))))

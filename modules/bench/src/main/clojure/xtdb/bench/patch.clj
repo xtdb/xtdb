@@ -1,6 +1,5 @@
 (ns xtdb.bench.patch
-  (:require [clojure.test :as t]
-            [clojure.tools.logging :as log]
+  (:require [clojure.tools.logging :as log]
             [xtdb.api :as xt]
             [xtdb.bench :as b]
             [xtdb.util :as util])
@@ -109,7 +108,7 @@
            #_ ; FIXME: #4990
            (patch-non-existing-docs-stage opts)]})
 
-(t/deftest ^:bench patch-benchmark
+(comment
   (-> (b/->benchmark :patch
                       {:doc-count 100000
                        :patch-count 10

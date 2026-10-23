@@ -1,6 +1,5 @@
 (ns xtdb.bench.tpch
-  (:require [clojure.test :as t]
-            [clojure.tools.logging :as log]
+  (:require [clojure.tools.logging :as log]
             [xtdb.api :as xt]
             [xtdb.bench :as b]
             [xtdb.datasets.tpch :as tpch]
@@ -81,7 +80,7 @@
 
            (queries-stage :hot-queries query-language scale-factor)]})
 
-(t/deftest ^:bench tpch-benchmark
+(comment
   (binding [*qs* #{1}]
     (-> (b/->benchmark :tpch
                        {:scale-factor 1

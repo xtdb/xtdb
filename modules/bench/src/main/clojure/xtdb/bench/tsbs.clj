@@ -1,7 +1,6 @@
 (ns xtdb.bench.tsbs
   (:require [clojure.set :as set]
             [clojure.string :as str]
-            [clojure.test :as t]
             [clojure.tools.logging :as log]
             [hugsql.core :as hugsql]
             [xtdb.api :as xt]
@@ -512,8 +511,7 @@
                     :total-queries (count all-timings)
                     :total-time-ms (:total-ms overall-stats)}))}]})
 
-;; not intended to be run as a test - more for ease of REPL dev
-(t/deftest ^:benchmark run-iot
+(comment
   (util/with-tmp-dirs #{node-tmp-dir}
     (-> (b/->benchmark :tsbs-iot {:devices 40
                                   :timestamp-start #inst "2020-01-01"
@@ -522,7 +520,7 @@
                                   :workers 4})
         (b/run-benchmark {:node-dir node-tmp-dir}))))
 
-(t/deftest ^:benchmark run-iot-from-file
+(comment
   (util/with-tmp-dirs #{node-tmp-dir}
     (log/debug "tmp-dir:" node-tmp-dir)
 

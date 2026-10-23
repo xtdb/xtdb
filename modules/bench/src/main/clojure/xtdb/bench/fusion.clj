@@ -579,7 +579,7 @@
     (log/infof "System-time lag distribution: %.1f%% short (0-5s), %.1f%% long (280-320s)"
                (* 100 short-ratio) (* 100 long-ratio))))
 
-(t/deftest ^:benchmark run-fusion
+(comment
   (let [path (util/->path "/tmp/fusion-bench")]
     (-> (b/->benchmark :fusion {:devices 100 :readings 100 :batch-size 50
                                 :update-batch-size 10 :updates-per-system 5})

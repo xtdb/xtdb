@@ -2,7 +2,6 @@
   (:require [clojure.data.csv :as csv]
             [clojure.java.io :as io]
             [clojure.string :as str]
-            [clojure.test :as t]
             [clojure.tools.logging :as log]
             [cognitect.transit :as transit]
             [hugsql.core :as hugsql]
@@ -234,6 +233,6 @@
                            (query-stage query-name sqlvec-fn))
                          query-sqlvec-fns)}]})
 
-(t/deftest ^:benchmark run-clickbench
+(comment
   (-> (b/->benchmark :clickbench {})
       (b/run-benchmark {:node-dir (util/->path "/home/james/tmp/clickbench-10M")})))

@@ -1,6 +1,5 @@
 (ns xtdb.bench.ts-devices
-  (:require [clojure.test :as t]
-            [clojure.tools.logging :as log]
+  (:require [clojure.tools.logging :as log]
             [xtdb.bench :as b]
             [xtdb.bench.util :as bu]
             [xtdb.ts-devices :as tsd]
@@ -54,8 +53,7 @@
                      :stage :finish-block
                      :f (fn [{:keys [node]}] (b/flush-block! node))}]}]})
 
-;; not intended to be run as a test - more for ease of REPL dev
-(t/deftest ^:benchmark run-ts-devices
+(comment
   (util/with-tmp-dirs #{node-tmp-dir}
     (-> (b/->benchmark :ts-devices {:size :small})
         (b/run-benchmark {:node-dir node-tmp-dir}))))
