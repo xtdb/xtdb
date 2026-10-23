@@ -63,10 +63,10 @@
    :seed seed
    :parameters {:scale-factor scale-factor :query-language query-language :seed seed :no-load? no-load?}
    :->state #(do {:!state (atom {})})
-   :tasks [{:t :do
-            :stage :ingest
-            :tasks (when-not no-load?
-                     [{:t :call, :stage :submit-rels
+   :tasks [(when-not no-load?
+             {:t :do
+              :stage :ingest
+              :tasks [{:t :call, :stage :submit-rels
                        :f (fn [{:keys [node]}] (tpch/submit-rels! node scale-factor))}
 
                       {:t :call, :stage :sync,
@@ -76,7 +76,9 @@
                        :f (fn [{:keys [node]}] (b/flush-block! node))}
 
                       {:t :call, :stage :compact
-                       :f (fn [{:keys [node]}] (b/compact! node))}])}
+                       :f (fn [{:keys [node]}] (b/compact! node))}
+
+                      (b/settle-stage)]})
 
            (queries-stage :cold-queries query-language scale-factor)
 

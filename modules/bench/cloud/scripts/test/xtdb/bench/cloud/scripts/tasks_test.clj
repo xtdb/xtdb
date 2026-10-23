@@ -614,13 +614,15 @@
                          "{\"stage\":\"sync\",\"time-taken-ms\":3000}"
                          "{\"stage\":\"finish-block\",\"time-taken-ms\":1000}"
                          "{\"stage\":\"compact\",\"time-taken-ms\":2000}"
-                         "{\"stage\":\"ingest\",\"time-taken-ms\":11000}"
-                         "{\"stage\":\"summary\",\"time-taken-ms\":12000}"]))
+                         "{\"stage\":\"settle\",\"time-taken-ms\":500,\"setup\":true}"
+                         "{\"stage\":\"ingest\",\"time-taken-ms\":11500}"
+                         "{\"stage\":\"summary\",\"time-taken-ms\":12000,\"setup-time-ms\":500,\"total-time-ms\":12500}"]))
         (let [result (log-parsing/parse-log "clickbench" (.getPath temp-file))
               ingest-stages (:ingest-stages result)
               stage-names (set (map :stage ingest-stages))]
           ;; parent "ingest" stage should NOT be in ingest-stages
           (is (not (contains? stage-names "ingest")))
+          (is (not (contains? stage-names "settle")))
           (is (= 4 (count ingest-stages)))
           ;; sum of sub-stages should be 11000, not 22000
           (is (= 11000 (reduce + (map :time-taken-ms ingest-stages)))))
@@ -637,13 +639,15 @@
                          "{\"stage\":\"sync\",\"time-taken-ms\":2000}"
                          "{\"stage\":\"finish-block\",\"time-taken-ms\":500}"
                          "{\"stage\":\"compact\",\"time-taken-ms\":1500}"
-                         "{\"stage\":\"ingest\",\"time-taken-ms\":12000}"
+                         "{\"stage\":\"settle\",\"time-taken-ms\":500,\"setup\":true}"
+                         "{\"stage\":\"ingest\",\"time-taken-ms\":12500}"
                          "{\"stage\":\"queries\",\"time-taken-ms\":100}"
-                         "{\"stage\":\"summary\",\"time-taken-ms\":12100}"]))
+                         "{\"stage\":\"summary\",\"time-taken-ms\":12100,\"setup-time-ms\":500,\"total-time-ms\":12600}"]))
         (let [result (log-parsing/parse-log "tsbs-iot" (.getPath temp-file))
               ingest-stages (:ingest-stages result)
               stage-names (set (map :stage ingest-stages))]
           (is (not (contains? stage-names "ingest")))
+          (is (not (contains? stage-names "settle")))
           (is (= 4 (count ingest-stages)))
           (is (= 12000 (reduce + (map :time-taken-ms ingest-stages)))))
         (finally

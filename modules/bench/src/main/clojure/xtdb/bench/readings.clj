@@ -91,7 +91,9 @@
     {:t :call, :stage :compact
      :f (fn [{:keys [node]}]
           (b/flush-block! node)
-          (b/compact! node))}]))
+          (b/compact! node))}
+
+    (b/settle-stage)]))
 
 (defmethod b/cli-flags :readings [_]
   [[nil "--devices devices" "device count"

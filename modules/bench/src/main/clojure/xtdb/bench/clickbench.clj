@@ -202,36 +202,38 @@
   {:title "Clickbench Hits"
    :benchmark-type :clickbench
    :parameters {:no-load? no-load? :limit limit :size size}
-   :tasks [{:t :call, :stage :download, :setup? true
-            :f (fn [_]
-                 (download-dataset size))}
+   :tasks (concat (when-not no-load?
+                    [{:t :call, :stage :download, :setup? true
+                      :f (fn [_]
+                           (download-dataset size))}
 
-           {:t :do, :stage :ingest
-            :tasks (concat (when-not no-load?
-                             [{:t :do
+                     {:t :do, :stage :ingest
+                      :tasks [{:t :do
                                :stage :submit-docs
                                :tasks [{:t :call
                                         :f (fn [{:keys [node]}]
                                              (with-open [rdr (io/reader (GZIPInputStream. (io/input-stream (hits-file size))))]
                                                (store-documents! node (cond->> (line-seq rdr)
-                                                                        limit (take limit)))))}]}])
+                                                                        limit (take limit)))))}]}
 
-                           [{:t :call, :stage :sync
-                             :f (fn [{:keys [node]}]
-                                  (b/sync-node node (Duration/ofHours 5)))}
+                              {:t :call, :stage :sync
+                               :f (fn [{:keys [node]}]
+                                    (b/sync-node node (Duration/ofHours 5)))}
 
-                            {:t :call, :stage :finish-block
-                             :f (fn [{:keys [node]}]
-                                  (b/flush-block! node))}
+                              {:t :call, :stage :finish-block
+                               :f (fn [{:keys [node]}]
+                                    (b/flush-block! node))}
 
-                            {:t :call, :stage :compact
-                             :f (fn [{:keys [node]}]
-                                  (b/compact! node))}])}
+                              {:t :call, :stage :compact
+                               :f (fn [{:keys [node]}]
+                                    (b/compact! node))}
 
-           {:t :do, :stage :queries
-            :tasks (mapv (fn [[query-name sqlvec-fn]]
-                           (query-stage query-name sqlvec-fn))
-                         query-sqlvec-fns)}]})
+                              (b/settle-stage)]}])
+
+                  [{:t :do, :stage :queries
+                    :tasks (mapv (fn [[query-name sqlvec-fn]]
+                                   (query-stage query-name sqlvec-fn))
+                                 query-sqlvec-fns)}])})
 
 (comment
   (-> (b/->benchmark :clickbench {})

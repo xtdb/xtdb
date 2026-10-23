@@ -246,11 +246,11 @@
                        :f (fn [{:keys [node]}] (b/sync-node node (Duration/ofMinutes 5)))}
                       {:t :call
                        :stage :flush-block
-                       :f (fn [{:keys [node]}] (tu/flush-block! node))}]})
-
-           {:t :call
-            :stage :compact
-            :f (fn [{:keys [node]}] (c/compact-all! node nil))}
+                       :f (fn [{:keys [node]}] (tu/flush-block! node))}
+                      {:t :call
+                       :stage :compact
+                       :f (fn [{:keys [node]}] (c/compact-all! node nil))}
+                      (b/settle-stage)]})
 
            {:t :call
             :stage :get-query-data

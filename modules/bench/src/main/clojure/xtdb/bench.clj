@@ -7,6 +7,7 @@
             [clojure.tools.logging :as log]
             [xtdb.api :as xt]
             [xtdb.compactor :as c]
+            [xtdb.db-catalog :as db]
             [xtdb.error :as err]
             [xtdb.log :as xt-log]
             [xtdb.logging :as logging]
@@ -474,6 +475,21 @@
 
 (defn compact! [node]
   (c/compact-all! node (Duration/ofMinutes 10)))
+
+(defn gc! [node]
+  (let [db-cat (db/<-node node)]
+    (doseq [^String db-name (.getDatabaseNames db-cat)]
+      (some-> (.databaseOrNull db-cat db-name) .gcAll))))
+
+(defn settle-stage
+  "A stage to run after a load's compaction, before anything the bench times.
+   It flushes a block, so the latest block lists the compacted tries a later `--no-load` run starts from.
+   It returns once the garbage-collection cycle that flush starts has finished, so none is running when the timed stages begin."
+  []
+  {:t :call, :stage :settle, :setup? true
+   :f (fn [{:keys [node]}]
+        (flush-block! node)
+        (gc! node))})
 
 (defn generate
   ([worker table f n]

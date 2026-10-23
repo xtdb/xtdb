@@ -101,7 +101,8 @@
                              :tasks [{:t :call :f (fn [{:keys [node]}] (b/flush-block! node))}]}
                             {:t :do
                              :stage :compact
-                             :tasks [{:t :call :f (fn [{:keys [node]}] (b/compact! node))}]}])}
+                             :tasks [{:t :call :f (fn [{:keys [node]}] (b/compact! node))}]}
+                            (b/settle-stage)])}
 
            (patch-existing-docs-stage opts)
            (patch-multiple-existing-docs-stage opts)
