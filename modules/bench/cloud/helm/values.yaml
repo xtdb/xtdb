@@ -1,4 +1,6 @@
 benchType: tpch
+benchWorkflow: ""
+runQueue: false
 
 auctionmark:
   onlyLoad: false
