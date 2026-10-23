@@ -2517,21 +2517,33 @@
                         (symbol (.getName col))
                         (.getType col)))))))
 
+(defn- expr-variables [expr]
+  (->> (tree-seq coll? seq (prepare-expr expr))
+       (keep (fn [x] (when (and (map? x) (= :variable (:op x))) (:variable x))))
+       (into #{})))
+
 (defn ->expression-projection-spec ^xtdb.operator.ProjectionSpec [col-name expr {:keys [var-types param-types]}]
   (let [;; HACK - this runs the analyser (we discard the emission) to get the widest possible out-type.
         widest-out-type (-> (emit-projection expr {:param-types param-types
                                                    :var-types var-types})
-                            :return-type)]
+                            :return-type)
+        narrow? (Boolean/getBoolean "xtdb.narrowVarTypes")
+        expr-vars (expr-variables expr)]
 
     (reify ProjectionSpec
       (getToName [_] (str col-name))
       (getType [_] widest-out-type)
 
       (project [_ allocator in-rel schema args]
-        (let [var-types (->> in-rel
-                             (into {} (map (fn [^VectorReader iv]
-                                             [(symbol (.getName iv))
-                                              (.getType iv)]))))
+        (let [var-types (if narrow?
+                          (into {} (keep (fn [v]
+                                           (when-let [iv (.vectorForOrNull in-rel (str v))]
+                                             [v (.getType iv)])))
+                                expr-vars)
+                          (->> in-rel
+                               (into {} (map (fn [^VectorReader iv]
+                                               [(symbol (.getName iv))
+                                                (.getType iv)])))))
 
               {:keys [return-type !projection-fn]} (emit-projection expr {:param-types (->param-types args)
                                                                           :var-types var-types})]
