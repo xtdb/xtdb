@@ -140,6 +140,31 @@
     (t/is (= 1 @!refreshes))
     (t/is (= refreshed-at (:expires-at @(:!token principal))))))
 
+(defn- refresh-tokens-sent
+  [next-refresh-tokens]
+  (let [expired-at (Instant/parse "2020-01-01T12:00:00Z")
+        authn {:instant-src (InstantSource/fixed (Instant/parse "2020-01-01T13:00:00Z"))}
+        ^Principal principal (authn/->OidcPasswordPrincipal authn "user" (atom {:expires-at expired-at
+                                                                                 :access-token "access-0"
+                                                                                 :refresh-token "refresh-0"}))
+        !sent (atom [])
+        !responses (atom next-refresh-tokens)]
+    (with-redefs [authn/oauth-token (fn [_ {:keys [refresh_token]}]
+                                      (swap! !sent conj refresh_token)
+                                      (let [[next-refresh-token] (first (swap-vals! !responses rest))]
+                                        {:status 200, :body {:access-token "access-n"
+                                                             :refresh-token next-refresh-token
+                                                             :expires-at expired-at}}))]
+      (.revalidate principal)
+      (.revalidate principal))
+    @!sent))
+
+(t/deftest a-refresh-presents-the-refresh-token-the-last-refresh-issued
+  (t/is (= ["refresh-0" "refresh-1"] (refresh-tokens-sent ["refresh-1" "refresh-2"]))))
+
+(t/deftest a-refresh-keeps-the-current-refresh-token-when-the-provider-issues-none
+  (t/is (= ["refresh-0" "refresh-0"] (refresh-tokens-sent [nil nil]))))
+
 (t/deftest test-oidc-password-flow
   (let [test-user-id (-> (seed! container) 
                          (get-in [:users :test-user]))

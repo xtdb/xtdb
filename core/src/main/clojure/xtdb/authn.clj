@@ -144,7 +144,8 @@
           (let [{:keys [status body]} (oauth-token authn {:grant_type "refresh_token"
                                                           :refresh_token refresh-token})]
             (if (= 200 status)
-              (swap! !token assoc :expires-at (:expires-at body))
+              ;; a provider that doesn't rotate refresh tokens omits one from the response; the current one stays valid (RFC 6749 §6)
+              (reset! !token (update body :refresh-token #(or % refresh-token)))
               (throw (err/forbidden :xtdb.authn/refresh-failed
                                     (format "Failed to refresh OAuth token: %s" (:error body))
                                     {:status status, :body body})))))))))
@@ -163,7 +164,7 @@
                                                           :client_id client-id
                                                           :client_secret client-secret})]
             (if (= 200 status)
-              (swap! !token assoc :expires-at (:expires-at body))
+              (reset! !token (select-keys body [:expires-at :access-token]))
               (throw (err/forbidden :xtdb.authn/refresh-failed
                                     (format "Failed to refresh client credentials token: %s" (:error body))
                                     {:status status, :body body})))))))))
