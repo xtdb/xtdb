@@ -876,6 +876,8 @@ fun createBench(benchName: String, properties: Map<String, String>, defaultArgs:
 createBench("tpch", mapOf(
     "scaleFactor" to "--scale-factor",
     "queryLanguage" to "--query-language",
+    "ingestVia" to "--ingest-via",
+    "threads" to "--threads",
     "noLoad" to "--no-load"
 ))
 
