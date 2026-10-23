@@ -12,13 +12,23 @@ import java.util.Random;
 
 public class VecApiBench {
     static final VectorSpecies<Double> S = DoubleVector.SPECIES_PREFERRED;
-    static final int N = 1 << 20;
+    static int N = 1 << 20;
 
     static int selScalar(double[] x, double lo, double hi, int[] out) {
         int k = 0;
         for (int i = 0; i < x.length; i++) {
             double v = x[i];
             if (v >= lo && v <= hi) out[k++] = i;
+        }
+        return k;
+    }
+
+    static int selBranchless(double[] x, double lo, double hi, int[] out) {
+        int k = 0;
+        for (int i = 0; i < x.length; i++) {
+            double v = x[i];
+            out[k] = i;
+            k += (v >= lo & v <= hi) ? 1 : 0;
         }
         return k;
     }
@@ -71,15 +81,16 @@ public class VecApiBench {
     interface R { void run(); }
 
     static void time(String name, R r) {
-        for (int i = 0; i < 200; i++) r.run();
+        for (int i = 0; i < Math.max(200, (200 << 20) / N); i++) r.run();
         long t0 = System.nanoTime();
-        int reps = 400;
+        int reps = Math.max(400, (400 << 20) / N);
         for (int i = 0; i < reps; i++) r.run();
         System.out.printf("%-28s %8.3f ns/row%n", name, (System.nanoTime() - t0) / (double) reps / N);
     }
 
     public static void main(String[] args) {
-        System.out.println("species " + S);
+        if (args.length > 0) N = Integer.parseInt(args[0]);
+        System.out.println("species " + S + " N " + N);
         Random rnd = new Random(0);
         double[] p = new double[N], d = new double[N], t = new double[N], out = new double[N];
         for (int i = 0; i < N; i++) { p[i] = rnd.nextDouble() * 1e5; d[i] = rnd.nextInt(11) / 100.0; t[i] = rnd.nextInt(9) / 100.0; }
@@ -91,6 +102,7 @@ public class VecApiBench {
 
         final int[] sink = {0};
         time("sel scalar (Q6 discount)", () -> sink[0] += selScalar(d, 0.05, 0.07, sel));
+        time("sel scalar branchless", () -> sink[0] += selBranchless(d, 0.05, 0.07, sel));
         time("sel vector-api", () -> sink[0] += selVec(d, 0.05, 0.07, sel));
         time("proj scalar fused", () -> projScalar(p, d, t, out));
         double[] p2 = p.clone(), d2 = d.clone(), t2 = t.clone();

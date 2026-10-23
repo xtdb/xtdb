@@ -21,7 +21,8 @@ internal fun unwrap(v: VectorReader): Physical? = when (v) {
         when (val sel = v.sel) {
             is Selection -> {
                 val idxs = sel.idxs
-                Physical(inner.base, IntArray(idxs.size) { inner.phys(idxs[it]) }, 0)
+                if (inner.idxs == null) Physical(inner.base, idxs, inner.offset)
+                else Physical(inner.base, IntArray(idxs.size) { inner.phys(idxs[it]) }, 0)
             }
 
             is Slice ->
@@ -71,6 +72,7 @@ class RangePredicate(
         if (loV === NullBound || hiV === NullBound) return IntArray(0)
 
         val n = inSel?.size ?: rel.rowCount
+        if (KERNEL_DEBUG) { KStats.selCalls.incrementAndGet(); KStats.selRows.addAndGet(n.toLong()) }
 
         return when (val base = p.base) {
             is DoubleVector -> {
@@ -142,6 +144,19 @@ class RangePredicate(
 internal val KERNEL_DEBUG = java.lang.Boolean.getBoolean("xtdb.kernels.debug")
 internal fun kdebug(msg: String) { if (KERNEL_DEBUG) System.err.println("[kernel] $msg") }
 
+internal object KStats {
+    val selCalls = java.util.concurrent.atomic.AtomicLong()
+    val selRows = java.util.concurrent.atomic.AtomicLong()
+    val projCalls = java.util.concurrent.atomic.AtomicLong()
+    val projRows = java.util.concurrent.atomic.AtomicLong()
+
+    init {
+        if (KERNEL_DEBUG) Runtime.getRuntime().addShutdownHook(Thread {
+            System.err.println("[kernel] stats sel calls=$selCalls rows=$selRows proj calls=$projCalls rows=$projRows")
+        })
+    }
+}
+
 class KernelSelectionSpec(private val pred: RangePredicate, private val fallback: SelectionSpec) : SelectionSpec {
     init { kdebug("sel matched $pred") }
     private var warned = false
@@ -179,6 +194,7 @@ class DoubleProjectionKernel(private val expr: DoubleExpr) {
     /** null if any column isn't a plain f64 vector */
     fun project(al: BufferAllocator, toName: String, rel: RelationReader): VectorReader? {
         val n = rel.rowCount
+        if (KERNEL_DEBUG) { KStats.projCalls.incrementAndGet(); KStats.projRows.addAndGet(n.toLong()) }
         val cols = HashMap<String, Physical>()
         for (c in colNames) {
             val p = unwrap(rel.vectorForOrNull(c) ?: return null) ?: return null
