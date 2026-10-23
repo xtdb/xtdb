@@ -71,7 +71,7 @@ class KafkaConnectSource internal constructor(
     private val cluster: KafkaCluster,
     private val topic: String,
     private val connectConfig: ConnectConfig,
-    private val indexer: RecordIndexer,
+    private val indexerFactory: RecordIndexer.Factory,
     private val meterRegistry: MeterRegistry? = null,
 ) : ExternalSource {
 
@@ -104,7 +104,7 @@ class KafkaConnectSource internal constructor(
                     errorCode = "xtdb.kafka-connect-source/wrong-remote-type",
                     data = mapOf("alias" to remote, "actualType" to actualType),
                 )
-            return KafkaConnectSource(dbName, cluster, topic, ConnectConfig.parse(connectConfig), indexer.open(), meterRegistry)
+            return KafkaConnectSource(dbName, cluster, topic, ConnectConfig.parse(connectConfig), indexer, meterRegistry)
         }
 
         class Registration : ExternalSource.Registration<Factory> {
@@ -145,6 +145,9 @@ class KafkaConnectSource internal constructor(
         txIndexer: TxIndexer,
     ) {
         LOG.info("[$dbName] Partition $partition assigned (topic=$topic)")
+
+        val token = afterToken?.let(KafkaConnectSourceToken::parseFrom)
+        val indexer = indexerFactory.open(token?.takeIf { it.hasUserToken() }?.userToken?.toByteArray())
 
         val tags = listOf(
             Tag.of("db", dbName),
@@ -222,8 +225,8 @@ class KafkaConnectSource internal constructor(
                                     val tp = TopicPartition(topic, partition)
                                     consumer.assign(listOf(tp))
 
-                                    if (afterToken != null) {
-                                        val offset = KafkaConnectSourceToken.parseFrom(afterToken).offset + 1
+                                    if (token != null) {
+                                        val offset = token.offset + 1
                                         LOG.info("[$dbName] Resuming from offset $offset on $topic-$partition")
                                         consumer.seek(tp, offset)
                                     } else {
@@ -291,6 +294,8 @@ class KafkaConnectSource internal constructor(
             LOG.error(e, "[$dbName] External source failed")
             throw e
         } finally {
+            runCatching { indexer.close() }
+                .onFailure { LOG.error(it, "[$dbName] Indexer close failed") }
             meterRegistry?.let { reg -> (gauges + listOfNotNull(recordsCounter, commitLag)).forEach { reg.remove(it) } }
         }
     }
@@ -334,8 +339,6 @@ class KafkaConnectSource internal constructor(
 
     override fun close() {
         LOG.info("[$dbName] Closing external source")
-        runCatching { indexer.close() }
-            .onFailure { LOG.error(it, "[$dbName] Indexer close failed") }
     }
 }
 
