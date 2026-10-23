@@ -5,6 +5,7 @@ import org.apache.arrow.flight.Location.forGrpcInsecure
 import xtdb.flight_sql.XtdbProducer
 import xtdb.flight_sql.withDatabaseMiddleware
 import xtdb.flight_sql.withErrorLoggingMiddleware
+import xtdb.flight_sql.withPeerAddrTracer
 import xtdb.flight_sql.withSessionMiddleware
 import xtdb.api.error.Incorrect
 import xtdb.util.closeOnCatch
@@ -49,6 +50,7 @@ interface FlightSql : AutoCloseable {
             XtdbProducer(xtdb, config, clock).closeOnCatch { producer ->
                 val host = if (config.host == "*") "0.0.0.0" else config.host
                 val server = builder(xtdb.allocator, forGrpcInsecure(host, config.port), producer)
+                    .also { it.withPeerAddrTracer() }
                     .also { it.withErrorLoggingMiddleware() }
                     .also { it.withDatabaseMiddleware() }
                     .also { it.withSessionMiddleware(producer.sessionMiddlewareFactory) }

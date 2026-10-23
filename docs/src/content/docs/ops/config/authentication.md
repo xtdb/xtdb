@@ -4,6 +4,7 @@ title: Authentication
 
 XTDB provides authentication to control database access and secure connections.
 Authentication rules determine which users can connect and what credentials they must provide.
+They apply to pgwire and FlightSQL connections alike: see the [ADBC reference](/adbc/reference#authentication) for how a FlightSQL client presents its credentials.
 
 ## Authentication providers
 

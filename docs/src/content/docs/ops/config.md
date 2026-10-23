@@ -72,7 +72,7 @@ By default [healthz](config/monitoring#healthz-server), [monitoring](config/moni
 
 ## Authentication
 
-The Postgres wire-compatible server supports [authentication](config/authentication) which can be configured via authentication rules.
+The Postgres wire-compatible server and the Flight SQL server both support [authentication](config/authentication), configured via the same authentication rules.
 
 By default a [single root user](config/authentication#single-root-user-v22) named `xtdb` accepting any password is configured.
 

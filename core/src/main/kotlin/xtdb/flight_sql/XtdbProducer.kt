@@ -230,15 +230,12 @@ class XtdbProducer(
     private val stmts = Leases<PreparedStatementHandle, PreparedStatement>(clock)
     private val sessions = Leases<String, Session>(clock)
 
-    private fun newConnection(dbName: DatabaseName): Xtdb.Connection =
-        (node.connect()).also { it.setCurrentCatalog(dbName) }
-
-    internal val sessionMiddlewareFactory = SessionMiddleware.Factory(sessions) {
+    internal val sessionMiddlewareFactory = SessionMiddleware.Factory(sessions, FlightAuthn(node)) { caller ->
         Session(
             UUID.randomUUID().toString(),
             Lease(clock, config.sessionIdleTimeout, firstLimit = config.sessionUnclaimedTimeout),
-            ::newConnection,
-        )
+            caller,
+        ) { dbName -> caller.connect(node, dbName) }
     }
 
     private fun sessionMiddleware(ctx: CallContext?): SessionMiddleware =
@@ -868,10 +865,10 @@ class XtdbProducer(
     ) = listener.reportingErrors {
         val txHandle = newHandle()
         val dbName = resolveDb(ctx)
-        val session = connectionFor(ctx, dbName)
-        val conn = newConnection(dbName).apply {
-            awaitToken = session.awaitToken
-            defaultTz = session.defaultTz
+        val sessionConn = connectionFor(ctx, dbName)
+        val conn = session(ctx).openConnection(dbName).apply {
+            awaitToken = sessionConn.awaitToken
+            defaultTz = sessionConn.defaultTz
             setAutoCommit(false)
         }
         txs.add(txHandle, FlightTx(conn, Lease(clock, config.transactionIdleTimeout)))
