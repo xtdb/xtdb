@@ -44,7 +44,7 @@
     (try
       (pgwire/cmd-startup-pg30 conn startup-opts)
       (catch Exception e
-        (if (#{:xtdb/authn-failed :xtdb/invalid-client-credentials} (:xtdb.error/code (ex-data e)))
+        (if (#{:xtdb.authn/failed :xtdb.authn/malformed-client-credentials} (:xtdb.error/code (ex-data e)))
           (doto conn
             (pgwire/send-ex e)
             (pgwire/handle-msg* {:msg-name :msg-terminate}))
@@ -77,8 +77,8 @@
                    :localized-severity "ERROR",
                    :sql-state "28P01",
                    :message "Password authentication failed for user: test-user"
-                   :detail {"category" "incorrect"
-                            "code" "xtdb/authn-failed"
+                   :detail {"category" "forbidden"
+                            "code" "xtdb.authn/failed"
                             "message" "Password authentication failed for user: test-user"
                             "data" {"status" 401
                                     "body" {"access-token" nil
@@ -116,6 +116,6 @@
                    :sql-state "28P01",
                    :message "Client credentials must be provided in the format 'client-id:client-secret'",
                    :detail {"category" "incorrect"
-                            "code" "xtdb/invalid-client-credentials"
+                            "code" "xtdb.authn/malformed-client-credentials"
                             "message" "Client credentials must be provided in the format 'client-id:client-secret'"}}}]]
                @!in-msgs)))))

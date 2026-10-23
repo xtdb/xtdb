@@ -82,13 +82,13 @@
 (t/deftest test-invalid-issuer-url
   (t/testing "error caught when issuer URL is invalid"
     (let [invalid-url (.toURL (URI. "http://invalid-url"))]
-      (t/is (anomalous? [:incorrect :xtdb/oidc-config-discovery-error
+      (t/is (anomalous? [:incorrect :xtdb.authn/oidc-discovery-failed
                          #"Error thrown when fetching OIDC configuration from http://invalid-url"]
                         (authn/discover-oidc-config invalid-url)))))
   
   (t/testing "discovery fails with unknown realm"
     (let [unknown-realm-url (.toURL (URI. (str (.getAuthServerUrl container) "/realms/other-realm")))]
-      (t/is (anomalous? [:incorrect :xtdb/oidc-config-discovery-error
+      (t/is (anomalous? [:incorrect :xtdb.authn/oidc-discovery-failed
                          #"Failed to discover OIDC configuration from"]
                         (authn/discover-oidc-config unknown-realm-url))))))
 
@@ -99,7 +99,7 @@
                                      (authn/->rules-cfg [{:method :password}])
                                      (InstantSource/system))]
 
-    (t/is (anomalous? [:incorrect :xtdb/authn-failed "No valid token or refresh token available for refresh"]
+    (t/is (anomalous? [:forbidden :xtdb.authn/refresh-failed "No valid token or refresh token available for refresh"]
                       (authn/refresh-token authn nil)))))
 
 (t/deftest test-revalidate
@@ -143,7 +143,7 @@
         (t/is (= test-user-id (.getUserId auth-result)))))
 
     (t/testing "authentication failures"
-      (t/is (anomalous? [:incorrect :xtdb/authn-failed "Password authentication failed for user: test-user"] 
+      (t/is (anomalous? [:forbidden :xtdb.authn/failed "Password authentication failed for user: test-user"] 
                         (.verifyPassword authn "test-user" "password123"))))))
 
 (t/deftest test-oidc-client-credential-flow
@@ -165,7 +165,7 @@
         (t/is (= client-secret (.getClientSecret auth-result)))))
 
     (t/testing "authentication failures" 
-      (t/is (anomalous? [:incorrect :xtdb/authn-failed "Client credentials authentication failed for client: bad-client"]
+      (t/is (anomalous? [:forbidden :xtdb.authn/failed "Client credentials authentication failed for client: bad-client"]
                         (.verifyClientCredentials authn "bad-client" "client-secret"))))))
 
 (comment

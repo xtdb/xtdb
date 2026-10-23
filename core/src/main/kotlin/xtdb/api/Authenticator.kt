@@ -16,7 +16,7 @@ import xtdb.query.IQuerySource
 import xtdb.util.requiringResolve
 import java.net.URL
 import java.security.MessageDigest
-import xtdb.api.error.Incorrect
+import xtdb.api.error.Forbidden
 import xtdb.api.error.Unsupported
 import java.time.Instant
 import java.time.InstantSource
@@ -186,7 +186,7 @@ class UserListAuthenticator(
     override fun verifyPassword(user: String, password: String): AuthResult {
         // Unknown user and wrong password fail identically — don't leak which usernames exist.
         if (users[user]?.verify(password) == true) return SimpleResult(user)
-        throw Incorrect(errorCode = "xtdb/authn-failed", message = "password authentication failed for user: $user")
+        throw Forbidden(errorCode = "xtdb.authn/failed", message = "password authentication failed for user: $user")
     }
 }
 
@@ -206,6 +206,6 @@ class SingleRootUserAuthenticator(private val password: String?) : Authenticator
         ) {
             return SimpleResult(user)
         }
-        throw Incorrect(errorCode = "xtdb/authn-failed", message = "password authentication failed for user: $user")
+        throw Forbidden(errorCode = "xtdb.authn/failed", message = "password authentication failed for user: $user")
     }
 }

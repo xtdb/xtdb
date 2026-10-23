@@ -8,7 +8,7 @@ import xtdb.api.Authenticator.Factory.UserList
 import xtdb.api.Authenticator.Method.PASSWORD
 import xtdb.api.Authenticator.Method.TRUST
 import xtdb.api.Authenticator.MethodRule
-import xtdb.api.error.Incorrect
+import xtdb.api.error.Forbidden
 
 class UserListAuthenticatorTest {
 
@@ -31,11 +31,11 @@ class UserListAuthenticatorTest {
 
         assertEquals(
             "password authentication failed for user: alice",
-            assertThrows<Incorrect> { authn.verifyPassword("alice", "wrong") }.message
+            assertThrows<Forbidden> { authn.verifyPassword("alice", "wrong") }.message
         )
         assertEquals(
             "password authentication failed for user: carol",
-            assertThrows<Incorrect> { authn.verifyPassword("carol", "whatever") }.message
+            assertThrows<Forbidden> { authn.verifyPassword("carol", "whatever") }.message
         )
     }
 

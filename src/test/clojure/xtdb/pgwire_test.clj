@@ -202,13 +202,13 @@
              (pgw/parse-client-creds "test-client:test-secret"))))
 
   (t/testing "test invalid inputs"
-    (t/is (anomalous? [:incorrect :xtdb/invalid-client-credentials #"Client credentials were not provided"]
+    (t/is (anomalous? [:incorrect :xtdb.authn/malformed-client-credentials #"Client credentials were not provided"]
                       (pgw/parse-client-creds nil)))
-    (t/is (anomalous? [:incorrect :xtdb/invalid-client-credentials #"Client credentials were empty"]
+    (t/is (anomalous? [:incorrect :xtdb.authn/malformed-client-credentials #"Client credentials were empty"]
                       (pgw/parse-client-creds "")))
-    (t/is (anomalous? [:incorrect :xtdb/invalid-client-credentials #"Client credentials must be provided in the format 'client-id:client-secret'"]
+    (t/is (anomalous? [:incorrect :xtdb.authn/malformed-client-credentials #"Client credentials must be provided in the format 'client-id:client-secret'"]
                       (pgw/parse-client-creds "no-colon")))
-    (t/is (anomalous? [:incorrect :xtdb/invalid-client-credentials #"Client credentials must be provided in the format 'client-id:client-secret'"]
+    (t/is (anomalous? [:incorrect :xtdb.authn/malformed-client-credentials #"Client credentials must be provided in the format 'client-id:client-secret'"]
                       (pgw/parse-client-creds "client:secret:extra")))))
 
 (deftest gssenc-test

@@ -272,11 +272,15 @@
                                                          ::error-code (case (:arg-format data)
                                                                         :text "22P02"
                                                                         :binary "22P03")}
-                           :xtdb/invalid-client-credentials {::severity :error, ::error-code "28P01"}
-                           :xtdb/authn-failed {::severity :error, ::error-code "28P01"}
+                           :xtdb.authn/malformed-client-credentials {::severity :error, ::error-code "28P01"}
                            :xtdb/discard-in-tx {::severity :error, ::error-code "25001"}
 
                            {::severity :error, ::error-code "08P01"})
+
+        ::anom/forbidden (case (::err/code data)
+                           (:xtdb.authn/failed :xtdb.authn/refresh-failed) {::severity :error, ::error-code "28P01"}
+                           :xtdb.authn/no-matching-rule {::severity :error, ::error-code "28000"}
+                           {::severity :error, ::error-code "42501"})
 
         ::anom/unsupported {::severity :error, ::error-code "0A000"}
 
@@ -370,17 +374,17 @@
 (defn parse-client-creds [^String credentials]
   (cond
     (nil? credentials)
-    (throw (err/incorrect :xtdb/invalid-client-credentials "Client credentials were not provided")) 
+    (throw (err/incorrect :xtdb.authn/malformed-client-credentials "Client credentials were not provided")) 
 
     (str/blank? credentials)
-    (throw (err/incorrect :xtdb/invalid-client-credentials "Client credentials were empty"))
+    (throw (err/incorrect :xtdb.authn/malformed-client-credentials "Client credentials were empty"))
 
     :else
     (let [parts (str/split credentials #":")]
       (if (= 2 (count parts))
         (let [[client-id client-secret] parts]
           {:client-id client-id :client-secret client-secret})
-        (throw (err/incorrect :xtdb/invalid-client-credentials "Client credentials must be provided in the format 'client-id:client-secret'"))))))
+        (throw (err/incorrect :xtdb.authn/malformed-client-credentials "Client credentials must be provided in the format 'client-id:client-secret'"))))))
 
 (defn cmd-startup-pg30 [{:keys [frontend server] :as conn} startup-opts]
   (let [{:keys [node ^Authenticator authn playground?]} server
@@ -453,7 +457,7 @@
                 (swap! (:conn-state conn) assoc :authn-state auth-result)
                 (startup-ok conn (assoc startup-opts "user" user-id))))))
 
-        (throw (err-invalid-auth-spec (str "no authentication record found for user: " user))))
+        (throw (err/forbidden :xtdb.authn/no-matching-rule (str "no authentication record found for user: " user))))
       conn)))
 
 (defn cmd-startup-cancel [conn msg-in]

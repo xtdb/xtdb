@@ -72,12 +72,12 @@
   (let [{:keys [token_endpoint userinfo_endpoint]} config]
     (cond
       (not token_endpoint)
-      (throw (err/incorrect :xtdb/oidc-config-discovery-error
+      (throw (err/incorrect :xtdb.authn/oidc-discovery-failed
                             (format "OIDC configuration missing required token_endpoint from %s" discovery-url)
                             {:body config}))
 
       (not userinfo_endpoint)
-      (throw (err/incorrect :xtdb/oidc-config-discovery-error
+      (throw (err/incorrect :xtdb.authn/oidc-discovery-failed
                             (format "OIDC configuration missing required userinfo_endpoint from %s" discovery-url)
                             {:body config}))
 
@@ -91,11 +91,11 @@
                                              :as :json})]
         (if (= 200 status)
           (validate-oidc-config body discovery-url)
-          (throw (err/incorrect :xtdb/oidc-config-discovery-error
+          (throw (err/incorrect :xtdb.authn/oidc-discovery-failed
                                 (format "Failed to discover OIDC configuration from %s: %s" discovery-url (:error body))
                                 {:status status, :body body}))))
       (catch Exception e
-        (throw (err/incorrect :xtdb/oidc-config-discovery-error
+        (throw (err/incorrect :xtdb.authn/oidc-discovery-failed
                               (format "Error thrown when fetching OIDC configuration from %s: %s" discovery-url (.getMessage e))
                               {:exception e}))))))
 
@@ -124,7 +124,7 @@
                                          :as :json})]
     (if (= 200 status)
       {:user-id (:sub body)}
-      (throw (err/incorrect :xtdb/authn-failed
+      (throw (err/forbidden :xtdb.authn/failed
                             (format "Failed to obtain user info from %s: %s" userinfo-endpoint (:error body))
                             {:status status, :body body})))))
 
@@ -143,7 +143,7 @@
                                                     :refresh_token refresh-token})]
       (if (= 200 status)
         (.withExpiry oauth-result ^Instant (:expires-at body))
-        (throw (err/incorrect :xtdb/authn-failed
+        (throw (err/forbidden :xtdb.authn/refresh-failed
                               (format "Failed to refresh OAuth token: %s" (:error body))
                               {:status status, :body body}))))
 
@@ -158,18 +158,18 @@
                                                     :client_secret client-secret})]
       (if (= 200 status)
         (.withExpiry creds-result ^Instant (:expires-at body))
-        (throw (err/incorrect :xtdb/authn-failed
+        (throw (err/forbidden :xtdb.authn/refresh-failed
                               (format "Failed to refresh client credentials token: %s" (:error body))
                               {:status status, :body body}))))
 
     :else
-    (throw (err/incorrect :xtdb/authn-failed "No valid token or refresh token available for refresh"))))
+    (throw (err/forbidden :xtdb.authn/refresh-failed "No valid token or refresh token available for refresh"))))
 
 (defn oauth-device-info [{:keys [oidc-config client-id client-secret]}]
   (let [device-endpoint (:device_authorization_endpoint oidc-config)]
     (when-not device-endpoint
-      (throw (err/incorrect :xtdb/authn-failed
-                            "OIDC provider does not support device authorization flow - missing device_authorization_endpoint")))
+      (throw (err/unsupported :xtdb.authn/device-auth-unsupported
+                              "OIDC provider does not support device authorization flow - missing device_authorization_endpoint")))
     (let [{:keys [status body]} (http/post device-endpoint
                                            {:form-params {:client_id client-id
                                                           :client_secret client-secret
@@ -181,7 +181,7 @@
          :verification-uri-complete (:verification_uri_complete body)
          :interval (:interval body)
          :expires-at (calculate-expires-at body (.instant (InstantSource/system)))}
-        (throw (err/incorrect :xtdb/authn-failed
+        (throw (err/forbidden :xtdb.authn/failed
                               (format "Failed to obtain device info from %s: %s" device-endpoint (:error body))
                               {:status status, :body body}))))))
 
@@ -193,7 +193,7 @@
   (await [_]
     (let [{:keys [oidc-config ^InstantSource instant-src]} authn]
       (loop []
-        (when (.isAfter (.instant instant-src) expires-at) (throw (err/incorrect :xtdb/authn-failed "Device authorization has expired")))
+        (when (.isAfter (.instant instant-src) expires-at) (throw (err/forbidden :xtdb.authn/failed "Device authorization has expired")))
 
         (let [token-endpoint (:token_endpoint oidc-config)
               {:keys [status body]} (http/post token-endpoint
@@ -212,10 +212,10 @@
                   (OAuthPasswordResult. user-id expires-at access-token refresh-token))
             400 (if (= "authorization_pending" (:error body))
                   (do (Thread/sleep (.toMillis interval)) (recur))
-                  (throw (err/incorrect :xtdb/authn-failed
+                  (throw (err/forbidden :xtdb.authn/failed
                                         (format "Device authentication failed: %s" (:error body))
                                         {:status status, :body body})))
-            (throw (err/incorrect :xtdb/authn-failed
+            (throw (err/forbidden :xtdb.authn/failed
                                   (format "Device authentication failed with status %d" status)
                                   {:status status, :body body}))))))))
 
@@ -231,7 +231,7 @@
         (let [{:keys [access-token refresh-token expires-at]} body
               {:keys [user-id]} (oauth-userinfo this access-token)]
           (OAuthPasswordResult. user-id expires-at access-token refresh-token))
-        (throw (err/incorrect :xtdb/authn-failed
+        (throw (err/forbidden :xtdb.authn/failed
                               (format "Password authentication failed for user: %s" user)
                               {:status status, :body body})))))
 
@@ -248,7 +248,7 @@
         (let [{:keys [access-token expires-at]} body
               {:keys [user-id]} (oauth-userinfo this access-token)]
           (OAuthClientCredentialsResult. user-id expires-at access-token client-id client-secret))
-        (throw (err/incorrect :xtdb/authn-failed
+        (throw (err/forbidden :xtdb.authn/failed
                               (format "Client credentials authentication failed for client: %s" client-id)
                               {:status status, :body body})))))
 

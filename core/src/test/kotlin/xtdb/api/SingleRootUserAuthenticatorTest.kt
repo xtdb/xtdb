@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import xtdb.api.Authenticator.Method.PASSWORD
 import xtdb.api.Authenticator.Method.TRUST
-import xtdb.api.error.Incorrect
+import xtdb.api.error.Forbidden
 
 class SingleRootUserAuthenticatorTest {
 
@@ -36,7 +36,7 @@ class SingleRootUserAuthenticatorTest {
     fun `verifyPassword rejects the root user with the wrong password`() {
         val authn = SingleRootUserAuthenticator("hunter2")
 
-        val thrown = assertThrows<Incorrect> { authn.verifyPassword("xtdb", "wrong") }
+        val thrown = assertThrows<Forbidden> { authn.verifyPassword("xtdb", "wrong") }
         assertEquals("password authentication failed for user: xtdb", thrown.message)
     }
 
@@ -44,7 +44,7 @@ class SingleRootUserAuthenticatorTest {
     fun `verifyPassword rejects any non-root user`() {
         val authn = SingleRootUserAuthenticator("hunter2")
 
-        val thrown = assertThrows<Incorrect> { authn.verifyPassword("alice", "hunter2") }
+        val thrown = assertThrows<Forbidden> { authn.verifyPassword("alice", "hunter2") }
         assertEquals("password authentication failed for user: alice", thrown.message)
     }
 
@@ -54,6 +54,6 @@ class SingleRootUserAuthenticatorTest {
         // if a caller explicitly invokes password verification — still must fail.
         val authn = SingleRootUserAuthenticator(null)
 
-        assertThrows<Incorrect> { authn.verifyPassword("xtdb", "anything") }
+        assertThrows<Forbidden> { authn.verifyPassword("xtdb", "anything") }
     }
 }
