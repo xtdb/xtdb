@@ -96,6 +96,18 @@
     (t/is (= #xt/type :i64
              (types/merge-types #xt/type :i64 #xt/type :nothing)))))
 
+(t/deftest run-end-encoded-types-round-trip-through-the-reader
+  (t/are [type-spec] (= type-spec (st/render-type (st/->type type-spec)))
+    [:ree :i64]
+    [:ree [:? :utf8]]
+    [:ree-i16 :i64]
+    [:ree-i64 :utf8]
+    [:ree #{:i64 :utf8}]
+    [:ree [:struct {"a" :i64}]])
+
+  (t/is (= #xt/type :i64 (types/merge-types #xt/type [:ree :i64] #xt/type :i64))
+        "an encoded type joins a plain one as its values"))
+
 (t/deftest the-lattice-bottom-round-trips-through-the-reader
   (t/are [type-spec] (= type-spec (st/render-type (st/->type type-spec)))
     :nothing

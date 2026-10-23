@@ -2,10 +2,14 @@ package xtdb.arrow
 
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
+import org.apache.arrow.vector.VectorLoader
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.ipc.ArrowFileWriter
+import org.apache.arrow.vector.types.UnionMode
+import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
+import org.apache.arrow.vector.types.pojo.Schema
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -14,6 +18,8 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import xtdb.api.error.Incorrect
+import xtdb.api.error.Unsupported
 import xtdb.arrow.Relation.Companion.loader
 import xtdb.arrow.Vector.Companion.openVector
 import xtdb.arrow.VectorType.Companion.asType
@@ -119,13 +125,179 @@ class RunEndEncodedVectorTest {
     }
 
     @Test
-    fun `the field carries the encoding, the type carries the values`() {
+    fun `the type and the field carry the encoding, the arrow type carries the values`() {
         openI64Runs(10L to 3).use { vec ->
-            assertEquals(RUN_END_ENCODED_TYPE, vec.arrowType)
-            assertEquals(listOf(REE_RUN_ENDS_NAME, REE_VALUES_NAME), vec.field.children.map { it.name })
+            assertEquals(VectorType.maybe(VectorType.I64).runEndEncoded(), vec.type)
+            assertEquals(I64_TYPE, vec.arrowType)
 
-            assertEquals(VectorType.maybe(VectorType.I64), vec.type)
+            assertEquals(RUN_END_ENCODED_TYPE, vec.field.type)
+            assertEquals(listOf(REE_RUN_ENDS_NAME, REE_VALUES_NAME), vec.field.children.map { it.name })
             assertEquals(vec.type, vec.field.asType)
+        }
+    }
+
+    @Test
+    fun `an encoded type joins a plain one as its values`() {
+        val ree = VectorType.I64.runEndEncoded()
+
+        assertEquals(VectorType.I64, MergeTypes.mergeTypes(ree, VectorType.I64))
+        assertEquals(VectorType.I64, MergeTypes.mergeTypes(ree, ree))
+        assertEquals(VectorType.maybe(VectorType.I64), MergeTypes.mergeTypes(ree, VectorType.Null))
+        assertEquals(ree, ree.toField("vals").asType)
+        assertEquals(VectorType.maybe(VectorType.I64).runEndEncoded(), VectorType.maybe(ree))
+        assertEquals(I64_TYPE, ree.arrowType)
+        assertEquals(setOf(VectorType.I64), ree.legs.toSet())
+    }
+
+    @Test
+    fun `an encoding replaces the one before it`() {
+        val ree = VectorType.I64.runEndEncoded()
+
+        assertEquals(VectorType.I64.runEndEncoded(RunEndWidth.I16), ree.runEndEncoded(RunEndWidth.I16))
+        assertEquals(VectorType.I64, ree.unencoded)
+        assertEquals(VectorType.maybe(VectorType.I64), VectorType.maybe(ree).unencoded)
+    }
+
+    @Test
+    fun `the values' type has no encoding at any depth`() {
+        val nested = VectorType.structOf(
+            "iid" to VectorType.IID.runEndEncoded(),
+            "els" to VectorType.listTypeOf(VectorType.maybe(VectorType.I64).runEndEncoded()),
+        ).runEndEncoded()
+
+        val plain = VectorType.structOf(
+            "iid" to VectorType.IID,
+            "els" to VectorType.listTypeOf(VectorType.maybe(VectorType.I64)),
+        )
+
+        assertEquals(plain, nested.unencoded)
+        assertEquals(setOf(plain), nested.legs.toSet())
+        assertEquals(plain.asLegField, nested.asLegField)
+        assertTrue(plain.unencoded === plain, "a plain type is its own values' type")
+        assertThrows<IllegalArgumentException> { VectorType.Poly(setOf(nested.withEncoding(Encoding.Plain).asMono, VectorType.UTF8)) }
+    }
+
+    @Test
+    fun `a union can be encoded, its legs stay plain`() {
+        val union = VectorType.fromLegs(VectorType.I64, VectorType.UTF8)
+        val ree = union.runEndEncoded()
+
+        assertEquals(ree, ree.toField("vals").asType)
+        assertEquals(union.legs.toSet(), ree.legs.toSet())
+        assertEquals(VectorType.maybe(union).runEndEncoded(), VectorType.maybe(ree))
+        assertEquals(union, MergeTypes.mergeTypes(ree, VectorType.I64))
+    }
+
+    @Test
+    fun `null and nothing can't be encoded`() {
+        assertEquals(VectorType.Null, VectorType.Null.unencoded)
+        assertThrows<Unsupported> { VectorType.Null.runEndEncoded() }
+        assertThrows<Unsupported> { VectorType.Nothing.runEndEncoded() }
+
+        val reeOfNull = Encoding.RunEnd(RunEndWidth.I32).layout("vals") { Field(it, FieldType.nullable(NULL_TYPE), emptyList()) }
+        assertThrows<Unsupported> { reeOfNull.asType }
+    }
+
+    @Test
+    fun `an encoded union leg is read as unsupported, not as a plain one`() {
+        val unionField = Field(
+            "u", FieldType.notNullable(UNION_TYPE),
+            listOf(VectorType.I64.runEndEncoded().toField("i64"), VectorType.UTF8.toField("utf8"))
+        )
+
+        assertThrows<Unsupported> { unionField.asType }
+
+        val nestedUnionField = Field(
+            "u", FieldType.notNullable(UNION_TYPE),
+            listOf(VectorType.structOf("iid" to VectorType.IID.runEndEncoded()).toField("struct"), VectorType.UTF8.toField("utf8"))
+        )
+
+        assertThrows<Unsupported> { nestedUnionField.asType }
+    }
+
+    @Test
+    fun `legs are the values' types, whatever the layout of the types they came from`() {
+        assertEquals(
+            VectorType.fromLegs(VectorType.I64, VectorType.UTF8),
+            VectorType.fromLegs(VectorType.I64.runEndEncoded().asMono, VectorType.UTF8)
+        )
+        assertEquals(VectorType.maybe(VectorType.I64), VectorType.fromLegs(VectorType.I64.runEndEncoded().asMono, VectorType.Null))
+    }
+
+    @Test
+    fun `run-ends other than i16, i32 or i64 are rejected`() {
+        val i8RunEnds = Field(
+            "vals", FieldType.notNullable(RUN_END_ENCODED_TYPE),
+            listOf(Field(REE_RUN_ENDS_NAME, FieldType.notNullable(I8_TYPE), emptyList()), VectorType.I64.toField(REE_VALUES_NAME))
+        )
+
+        assertThrows<Incorrect> { i8RunEnds.asType }
+    }
+
+    @Test
+    fun `an encoded column opened from its type reports that type`() {
+        for (type in listOf(
+            VectorType.I64.runEndEncoded(),
+            VectorType.maybe(VectorType.UTF8).runEndEncoded(RunEndWidth.I16),
+            VectorType.structOf("a" to VectorType.I64, "b" to VectorType.maybe(VectorType.UTF8)).runEndEncoded(),
+        )) {
+            allocator.openVector("vals", type).use { vec ->
+                assertTrue(vec is RunEndEncodedVector, "$type: $vec")
+                assertEquals(type, vec.type)
+                assertEquals(type, vec.field.asType)
+            }
+        }
+    }
+
+    @Test
+    fun `a selection declares the layout it was selected from`() {
+        openI64Runs(10L to 3, 20L to 1).use { vec ->
+            val sel = vec.select(intArrayOf(0, 3))
+
+            assertEquals(vec.type, sel.type)
+            assertEquals(vec.field, sel.field)
+        }
+    }
+
+    @Test
+    fun `plain and encoded columns append into one plain column`() {
+        Relation(allocator).use { out ->
+            Relation(allocator, listOf(openI64Runs(10L to 2, 20L to 1)), 3).use { out.append(it) }
+            Relation(allocator, listOf(LongVector(allocator, "vals", true).apply { writeLong(30L) }), 1).use { out.append(it) }
+            Relation(allocator, listOf(openI64Runs(40L to 2)), 2).use { out.append(it) }
+
+            val vals = out["vals"]
+            assertEquals(VectorType.maybe(VectorType.I64), vals.type)
+            assertEquals(I64_TYPE, vals.field.type)
+            assertEquals(listOf(10L, 10L, 20L, 30L, 40L, 40L), vals.asList)
+        }
+    }
+
+    @Test
+    fun `an encoded column widens only its nullability`() {
+        RunEndEncodedVector(allocator, "vals", LongVector(allocator, REE_VALUES_NAME, false)).use { vec ->
+            assertTrue(vec === vec.maybePromote(allocator, I64_TYPE, false))
+            assertFalse(vec.nullable)
+
+            assertTrue(vec === vec.maybePromote(allocator, NULL_TYPE, true))
+            assertTrue(vec.nullable)
+            assertEquals(I64_TYPE, vec.field.children[1].type)
+
+            assertThrows<UnsupportedOperationException> { vec.maybePromote(allocator, UTF8_TYPE, false) }
+        }
+    }
+
+    @Test
+    fun `an encoded column takes plain rows a run apiece`() {
+        LongVector(allocator, "in", false).use { plain ->
+            listOf(10L, 10L, 20L).forEach { plain.writeLong(it) }
+
+            openI64Runs(5L to 2).use { vec ->
+                vec.append(plain)
+
+                assertEquals(listOf(5L, 5L, 10L, 10L, 20L), vec.asList)
+                assertEquals(4, vec.runCount, "equal neighbours copied in aren't coalesced")
+            }
         }
     }
 
@@ -164,6 +336,119 @@ class RunEndEncodedVectorTest {
 
                 assertEquals(listOf(10L, 20L, 30L), out.asList)
                 assertEquals(3, out.runCount, "a range straddling run boundaries splits them")
+            }
+        }
+    }
+
+    @Test
+    fun `copies into an encoded column that already holds rows`() {
+        openI64Runs(10L to 3, 20L to 1, 30L to 2).use { vec ->
+            openI64Runs(5L to 2).use { out ->
+                out.append(vec)
+
+                assertEquals(listOf(5L, 5L, 10L, 10L, 10L, 20L, 30L, 30L), out.asList)
+                assertEquals(4, out.runCount)
+            }
+
+            openI64Runs(5L to 2).use { out ->
+                out.appendRows(vec, intArrayOf(5, 0, 3))
+
+                assertEquals(listOf(5L, 5L, 30L, 10L, 20L), out.asList)
+                assertEquals(4, out.runCount)
+            }
+        }
+    }
+
+    @Test
+    fun `nulls copied into an encoded column make it nullable`() {
+        NullVector("in", true, 2).use { nulls ->
+            RunEndEncodedVector(allocator, "vals", LongVector(allocator, REE_VALUES_NAME, false)).use { vec ->
+                vec.writeRun(5L, 2)
+                vec.append(nulls)
+
+                assertEquals(listOf(5L, 5L, null, null), vec.asList)
+                assertTrue(vec.nullable)
+                assertTrue(vec.field.children[1].isNullable)
+            }
+        }
+    }
+
+    @Test
+    fun `an encoded column beside another type promotes to a union by its values' type`() {
+        Relation(allocator).use { out ->
+            Relation(allocator, listOf(allocator.openVector("vals", UTF8_TYPE, false).apply { writeObject("a") }), 1)
+                .use { out.append(it) }
+            Relation(allocator, listOf(openI64Runs(10L to 2)), 2).use { out.append(it) }
+
+            val vals = out["vals"]
+            assertEquals(setOf("utf8", "i64"), vals.legNames)
+            assertEquals(listOf("a", 10L, 10L), vals.asList)
+        }
+    }
+
+    @Test
+    fun `an encoded column unloads in the layout of the schema it's given`() {
+        Relation(allocator, listOf(openI64Runs(10L to 2, null to 1, 20L to 1)), 4).use { rel ->
+            val plain = Schema(listOf(Field("vals", FieldType.nullable(I64_TYPE), emptyList())))
+
+            rel.openArrowRecordBatch(allocator, plain).use { batch ->
+                VectorSchemaRoot.create(plain, allocator).use { root ->
+                    VectorLoader(root).load(batch)
+                    assertEquals(listOf(10L, 10L, null, 20L), (0..<root.rowCount).map { root.getVector("vals").getObject(it) })
+                }
+            }
+
+            val encoded = rel.schema
+
+            rel.openArrowRecordBatch(allocator, encoded).use { batch ->
+                Relation(allocator, encoded).use { out ->
+                    out.load(batch)
+                    assertEquals(encoded, out.schema)
+                    assertEquals(listOf(10L, 10L, null, 20L), out["vals"].asList)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `a plain column unloads in the layout of an encoded schema it's given`() {
+        val plain = LongVector(allocator, "vals", true)
+            .apply { writeLong(10L); writeLong(10L); writeNull(); writeLong(20L) }
+
+        Relation(allocator, listOf(plain), 4).use { rel ->
+            val encoded = Schema(listOf(VectorType.maybe(VectorType.I64).runEndEncoded().toField("vals")))
+
+            rel.openArrowRecordBatch(allocator, encoded).use { batch ->
+                Relation(allocator, encoded).use { out ->
+                    out.load(batch)
+                    assertEquals(encoded, out.schema)
+                    assertTrue(out["vals"] is RunEndEncodedVector, "loads as runs: ${out["vals"]}")
+                    assertEquals(listOf(10L, 10L, null, 20L), out["vals"].asList)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `an encoded column unloads under a union target into its values' leg`() {
+        val target = Schema(
+            listOf(
+                Field(
+                    "vals", FieldType.notNullable(ArrowType.Union(UnionMode.Dense, null)),
+                    listOf(Field("i64", FieldType.notNullable(I64_TYPE), emptyList()), Field("utf8", FieldType.notNullable(UTF8_TYPE), emptyList()))
+                )
+            )
+        )
+
+        val vec = RunEndEncodedVector(allocator, "vals", LongVector(allocator, REE_VALUES_NAME, false))
+            .apply { writeRun(10L, 2); writeRun(20L, 1) }
+
+        Relation(allocator, listOf(vec), 3).use { rel ->
+            rel.openArrowRecordBatch(allocator, target).use { batch ->
+                Relation(allocator, target).use { out ->
+                    out.load(batch)
+                    assertEquals(listOf(10L, 10L, 20L), out["vals"].asList)
+                }
             }
         }
     }

@@ -13,6 +13,8 @@ import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import org.apache.arrow.vector.types.pojo.Schema
+import xtdb.api.error.Incorrect
+import xtdb.api.error.Unsupported
 import xtdb.arrow.extensions.IntervalMDMType
 import xtdb.arrow.extensions.KeywordType
 import xtdb.arrow.extensions.OidType
@@ -40,9 +42,71 @@ const val MAP_VALUES_NAME = "value"
 const val REE_RUN_ENDS_NAME = "run_ends"
 const val REE_VALUES_NAME = "values"
 
+/** The integer type of a run-end encoded column's run-ends — Arrow allows exactly these three. */
+enum class RunEndWidth(val arrowType: ArrowType) {
+    I16(I16_TYPE), I32(I32_TYPE), I64(I64_TYPE);
+
+    companion object {
+        /** @throws Incorrect if [arrowType] isn't one of the three. */
+        @JvmStatic
+        fun of(arrowType: ArrowType) =
+            entries.find { it.arrowType == arrowType }
+                ?: throw Incorrect("run-ends must be i16, i32 or i64, got $arrowType")
+    }
+}
+
+/**
+ * How a column's values are laid out, carried by its [VectorType] beside its arrow type —
+ * as a `FieldType` carries a dictionary encoding.
+ */
+sealed interface Encoding {
+    /** The physical field of a column called [name], given the field its values take under the name the layout gives them. */
+    fun layout(name: FieldName, values: (FieldName) -> Field): Field
+
+    data object Plain : Encoding {
+        override fun layout(name: FieldName, values: (FieldName) -> Field) = values(name)
+    }
+
+    data class RunEnd(val width: RunEndWidth) : Encoding {
+        override fun layout(name: FieldName, values: (FieldName) -> Field) =
+            Field(
+                name, FieldType.notNullable(RUN_END_ENCODED_TYPE),
+                listOf(
+                    Field(REE_RUN_ENDS_NAME, FieldType.notNullable(width.arrowType), emptyList()),
+                    values(REE_VALUES_NAME)
+                )
+            )
+    }
+}
+
+private fun String.encoded(encoding: Encoding) = when (encoding) {
+    Encoding.Plain -> this
+    is Encoding.RunEnd -> "[:ree ${encoding.width} $this]"
+}
+
+// Arrow could lay a null column out as runs, and so could we - but carrying an encoding on these two objects means
+// re-judging every `== Null` and `Null ->` across the codebase, which is onerous for a column nothing writes.
+private fun <T : VectorType> T.plainOnly(encoding: Encoding): T =
+    if (encoding == Encoding.Plain) this else throw Unsupported("$this can't be laid out as $encoding")
+
 sealed class VectorType {
+    /** The values' type, whatever their [encoding]. */
     abstract val arrowType: ArrowType
     abstract val nullable: Boolean
+
+    abstract val encoding: Encoding
+
+    /**
+     * This type with its values laid out as [encoding].
+     * @throws Unsupported on [Null] and [Nothing], for any encoding but [Encoding.Plain].
+     */
+    abstract fun withEncoding(encoding: Encoding): VectorType
+
+    @JvmOverloads
+    fun runEndEncoded(width: RunEndWidth = RunEndWidth.I32) = withEncoding(Encoding.RunEnd(width))
+
+    /** The type of the values themselves: this type with no encoding at any depth — `this`, where it has none. */
+    abstract val unencoded: VectorType
 
     abstract fun toField(name: FieldName): Field
 
@@ -61,13 +125,18 @@ sealed class VectorType {
         val fieldType get() = FieldType(nullable, arrowType, null)
         val firstChildOrNull get() = children.entries.firstOrNull()?.value
 
-        override val legs: Iterable<Mono> get() = setOf(this)
+        abstract override fun withEncoding(encoding: Encoding): Mono
+        abstract override val unencoded: Mono
+
+        override val legs: Iterable<Mono> get() = setOf(unencoded)
         override fun toField(name: FieldName) = toField(name, nullable)
 
         fun toField(name: FieldName, nullable: Boolean): Field =
-            Field(name, FieldType(nullable, arrowType, null), children.map { (n, t) -> t.toField(n) })
+            encoding.layout(name) { n ->
+                Field(n, FieldType(nullable, arrowType, null), children.map { (c, t) -> t.toField(c) })
+            }
 
-        override val asLegField get() = toField(arrowType.toLeg())
+        override val asLegField get() = unencoded.toField(arrowType.toLeg())
     }
 
     data object Null : Mono() {
@@ -75,12 +144,19 @@ sealed class VectorType {
         override val children: Map<FieldName, VectorType> get() = emptyMap()
         override val nullable get() = true
 
+        override val encoding get() = Encoding.Plain
+        override fun withEncoding(encoding: Encoding) = plainOnly(encoding)
+        override val unencoded get() = this
+
         override val asLegField get() = toField(arrowType.toLeg())
 
         override val legs: Iterable<Mono> get() = listOf(this)
     }
 
-    data class Scalar(override val arrowType: ArrowType) : Mono() {
+    data class Scalar @JvmOverloads constructor(
+        override val arrowType: ArrowType,
+        override val encoding: Encoding = Encoding.Plain,
+    ) : Mono() {
         init {
             assert(arrowType != NULL_TYPE) { "Use Null type for NULL_TYPE" }
             assert(arrowType !is ArrowType.Union) { "Use Poly type for UNION_TYPE" }
@@ -88,21 +164,47 @@ sealed class VectorType {
 
         override val children get() = emptyMap<FieldName, VectorType>()
 
-        override fun toString() = "<$arrowType>"
+        override fun withEncoding(encoding: Encoding) = copy(encoding = encoding)
+        override val unencoded get() = if (encoding == Encoding.Plain) this else copy(encoding = Encoding.Plain)
+
+        override fun toString() = "<$arrowType>".encoded(encoding)
     }
 
-    data class Listy(override val arrowType: ArrowType, val elType: VectorType) : Mono() {
+    data class Listy @JvmOverloads constructor(
+        override val arrowType: ArrowType,
+        val elType: VectorType,
+        override val encoding: Encoding = Encoding.Plain,
+    ) : Mono() {
         override val children get() = mapOf(elsName to elType)
 
         private val elsName get() = if (arrowType is ArrowType.Map) MAP_ENTRIES_NAME else LIST_ELS_NAME
 
-        override fun toString() = "[<$arrowType> $elType]"
+        override fun withEncoding(encoding: Encoding) = copy(encoding = encoding)
+
+        override val unencoded: Listy by lazy {
+            val el = elType.unencoded
+            if (encoding == Encoding.Plain && el === elType) this else Listy(arrowType, el)
+        }
+
+        override fun toString() = "[<$arrowType> $elType]".encoded(encoding)
     }
 
-    data class Struct(override val children: Map<FieldName, VectorType>) : Mono() {
+    data class Struct @JvmOverloads constructor(
+        override val children: Map<FieldName, VectorType>,
+        override val encoding: Encoding = Encoding.Plain,
+    ) : Mono() {
         override val arrowType get() = STRUCT_TYPE
 
-        override fun toString() = children.entries.joinToString(prefix = "{", postfix = "}") { (n, t) -> "$n: $t" }
+        override fun withEncoding(encoding: Encoding) = copy(encoding = encoding)
+
+        override val unencoded: Struct by lazy {
+            val plainChildren = children.mapValues { (_, t) -> t.unencoded }
+            if (encoding == Encoding.Plain && plainChildren.all { (n, t) -> t === children[n] }) this
+            else Struct(plainChildren)
+        }
+
+        override fun toString() =
+            children.entries.joinToString(prefix = "{", postfix = "}") { (n, t) -> "$n: $t" }.encoded(encoding)
     }
 
     /**
@@ -116,6 +218,10 @@ sealed class VectorType {
         override val arrowType get() = NULL_TYPE
         override val nullable get() = false
 
+        override val encoding get() = Encoding.Plain
+        override fun withEncoding(encoding: Encoding) = plainOnly(encoding)
+        override val unencoded get() = this
+
         // the bottom is absorbed by any join, so it contributes no legs and must never be one
         override val legs: Iterable<Mono> get() = emptyList()
 
@@ -128,22 +234,34 @@ sealed class VectorType {
         override val nullable = true
         val fieldType: FieldType get() = FieldType.nullable(arrowType)
 
-        override val asLegField get() = toField(Null.arrowType.toLeg())
+        override val encoding get() = mono.encoding
+        override fun withEncoding(encoding: Encoding) = Maybe(mono.withEncoding(encoding))
+        override val unencoded get() = mono.unencoded.let { if (it === mono) this else Maybe(it) }
 
-        override val legs: Iterable<Mono> get() = listOf(mono, Null)
+        override val asLegField get() = unencoded.toField(Null.arrowType.toLeg())
+
+        override val legs: Iterable<Mono> get() = listOf(mono.unencoded, Null)
 
         override fun toField(name: FieldName) =
-            Field(name, fieldType, mono.children.map { (n, t) -> t.toField(n) })
+            encoding.layout(name) { n -> Field(n, fieldType, mono.children.map { (c, t) -> t.toField(c) }) }
 
-        override fun toString() = "[:? $mono]"
+        override fun toString() = "[:? ${mono.unencoded}]".encoded(encoding)
     }
 
-    data class Poly(
-        private val children: Set<Mono>
+    data class Poly @JvmOverloads constructor(
+        private val children: Set<Mono>,
+        override val encoding: Encoding = Encoding.Plain,
     ) : VectorType() {
         companion object {
             private val fieldType = FieldType.notNullable(UNION_TYPE)
         }
+
+        init {
+            require(children.all { it.unencoded === it }) { "a union's legs are plain - the layout is the union's" }
+        }
+
+        override fun withEncoding(encoding: Encoding) = copy(encoding = encoding)
+        override val unencoded get() = if (encoding == Encoding.Plain) this else copy(encoding = Encoding.Plain)
 
         override val nullable by lazy { children.any { it == Null } }
 
@@ -154,10 +272,11 @@ sealed class VectorType {
         override val arrowType get() = singleMono?.arrowType ?: UNION_TYPE
 
         override fun toField(name: FieldName): Field =
-            singleMono?.toField(name, nullable)
-                ?: Field(name, fieldType, children.map { it.asLegField })
+            encoding.layout(name) { n ->
+                singleMono?.toField(n, nullable) ?: Field(n, fieldType, children.map { it.asLegField })
+            }
 
-        override val asLegField get() = toField(arrowType.toLeg())
+        override val asLegField get() = unencoded.toField(arrowType.toLeg())
 
         override val legs get() = children
     }
@@ -204,7 +323,7 @@ sealed class VectorType {
                 Nothing -> Null
                 is Mono -> Maybe(type)
                 is Maybe -> type
-                is Poly -> Poly(type.legs + Null)
+                is Poly -> Poly(type.legs + Null, type.encoding)
             }
         }
 
@@ -297,13 +416,14 @@ sealed class VectorType {
 
         @JvmStatic
         fun fromLegs(legs: Set<Mono>): VectorType {
-            val nullable = Null in legs
-            val withoutNull = legs - Null
+            val plainLegs = legs.mapTo(mutableSetOf()) { it.unencoded }
+            val nullable = Null in plainLegs
+            val withoutNull = plainLegs - Null
 
             return when (withoutNull.size) {
                 0 -> Null
                 1 -> maybe(withoutNull.single(), nullable)
-                else -> Poly(legs)
+                else -> Poly(plainLegs)
             }
         }
 
@@ -356,13 +476,15 @@ sealed class VectorType {
                 LIST_TYPE, SetType, TsTzRangeType, is ArrowType.FixedSizeList, is ArrowType.Map ->
                     Listy(type, children.single().asType)
                 STRUCT_TYPE -> Struct(children.associate { it.name to it.asType })
-                is ArrowType.Union -> fromLegs(children.map { it.asType })
+                is ArrowType.Union -> fromLegs(children.map { leg ->
+                    leg.asType.also {
+                        if (it.unencoded !== it) throw Unsupported("union leg '${leg.name}' can't be run-end encoded")
+                    }
+                })
 
-                // run-end encoding is a layout rather than a type: a column of run-encoded i64s is a
-                // column of i64s, and merging it against a plain one must not produce a union
                 is ArrowType.RunEndEncoded -> {
                     require(children.size == 2) { "run-end encoded fields have exactly two children" }
-                    children[1].asType
+                    children[1].asType.withEncoding(Encoding.RunEnd(RunEndWidth.of(children[0].type)))
                 }
 
                 else -> Scalar(type)

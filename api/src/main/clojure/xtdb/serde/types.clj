@@ -4,7 +4,7 @@
   (:import (java.io Writer)
            (org.apache.arrow.vector.types DateUnit FloatingPointPrecision IntervalUnit TimeUnit Types$MinorType UnionMode)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Decimal ArrowType$Duration ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Map ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType Schema)
-           (xtdb.arrow ArrowTypes VectorType VectorType$Listy VectorType$Maybe VectorType$Null VectorType$Nothing VectorType$Poly VectorType$Scalar VectorType$Struct VectorType$Mono)
+           (xtdb.arrow ArrowTypes Encoding$RunEnd RunEndWidth VectorType VectorType$Listy VectorType$Maybe VectorType$Null VectorType$Nothing VectorType$Poly VectorType$Scalar VectorType$Struct VectorType$Mono)
            (xtdb.arrow.extensions IntervalMDMType KeywordType OidType RegClassType RegProcType SetType TransitType TsTzRangeType UriType UuidType)))
 
 (defprotocol FromArrowType
@@ -243,23 +243,25 @@
 (defmethod print-method FieldType [field-type w]
   (print-dup field-type w))
 
+(declare render-type)
+
 (defprotocol RenderType
-  (render-type [vec-type]))
+  (render-unencoded [vec-type]))
 
 (extend-protocol RenderType
   VectorType$Null
-  (render-type [_] :null)
+  (render-unencoded [_] :null)
 
   VectorType$Nothing
-  (render-type [_] :nothing)
+  (render-unencoded [_] :nothing)
 
   VectorType$Scalar
-  (render-type [scalar]
+  (render-unencoded [scalar]
     (<-arrow-type (.getArrowType scalar)))
 
   VectorType$Listy
-  (render-type [list-type]
-    (if (= list-type VectorType/TSTZ_RANGE)
+  (render-unencoded [list-type]
+    (if (= (.getUnencoded list-type) VectorType/TSTZ_RANGE)
       :tstz-range
 
       (let [arrow-type (.getArrowType list-type)
@@ -273,19 +275,30 @@
           (conj type-spec el-type)))))
 
   VectorType$Struct
-  (render-type [struct-type]
+  (render-unencoded [struct-type]
     [:struct (-> (.getChildren struct-type) (update-vals render-type))])
 
   VectorType$Maybe
-  (render-type [maybe-type]
-    (let [base-type (render-type (.getMono maybe-type))]
+  (render-unencoded [maybe-type]
+    (let [base-type (render-unencoded (.getMono maybe-type))]
       (if (keyword? base-type)
         [:? base-type]
         (into [:?] base-type))))
-  
+
   VectorType$Poly
-  (render-type [vec-type]
+  (render-unencoded [vec-type]
     (into #{} (map render-type) (.getLegs vec-type))))
+
+(defn render-type [^VectorType vec-type]
+  (let [unencoded (render-unencoded vec-type)
+        encoding (.getEncoding vec-type)]
+    (if (instance? Encoding$RunEnd encoding)
+      [(case-enum (.getWidth ^Encoding$RunEnd encoding)
+         RunEndWidth/I16 :ree-i16
+         RunEndWidth/I32 :ree
+         RunEndWidth/I64 :ree-i64)
+       unencoded]
+      unencoded)))
 
 (defn render-field-type 
   ([^Field field]
@@ -449,6 +462,10 @@
                                                                                 [(str k) (->type v)])))))
 
                               :tstz-range VectorType/TSTZ_RANGE
+
+                              :ree (.runEndEncoded (->type (first more-opts)) RunEndWidth/I32)
+                              :ree-i16 (.runEndEncoded (->type (first more-opts)) RunEndWidth/I16)
+                              :ree-i64 (.runEndEncoded (->type (first more-opts)) RunEndWidth/I64)
 
                               ;; `[:map el]`, or `[:map {:sorted? bool} el]` as `render-type` emits it -
                               ;; the element type is always last

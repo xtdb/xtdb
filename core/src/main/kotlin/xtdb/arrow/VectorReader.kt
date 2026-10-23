@@ -21,6 +21,7 @@ interface VectorReader : ILookup, AutoCloseable {
     val name: String
     val valueCount: Int
 
+    /** The values' type, whatever layout they're stored in — [field] is the physical layout, and [type] names both. */
     val arrowType: ArrowType
     val nullable: Boolean
     val childFields: List<Field>

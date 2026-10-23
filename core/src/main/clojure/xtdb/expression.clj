@@ -440,7 +440,8 @@
 
 (defn- continue-read [f ^VectorType vec-type reader-sym & args]
   (if (instance? VectorType$Mono vec-type)
-    (f vec-type (apply read-value-code vec-type reader-sym args))
+    (let [vec-type (.getUnencoded vec-type)]
+      (f vec-type (apply read-value-code vec-type reader-sym args)))
     (continue-read-union f (set (.getLegs vec-type)) reader-sym args)))
 
 (def ^:dynamic ^String *snapshot-token* nil)
@@ -521,8 +522,8 @@
                                     :or {rel rel-sym, idx idx-sym, extract-vec-from-rel? true}}
                                    {:keys [var-types extract-vecs-from-rel?]
                                     :or {extract-vecs-from-rel? true}}]
-  (let [return-type (or (get var-types variable)
-                        (throw (AssertionError. (str "unknown variable: " variable))))
+  (let [return-type (.getUnencoded ^VectorType (or (get var-types variable)
+                                                   (throw (AssertionError. (str "unknown variable: " variable)))))
         var-rdr-sym (gensym (util/symbol->normal-form-symbol variable))]
 
     ;; NOTE: when used from metadata exprs, incoming vectors might not exist

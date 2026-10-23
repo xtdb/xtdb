@@ -6,6 +6,7 @@ import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
+import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.InternalApi
 import xtdb.api.query.IKeyFn
@@ -45,12 +46,12 @@ class RunEndEncodedVector private constructor(
     constructor(al: BufferAllocator, name: String, valuesVector: Vector)
             : this(name, IntVector.open(al, REE_RUN_ENDS_NAME, false), valuesVector)
 
-    override val arrowType get() = RUN_END_ENCODED_TYPE
+    override val arrowType get() = valuesVector.arrowType
+    override val childFields get() = valuesVector.childFields
 
     override val vectors get() = listOf(runEndsVector, valuesVector)
 
-    /** The values' type: run-end encoding is a layout, not a type, so it doesn't show up here. */
-    override val type get() = valuesVector.type
+    override val type get() = valuesVector.type.runEndEncoded(RunEndWidth.of(runEndsVector.arrowType))
 
     // Having no validity buffer of its own, the parent is never nullable whatever its values are - while
     // whether the *column* admits nulls is whether those values do.
@@ -61,6 +62,7 @@ class RunEndEncodedVector private constructor(
         }
 
     override val fieldType get() = FieldType(false, RUN_END_ENCODED_TYPE, null)
+    override val field get() = Field(name, fieldType, vectors.map { it.field })
 
     val runEnds: VectorReader get() = runEndsVector
 
@@ -221,13 +223,16 @@ class RunEndEncodedVector private constructor(
         valueCount = runEnd
     }
 
-    // Unreachable: an unencoded source is turned away by the arrow-type check in [Vector.rowCopier] before
-    // it gets here, and an encoded one is served by the override above.
-    override fun rowCopier0(src: VectorReader) = unsupported("rowCopier0")
+    override fun rowCopier0(src: VectorReader): RowCopier {
+        val valueCopier = src.rowCopier(valuesVector)
+        return RowCopier { srcIdx -> valueCopier.copyRow(srcIdx); endRun(1) }
+    }
 
-    /** An encoded column's type is pinned by the values it already holds. */
-    override fun maybePromote(al: BufferAllocator, targetType: ArrowType, targetNullable: Boolean) =
-        unsupported("maybePromote")
+    override fun maybePromote(al: BufferAllocator, targetType: ArrowType, targetNullable: Boolean): Vector {
+        if (targetType != arrowType && targetType != NULL_TYPE) unsupported("maybePromote")
+        if (!nullable && (targetNullable || targetType == NULL_TYPE)) nullable = true
+        return this
+    }
 
     // The run-ends are absolute from the start of the vector, and a slice here carries the whole vector
     // rather than a logical offset into it, so they stay valid as they are.

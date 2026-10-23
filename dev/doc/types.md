@@ -42,6 +42,21 @@ Code references are by name; Kotlin paths are under `api/src/main/kotlin/xtdb/` 
   - **`Struct` and `Listy` children are full `VectorType`s.**
     A struct key or a list's elements can be `Maybe`, `Poly` or `Nothing`.
 
+- **Every type also carries an `encoding` — how its values are laid out — and it's `Plain` unless asked.**
+  `runEndEncoded(width = I32)` lays the values out as runs of equal values (`Encoding.RunEnd`), and `unencoded` is the type of the values themselves — plain at every depth, so a struct's encoded child comes back plain too.
+  `arrowType` is the values' type, whatever the encoding.
+
+  - **`Scalar`, `Listy`, `Struct` and `Poly` carry their own; a `Maybe` takes its mono's.**
+    So a run-encoded column of nullable values is `Maybe(Scalar(…, RunEnd))`, and there's no second place to disagree with.
+
+  - **`Null` and `Nothing` can't be encoded: `runEndEncoded()` on them throws `Unsupported`.**
+    Arrow would allow it, but nothing writes such a column.
+
+  - **The run-end width is one of `RunEndWidth.I16`, `I32` or `I64`** — the three Arrow allows.
+
+  - **Equality includes the encoding.**
+    `I64.runEndEncoded() != I64`, so code comparing a vector's type against a plain one wants `unencoded`.
+
 - **Every type is a set of `Mono` legs.**
   `VectorType.legs` makes the types-as-sets reading literal:
 
@@ -53,6 +68,9 @@ Code references are by name; Kotlin paths are under `api/src/main/kotlin/xtdb/` 
   | `Maybe(m)` | `{m, Null}` |
   | `Poly(s)` | `s` |
 
+  - **Legs are always plain: the encoding is never a leg.**
+    It belongs to a column rather than to any value, so joining an encoded type with a plain one joins their values: `[:ree :i64] ⊔ :i64 = :i64`, never a union of the two.
+
   - **`fromLegs(Set<Mono>)` normalises a set of legs to its one canonical type.**
     No non-null legs → `Null`.
     One non-null leg → that leg, in a `Maybe` if `Null` was present.
@@ -60,10 +78,12 @@ Code references are by name; Kotlin paths are under `api/src/main/kotlin/xtdb/` 
 
   - **`maybe(type)` adds `Null` to a type by the same rules.**
     `Nothing` becomes `Null`, a `Mono` a `Maybe`, a `Poly` gains a `Null` leg; `Null` and `Maybe` are unchanged.
+    The encoding is kept.
 
   - **The shape invariants hold through the factories, not the types.**
     A `Maybe` wraps only a `Mono`, and a `Poly` has at least two non-null legs — but the constructors are public, so only `fromLegs` and `maybe` guarantee either.
     Build types through them.
+    That a `Poly`'s legs are plain is checked by its constructor.
 
   - **`fromLegs(∅)` answers `Null`, not `Nothing`.**
     `fromLegs()` with no arguments is the marker for an unknown prepared-statement parameter (`Xtdb.kt`, `TxWriter.kt`, `pgwire.clj`).
@@ -170,13 +190,30 @@ Code references are by name; Kotlin paths are under `api/src/main/kotlin/xtdb/` 
   | `Poly` with one non-null leg | that leg's field, nullable |
   | `Poly` | non-nullable dense union of `asLegField`s, named by `ArrowType.toLeg()`, with a `null` leg if nullable |
   | `Nothing` | non-nullable `Null` |
+  | any type with `RunEnd(w)` encoding | non-nullable `RunEndEncoded`, over a non-nullable `run_ends` of width `w` and the plain type's field named `values` |
 
 - **`Field.asType` reads a field back, folding the field's nullability in through `maybe`.**
 
   - **A dense union reads through `fromLegs` of its children.**
+    A child with run-end encoding anywhere in it throws `Unsupported`, rather than reading back plain.
 
-  - **A run-end-encoded field reads as its values child.**
-    REE is a layout, not a type, so a run-encoded `I64` column joins a plain one without becoming a union.
+  - **A run-end-encoded field reads as its values child's type, run-end encoded.**
+    Run-ends other than `i16`, `i32` or `i64` throw `Incorrect`.
+
+- **A vector's `type` carries its encoding; its `arrowType` is its values'.**
+  An encoded `_iid` vector's `type` is `IID.runEndEncoded()` and its `field` the physical `RunEndEncoded` layout, but its `arrowType` is the values' `FixedSizeBinary(16)`.
+  Extension vectors already split the same way: a `UuidVector`'s `arrowType` is `uuid`, not its storage.
+
+  - **Code choosing a vector to copy into reads `arrowType`.**
+    `Relation.vectorFor`, `maybePromote` and union-leg resolution see an encoded `_iid` and a plain one as the same type, so they resolve to one plain column.
+
+  - **Code writing Arrow reads `field`** — a schema, an IPC page, a Flight SQL stream.
+
+  - **Expressions read a variable's `unencoded` type.**
+    A value has no layout, so an expression over an encoded column dispatches, and returns, as it would over a plain one.
+
+  - **A query's result types are joined, so they are plain.**
+    Each page is conformed to the declared schema on its way out, so every page of a stream carries the one schema, whatever encoding each was read from.
 
 - **The mapping bends in three places.**
 
@@ -221,6 +258,7 @@ Code references are by name; Kotlin paths are under `api/src/main/kotlin/xtdb/` 
   | `#{t1 t2}` | `Poly` |
   | `[:struct {"k" t}]` | `Struct` |
   | `[:list t]`, `[:set t]`, `[:map {:sorted? b} t]`, `:tstz-range` | `Listy` |
+  | `[:ree t]` (`i32` run-ends), `[:ree-i16 t]`, `[:ree-i64 t]` | `t`, run-end encoded |
 
   - **A nullable composite renders flattened.**
     `[:? :list :i64]`, not `[:? [:list :i64]]`; `->type` reads either.

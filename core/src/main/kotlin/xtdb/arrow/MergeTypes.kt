@@ -31,7 +31,7 @@ data class MergeTypes(
                     (existing ?: MergeTypes()).also { it.merge(type.elType) }
                 }
 
-            is Scalar -> scalars.add(type)
+            is Scalar -> scalars.add(type.unencoded)
 
             is Struct -> {
                 val existingKeys = structKeys?.keys
