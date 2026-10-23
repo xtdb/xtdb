@@ -17,6 +17,8 @@ import xtdb.util.safeMap
 import java.util.*
 import java.util.function.Consumer
 
+private val COMPOSE_SELECTIONS = System.getProperty("xtdb.composeSelections", "true").toBoolean()
+
 class ScanCursor(
     private val al: BufferAllocator,
 
@@ -86,7 +88,15 @@ class ScanCursor(
 
                 bitemporalConsumer.build()
                     .map { childRel ->
-                        colPreds.fold(childRel) { acc, colPred -> acc.select(colPred.select(al, acc, schema, args)) }
+                        if (COMPOSE_SELECTIONS) {
+                            var sel: IntArray? = null
+                            for (colPred in colPreds) {
+                                sel = colPred.selectWithin(al, childRel, sel, schema, args)
+                                if (sel.isEmpty()) break
+                            }
+                            sel?.let { childRel.select(it) } ?: childRel
+                        } else
+                            colPreds.fold(childRel) { acc, colPred -> acc.select(colPred.select(al, acc, schema, args)) }
                     }
                     .filter { it.rowCount > 0 }
                     .safeMap { it.openSlice(al) }

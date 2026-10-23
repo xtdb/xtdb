@@ -22,6 +22,7 @@
            (xtdb.arrow ListValueReader RelationReader ValueBox ValueReader Vector VectorMask VectorReader VectorType VectorType$Listy VectorType$Mono VectorType$Nothing VectorType$Poly VectorType$Struct)
            (xtdb.expression PgFormat)
            (xtdb.operator MaskSpec ProjectionSpec SelectionSpec)
+           (xtdb.expression.kernel DoubleExpr$Bin DoubleExpr$Col DoubleExpr$Lit DoubleProjectionKernel KernelProjectionSpec KernelSelectionSpec RangePredicate Scalar$Lit Scalar$Param)
            (xtdb.pgwire PgTypes)
            xtdb.time.Interval
            (xtdb.util StringUtil)))
@@ -2522,7 +2523,37 @@
        (keep (fn [x] (when (and (map? x) (= :variable (:op x))) (:variable x))))
        (into #{})))
 
-(defn ->expression-projection-spec ^xtdb.operator.ProjectionSpec [col-name expr {:keys [var-types param-types]}]
+(def ^:private kernels-mode (System/getProperty "xtdb.kernels" "all"))
+(def ^:private sel-kernels? (contains? #{"all" "sel"} kernels-mode))
+(def ^:private proj-kernels? (contains? #{"all" "proj"} kernels-mode))
+
+(defn- ->double-expr [{:keys [op f args] :as expr}]
+  (case op
+    :variable (DoubleExpr$Col. (str (:variable expr)))
+    :literal (let [v (:literal expr)]
+               (when (and (number? v) (not (decimal? v)) (not (ratio? v)))
+                 (DoubleExpr$Lit. (double v))))
+    :call (when (and (contains? #{:+ :- :*} f) (= 2 (count args)))
+            (let [[l r] (map ->double-expr args)]
+              (when (and l r)
+                (DoubleExpr$Bin. (case f :+ \+, :- \-, :* \*) l r))))
+    nil))
+
+(defn- ->kernel-projection [expr]
+  (when (and proj-kernels? (= :call (:op expr)))
+    (when-let [de (->double-expr expr)]
+      (when (seq (.cols ^xtdb.expression.kernel.DoubleExpr de))
+        (DoubleProjectionKernel. de)))))
+
+(declare ->expression-projection-spec*)
+
+(defn ->expression-projection-spec ^xtdb.operator.ProjectionSpec [col-name expr input-types]
+  (let [spec (->expression-projection-spec* col-name expr input-types)]
+    (if-let [k (->kernel-projection expr)]
+      (KernelProjectionSpec. k spec)
+      spec)))
+
+(defn- ->expression-projection-spec* ^xtdb.operator.ProjectionSpec [col-name expr {:keys [var-types param-types]}]
   (let [;; HACK - this runs the analyser (we discard the emission) to get the widest possible out-type.
         widest-out-type (-> (emit-projection expr {:param-types param-types
                                                    :var-types var-types})
@@ -2568,7 +2599,55 @@
         (with-open [selection (.project projector al in-rel schema args)]
           (VectorMask/open al (.getRowCount in-rel) selection))))))
 
+(declare ->expression-selection-spec*)
+
+(defn- ->kernel-scalar [{:keys [op] :as expr}]
+  (case op
+    :param (Scalar$Param. (str (:param expr)))
+    :literal (let [v (:literal expr)]
+               (when (or (and (number? v) (not (decimal? v)) (not (ratio? v)))
+                         (instance? java.time.LocalDate v))
+                 (Scalar$Lit. v)))
+    nil))
+
+(def ^:private flip-cmp {:< :>, :<= :>=, :> :<, :>= :<=})
+
+(defn- ->bound
+  "{:col .. :lo [scalar incl?]} / {:col .. :hi [..]} for `col op scalar` (either way round)"
+  [{:keys [op f args]}]
+  (when (and (= op :call) (contains? flip-cmp f) (= 2 (count args)))
+    (let [[a b] args
+          [col-expr scalar-expr f] (cond
+                                     (= :variable (:op a)) [a b f]
+                                     (= :variable (:op b)) [b a (flip-cmp f)])]
+      (when-let [scalar (some-> scalar-expr ->kernel-scalar)]
+        (when col-expr
+          (let [col (str (:variable col-expr))]
+            (case f
+              :< {:col col, :hi [scalar false]}
+              :<= {:col col, :hi [scalar true]}
+              :> {:col col, :lo [scalar false]}
+              :>= {:col col, :lo [scalar true]})))))))
+
+(defn- ->range-predicate [{:keys [op f args] :as expr}]
+  (when sel-kernels?
+    (when-let [{:keys [col lo hi]} (if (and (= op :call) (= f :and))
+                                     (let [bounds (map ->bound args)]
+                                       (when (and (every? some? bounds)
+                                                  (apply = (map :col bounds))
+                                                  (<= (count (keep :lo bounds)) 1)
+                                                  (<= (count (keep :hi bounds)) 1))
+                                         (apply merge bounds)))
+                                     (->bound expr))]
+      (RangePredicate. col (first lo) (boolean (second lo)) (first hi) (boolean (second hi))))))
+
 (defn ->expression-selection-spec ^SelectionSpec [expr input-types]
+  (let [spec (->expression-selection-spec* expr input-types)]
+    (if-let [pred (->range-predicate expr)]
+      (KernelSelectionSpec. pred spec)
+      spec)))
+
+(defn- ->expression-selection-spec* ^SelectionSpec [expr input-types]
   (let [mask-spec (->expression-mask-spec expr input-types)]
     (reify SelectionSpec
       (select [_ al in-rel schema args]

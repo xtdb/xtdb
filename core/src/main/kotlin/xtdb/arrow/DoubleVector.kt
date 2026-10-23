@@ -25,6 +25,14 @@ class DoubleVector private constructor(
     override fun getAsFloat(idx: Int) = getDouble(idx).toFloat()
     override fun getAsDouble(idx: Int) = getDouble(idx)
 
+    fun writeDoubles(arr: DoubleArray, n: Int) {
+        val buf = dataBuffer.ensureWritable(n.toLong() * Double.SIZE_BYTES)
+        val wi = buf.writerIndex()
+        for (i in 0 until n) buf.setDouble(wi + i.toLong() * Double.SIZE_BYTES, arr[i])
+        buf.writerIndex(wi + n.toLong() * Double.SIZE_BYTES)
+        repeat(n) { writeNotNull() }
+    }
+
     fun increment(idx: Int, v: Double) {
         ensureCapacity(idx + 1)
         setDouble(idx, if (isNull(idx)) v else getDouble(idx) + v)

@@ -872,6 +872,15 @@ fun createBench(benchName: String, properties: Map<String, String>, defaultArgs:
         if (project.hasProperty("narrowVarTypes"))
             jvmArgs("-Dxtdb.narrowVarTypes=true")
 
+        if (project.hasProperty("kernels"))
+            jvmArgs("-Dxtdb.kernels=${project.property("kernels")}")
+
+        if (project.hasProperty("composeSelections"))
+            jvmArgs("-Dxtdb.composeSelections=${project.property("composeSelections")}")
+
+        if (project.hasProperty("vectorApi"))
+            jvmArgs("--add-modules", "jdk.incubator.vector")
+
         if (project.hasProperty("qs"))
             jvmArgs("-Dxtdb.bench.qs=${project.property("qs")}")
 
