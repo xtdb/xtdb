@@ -9,6 +9,7 @@ import xtdb.compactor.RecencyPartition.*
 import xtdb.compactor.SegmentMerge.Results
 import xtdb.time.microsAsInstant
 import xtdb.trie.Trie
+import xtdb.trie.rowCopierFor
 import xtdb.util.closeAll
 import xtdb.util.openWritableChannel
 import java.nio.file.Path
@@ -82,7 +83,7 @@ internal interface OutWriter : AutoCloseable {
 
         private class CopierFactory(private val dataRel: Relation) {
             fun rowCopier(dataReader: RelationReader) = object : RecencyRowCopier {
-                private val copier = dataReader.rowCopier(dataRel)
+                private val copier = dataReader.rowCopierFor(dataRel)
 
                 override fun copyRow(recency: RecencyMicros, sourceIndex: Int) = copier.copyRow(sourceIndex)
             }

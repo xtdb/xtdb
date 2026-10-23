@@ -80,7 +80,8 @@ interface Compactor : AutoCloseable {
 
         companion object {
             @JvmStatic
-            fun real(pageSize: Int, recencyPartition: RecencyPartition?) =
+            @JvmOverloads
+            fun real(pageSize: Int, recencyPartition: RecencyPartition?, runEncodeIids: Boolean = false) =
                 object : Factory {
                     override fun create(allocator: BufferAllocator, partitionStorage: PartitionStorage, partitionState: PartitionState, watchers: Watchers) = object : Driver {
                         private val al = allocator.openChildAllocator("compactor")
@@ -90,7 +91,7 @@ interface Compactor : AutoCloseable {
                         private val tableCat = partitionState.tableCatalog
 
                         private val trieWriter = PageTrieWriter(al, bp, calculateBlooms = true)
-                        private val segMerge = SegmentMerge(al)
+                        private val segMerge = SegmentMerge(al, runEncodeIids)
 
                         private fun Job.trieDetails(
                             trieKey: TrieKey,
