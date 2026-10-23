@@ -142,6 +142,21 @@ entity CompactionJob {
 --
 -- This ensures output pages are consistently sized (~1024 rows), regardless of input distribution.
 --
+-- == IID layout ==
+--
+-- When the compactor is configured to run-end encode IIDs, `_iid` in every historical output data file is run-end encoded.
+-- A historical output file is one with a recency: a weekly `r<date>` file, including a Preserve-recency merge whose recency is non-null.
+-- A current output file (recency null, `rc`) always stores `_iid` as a plain 16-byte fixed-size binary column.
+-- The setting is off by default.
+-- The encoding is int32 run-ends over 16-byte fixed-size binary values, with one run per consecutive equal IID within a page.
+-- Both stages write `_iid` this way.
+-- A row extends its output's last run when it carries the same IID as that run.
+-- So an entity whose events alternate between the current and historical output files still gets one run per historical file and page, while its current-file rows stay plain.
+-- Stage 2's re-partitioning by IID never splits a run, because a run is one IID.
+-- Leaves it coalesces into one page never share an IID, so their runs carry over unchanged.
+-- Page metadata is computed over the IIDs the runs encode, so a meta file is identical whether or not its data file's `_iid` is encoded.
+-- With the setting off, `_iid` is a plain 16-byte fixed-size binary column.
+--
 -- == Upload ==
 --
 -- The data file is uploaded first.

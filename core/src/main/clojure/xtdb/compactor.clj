@@ -13,7 +13,7 @@
     (create [_ meter-registry config]
       (let [threads (.getThreads config)]
         (if (pos? threads)
-          (Compactor$Impl. (Compactor$Driver/real *page-size* *recency-partition*)
+          (Compactor$Impl. (Compactor$Driver/real *page-size* *recency-partition* (.getReeIids config))
                            meter-registry
                            (jc/->JobCalculator)
                            *ignore-signal-block?* threads)

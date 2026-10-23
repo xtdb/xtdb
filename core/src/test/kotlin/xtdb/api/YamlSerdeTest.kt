@@ -363,6 +363,16 @@ class YamlSerdeTest {
     }
 
     @Test
+    fun testCompactorReeIids() {
+        val input = """
+        compactor:
+          reeIids: true
+        """.trimIndent()
+
+        assertEquals(true, nodeConfig(input).compactor.reeIids)
+    }
+
+    @Test
     fun testSingleRootUserExplicitPassword() {
         val input = """
         authn: !SingleRootUser
