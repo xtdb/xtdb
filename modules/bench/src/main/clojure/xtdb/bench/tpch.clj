@@ -1,5 +1,6 @@
 (ns xtdb.bench.tpch
-  (:require [clojure.tools.logging :as log]
+  (:require [clojure.string :as str]
+            [clojure.tools.logging :as log]
             [xtdb.api :as xt]
             [xtdb.bench :as b]
             [xtdb.datasets.tpch :as tpch]
@@ -10,8 +11,9 @@
   (:import (java.time Duration)))
 
 (def ^:dynamic *qs*
-  (-> (into #{} (range 1 (inc (count tpch-ra/queries))))
-      (disj 21)))
+  (into #{} (map parse-long) (str/split (System/getProperty "xtdb.bench.qs" "1,6") #",")))
+
+(def hot-reps (parse-long (System/getProperty "xtdb.bench.hotReps" "50")))
 
 (defn query-tpch [stage-name query-language scale-factor expected i]
   (let [q (nth tpch-ra/queries i)
@@ -80,7 +82,9 @@
 
            (queries-stage :cold-queries query-language scale-factor)
 
-           (queries-stage :hot-queries query-language scale-factor)]})
+           {:t :do, :stage :hot-repeats
+            :tasks (vec (for [rep (range hot-reps)]
+                          (queries-stage (keyword (str "hot-queries-" rep)) query-language scale-factor)))}]})
 
 (comment
   (binding [*qs* #{1}]
