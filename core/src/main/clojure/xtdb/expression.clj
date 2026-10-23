@@ -13,15 +13,15 @@
            (java.nio ByteBuffer)
            (java.nio.charset StandardCharsets)
            (java.time Duration Instant InstantSource LocalDate LocalDateTime LocalTime OffsetDateTime ZoneId ZoneOffset ZonedDateTime)
-           (java.util Arrays Date List Map UUID)
+           (java.util Arrays BitSet Date List Map UUID)
            (java.util.regex Pattern)
            (java.util.stream IntStream)
            (org.apache.arrow.vector PeriodDuration)
            (org.apache.arrow.vector.types.pojo ArrowType$Decimal)
            (org.apache.commons.codec.binary Hex)
-           (xtdb.arrow ListValueReader RelationReader ValueBox ValueReader Vector VectorMask VectorReader VectorType VectorType$Listy VectorType$Mono VectorType$Nothing VectorType$Poly VectorType$Struct)
+           (xtdb.arrow ListValueReader MaskedRelation RelationReader ValueBox ValueReader Vector VectorMask VectorReader VectorType VectorType$Listy VectorType$Mono VectorType$Nothing VectorType$Poly VectorType$Struct)
            (xtdb.expression PgFormat)
-           (xtdb.operator MaskSpec ProjectionSpec SelectionSpec)
+           (xtdb.operator MaskSpec MaskRefiner MaskedProjection ProjectionSpec SelectionSpec)
            (xtdb.pgwire PgTypes)
            xtdb.time.Interval
            (xtdb.util StringUtil)))
@@ -2506,6 +2506,36 @@
                                  #_(->> (binding [*print-meta* true]))
                                  eval))
 
+           ;; DART (#6285 avenue B): read at each set bit's physical index, append densely
+           :!masked-projection-fn (delay
+                                    (-> `(fn [~(-> rel-sym (with-tag RelationReader))
+                                              ~(-> schema-sym (with-tag IPersistentMap))
+                                              ~(-> args-sym (with-tag RelationReader))
+                                              ~(-> out-vec-sym (with-tag Vector))
+                                              ~(-> 'mask (with-tag BitSet))]
+                                           (let [~@(batch-bindings emitted-expr)
+                                                 ~@writer-bindings]
+                                             (loop [~idx-sym (.nextSetBit ~'mask 0)]
+                                               (when (>= ~idx-sym 0)
+                                                 ~(continue (fn [t c]
+                                                              (write-value-out! t c)))
+                                                 (recur (.nextSetBit ~'mask (inc ~idx-sym)))))))
+                                        eval))
+
+           ;; DART: only meaningful when the expr is boolean - clears the bits where it isn't true
+           :!mask-refine-fn (delay
+                              (-> `(fn [~(-> rel-sym (with-tag RelationReader))
+                                        ~(-> schema-sym (with-tag IPersistentMap))
+                                        ~(-> args-sym (with-tag RelationReader))
+                                        ~(-> 'mask (with-tag BitSet))]
+                                     (let [~@(batch-bindings emitted-expr)]
+                                       (loop [~idx-sym (.nextSetBit ~'mask 0)]
+                                         (when (>= ~idx-sym 0)
+                                           (when-not ~(continue (fn [_t c] c))
+                                             (.clear ~'mask ~idx-sym))
+                                           (recur (.nextSetBit ~'mask (inc ~idx-sym)))))))
+                                  eval))
+
            :return-type return-type}))
       (util/lru-memoize) ; <<no-commit>>
       wrap-zone-id-cache-buster))
@@ -2530,7 +2560,23 @@
         narrow? (Boolean/getBoolean "xtdb.narrowVarTypes")
         expr-vars (expr-variables expr)]
 
-    (reify ProjectionSpec
+    (reify
+      MaskedProjection
+      (projectMasked [_ allocator masked-rel schema args]
+        (let [^MaskedRelation masked-rel masked-rel]
+          (when (every? #(.isDirect masked-rel (str %)) expr-vars)
+            (let [in-rel (.getDirectRel masked-rel)
+                  var-types (into {} (keep (fn [v]
+                                             (when-let [^VectorReader iv (.vectorForOrNull in-rel (str v))]
+                                               [v (.getType iv)])))
+                                  expr-vars)
+                  {:keys [!masked-projection-fn return-type]} (emit-projection expr {:param-types (->param-types args)
+                                                                                     :var-types var-types})]
+              (util/with-close-on-catch [out-vec (Vector/open allocator (str col-name) return-type)]
+                (@!masked-projection-fn in-rel schema args out-vec (.getMask masked-rel))
+                out-vec)))))
+
+      ProjectionSpec
       (getToName [_] (str col-name))
       (getType [_] widest-out-type)
 
@@ -2569,8 +2615,27 @@
           (VectorMask/open al (.getRowCount in-rel) selection))))))
 
 (defn ->expression-selection-spec ^SelectionSpec [expr input-types]
-  (let [mask-spec (->expression-mask-spec expr input-types)]
-    (reify SelectionSpec
+  (let [mask-spec (->expression-mask-spec expr input-types)
+        bool-expr {:op :call, :f :boolean, :args [expr]}
+        expr-vars (expr-variables bool-expr)]
+    (reify
+      MaskRefiner
+      (refine [_ al masked-rel schema args]
+        (let [^MaskedRelation masked-rel masked-rel]
+          (when (every? #(.isDirect masked-rel (str %)) expr-vars)
+            (let [in-rel (.getDirectRel masked-rel)
+                  var-types (into {} (keep (fn [v]
+                                             (when-let [^VectorReader iv (.vectorForOrNull in-rel (str v))]
+                                               [v (.getType iv)])))
+                                  expr-vars)
+                  {:keys [!mask-refine-fn ^VectorType return-type]} (emit-projection bool-expr {:param-types (->param-types args)
+                                                                                                :var-types var-types})]
+              (when (= return-type (types/->type :bool))
+                (let [mask (.clone ^BitSet (.getMask masked-rel))]
+                  (@!mask-refine-fn in-rel schema args mask)
+                  (.withMask masked-rel mask)))))))
+
+      SelectionSpec
       (select [_ al in-rel schema args]
         (with-open [mask (.mask mask-spec al in-rel schema args)]
           (let [res (IntStream/builder)]

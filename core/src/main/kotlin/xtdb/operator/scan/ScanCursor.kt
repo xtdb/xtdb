@@ -5,7 +5,9 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.ICursor
+import xtdb.arrow.MaskedRelation
 import xtdb.arrow.RelationReader
+import xtdb.operator.MaskRefiner
 import xtdb.operator.SelectionSpec
 import xtdb.segment.MergeTask
 import xtdb.segment.Segment
@@ -86,7 +88,10 @@ class ScanCursor(
 
                 bitemporalConsumer.build()
                     .map { childRel ->
-                        colPreds.fold(childRel) { acc, colPred -> acc.select(colPred.select(al, acc, schema, args)) }
+                        colPreds.fold(childRel) { acc, colPred ->
+                            (if (acc is MaskedRelation && colPred is MaskRefiner) colPred.refine(al, acc, schema, args) else null)
+                                ?: acc.select(colPred.select(al, acc, schema, args))
+                        }
                     }
                     .filter { it.rowCount > 0 }
                     .safeMap { it.openSlice(al) }

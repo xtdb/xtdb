@@ -2,6 +2,7 @@ package xtdb.operator
 
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.ICursor
+import xtdb.arrow.MaskedRelation
 import xtdb.arrow.RelationReader
 import java.util.function.Consumer
 
@@ -20,10 +21,18 @@ class SelectCursor(
 
         while (!advanced) {
             inCursor.tryAdvance { inRel ->
-                val sel = selector.select(al, inRel, schema, args)
-                if (sel.isNotEmpty()) {
-                    c.accept(inRel.select(sel))
-                    advanced = true
+                val refined = if (inRel is MaskedRelation && selector is MaskRefiner) selector.refine(al, inRel, schema, args) else null
+                if (refined != null) {
+                    if (refined.rowCount > 0) {
+                        c.accept(refined)
+                        advanced = true
+                    }
+                } else {
+                    val sel = selector.select(al, inRel, schema, args)
+                    if (sel.isNotEmpty()) {
+                        c.accept(inRel.select(sel))
+                        advanced = true
+                    }
                 }
             } || break
         }

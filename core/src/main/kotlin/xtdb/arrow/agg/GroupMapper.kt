@@ -1,6 +1,7 @@
 package xtdb.arrow.agg
 
 import org.apache.arrow.memory.BufferAllocator
+import xtdb.arrow.MaskedRelation
 import xtdb.arrow.RelationReader
 import xtdb.arrow.Vector
 import xtdb.arrow.Vector.Companion.openVector
@@ -38,6 +39,19 @@ interface GroupMapper : AutoCloseable {
 
         override fun groupMapping(inRelation: RelationReader): GroupMapping {
             groupMapping.clear()
+
+            if (Sum.MASKED_AGG && inRelation is MaskedRelation && relMap.keyColumnNames.all { inRelation.isDirect(it) }) {
+                // DART (#6285 avenue B): hash the direct key vectors at each set bit
+                val builder = relMap.buildFromRelation(inRelation.directRel)
+                val m = inRelation.mask
+                var p = m.nextSetBit(0)
+                while (p >= 0) {
+                    groupMapping.writeInt(insertedIdx(builder.addIfNotPresent(p)))
+                    p = m.nextSetBit(p + 1)
+                }
+                return groupMapping
+            }
+
             val builder = relMap.buildFromRelation(inRelation)
 
             repeat(inRelation.rowCount) { idx ->

@@ -64,8 +64,29 @@ class BitemporalConsumer private constructor(
             systemToVec?.let { if (systemTo == MAX_LONG) it.writeNull() else it.writeLong(systemTo) }
         }
 
+        private fun isStrictlyIncreasing(sel: IntArray): Boolean {
+            for (i in 1 until sel.size) if (sel[i] <= sel[i - 1]) return false
+            return true
+        }
+
         fun build(): RelationReader {
             val selArray = contentSel.toArray()
+
+            if (MASKED && isStrictlyIncreasing(selArray)) {
+                val mask = java.util.BitSet(rel.rowCount)
+                for (idx in selArray) mask.set(idx)
+
+                val putVec = rel["op"].vectorForOrNull("put")?.takeIf { !it.keyNames.isNullOrEmpty() }
+
+                return MaskedRelation(
+                    contentColNames.map {
+                        if (it == "_iid") rel["_iid"]
+                        else putVec?.vectorForOrNull(it) ?: NullVector(it, true, rel.rowCount)
+                    },
+                    rel.rowCount, mask,
+                    listOfNotNull(validFromVec, validToVec, systemFromVec, systemToVec)
+                )
+            }
 
             val putReader =
                 // an erase-only leaf writes `put` as an empty struct (see #4577) — treat that as
@@ -95,6 +116,9 @@ class BitemporalConsumer private constructor(
     }
 
     companion object {
+        @JvmField
+        val MASKED: Boolean = System.getProperty("xtdb.masked", "true").toBoolean()
+
         fun open(al: BufferAllocator, rels: List<RelationReader>, colNames: List<ColumnName>): BitemporalConsumer {
             val hasValidFrom = "_valid_from" in colNames
             val hasValidTo = "_valid_to" in colNames

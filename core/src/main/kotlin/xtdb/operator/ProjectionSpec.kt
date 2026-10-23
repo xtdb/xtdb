@@ -66,7 +66,7 @@ interface ProjectionSpec {
         ) = RelationAsStructReader(toName, inRel).openSlice(allocator)
     }
 
-    class Rename(private val fromName: FieldName, override val toName: FieldName, override val type: VectorType) : ProjectionSpec {
+    class Rename(val fromName: FieldName, override val toName: FieldName, override val type: VectorType) : ProjectionSpec {
         override fun project(
             allocator: BufferAllocator, inRel: RelationReader, schema: Map<String, Any>, args: RelationReader
         ) =

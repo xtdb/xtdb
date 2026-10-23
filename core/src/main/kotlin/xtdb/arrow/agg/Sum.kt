@@ -2,6 +2,7 @@ package xtdb.arrow.agg
 
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.arrow.FieldName
+import xtdb.arrow.MaskedRelation
 import xtdb.arrow.RelationReader
 import xtdb.arrow.Vector
 import xtdb.arrow.Vector.Companion.openVector
@@ -15,6 +16,9 @@ class Sum(
 ) : AggregateSpec.Factory {
 
     companion object {
+        @JvmField
+        val MASKED_AGG: Boolean = System.getProperty("xtdb.maskedAgg", "true").toBoolean()
+
         @JvmStatic
         fun outType(fromType: VectorType) =
             leastUpperBound(listOf(fromType)) ?: throw Incorrect("Cannot compute SUM over type $fromType")
@@ -24,6 +28,21 @@ class Sum(
         private val outVec = al.openVector(colName, type)
 
         override fun aggregate(inRel: RelationReader, groupMapping: GroupMapping, mask: VectorMask) {
+            if (MASKED_AGG && mask === VectorMask.ALL && inRel is MaskedRelation && inRel.isDirect(fromName)) {
+                // DART (#6285 avenue B): read the direct vector at each set bit, the group mapping at the logical row
+                val summer = inRel.directRel[fromName].sumInto(outVec)
+                val m = inRel.mask
+                var i = 0
+                var p = m.nextSetBit(0)
+                while (p >= 0) {
+                    val groupIdx = groupMapping.getInt(i++)
+                    while (outVec.valueCount <= groupIdx) outVec.writeNull()
+                    summer.sumRow(p, groupIdx)
+                    p = m.nextSetBit(p + 1)
+                }
+                return
+            }
+
             val inVec = inRel.vectorForOrNull(fromName) ?: return
             val summer = inVec.sumInto(outVec)
 
