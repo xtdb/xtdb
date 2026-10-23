@@ -203,6 +203,36 @@ class FlightSqlAuthnTest {
         }
     }
 
+    private fun assertNotFound(f: () -> Unit) =
+        assertEquals(FlightStatusCode.NOT_FOUND, assertThrows<FlightRuntimeException> { f() }.status().code())
+
+    @Test
+    fun `a transaction is reachable only by the session that began it`() {
+        openNode()
+        val alice = headers("authorization" to "Bearer ${login("alice", "alice-pw")}")
+        val bob = headers("authorization" to "Bearer ${login("bob", "bob-pw")}")
+        val client = client()
+        val tx = client.beginTransaction(alice)
+
+        assertNotFound { client.executeUpdate("INSERT INTO docs RECORDS {_id: 1}", tx, bob) }
+        assertNotFound { client.commit(tx, bob) }
+        assertNotFound { client.rollback(tx, bob) }
+
+        client.executeUpdate("INSERT INTO docs RECORDS {_id: 1}", tx, alice)
+        client.commit(tx, alice)
+    }
+
+    @Test
+    fun `a prepared statement is reachable only by the session that prepared it`() {
+        openNode()
+        val alice = headers("authorization" to "Bearer ${login("alice", "alice-pw")}")
+        val bob = headers("authorization" to "Bearer ${login("bob", "bob-pw")}")
+        val ps = client().prepare("SELECT 1 AS x", alice)
+
+        assertNotFound { ps.execute(bob) }
+        ps.execute(alice)
+    }
+
     @Test
     fun `rules see the caller's own address, whatever address header it sends`() {
         openNode(listOf(MethodRule(TRUST, remoteAddress = "127.0.0.1"), MethodRule(PASSWORD)))

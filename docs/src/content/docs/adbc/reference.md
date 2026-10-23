@@ -15,6 +15,15 @@ v2-NEXT: FlightSQL clients authenticate per the node's authentication rules
   Where the rules ask for a password, give FlightSQL clients the driver's `username` and `password` options.
   Under the default rules nothing changes for a client sending no credentials; one sending a username runs as that user.
 
+v2-NEXT: a FlightSQL transaction or prepared statement belongs to the session that created it
+
+: Another session presenting its handle is told it doesn't exist — see [Session options](#session-options).
+
+  Previously any client presenting a handle could use it, and commit a transaction as whoever began it.
+
+  No upgrade steps for a client that keeps its handles within its own session; one passing a handle to another authenticated session has to stop.
+  Clients sending no credentials share one identity, so they still reach one another's handles.
+
 </details>
 
 XTDB exposes [ADBC](https://arrow.apache.org/adbc/), the Arrow Database Connectivity standard, through two surfaces:
@@ -195,7 +204,10 @@ A call presenting the cookie of a closed session fails with `NOT_FOUND`.
 
 `closeSession()`
 : ends the session, closes its connections, and invalidates the cookie.
-  An open transaction is left open: a transaction is reached by its handle alone, and ends by commit, rollback, or rolling back once it has gone `flightSql.transactionIdleTimeout` (default 30 minutes) without a call naming it.
+  An open transaction is left open; an anonymous client can still commit or roll it back by its handle, but an authenticated session's is reachable only from that session, so it rolls back once it has gone `flightSql.transactionIdleTimeout` (default 30 minutes) without a call naming it.
+
+A transaction or prepared statement is reached by its handle, from the session that created it: another session presenting the handle is told it doesn't exist.
+Clients connecting without credentials, where the rules allow it, share one identity, so any of them can reach the others' handles, as before.
 
 The schema is not settable: `public` is the only accepted value (a confirming no-op), anything else is rejected.
 
