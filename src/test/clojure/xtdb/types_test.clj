@@ -2,7 +2,8 @@
   (:require [clojure.test :as t]
             [xtdb.serde.types :as st]
             [xtdb.test-util :as tu]
-            [xtdb.types :as types]))
+            [xtdb.types :as types])
+  (:import (xtdb.arrow RunEndWidth VectorType)))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -107,6 +108,20 @@
 
   (t/is (= #xt/type :i64 (types/merge-types #xt/type [:ree :i64] #xt/type :i64))
         "an encoded type joins a plain one as its values"))
+
+(t/deftest run-end-encoded-fields-round-trip-through-the-reader
+  (t/are [field-spec] (let [field (st/->field field-spec)]
+                        (and (= field-spec (st/render-field field))
+                             (= field (st/->field (st/render-field field)))))
+    {"_iid" [:ree [:fixed-size-binary 16]]}
+    {"a" [:ree-i16 [:? :utf8]]}
+    {"a" [:ree-i64 :i64]}
+    {"a" [:struct {"b" [:ree :i64]}]}
+    {"a" [:list [:ree :i64]]})
+
+  (t/is (= {"_iid" [:ree [:fixed-size-binary 16]]}
+           (st/render-field (VectorType/.toField (.runEndEncoded VectorType/IID RunEndWidth/I32) "_iid")))
+        "the field a compacted page carries its iids in"))
 
 (t/deftest the-lattice-bottom-round-trips-through-the-reader
   (t/are [type-spec] (= type-spec (st/render-type (st/->type type-spec)))

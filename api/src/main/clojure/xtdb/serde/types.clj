@@ -3,7 +3,7 @@
             [xtdb.error :as err])
   (:import (java.io Writer)
            (org.apache.arrow.vector.types DateUnit FloatingPointPrecision IntervalUnit TimeUnit Types$MinorType UnionMode)
-           (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Decimal ArrowType$Duration ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Map ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType Schema)
+           (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Decimal ArrowType$Duration ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Map ArrowType$Null ArrowType$RunEndEncoded ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType Schema)
            (xtdb.arrow ArrowTypes Encoding$RunEnd RunEndWidth VectorType VectorType$Listy VectorType$Maybe VectorType$Null VectorType$Nothing VectorType$Poly VectorType$Scalar VectorType$Struct VectorType$Mono)
            (xtdb.arrow.extensions IntervalMDMType KeywordType OidType RegClassType RegProcType SetType TransitType TsTzRangeType UriType UuidType)))
 
@@ -300,9 +300,14 @@
        unencoded]
       unencoded)))
 
+(defn- run-end-encoded? [^Field field]
+  (instance? ArrowType$RunEndEncoded (.getType field)))
+
 (defn render-field-type 
   ([^Field field]
-   (render-field-type (<-arrow-type (.getType field)) (.isNullable field) (.getChildren field)))
+   (if (run-end-encoded? field)
+     (render-type (VectorType/fromField field))
+     (render-field-type (<-arrow-type (.getType field)) (.isNullable field) (.getChildren field))))
 
   ([arrow-type-spec nullable? children]
    (if (and (not nullable?) (empty? children))
@@ -331,10 +336,9 @@
 
 (defn render-field [^Field field]
   (let [field-name (.getName field)
-        arrow-type (.getType field)
-        arrow-type-spec (<-arrow-type arrow-type)
-        type-spec (render-field-type arrow-type-spec (.isNullable field) (.getChildren field))]
-    (if (= field-name (ArrowTypes/toLeg arrow-type))
+        type-spec (render-field-type field)]
+    (if (and (not (run-end-encoded? field))
+             (= field-name (ArrowTypes/toLeg (.getType field))))
       type-spec
       {field-name type-spec})))
 
@@ -345,7 +349,7 @@
 (defmethod print-method Field [f w]
   (print-dup f w))
 
-(declare ->field ->field*)
+(declare ->field ->field* ->type)
 
 (defn- ->child-fields
   "Converts child specs to fields
@@ -369,11 +373,16 @@
                                     child-spec)]))))))
 
 (defn ->field* ^org.apache.arrow.vector.types.pojo.Field [field-name type-spec]
-  (if (instance? VectorType type-spec)
+  (cond
+    (instance? VectorType type-spec)
     (if field-name 
       (VectorType/.toField type-spec field-name)
       (VectorType/.getAsLegField type-spec))
-    
+
+    (and (vector? type-spec) (contains? #{:ree :ree-i16 :ree-i64} (first type-spec)))
+    (->field* field-name (->type type-spec))
+
+    :else
     (let [[arrow-type nullable? children]
           (if (keyword? type-spec)
             (case type-spec
