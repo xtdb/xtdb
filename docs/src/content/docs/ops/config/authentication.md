@@ -152,3 +152,28 @@ If no rules match, the connection is rejected.
 ```
 
 This rule requires the `admin` user to provide a password when connecting from `localhost`.
+
+## In-process connections (v2.3+)
+
+An application embedding XTDB opens connections with `node.connect()`, which applies no authentication rules: the caller already holds the node.
+Those connections have no user, so their writes carry none in the audit trail and they can't run superuser-only statements such as `GRANT`.
+
+To run a session as one of your users, authenticate it through the node, which applies the same provider and rules as pgwire:
+
+``` kotlin
+when (node.authMethodFor("alice", remoteAddress)) {
+    TRUST -> node.connectTrusted("xtdb", "alice")
+    PASSWORD -> node.connectWithPassword("xtdb", "alice", password)
+    CLIENT_CREDENTIALS -> node.connectWithClientCredentials("xtdb", clientId, clientSecret)
+    DEVICE_AUTH -> node.startDeviceAuth("xtdb", "alice").let { auth ->
+        println("Approve this connection at ${auth.url}")
+        auth.await()
+    }
+    null -> error("alice may not connect from $remoteAddress")
+}.use { conn ->
+    // conn.user is the user the provider authenticated — for OIDC, the token's subject
+}
+```
+
+None of the `connect…` calls apply your rules — that's `authMethodFor`, so consult it first when the rules should decide.
+`connectWithPassword` and `connectWithClientCredentials` verify the credentials they're given, but `connectTrusted` checks nothing: it opens a connection as whichever user you name, superuser included.

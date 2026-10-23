@@ -33,8 +33,7 @@
                                                                                  "client_encoding" "UTF8"
                                                                                  "DateStyle" "ISO"
                                                                                  "IntervalStyle" "ISO_8601"}})
-                                               :node tu/*node*
-                                               :authn authn}
+                                               :node (assoc tu/*node* :authn authn)}
                                       :allocator tu/*allocator*
                                       :frontend frontend
                                       :cid -1

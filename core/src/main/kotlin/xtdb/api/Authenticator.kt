@@ -18,44 +18,21 @@ import java.net.URL
 import java.security.MessageDigest
 import xtdb.api.error.Forbidden
 import xtdb.api.error.Unsupported
-import java.time.Instant
 import java.time.InstantSource
 
 /** @suppress */
-interface AuthResult {
+interface Principal {
     val userId: String
-}
 
-/** @suppress */
-interface OAuthResult : AuthResult {
-    val expiresAt: Instant
-    fun withExpiry(expiresAt: Instant): OAuthResult
-}
+    /**
+     * The principal with refreshed credentials, or null while these are still valid.
+     * @throws Forbidden (`xtdb.authn/refresh-failed`) if the credentials can no longer be refreshed.
+     */
+    fun revalidate(): Principal?
 
-/** @suppress */
-data class SimpleResult(
-    override val userId: String
-) : AuthResult
-
-/** @suppress */
-data class OAuthPasswordResult(
-    override val userId: String,
-    override var expiresAt: Instant,
-    val accessToken: String,
-    val refreshToken: String
-) : OAuthResult {
-    override fun withExpiry(expiresAt: Instant) = copy(expiresAt = expiresAt)
-}
-
-/** @suppress */
-data class OAuthClientCredentialsResult(
-    override val userId: String,
-    override var expiresAt: Instant,
-    val accessToken: String,
-    val clientId: String,
-    val clientSecret: String
-) : OAuthResult {
-    override fun withExpiry(expiresAt: Instant) = copy(expiresAt = expiresAt)
+    data class Static(override val userId: String) : Principal {
+        override fun revalidate(): Principal? = null
+    }
 }
 
 val DEFAULT_RULES = listOf(MethodRule(TRUST))
@@ -63,22 +40,19 @@ val DEFAULT_RULES = listOf(MethodRule(TRUST))
 interface Authenticator : AutoCloseable {
     fun methodFor(user: String?, remoteAddress: String?): Method?
 
-    fun verifyPassword(user: String, password: String): AuthResult =
+    fun verifyPassword(user: String, password: String): Principal =
         throw Unsupported(errorCode="verifyPassword")
 
     interface DeviceAuthResponse {
         val url: URL
-        fun await(): OAuthPasswordResult
+        fun await(): Principal
     }
 
     fun startDeviceAuth(user: String): DeviceAuthResponse =
         throw Unsupported(errorCode="startDeviceAuth")
 
-    fun verifyClientCredentials(clientId: String, clientSecret: String): OAuthClientCredentialsResult =
+    fun verifyClientCredentials(clientId: String, clientSecret: String): Principal =
         throw Unsupported(errorCode="verifyClientCredentials")
-
-    fun revalidate(authResult: OAuthResult): OAuthResult =
-        throw Unsupported(errorCode="revalidate")
 
     override fun close() = Unit
 
@@ -183,9 +157,9 @@ class UserListAuthenticator(
     override fun methodFor(user: String?, remoteAddress: String?) =
         MethodRule.methodFor(rules, user, remoteAddress)
 
-    override fun verifyPassword(user: String, password: String): AuthResult {
+    override fun verifyPassword(user: String, password: String): Principal {
         // Unknown user and wrong password fail identically — don't leak which usernames exist.
-        if (users[user]?.verify(password) == true) return SimpleResult(user)
+        if (users[user]?.verify(password) == true) return Principal.Static(user)
         throw Forbidden(errorCode = "xtdb.authn/failed", message = "password authentication failed for user: $user")
     }
 }
@@ -198,13 +172,13 @@ class SingleRootUserAuthenticator(private val password: String?) : Authenticator
     override fun methodFor(user: String?, remoteAddress: String?): Authenticator.Method =
         if (password == null) TRUST else PASSWORD
 
-    override fun verifyPassword(user: String, password: String): AuthResult {
+    override fun verifyPassword(user: String, password: String): Principal {
         val configured = this.password
         if (configured != null
             && user == ROOT_USER
             && MessageDigest.isEqual(configured.toByteArray(Charsets.UTF_8), password.toByteArray(Charsets.UTF_8))
         ) {
-            return SimpleResult(user)
+            return Principal.Static(user)
         }
         throw Forbidden(errorCode = "xtdb.authn/failed", message = "password authentication failed for user: $user")
     }

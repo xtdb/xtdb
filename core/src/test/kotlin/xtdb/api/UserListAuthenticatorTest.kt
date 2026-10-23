@@ -21,8 +21,8 @@ class UserListAuthenticatorTest {
     fun `verifyPassword accepts configured users with the right password`() {
         val authn = UserListAuthenticator(users, listOf(MethodRule(PASSWORD)))
 
-        assertEquals(SimpleResult("alice"), authn.verifyPassword("alice", "alice-pw"))
-        assertEquals(SimpleResult("bob"), authn.verifyPassword("bob", "bob-pw"))
+        assertEquals(Principal.Static("alice"), authn.verifyPassword("alice", "alice-pw"))
+        assertEquals(Principal.Static("bob"), authn.verifyPassword("bob", "bob-pw"))
     }
 
     @Test

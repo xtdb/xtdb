@@ -29,7 +29,7 @@ class SingleRootUserAuthenticatorTest {
     fun `verifyPassword accepts the root user with the correct password`() {
         val authn = SingleRootUserAuthenticator("hunter2")
 
-        assertEquals(SimpleResult("xtdb"), authn.verifyPassword("xtdb", "hunter2"))
+        assertEquals(Principal.Static("xtdb"), authn.verifyPassword("xtdb", "hunter2"))
     }
 
     @Test

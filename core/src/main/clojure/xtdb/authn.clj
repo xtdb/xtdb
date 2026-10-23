@@ -6,8 +6,7 @@
   (:import [java.io Writer]
            (xtdb.api Authenticator Authenticator$DeviceAuthResponse Authenticator$Factory Authenticator$Factory$OpenIdConnect
                      Authenticator$Factory$SingleRootUser Authenticator$Factory$UserList
-                     Authenticator$Method Authenticator$MethodRule Xtdb$Config
-                     OAuthPasswordResult OAuthClientCredentialsResult OAuthResult
+                     Authenticator$Method Authenticator$MethodRule Principal Xtdb$Config
                      PasswordHash PasswordHash$Argon2id PasswordHash$BCrypt)
            xtdb.NodeBase
            [java.net URI]
@@ -128,42 +127,41 @@
                             (format "Failed to obtain user info from %s: %s" userinfo-endpoint (:error body))
                             {:status status, :body body})))))
 
-(defn token-expired? [^OAuthResult auth-result ^Instant now]
-  (when-let [expires-at (.getExpiresAt ^OAuthResult auth-result)]
+(defn token-expired? [expires-at ^Instant now]
+  (when expires-at
     (.isAfter now expires-at)))
 
-;; TODO: Could live in Kotlin
-(defn refresh-token [authn ^OAuthResult auth-result]
-  (cond
-    ;; For password/device auth flows - use refresh token from OAuthPasswordResult
-    (instance? OAuthPasswordResult auth-result)
-    (let [oauth-result ^OAuthPasswordResult auth-result
-          refresh-token (.getRefreshToken oauth-result)
-          {:keys [status body]} (oauth-token authn {:grant_type "refresh_token"
-                                                    :refresh_token refresh-token})]
-      (if (= 200 status)
-        (.withExpiry oauth-result ^Instant (:expires-at body))
-        (throw (err/forbidden :xtdb.authn/refresh-failed
-                              (format "Failed to refresh OAuth token: %s" (:error body))
-                              {:status status, :body body}))))
+(defrecord OidcPasswordPrincipal [authn user-id expires-at access-token refresh-token]
+  Principal
+  (getUserId [_] user-id)
 
-    ;; For client credentials flow - get a fresh token using stored client credentials
-    (instance? OAuthClientCredentialsResult auth-result)
-    (let [creds-result ^OAuthClientCredentialsResult auth-result
-          client-id (.getClientId creds-result)
-          client-secret (.getClientSecret creds-result)
-          {:keys [status body]} (oauth-token authn {:grant_type "client_credentials"
-                                                    :scope "openid"
-                                                    :client_id client-id
-                                                    :client_secret client-secret})]
-      (if (= 200 status)
-        (.withExpiry creds-result ^Instant (:expires-at body))
-        (throw (err/forbidden :xtdb.authn/refresh-failed
-                              (format "Failed to refresh client credentials token: %s" (:error body))
-                              {:status status, :body body}))))
+  (revalidate [this]
+    (let [{:keys [^InstantSource instant-src]} authn]
+      (when (token-expired? expires-at (.instant instant-src))
+        (let [{:keys [status body]} (oauth-token authn {:grant_type "refresh_token"
+                                                        :refresh_token refresh-token})]
+          (if (= 200 status)
+            (assoc this :expires-at (:expires-at body))
+            (throw (err/forbidden :xtdb.authn/refresh-failed
+                                  (format "Failed to refresh OAuth token: %s" (:error body))
+                                  {:status status, :body body}))))))))
 
-    :else
-    (throw (err/forbidden :xtdb.authn/refresh-failed "No valid token or refresh token available for refresh"))))
+(defrecord OidcClientCredentialsPrincipal [authn user-id expires-at access-token client-id client-secret]
+  Principal
+  (getUserId [_] user-id)
+
+  (revalidate [this]
+    (let [{:keys [^InstantSource instant-src]} authn]
+      (when (token-expired? expires-at (.instant instant-src))
+        (let [{:keys [status body]} (oauth-token authn {:grant_type "client_credentials"
+                                                        :scope "openid"
+                                                        :client_id client-id
+                                                        :client_secret client-secret})]
+          (if (= 200 status)
+            (assoc this :expires-at (:expires-at body))
+            (throw (err/forbidden :xtdb.authn/refresh-failed
+                                  (format "Failed to refresh client credentials token: %s" (:error body))
+                                  {:status status, :body body}))))))))
 
 (defn oauth-device-info [{:keys [oidc-config client-id client-secret]}]
   (let [device-endpoint (:device_authorization_endpoint oidc-config)]
@@ -209,7 +207,7 @@
                       refresh-token (:refresh_token body)
                       expires-at (calculate-expires-at body (.instant instant-src))
                       {:keys [user-id]} (oauth-userinfo authn access-token)]
-                  (OAuthPasswordResult. user-id expires-at access-token refresh-token))
+                  (->OidcPasswordPrincipal authn user-id expires-at access-token refresh-token))
             400 (if (= "authorization_pending" (:error body))
                   (do (Thread/sleep (.toMillis interval)) (recur))
                   (throw (err/forbidden :xtdb.authn/failed
@@ -230,7 +228,7 @@
       (if (= 200 status)
         (let [{:keys [access-token refresh-token expires-at]} body
               {:keys [user-id]} (oauth-userinfo this access-token)]
-          (OAuthPasswordResult. user-id expires-at access-token refresh-token))
+          (->OidcPasswordPrincipal this user-id expires-at access-token refresh-token))
         (throw (err/forbidden :xtdb.authn/failed
                               (format "Password authentication failed for user: %s" user)
                               {:status status, :body body})))))
@@ -247,14 +245,10 @@
       (if (= 200 status)
         (let [{:keys [access-token expires-at]} body
               {:keys [user-id]} (oauth-userinfo this access-token)]
-          (OAuthClientCredentialsResult. user-id expires-at access-token client-id client-secret))
+          (->OidcClientCredentialsPrincipal this user-id expires-at access-token client-id client-secret))
         (throw (err/forbidden :xtdb.authn/failed
                               (format "Client credentials authentication failed for client: %s" client-id)
-                              {:status status, :body body})))))
-
-  (revalidate [this auth-result]
-    (when (token-expired? auth-result (.instant instant-src))
-      (refresh-token this auth-result))))
+                              {:status status, :body body}))))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn ->oidc-authn [^Authenticator$Factory$OpenIdConnect cfg]
