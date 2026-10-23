@@ -875,6 +875,9 @@ fun createBench(benchName: String, properties: Map<String, String>, defaultArgs:
         if (project.hasProperty("kernels"))
             jvmArgs("-Dxtdb.kernels=${project.property("kernels")}")
 
+        if (project.hasProperty("kernelsDebug"))
+            jvmArgs("-Dxtdb.kernels.debug=true")
+
         if (project.hasProperty("composeSelections"))
             jvmArgs("-Dxtdb.composeSelections=${project.property("composeSelections")}")
 

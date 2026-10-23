@@ -139,16 +139,22 @@ class RangePredicate(
     override fun toString() = "(RangePredicate $col $lo $loIncl $hi $hiIncl)"
 }
 
+internal val KERNEL_DEBUG = java.lang.Boolean.getBoolean("xtdb.kernels.debug")
+internal fun kdebug(msg: String) { if (KERNEL_DEBUG) System.err.println("[kernel] $msg") }
+
 class KernelSelectionSpec(private val pred: RangePredicate, private val fallback: SelectionSpec) : SelectionSpec {
+    init { kdebug("sel matched $pred") }
+    private var warned = false
+    private fun fellBack(): IntArray? { if (!warned) { warned = true; kdebug("sel FALLBACK $pred") }; return null }
     override fun select(allocator: BufferAllocator, readRelation: RelationReader, schema: Map<String, Any>, params: RelationReader): IntArray =
-        pred.selectWithin(readRelation, null, params)
+        (pred.selectWithin(readRelation, null, params) ?: fellBack())
             ?: fallback.select(allocator, readRelation, schema, params)
 
     override fun selectWithin(
         allocator: BufferAllocator, readRelation: RelationReader, inSel: IntArray?,
         schema: Map<String, Any>, params: RelationReader
     ): IntArray =
-        pred.selectWithin(readRelation, inSel, params)
+        (pred.selectWithin(readRelation, inSel, params) ?: fellBack())
             ?: super.selectWithin(allocator, readRelation, inSel, schema, params)
 }
 
@@ -271,6 +277,9 @@ class KernelProjectionSpec(
     private val kernel: DoubleProjectionKernel,
     private val fallback: ProjectionSpec
 ) : ProjectionSpec by fallback {
+    init { kdebug("proj matched ${fallback.toName}") }
+    private var warned = false
+    private fun fellBack(): VectorReader? { if (!warned) { warned = true; kdebug("proj FALLBACK ${fallback.toName}") }; return null }
     override fun project(allocator: BufferAllocator, inRel: RelationReader, schema: Map<String, Any>, args: RelationReader): VectorReader =
-        kernel.project(allocator, toName, inRel) ?: fallback.project(allocator, inRel, schema, args)
+        kernel.project(allocator, toName, inRel) ?: fellBack() ?: fallback.project(allocator, inRel, schema, args)
 }
