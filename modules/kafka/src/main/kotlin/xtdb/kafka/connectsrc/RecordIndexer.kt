@@ -19,17 +19,21 @@ interface RecordIndexer : AutoCloseable {
         fun open(): RecordIndexer
 
         companion object {
-            private val registrations = ServiceLoader.load(Registration::class.java).toList()
-            private val registrationsByTag = registrations.associateBy { it.protoTag }
-            private val registrationsByClass = registrations.associateBy { it.factoryClass }
+            // Lazy: a Factory implementation's class init can initialise this interface, and loading
+            // the Registrations then re-enters that half-initialised implementation.
+            private val registrations by lazy { ServiceLoader.load(Registration::class.java).toList() }
+            private val registrationsByTag by lazy { registrations.associateBy { it.protoTag } }
+            private val registrationsByClass by lazy { registrations.associateBy { it.factoryClass } }
 
-            val serializersModule = SerializersModule {
-                for (reg in registrations)
-                    include(reg.serializersModule)
-
-                polymorphic(Factory::class) {
+            val serializersModule: SerializersModule by lazy {
+                SerializersModule {
                     for (reg in registrations)
-                        reg.registerSerde(this)
+                        include(reg.serializersModule)
+
+                    polymorphic(Factory::class) {
+                        for (reg in registrations)
+                            reg.registerSerde(this)
+                    }
                 }
             }
 
