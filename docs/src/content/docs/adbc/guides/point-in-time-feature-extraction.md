@@ -150,7 +150,6 @@ c1's August features are now $400 / 640 / employed: the state the customer was a
 c3's features are $10 / 540 / unemployed: the dire state preceding the default, not the post-recovery snapshot.
 
 This is one query covering every label, with no Python loop or per-row round trip.
-XTDB applies the `FOR VALID_TIME AS OF` bound during the table scan, so each row is read at its as-of-label-time version directly.
 
 ### Why this is hard without bitemporal storage
 

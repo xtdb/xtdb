@@ -24,6 +24,7 @@
               selector (expr/->expression-selection-spec (expr/form->expr predicate input-types) input-types)]
           {:op :select
            :stats inner-stats
+           :valid-time-pushdown-cols (:valid-time-pushdown-cols inner-rel)
            :children [inner-rel]
            :explain {:predicate (pr-str predicate)}
            :vec-types inner-vec-types
