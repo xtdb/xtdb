@@ -42,7 +42,7 @@
      :layouts (->> (foo-l1-data-files node-dir)
                    (into {} (map (juxt #(if (re-find #"/l01-rc-" (str %)) :current :historical) iid-layout))))}))
 
-(t/deftest compaction-writes-iids-as-runs-when-configured
+(t/deftest compaction-writes-historical-iids-as-runs-when-configured
   (tu/with-tmp-dirs #{plain-dir encoded-dir}
     (let [plain (compact! plain-dir {:ree-iids? false})
           encoded (compact! encoded-dir {:ree-iids? true})]
@@ -52,8 +52,8 @@
                (:layouts plain))
             "plain by default")
 
-      (t/is (= {:current {:encoded? true, :rows 20, :runs 20}
+      (t/is (= {:current {:encoded? false, :rows 20, :runs 20}
                 :historical {:encoded? true, :rows 40, :runs 20}}
                (:layouts encoded))
-            "one run per entity in each file")
+            "one run per entity in each historical file; the current file stays plain")
       (t/is (= (:rows plain) (:rows encoded))))))
