@@ -73,12 +73,18 @@ interface Authenticator : AutoCloseable {
         companion object {
             // Rules are matched in order; the first whose constraints all hold wins.
             // A null constraint matches anything. Null result => no rule matched => reject the connection.
+            // An unknown (null) remoteAddress can't be checked against a rule that names one, so it rejects there
+            // rather than skipping on to a looser rule further down.
             @JvmStatic
-            fun methodFor(rules: List<MethodRule>, user: String?, remoteAddress: String?): Method? =
-                rules.firstOrNull { rule ->
-                    (rule.user == null || rule.user == user)
-                            && (rule.remoteAddress == null || rule.remoteAddress == remoteAddress)
-                }?.method
+            fun methodFor(rules: List<MethodRule>, user: String?, remoteAddress: String?): Method? {
+                for (rule in rules) {
+                    if (rule.user != null && rule.user != user) continue
+                    if (rule.remoteAddress == null) return rule.method
+                    if (remoteAddress == null) return null
+                    if (rule.remoteAddress == remoteAddress) return rule.method
+                }
+                return null
+            }
         }
     }
 

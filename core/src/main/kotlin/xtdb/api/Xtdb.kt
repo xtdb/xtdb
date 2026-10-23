@@ -119,6 +119,9 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
      * The authentication method the node's configured `authn` rules ask of a caller claiming [user] from [remoteAddress],
      * or null if no rule matches and the caller is to be rejected.
      *
+     * Pass a null [remoteAddress] where the caller's address isn't known: a rule naming an address can't then match,
+     * so a caller who reaches one is rejected rather than matched against a looser rule further down.
+     *
      * Pick the matching method below: [authenticateTrusted] for [Authenticator.Method.TRUST],
      * [authenticateWithPassword] for [Authenticator.Method.PASSWORD],
      * [authenticateWithClientCredentials] for [Authenticator.Method.CLIENT_CREDENTIALS],

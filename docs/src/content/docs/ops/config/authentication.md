@@ -128,6 +128,7 @@ For complete OIDC configuration, setup guides, and troubleshooting, see [OpenID 
 
 Authentication rules are evaluated in order until the first match.
 If no rules match, the connection is rejected.
+Where the caller's address isn't known, evaluation stops at the first rule that applies to that user and names a `remoteAddress`, and rejects the connection rather than moving on to a rule further down.
 
 **Rule Parameters**
 : - `user` (optional): Match specific username
