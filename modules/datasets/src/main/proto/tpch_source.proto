@@ -1,0 +1,10 @@
+edition = "2023";
+
+package xtdb.datasets.proto;
+
+option java_multiple_files = true;
+
+message TpchSourceConfig {
+    double scale_factor = 1;
+    int32 threads = 2;
+}

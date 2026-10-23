@@ -10,6 +10,7 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     // publishes a stub javadoc jar to satisfy Maven Central (no public Java API here)
     alias(libs.plugins.dokka)
+    alias(libs.plugins.protobuf)
 }
 
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))
@@ -37,6 +38,25 @@ dependencies {
     implementation(kotlin("stdlib"))
     // the Postgres sinks bind enum/jsonb (GLEIF) and dates/numerics (EDGAR) via pgjdbc.
     implementation(libs.pgjdbc)
+
+    api(libs.protobuf.kotlin)
+
+    testImplementation(kotlin("test"))
+    testImplementation(libs.kotest)
+}
+
+protobuf {
+    protoc {
+        artifact = "com.google.protobuf:protoc:${libs.versions.protobuf.asProvider().get()}"
+    }
+
+    generateProtoTasks {
+        all().forEach {
+            it.builtins {
+                create("kotlin")
+            }
+        }
+    }
 }
 
 publishing {
