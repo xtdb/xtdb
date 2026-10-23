@@ -110,6 +110,10 @@ We don't make heavy use of labels, but these conventions matter:
   Where a card waits on another issue, you MUST mark it with a blocked-by edge on the waiting card, pointing at that issue (the chalk `github` agent's `addBlockedBy`), rather than the label.
   The edge names the blocker, and the card shows as unblocked once the blocker closes; the label does neither.
   Where nothing the card waits on has a natural issue, it takes the `blocked` label, with a comment saying what it waits on.
+- **`tokens-reqd` marks a card an AI agent can pick up and land unsupervised.**
+  Like the other `-reqd` labels (`thought-reqd`, `spec-reqd`, `repro-reqd`), it names what the card is waiting on: here, only someone to spend tokens on it.
+  You MAY apply it only where the card's goal and invariants are on the issue, nothing it asks has a design choice left open, and its tests would show the change is right.
+  You MUST NOT apply it alongside `thought-reqd` or any other `-reqd` label, and SHOULD take it off a card whose discussion reopens a decision.
 
 ## Starting work on a card
 
