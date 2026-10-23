@@ -74,6 +74,17 @@
       (t/is (anomalous? [:incorrect nil] (project '(vec a)))
             "cannot call arbitrary functions"))))
 
+(t/deftest projection-only-reads-the-columns-it-references
+  (with-open [in-rel (tu/open-rel (->data-vecs))]
+    (let [input-types {:var-types {'a #xt/type :f64, 'b #xt/type :f64}, :param-types {}}
+          lookup-only-rel (reify RelationReader
+                            (getRowCount [_] (.getRowCount in-rel))
+                            (vectorForOrNull [_ col-name] (.vectorForOrNull in-rel col-name)))]
+      (with-open [project-col (.project (expr/->expression-projection-spec "c" (expr/form->expr '(+ a b) input-types) input-types)
+                                        tu/*allocator* lookup-only-rel {} vw/empty-args)]
+        (t/is (= (mapv (comp double +) (range 1000) (range 1000))
+                 (.getAsList project-col)))))))
+
 (t/deftest can-compile-simple-expression
   (with-open [in-rel (tu/open-rel (->data-vecs))]
     (letfn [(select-relation [form var-types args-map]

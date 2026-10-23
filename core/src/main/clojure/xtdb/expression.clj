@@ -2,6 +2,7 @@
   (:require [clojure.string :as str]
             [xtdb.error :as err]
             [xtdb.expression.macro :as macro]
+            [xtdb.expression.walk :as ewalk]
             [xtdb.serde :as serde]
             [xtdb.serde.types :as st]
             [xtdb.time :as time]
@@ -2521,17 +2522,18 @@
   (let [;; HACK - this runs the analyser (we discard the emission) to get the widest possible out-type.
         widest-out-type (-> (emit-projection expr {:param-types param-types
                                                    :var-types var-types})
-                            :return-type)]
+                            :return-type)
+        variables (into #{} (keep #(when (= :variable (:op %)) (:variable %))) (ewalk/expr-seq expr))]
 
     (reify ProjectionSpec
       (getToName [_] (str col-name))
       (getType [_] widest-out-type)
 
       (project [_ allocator in-rel schema args]
-        (let [var-types (->> in-rel
-                             (into {} (map (fn [^VectorReader iv]
-                                             [(symbol (.getName iv))
-                                              (.getType iv)]))))
+        (let [var-types (into {} (keep (fn [variable]
+                                         (when-let [iv (.vectorForOrNull in-rel (str variable))]
+                                           [variable (.getType iv)])))
+                              variables)
 
               {:keys [return-type !projection-fn]} (emit-projection expr {:param-types (->param-types args)
                                                                           :var-types var-types})]
