@@ -67,8 +67,11 @@ interface RelationReader : ILookup, Seqable, Counted, AutoCloseable {
     fun select(idxs: IntArray): RelationReader = from(vectors.map { it.select(idxs) }, idxs.size)
     fun select(startIdx: Int, len: Int): RelationReader = from(vectors.map { it.select(startIdx, len) }, len)
 
-    fun rowCopier(dest: RelationWriter): RowCopier {
-        val colNames = vectors.mapTo(mutableSetOf()) { it.name } + dest.vectors.map { it.name }
+    fun rowCopier(dest: RelationWriter): RowCopier = rowCopierExcluding(dest, emptySet())
+
+    /** As [rowCopier], leaving the [excluded] columns for the caller to write - it still advances `dest`'s row count. */
+    fun rowCopierExcluding(dest: RelationWriter, excluded: Set<String>): RowCopier {
+        val colNames = vectors.mapTo(mutableSetOf()) { it.name } + dest.vectors.map { it.name } - excluded
 
         val copiers = colNames.map { colName ->
             val srcVec = vectorForOrNull(colName) ?: NullVector(colName, true, rowCount)
