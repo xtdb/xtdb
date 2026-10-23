@@ -7,7 +7,8 @@ title: Configuration
 
 v2-NEXT: the compactor can run-end encode `_iid`, behind `reeIids`
 
-: With `compactor.reeIids` on, compacted data files store each entity's `_iid` once per run of its versions, rather than once per version — see [Compactor](#compactor).
+: With `compactor.reeIids` on, compacted historical data files store each entity's `_iid` once per run of its versions, rather than once per version — see [Compactor](#compactor).
+  Current-tier files, where an entity usually has one version, stay as they were.
 
   It's off by default, and with it off the compactor writes the same files as v2.2, so upgrading from v2.2 needs no extra steps.
   Every v2-NEXT node reads files written either way.
@@ -260,7 +261,7 @@ compactor:
   # Set to 0 to disable the compactor.
   threads: 4
 
-  # (v2-NEXT+) Run-end encode `_iid` in compacted data files.
+  # (v2-NEXT+) Run-end encode `_iid` in compacted historical data files.
   # Every node compacting a database must agree - see the v2-NEXT changelog entry above before turning it on for an existing cluster.
   # Defaults to !Env XTDB_REE_IIDS # or if that's not specified false.
   reeIids: false

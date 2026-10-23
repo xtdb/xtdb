@@ -230,11 +230,14 @@ internal class SegmentMerge(
         // an all-put-less merge (deletes/erases only) contributes no put fields — omit the put leg
         // rather than minting a present Null one, matching a raw L0 block. dataRelSchema drops a null
         // putDocField from the op union. #5714
-        val schema = dataRelSchema(putFields.takeIf { it.isNotEmpty() }?.let { mergeFields(it).withName("put") }, if (reeIids) IID_RUNS else Encoding.Plain)
+        val putDocField = putFields.takeIf { it.isNotEmpty() }?.let { mergeFields(it).withName("put") }
+
+        fun schemaFor(recency: LocalDate?) =
+            dataRelSchema(putDocField, if (reeIids && recency != null) IID_RUNS else Encoding.Plain)
 
         val outWriter = when (recencyPartitioning) {
-            RecencyPartitioning.Partition -> outWriters.PartitionedOutWriter(schema, recencyPartition)
-            is RecencyPartitioning.Preserve -> outWriters.OutRel(schema, recency = recencyPartitioning.recency)
+            RecencyPartitioning.Partition -> outWriters.PartitionedOutWriter(::schemaFor, recencyPartition)
+            is RecencyPartitioning.Preserve -> outWriters.OutRel(schemaFor(recencyPartitioning.recency), recency = recencyPartitioning.recency)
         }
 
         return outWriter.use {

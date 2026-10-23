@@ -31,6 +31,7 @@ import xtdb.util.safeMap
 import xtdb.util.useAll
 import java.nio.ByteBuffer
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZonedDateTime
 
@@ -167,15 +168,17 @@ class SegmentMergeTest {
 
     private fun SegmentMerge.iidRunEndsOf(result: SegmentMerge.Result) =
         result.openAllAsRelation().use { rel ->
-            (rel["_iid"] as RunEndEncodedVector).let { iid -> (0..<iid.runCount).map { iid.runEnd(it) } }
+            (rel["_iid"] as? RunEndEncodedVector)?.let { iid -> (0..<iid.runCount).map { iid.runEnd(it) } }
         }
 
+    private val historical = RecencyPartitioning.Preserve(LocalDate.of(2023, 1, 2))
+
     @Test
-    fun `with the iid run-end encoded, a merge writes the same rows as one run per entity`() = withSegments { segments ->
+    fun `with the iid run-end encoded, a historical merge writes the same rows as one run per entity`() = withSegments { segments ->
         SegmentMerge(al).use { plain ->
             SegmentMerge(al, reeIids = true).use { encoded ->
-                plain.mergeSegmentsSync(segments, null, RecencyPartitioning.Preserve(null)).use { plainResults ->
-                    encoded.mergeSegmentsSync(segments, null, RecencyPartitioning.Preserve(null)).use { encodedResults ->
+                plain.mergeSegmentsSync(segments, null, historical).use { plainResults ->
+                    encoded.mergeSegmentsSync(segments, null, historical).use { encodedResults ->
                         assertEquals(plainResults.map { plain.rowsOf(it) }, encodedResults.map { encoded.rowsOf(it) })
                         assertEquals(listOf(listOf(3, 6)), encodedResults.map { encoded.iidRunEndsOf(it) })
                     }
@@ -185,7 +188,16 @@ class SegmentMergeTest {
     }
 
     @Test
-    fun `with the iid run-end encoded, each recency file holds its own runs`() = withSegments { segments ->
+    fun `with the iid run-end encoded, a current-tier merge still stores its iids plain`() = withSegments { segments ->
+        SegmentMerge(al, reeIids = true).use { encoded ->
+            encoded.mergeSegmentsSync(segments, null, RecencyPartitioning.Preserve(null)).use { results ->
+                assertEquals(listOf(null), results.map { encoded.iidRunEndsOf(it) })
+            }
+        }
+    }
+
+    @Test
+    fun `with the iid run-end encoded, each weekly file holds its own runs and the current file stays plain`() = withSegments { segments ->
         SegmentMerge(al).use { plain ->
             SegmentMerge(al, reeIids = true).use { encoded ->
                 plain.mergeSegmentsSync(segments, null, RecencyPartitioning.Partition).use { plainResults ->
@@ -200,7 +212,7 @@ class SegmentMergeTest {
                                 "r20210104.arrow" to listOf(1),
                                 "r20220103.arrow" to listOf(1),
                                 "r20230102.arrow" to listOf(1, 2),
-                                "rc.arrow" to listOf(1, 2)
+                                "rc.arrow" to null
                             ),
                             encodedResults.associate { it.path.fileName.toString() to encoded.iidRunEndsOf(it) }
                         )
@@ -219,7 +231,7 @@ class SegmentMergeTest {
 
                 fun writeTrie(reeIids: Boolean, trieKey: String, pageSize: Int) =
                     SegmentMerge(al, reeIids).use { segMerge ->
-                        segMerge.mergeSegmentsSync(segments, null, RecencyPartitioning.Preserve(null)).use { results ->
+                        segMerge.mergeSegmentsSync(segments, null, historical).use { results ->
                             val result = results.single()
                             Relation.loader(al, result.openForRead()).use { loader ->
                                 runBlocking { trieWriter.writePageTree(slug, trieKey, loader, result.leaves.asTree, pageSize) }
@@ -245,17 +257,17 @@ class SegmentMergeTest {
                     }
 
                 for ((pageSize, expectedRunCounts) in listOf(1024 to listOf(2), 2 to listOf(1, 1))) {
-                    writeTrie(false, "l01-rc-b00", pageSize)
-                    writeTrie(true, "l01-rc-b01", pageSize)
+                    writeTrie(false, "l01-r20230102-b00", pageSize)
+                    writeTrie(true, "l01-r20230102-b01", pageSize)
 
                     assertArrayEquals(
-                        bp.getByteArray(slug.metaFilePath("l01-rc-b00")),
-                        bp.getByteArray(slug.metaFilePath("l01-rc-b01")),
+                        bp.getByteArray(slug.metaFilePath("l01-r20230102-b00")),
+                        bp.getByteArray(slug.metaFilePath("l01-r20230102-b01")),
                         "meta files, page size $pageSize"
                     )
 
-                    assertEquals(pagesOf("l01-rc-b00"), pagesOf("l01-rc-b01"), "pages, page size $pageSize")
-                    assertEquals(expectedRunCounts, iidRunCountsOf("l01-rc-b01"), "runs per page, page size $pageSize")
+                    assertEquals(pagesOf("l01-r20230102-b00"), pagesOf("l01-r20230102-b01"), "pages, page size $pageSize")
+                    assertEquals(expectedRunCounts, iidRunCountsOf("l01-r20230102-b01"), "runs per page, page size $pageSize")
                 }
             }
         }

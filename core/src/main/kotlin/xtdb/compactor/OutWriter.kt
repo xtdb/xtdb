@@ -129,14 +129,17 @@ internal interface OutWriter : AutoCloseable {
             }
         }
 
-        internal inner class PartitionedOutWriter(private val schema: Schema, private val recencyPartition: RecencyPartition?) : OutWriter {
+        internal inner class PartitionedOutWriter(
+            private val schemaFor: (recency: LocalDate?) -> Schema,
+            private val recencyPartition: RecencyPartition?
+        ) : OutWriter {
             private val outDir = createTempDirectory(tempDir, "merged-segments")
-            private var currentRel = OutRel(schema, outDir.resolve("rc.arrow"), null)
+            private var currentRel = OutRel(schemaFor(null), outDir.resolve("rc.arrow"), null)
 
             private val historicalRels = mutableMapOf<LocalDate, OutRel>()
 
             private fun historicalRel(recencyPartition: LocalDate) = historicalRels.computeIfAbsent(recencyPartition) {
-                OutRel(schema, outDir.resolve("r${Trie.RECENCY_FMT.format(it)}.arrow"), recencyPartition)
+                OutRel(schemaFor(it), outDir.resolve("r${Trie.RECENCY_FMT.format(it)}.arrow"), recencyPartition)
             }
 
             override fun rowCopier(reader: RelationReader) = object : RecencyRowCopier {
