@@ -1,6 +1,8 @@
 package xtdb.storage
 
 import org.apache.arrow.memory.RootAllocator
+import org.junit.jupiter.api.Assertions.assertArrayEquals
+import org.junit.jupiter.api.Assertions.assertTimeoutPreemptively
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
@@ -12,6 +14,7 @@ import xtdb.arrow.Relation
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.asPath
 import java.nio.ByteBuffer
+import java.time.Duration
 
 abstract class StorageTest {
     abstract fun storage(): BufferPool
@@ -25,6 +28,21 @@ abstract class StorageTest {
      * [PartitionedStorageTest].
      */
     abstract fun openPartitionedStorage(partition: Int, totalPartitions: Int): BufferPool
+
+    @Test
+    fun `missing object reads fail and do not poison later reads`() {
+        assertTimeoutPreemptively(Duration.ofSeconds(5)) {
+            val storage = storage()
+            val key = "missing-object".asPath
+            repeat(2) {
+                assertThrows(Exception::class.java) { storage.getByteArray(key) }
+            }
+
+            val bytes = byteArrayOf(1, 2, 3)
+            storage.putObjectSync(key, ByteBuffer.wrap(bytes))
+            assertArrayEquals(bytes, storage.getByteArray(key))
+        }
+    }
 
     @Test
     fun listObjectTests_3545() {
