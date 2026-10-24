@@ -10,11 +10,11 @@
            (java.nio.charset StandardCharsets)
            (java.time DateTimeException Duration Instant LocalDate LocalDateTime LocalTime Period ZoneId ZoneOffset ZonedDateTime)
            (java.time.format DateTimeParseException)
-           (java.time.temporal ChronoField ChronoUnit IsoFields Temporal)
+           (java.time.temporal ChronoField ChronoUnit Temporal)
            (org.apache.arrow.vector PeriodDuration)
            (xtdb DateTruncator)
            (xtdb.arrow ListValueReader ValueBox ValueReader VectorType VectorType$Mono)
-           (xtdb.time LocalDateTimeUtil)))
+           (xtdb.time LocalDateTimeUtil TemporalMath ZoneOffsets)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -1476,41 +1476,49 @@
      :->call-code (fn [[s & _]]
                     `(parse-multi-field-interval (expr/resolve-string ~s) ~unit1 ~unit2 ~fractional-precision))}))
 
-(defn time-field->ChronoField [field]
+(defn- extract-date-field-code [field epoch-day]
   (case field
-    "YEAR" `ChronoField/YEAR
-    "MONTH" `ChronoField/MONTH_OF_YEAR
-    "DAY" `ChronoField/DAY_OF_MONTH
-    "HOUR" `ChronoField/HOUR_OF_DAY
-    "MINUTE" `ChronoField/MINUTE_OF_HOUR
-    "SECOND" `ChronoField/SECOND_OF_MINUTE
-    "DOY" `ChronoField/DAY_OF_YEAR
-    "WEEK" `IsoFields/WEEK_OF_WEEK_BASED_YEAR
-    "QUARTER" `IsoFields/QUARTER_OF_YEAR))
+    "YEAR" `(TemporalMath/year ~epoch-day)
+    "MONTH" `(TemporalMath/month ~epoch-day)
+    "DAY" `(TemporalMath/dayOfMonth ~epoch-day)
+    "DOW" `(TemporalMath/dayOfWeek ~epoch-day)
+    "ISODOW" `(TemporalMath/isoDayOfWeek ~epoch-day)
+    "DOY" `(TemporalMath/dayOfYear ~epoch-day)
+    "WEEK" `(TemporalMath/isoWeek ~epoch-day)
+    "QUARTER" `(TemporalMath/quarter ~epoch-day)
+    nil))
+
+(defn- extract-local-ts-field-code [field local-ts ^long hz]
+  (or (extract-date-field-code field `(TemporalMath/epochDay ~local-ts ~hz))
+      (let [second-of-day `(TemporalMath/secondOfDay ~local-ts ~hz)]
+        (case field
+          "HOUR" `(int (quot ~second-of-day 3600))
+          "MINUTE" `(int (rem (quot ~second-of-day 60) 60))
+          "SECOND" `(int (rem ~second-of-day 60))))))
 
 (defmethod expr/codegen-call [:extract :utf8 :timestamp-tz] [{[{field :literal} _] :args, [_ ^VectorType$Mono ts-type] :arg-types}]
-  (let [ts-unit (st/timestamp-type->unit ts-type)
+  (let [hz (types/ts-units-per-second (st/timestamp-type->unit ts-type))
         tz (st/timestamp-type->tz ts-type)
-        zone-id-sym (gensym 'zone-id)]
+        zone-sym (-> (gensym 'zone) (expr/with-tag ZoneOffsets))]
     {:return-type #xt/type :i32
-     :batch-bindings [[zone-id-sym (ZoneId/of tz)]]
+     :batch-bindings [[zone-sym `(ZoneOffsets/of (ZoneId/of ~tz))]]
      :->call-code (fn [[_ x]]
-                    (let [zdt-sym (gensym 'zdt)]
-                      `(let [~zdt-sym ~(ts->zdt x ts-unit zone-id-sym)]
+                    (let [ts-sym (gensym 'ts)]
+                      `(let [~ts-sym ~x]
                          ~(case field
-                            "TIMEZONE_HOUR" `(-> (.getOffset ~zdt-sym) (.getTotalSeconds) (/ 3600) (int))
-                            "TIMEZONE_MINUTE" `(-> (.getOffset ~zdt-sym) (.getTotalSeconds) (/ 60) (rem 60) (int))
-                            "DOW" `(int (rem (.getValue (.getDayOfWeek ~zdt-sym)) 7))
-                            "ISODOW" `(.getValue (.getDayOfWeek ~zdt-sym))
-                            "EPOCH" `(int (.toEpochSecond ~zdt-sym))
-                            `(.get ~zdt-sym ~(time-field->ChronoField field))))))}))
+                            "TIMEZONE_HOUR" `(int (quot (.offsetAt ~zone-sym (Math/floorDiv ~ts-sym ~hz)) 3600))
+                            "TIMEZONE_MINUTE" `(int (rem (quot (.offsetAt ~zone-sym (Math/floorDiv ~ts-sym ~hz)) 60) 60))
+                            "EPOCH" `(int (Math/floorDiv ~ts-sym ~hz))
+                            (let [local-sym (gensym 'local-second)]
+                              `(let [~local-sym (TemporalMath/toLocal (Math/floorDiv ~ts-sym ~hz) 1 ~zone-sym)]
+                                 ~(extract-local-ts-field-code field local-sym 1)))))))}))
 
 (defmethod expr/codegen-call [:extract :utf8 :timestamp-local] [{[{field :literal} _] :args, [_ ^VectorType$Mono ts-type] :arg-types}]
-  (let [ts-unit (st/timestamp-type->unit ts-type)]
+  (let [hz (types/ts-units-per-second (st/timestamp-type->unit ts-type))]
     {:return-type #xt/type :i32
      :->call-code (fn [[_ x]]
-                    (let [ldt-sym (gensym 'ldt)]
-                      `(let [~ldt-sym ~(ts->ldt x ts-unit)]
+                    (let [ts-sym (gensym 'ts)]
+                      `(let [~ts-sym ~x]
                          ~(case field
                             "TIMEZONE_HOUR" (throw (err/unsupported ::expr/extract-not-supported
                                                                     "Extract \"TIMEZONE_HOUR\" not supported for type timestamp without timezone"
@@ -1521,28 +1529,16 @@
                             "EPOCH" (throw (err/unsupported ::expr/extract-not-supported
                                                             "Extract \"EPOCH\" not supported for type timestamp without timezone"
                                                             {:field :epoch, :source-type :timestamp-local}))
-                            "DOW" `(int (rem (.getValue (.getDayOfWeek ~ldt-sym)) 7))
-                            "ISODOW" `(.getValue (.getDayOfWeek ~ldt-sym))
-                            `(.get ~ldt-sym ~(time-field->ChronoField field))))))}))
+                            (extract-local-ts-field-code field ts-sym hz)))))}))
 
 (defmethod expr/codegen-call [:extract :utf8 :date] [{[{field :literal} _] :args}]
   ;; FIXME this assumes date-unit :day
   {:return-type #xt/type :i32
    :->call-code (fn [[_ epoch-day-code]]
-                  (let [ld-sym (gensym 'ld)]
-                    `(let [~ld-sym (LocalDate/ofEpochDay ~epoch-day-code)]
-                       ~(case field
-                          "YEAR" `(.getYear ~ld-sym)
-                          "MONTH" `(.getMonthValue ~ld-sym)
-                          "DAY" `(.getDayOfMonth ~ld-sym)
-                          "DOW" `(int (rem (.getValue (.getDayOfWeek ~ld-sym)) 7))
-                          "ISODOW" `(.getValue (.getDayOfWeek ~ld-sym))
-                          "DOY" `(.getDayOfYear ~ld-sym)
-                          "WEEK" `(.get ~ld-sym IsoFields/WEEK_OF_WEEK_BASED_YEAR)
-                          "QUARTER" `(.get ~ld-sym IsoFields/QUARTER_OF_YEAR)
-                          (throw (err/unsupported ::expr/extract-not-supported
-                                                  (format "Extract \"%s\" not supported for type date" field)
-                                                  {:field field, :source-type :date}))))))})
+                  (or (extract-date-field-code field epoch-day-code)
+                      (throw (err/unsupported ::expr/extract-not-supported
+                                              (format "Extract \"%s\" not supported for type date" field)
+                                              {:field field, :source-type :date}))))})
 
 (defmethod expr/codegen-call [:extract :utf8 :interval] [{[{field :literal} _] :args}]
   {:return-type #xt/type :i32

@@ -46,6 +46,16 @@
     ;; offset inequality
     false #xt/zoned-date-time "2021-08-09T15:43:23+02:00" #xt/date-time "2021-08-09T15:43:23" "+03:00"))
 
+(t/deftest timestamp-tz-within-an-offset-of-the-long-limit
+  (let [zone (ZoneOffset/of "+05:00")
+        zdt (.atZone ^Instant (time/micros->instant Long/MAX_VALUE) zone)]
+    (t/are [expected expr]
+        (= expected (-> (tu/query-ra [:project {:projections [{'res expr}]} [:table {:rows [{}]}]]
+                                     {:args {:zdt zdt}, :default-tz zone})
+                        first :res))
+      (.getYear zdt) '(extract "YEAR" ?zdt)
+      (.getHour zdt) '(extract "HOUR" ?zdt))))
+
 (t/deftest test-cast-temporal
   (let [current-time #xt/instant "2022-08-16T20:04:14.423452Z"]
     (letfn [(test-cast
