@@ -30,15 +30,12 @@ class Sum(
         override fun aggregate(inRel: RelationReader, groupMapping: GroupMapping, mask: VectorMask) {
             if (MASKED_AGG && mask === VectorMask.ALL && inRel is MaskedRelation && inRel.isDirect(fromName)) {
                 // DART (#6285 avenue B): read the direct vector at each set bit, the group mapping at the logical row
-                val summer = inRel.directRel[fromName].sumInto(outVec)
-                val m = inRel.mask
+                val summer = inRel.directVector(fromName).sumInto(outVec)
                 var i = 0
-                var p = m.nextSetBit(0)
-                while (p >= 0) {
+                MaskedRelation.forEachSetBit(inRel.words) { p ->
                     val groupIdx = groupMapping.getInt(i++)
                     while (outVec.valueCount <= groupIdx) outVec.writeNull()
                     summer.sumRow(p, groupIdx)
-                    p = m.nextSetBit(p + 1)
                 }
                 return
             }

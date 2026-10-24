@@ -79,14 +79,17 @@ class BitemporalConsumer private constructor(
                 if (!loggedMasked) { loggedMasked = true; System.err.println("DART-6285-B: masked scan engaged") }
                 val putStruct = putLeg.inner
                 val structCount = putStruct.valueCount
-                val mask = java.util.BitSet(structCount)
-                for (idx in selArray) mask.set(putLeg.getOffset(idx))
+                val words = LongArray(MaskedRelation.wordCount(structCount))
+                for (idx in selArray) {
+                    val off = putLeg.getOffset(idx)
+                    words[off ushr 6] = words[off ushr 6] or (1L shl off)
+                }
 
                 return MaskedRelation(
                     contentColNames.filter { it != "_iid" }.map {
                         putStruct.vectorForOrNull(it) ?: NullVector(it, true, structCount)
                     },
-                    structCount, mask,
+                    structCount, words,
                     listOfNotNull(
                         if ("_iid" in contentColNames) rel["_iid"].select(selArray) else null,
                         validFromVec, validToVec, systemFromVec, systemToVec

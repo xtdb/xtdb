@@ -46,11 +46,11 @@ class ProjectCursor(
             for (spec in specs) {
                 when (spec) {
                     is ProjectionSpec.Identity ->
-                        if (inRel.isDirect(spec.toName)) direct.add(inRel.directRel[spec.toName])
+                        if (inRel.isDirect(spec.toName)) direct.add(inRel.directVector(spec.toName))
                         else dense.add(inRel[spec.toName])
 
                     is ProjectionSpec.Rename ->
-                        if (inRel.isDirect(spec.fromName)) direct.add(inRel.directRel[spec.fromName].withName(spec.toName))
+                        if (inRel.isDirect(spec.fromName)) direct.add(inRel.directVector(spec.fromName).withName(spec.toName))
                         else dense.add(inRel[spec.fromName].withName(spec.toName))
 
                     is MaskedProjection ->

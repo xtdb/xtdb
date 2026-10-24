@@ -25,15 +25,12 @@ class Count(
 
             override fun aggregate(inRel: RelationReader, groupMapping: GroupMapping, mask: VectorMask) {
                 if (Sum.MASKED_AGG && mask === VectorMask.ALL && inRel is MaskedRelation && inRel.isDirect(fromColName)) {
-                    val col = inRel.directRel[fromColName]
-                    val m = inRel.mask
+                    val col = inRel.directVector(fromColName)
                     var i = 0
-                    var p = m.nextSetBit(0)
-                    while (p >= 0) {
+                    MaskedRelation.forEachSetBit(inRel.words) { p ->
                         val groupIdx = groupMapping.getInt(i++)
                         if (outVec.valueCount == groupIdx) outVec.writeLong(0L)
                         if (!col.isNull(p)) outVec.setLong(groupIdx, outVec.getLong(groupIdx) + 1)
-                        p = m.nextSetBit(p + 1)
                     }
                     return
                 }

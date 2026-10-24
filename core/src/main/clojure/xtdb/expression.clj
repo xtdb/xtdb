@@ -2512,14 +2512,16 @@
                                               ~(-> schema-sym (with-tag IPersistentMap))
                                               ~(-> args-sym (with-tag RelationReader))
                                               ~(-> out-vec-sym (with-tag Vector))
-                                              ~(-> 'mask (with-tag BitSet))]
+                                              ~(-> 'words (with-tag 'longs))]
                                            (let [~@(batch-bindings emitted-expr)
                                                  ~@writer-bindings]
-                                             (loop [~idx-sym (.nextSetBit ~'mask 0)]
-                                               (when (>= ~idx-sym 0)
-                                                 ~(continue (fn [t c]
-                                                              (write-value-out! t c)))
-                                                 (recur (.nextSetBit ~'mask (inc ~idx-sym)))))))
+                                             (dotimes [wi# (alength ~'words)]
+                                               (loop [w# (aget ~'words wi#)]
+                                                 (when-not (zero? w#)
+                                                   (let [~idx-sym (+ (bit-shift-left wi# 6) (Long/numberOfTrailingZeros w#))]
+                                                     ~(continue (fn [t c]
+                                                                  (write-value-out! t c))))
+                                                   (recur (bit-and w# (unchecked-dec w#))))))))
                                         eval))
 
            ;; DART: only meaningful when the expr is boolean - clears the bits where it isn't true
@@ -2527,13 +2529,19 @@
                               (-> `(fn [~(-> rel-sym (with-tag RelationReader))
                                         ~(-> schema-sym (with-tag IPersistentMap))
                                         ~(-> args-sym (with-tag RelationReader))
-                                        ~(-> 'mask (with-tag BitSet))]
+                                        ~(-> 'words (with-tag 'longs))]
                                      (let [~@(batch-bindings emitted-expr)]
-                                       (loop [~idx-sym (.nextSetBit ~'mask 0)]
-                                         (when (>= ~idx-sym 0)
-                                           (when-not ~(continue (fn [_t c] c))
-                                             (.clear ~'mask ~idx-sym))
-                                           (recur (.nextSetBit ~'mask (inc ~idx-sym)))))))
+                                       (dotimes [wi# (alength ~'words)]
+                                         (let [w0# (aget ~'words wi#)]
+                                           (loop [w# w0#, out# w0#]
+                                             (if (zero? w#)
+                                               (aset ~'words wi# out#)
+                                               (let [t# (Long/numberOfTrailingZeros w#)
+                                                     ~idx-sym (+ (bit-shift-left wi# 6) t#)]
+                                                 (recur (bit-and w# (unchecked-dec w#))
+                                                        (if ~(continue (fn [_t c] c))
+                                                          out#
+                                                          (bit-and out# (bit-not (bit-shift-left 1 t#))))))))))))
                                   eval))
 
            :return-type return-type}))
@@ -2573,7 +2581,7 @@
                   {:keys [!masked-projection-fn return-type]} (emit-projection expr {:param-types (->param-types args)
                                                                                      :var-types var-types})]
               (util/with-close-on-catch [out-vec (Vector/open allocator (str col-name) return-type)]
-                (@!masked-projection-fn in-rel schema args out-vec (.getMask masked-rel))
+                (@!masked-projection-fn in-rel schema args out-vec (.getWords masked-rel))
                 out-vec)))))
 
       ProjectionSpec
@@ -2631,9 +2639,9 @@
                   {:keys [!mask-refine-fn ^VectorType return-type]} (emit-projection bool-expr {:param-types (->param-types args)
                                                                                                 :var-types var-types})]
               (when (= return-type (types/->type :bool))
-                (let [mask (.clone ^BitSet (.getMask masked-rel))]
-                  (@!mask-refine-fn in-rel schema args mask)
-                  (.withMask masked-rel mask)))))))
+                (let [words (aclone ^longs (.getWords masked-rel))]
+                  (@!mask-refine-fn in-rel schema args words)
+                  (.withWords masked-rel words)))))))
 
       SelectionSpec
       (select [_ al in-rel schema args]
