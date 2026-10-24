@@ -46,6 +46,20 @@
     ;; offset inequality
     false #xt/zoned-date-time "2021-08-09T15:43:23+02:00" #xt/date-time "2021-08-09T15:43:23" "+03:00"))
 
+(t/deftest timestamp-tz-within-an-offset-of-the-long-limit
+  (let [zone (ZoneOffset/of "+05:00")
+        zdt (.atZone ^Instant (time/micros->instant Long/MAX_VALUE) zone)]
+    (t/are [expected expr]
+        (= expected (-> (tu/query-ra [:project {:projections [{'res expr}]} [:table {:rows [{}]}]]
+                                     {:args {:zdt zdt}, :default-tz zone})
+                        first :res))
+      (.getYear zdt) '(extract "YEAR" ?zdt)
+      (.getHour zdt) '(extract "HOUR" ?zdt)
+      (.truncatedTo zdt ChronoUnit/DAYS) '(date_trunc "DAY" ?zdt)
+      (.toLocalDate zdt) '(cast ?zdt #xt/type [:date :day])
+      (.toLocalTime zdt) '(cast ?zdt #xt/type [:time-local :micro])
+      (.minus zdt (Period/ofMonths 1)) '(- ?zdt (single-field-interval 1 "MONTH" 2 0)))))
+
 (t/deftest test-cast-temporal
   (let [current-time #xt/instant "2022-08-16T20:04:14.423452Z"]
     (letfn [(test-cast
@@ -1946,3 +1960,40 @@
     (LocalDateTime/parse "1969-12-31T23:59") '(date_trunc "MINUTE" a)
     (LocalDate/parse "1969-12-31") '(cast a #xt/type [:date :day])
     (LocalTime/parse "23:59:59.5") '(cast a #xt/type [:time-local :micro])))
+
+(t/deftest pre-epoch-casts-between-timestamp-types-floor-to-the-coarser-unit
+  (letfn [(project [expr]
+            (-> (tu/query-ra [:project {:projections [{'res expr}]} [:table {:rows [{}]}]]
+                             {:default-tz ZoneOffset/UTC})
+                first :res))]
+    (t/is (= (Instant/parse "1969-12-31T23:59:59.999999Z")
+             (.toInstant ^ZonedDateTime
+                         (project '(cast (cast "1969-12-31T23:59:59.999999999" #xt/type [:timestamp-local :nano] {:precision 9})
+                                         #xt/type [:timestamp-tz :micro "UTC"])))))
+
+    (t/is (= (LocalDateTime/parse "1969-12-31T23:59:59.999999")
+             (project '(cast (cast "1969-12-31T23:59:59.999999999Z" #xt/type [:timestamp-tz :nano "UTC"] {:precision 9})
+                             #xt/type [:timestamp-local :micro]))))))
+
+(t/deftest interval-arithmetic-matches-java-time
+  (let [london-noon (ZonedDateTime/of (LocalDateTime/of 2021 3 27 12 0) (ZoneId/of "Europe/London"))
+        ldt (LocalDateTime/parse "2021-01-01T00:00")]
+    (t/are [expected expr]
+        (= expected (-> (tu/query-ra [:project {:projections [{'res expr}]} [:table {:rows [{}]}]]
+                                     {:args {:zdt london-noon, :ldt ldt}})
+                        first :res))
+      (.plus london-noon (Period/ofDays 1)) '(+ ?zdt (single-field-interval 1 "DAY" 2 0))
+      (.plus london-noon (Duration/ofHours 24)) '(+ ?zdt (single-field-interval 24 "HOUR" 2 0))
+      (.minus london-noon (Period/ofMonths 1)) '(- ?zdt (single-field-interval 1 "MONTH" 2 0))
+
+      (.minus ldt (Duration/ofNanos 1000)) '(- ?ldt (single-field-interval "0.0000005" "SECOND" 2 6))
+      ldt '(+ ?ldt (single-field-interval "0.0000005" "SECOND" 2 6)))))
+
+(t/deftest date-starts-where-a-midnight-gap-ends
+  (let [zone (ZoneId/of "America/Sao_Paulo")
+        [{^ZonedDateTime res :res}] (tu/query-ra [:project {:projections [{'res '(cast (cast "2018-11-04" #xt/type [:date :day])
+                                                                                       #xt/type [:timestamp-tz :micro "America/Sao_Paulo"])}]}
+                                                  [:table {:rows [{}]}]]
+                                                 {:default-tz zone})]
+    (t/is (= (.toInstant (.atStartOfDay (LocalDate/parse "2018-11-04") zone))
+             (.toInstant res)))))

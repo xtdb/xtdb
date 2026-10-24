@@ -204,6 +204,21 @@
     (t/is (= #xt/zoned-date-time "2001-02-16T08:00-05:00[America/New_York]"
              (project1 (list 'date-trunc "DAY" 'date "Australia/Sydney") test-doc)))))
 
+(t/deftest test-date-trunc-across-dst-transitions
+  (t/are [^ZonedDateTime zdt field unit]
+      (= (.truncatedTo zdt unit) (project1 (list 'date-trunc field 'date) {:date zdt}))
+
+    ;; Sao Paulo skips 00:00-01:00 on this date
+    (ZonedDateTime/of (LocalDateTime/of 2018 11 4 12 0) (ZoneId/of "America/Sao_Paulo")) "DAY" ChronoUnit/DAYS
+
+    (-> (ZonedDateTime/of (LocalDateTime/of 2021 10 31 1 30) (ZoneId/of "Europe/London"))
+        (.withEarlierOffsetAtOverlap))
+    "HOUR" ChronoUnit/HOURS
+
+    (-> (ZonedDateTime/of (LocalDateTime/of 2021 10 31 1 30) (ZoneId/of "Europe/London"))
+        (.withLaterOffsetAtOverlap))
+    "HOUR" ChronoUnit/HOURS))
+
 (t/deftest test-date-trunc-interval
   (let [test-doc {:_id :foo,
                   :year-interval (Interval. (Period/of 1111 4 8) (Duration/parse "PT1H1M1.111111S"))

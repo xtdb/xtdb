@@ -8,13 +8,12 @@
             [xtdb.types :as types])
   (:import (java.nio ByteBuffer)
            (java.nio.charset StandardCharsets)
-           (java.time DateTimeException Duration Instant LocalDate LocalDateTime LocalTime Period ZoneId ZoneOffset ZonedDateTime)
+           (java.time DateTimeException Duration Instant LocalDate LocalDateTime LocalTime Period ZoneId ZonedDateTime)
            (java.time.format DateTimeParseException)
-           (java.time.temporal ChronoField ChronoUnit IsoFields Temporal)
+           (java.time.temporal ChronoField ChronoUnit Temporal)
            (org.apache.arrow.vector PeriodDuration)
-           (xtdb DateTruncator)
            (xtdb.arrow ListValueReader ValueBox ValueReader VectorType VectorType$Mono)
-           (xtdb.time LocalDateTimeUtil)))
+           (xtdb.time LocalDateTimeUtil TemporalMath ZoneOffsets)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -104,13 +103,6 @@
     :micro `(time/micros->instant ~form)
     :nano `(time/nanos->instant ~form)))
 
-(defn- inst->ts [form ts-unit]
-  (case ts-unit
-    :second `(.getEpochSecond ~form)
-    :milli `(.toEpochMilli ~form)
-    :micro `(time/instant->micros ~form)
-    :nano `(time/instant->nanos ~form)))
-
 (defn- ts->zdt [form ts-unit tz-sym]
   `(ZonedDateTime/ofInstant ~(ts->inst form ts-unit) ~tz-sym))
 
@@ -171,107 +163,111 @@
         tgt-tsunit (st/duration-type->unit target-type)]
     {:return-type target-type, :->call-code (comp #(with-conversion % src-tsunit tgt-tsunit) first)}))
 
+(defn- with-floored-conversion [form from-unit to-unit]
+  (let [from-hz (types/ts-units-per-second from-unit)
+        to-hz (types/ts-units-per-second to-unit)]
+    (if (> from-hz to-hz)
+      `(Math/floorDiv ~form ~(quot from-hz to-hz))
+      (with-conversion form from-unit to-unit))))
+
+(defn- default-zone-binding []
+  (let [zone-sym (-> (gensym 'default-zone) (expr/with-tag ZoneOffsets))]
+    [zone-sym [zone-sym `(ZoneOffsets/of expr/*default-tz*)]]))
+
 (defmethod expr/codegen-cast [:date :timestamp-local] [{:keys [^VectorType target-type]}]
-  (let [tgt-tsunit (st/timestamp-type->unit target-type)]
+  (let [hz (types/ts-units-per-second (st/timestamp-type->unit target-type))]
     {:return-type target-type
      :->call-code (fn [[dt]]
-                    `(-> (LocalDate/ofEpochDay ~dt)
-                         (.atStartOfDay ZoneOffset/UTC)
-                         (.toEpochSecond)
-                         (Math/multiplyExact ~(types/ts-units-per-second tgt-tsunit))))}))
+                    `(TemporalMath/dayToLocal ~dt ~hz))}))
 
 (defmethod expr/codegen-cast [:date :timestamp-tz] [{:keys [^VectorType target-type]}]
-  (let [tgt-tsunit (st/timestamp-type->unit target-type)]
+  (let [hz (types/ts-units-per-second (st/timestamp-type->unit target-type))
+        [zone-sym zone-binding] (default-zone-binding)]
     {:return-type target-type
+     :batch-bindings [zone-binding]
      :->call-code (fn [[dt]]
-                    (-> `(-> (LocalDate/ofEpochDay ~dt)
-                             (.atStartOfDay expr/*default-tz*)
-                             (.toInstant))
-                        (inst->ts tgt-tsunit)))}))
+                    `(TemporalMath/startOfDay ~dt ~hz ~zone-sym))}))
+
+(defn- today-code [zone-sym]
+  `(TemporalMath/epochDay (TemporalMath/toLocal (.getEpochSecond (expr/current-time)) 1 ~zone-sym) 1))
 
 (defmethod expr/codegen-cast [:time-local :timestamp-local] [{:keys [^VectorType source-type, ^VectorType target-type]}]
   (let [src-tsunit (st/time-type->unit source-type)
-        tgt-tsunit (st/timestamp-type->unit target-type)]
+        tgt-tsunit (st/timestamp-type->unit target-type)
+        [zone-sym zone-binding] (default-zone-binding)]
     {:return-type target-type
+     :batch-bindings [zone-binding]
      :->call-code (fn [[tm]]
-                    (-> `(LocalDateTime/of (LocalDate/ofInstant (expr/current-time) expr/*default-tz*)
-                                           (LocalTime/ofNanoOfDay ~(with-conversion tm src-tsunit :nano)))
-                        (ldt->ts tgt-tsunit)))}))
+                    `(Math/addExact (TemporalMath/dayToLocal ~(today-code zone-sym) ~(types/ts-units-per-second tgt-tsunit))
+                                    ~(with-conversion tm src-tsunit tgt-tsunit)))}))
 
 (defmethod expr/codegen-cast [:time-local :timestamp-tz] [{:keys [^VectorType source-type, ^VectorType target-type]}]
   (let [src-tsunit (st/time-type->unit source-type)
-        tgt-tsunit (st/timestamp-type->unit target-type)]
+        tgt-tsunit (st/timestamp-type->unit target-type)
+        hz (types/ts-units-per-second tgt-tsunit)
+        [zone-sym zone-binding] (default-zone-binding)]
     {:return-type target-type
+     :batch-bindings [zone-binding]
      :->call-code (fn [[tm]]
-                    (-> `(-> (ZonedDateTime/of (LocalDate/ofInstant (expr/current-time) expr/*default-tz*)
-                                               (LocalTime/ofNanoOfDay ~(with-conversion tm src-tsunit :nano))
-                                               expr/*default-tz*)
-                             (.toInstant))
-                        (inst->ts tgt-tsunit)))}))
+                    `(TemporalMath/fromLocal (Math/addExact (TemporalMath/dayToLocal ~(today-code zone-sym) ~hz)
+                                                            ~(with-conversion tm src-tsunit tgt-tsunit))
+                                             ~hz ~zone-sym))}))
 
 (defmethod expr/codegen-cast [:timestamp-local :date] [{:keys [^VectorType source-type, ^VectorType target-type]}]
-  (let [src-tsunit (st/timestamp-type->unit source-type)]
+  (let [hz (types/ts-units-per-second (st/timestamp-type->unit source-type))]
     {:return-type target-type
      :->call-code (fn [[ts]]
-                    `(-> ~(ts->ldt ts src-tsunit)
-                         (.toLocalDate)
-                         (.toEpochDay)))}))
+                    `(TemporalMath/epochDay ~ts ~hz))}))
 
 (defmethod expr/codegen-cast [:timestamp-local :time-local] [{:keys [^VectorType source-type, ^VectorType target-type]}]
   (let [src-tsunit (st/timestamp-type->unit source-type)
         tgt-tsunit (st/time-type->unit target-type)]
     {:return-type target-type
      :->call-code (fn [[ts]]
-                    (-> `(-> ~(ts->ldt ts src-tsunit)
-                             (.toLocalTime)
-                             (.toNanoOfDay))
-                        (with-conversion :nano tgt-tsunit)))}))
+                    (-> `(TemporalMath/unitOfDay ~ts ~(types/ts-units-per-second src-tsunit))
+                        (with-conversion src-tsunit tgt-tsunit)))}))
 
 (defmethod expr/codegen-cast [:timestamp-local :timestamp-tz] [{:keys [^VectorType source-type, ^VectorType target-type]}]
   (let [src-tsunit (st/timestamp-type->unit source-type)
-        tgt-tsunit (st/timestamp-type->unit target-type)]
+        tgt-tsunit (st/timestamp-type->unit target-type)
+        [zone-sym zone-binding] (default-zone-binding)]
     {:return-type target-type
+     :batch-bindings [zone-binding]
      :->call-code (fn [[ts]]
-                    (-> `(-> ~(ts->ldt ts src-tsunit)
-                             (.atZone expr/*default-tz*)
-                             (.toInstant))
-                        (inst->ts tgt-tsunit)))}))
+                    (-> `(TemporalMath/fromLocal ~ts ~(types/ts-units-per-second src-tsunit) ~zone-sym)
+                        (with-floored-conversion src-tsunit tgt-tsunit)))}))
 
 (defmethod expr/codegen-cast [:timestamp-tz :date] [{:keys [^VectorType source-type, ^VectorType target-type]}]
-  (let [[src-tsunit src-tz] (st/timestamp-type->unit+tz source-type)
-        src-tz-sym (gensym 'src-tz)]
+  (let [hz (types/ts-units-per-second (st/timestamp-type->unit source-type))
+        [zone-sym zone-binding] (default-zone-binding)]
     {:return-type target-type
-     :batch-bindings [[src-tz-sym `(ZoneId/of ~src-tz)]]
+     :batch-bindings [zone-binding]
      :->call-code (fn [[tstz]]
-                    `(-> ~(ts->zdt tstz src-tsunit src-tz-sym)
-                         (.withZoneSameInstant expr/*default-tz*)
-                         (.toLocalDate)
-                         (.toEpochDay)))}))
+                    `(TemporalMath/epochDay (TemporalMath/toLocal (Math/floorDiv ~tstz ~hz) 1 ~zone-sym) 1))}))
 
 (defmethod expr/codegen-cast [:timestamp-tz :time-local] [{:keys [^VectorType source-type, ^VectorType target-type]}]
-  (let [[src-tsunit src-tz] (st/timestamp-type->unit+tz source-type)
+  (let [src-tsunit (st/timestamp-type->unit source-type)
         tgt-tsunit (st/time-type->unit target-type)
-        src-tz-sym (gensym 'src-tz)]
+        hz (types/ts-units-per-second src-tsunit)
+        [zone-sym zone-binding] (default-zone-binding)]
     {:return-type target-type
-     :batch-bindings [[src-tz-sym `(ZoneId/of ~src-tz)]]
+     :batch-bindings [zone-binding]
      :->call-code (fn [[tstz]]
-                    (-> `(-> ~(ts->zdt tstz src-tsunit src-tz-sym)
-                             (.withZoneSameInstant expr/*default-tz*)
-                             (.toLocalTime)
-                             (.toNanoOfDay))
-                        (with-conversion :nano tgt-tsunit)))}))
+                    (let [ts-sym (gensym 'ts)]
+                      (-> `(let [~ts-sym ~tstz]
+                             (+ (* (TemporalMath/unitOfDay (TemporalMath/toLocal (Math/floorDiv ~ts-sym ~hz) 1 ~zone-sym) 1) ~hz)
+                                (Math/floorMod ~ts-sym ~hz)))
+                          (with-conversion src-tsunit tgt-tsunit))))}))
 
 (defmethod expr/codegen-cast [:timestamp-tz :timestamp-local] [{:keys [^VectorType source-type, ^VectorType target-type]}]
-  (let [[src-tsunit src-tz] (st/timestamp-type->unit+tz source-type)
+  (let [src-tsunit (st/timestamp-type->unit source-type)
         tgt-tsunit (st/timestamp-type->unit target-type)
-        src-tz-sym (gensym 'src-tz)]
+        [zone-sym zone-binding] (default-zone-binding)]
     {:return-type target-type
-     :batch-bindings [[src-tz-sym `(ZoneId/of ~src-tz)]]
+     :batch-bindings [zone-binding]
      :->call-code (fn [[tstz]]
-                    (-> `(-> ~(ts->zdt tstz src-tsunit src-tz-sym)
-                             (.withZoneSameInstant expr/*default-tz*)
-                             (.toLocalDateTime))
-                        (ldt->ts tgt-tsunit)))}))
+                    (-> `(TemporalMath/toLocal ~tstz ~(types/ts-units-per-second src-tsunit) ~zone-sym)
+                        (with-floored-conversion src-tsunit tgt-tsunit)))}))
 
 (defmethod expr/codegen-cast [:time-local :duration] [{:keys [^VectorType source-type, ^VectorType target-type]}]
   (let [src-tsunit (st/time-type->unit source-type)
@@ -809,14 +805,13 @@
     (with-arg-unit-conversion x-unit y-unit
       #(do [:duration %]) #(do `(Math/addExact ~@%)))))
 
-(doseq [[f-kw method-sym] [[:+ '.plus]
-                           [:- '.minus]]]
+(doseq [[f-kw sign] [[:+ 1] [:- -1]]]
   (defmethod expr/codegen-call [f-kw :date :interval] [{[dt-type, ^VectorType$Mono i-type] :arg-types, :as expr}]
     (let [iunit (st/interval-type->unit i-type)]
       (case iunit
         :year-month {:return-type dt-type
                      :->call-code (fn [[x-arg y-arg]]
-                                    `(.toEpochDay (~method-sym (LocalDate/ofEpochDay ~x-arg) (.getPeriod ~y-arg))))}
+                                    `(TemporalMath/datePlusInterval ~x-arg ~y-arg ~sign))}
         :month-day-micro (recall-with-cast2 expr [:timestamp-local :micro] [:interval :month-day-micro])
         :month-day-nano (recall-with-cast2 expr [:timestamp-local :nano] [:interval :month-day-nano]))))
 
@@ -827,19 +822,11 @@
                 (with-first-arg-unit-conversion ts-unit unit-lower-bound
                   #(do [:timestamp-local %])
                   (fn [ts-unit [ts-arg i-arg]]
-                    (-> `(let [i# ~i-arg]
-                           (-> ~(ts->ldt ts-arg ts-unit)
-                               (~method-sym (.getPeriod i#))
-                               (~method-sym (.getDuration i#))))
-                        (ldt->ts ts-unit)))))]
+                    `(TemporalMath/localPlusInterval ~ts-arg ~(types/ts-units-per-second ts-unit) ~i-arg ~sign))))]
         (case iunit
           :year-month {:return-type ts-type
                        :->call-code (fn [[x-arg y-arg]]
-                                      (-> `(let [i# ~y-arg]
-                                             (-> ~(ts->ldt x-arg ts-unit)
-                                                 (~method-sym (.getPeriod i#))
-                                                 (~method-sym (.getDuration i#))))
-                                          (ldt->ts ts-unit)))}
+                                      `(TemporalMath/localPlusInterval ~x-arg ~(types/ts-units-per-second ts-unit) ~y-arg ~sign))}
 
           :month-day-micro (codegen-call :micro)
           :month-day-nano (codegen-call :nano)))))
@@ -847,28 +834,20 @@
   (defmethod expr/codegen-call [f-kw :timestamp-tz :interval] [{[^VectorType$Mono ts-type, ^VectorType$Mono i-type] :arg-types}]
     (let [[ts-unit tz] (st/timestamp-type->unit+tz ts-type)
           iunit (st/interval-type->unit i-type)
-          zone-id-sym (gensym 'zone-id)]
+          zone-sym (-> (gensym 'zone) (expr/with-tag ZoneOffsets))]
       (letfn [(codegen-call [unit-lower-bound]
                 (with-first-arg-unit-conversion ts-unit unit-lower-bound
                   #(do [:timestamp-tz % tz])
                   (fn [ts-unit [ts-arg i-arg]]
-                    (-> `(let [i# ~i-arg]
-                           (-> ~(ts->zdt ts-arg ts-unit zone-id-sym)
-                               (~method-sym (.getPeriod i#))
-                               (~method-sym (.getDuration i#))))
-                        (zdt->ts ts-unit)))))]
+                    `(TemporalMath/tzPlusInterval ~ts-arg ~(types/ts-units-per-second ts-unit) ~zone-sym ~i-arg ~sign))))]
         (-> (case iunit
               :year-month {:return-type ts-type
                            :->call-code (fn [[x-arg y-arg]]
-                                          (-> `(let [y# ~y-arg]
-                                                 (-> ~(ts->zdt x-arg ts-unit zone-id-sym)
-                                                     (~method-sym (.getPeriod y#))
-                                                     (~method-sym (.getDuration y#))))
-                                              (zdt->ts ts-unit)))}
+                                          `(TemporalMath/tzPlusInterval ~x-arg ~(types/ts-units-per-second ts-unit) ~zone-sym ~y-arg ~sign))}
 
               :month-day-micro (codegen-call :micro)
               :month-day-nano (codegen-call :nano))
-            (update :batch-bindings (fnil conj []) [zone-id-sym `(ZoneId/of ~(str tz))]))))))
+            (update :batch-bindings (fnil conj []) [zone-sym `(ZoneOffsets/of (ZoneId/of ~(str tz)))]))))))
 
 (doseq [[t1 t2] [[:duration :timestamp-tz]
                  [:duration :timestamp-local]
@@ -949,15 +928,6 @@
         y-unit (st/duration-type->unit y-type)]
     (with-arg-unit-conversion x-unit y-unit
       #(do [:duration %]) #(do `(Math/subtractExact ~@%)))))
-
-(defmethod expr/codegen-call [:- :date :interval] [{[dt-type, ^VectorType$Mono i-type] :arg-types, :as expr}]
-  (let [iunit (st/interval-type->unit i-type)]
-    (case iunit
-      :year-month {:return-type dt-type
-                   :->call-code (fn [[x-arg y-arg]]
-                                  `(.toEpochDay (.minus (LocalDate/ofEpochDay ~x-arg) (.getPeriod ~y-arg))))}
-      :month-day-nano (recall-with-cast2 expr [:timestamp-local :nano] [:interval :month-day-nano])
-      :month-day-micro (recall-with-cast2 expr [:timestamp-local :micro] [:interval :month-day-micro]))))
 
 ;;; multiply, divide
 
@@ -1476,41 +1446,49 @@
      :->call-code (fn [[s & _]]
                     `(parse-multi-field-interval (expr/resolve-string ~s) ~unit1 ~unit2 ~fractional-precision))}))
 
-(defn time-field->ChronoField [field]
+(defn- extract-date-field-code [field epoch-day]
   (case field
-    "YEAR" `ChronoField/YEAR
-    "MONTH" `ChronoField/MONTH_OF_YEAR
-    "DAY" `ChronoField/DAY_OF_MONTH
-    "HOUR" `ChronoField/HOUR_OF_DAY
-    "MINUTE" `ChronoField/MINUTE_OF_HOUR
-    "SECOND" `ChronoField/SECOND_OF_MINUTE
-    "DOY" `ChronoField/DAY_OF_YEAR
-    "WEEK" `IsoFields/WEEK_OF_WEEK_BASED_YEAR
-    "QUARTER" `IsoFields/QUARTER_OF_YEAR))
+    "YEAR" `(TemporalMath/year ~epoch-day)
+    "MONTH" `(TemporalMath/month ~epoch-day)
+    "DAY" `(TemporalMath/dayOfMonth ~epoch-day)
+    "DOW" `(TemporalMath/dayOfWeek ~epoch-day)
+    "ISODOW" `(TemporalMath/isoDayOfWeek ~epoch-day)
+    "DOY" `(TemporalMath/dayOfYear ~epoch-day)
+    "WEEK" `(TemporalMath/isoWeek ~epoch-day)
+    "QUARTER" `(TemporalMath/quarter ~epoch-day)
+    nil))
+
+(defn- extract-local-ts-field-code [field local-ts ^long hz]
+  (or (extract-date-field-code field `(TemporalMath/epochDay ~local-ts ~hz))
+      (let [second-of-day `(TemporalMath/secondOfDay ~local-ts ~hz)]
+        (case field
+          "HOUR" `(int (quot ~second-of-day 3600))
+          "MINUTE" `(int (rem (quot ~second-of-day 60) 60))
+          "SECOND" `(int (rem ~second-of-day 60))))))
 
 (defmethod expr/codegen-call [:extract :utf8 :timestamp-tz] [{[{field :literal} _] :args, [_ ^VectorType$Mono ts-type] :arg-types}]
-  (let [ts-unit (st/timestamp-type->unit ts-type)
+  (let [hz (types/ts-units-per-second (st/timestamp-type->unit ts-type))
         tz (st/timestamp-type->tz ts-type)
-        zone-id-sym (gensym 'zone-id)]
+        zone-sym (-> (gensym 'zone) (expr/with-tag ZoneOffsets))]
     {:return-type #xt/type :i32
-     :batch-bindings [[zone-id-sym (ZoneId/of tz)]]
+     :batch-bindings [[zone-sym `(ZoneOffsets/of (ZoneId/of ~tz))]]
      :->call-code (fn [[_ x]]
-                    (let [zdt-sym (gensym 'zdt)]
-                      `(let [~zdt-sym ~(ts->zdt x ts-unit zone-id-sym)]
+                    (let [ts-sym (gensym 'ts)]
+                      `(let [~ts-sym ~x]
                          ~(case field
-                            "TIMEZONE_HOUR" `(-> (.getOffset ~zdt-sym) (.getTotalSeconds) (/ 3600) (int))
-                            "TIMEZONE_MINUTE" `(-> (.getOffset ~zdt-sym) (.getTotalSeconds) (/ 60) (rem 60) (int))
-                            "DOW" `(int (rem (.getValue (.getDayOfWeek ~zdt-sym)) 7))
-                            "ISODOW" `(.getValue (.getDayOfWeek ~zdt-sym))
-                            "EPOCH" `(int (.toEpochSecond ~zdt-sym))
-                            `(.get ~zdt-sym ~(time-field->ChronoField field))))))}))
+                            "TIMEZONE_HOUR" `(int (quot (.offsetAt ~zone-sym (Math/floorDiv ~ts-sym ~hz)) 3600))
+                            "TIMEZONE_MINUTE" `(int (rem (quot (.offsetAt ~zone-sym (Math/floorDiv ~ts-sym ~hz)) 60) 60))
+                            "EPOCH" `(int (Math/floorDiv ~ts-sym ~hz))
+                            (let [local-sym (gensym 'local-second)]
+                              `(let [~local-sym (TemporalMath/toLocal (Math/floorDiv ~ts-sym ~hz) 1 ~zone-sym)]
+                                 ~(extract-local-ts-field-code field local-sym 1)))))))}))
 
 (defmethod expr/codegen-call [:extract :utf8 :timestamp-local] [{[{field :literal} _] :args, [_ ^VectorType$Mono ts-type] :arg-types}]
-  (let [ts-unit (st/timestamp-type->unit ts-type)]
+  (let [hz (types/ts-units-per-second (st/timestamp-type->unit ts-type))]
     {:return-type #xt/type :i32
      :->call-code (fn [[_ x]]
-                    (let [ldt-sym (gensym 'ldt)]
-                      `(let [~ldt-sym ~(ts->ldt x ts-unit)]
+                    (let [ts-sym (gensym 'ts)]
+                      `(let [~ts-sym ~x]
                          ~(case field
                             "TIMEZONE_HOUR" (throw (err/unsupported ::expr/extract-not-supported
                                                                     "Extract \"TIMEZONE_HOUR\" not supported for type timestamp without timezone"
@@ -1521,28 +1499,16 @@
                             "EPOCH" (throw (err/unsupported ::expr/extract-not-supported
                                                             "Extract \"EPOCH\" not supported for type timestamp without timezone"
                                                             {:field :epoch, :source-type :timestamp-local}))
-                            "DOW" `(int (rem (.getValue (.getDayOfWeek ~ldt-sym)) 7))
-                            "ISODOW" `(.getValue (.getDayOfWeek ~ldt-sym))
-                            `(.get ~ldt-sym ~(time-field->ChronoField field))))))}))
+                            (extract-local-ts-field-code field ts-sym hz)))))}))
 
 (defmethod expr/codegen-call [:extract :utf8 :date] [{[{field :literal} _] :args}]
   ;; FIXME this assumes date-unit :day
   {:return-type #xt/type :i32
    :->call-code (fn [[_ epoch-day-code]]
-                  (let [ld-sym (gensym 'ld)]
-                    `(let [~ld-sym (LocalDate/ofEpochDay ~epoch-day-code)]
-                       ~(case field
-                          "YEAR" `(.getYear ~ld-sym)
-                          "MONTH" `(.getMonthValue ~ld-sym)
-                          "DAY" `(.getDayOfMonth ~ld-sym)
-                          "DOW" `(int (rem (.getValue (.getDayOfWeek ~ld-sym)) 7))
-                          "ISODOW" `(.getValue (.getDayOfWeek ~ld-sym))
-                          "DOY" `(.getDayOfYear ~ld-sym)
-                          "WEEK" `(.get ~ld-sym IsoFields/WEEK_OF_WEEK_BASED_YEAR)
-                          "QUARTER" `(.get ~ld-sym IsoFields/QUARTER_OF_YEAR)
-                          (throw (err/unsupported ::expr/extract-not-supported
-                                                  (format "Extract \"%s\" not supported for type date" field)
-                                                  {:field field, :source-type :date}))))))})
+                  (or (extract-date-field-code field epoch-day-code)
+                      (throw (err/unsupported ::expr/extract-not-supported
+                                              (format "Extract \"%s\" not supported for type date" field)
+                                              {:field field, :source-type :date}))))})
 
 (defmethod expr/codegen-call [:extract :utf8 :interval] [{[{field :literal} _] :args}]
   {:return-type #xt/type :i32
@@ -1573,92 +1539,79 @@
                                                (format "Extract \"%s\" not supported for type time without timezone" field)
                                                {:field field, :source-type :time-local})))))}))
 
-(defn field->truncate-fn
-  [field]
+(defn- truncate-date-code [field epoch-day]
   (case field
-    "MILLENNIUM" `(DateTruncator/truncateYear 1000)
-    "CENTURY" `(DateTruncator/truncateYear 100)
-    "DECADE" `(DateTruncator/truncateYear 10)
-    "YEAR" `(DateTruncator/truncateYear)
-    "QUARTER" `(DateTruncator/truncateQuarter)
-    "MONTH" `(DateTruncator/truncateMonth)
-    "WEEK" `(DateTruncator/truncateWeek)
-    `(.truncatedTo ~(case field
-                      "DAY" `ChronoUnit/DAYS
-                      "HOUR" `ChronoUnit/HOURS
-                      "MINUTE" `ChronoUnit/MINUTES
-                      "SECOND" `ChronoUnit/SECONDS
-                      "MILLISECOND" `ChronoUnit/MILLIS
-                      "MICROSECOND" `ChronoUnit/MICROS))))
+    "MILLENNIUM" `(TemporalMath/truncYear ~epoch-day 1000)
+    "CENTURY" `(TemporalMath/truncYear ~epoch-day 100)
+    "DECADE" `(TemporalMath/truncYear ~epoch-day 10)
+    "YEAR" `(TemporalMath/truncYear ~epoch-day 1)
+    "QUARTER" `(TemporalMath/truncQuarter ~epoch-day)
+    "MONTH" `(TemporalMath/truncMonth ~epoch-day)
+    "WEEK" `(TemporalMath/truncWeek ~epoch-day)
+    ("DAY" "HOUR" "MINUTE" "SECOND" "MILLISECOND" "MICROSECOND") epoch-day))
 
-;; 1. We pass in the arrow timestamp - essentially a Long with some units (ts-unit) and a timezone (tz)
-;; 2. Convert the tz to a ZoneId
-;; 3. We take the long and the units, and use these to create an Instant
-;; 4. We convert the instant to a ZonedDateTime with the ZoneId
-;; 5. We truncate the ZonedDateTime, to the equivalent `field` value
-;; 6. We convert the ZonedDateTime back to a Long with the same units as the input
-;; 7. The generated code returns the Long.
+(defn- truncate-local-ts-code [field local-ts ^long hz]
+  (letfn [(floor-to [^long len]
+            (if (<= len 1)
+              local-ts
+              `(Math/multiplyExact (Math/floorDiv ~local-ts ~len) ~len)))]
+    (case field
+      ("MILLENNIUM" "CENTURY" "DECADE" "YEAR" "QUARTER" "MONTH" "WEEK" "DAY")
+      `(TemporalMath/dayToLocal ~(truncate-date-code field `(TemporalMath/epochDay ~local-ts ~hz)) ~hz)
+
+      "HOUR" (floor-to (* hz 3600))
+      "MINUTE" (floor-to (* hz 60))
+      "SECOND" (floor-to hz)
+      "MILLISECOND" (floor-to (quot hz 1000))
+      "MICROSECOND" (floor-to (quot hz 1000000)))))
+
+(defn- truncate-tstz-code [field ts ^long hz zone-sym]
+  (let [ts-sym (gensym 'ts)
+        second-sym (gensym 'second)]
+    `(let [~ts-sym ~ts]
+       ~(case field
+          ;; offsets are whole seconds, so truncating below a second never moves the wall-clock second
+          ("MILLISECOND" "MICROSECOND") (truncate-local-ts-code field ts-sym hz)
+
+          `(let [~second-sym (Math/floorDiv ~ts-sym ~hz)]
+             (Math/multiplyExact (TemporalMath/fromLocalNear ~(truncate-local-ts-code field `(TemporalMath/toLocal ~second-sym 1 ~zone-sym) 1)
+                                                             1 ~zone-sym ~second-sym)
+                                 ~hz))))))
+
 (defmethod expr/codegen-call [:date_trunc :utf8 :timestamp-tz] [{[{field :literal} _] :args, [_ ^VectorType$Mono ts-type] :arg-types}]
-  (let [ts-unit (st/timestamp-type->unit ts-type)
+  (let [hz (types/ts-units-per-second (st/timestamp-type->unit ts-type))
         tz (st/timestamp-type->tz ts-type)
-        zone-id-sym (gensym 'zone-id)]
+        zone-sym (-> (gensym 'zone) (expr/with-tag ZoneOffsets))]
     {:return-type ts-type
-     :batch-bindings [[zone-id-sym (ZoneId/of tz)]]
+     :batch-bindings [[zone-sym `(ZoneOffsets/of (ZoneId/of ~tz))]]
      :->call-code (fn [[_ x]]
-                    (-> `(-> ~(ts->zdt x ts-unit zone-id-sym)
-                             ~(field->truncate-fn field))
-                        (zdt->ts ts-unit)))}))
+                    (truncate-tstz-code field x hz zone-sym))}))
 
 (defmethod expr/codegen-call [:date_trunc :utf8 :timestamp-local] [{[{field :literal} _] :args, [_ ^VectorType$Mono ts-type] :arg-types}]
-    (let [ts-unit (st/timestamp-type->unit ts-type)]
-      {:return-type ts-type
-       :->call-code (fn [[_ x]]
-                      (-> `(-> ~(ts->ldt x ts-unit)
-                               ~(field->truncate-fn field))
-                          (ldt->ts ts-unit)))}))
-
-;; 1. We pass in the arrow timestamp - essentially a Long with some units (ts-unit) and a timezone (tz), and we have a provided time_zone argument
-;; 2. Convert the time_zone to ZoneId
-;; 3. We take the long and the units, and use these to create an Instant
-;; 4. We convert the instant to a ZonedDateTime with the time_zone ZoneId
-;; 5. We truncate the ZonedDateTime, to the equivalent `field` value
-;; 6. We convert the ZonedDateTime back to a Long with the same units as the input
-;; 7. The generated code returns the Long, with the original tz from the args.
-(defmethod expr/codegen-call [:date_trunc :utf8 :timestamp-tz :utf8] [{[{field :literal} _ {trunc-tz :literal}] :args, [_ ^VectorType$Mono ts-type _] :arg-types}]
-  (let [ts-unit (st/timestamp-type->unit ts-type)
-        trunc-zone-id-sym (gensym 'zone-id)]
+  (let [hz (types/ts-units-per-second (st/timestamp-type->unit ts-type))]
     {:return-type ts-type
-     :batch-bindings [[trunc-zone-id-sym (try
-                                           (ZoneId/of trunc-tz)
-                                           (catch DateTimeException e
-                                             (throw (err/incorrect ::expr/invalid-timezone (ex-message e)
-                                                                     {:timezone trunc-tz
-                                                                      ::err/cause e}))))]]
      :->call-code (fn [[_ x]]
-                    (-> `(-> ~(ts->zdt x ts-unit trunc-zone-id-sym)
-                             ~(field->truncate-fn field))
-                        (zdt->ts ts-unit)))}))
+                    (truncate-local-ts-code field x hz))}))
+
+(defmethod expr/codegen-call [:date_trunc :utf8 :timestamp-tz :utf8] [{[{field :literal} _ {trunc-tz :literal}] :args, [_ ^VectorType$Mono ts-type _] :arg-types}]
+  (let [hz (types/ts-units-per-second (st/timestamp-type->unit ts-type))
+        trunc-zone-id (try
+                        (ZoneId/of trunc-tz)
+                        (catch DateTimeException e
+                          (throw (err/incorrect ::expr/invalid-timezone (ex-message e)
+                                                {:timezone trunc-tz
+                                                 ::err/cause e}))))
+        zone-sym (-> (gensym 'trunc-zone) (expr/with-tag ZoneOffsets))]
+    {:return-type ts-type
+     :batch-bindings [[zone-sym `(ZoneOffsets/of (ZoneId/of ~(str trunc-zone-id)))]]
+     :->call-code (fn [[_ x]]
+                    (truncate-tstz-code field x hz zone-sym))}))
 
 (defmethod expr/codegen-call [:date_trunc :utf8 :date] [{[{field :literal} _] :args, [_ date-type] :arg-types}]
   ;; FIXME this assumes epoch-day
   {:return-type date-type
    :->call-code (fn [[_ epoch-day-code]]
-                  `(-> (LocalDate/ofEpochDay ~epoch-day-code)
-                       ~(case field
-                         "MILLENNIUM" `(DateTruncator/truncateYear 1000)
-                         "CENTURY" `(DateTruncator/truncateYear 100)
-                         "DECADE" `(DateTruncator/truncateYear 10)
-                         "YEAR" `(DateTruncator/truncateYear)
-                         "QUARTER" `(DateTruncator/truncateQuarter)
-                         "MONTH" `(DateTruncator/truncateMonth)
-                         "WEEK" `(DateTruncator/truncateWeek)
-                         "DAY" `(identity)
-                         "HOUR" `(identity)
-                         "MINUTE" `(identity)
-                         "SECOND" `(identity)
-                         "MILLISECOND" `(identity)
-                         "MICROSECOND" `(identity))
-                       (.toEpochDay)))})
+                  (truncate-date-code field epoch-day-code))})
 
 (defn ->period-duration
   ([^Period p]
@@ -1714,37 +1667,17 @@
                       "MILLISECOND" `(->period-duration ~period (.truncatedTo ~duration ChronoUnit/MILLIS))
                       "MICROSECOND" `(->period-duration ~period (.truncatedTo ~duration ChronoUnit/MICROS)))))})
 
-(defn ->md*-interval-between [^LocalDateTime end-dt ^LocalDateTime start-dt]
-  (let [period-between (Period/between (.toLocalDate start-dt) (.toLocalDate end-dt))
-        period-days (.getDays period-between)
-        duration-between (Duration/between start-dt end-dt)
-        start-lt (.toLocalTime start-dt)
-        end-lt (.toLocalTime end-dt)
-        period-day-adjustment (cond
-                                (and (.isNegative period-between)
-                                     (.isBefore start-lt end-lt))
-                                1
-
-                                (and (not (.isNegative period-between))
-                                     (not= period-days 0)
-                                     (.isAfter start-lt end-lt))
-                                -1
-
-                                :else 0)
-        adjusted-period (.plusDays period-between period-day-adjustment)
-        adjusted-duration (.minusDays duration-between (.toDays duration-between))]
-    (PeriodDuration. adjusted-period adjusted-duration)))
-
 (defmethod expr/codegen-call [:age :timestamp-local :timestamp-local] [{[^VectorType$Mono x-type, ^VectorType$Mono y-type] :arg-types}]
   (let [x-unit (st/timestamp-type->unit x-type)
-        y-unit (st/timestamp-type->unit y-type)]
+        y-unit (st/timestamp-type->unit y-type)
+        ->age-code (fn [x y]
+                     `(TemporalMath/ageInterval ~x ~(types/ts-units-per-second x-unit) ~y ~(types/ts-units-per-second y-unit)))]
     (if (or (= :nano x-unit) (= :nano y-unit))
       {:return-type #xt/type [:interval :month-day-nano]
-       :->call-code (fn [[x y]] `(->md*-interval-between ~(ts->ldt x x-unit) ~(ts->ldt y y-unit)))}
+       :->call-code (fn [[x y]] (->age-code x y))}
       {:return-type #xt/type [:interval :month-day-micro]
        :->call-code (fn [[x y]]
-                      `(time/alter-md*-interval-precision 6
-                        (->md*-interval-between ~(ts->ldt x x-unit) ~(ts->ldt y y-unit))))})))
+                      `(time/alter-md*-interval-precision 6 ~(->age-code x y)))})))
 
 ;; Cast and call for timestamp tz and mixed types
 (doseq [x [:timestamp-tz :timestamp-local]
@@ -1819,9 +1752,10 @@
   ;; Type doesn't support TZ-aware dates
   {:return-type #xt/type [:date :day]
    :->call-code (fn [_]
-                  `(long (-> (ZonedDateTime/ofInstant (expr/current-time) ZoneOffset/UTC)
-                             (.toLocalDate)
-                             (.toEpochDay))))})
+                  `(TemporalMath/epochDay (.getEpochSecond (expr/current-time)) 1))})
+
+(defn- nano-of-day-code [local-second-code nano-code]
+  `(+ (* (TemporalMath/unitOfDay ~local-second-code 1) 1000000000) ~nano-code))
 
 (defn- current-time [^long precision]
   ;; TODO check the specs on this one - I read the SQL spec as being returned in local,
@@ -1830,11 +1764,10 @@
   (let [precision (bound-precision precision) ]
     {:return-type (st/->type [:time-local (precision-timeunits precision)])
      :->call-code (fn [_]
-                    (-> `(long (-> (ZonedDateTime/ofInstant (expr/current-time) ZoneOffset/UTC)
-                                   (.toLocalTime)
-                                   (.toNanoOfDay)
-                                   (quot ~(nanos-divisor precision))))
-                        (truncate-for-precision precision)))}))
+                    (let [now-sym (gensym 'now)]
+                      (-> `(let [~now-sym (expr/current-time)]
+                             (quot ~(nano-of-day-code `(.getEpochSecond ~now-sym) `(.getNano ~now-sym)) ~(nanos-divisor precision)))
+                          (truncate-for-precision precision))))}))
 
 (defmethod expr/codegen-call [:current_time] [_]
   (current-time default-time-precision))
@@ -1844,20 +1777,21 @@
   (current-time precision))
 
 (defmethod expr/codegen-call [:local_date] [_]
-  {:return-type #xt/type [:date :day]
-   :->call-code (fn [_]
-                  `(long (-> (ZonedDateTime/ofInstant (expr/current-time) expr/*default-tz*)
-                             (.toLocalDate)
-                             (.toEpochDay))))})
+  (let [[zone-sym zone-binding] (default-zone-binding)]
+    {:return-type #xt/type [:date :day]
+     :batch-bindings [zone-binding]
+     :->call-code (fn [_]
+                    `(TemporalMath/epochDay (TemporalMath/toLocal (.getEpochSecond (expr/current-time)) 1 ~zone-sym) 1))}))
 
 (defn- local-timestamp [^long precision]
-  (let [precision (bound-precision precision)]
+  (let [precision (bound-precision precision)
+        [zone-sym zone-binding] (default-zone-binding)]
     {:return-type (st/->type [:timestamp-local (precision-timeunits precision)])
+     :batch-bindings [zone-binding]
      :->call-code (fn [_]
-                    (-> `(long (let [ldt# (-> (ZonedDateTime/ofInstant (expr/current-time) expr/*default-tz*)
-                                              (.toLocalDateTime))]
-                                 (+ (* (.toEpochSecond ldt# ZoneOffset/UTC) ~(seconds-multiplier precision))
-                                    (quot (.getNano ldt#) ~(nanos-divisor precision)))))
+                    (-> `(let [now# (expr/current-time)]
+                           (+ (* (TemporalMath/toLocal (.getEpochSecond now#) 1 ~zone-sym) ~(seconds-multiplier precision))
+                              (quot (.getNano now#) ~(nanos-divisor precision))))
                         (truncate-for-precision precision)))}))
 
 (defmethod expr/codegen-call [:local_timestamp] [_]
@@ -1868,14 +1802,16 @@
   (local-timestamp precision))
 
 (defn- local-time [^long precision]
-  (let [precision (bound-precision precision)]
+  (let [precision (bound-precision precision)
+        [zone-sym zone-binding] (default-zone-binding)]
     {:return-type (st/->type [:time-local (precision-timeunits precision)])
+     :batch-bindings [zone-binding]
      :->call-code (fn [_]
-                    (-> `(long (-> (ZonedDateTime/ofInstant (expr/current-time) expr/*default-tz*)
-                                   (.toLocalTime)
-                                   (.toNanoOfDay)
-                                   (quot ~(nanos-divisor precision))))
-                        (truncate-for-precision precision)))}))
+                    (let [now-sym (gensym 'now)]
+                      (-> `(let [~now-sym (expr/current-time)]
+                             (quot ~(nano-of-day-code `(TemporalMath/toLocal (.getEpochSecond ~now-sym) 1 ~zone-sym) `(.getNano ~now-sym))
+                                   ~(nanos-divisor precision)))
+                          (truncate-for-precision precision))))}))
 
 (defmethod expr/codegen-call [:local_time] [_]
   (local-time default-time-precision))
@@ -2171,31 +2107,20 @@
      :->call-code (fn [[i-code from-code to-code origin-code]]
                     (->call-code [i-code (->from-code [from-code]) (->to-code [to-code]) (->origin-code [origin-code])]))}))
 
-(defn date-series [^LocalDate from, ^LocalDate to, ^PeriodDuration stride, inclusive?]
-  (assert (= Duration/ZERO (.getDuration stride))
-          "date-series only supports zero-duration strides")
-
-  (let [period (.getPeriod stride)
-        months (+ (* (.getYears period) 12) (.getMonths period))
-        el-box (ValueBox.)
-        pred (if inclusive?
-               #(not (pos? (compare % to)))
-               #(neg? (compare % to)))
-
-        ;; we eagerly evaluate here because (unlike the ints version)
-        ;; every entry will need to calculate the one before anyway
-        res (->> (iterate (fn [^LocalDate acc]
-                            (.plusMonths acc months))
-                          from)
-                 (into [] (take-while pred)))]
-
+(defn long-array-reader ^xtdb.arrow.ListValueReader [^longs values]
+  (let [el-box (ValueBox.)]
     (reify ListValueReader
-      (size [_]
-        (count res))
+      (size [_] (alength values))
 
       (nth [_ idx]
         (doto el-box
-          (.writeLong (.toEpochDay ^LocalDate (nth res idx))))))))
+          (.writeLong (aget values idx)))))))
+
+(defn date-series ^xtdb.arrow.ListValueReader [^long from, ^long to, ^PeriodDuration stride, inclusive?]
+  (assert (= Duration/ZERO (.getDuration stride))
+          "date-series only supports zero-duration strides")
+
+  (long-array-reader (TemporalMath/dateSeries from to (.toTotalMonths (.getPeriod stride)) (boolean inclusive?))))
 
 (defmethod expr/codegen-call [:generate_series :date :date :interval] [expr]
   (expr/delegate-exclusive-default expr))
@@ -2213,31 +2138,16 @@
     (case i-unit
       :year-month {:return-type #xt/type [:list [:date :day]]
                    :->call-code (fn [[x-arg y-arg stride inclusive?]]
-                                  `(date-series (LocalDate/ofEpochDay ~x-arg) (LocalDate/ofEpochDay ~y-arg) ~stride (boolean ~inclusive?)))}
+                                  `(date-series ~x-arg ~y-arg ~stride ~inclusive?))}
       :month-day-micro (recall-with-cast3 expr [:timestamp-local :micro] [:timestamp-local :micro] [:interval :month-day-micro])
       :month-day-nano (recall-with-cast3 expr [:timestamp-local :nano] [:timestamp-local :nano] [:interval :month-day-nano]))))
 
-(defn ts-series [^LocalDateTime from, ^LocalDateTime to, ^PeriodDuration stride, write-ldt, inclusive?]
-  (let [period (.getPeriod stride)
-        duration (.getDuration stride)
-        el-box (ValueBox.)
-        pred (if inclusive?
-               #(not (pos? (compare % to)))
-               #(neg? (compare % to)))
-
-        ;; we eagerly evaluate here because (unlike the ints version)
-        ;; every entry will need to calculate the one before anyway
-        res (->> (iterate (fn [^LocalDateTime acc]
-                            (-> acc (.plus period) (.plus duration)))
-                          from)
-                 (into [] (take-while pred)))]
-
-    (reify ListValueReader
-      (size [_] (count res))
-
-      (nth [_ idx]
-        (doto el-box
-          (write-ldt (nth res idx)))))))
+(defn- series-out-unit [from-unit to-unit i-unit]
+  (types/smallest-ts-unit from-unit to-unit
+                          (case i-unit
+                            :year-month :second
+                            :month-day-nano :nano
+                            :month-day-micro :micro)))
 
 (defmethod expr/codegen-call [:generate_series :timestamp-local :timestamp-local :interval] [expr]
   (expr/delegate-exclusive-default expr))
@@ -2245,69 +2155,29 @@
 (defmethod expr/codegen-call [:generate_series :timestamp-local :timestamp-local :interval :bool] [{[^VectorType$Mono from-type, ^VectorType$Mono to-type, ^VectorType$Mono i-type] :arg-types}]
   (let [from-unit (st/timestamp-type->unit from-type)
         to-unit (st/timestamp-type->unit to-type)
-        i-unit (st/interval-type->unit i-type)
-        out-unit (types/smallest-ts-unit from-unit to-unit
-                                         (case i-unit
-                                           :year-month :second
-                                           :month-day-nano :nano
-                                           :month-day-micro :micro))]
+        out-unit (series-out-unit from-unit to-unit (st/interval-type->unit i-type))]
     {:return-type (st/->type [:list [:timestamp-local out-unit]])
      :->call-code (fn [[from-arg to-arg i-arg inclusive?]]
-                    (-> `(ts-series ~(ts->ldt from-arg from-unit)
-                                    ~(ts->ldt to-arg to-unit)
-                                    ~i-arg
-                                    ~(let [ldt-sym (gensym 'ldt)]
-                                       `(fn ~'write-ldt [^ValueBox box#, ~(-> ldt-sym (expr/with-tag LocalDateTime))]
-                                          (.writeLong box# ~(ldt->ts ldt-sym out-unit))))
-                                    (boolean ~inclusive?))))}))
-
-(defn tstz-series [^ZonedDateTime from, ^ZonedDateTime to, ^PeriodDuration stride, write-zdt, inclusive?]
-  (let [period (.getPeriod stride)
-        duration (.getDuration stride)
-        el-box (ValueBox.)
-        pred (if inclusive?
-               #(not (pos? (compare % to)))
-               #(neg? (compare % to)))
-
-        ;; we eagerly evaluate here because (unlike the ints version)
-        ;; every entry will need to calculate the one before anyway
-        res (->> (iterate (fn [^ZonedDateTime acc]
-                            (-> acc (.plus period) (.plus duration)))
-                          from)
-                 (into [] (take-while pred)))]
-
-    (reify ListValueReader
-      (size [_] (count res))
-
-      (nth [_ idx]
-        (doto el-box
-          (write-zdt (nth res idx)))))))
+                    `(long-array-reader
+                      (TemporalMath/localSeries ~from-arg ~(types/ts-units-per-second from-unit)
+                                                ~to-arg ~(types/ts-units-per-second to-unit)
+                                                ~i-arg ~(types/ts-units-per-second out-unit)
+                                                (boolean ~inclusive?))))}))
 
 (defmethod expr/codegen-call [:generate_series :timestamp-tz :timestamp-tz :interval] [expr]
   (expr/delegate-exclusive-default expr))
 
 (defmethod expr/codegen-call [:generate_series :timestamp-tz :timestamp-tz :interval :bool] [{[^VectorType$Mono from-type, ^VectorType$Mono to-type, ^VectorType$Mono i-type] :arg-types}]
-  (let [from-unit (st/timestamp-type->unit from-type)
-        to-unit (st/timestamp-type->unit to-type)
-        from-tz (st/timestamp-type->tz from-type)
-        to-tz (st/timestamp-type->tz to-type)
-        i-unit (st/interval-type->unit i-type)
-        out-unit (types/smallest-ts-unit from-unit to-unit
-                                         (case i-unit
-                                           :year-month :second
-                                           :month-day-nano :nano
-                                           :month-day-micro :micro))
-        out-tz-sym (gensym 'out-tz)
-        out-tz (if (= from-tz to-tz) from-tz "UTC")]
+  (let [[from-unit from-tz] (st/timestamp-type->unit+tz from-type)
+        [to-unit to-tz] (st/timestamp-type->unit+tz to-type)
+        out-unit (series-out-unit from-unit to-unit (st/interval-type->unit i-type))
+        out-tz (if (= from-tz to-tz) from-tz "UTC")
+        zone-sym (-> (gensym 'out-zone) (expr/with-tag ZoneOffsets))]
     {:return-type (st/->type [:list [:timestamp-tz out-unit out-tz]])
-     :batch-bindings [[out-tz-sym (ZoneId/of out-tz)]]
+     :batch-bindings [[zone-sym `(ZoneOffsets/of (ZoneId/of ~out-tz))]]
      :->call-code (fn [[from-arg to-arg i-arg inclusive?]]
-                    (-> `(tstz-series ~(ts->zdt from-arg from-unit out-tz-sym)
-                                      ~(ts->zdt to-arg to-unit out-tz-sym)
-                                      ~i-arg
-                                      ~(let [zdt-sym (gensym 'zdt)]
-                                         `(fn ~'write-zdt [^ValueBox box#, ~(-> zdt-sym (expr/with-tag ZonedDateTime))]
-                                            (.writeLong box# ~(zdt->ts zdt-sym out-unit))))
-                                      (boolean ~inclusive?))))}))
-
-
+                    `(long-array-reader
+                      (TemporalMath/tzSeries ~from-arg ~(types/ts-units-per-second from-unit)
+                                             ~to-arg ~(types/ts-units-per-second to-unit)
+                                             ~zone-sym ~i-arg ~(types/ts-units-per-second out-unit)
+                                             (boolean ~inclusive?))))}))
