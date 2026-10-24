@@ -139,6 +139,8 @@ class DenseUnionVector private constructor(
         private val reader: LegReader = LegReader(valueCount, typeBuffer, offsetBuffer, false, typeId, inner, nested)
     ) : VectorReader by reader, VectorWriter {
 
+        fun getOffset(idx: Int) = reader.getOffset(idx)
+
         override val listElements get() = inner.listElements
 
         override fun vectorForOrNull(name: String) =

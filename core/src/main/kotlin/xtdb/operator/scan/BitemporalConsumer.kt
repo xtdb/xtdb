@@ -74,8 +74,9 @@ class BitemporalConsumer private constructor(
 
             val putLeg = rel["op"].vectorForOrNull("put")?.takeIf { !it.keyNames.isNullOrEmpty() }
 
-            if (MASKED && putLeg is DenseUnionVector.LegReader && isStrictlyIncreasing(selArray)) {
+            if (MASKED && putLeg is DenseUnionVector.LegVector && isStrictlyIncreasing(selArray)) {
                 // DART (#6285 avenue B): the mask lives in the put struct's own index space - offsets within one leg are monotonic
+                if (!loggedMasked) { loggedMasked = true; System.err.println("DART-6285-B: masked scan engaged") }
                 val putStruct = putLeg.inner
                 val structCount = putStruct.valueCount
                 val mask = java.util.BitSet(structCount)
@@ -123,6 +124,9 @@ class BitemporalConsumer private constructor(
     companion object {
         @JvmField
         val MASKED: Boolean = System.getProperty("xtdb.masked", "true").toBoolean()
+
+        @Volatile
+        var loggedMasked = false
 
         fun open(al: BufferAllocator, rels: List<RelationReader>, colNames: List<ColumnName>): BitemporalConsumer {
             val hasValidFrom = "_valid_from" in colNames
