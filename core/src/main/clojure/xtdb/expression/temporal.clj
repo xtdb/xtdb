@@ -103,13 +103,6 @@
     :micro `(time/micros->instant ~form)
     :nano `(time/nanos->instant ~form)))
 
-(defn- inst->ts [form ts-unit]
-  (case ts-unit
-    :second `(.getEpochSecond ~form)
-    :milli `(.toEpochMilli ~form)
-    :micro `(time/instant->micros ~form)
-    :nano `(time/instant->nanos ~form)))
-
 (defn- ts->zdt [form ts-unit tz-sym]
   `(ZonedDateTime/ofInstant ~(ts->inst form ts-unit) ~tz-sym))
 
@@ -170,107 +163,111 @@
         tgt-tsunit (st/duration-type->unit target-type)]
     {:return-type target-type, :->call-code (comp #(with-conversion % src-tsunit tgt-tsunit) first)}))
 
+(defn- with-floored-conversion [form from-unit to-unit]
+  (let [from-hz (types/ts-units-per-second from-unit)
+        to-hz (types/ts-units-per-second to-unit)]
+    (if (> from-hz to-hz)
+      `(Math/floorDiv ~form ~(quot from-hz to-hz))
+      (with-conversion form from-unit to-unit))))
+
+(defn- default-zone-binding []
+  (let [zone-sym (-> (gensym 'default-zone) (expr/with-tag ZoneOffsets))]
+    [zone-sym [zone-sym `(ZoneOffsets/of expr/*default-tz*)]]))
+
 (defmethod expr/codegen-cast [:date :timestamp-local] [{:keys [^VectorType target-type]}]
-  (let [tgt-tsunit (st/timestamp-type->unit target-type)]
+  (let [hz (types/ts-units-per-second (st/timestamp-type->unit target-type))]
     {:return-type target-type
      :->call-code (fn [[dt]]
-                    `(-> (LocalDate/ofEpochDay ~dt)
-                         (.atStartOfDay ZoneOffset/UTC)
-                         (.toEpochSecond)
-                         (Math/multiplyExact ~(types/ts-units-per-second tgt-tsunit))))}))
+                    `(TemporalMath/dayToLocal ~dt ~hz))}))
 
 (defmethod expr/codegen-cast [:date :timestamp-tz] [{:keys [^VectorType target-type]}]
-  (let [tgt-tsunit (st/timestamp-type->unit target-type)]
+  (let [hz (types/ts-units-per-second (st/timestamp-type->unit target-type))
+        [zone-sym zone-binding] (default-zone-binding)]
     {:return-type target-type
+     :batch-bindings [zone-binding]
      :->call-code (fn [[dt]]
-                    (-> `(-> (LocalDate/ofEpochDay ~dt)
-                             (.atStartOfDay expr/*default-tz*)
-                             (.toInstant))
-                        (inst->ts tgt-tsunit)))}))
+                    `(TemporalMath/startOfDay ~dt ~hz ~zone-sym))}))
+
+(defn- today-code [zone-sym]
+  `(TemporalMath/epochDay (TemporalMath/toLocal (.getEpochSecond (expr/current-time)) 1 ~zone-sym) 1))
 
 (defmethod expr/codegen-cast [:time-local :timestamp-local] [{:keys [^VectorType source-type, ^VectorType target-type]}]
   (let [src-tsunit (st/time-type->unit source-type)
-        tgt-tsunit (st/timestamp-type->unit target-type)]
+        tgt-tsunit (st/timestamp-type->unit target-type)
+        [zone-sym zone-binding] (default-zone-binding)]
     {:return-type target-type
+     :batch-bindings [zone-binding]
      :->call-code (fn [[tm]]
-                    (-> `(LocalDateTime/of (LocalDate/ofInstant (expr/current-time) expr/*default-tz*)
-                                           (LocalTime/ofNanoOfDay ~(with-conversion tm src-tsunit :nano)))
-                        (ldt->ts tgt-tsunit)))}))
+                    `(Math/addExact (TemporalMath/dayToLocal ~(today-code zone-sym) ~(types/ts-units-per-second tgt-tsunit))
+                                    ~(with-conversion tm src-tsunit tgt-tsunit)))}))
 
 (defmethod expr/codegen-cast [:time-local :timestamp-tz] [{:keys [^VectorType source-type, ^VectorType target-type]}]
   (let [src-tsunit (st/time-type->unit source-type)
-        tgt-tsunit (st/timestamp-type->unit target-type)]
+        tgt-tsunit (st/timestamp-type->unit target-type)
+        hz (types/ts-units-per-second tgt-tsunit)
+        [zone-sym zone-binding] (default-zone-binding)]
     {:return-type target-type
+     :batch-bindings [zone-binding]
      :->call-code (fn [[tm]]
-                    (-> `(-> (ZonedDateTime/of (LocalDate/ofInstant (expr/current-time) expr/*default-tz*)
-                                               (LocalTime/ofNanoOfDay ~(with-conversion tm src-tsunit :nano))
-                                               expr/*default-tz*)
-                             (.toInstant))
-                        (inst->ts tgt-tsunit)))}))
+                    `(TemporalMath/fromLocal (Math/addExact (TemporalMath/dayToLocal ~(today-code zone-sym) ~hz)
+                                                            ~(with-conversion tm src-tsunit tgt-tsunit))
+                                             ~hz ~zone-sym))}))
 
 (defmethod expr/codegen-cast [:timestamp-local :date] [{:keys [^VectorType source-type, ^VectorType target-type]}]
-  (let [src-tsunit (st/timestamp-type->unit source-type)]
+  (let [hz (types/ts-units-per-second (st/timestamp-type->unit source-type))]
     {:return-type target-type
      :->call-code (fn [[ts]]
-                    `(-> ~(ts->ldt ts src-tsunit)
-                         (.toLocalDate)
-                         (.toEpochDay)))}))
+                    `(TemporalMath/epochDay ~ts ~hz))}))
 
 (defmethod expr/codegen-cast [:timestamp-local :time-local] [{:keys [^VectorType source-type, ^VectorType target-type]}]
   (let [src-tsunit (st/timestamp-type->unit source-type)
         tgt-tsunit (st/time-type->unit target-type)]
     {:return-type target-type
      :->call-code (fn [[ts]]
-                    (-> `(-> ~(ts->ldt ts src-tsunit)
-                             (.toLocalTime)
-                             (.toNanoOfDay))
-                        (with-conversion :nano tgt-tsunit)))}))
+                    (-> `(TemporalMath/unitOfDay ~ts ~(types/ts-units-per-second src-tsunit))
+                        (with-conversion src-tsunit tgt-tsunit)))}))
 
 (defmethod expr/codegen-cast [:timestamp-local :timestamp-tz] [{:keys [^VectorType source-type, ^VectorType target-type]}]
   (let [src-tsunit (st/timestamp-type->unit source-type)
-        tgt-tsunit (st/timestamp-type->unit target-type)]
+        tgt-tsunit (st/timestamp-type->unit target-type)
+        [zone-sym zone-binding] (default-zone-binding)]
     {:return-type target-type
+     :batch-bindings [zone-binding]
      :->call-code (fn [[ts]]
-                    (-> `(-> ~(ts->ldt ts src-tsunit)
-                             (.atZone expr/*default-tz*)
-                             (.toInstant))
-                        (inst->ts tgt-tsunit)))}))
+                    (-> `(TemporalMath/fromLocal ~ts ~(types/ts-units-per-second src-tsunit) ~zone-sym)
+                        (with-floored-conversion src-tsunit tgt-tsunit)))}))
 
 (defmethod expr/codegen-cast [:timestamp-tz :date] [{:keys [^VectorType source-type, ^VectorType target-type]}]
-  (let [[src-tsunit src-tz] (st/timestamp-type->unit+tz source-type)
-        src-tz-sym (gensym 'src-tz)]
+  (let [hz (types/ts-units-per-second (st/timestamp-type->unit source-type))
+        [zone-sym zone-binding] (default-zone-binding)]
     {:return-type target-type
-     :batch-bindings [[src-tz-sym `(ZoneId/of ~src-tz)]]
+     :batch-bindings [zone-binding]
      :->call-code (fn [[tstz]]
-                    `(-> ~(ts->zdt tstz src-tsunit src-tz-sym)
-                         (.withZoneSameInstant expr/*default-tz*)
-                         (.toLocalDate)
-                         (.toEpochDay)))}))
+                    `(TemporalMath/epochDay (TemporalMath/toLocal (Math/floorDiv ~tstz ~hz) 1 ~zone-sym) 1))}))
 
 (defmethod expr/codegen-cast [:timestamp-tz :time-local] [{:keys [^VectorType source-type, ^VectorType target-type]}]
-  (let [[src-tsunit src-tz] (st/timestamp-type->unit+tz source-type)
+  (let [src-tsunit (st/timestamp-type->unit source-type)
         tgt-tsunit (st/time-type->unit target-type)
-        src-tz-sym (gensym 'src-tz)]
+        hz (types/ts-units-per-second src-tsunit)
+        [zone-sym zone-binding] (default-zone-binding)]
     {:return-type target-type
-     :batch-bindings [[src-tz-sym `(ZoneId/of ~src-tz)]]
+     :batch-bindings [zone-binding]
      :->call-code (fn [[tstz]]
-                    (-> `(-> ~(ts->zdt tstz src-tsunit src-tz-sym)
-                             (.withZoneSameInstant expr/*default-tz*)
-                             (.toLocalTime)
-                             (.toNanoOfDay))
-                        (with-conversion :nano tgt-tsunit)))}))
+                    (let [ts-sym (gensym 'ts)]
+                      (-> `(let [~ts-sym ~tstz]
+                             (+ (* (TemporalMath/unitOfDay (TemporalMath/toLocal (Math/floorDiv ~ts-sym ~hz) 1 ~zone-sym) 1) ~hz)
+                                (Math/floorMod ~ts-sym ~hz)))
+                          (with-conversion src-tsunit tgt-tsunit))))}))
 
 (defmethod expr/codegen-cast [:timestamp-tz :timestamp-local] [{:keys [^VectorType source-type, ^VectorType target-type]}]
-  (let [[src-tsunit src-tz] (st/timestamp-type->unit+tz source-type)
+  (let [src-tsunit (st/timestamp-type->unit source-type)
         tgt-tsunit (st/timestamp-type->unit target-type)
-        src-tz-sym (gensym 'src-tz)]
+        [zone-sym zone-binding] (default-zone-binding)]
     {:return-type target-type
-     :batch-bindings [[src-tz-sym `(ZoneId/of ~src-tz)]]
+     :batch-bindings [zone-binding]
      :->call-code (fn [[tstz]]
-                    (-> `(-> ~(ts->zdt tstz src-tsunit src-tz-sym)
-                             (.withZoneSameInstant expr/*default-tz*)
-                             (.toLocalDateTime))
-                        (ldt->ts tgt-tsunit)))}))
+                    (-> `(TemporalMath/toLocal ~tstz ~(types/ts-units-per-second src-tsunit) ~zone-sym)
+                        (with-floored-conversion src-tsunit tgt-tsunit)))}))
 
 (defmethod expr/codegen-cast [:time-local :duration] [{:keys [^VectorType source-type, ^VectorType target-type]}]
   (let [src-tsunit (st/time-type->unit source-type)

@@ -55,7 +55,9 @@
                         first :res))
       (.getYear zdt) '(extract "YEAR" ?zdt)
       (.getHour zdt) '(extract "HOUR" ?zdt)
-      (.truncatedTo zdt ChronoUnit/DAYS) '(date_trunc "DAY" ?zdt))))
+      (.truncatedTo zdt ChronoUnit/DAYS) '(date_trunc "DAY" ?zdt)
+      (.toLocalDate zdt) '(cast ?zdt #xt/type [:date :day])
+      (.toLocalTime zdt) '(cast ?zdt #xt/type [:time-local :micro]))))
 
 (t/deftest test-cast-temporal
   (let [current-time #xt/instant "2022-08-16T20:04:14.423452Z"]
@@ -1957,3 +1959,26 @@
     (LocalDateTime/parse "1969-12-31T23:59") '(date_trunc "MINUTE" a)
     (LocalDate/parse "1969-12-31") '(cast a #xt/type [:date :day])
     (LocalTime/parse "23:59:59.5") '(cast a #xt/type [:time-local :micro])))
+
+(t/deftest pre-epoch-casts-between-timestamp-types-floor-to-the-coarser-unit
+  (letfn [(project [expr]
+            (-> (tu/query-ra [:project {:projections [{'res expr}]} [:table {:rows [{}]}]]
+                             {:default-tz ZoneOffset/UTC})
+                first :res))]
+    (t/is (= (Instant/parse "1969-12-31T23:59:59.999999Z")
+             (.toInstant ^ZonedDateTime
+                         (project '(cast (cast "1969-12-31T23:59:59.999999999" #xt/type [:timestamp-local :nano] {:precision 9})
+                                         #xt/type [:timestamp-tz :micro "UTC"])))))
+
+    (t/is (= (LocalDateTime/parse "1969-12-31T23:59:59.999999")
+             (project '(cast (cast "1969-12-31T23:59:59.999999999Z" #xt/type [:timestamp-tz :nano "UTC"] {:precision 9})
+                             #xt/type [:timestamp-local :micro]))))))
+
+(t/deftest date-starts-where-a-midnight-gap-ends
+  (let [zone (ZoneId/of "America/Sao_Paulo")
+        [{^ZonedDateTime res :res}] (tu/query-ra [:project {:projections [{'res '(cast (cast "2018-11-04" #xt/type [:date :day])
+                                                                                       #xt/type [:timestamp-tz :micro "America/Sao_Paulo"])}]}
+                                                  [:table {:rows [{}]}]]
+                                                 {:default-tz zone})]
+    (t/is (= (.toInstant (.atStartOfDay (LocalDate/parse "2018-11-04") zone))
+             (.toInstant res)))))

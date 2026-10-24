@@ -35,8 +35,22 @@ object TemporalMath {
         return subtractExact(localTs, multiplyExact(offset.toLong(), hz))
     }
 
+    /** resolves [localTs] in [zone] as `LocalDateTime.atZone` does */
+    @JvmStatic
+    fun fromLocal(localTs: Long, hz: Long, zone: ZoneOffsets): Long {
+        val offset = zone.offsetForLocal(floorDiv(localTs, hz), ZoneOffsets.NO_PREFERRED_OFFSET)
+        return subtractExact(localTs, multiplyExact(offset.toLong(), hz))
+    }
+
+    @JvmStatic
+    fun startOfDay(epochDay: Long, hz: Long, zone: ZoneOffsets): Long = multiplyExact(zone.startOfDay(epochDay), hz)
+
     @JvmStatic
     fun epochDay(localTs: Long, hz: Long): Long = floorDiv(localTs, hz * SECS_PER_DAY)
+
+    /** units since midnight, in the timestamp's own unit */
+    @JvmStatic
+    fun unitOfDay(localTs: Long, hz: Long): Long = floorMod(localTs, hz * SECS_PER_DAY)
 
     @JvmStatic
     fun dayToLocal(epochDay: Long, hz: Long): Long = multiplyExact(epochDay, hz * SECS_PER_DAY)

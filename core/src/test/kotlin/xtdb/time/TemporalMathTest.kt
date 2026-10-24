@@ -53,6 +53,7 @@ class TemporalMathTest {
         val local = TemporalMath.toLocal(ts, hz, ZoneOffsets.of(zone))
         assertEquals(ldt.toLocalDate().toEpochDay(), TemporalMath.epochDay(local, hz), "epoch day $zone $ts/$hz")
         assertEquals(ldt.toLocalTime().toSecondOfDay(), TemporalMath.secondOfDay(local, hz), "second of day $zone $ts/$hz")
+        assertEquals(ldt.toLocalTime().toNanoOfDay() / (1_000_000_000 / hz), TemporalMath.unitOfDay(local, hz), "unit of day $zone $ts/$hz")
     }
 
     private fun epochSecondsAroundTransitions(zone: ZoneId): List<Long> {
@@ -82,28 +83,38 @@ class TemporalMathTest {
     private fun localSecond(zone: ZoneId, s: Long) =
         ZonedDateTime.ofInstant(Instant.ofEpochSecond(s), zone).toLocalDateTime().toEpochSecond(ZoneOffset.UTC)
 
-    private fun assertResolvesNear(zone: ZoneId, s: Long, probe: Long) {
+    private fun assertResolves(zone: ZoneId, s: Long, probe: Long) {
+        val offsets = ZoneOffsets.of(zone)
         val zdt = ZonedDateTime.ofInstant(Instant.ofEpochSecond(s), zone)
         val ldt = LocalDateTime.ofEpochSecond(probe, 0, ZoneOffset.UTC)
-        assertEquals(zdt.with(ldt).toEpochSecond(), TemporalMath.fromLocalNear(probe, 1, ZoneOffsets.of(zone), s), "$zone $ldt near $zdt")
+        assertEquals(zdt.with(ldt).toEpochSecond(), TemporalMath.fromLocalNear(probe, 1, offsets, s), "$zone $ldt near $zdt")
+        assertEquals(ldt.atZone(zone).toEpochSecond(), TemporalMath.fromLocal(probe, 1, offsets), "$zone $ldt at zone")
     }
 
+    private fun assertStartOfDay(zone: ZoneId, d: LocalDate) =
+        assertEquals(d.atStartOfDay(zone).toEpochSecond(), TemporalMath.startOfDay(d.toEpochDay(), 1, ZoneOffsets.of(zone)), "$zone start of $d")
+
     @Test
-    fun `local readings resolve near the original instant as ZonedDateTime with does in every zone`() {
+    fun `local readings resolve as ZonedDateTime does in every zone`() {
         for (id in ZoneId.getAvailableZoneIds()) {
             val zone = ZoneId.of(id)
             for (s in epochSecondsAroundTransitions(zone)) {
                 val local = localSecond(zone, s)
                 for (probe in longArrayOf(local, local - 3600, local - 1800, local + 1800, local + 3600, local - 86_400))
-                    assertResolvesNear(zone, s, probe)
+                    assertResolves(zone, s, probe)
+
+                val day = LocalDate.ofEpochDay(Math.floorDiv(local, 86_400L))
+                for (d in listOf(day.minusDays(1), day, day.plusDays(1))) assertStartOfDay(zone, d)
             }
         }
     }
 
     @Test
-    fun `local readings resolve near the original instant as ZonedDateTime with does for any instant and zone`() = runTest {
+    fun `local readings resolve as ZonedDateTime does for any instant and zone`() = runTest {
         checkAll(ITERATIONS, zones, epochSeconds, Arb.long(-2 * 86_400L..2 * 86_400L)) { zone, s, delta ->
-            assertResolvesNear(zone, s, localSecond(zone, s) + delta)
+            val probe = localSecond(zone, s) + delta
+            assertResolves(zone, s, probe)
+            assertStartOfDay(zone, LocalDate.ofEpochDay(Math.floorDiv(probe, 86_400L)))
         }
     }
 
