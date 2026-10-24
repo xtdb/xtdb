@@ -26,16 +26,16 @@ val Long.secondsToNanos get() = multiplyExact(this, NANO_HZ)
 
 val Long.microsAsInstant get(): Instant = Instant.EPOCH.plus(this, MICROS)
 
-internal val Long.millisToSecondsPart get() = this / MILLI_HZ
-internal val Long.microsToSecondsPart get() = this / MICRO_HZ
-internal val Long.nanosToSecondsPart get() = this / NANO_HZ
+internal val Long.millisToSecondsPart get() = floorDiv(MILLI_HZ.toLong())
+internal val Long.microsToSecondsPart get() = floorDiv(MICRO_HZ.toLong())
+internal val Long.nanosToSecondsPart get() = floorDiv(NANO_HZ.toLong())
 
 internal val Int.nanoPartToMillis get() = this / (NANO_HZ / MILLI_HZ)
 internal val Int.nanoPartToMicros get() = this / (NANO_HZ / MICRO_HZ)
 
-internal val Long.millisToNanosPart get() = multiplyExact(this % MILLI_HZ, (NANO_HZ / MILLI_HZ))
-internal val Long.microsToNanosPart get() = multiplyExact(this % MICRO_HZ, (NANO_HZ / MICRO_HZ))
-internal val Long.nanosToNanosPart get() = this % NANO_HZ
+internal val Long.millisToNanosPart get() = multiplyExact(mod(MILLI_HZ.toLong()), (NANO_HZ / MILLI_HZ))
+internal val Long.microsToNanosPart get() = multiplyExact(mod(MICRO_HZ.toLong()), (NANO_HZ / MICRO_HZ))
+internal val Long.nanosToNanosPart get() = mod(NANO_HZ.toLong())
 
 val TimeUnit.hz get() = when (this) {
     TimeUnit.SECOND -> 1

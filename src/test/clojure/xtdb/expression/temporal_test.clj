@@ -1935,3 +1935,14 @@
 
     ;; cross-type intervals (mdm vs mdn)
     false '(=== (multi-field-interval "1 2" "DAY" 2 "HOUR" 2) (multi-field-interval "1 2" "DAY" 2 "HOUR" 9))))
+
+(t/deftest pre-epoch-timestamp-local-with-sub-second-part
+  (t/are [expected expr]
+      (= [{:res expected}]
+         (tu/query-ra [:project {:projections [{'res expr}]}
+                       [:table {:rows [{:a (LocalDateTime/parse "1969-12-31T23:59:59.5")}]}]]))
+    1969 '(extract "YEAR" a)
+    59 '(extract "SECOND" a)
+    (LocalDateTime/parse "1969-12-31T23:59") '(date_trunc "MINUTE" a)
+    (LocalDate/parse "1969-12-31") '(cast a #xt/type [:date :day])
+    (LocalTime/parse "23:59:59.5") '(cast a #xt/type [:time-local :micro])))
