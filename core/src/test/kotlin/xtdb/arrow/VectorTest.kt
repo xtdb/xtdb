@@ -16,4 +16,15 @@ class VectorTest {
             assertSame(vec, maybePromoted)
         }
     }
+
+    @Test
+    fun `a renamed vector's field and its relation's schema carry the new name`(al: BufferAllocator) {
+        LongVector(al, "a", false).use { vec ->
+            vec.writeLong(1)
+            val renamed = vec.withName("b")
+
+            assertEquals("b", renamed.field.name)
+            assertEquals(listOf("b"), RelationReader.from(listOf(renamed)).schema.fields.map { it.name })
+        }
+    }
 }
