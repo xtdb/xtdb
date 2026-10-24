@@ -49,13 +49,26 @@ kern-2.log           q6   cold   5568 n  30 median    5122 mean    5135 min   48
 kern-3.log           q1   cold  10634 n  30 median    7891 mean    7864 min   7290 sd    290
 kern-3.log           q6   cold   5219 n  30 median    5215 mean    5236 min   4825 sd    250
 ```
-- Q1 median-of-medians 8346 → 7967 ms (**−4.5%**); Q6 6117 → 5250 ms (**−14.2%**).
+- Q1 mean of per-JVM medians 8346 → 7967 ms (**−4.5%**); Q6 6117 → 5250 ms (**−14.2%**).
 
 ### Round 3 — final code (v1 + no-copy `Physical`), 3+3 JVMs interleaved, 50 reps, drop 20
 ```
-ROUND3
+base-1.log           q1   cold  10795 n  30 median    8386 mean    8393 min   7842 sd    352
+base-1.log           q6   cold   6565 n  30 median    6078 mean    6055 min   5601 sd    220
+base-2.log           q1   cold  10484 n  30 median    8130 mean    8204 min   7749 sd    300
+base-2.log           q6   cold   6132 n  30 median    5972 mean    6100 min   5646 sd    464
+base-3.log           q1   cold  11007 n  30 median    8402 mean    8469 min   7853 sd    411
+base-3.log           q6   cold   6100 n  30 median    6164 mean    6178 min   5500 sd    360
+kern-1.log           q1   cold  10939 n  30 median    7694 mean    7735 min   7392 sd    240
+kern-1.log           q6   cold   4915 n  30 median    4818 mean    4860 min   4588 sd    198
+kern-2.log           q1   cold  10021 n  30 median    7860 mean    7920 min   7316 sd    329
+kern-2.log           q6   cold   5157 n  30 median    5105 mean    5130 min   4721 sd    254
+kern-3.log           q1   cold  11119 n  30 median    8272 mean    8269 min   7637 sd    262
+kern-3.log           q6   cold   5835 n  30 median    5414 mean    5411 min   4875 sd    259
 ```
-ROUND3SUMMARY
+- Q1: median of per-JVM medians 8386 → 7860 ms (**−6.3%**); per-JVM base [8386, 8130, 8402] vs kernels [7694, 7860, 8272].
+- Q6: 6078 → 5105 ms (**−16.0%**); per-JVM base [6078, 5972, 6164] vs kernels [4818, 5105, 5414].
+- The kernels' worst JVM beats the base's best on Q6; on Q1 the ranges overlap (kern-3 8272 vs base-2 8130).
 
 ### Round 2 — ablation, one JVM each, 35 reps, drop 15 (JVM-to-JVM noise is ±4%, so read these as indicative)
 ```
