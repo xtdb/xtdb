@@ -13,7 +13,7 @@
            (java.time.temporal ChronoField ChronoUnit Temporal)
            (org.apache.arrow.vector PeriodDuration)
            (xtdb.arrow ListValueReader ValueBox ValueReader VectorType VectorType$Mono)
-           (xtdb.time LocalDateTimeUtil TemporalMath ZoneOffsets)))
+           (xtdb.time Interval LocalDateTimeUtil TemporalMath ZoneOffsets)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -705,11 +705,8 @@
       (->multi-field-interval-call expr))))
 
 (defn interval->iso-string [^PeriodDuration x]
-  (let [period-str (when-not (.isZero (.getPeriod x))
-                     (str (.getPeriod x)))
-        duration-str (when-not (.isZero (.getDuration x))
-                       (str (.getDuration x)))]
-    (str "P" (some-> period-str (subs 1)) (some-> duration-str (subs 1)))))
+  (let [p (.getPeriod x)]
+    (Interval/toIsoString (.toTotalMonths p) (.getDays p) (.getDuration x))))
 
 (defmethod expr/codegen-cast [:interval :utf8] [_]
   {:return-type #xt/type :utf8

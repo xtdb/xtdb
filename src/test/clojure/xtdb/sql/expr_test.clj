@@ -968,10 +968,10 @@
   (t/is (= [{:string "P2Y"}]
            (xt/q tu/*node* "SELECT CAST(INTERVAL '2' YEAR AS VARCHAR) as string")))
 
-  (t/is (= [{:string "P22M"}]
+  (t/is (= [{:string "P1Y10M"}]
            (xt/q tu/*node* "SELECT CAST(INTERVAL '1-10' YEAR TO MONTH AS VARCHAR) as string")))
 
-  (t/is (= [{:string "P-22M"}]
+  (t/is (= [{:string "P-1Y-10M"}]
            (xt/q tu/*node* "SELECT CAST(INTERVAL '-1-10' YEAR TO MONTH AS VARCHAR) as string")))
 
   (t/is (= [{:string "P1D"}]

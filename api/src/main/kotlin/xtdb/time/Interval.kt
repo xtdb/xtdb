@@ -7,11 +7,7 @@ data class Interval(val months: Int, val days: Int, val nanos: Long) {
     val period: Period get() = Period.of(0, months, days)
     val duration: Duration get() = Duration.ofNanos(nanos)
 
-    override fun toString() = buildString {
-        append("P")
-        if (months != 0 || days != 0) append(period.toString().drop(1))
-        if (nanos != 0L) append(duration.toString().drop(1))
-    }
+    override fun toString() = toIsoString(months.toLong(), days, duration)
 
     constructor(period: Period = Period.ZERO, duration: Duration = Duration.ZERO) : this(
         period.toTotalMonths().toInt(), period.days, duration.toNanos()
@@ -27,5 +23,14 @@ data class Interval(val months: Int, val days: Int, val nanos: Long) {
 
     companion object {
         @JvmField val ZERO = Interval(0, 0, 0L)
+
+        @JvmStatic
+        fun toIsoString(months: Long, days: Int, duration: Duration) = buildString {
+            append("P")
+            if (months / 12 != 0L) append(months / 12).append('Y')
+            if (months % 12 != 0L) append(months % 12).append('M')
+            if (days != 0) append(days).append('D')
+            if (!duration.isZero) append(duration.toString().drop(1))
+        }
     }
 }

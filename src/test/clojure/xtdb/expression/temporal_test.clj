@@ -6,6 +6,7 @@
             [clojure.test.check.properties :as tcp]
             [xtdb.expression :as expr]
             [xtdb.expression-test :as et]
+            [xtdb.serde :as serde]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
             [xtdb.types :as types])
@@ -464,11 +465,12 @@
                 first :res))]
     (t/testing "year-month interval -> string"
       (t/are [expected src-value] (= expected (test-cast src-value (types/->type :utf8)))
-        "P12M" #xt/interval "P12M"
-        "P-12M" #xt/interval "-P12M"
-        "P22M" #xt/interval "P22M"
-        "P-22M" #xt/interval "-P22M"
-        "P6M" #xt/interval "P6M"))
+        "P1Y" #xt/interval "P12M"
+        "P-1Y" #xt/interval "-P12M"
+        "P1Y10M" #xt/interval "P22M"
+        "P-1Y-10M" #xt/interval "-P22M"
+        "P6M" #xt/interval "P6M"
+        "P1Y10M-3DT4H" #xt/interval "P22M-3DT4H"))
 
     (t/testing "month-day-* interval -> string"
       (t/are [expected src-value] (= expected (test-cast src-value (types/->type :utf8)))
@@ -486,6 +488,18 @@
         "P-1DT10H10M10.111111S" #xt/interval "-P1DT-10H-10M-10.111111S"
         "P-1DT10H10M10.111111111S" #xt/interval "-P1DT-10H-10M-10.111111111S"
         "PT-10H-10M" #xt/interval "PT-10H-10M"))))
+
+(t/deftest interval-serde-round-trips-normalised-string
+  (t/are [s itvl] (and (= s (str itvl))
+                       (= (str "#xt/interval \"" s "\"") (pr-str itvl))
+                       (= itvl (read-string (pr-str itvl)))
+                       (= itvl (serde/read-transit (serde/write-transit itvl :json) :json)))
+    "P2Y" (Interval. 24 0 0)
+    "P1Y10M" (Interval. 22 0 0)
+    "P-1Y-10M" (Interval. -22 0 0)
+    "P10M" (Interval. 10 0 0)
+    "P1Y-3D" (Interval. 12 -3 0)
+    "P-1Y-10M3DT4H" (Interval. -22 3 (* 4 3600 1000000000))))
 
 (t/deftest cast-interval-to-interval
   (letfn [(test-cast
