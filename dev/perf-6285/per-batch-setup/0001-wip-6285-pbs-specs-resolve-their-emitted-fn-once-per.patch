@@ -1,0 +1,178 @@
+From 05ebdb92794d5be9a99bb03f8e0cc164a1d19bd3 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 24 Oct 2026 02:38:58 +0000
+Subject: [PATCH] wip(6285-pbs): specs resolve their emitted fn once per
+ input/param shape; selection spec writes int[] from the generated loop
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_019fLhm1UQAA7AaS38htF4V1
+---
+ build.gradle.kts                          |   6 ++
+ core/src/main/clojure/xtdb/expression.clj | 117 +++++++++++++++++-----
+ 2 files changed, 100 insertions(+), 23 deletions(-)
+
+diff --git a/build.gradle.kts b/build.gradle.kts
+index 8e3d4b2..447a0a0 100644
+--- a/build.gradle.kts
++++ b/build.gradle.kts
+@@ -872,6 +872,12 @@ fun createBench(benchName: String, properties: Map<String, String>, defaultArgs:
+         if (project.hasProperty("narrowVarTypes"))
+             jvmArgs("-Dxtdb.narrowVarTypes=true")
+ 
++        if (project.hasProperty("noSpecCache"))
++            jvmArgs("-Dxtdb.noSpecCache=true")
++
++        if (project.hasProperty("noDirectSel"))
++            jvmArgs("-Dxtdb.noDirectSel=true")
++
+         if (project.hasProperty("qs"))
+             jvmArgs("-Dxtdb.bench.qs=${project.property("qs")}")
+ 
+diff --git a/core/src/main/clojure/xtdb/expression.clj b/core/src/main/clojure/xtdb/expression.clj
+index bccd478..7678ad3 100644
+--- a/core/src/main/clojure/xtdb/expression.clj
++++ b/core/src/main/clojure/xtdb/expression.clj
+@@ -2522,31 +2522,62 @@
+        (keep (fn [x] (when (and (map? x) (= :variable (:op x))) (:variable x))))
+        (into #{})))
+ 
++(def ^:private spec-cache? (not (Boolean/getBoolean "xtdb.noSpecCache")))
++
++(defn- ->emitted-resolver
++  "returns `(fn [in-rel args] emitted)`, which re-emits only when the input var types, param types or zone differ from the previous batch's.
++   `emit` takes the opts map (`:var-types`, `:param-types`)."
++  [emit expr-vars narrow?]
++  (let [var-names (object-array (map str expr-vars))
++        var-syms (object-array expr-vars)
++        n-vars (alength var-names)
++        ;; [args param-types var-type-arr zone emitted] - swapped whole, so concurrent cursors sharing this spec see a consistent entry
++        !cache (volatile! nil)]
++    (fn [^RelationReader in-rel ^RelationReader args]
++      (let [zone *default-tz*
++            [c-args c-param-types ^objects c-vts c-zone c-emitted] @!cache
++            vts (when narrow?
++                  (let [vts (object-array n-vars)]
++                    (dotimes [i n-vars]
++                      (aset vts i (some-> (.vectorForOrNull in-rel ^String (aget var-names i)) (.getType))))
++                    vts))
++            param-types (if (identical? args c-args) c-param-types (->param-types args))]
++        (if (and spec-cache? narrow? c-emitted
++                 (identical? zone c-zone)
++                 (or (identical? args c-args) (= param-types c-param-types))
++                 (Arrays/equals ^objects vts ^objects c-vts))
++          (do
++            (when-not (identical? args c-args)
++              (vreset! !cache [args param-types c-vts c-zone c-emitted]))
++            c-emitted)
++
++          (let [var-types (if narrow?
++                            (into {} (keep (fn [i]
++                                             (when-let [t (aget vts i)]
++                                               [(aget var-syms i) t])))
++                                  (range n-vars))
++                            (->> in-rel
++                                 (into {} (map (fn [^VectorReader iv]
++                                                 [(symbol (.getName iv))
++                                                  (.getType iv)])))))
++                emitted (emit {:param-types param-types, :var-types var-types})]
++            (vreset! !cache [args param-types vts zone emitted])
++            emitted))))))
++
+ (defn ->expression-projection-spec ^xtdb.operator.ProjectionSpec [col-name expr {:keys [var-types param-types]}]
+   (let [;; HACK - this runs the analyser (we discard the emission) to get the widest possible out-type.
+         widest-out-type (-> (emit-projection expr {:param-types param-types
+                                                    :var-types var-types})
+                             :return-type)
+         narrow? (Boolean/getBoolean "xtdb.narrowVarTypes")
+-        expr-vars (expr-variables expr)]
++        resolve-emitted (->emitted-resolver #(emit-projection expr %) (expr-variables expr) narrow?)]
+ 
+     (reify ProjectionSpec
+       (getToName [_] (str col-name))
+       (getType [_] widest-out-type)
+ 
+       (project [_ allocator in-rel schema args]
+-        (let [var-types (if narrow?
+-                          (into {} (keep (fn [v]
+-                                           (when-let [iv (.vectorForOrNull in-rel (str v))]
+-                                             [v (.getType iv)])))
+-                                expr-vars)
+-                          (->> in-rel
+-                               (into {} (map (fn [^VectorReader iv]
+-                                               [(symbol (.getName iv))
+-                                                (.getType iv)])))))
+-
+-              {:keys [return-type !projection-fn]} (emit-projection expr {:param-types (->param-types args)
+-                                                                          :var-types var-types})]
++        (let [{:keys [return-type !projection-fn]} (resolve-emitted in-rel args)]
+           (util/with-close-on-catch [out-vec (Vector/open allocator (str col-name) return-type)]
+             (try
+               (@!projection-fn in-rel schema args out-vec)
+@@ -2568,13 +2599,53 @@
+         (with-open [selection (.project projector al in-rel schema args)]
+           (VectorMask/open al (.getRowCount in-rel) selection))))))
+ 
+-(defn ->expression-selection-spec ^SelectionSpec [expr input-types]
+-  (let [mask-spec (->expression-mask-spec expr input-types)]
+-    (reify SelectionSpec
+-      (select [_ al in-rel schema args]
+-        (with-open [mask (.mask mask-spec al in-rel schema args)]
+-          (let [res (IntStream/builder)]
+-            (dotimes [idx (.getRowCount in-rel)]
+-              (when (.isSet mask idx)
+-                (.add res idx)))
+-            (.toArray (.build res))))))))
++(def ^:private emit-selection
++  "emits `(fn [rel schema args] int[])` - the indices of the rows for which `expr` is true, written straight from the loop."
++  (-> (fn [expr opts]
++        (let [expr (prepare-expr {:op :call, :f :boolean, :args [expr]})
++              {:keys [continue] :as emitted-expr} (codegen-expr expr opts)]
++          {:!selection-fn (delay
++                            (-> `(fn [~(-> rel-sym (with-tag RelationReader))
++                                      ~(-> schema-sym (with-tag IPersistentMap))
++                                      ~(-> args-sym (with-tag RelationReader))]
++                                   (let [~@(batch-bindings emitted-expr)
++                                         row-count# (.getRowCount ~rel-sym)
++                                         out# (int-array row-count#)]
++                                     (loop [~idx-sym 0, n# 0]
++                                       (if (< ~idx-sym row-count#)
++                                         (if ~(continue (fn [t c] (if (= t #xt/type :null) false c)))
++                                           (do (aset out# n# (int ~idx-sym))
++                                               (recur (inc ~idx-sym) (inc n#)))
++                                           (recur (inc ~idx-sym) n#))
++                                         (if (== n# row-count#) out# (Arrays/copyOf out# (int n#)))))))
++                                eval))}))
++      (util/lru-memoize)
++      wrap-zone-id-cache-buster))
++
++(defn ->expression-selection-spec ^SelectionSpec [expr {:keys [var-types param-types] :as input-types}]
++  (if (Boolean/getBoolean "xtdb.noDirectSel")
++    (let [mask-spec (->expression-mask-spec expr input-types)]
++      (reify SelectionSpec
++        (select [_ al in-rel schema args]
++          (with-open [mask (.mask mask-spec al in-rel schema args)]
++            (let [res (IntStream/builder)]
++              (dotimes [idx (.getRowCount in-rel)]
++                (when (.isSet mask idx)
++                  (.add res idx)))
++              (.toArray (.build res)))))))
++
++    (let [resolve-emitted (->emitted-resolver #(emit-selection expr %) (expr-variables expr)
++                                              (Boolean/getBoolean "xtdb.narrowVarTypes"))]
++      (reify SelectionSpec
++        (select [_ _al in-rel schema args]
++          (let [{:keys [!selection-fn]} (resolve-emitted in-rel args)]
++            (try
++              (@!selection-fn in-rel schema args)
++              (catch ArithmeticException e
++                (throw (arithmetic-ex->anomaly e)))
++              (catch NumberFormatException e
++                (throw (err/incorrect :xtdb.expression/number-format-error (ex-message e) {::err/cause e})))
++              (catch ClassCastException e
++                (throw (err/incorrect :xtdb.expression/class-cast-exception (ex-message e) {::err/cause e})))
++              (catch IllegalArgumentException e
++                (throw (err/incorrect :xtdb.expression/illegal-argument-exception (ex-message e) {::err/cause e}))))))))))
+\ No newline at end of file
+-- 
+2.43.0
+
