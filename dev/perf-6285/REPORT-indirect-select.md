@@ -228,3 +228,61 @@ Each is a tidy (structure only) or an advance (behaviour); dependencies are in b
   Projection is too small a share of the time for either choice to matter much.
 - **Unflattened views over `LegReader`**: broke `SUM`, and cost an extra hop per read.
   Composing the leg offsets into `sel` once per leaf closed that.
+
+## Follow-up: refreshed-snapshot layout (#6174)
+
+Harness b595eec was cherry-picked onto base and onto this branch, so `-PnoLoad` runs one refresh tx before the queries (the `refresh-snapshot` stage shows in each log).
+Base vs sparse vs no-put-leg-compose, 3 JVMs each interleaved, 50 reps, drop 20, all `-PnarrowVarTypes`. Logs are in `results/fresh/`.
+
+| variant | Q1 medians | Q6 medians | Q1 vs base | Q6 vs base |
+|---|---|---|---|---|
+| base | 4744 5084 5066 | 3389 3606 3498 | | |
+| sparse | 5138 4994 4917 | 3204 3156 3271 | **+1.0% (gone)** | **−8.2%** |
+| no put-leg compose | 5282 5242 5118 | 3373 3334 3248 | +5.0% | −5.1% |
+
+- **Q6's gain survives the bigger batches**, at −8%, almost all of it from `refine`. Put-leg composition is still worth ~3% of Q6.
+- **Q1's gain does not survive**: sparse ≈ base.
+  The base-1 JVM ran first after the layout change (cold 79.6s), and its Q1 hot median of 4744 is the lowest base value.
+  Even excluding it, sparse is only ~1.5% faster on Q1, which is within noise.
+- JFR, one run each, 12 reps, Q1 and Q6 mixed. Samples under the scan:
+
+| phase | base | sparse |
+|---|---|---|
+| total | 5390 | 5112 |
+| predicate eval | 1285 | **740 (−42%)** |
+| group-by | 1341 | **1773 (+32%)** |
+| event merge | 1276 | 1216 |
+| page load | 481 | 483 |
+| param-types/emit | 343 | 364 |
+
+  - The group-by increase is in `DistinctRelationMap` key equality: 799 samples in base, 1080 in sparse.
+    The difference is mostly `ByteBuffer.equals`/`BufferMismatch` from the generated key comparator (283 vs 54), plus `ArrowUtil.toByteArray` copies and `IndirectVector.isNull` in `Count` (118).
+  - The key columns have the same shape in both (`IndirectVector(Utf8 direct, Selection)`), so I can't attribute this structurally.
+    My unconfirmed suspicion is different JIT inlining of `ByteBuffer.equals` in the comparator; base's samples land in `Buffer.limit` frames instead.
+  - Either way, on Q1 the predicate saving is now offset by group-by.
+- Implication: the avenue's robust gain is **`refine` (filter `sel`, don't compose) for selective predicates**.
+  - Put-leg composition is a small win at best.
+  - The Q1 gain in the stale layout came from its ~99-row batches, where per-batch and per-read overheads were proportionally larger.
+  - Group-by key equality (allocating a `ByteBuffer` per row in `readBytes` + `equals`) is now the largest addressable cost in Q1, outside this avenue.
+
+runs.py output (refreshed layout):
+```
+base-1.log           q1   cold  79585 n  30 median    4744 mean    4761 min   4572 sd     93
+base-1.log           q6   cold   3740 n  30 median    3389 mean    3436 min   3329 sd    103
+base-2.log           q1   cold   7652 n  30 median    5084 mean    5091 min   4903 sd    115
+base-2.log           q6   cold   3705 n  30 median    3606 mean    3603 min   3443 sd    105
+base-3.log           q1   cold   7552 n  30 median    5066 mean    5096 min   4872 sd    139
+base-3.log           q6   cold   3768 n  30 median    3498 mean    3518 min   3317 sd     87
+sparse-1.log         q1   cold   8076 n  30 median    5138 mean    5181 min   4994 sd    133
+sparse-1.log         q6   cold   3369 n  30 median    3204 mean    3230 min   3023 sd    114
+sparse-2.log         q1   cold   8175 n  30 median    4994 mean    5036 min   4838 sd    137
+sparse-2.log         q6   cold   3479 n  30 median    3156 mean    3192 min   3004 sd    106
+sparse-3.log         q1   cold   7381 n  30 median    4917 mean    4901 min   4659 sd    150
+sparse-3.log         q6   cold   3513 n  30 median    3271 mean    3275 min   3071 sd    122
+noputleg-1.log       q1   cold   8137 n  30 median    5282 mean    5297 min   5051 sd    163
+noputleg-1.log       q6   cold   3774 n  30 median    3373 mean    3372 min   3212 sd    111
+noputleg-2.log       q1   cold   8234 n  30 median    5242 mean    5267 min   4940 sd    203
+noputleg-2.log       q6   cold   3600 n  30 median    3334 mean    3330 min   3138 sd    100
+noputleg-3.log       q1   cold   7884 n  30 median    5118 mean    5142 min   4933 sd    128
+noputleg-3.log       q6   cold   3498 n  30 median    3248 mean    3255 min   3051 sd     78
+```
