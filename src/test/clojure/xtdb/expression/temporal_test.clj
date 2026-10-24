@@ -12,6 +12,7 @@
             [xtdb.types :as types])
   (:import (java.time Duration Instant LocalDate LocalDateTime LocalTime Period ZoneId ZoneOffset ZonedDateTime)
            java.time.temporal.ChronoUnit
+           (org.apache.arrow.vector PeriodDuration)
            (xtdb.time Interval)))
 
 (t/use-fixtures :each tu/with-allocator)
@@ -1338,6 +1339,13 @@
     #xt/duration "PT1H30M45S" '(abs #xt/duration "PT-1H-30M-45S")
     #xt/duration "PT1.123456S" '(abs #xt/duration "PT-1.123456S")))
 
+(t/deftest period-duration-literal-past-interval-range-raises-overflow-error
+  (t/is (thrown-with-msg? RuntimeException #"data exception - overflow error"
+                          (et/project1 (PeriodDuration. (Period/ofYears 200000000) Duration/ZERO) {}))))
+
+(def ^:private max-interval-hours
+  (dec (quot Long/MAX_VALUE (* 3600 1000000000))))
+
 (def single-interval-constructor-gen
   (->> (tcg/hash-map
         :unit (tcg/elements ["YEAR" "MONTH" "DAY" "HOUR" "MINUTE" "SECOND"])
@@ -1370,7 +1378,8 @@
                   use-fractional-precision fractional-precision
                   :else 2)
 
-                leading-value (mod leading-value (parse-long (str/join (repeat precision "9"))))
+                leading-value (cond-> (mod leading-value (parse-long (str/join (repeat precision "9"))))
+                                (= "HOUR" unit) (mod (inc max-interval-hours)))
 
                 fractional-value
                 (if (pos? fractional-precision)
@@ -1454,7 +1463,8 @@
                              (if (= ending-unit field)
                                (str s prefix (time-values field))
                                (recur (rest fields) (if (= field leading-unit)
-                                                      (mod (time-values leading-unit) (parse-long (str/join (repeat precision "9"))))
+                                                      (cond-> (mod (time-values leading-unit) (parse-long (str/join (repeat precision "9"))))
+                                                        (= "HOUR" leading-unit) (mod (inc max-interval-hours)))
                                                       (str s prefix (time-values field))))))
                            (throw (Exception. "Unreachable"))))
                        (when use-fractional-value (str "." fractional-value)))]

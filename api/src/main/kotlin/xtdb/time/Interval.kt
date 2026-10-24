@@ -1,5 +1,8 @@
 package xtdb.time
 
+import java.lang.Math.addExact
+import java.lang.Math.multiplyExact
+import java.lang.Math.toIntExact
 import java.time.Duration
 import java.time.Period
 
@@ -9,17 +12,20 @@ data class Interval(val months: Int, val days: Int, val nanos: Long) {
 
     override fun toString() = toIsoString(months.toLong(), days, duration)
 
+    /**
+     * @throws ArithmeticException if the period's total months don't fit an [Int], or the duration's nanos a [Long].
+     */
     constructor(period: Period = Period.ZERO, duration: Duration = Duration.ZERO) : this(
-        period.toTotalMonths().toInt(), period.days, duration.toNanos()
+        toIntExact(period.toTotalMonths()), period.days, duration.toNanos()
     )
 
-    fun plusYears(years: Long) = Interval(months + (years * 12).toInt(), days, nanos)
-    fun plusMonths(months: Long) = Interval(this.months + months.toInt(), days, nanos)
-    fun plusWeeks(weeks: Long) = Interval(months, days + (weeks * 7).toInt(), nanos)
-    fun plusDays(days: Long) = Interval(months, this.days + days.toInt(), nanos)
-    fun plusHours(hours: Long) = Interval(months, days, nanos + hours * 3600 * NANO_HZ)
-    fun plusMinutes(minutes: Long) = Interval(months, days, nanos + minutes * 60 * NANO_HZ)
-    fun plusSeconds(seconds: Long) = Interval(months, days, nanos + seconds * NANO_HZ)
+    fun plusYears(years: Long) = Interval(addExact(months, toIntExact(multiplyExact(years, 12))), days, nanos)
+    fun plusMonths(months: Long) = Interval(addExact(this.months, toIntExact(months)), days, nanos)
+    fun plusWeeks(weeks: Long) = Interval(months, addExact(days, toIntExact(multiplyExact(weeks, 7))), nanos)
+    fun plusDays(days: Long) = Interval(months, addExact(this.days, toIntExact(days)), nanos)
+    fun plusHours(hours: Long) = Interval(months, days, addExact(nanos, multiplyExact(hours, 3600L * NANO_HZ)))
+    fun plusMinutes(minutes: Long) = Interval(months, days, addExact(nanos, multiplyExact(minutes, 60L * NANO_HZ)))
+    fun plusSeconds(seconds: Long) = Interval(months, days, addExact(nanos, multiplyExact(seconds, NANO_HZ)))
 
     companion object {
         @JvmField val ZERO = Interval(0, 0, 0L)

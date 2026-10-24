@@ -981,6 +981,28 @@
            (xt/q tu/*node* "SELECT CAST(INTERVAL '1 10:10:10' DAY TO SECOND AS VARCHAR) as string"))))
 
 
+(t/deftest test-interval-past-interval-range-raises-overflow-error
+  (t/are [sql] (thrown-with-msg? RuntimeException #"data exception - overflow error" (xt/q tu/*node* sql))
+    "SELECT INTERVAL '3000000' HOUR AS i"
+    "SELECT INTERVAL '2147483647' HOUR AS i"
+    "SELECT INTERVAL '2147483647' MINUTE AS i"
+    "SELECT INTERVAL '2147483647' YEAR AS i"
+    "SELECT INTERVAL '1' HOUR * 2147483647 AS i"
+    "SELECT INTERVAL '1' MONTH * 4294967297 AS i"
+    "SELECT INTERVAL '1' DAY * 4294967297 AS i"
+    "SELECT CAST(INTERVAL '200000' DAY AS INTERVAL HOUR) AS i"
+    "SELECT CAST('PT3000000H' AS INTERVAL) AS i")
+
+  (t/is (= [{:i #xt/interval "PT2000000H"}]
+           (xt/q tu/*node* "SELECT INTERVAL '2000000' HOUR AS i")))
+
+  (t/is (= [{:i #xt/interval "PT4294.967297S"}]
+           (xt/q tu/*node* "SELECT INTERVAL '0.000001' SECOND * 4294967297 AS i"))
+        "a factor past Int is fine where the result fits")
+
+  (t/is (thrown-with-msg? RuntimeException #"Cannot parse interval: P200000000Y"
+                          (xt/q tu/*node* "SELECT INTERVAL 'P200000000Y' AS i"))))
+
 (t/deftest test-timestamp-literal
   (t/are
       [sql expected]

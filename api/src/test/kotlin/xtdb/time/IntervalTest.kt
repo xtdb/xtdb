@@ -2,7 +2,9 @@ package xtdb.time
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import java.time.Duration
+import java.time.Period
 
 class IntervalTest {
 
@@ -35,5 +37,15 @@ class IntervalTest {
     @Test
     fun `years beyond Int months still print`() {
         assertEquals("P2147483647Y", Interval.toIsoString(Int.MAX_VALUE * 12L, 0, Duration.ZERO))
+    }
+
+    @Test
+    fun `an interval past Interval's range throws rather than wrapping`() {
+        assertThrows<ArithmeticException> { Interval(Period.ofYears(200_000_000), Duration.ZERO) }
+        assertThrows<ArithmeticException> { Interval(Period.ZERO, Duration.ofHours(3_000_000)) }
+        assertThrows<ArithmeticException> { "P200000000Y".asInterval() }
+        assertThrows<ArithmeticException> { Interval.ZERO.plusYears(200_000_000) }
+        assertThrows<ArithmeticException> { Interval.ZERO.plusHours(3_000_000) }
+        assertEquals(Interval(0, 0, Duration.ofHours(2_000_000).toNanos()), Interval.ZERO.plusHours(2_000_000))
     }
 }

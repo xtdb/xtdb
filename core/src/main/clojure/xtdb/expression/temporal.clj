@@ -483,7 +483,10 @@
 
 (defn ->interval
   (^PeriodDuration [^Period p] (->interval p Duration/ZERO))
-  (^PeriodDuration [^Period p ^Duration d] (PeriodDuration. p d)))
+  (^PeriodDuration [^Period p ^Duration d]
+   ;; throws past Interval's range
+   (Interval. p d)
+   (PeriodDuration. p d)))
 
 (defn md*-interval->duration [^PeriodDuration x]
   (let [period (.getPeriod x)]
@@ -1210,7 +1213,10 @@
   (fn ^PeriodDuration [^PeriodDuration pd ^long factor]
     (let [p (.getPeriod pd)
           d (.getDuration pd)]
-      (->interval (.multipliedBy p factor) (.multipliedBy d factor)))))
+      (->interval (Period/of 0
+                             (Math/toIntExact (Math/multiplyExact (.toTotalMonths p) factor))
+                             (Math/toIntExact (Math/multiplyExact (long (.getDays p)) factor)))
+                  (.multipliedBy d factor)))))
 
 (defmethod expr/codegen-call [:* :interval :int] [{[l-type _] :arg-types}]
   {:return-type l-type

@@ -479,6 +479,12 @@
     (.toEpochDay ^LocalDate code)
     `(.toEpochDay ~code)))
 
+(defmethod emit-value PeriodDuration [_ code]
+  `(let [^PeriodDuration pd# ~code]
+     ;; throws past Interval's range
+     (Interval. (.getPeriod pd#) (.getDuration pd#))
+     pd#))
+
 ;; we emit these to PDs until the EE uses these types directly
 (defmethod emit-value Interval [_ code]
   `(let [i# ~code]
