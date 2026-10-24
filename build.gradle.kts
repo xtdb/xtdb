@@ -884,6 +884,9 @@ fun createBench(benchName: String, properties: Map<String, String>, defaultArgs:
         if (project.hasProperty("qs"))
             jvmArgs("-Dxtdb.bench.qs=${project.property("qs")}")
 
+        if (project.hasProperty("staleSnapshot"))
+            jvmArgs("-Dxtdb.bench.staleSnapshot=true")
+
         if (project.hasProperty("hotReps"))
             jvmArgs("-Dxtdb.bench.hotReps=${project.property("hotReps")}")
 

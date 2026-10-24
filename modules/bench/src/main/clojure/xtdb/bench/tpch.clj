@@ -65,7 +65,8 @@
    :seed seed
    :parameters {:scale-factor scale-factor :query-language query-language :seed seed :no-load? no-load?}
    :->state #(do {:!state (atom {})})
-   :tasks [{:t :do
+   :tasks (filterv some?
+          [{:t :do
             :stage :ingest
             :tasks (when-not no-load?
                      [{:t :call, :stage :submit-rels
@@ -80,11 +81,16 @@
                       {:t :call, :stage :compact
                        :f (fn [{:keys [node]}] (b/compact! node))}])}
 
+           ;; #6174: a restarted node plans from the snapshot taken before compaction's TriesAdded replay; one tx refreshes it
+           (when (and no-load? (not (Boolean/getBoolean "xtdb.bench.staleSnapshot")))
+             {:t :call, :stage :refresh-snapshot
+              :f (fn [{:keys [node]}] (xt/execute-tx node [[:put-docs :bench_refresh {:xt/id 1}]]))})
+
            (queries-stage :cold-queries query-language scale-factor)
 
            {:t :do, :stage :hot-repeats
             :tasks (vec (for [rep (range hot-reps)]
-                          (queries-stage (keyword (str "hot-queries-" rep)) query-language scale-factor)))}]})
+                          (queries-stage (keyword (str "hot-queries-" rep)) query-language scale-factor)))}])})
 
 (comment
   (binding [*qs* #{1}]
