@@ -49,6 +49,26 @@ Same instrumentation at SF0.1 (`~/bench/sf01`, 7 × l00 + 7 × l01 on disk):
 - The pages it loads also shrink from 43 to ~2 per task.
 - PQ work measured on `-PnoLoad` mostly measures the stale catalog.
 
+### Refreshed layout (#6174 workaround)
+The bench now runs a `:refresh-snapshot` stage after start under `-PnoLoad`: one `put-docs` into `bench_refresh`, then sync.
+`-PstaleSnapshot` opts out.
+I added it to both the base checkout and the variant checkout.
+Shape with it (`-PscanDebug`, cold + 3 hot runs of Q1 + Q6):
+
+| | stale (restart, no refresh) | refreshed |
+|---|---|---|
+| merge tasks per scan | 1024 (depth 5) | **4096 (depth 6)** |
+| pages per task | 43 (38 × l00 + 5 × l01) | **6 (4 × l01 + 2 × l02-pN)** |
+| rows per loaded page (pre-slice) | l00 403, l01 482 | l01 459, l02 502 |
+| relations emitted per task | 43 | 6 |
+| rows per emitted relation, pre-predicate | 136 | **244** (88K < 128, 42K < 256, 43K < 512, 22K < 1024) |
+| rows per task | ~5.9K | ~1.47K |
+| hot Q1 / Q6, one JVM, base-equivalent | ~8.0 / 6.05 s | ~7.3 / 5.2 s |
+
+- On the realistic layout batches are still small (~244 rows), because emission is still one relation per page.
+  But the merge is 6-way, not 43-way.
+- Cold Q1 on the first refreshed run took 85 s (first read of the l01/l02 files in this node dir); later JVMs aren't affected.
+
 ## Routes to bigger batches
 
 - **pre** — `concatRels`: copy a merge task's per-page relations (post-resolution, pre-predicate) into one owned `Relation` via `RelationReader.rowCopier(...).copyRange`.
@@ -70,7 +90,18 @@ Neither concatenates virtually: #4968's `ConcatVector` lesson (a per-row child l
 
 ## Numbers
 
-ROUNDB1
+### Stale layout (no refresh), one JVM each (the round was stopped after one triple when #6174 surfaced), 50 reps, drop 20
+```
+base-1.log           q1   cold  11976 n  30 median    8030 mean    8145 min   7627 sd    380
+base-1.log           q6   cold   6564 n  30 median    6052 mean    6083 min   5637 sd    322
+pre-1.log            q1   cold  10235 n  30 median    7942 mean    7843 min   7137 sd    479
+pre-1.log            q6   cold   5950 n  30 median    5618 mean    5611 min   4998 sd    366
+prek-1.log           q1   cold   9806 n  30 median    7614 mean    7670 min   6894 sd    516
+prek-1.log           q6   cold   5133 n  30 median    5280 mean    5337 min   4752 sd    334
+```
+- pre: Q1 −1%, Q6 −7%; pre + kernels: Q1 −5%, Q6 −13% against base, single JVMs.
+
+ROUNDB2
 
 ## Questions
 - Q-catalog: why does a restarted node's trie catalog lack compaction output that was produced after the last block?
