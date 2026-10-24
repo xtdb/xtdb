@@ -1,0 +1,56 @@
+samples under ScanCursor.tryAdvance 20937
+  8873  42.4% event merge / resolve
+  4050  19.3% predicate/projection: expression eval
+  4039  19.3% group-by
+  1476   7.0% predicate: param-types/zone setup
+  1249   6.0% page load
+  1129   5.4% project
+   113   0.5% selection: IntStream/VectorMask/select
+     8   0.0% predicate: java.time
+
+TOP SELF
+  2728  13.0% xtdb.arrow.FixedWidthVector.getLong0
+  2216  10.6% xtdb.trie.EventRowPointer$Companion.iidComparator$lambda$0
+  1565   7.5% kotlin.jvm.internal.PropertyReference1.invoke
+  1017   4.9% java.nio.Buffer.<init>
+   965   4.6% xtdb.arrow.FixedWidthVector.getDouble0
+   884   4.2% xtdb.arrow.FixedWidthVector.getInt0
+   518   2.5% xtdb.operator.scan.EntityMerge.requeue
+   475   2.3% xtdb.arrow.ArrowUtil.arrowBufToRecordBatch
+   357   1.7% java.lang.invoke.DirectMethodHandle.allocateInstance
+   352   1.7% java.util.PriorityQueue.siftUpUsingComparator
+   312   1.5% java.nio.BufferMismatch.mismatch
+   309   1.5% java.util.HashMap.getNode
+   294   1.4% xtdb.trie.MutableMemoryHashTrie$Leaf.addIfNotPresent
+   263   1.3% java.lang.String.equals
+   245   1.2% xtdb.trie.Bucketer.compareToPath
+   227   1.1% xtdb.arrow.agg.Count$build$1.aggregate
+   226   1.1% org.apache.arrow.memory.LowCostIdentityHashMap.findIndex
+   224   1.1% org.apache.arrow.memory.Accountant.releaseBytes
+   204   1.0% xtdb.util.Hasher$Xx.hash
+   191   0.9% xtdb.operator.scan.EntityMerge.nextEvent
+   184   0.9% java.util.PriorityQueue.siftDownUsingComparator
+   174   0.8% xtdb.arrow.agg.Sum$build$1.aggregate
+   172   0.8% xtdb.expression.map.IndexHasher.hashCode
+   170   0.8% xtdb.arrow.FixedWidthVector.loadPage$xtdb_core
+   166   0.8% java.lang.String.hashCode
+
+OTHER
+
+STACKS THROUGH Masked
+ 4926 xtdb.operator.ProjectCursor.tryMasked <- xtdb.operator.ProjectCursor.tryAdvance$lambda$0 <- xtdb.operator.ProjectCursor.tryAdvance$lambda$1 <- xtdb.operator.scan.ScanCursor.tryAdvance <- xtdb.api.ICursor$Companion$InterruptibleCursor.tryAdvance <- xtdb.operator.ProjectCursor.tryAdvance
+
+ 2120 xtdb.expression$$reify__10263.projectMasked <- xtdb.operator.ProjectCursor.tryMasked <- xtdb.operator.ProjectCursor.tryAdvance$lambda$0 <- xtdb.operator.ProjectCursor.tryAdvance$lambda$1 <- xtdb.operator.scan.ScanCursor.tryAdvance <- xtdb.api.ICursor$Companion$InterruptibleCursor.tryAdvance
+
+  245 xtdb.arrow.MaskedRelation.openSlice <- xtdb.operator.scan.ScanCursor.tryAdvance <- xtdb.api.ICursor$Companion$InterruptibleCursor.tryAdvance <- xtdb.operator.ProjectCursor.tryAdvance <- xtdb.api.ICursor$Companion$InterruptibleCursor.tryAdvance <- java.util.Spliterator.forEachRemaining
+
+  150 xtdb.arrow.MaskedRelation.directRel_delegate$lambda$0 <- kotlin.SynchronizedLazyImpl.getValue <- xtdb.arrow.MaskedRelation.getDirectRel <- xtdb.expression$$reify__10288.refine <- xtdb.operator.scan.ScanCursor.tryAdvance <- xtdb.api.ICursor$Companion$InterruptibleCursor.tryAdvance
+
+  128 xtdb.arrow.MaskedRelation.<init> <- xtdb.arrow.MaskedRelation.withWords <- xtdb.expression$$reify__10288.refine <- xtdb.operator.scan.ScanCursor.tryAdvance <- xtdb.api.ICursor$Companion$InterruptibleCursor.tryAdvance <- xtdb.operator.ProjectCursor.tryAdvance
+
+  114 xtdb.arrow.MaskedRelation.<init> <- xtdb.operator.scan.BitemporalConsumer$RelBuilder.build <- xtdb.operator.scan.BitemporalConsumer.build <- xtdb.operator.scan.ScanCursor.tryAdvance <- xtdb.api.ICursor$Companion$InterruptibleCursor.tryAdvance <- xtdb.operator.ProjectCursor.tryAdvance
+
+   93 xtdb.arrow.MaskedRelation.directRel_delegate$lambda$0 <- kotlin.SynchronizedLazyImpl.getValue <- xtdb.arrow.MaskedRelation.getDirectRel <- xtdb.expression$$reify__10263.projectMasked <- xtdb.operator.ProjectCursor.tryMasked <- xtdb.operator.ProjectCursor.tryAdvance$lambda$0
+
+   87 xtdb.arrow.MaskedRelation.<init> <- xtdb.arrow.MaskedRelation.openSlice <- xtdb.operator.scan.ScanCursor.tryAdvance <- xtdb.api.ICursor$Companion$InterruptibleCursor.tryAdvance <- xtdb.operator.ProjectCursor.tryAdvance <- xtdb.api.ICursor$Companion$InterruptibleCursor.tryAdvance
+

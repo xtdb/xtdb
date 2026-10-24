@@ -1,0 +1,12 @@
+base2-0.log          q1   cold  10865 n  30 median    7835 mean    7850 min   7506 sd    189
+base2-0.log          q6   cold   6221 n  30 median    5876 mean    5886 min   5589 sd    162
+base2-1.log          q1   cold  10646 n  30 median    7845 mean    7905 min   7552 sd    223
+base2-1.log          q6   cold   6480 n  30 median    5892 mean    5900 min   5476 sd    224
+base2-2.log          q1   cold  11924 n  30 median    8063 mean    8092 min   7779 sd    196
+base2-2.log          q6   cold   6804 n  30 median    6082 mean    6082 min   5536 sd    238
+mask2-0.log          q1   cold  10219 n  30 median    7723 mean    7741 min   7211 sd    228
+mask2-0.log          q6   cold   5444 n  30 median    5684 mean    5698 min   5378 sd    197
+mask2-1.log          q1   cold  10358 n  30 median    7632 mean    7637 min   7323 sd    223
+mask2-1.log          q6   cold   5695 n  30 median    5562 mean    5569 min   5277 sd    212
+mask2-2.log          q1   cold  10924 n  30 median    7618 mean    7616 min   7103 sd    214
+mask2-2.log          q6   cold   6052 n  30 median    5575 mean    5615 min   5298 sd    195

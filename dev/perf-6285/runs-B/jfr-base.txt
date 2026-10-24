@@ -1,0 +1,12 @@
+samples under ScanCursor.tryAdvance 22542
+  8001  35.5% event merge / resolve
+  5455  24.2% predicate/projection: expression eval
+  3883  17.2% group-by
+  1661   7.4% predicate: param-types/zone setup
+  1467   6.5% project
+  1382   6.1% page load
+   673   3.0% selection: IntStream/VectorMask/select
+    20   0.1% predicate: java.time
+
+TOP SELF
+  3197  14.2% java.util.PriorityQueue.siftUp

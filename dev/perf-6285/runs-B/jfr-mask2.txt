@@ -1,0 +1,12 @@
+samples under ScanCursor.tryAdvance 20937
+  8873  42.4% event merge / resolve
+  4050  19.3% predicate/projection: expression eval
+  4039  19.3% group-by
+  1476   7.0% predicate: param-types/zone setup
+  1249   6.0% page load
+  1129   5.4% project
+   113   0.5% selection: IntStream/VectorMask/select
+     8   0.0% predicate: java.time
+
+TOP SELF
+  2728  13.0% xtdb.arrow.FixedWidthVector.getLong0
