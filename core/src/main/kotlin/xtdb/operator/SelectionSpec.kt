@@ -24,6 +24,9 @@ interface SelectionSpec {
     }
 
     companion object {
+        // dart ablation: `-Dxtdb.refine=false` = evaluate over the views + compose, as before
+        private val REFINE = System.getProperty("xtdb.refine", "true") == "true"
+
         /**
          * [rel] narrowed to the rows passing [spec], as an [IndirectRelation] whose selection was filtered
          * rather than composed.
@@ -33,6 +36,10 @@ interface SelectionSpec {
             rel: RelationReader, spec: SelectionSpec, allocator: BufferAllocator,
             schema: Map<String, Any>, params: RelationReader
         ): IndirectRelation {
+            if (!REFINE) {
+                val idxs = spec.select(allocator, rel, schema, params)
+                return IndirectRelation(IndirectRelation.innerOf(rel), IndirectRelation.selOf(rel)?.let { s -> IntArray(idxs.size) { s[idxs[it]] } } ?: idxs)
+            }
             val inner = IndirectRelation.innerOf(rel)
             return IndirectRelation(inner, spec.refine(allocator, inner, IndirectRelation.selOf(rel), schema, params))
         }
