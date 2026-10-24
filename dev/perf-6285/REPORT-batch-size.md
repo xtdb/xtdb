@@ -13,8 +13,8 @@ Toggles: `-Pcoalesce=none|pre|post`, `-PcoalesceTarget=N` (post only), `-PscanDe
 |---|---|
 | merge tasks per scan | 1024 (path depth 5, so every task is a depth-5 IID-path leaf) |
 | pages per task | **43, every task: 38 × l00 + 5 × l01** |
-| rows per page | l00: mean 403 (all < 512); l01: mean 482 (< 1024) |
-| rows read per scan | ~18M, to emit 6M live rows — **3× read amplification** |
+| rows per loaded page (whole page, *before* the task's IID-path slice) | l00: mean 403 (all < 512); l01: mean 482 (< 1024) |
+| rows per page after the IID-path slice (orchestrator's EntityMerge dart, same data) | 39 × ~99 and 4 × ~502 per task; rows = entities = events, with no entity spanning pages |
 | relations emitted per task | 43, one per leaf page (`BitemporalConsumer.build` → `rels.map`) |
 | rows per emitted relation | mean 136 before the predicates; after them, ~136 for Q1 (98% pass) and ~2 for Q6 |
 | l02 (p0–p3) pages read | **none** |
@@ -23,7 +23,8 @@ So it's both factors, multiplied:
 1. **The scan emits one relation per leaf page per merge task.**
    A task's resolved rows are split across its 43 source pages, so each gets ~1/43 of them.
 2. **The pages a task merges come from a barely-compacted catalog.**
-   With 38 L0 pages + 5 L1 pages per task, ~2/3 of the rows read are duplicates that the merge resolves away, and the live rows spread thinly across all 43 relations.
+   There are 38 L0 pages + 5 L1 pages per task.
+   Each loaded page is ~4× the task's slice of it (a page covers a shorter IID prefix than the depth-5 task), so a task's ~5.9K rows are spread thinly across 43 relations.
 
 ### The restart catalog isn't the compacted one
 Same instrumentation at SF0.1 (`~/bench/sf01`, 7 × l00 + 7 × l01 on disk):
@@ -43,8 +44,9 @@ Same instrumentation at SF0.1 (`~/bench/sf01`, 7 × l00 + 7 × l01 on disk):
 - It looks like a recovery bug, or an unspecified behaviour. I didn't chase it (out of avenue), but it changes what every `-PnoLoad` dart measures.
 
 **Implications for the EntityMerge/PQ dart**:
-- Each merge in the bench has a 43-pointer priority queue (~5.4 compares/event) over 18M events per scan.
-- The in-process shape is 2–5 pointers over ~6M events: ~3× fewer events, ~2.5× shallower heap, so ~7× less PQ work.
+- Each merge in the bench has a 43-pointer priority queue (~5.4 compares/event) over the 6M events per scan.
+- The in-process shape (2 × l01 at SF0.1) is a 2-pointer merge (~1 compare/event), so the PQ cost should drop several-fold.
+- The pages it loads also shrink from 43 to ~2 per task.
 - PQ work measured on `-PnoLoad` mostly measures the stale catalog.
 
 ## Routes to bigger batches
