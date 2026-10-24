@@ -54,7 +54,8 @@
                                      {:args {:zdt zdt}, :default-tz zone})
                         first :res))
       (.getYear zdt) '(extract "YEAR" ?zdt)
-      (.getHour zdt) '(extract "HOUR" ?zdt))))
+      (.getHour zdt) '(extract "HOUR" ?zdt)
+      (.truncatedTo zdt ChronoUnit/DAYS) '(date_trunc "DAY" ?zdt))))
 
 (t/deftest test-cast-temporal
   (let [current-time #xt/instant "2022-08-16T20:04:14.423452Z"]

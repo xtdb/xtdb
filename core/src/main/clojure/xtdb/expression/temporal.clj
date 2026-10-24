@@ -12,7 +12,6 @@
            (java.time.format DateTimeParseException)
            (java.time.temporal ChronoField ChronoUnit Temporal)
            (org.apache.arrow.vector PeriodDuration)
-           (xtdb DateTruncator)
            (xtdb.arrow ListValueReader ValueBox ValueReader VectorType VectorType$Mono)
            (xtdb.time LocalDateTimeUtil TemporalMath ZoneOffsets)))
 
@@ -1569,92 +1568,79 @@
                                                (format "Extract \"%s\" not supported for type time without timezone" field)
                                                {:field field, :source-type :time-local})))))}))
 
-(defn field->truncate-fn
-  [field]
+(defn- truncate-date-code [field epoch-day]
   (case field
-    "MILLENNIUM" `(DateTruncator/truncateYear 1000)
-    "CENTURY" `(DateTruncator/truncateYear 100)
-    "DECADE" `(DateTruncator/truncateYear 10)
-    "YEAR" `(DateTruncator/truncateYear)
-    "QUARTER" `(DateTruncator/truncateQuarter)
-    "MONTH" `(DateTruncator/truncateMonth)
-    "WEEK" `(DateTruncator/truncateWeek)
-    `(.truncatedTo ~(case field
-                      "DAY" `ChronoUnit/DAYS
-                      "HOUR" `ChronoUnit/HOURS
-                      "MINUTE" `ChronoUnit/MINUTES
-                      "SECOND" `ChronoUnit/SECONDS
-                      "MILLISECOND" `ChronoUnit/MILLIS
-                      "MICROSECOND" `ChronoUnit/MICROS))))
+    "MILLENNIUM" `(TemporalMath/truncYear ~epoch-day 1000)
+    "CENTURY" `(TemporalMath/truncYear ~epoch-day 100)
+    "DECADE" `(TemporalMath/truncYear ~epoch-day 10)
+    "YEAR" `(TemporalMath/truncYear ~epoch-day 1)
+    "QUARTER" `(TemporalMath/truncQuarter ~epoch-day)
+    "MONTH" `(TemporalMath/truncMonth ~epoch-day)
+    "WEEK" `(TemporalMath/truncWeek ~epoch-day)
+    ("DAY" "HOUR" "MINUTE" "SECOND" "MILLISECOND" "MICROSECOND") epoch-day))
 
-;; 1. We pass in the arrow timestamp - essentially a Long with some units (ts-unit) and a timezone (tz)
-;; 2. Convert the tz to a ZoneId
-;; 3. We take the long and the units, and use these to create an Instant
-;; 4. We convert the instant to a ZonedDateTime with the ZoneId
-;; 5. We truncate the ZonedDateTime, to the equivalent `field` value
-;; 6. We convert the ZonedDateTime back to a Long with the same units as the input
-;; 7. The generated code returns the Long.
+(defn- truncate-local-ts-code [field local-ts ^long hz]
+  (letfn [(floor-to [^long len]
+            (if (<= len 1)
+              local-ts
+              `(Math/multiplyExact (Math/floorDiv ~local-ts ~len) ~len)))]
+    (case field
+      ("MILLENNIUM" "CENTURY" "DECADE" "YEAR" "QUARTER" "MONTH" "WEEK" "DAY")
+      `(TemporalMath/dayToLocal ~(truncate-date-code field `(TemporalMath/epochDay ~local-ts ~hz)) ~hz)
+
+      "HOUR" (floor-to (* hz 3600))
+      "MINUTE" (floor-to (* hz 60))
+      "SECOND" (floor-to hz)
+      "MILLISECOND" (floor-to (quot hz 1000))
+      "MICROSECOND" (floor-to (quot hz 1000000)))))
+
+(defn- truncate-tstz-code [field ts ^long hz zone-sym]
+  (let [ts-sym (gensym 'ts)
+        second-sym (gensym 'second)]
+    `(let [~ts-sym ~ts]
+       ~(case field
+          ;; offsets are whole seconds, so truncating below a second never moves the wall-clock second
+          ("MILLISECOND" "MICROSECOND") (truncate-local-ts-code field ts-sym hz)
+
+          `(let [~second-sym (Math/floorDiv ~ts-sym ~hz)]
+             (Math/multiplyExact (TemporalMath/fromLocalNear ~(truncate-local-ts-code field `(TemporalMath/toLocal ~second-sym 1 ~zone-sym) 1)
+                                                             1 ~zone-sym ~second-sym)
+                                 ~hz))))))
+
 (defmethod expr/codegen-call [:date_trunc :utf8 :timestamp-tz] [{[{field :literal} _] :args, [_ ^VectorType$Mono ts-type] :arg-types}]
-  (let [ts-unit (st/timestamp-type->unit ts-type)
+  (let [hz (types/ts-units-per-second (st/timestamp-type->unit ts-type))
         tz (st/timestamp-type->tz ts-type)
-        zone-id-sym (gensym 'zone-id)]
+        zone-sym (-> (gensym 'zone) (expr/with-tag ZoneOffsets))]
     {:return-type ts-type
-     :batch-bindings [[zone-id-sym (ZoneId/of tz)]]
+     :batch-bindings [[zone-sym `(ZoneOffsets/of (ZoneId/of ~tz))]]
      :->call-code (fn [[_ x]]
-                    (-> `(-> ~(ts->zdt x ts-unit zone-id-sym)
-                             ~(field->truncate-fn field))
-                        (zdt->ts ts-unit)))}))
+                    (truncate-tstz-code field x hz zone-sym))}))
 
 (defmethod expr/codegen-call [:date_trunc :utf8 :timestamp-local] [{[{field :literal} _] :args, [_ ^VectorType$Mono ts-type] :arg-types}]
-    (let [ts-unit (st/timestamp-type->unit ts-type)]
-      {:return-type ts-type
-       :->call-code (fn [[_ x]]
-                      (-> `(-> ~(ts->ldt x ts-unit)
-                               ~(field->truncate-fn field))
-                          (ldt->ts ts-unit)))}))
-
-;; 1. We pass in the arrow timestamp - essentially a Long with some units (ts-unit) and a timezone (tz), and we have a provided time_zone argument
-;; 2. Convert the time_zone to ZoneId
-;; 3. We take the long and the units, and use these to create an Instant
-;; 4. We convert the instant to a ZonedDateTime with the time_zone ZoneId
-;; 5. We truncate the ZonedDateTime, to the equivalent `field` value
-;; 6. We convert the ZonedDateTime back to a Long with the same units as the input
-;; 7. The generated code returns the Long, with the original tz from the args.
-(defmethod expr/codegen-call [:date_trunc :utf8 :timestamp-tz :utf8] [{[{field :literal} _ {trunc-tz :literal}] :args, [_ ^VectorType$Mono ts-type _] :arg-types}]
-  (let [ts-unit (st/timestamp-type->unit ts-type)
-        trunc-zone-id-sym (gensym 'zone-id)]
+  (let [hz (types/ts-units-per-second (st/timestamp-type->unit ts-type))]
     {:return-type ts-type
-     :batch-bindings [[trunc-zone-id-sym (try
-                                           (ZoneId/of trunc-tz)
-                                           (catch DateTimeException e
-                                             (throw (err/incorrect ::expr/invalid-timezone (ex-message e)
-                                                                     {:timezone trunc-tz
-                                                                      ::err/cause e}))))]]
      :->call-code (fn [[_ x]]
-                    (-> `(-> ~(ts->zdt x ts-unit trunc-zone-id-sym)
-                             ~(field->truncate-fn field))
-                        (zdt->ts ts-unit)))}))
+                    (truncate-local-ts-code field x hz))}))
+
+(defmethod expr/codegen-call [:date_trunc :utf8 :timestamp-tz :utf8] [{[{field :literal} _ {trunc-tz :literal}] :args, [_ ^VectorType$Mono ts-type _] :arg-types}]
+  (let [hz (types/ts-units-per-second (st/timestamp-type->unit ts-type))
+        trunc-zone-id (try
+                        (ZoneId/of trunc-tz)
+                        (catch DateTimeException e
+                          (throw (err/incorrect ::expr/invalid-timezone (ex-message e)
+                                                {:timezone trunc-tz
+                                                 ::err/cause e}))))
+        zone-sym (-> (gensym 'trunc-zone) (expr/with-tag ZoneOffsets))]
+    {:return-type ts-type
+     :batch-bindings [[zone-sym `(ZoneOffsets/of (ZoneId/of ~(str trunc-zone-id)))]]
+     :->call-code (fn [[_ x]]
+                    (truncate-tstz-code field x hz zone-sym))}))
 
 (defmethod expr/codegen-call [:date_trunc :utf8 :date] [{[{field :literal} _] :args, [_ date-type] :arg-types}]
   ;; FIXME this assumes epoch-day
   {:return-type date-type
    :->call-code (fn [[_ epoch-day-code]]
-                  `(-> (LocalDate/ofEpochDay ~epoch-day-code)
-                       ~(case field
-                         "MILLENNIUM" `(DateTruncator/truncateYear 1000)
-                         "CENTURY" `(DateTruncator/truncateYear 100)
-                         "DECADE" `(DateTruncator/truncateYear 10)
-                         "YEAR" `(DateTruncator/truncateYear)
-                         "QUARTER" `(DateTruncator/truncateQuarter)
-                         "MONTH" `(DateTruncator/truncateMonth)
-                         "WEEK" `(DateTruncator/truncateWeek)
-                         "DAY" `(identity)
-                         "HOUR" `(identity)
-                         "MINUTE" `(identity)
-                         "SECOND" `(identity)
-                         "MILLISECOND" `(identity)
-                         "MICROSECOND" `(identity))
-                       (.toEpochDay)))})
+                  (truncate-date-code field epoch-day-code))})
 
 (defn ->period-duration
   ([^Period p]
