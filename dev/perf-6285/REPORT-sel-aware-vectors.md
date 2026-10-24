@@ -156,7 +156,8 @@ Didn't:
 ## Tests
 
 - `:test --tests 'xtdb.operator*' 'xtdb.expression*' 'xtdb.tpch*' 'xtdb.sql*'`: 755 tests, 1 failure (Q22, above) before the fix, 0 after.
-- Full `:test :xtdb-core:test`: see final section.
+- Full `:test :xtdb-core:test` on V3 + fix: root 1876 tests, 1 failure — `xtdb.authn-test` initializationError, from the local no-Docker patch below, not the change; `:xtdb-core:test` 601/601.
+  Not run: `integration-test`, `property-test` (scan/indexing untouched).
 - Env note: `:compileTestClojure` fails here without Docker — `xtdb.authn-test` constructs a `KeycloakContainer` in a `defonce` at load. Patched locally (not committed) to run tests.
 
 ## Suggested sub-goals
