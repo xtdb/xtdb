@@ -8,7 +8,7 @@
             [xtdb.types :as types])
   (:import (java.nio ByteBuffer)
            (java.nio.charset StandardCharsets)
-           (java.time DateTimeException Duration Instant LocalDate LocalDateTime LocalTime Period ZoneId ZoneOffset ZonedDateTime)
+           (java.time DateTimeException Duration Instant LocalDate LocalDateTime LocalTime Period ZoneId ZonedDateTime)
            (java.time.format DateTimeParseException)
            (java.time.temporal ChronoField ChronoUnit Temporal)
            (org.apache.arrow.vector PeriodDuration)
@@ -2107,31 +2107,20 @@
      :->call-code (fn [[i-code from-code to-code origin-code]]
                     (->call-code [i-code (->from-code [from-code]) (->to-code [to-code]) (->origin-code [origin-code])]))}))
 
-(defn date-series [^LocalDate from, ^LocalDate to, ^PeriodDuration stride, inclusive?]
-  (assert (= Duration/ZERO (.getDuration stride))
-          "date-series only supports zero-duration strides")
-
-  (let [period (.getPeriod stride)
-        months (+ (* (.getYears period) 12) (.getMonths period))
-        el-box (ValueBox.)
-        pred (if inclusive?
-               #(not (pos? (compare % to)))
-               #(neg? (compare % to)))
-
-        ;; we eagerly evaluate here because (unlike the ints version)
-        ;; every entry will need to calculate the one before anyway
-        res (->> (iterate (fn [^LocalDate acc]
-                            (.plusMonths acc months))
-                          from)
-                 (into [] (take-while pred)))]
-
+(defn long-array-reader ^xtdb.arrow.ListValueReader [^longs values]
+  (let [el-box (ValueBox.)]
     (reify ListValueReader
-      (size [_]
-        (count res))
+      (size [_] (alength values))
 
       (nth [_ idx]
         (doto el-box
-          (.writeLong (.toEpochDay ^LocalDate (nth res idx))))))))
+          (.writeLong (aget values idx)))))))
+
+(defn date-series ^xtdb.arrow.ListValueReader [^long from, ^long to, ^PeriodDuration stride, inclusive?]
+  (assert (= Duration/ZERO (.getDuration stride))
+          "date-series only supports zero-duration strides")
+
+  (long-array-reader (TemporalMath/dateSeries from to (.toTotalMonths (.getPeriod stride)) (boolean inclusive?))))
 
 (defmethod expr/codegen-call [:generate_series :date :date :interval] [expr]
   (expr/delegate-exclusive-default expr))
@@ -2149,31 +2138,16 @@
     (case i-unit
       :year-month {:return-type #xt/type [:list [:date :day]]
                    :->call-code (fn [[x-arg y-arg stride inclusive?]]
-                                  `(date-series (LocalDate/ofEpochDay ~x-arg) (LocalDate/ofEpochDay ~y-arg) ~stride (boolean ~inclusive?)))}
+                                  `(date-series ~x-arg ~y-arg ~stride ~inclusive?))}
       :month-day-micro (recall-with-cast3 expr [:timestamp-local :micro] [:timestamp-local :micro] [:interval :month-day-micro])
       :month-day-nano (recall-with-cast3 expr [:timestamp-local :nano] [:timestamp-local :nano] [:interval :month-day-nano]))))
 
-(defn ts-series [^LocalDateTime from, ^LocalDateTime to, ^PeriodDuration stride, write-ldt, inclusive?]
-  (let [period (.getPeriod stride)
-        duration (.getDuration stride)
-        el-box (ValueBox.)
-        pred (if inclusive?
-               #(not (pos? (compare % to)))
-               #(neg? (compare % to)))
-
-        ;; we eagerly evaluate here because (unlike the ints version)
-        ;; every entry will need to calculate the one before anyway
-        res (->> (iterate (fn [^LocalDateTime acc]
-                            (-> acc (.plus period) (.plus duration)))
-                          from)
-                 (into [] (take-while pred)))]
-
-    (reify ListValueReader
-      (size [_] (count res))
-
-      (nth [_ idx]
-        (doto el-box
-          (write-ldt (nth res idx)))))))
+(defn- series-out-unit [from-unit to-unit i-unit]
+  (types/smallest-ts-unit from-unit to-unit
+                          (case i-unit
+                            :year-month :second
+                            :month-day-nano :nano
+                            :month-day-micro :micro)))
 
 (defmethod expr/codegen-call [:generate_series :timestamp-local :timestamp-local :interval] [expr]
   (expr/delegate-exclusive-default expr))
@@ -2181,69 +2155,29 @@
 (defmethod expr/codegen-call [:generate_series :timestamp-local :timestamp-local :interval :bool] [{[^VectorType$Mono from-type, ^VectorType$Mono to-type, ^VectorType$Mono i-type] :arg-types}]
   (let [from-unit (st/timestamp-type->unit from-type)
         to-unit (st/timestamp-type->unit to-type)
-        i-unit (st/interval-type->unit i-type)
-        out-unit (types/smallest-ts-unit from-unit to-unit
-                                         (case i-unit
-                                           :year-month :second
-                                           :month-day-nano :nano
-                                           :month-day-micro :micro))]
+        out-unit (series-out-unit from-unit to-unit (st/interval-type->unit i-type))]
     {:return-type (st/->type [:list [:timestamp-local out-unit]])
      :->call-code (fn [[from-arg to-arg i-arg inclusive?]]
-                    (-> `(ts-series ~(ts->ldt from-arg from-unit)
-                                    ~(ts->ldt to-arg to-unit)
-                                    ~i-arg
-                                    ~(let [ldt-sym (gensym 'ldt)]
-                                       `(fn ~'write-ldt [^ValueBox box#, ~(-> ldt-sym (expr/with-tag LocalDateTime))]
-                                          (.writeLong box# ~(ldt->ts ldt-sym out-unit))))
-                                    (boolean ~inclusive?))))}))
-
-(defn tstz-series [^ZonedDateTime from, ^ZonedDateTime to, ^PeriodDuration stride, write-zdt, inclusive?]
-  (let [period (.getPeriod stride)
-        duration (.getDuration stride)
-        el-box (ValueBox.)
-        pred (if inclusive?
-               #(not (pos? (compare % to)))
-               #(neg? (compare % to)))
-
-        ;; we eagerly evaluate here because (unlike the ints version)
-        ;; every entry will need to calculate the one before anyway
-        res (->> (iterate (fn [^ZonedDateTime acc]
-                            (-> acc (.plus period) (.plus duration)))
-                          from)
-                 (into [] (take-while pred)))]
-
-    (reify ListValueReader
-      (size [_] (count res))
-
-      (nth [_ idx]
-        (doto el-box
-          (write-zdt (nth res idx)))))))
+                    `(long-array-reader
+                      (TemporalMath/localSeries ~from-arg ~(types/ts-units-per-second from-unit)
+                                                ~to-arg ~(types/ts-units-per-second to-unit)
+                                                ~i-arg ~(types/ts-units-per-second out-unit)
+                                                (boolean ~inclusive?))))}))
 
 (defmethod expr/codegen-call [:generate_series :timestamp-tz :timestamp-tz :interval] [expr]
   (expr/delegate-exclusive-default expr))
 
 (defmethod expr/codegen-call [:generate_series :timestamp-tz :timestamp-tz :interval :bool] [{[^VectorType$Mono from-type, ^VectorType$Mono to-type, ^VectorType$Mono i-type] :arg-types}]
-  (let [from-unit (st/timestamp-type->unit from-type)
-        to-unit (st/timestamp-type->unit to-type)
-        from-tz (st/timestamp-type->tz from-type)
-        to-tz (st/timestamp-type->tz to-type)
-        i-unit (st/interval-type->unit i-type)
-        out-unit (types/smallest-ts-unit from-unit to-unit
-                                         (case i-unit
-                                           :year-month :second
-                                           :month-day-nano :nano
-                                           :month-day-micro :micro))
-        out-tz-sym (gensym 'out-tz)
-        out-tz (if (= from-tz to-tz) from-tz "UTC")]
+  (let [[from-unit from-tz] (st/timestamp-type->unit+tz from-type)
+        [to-unit to-tz] (st/timestamp-type->unit+tz to-type)
+        out-unit (series-out-unit from-unit to-unit (st/interval-type->unit i-type))
+        out-tz (if (= from-tz to-tz) from-tz "UTC")
+        zone-sym (-> (gensym 'out-zone) (expr/with-tag ZoneOffsets))]
     {:return-type (st/->type [:list [:timestamp-tz out-unit out-tz]])
-     :batch-bindings [[out-tz-sym (ZoneId/of out-tz)]]
+     :batch-bindings [[zone-sym `(ZoneOffsets/of (ZoneId/of ~out-tz))]]
      :->call-code (fn [[from-arg to-arg i-arg inclusive?]]
-                    (-> `(tstz-series ~(ts->zdt from-arg from-unit out-tz-sym)
-                                      ~(ts->zdt to-arg to-unit out-tz-sym)
-                                      ~i-arg
-                                      ~(let [zdt-sym (gensym 'zdt)]
-                                         `(fn ~'write-zdt [^ValueBox box#, ~(-> zdt-sym (expr/with-tag ZonedDateTime))]
-                                            (.writeLong box# ~(zdt->ts zdt-sym out-unit))))
-                                      (boolean ~inclusive?))))}))
-
-
+                    `(long-array-reader
+                      (TemporalMath/tzSeries ~from-arg ~(types/ts-units-per-second from-unit)
+                                             ~to-arg ~(types/ts-units-per-second to-unit)
+                                             ~zone-sym ~i-arg ~(types/ts-units-per-second out-unit)
+                                             (boolean ~inclusive?))))}))

@@ -6,6 +6,7 @@ import io.kotest.property.Arb
 import io.kotest.property.arbitrary.bind
 import io.kotest.property.arbitrary.choice
 import io.kotest.property.arbitrary.element
+import io.kotest.property.arbitrary.filter
 import io.kotest.property.arbitrary.flatMap
 import io.kotest.property.arbitrary.int
 import io.kotest.property.arbitrary.long
@@ -61,6 +62,12 @@ class TemporalMathTest {
         // ±250 years, so a pair of them fits a long at every unit
         private val ageSeconds = Arb.long(-8_000_000_000L..8_000_000_000L)
         private val nanosOfSecond = Arb.long(0L..999_999_999L)
+
+        private const val SERIES_ITERATIONS = 1_000
+
+        private val strides = Arb.bind(Arb.int(0..2), Arb.int(0..2), Arb.long(0L..90_000L), Arb.long(0L..999_999_999L)) { months, days, secs, nanos ->
+            PeriodDuration(Period.of(0, months, days), Duration.ofSeconds(secs, nanos))
+        }.filter { !(it.period.isZero && it.duration.isZero) }
     }
 
     private fun assertLocalReading(zone: ZoneId, ts: Long, hz: Long) {
@@ -228,6 +235,50 @@ class TemporalMathTest {
     fun `age matches its java time definition for timestamps within 90 days of each other`() = runTest {
         checkAll(ITERATIONS, units, ageSeconds, nanosOfSecond, units, Arb.long(-90L * 86_400..90L * 86_400), nanosOfSecond) { endHz, endSec, endNano, startHz, delta, startNano ->
             assertAge(endHz, endSec, endNano, startHz, endSec + delta, startNano)
+        }
+    }
+
+    private fun <T : Comparable<T>> iterateSeries(from: T, to: T, inclusive: Boolean, step: (T) -> T): List<T> =
+        generateSequence(from, step).takeWhile { it < to || (inclusive && it.compareTo(to) == 0) }.toList()
+
+    @Test
+    fun `date series clamp to month end from the previous step, as iterated LocalDate does`() {
+        val jan31 = LocalDate.of(2023, 1, 31)
+        assertEquals(
+            iterateSeries(jan31, jan31.plusYears(2), true) { it.plusMonths(1) }.map { it.toEpochDay() },
+            TemporalMath.dateSeries(jan31.toEpochDay(), jan31.plusYears(2).toEpochDay(), 1, true).toList()
+        )
+    }
+
+    // no stride is shorter than this, so a span of `n` of them holds at most `n + 1` elements
+    private fun PeriodDuration.minNanos() =
+        (period.months * 28L + period.days) * 86_400_000_000_000 + duration.seconds * 1_000_000_000 + duration.nano
+
+    @Test
+    fun `timestamp series step as iterated java time does`() = runTest {
+        val nanos = 1_000_000_000L
+        checkAll(
+            SERIES_ITERATIONS, zones, Arb.long(-7_000_000_000L..7_000_000_000L), Arb.long(0L..999_999L), strides, Arb.int(0..200), Arb.element(true, false)
+        ) { zone, fromSec, fromMicros, stride, steps, inclusive ->
+            val from = fromSec * micros + fromMicros
+            val to = from + stride.minNanos() * steps / 1000
+
+            val ldtFrom = from.microsToLocal()
+            val ldtTo = to.microsToLocal()
+            assertEquals(
+                iterateSeries(ldtFrom, ldtTo, inclusive) { it.plus(stride.period).plus(stride.duration) }
+                    .map { val i = it.toInstant(ZoneOffset.UTC); i.epochSecond * nanos + i.nano },
+                TemporalMath.localSeries(from, micros, to, micros, stride, nanos, inclusive).toList(),
+                "local $ldtFrom..$ldtTo by $stride"
+            )
+
+            assertEquals(
+                iterateSeries(ZonedDateTime.ofInstant(from.microsToInstant(), zone), ZonedDateTime.ofInstant(to.microsToInstant(), zone), inclusive) {
+                    it.plus(stride.period).plus(stride.duration)
+                }.map { it.toInstant().toMicros() },
+                TemporalMath.tzSeries(from, micros, to, micros, ZoneOffsets.of(zone), stride, micros, inclusive).toList(),
+                "tz $zone from $from to $to by $stride"
+            )
         }
     }
 }

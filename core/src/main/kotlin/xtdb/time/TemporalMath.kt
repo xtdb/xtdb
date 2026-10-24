@@ -158,6 +158,76 @@ object TemporalMath {
         return addExact(moved, durationUnits(interval.duration, hz, sign))
     }
 
+    private class LongSeries {
+        var values = LongArray(16)
+        var size = 0
+
+        fun add(value: Long) {
+            if (size == values.size) values = values.copyOf(size * 2)
+            values[size++] = value
+        }
+
+        fun toArray(): LongArray = values.copyOf(size)
+    }
+
+    private fun stillInSeries(cmp: Int, inclusive: Boolean) = cmp < 0 || (inclusive && cmp == 0)
+
+    /** `from`, `from + months`, `from + 2 * months`, ... - each step from the last, so month-end clamping carries forward */
+    @JvmStatic
+    fun dateSeries(from: Long, to: Long, months: Long, inclusive: Boolean): LongArray {
+        val out = LongSeries()
+        var day = from
+        while (stillInSeries(day.compareTo(to), inclusive)) {
+            out.add(day)
+            day = LocalDate.ofEpochDay(day).plusMonths(months).toEpochDay()
+        }
+        return out.toArray()
+    }
+
+    private fun compareSecondNanos(sec: Long, nano: Long, otherSec: Long, otherNano: Long): Int =
+        if (sec != otherSec) sec.compareTo(otherSec) else nano.compareTo(otherNano)
+
+    // a series steps a (second, nano-of-second) pair rather than a single long, so a nanosecond stride stays exact at any unit
+    private inline fun series(
+        from: Long, fromHz: Long, to: Long, toHz: Long, stride: PeriodDuration, outHz: Long, inclusive: Boolean,
+        plusPeriod: (Long) -> Long,
+    ): LongArray {
+        val out = LongSeries()
+        var sec = floorDiv(from, fromHz)
+        var nano = floorMod(from, fromHz) * (NANOS_PER_SEC / fromHz)
+        val toSec = floorDiv(to, toHz)
+        val toNano = floorMod(to, toHz) * (NANOS_PER_SEC / toHz)
+        val period = stride.period
+        val duration = stride.duration
+
+        while (stillInSeries(compareSecondNanos(sec, nano, toSec, toNano), inclusive)) {
+            out.add(addExact(multiplyExact(sec, outHz), nano / (NANOS_PER_SEC / outHz)))
+
+            if (!period.isZero) sec = plusPeriod(sec)
+            sec = addExact(sec, duration.seconds)
+            nano += duration.nano
+            if (nano >= NANOS_PER_SEC) {
+                nano -= NANOS_PER_SEC
+                sec = addExact(sec, 1)
+            }
+        }
+        return out.toArray()
+    }
+
+    /** as iterating `LocalDateTime.plus(stride.period).plus(stride.duration)` from [from], written in [outHz] */
+    @JvmStatic
+    fun localSeries(from: Long, fromHz: Long, to: Long, toHz: Long, stride: PeriodDuration, outHz: Long, inclusive: Boolean): LongArray =
+        series(from, fromHz, to, toHz, stride, outHz, inclusive) { sec -> localPlusPeriod(sec, 1, stride.period, 1) }
+
+    /** as iterating `ZonedDateTime.plus(stride.period).plus(stride.duration)` from [from] in [zone], written in [outHz] */
+    @JvmStatic
+    fun tzSeries(
+        from: Long, fromHz: Long, to: Long, toHz: Long, zone: ZoneOffsets, stride: PeriodDuration, outHz: Long, inclusive: Boolean,
+    ): LongArray =
+        series(from, fromHz, to, toHz, stride, outHz, inclusive) { sec ->
+            fromLocalNear(localPlusPeriod(toLocal(sec, 1, zone), 1, stride.period, 1), 1, zone, sec)
+        }
+
     /** the first day of [epochDay]'s year, rounded towards zero to a multiple of [yearMultiple] */
     @JvmStatic
     fun truncYear(epochDay: Long, yearMultiple: Long): Long {
