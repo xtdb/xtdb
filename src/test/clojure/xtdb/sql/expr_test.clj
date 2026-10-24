@@ -981,6 +981,13 @@
            (xt/q tu/*node* "SELECT CAST(INTERVAL '1 10:10:10' DAY TO SECOND AS VARCHAR) as string"))))
 
 
+(t/deftest test-cast-nested-interval-to-string-prints-interval
+  (t/is (= [{:s "[#xt/interval \"P1D\"]"}]
+           (xt/q tu/*node* "SELECT CAST([INTERVAL '1' DAY] AS VARCHAR) AS s")))
+
+  (t/is (= [{:s "{\"a\" #xt/interval \"P2Y\"}"}]
+           (xt/q tu/*node* "SELECT CAST({a: INTERVAL '2' YEAR} AS VARCHAR) AS s"))))
+
 (t/deftest test-interval-past-interval-range-raises-overflow-error
   (t/are [sql] (thrown-with-msg? RuntimeException #"data exception - overflow error" (xt/q tu/*node* sql))
     "SELECT INTERVAL '3000000' HOUR AS i"

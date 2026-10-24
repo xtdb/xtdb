@@ -1883,6 +1883,7 @@
     (resolve-value (.readObject ^ValueReader v))
 
     (instance? ByteBuffer v) (buf->str v)
+    (instance? PeriodDuration v) (let [^PeriodDuration pd v] (Interval. (.getPeriod pd) (.getDuration pd)))
     (instance? Map v) (into {} (map (fn [[k val]] [k (resolve-value val)])) v)
     (map? v) (into {} (map (fn [[k val]] [k (resolve-value val)])) v)
     (sequential? v) (mapv resolve-value v)
