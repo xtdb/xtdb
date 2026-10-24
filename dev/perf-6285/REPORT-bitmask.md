@@ -98,6 +98,16 @@ Per-JVM Q1 medians across the 9 A/A JVMs ranged 7566–8453 (≈ ±6%), and Q6 5
   Both use the same `continue`/`batch-bindings`, with the `dotimes` replaced by a word loop over `idx-sym`.
   Expressions only qualify when **every** variable is direct; otherwise it falls back.
 
+## Tests
+
+- `./gradlew :test --tests 'xtdb.operator*' --tests 'xtdb.expression*' --tests 'xtdb.tpch_test*' --tests 'xtdb.sql_test*'` on mask-v2 ran **561 tests: 0 failures, 0 errors**.
+  The masked scan engaged in that JVM (stderr marker).
+- Caveat: this container has no Docker, and root `compileTestClojure` AOT fails on testcontainers namespaces.
+  I moved 8 namespaces aside for the run and then restored them: authn, kafka, pgwire_protocol, oidc_integration, aws/s3, azure, gcp, pgwire/authn.
+  Not run: the full `./gradlew test`, property tests, or `:xtdb-core` Clojure tests beyond `xtdb.operator*`/`xtdb.expression*` (the Kotlin ones, which passed).
+- So the green run says the fallback view and the masked paths agree on what the tests cover.
+  It says nothing about leaks under failure, or about the iid-selected/polygon scan paths with masks (they fall back).
+
 ## Data structures
 
 **Matched the problem:**
