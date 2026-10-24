@@ -880,6 +880,11 @@ fun createBench(benchName: String, properties: Map<String, String>, defaultArgs:
 
         if (project.hasProperty("composePutLeg"))
             jvmArgs("-Dxtdb.composePutLeg=${project.property("composePutLeg")}")
+        if (project.hasProperty("ptrEqui"))
+            jvmArgs("-Dxtdb.ptrEqui=${project.property("ptrEqui")}")
+
+        if (project.hasProperty("fastHash"))
+            jvmArgs("-Dxtdb.fastHash=${project.property("fastHash")}")
 
         if (project.hasProperty("qs"))
             jvmArgs("-Dxtdb.bench.qs=${project.property("qs")}")

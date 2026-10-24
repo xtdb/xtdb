@@ -9,7 +9,7 @@
            (org.apache.arrow.memory BufferAllocator)
            (xtdb.api ICursor)
            (xtdb.arrow RelationReader)
-           (xtdb.operator.distinct DistinctRelationMap DistinctRelationMap$ComparatorFactory)))
+           (xtdb.operator.distinct DistinctRelationMap DistinctRelationMap$ComparatorFactory PointerEquiComparator)))
 
 (defmethod lp/ra-expr :distinct [_]
   (s/cat :op #{:δ :distinct}
@@ -65,10 +65,11 @@
                           (boolean store-full-build-rel?)
                           (reify DistinctRelationMap$ComparatorFactory
                             (buildEqui [_ build-col in-col]
-                              (emap/->equi-comparator build-col in-col
+                              (or (PointerEquiComparator/orNull build-col in-col (boolean nil-keys-equal?))
+                                  (emap/->equi-comparator build-col in-col
                                                       args
                                                       {:nil-keys-equal? nil-keys-equal?
-                                                       :param-types param-types})))
+                                                       :param-types param-types}))))
                           64 4)))
 
 (defmethod lp/emit-expr :distinct [{:keys [_opts relation]} args]

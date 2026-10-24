@@ -28,6 +28,7 @@ abstract class Hasher {
             private const val PRIME32_3 = -1028477379  // 0xC2B2AE3D
             private const val PRIME32_4 = 668265263    // 0x27D4EB2F
             private const val PRIME32_5 = 374761393    // 0x165667B1
+            private val FAST = System.getProperty("xtdb.fastHash", "true") == "true"
         }
 
         private fun processLane(acc: Int, lane: Int): Int = rotateLeft(acc + lane * PRIME32_2, 13) * PRIME32_1
@@ -86,6 +87,12 @@ abstract class Hasher {
                         .or((data[index + 3].toInt() and 0xFF) shl 24)
             }
 
+            // dart(#6285 group-by keys): read through the address, skipping ArrowBuf's per-byte bounds checks
+            class Addr(val addr: Long) : Bytes {
+                override fun getByte(index: Int) = org.apache.arrow.memory.util.MemoryUtil.getByte(addr + index)
+                override fun getInt(index: Int) = org.apache.arrow.memory.util.MemoryUtil.getInt(addr + index)
+            }
+
             class Buf(val buf: ArrowBuf) : Bytes {
                 override fun getByte(index: Int) = buf.getByte(index.toLong())
 
@@ -138,7 +145,8 @@ abstract class Hasher {
             return avalanche(h32)
         }
 
-        override fun hash(buf: ArrowBuf, offset: Int, length: Int) = hash(Bytes.Buf(buf), offset, length)
+        override fun hash(buf: ArrowBuf, offset: Int, length: Int) =
+            if (FAST) hash(Bytes.Addr(buf.memoryAddress()), offset, length) else hash(Bytes.Buf(buf), offset, length)
 
         fun hash(data: ByteArray, offset: Int, length: Int): Int = hash(Bytes.Array(data), offset, length)
 
