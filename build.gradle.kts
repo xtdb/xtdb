@@ -893,6 +893,9 @@ fun createBench(benchName: String, properties: Map<String, String>, defaultArgs:
         if (project.hasProperty("vectorApi"))
             jvmArgs("--add-modules", "jdk.incubator.vector")
 
+        if (project.hasProperty("staleSnapshot"))
+            jvmArgs("-Dxtdb.bench.staleSnapshot=true")
+
         if (project.hasProperty("qs"))
             jvmArgs("-Dxtdb.bench.qs=${project.property("qs")}")
 

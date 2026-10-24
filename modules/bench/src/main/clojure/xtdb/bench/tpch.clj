@@ -67,7 +67,13 @@
    :->state #(do {:!state (atom {})})
    :tasks [{:t :do
             :stage :ingest
-            :tasks (when-not no-load?
+            :tasks (if no-load?
+                     ;; #6174: a restarted node plans from the snapshot cached at the last block until a tx arrives
+                     (when-not (Boolean/getBoolean "xtdb.bench.staleSnapshot")
+                       [{:t :call, :stage :refresh-snapshot
+                         :f (fn [{:keys [node]}]
+                              (xt/execute-tx node [[:put-docs :bench_refresh {:xt/id 1}]])
+                              (b/sync-node node (Duration/ofMinutes 5)))}])
                      [{:t :call, :stage :submit-rels
                        :f (fn [{:keys [node]}] (tpch/submit-rels! node scale-factor))}
 
