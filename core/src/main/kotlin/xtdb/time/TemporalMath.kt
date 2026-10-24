@@ -88,6 +88,32 @@ object TemporalMath {
     @JvmStatic
     fun isoWeek(epochDay: Long): Int = LocalDate.ofEpochDay(epochDay).get(IsoFields.WEEK_OF_WEEK_BASED_YEAR)
 
+    /**
+     * `AGE(end, start)` over two local timestamps: the calendar period between their dates,
+     * one day short where the time of day hasn't yet come round, and the sub-day remainder as the duration.
+     */
+    @JvmStatic
+    fun ageInterval(endTs: Long, endHz: Long, startTs: Long, startHz: Long): PeriodDuration {
+        val endDay = epochDay(endTs, endHz)
+        val startDay = epochDay(startTs, startHz)
+        val endNanoOfDay = unitOfDay(endTs, endHz) * (NANOS_PER_SEC / endHz)
+        val startNanoOfDay = unitOfDay(startTs, startHz) * (NANOS_PER_SEC / startHz)
+
+        val period = Period.between(LocalDate.ofEpochDay(startDay), LocalDate.ofEpochDay(endDay))
+        val dayAdjustment = when {
+            period.isNegative && startNanoOfDay < endNanoOfDay -> 1
+            !period.isNegative && period.days != 0 && startNanoOfDay > endNanoOfDay -> -1
+            else -> 0
+        }
+
+        val between = Duration.ofSeconds(
+            addExact(multiplyExact(endDay - startDay, SECS_PER_DAY), endNanoOfDay / NANOS_PER_SEC - startNanoOfDay / NANOS_PER_SEC),
+            endNanoOfDay % NANOS_PER_SEC - startNanoOfDay % NANOS_PER_SEC
+        )
+
+        return PeriodDuration(period.plusDays(dayAdjustment.toLong()), between.minusDays(between.toDays()))
+    }
+
     private fun plusPeriod(epochDay: Long, period: Period, sign: Long): Long {
         val date = LocalDate.ofEpochDay(epochDay)
         return (if (sign > 0) date.plus(period) else date.minus(period)).toEpochDay()

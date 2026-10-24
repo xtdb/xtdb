@@ -57,6 +57,10 @@ class TemporalMathTest {
         // far enough inside LocalDate's range, and a micros timestamp's, that no interval above can push a result out of it
         private val intervalEpochDays = Arb.long(LocalDate.MIN.toEpochDay() + 1_000_000..LocalDate.MAX.toEpochDay() - 1_000_000)
         private val intervalMicros = Arb.long(Long.MIN_VALUE + 100_000_000_000_000_000..Long.MAX_VALUE - 100_000_000_000_000_000)
+
+        // ±250 years, so a pair of them fits a long at every unit
+        private val ageSeconds = Arb.long(-8_000_000_000L..8_000_000_000L)
+        private val nanosOfSecond = Arb.long(0L..999_999_999L)
     }
 
     private fun assertLocalReading(zone: ZoneId, ts: Long, hz: Long) {
@@ -188,6 +192,42 @@ class TemporalMathTest {
             val zone = ZoneId.of(id)
             for (s in epochSecondsAroundTransitions(zone))
                 for (i in fixed) assertTzPlusInterval(zone, s * micros + 250_000, i)
+        }
+    }
+
+    private fun javaTimeAge(end: LocalDateTime, start: LocalDateTime): PeriodDuration {
+        val period = Period.between(start.toLocalDate(), end.toLocalDate())
+        val adjustment = when {
+            period.isNegative && start.toLocalTime().isBefore(end.toLocalTime()) -> 1L
+            !period.isNegative && period.days != 0 && start.toLocalTime().isAfter(end.toLocalTime()) -> -1L
+            else -> 0L
+        }
+        val duration = Duration.between(start, end)
+        return PeriodDuration(period.plusDays(adjustment), duration.minusDays(duration.toDays()))
+    }
+
+    private fun ts(sec: Long, nano: Long, hz: Long) = sec * hz + nano / (1_000_000_000 / hz)
+
+    private fun assertAge(endHz: Long, endSec: Long, endNano: Long, startHz: Long, startSec: Long, startNano: Long) {
+        val endTs = ts(endSec, endNano, endHz)
+        val startTs = ts(startSec, startNano, startHz)
+        fun ldt(ts: Long, hz: Long) =
+            LocalDateTime.ofEpochSecond(Math.floorDiv(ts, hz), (Math.floorMod(ts, hz) * (1_000_000_000 / hz)).toInt(), ZoneOffset.UTC)
+
+        assertEquals(javaTimeAge(ldt(endTs, endHz), ldt(startTs, startHz)), TemporalMath.ageInterval(endTs, endHz, startTs, startHz), "age $endTs/$endHz $startTs/$startHz")
+    }
+
+    @Test
+    fun `age matches its java time definition for any two timestamps`() = runTest {
+        checkAll(ITERATIONS, units, ageSeconds, nanosOfSecond, units, ageSeconds, nanosOfSecond) { endHz, endSec, endNano, startHz, startSec, startNano ->
+            assertAge(endHz, endSec, endNano, startHz, startSec, startNano)
+        }
+    }
+
+    @Test
+    fun `age matches its java time definition for timestamps within 90 days of each other`() = runTest {
+        checkAll(ITERATIONS, units, ageSeconds, nanosOfSecond, units, Arb.long(-90L * 86_400..90L * 86_400), nanosOfSecond) { endHz, endSec, endNano, startHz, delta, startNano ->
+            assertAge(endHz, endSec, endNano, startHz, endSec + delta, startNano)
         }
     }
 }

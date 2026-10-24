@@ -1667,37 +1667,17 @@
                       "MILLISECOND" `(->period-duration ~period (.truncatedTo ~duration ChronoUnit/MILLIS))
                       "MICROSECOND" `(->period-duration ~period (.truncatedTo ~duration ChronoUnit/MICROS)))))})
 
-(defn ->md*-interval-between [^LocalDateTime end-dt ^LocalDateTime start-dt]
-  (let [period-between (Period/between (.toLocalDate start-dt) (.toLocalDate end-dt))
-        period-days (.getDays period-between)
-        duration-between (Duration/between start-dt end-dt)
-        start-lt (.toLocalTime start-dt)
-        end-lt (.toLocalTime end-dt)
-        period-day-adjustment (cond
-                                (and (.isNegative period-between)
-                                     (.isBefore start-lt end-lt))
-                                1
-
-                                (and (not (.isNegative period-between))
-                                     (not= period-days 0)
-                                     (.isAfter start-lt end-lt))
-                                -1
-
-                                :else 0)
-        adjusted-period (.plusDays period-between period-day-adjustment)
-        adjusted-duration (.minusDays duration-between (.toDays duration-between))]
-    (PeriodDuration. adjusted-period adjusted-duration)))
-
 (defmethod expr/codegen-call [:age :timestamp-local :timestamp-local] [{[^VectorType$Mono x-type, ^VectorType$Mono y-type] :arg-types}]
   (let [x-unit (st/timestamp-type->unit x-type)
-        y-unit (st/timestamp-type->unit y-type)]
+        y-unit (st/timestamp-type->unit y-type)
+        ->age-code (fn [x y]
+                     `(TemporalMath/ageInterval ~x ~(types/ts-units-per-second x-unit) ~y ~(types/ts-units-per-second y-unit)))]
     (if (or (= :nano x-unit) (= :nano y-unit))
       {:return-type #xt/type [:interval :month-day-nano]
-       :->call-code (fn [[x y]] `(->md*-interval-between ~(ts->ldt x x-unit) ~(ts->ldt y y-unit)))}
+       :->call-code (fn [[x y]] (->age-code x y))}
       {:return-type #xt/type [:interval :month-day-micro]
        :->call-code (fn [[x y]]
-                      `(time/alter-md*-interval-precision 6
-                        (->md*-interval-between ~(ts->ldt x x-unit) ~(ts->ldt y y-unit))))})))
+                      `(time/alter-md*-interval-precision 6 ~(->age-code x y)))})))
 
 ;; Cast and call for timestamp tz and mixed types
 (doseq [x [:timestamp-tz :timestamp-local]
@@ -1772,9 +1752,10 @@
   ;; Type doesn't support TZ-aware dates
   {:return-type #xt/type [:date :day]
    :->call-code (fn [_]
-                  `(long (-> (ZonedDateTime/ofInstant (expr/current-time) ZoneOffset/UTC)
-                             (.toLocalDate)
-                             (.toEpochDay))))})
+                  `(TemporalMath/epochDay (.getEpochSecond (expr/current-time)) 1))})
+
+(defn- nano-of-day-code [local-second-code nano-code]
+  `(+ (* (TemporalMath/unitOfDay ~local-second-code 1) 1000000000) ~nano-code))
 
 (defn- current-time [^long precision]
   ;; TODO check the specs on this one - I read the SQL spec as being returned in local,
@@ -1783,11 +1764,10 @@
   (let [precision (bound-precision precision) ]
     {:return-type (st/->type [:time-local (precision-timeunits precision)])
      :->call-code (fn [_]
-                    (-> `(long (-> (ZonedDateTime/ofInstant (expr/current-time) ZoneOffset/UTC)
-                                   (.toLocalTime)
-                                   (.toNanoOfDay)
-                                   (quot ~(nanos-divisor precision))))
-                        (truncate-for-precision precision)))}))
+                    (let [now-sym (gensym 'now)]
+                      (-> `(let [~now-sym (expr/current-time)]
+                             (quot ~(nano-of-day-code `(.getEpochSecond ~now-sym) `(.getNano ~now-sym)) ~(nanos-divisor precision)))
+                          (truncate-for-precision precision))))}))
 
 (defmethod expr/codegen-call [:current_time] [_]
   (current-time default-time-precision))
@@ -1797,20 +1777,21 @@
   (current-time precision))
 
 (defmethod expr/codegen-call [:local_date] [_]
-  {:return-type #xt/type [:date :day]
-   :->call-code (fn [_]
-                  `(long (-> (ZonedDateTime/ofInstant (expr/current-time) expr/*default-tz*)
-                             (.toLocalDate)
-                             (.toEpochDay))))})
+  (let [[zone-sym zone-binding] (default-zone-binding)]
+    {:return-type #xt/type [:date :day]
+     :batch-bindings [zone-binding]
+     :->call-code (fn [_]
+                    `(TemporalMath/epochDay (TemporalMath/toLocal (.getEpochSecond (expr/current-time)) 1 ~zone-sym) 1))}))
 
 (defn- local-timestamp [^long precision]
-  (let [precision (bound-precision precision)]
+  (let [precision (bound-precision precision)
+        [zone-sym zone-binding] (default-zone-binding)]
     {:return-type (st/->type [:timestamp-local (precision-timeunits precision)])
+     :batch-bindings [zone-binding]
      :->call-code (fn [_]
-                    (-> `(long (let [ldt# (-> (ZonedDateTime/ofInstant (expr/current-time) expr/*default-tz*)
-                                              (.toLocalDateTime))]
-                                 (+ (* (.toEpochSecond ldt# ZoneOffset/UTC) ~(seconds-multiplier precision))
-                                    (quot (.getNano ldt#) ~(nanos-divisor precision)))))
+                    (-> `(let [now# (expr/current-time)]
+                           (+ (* (TemporalMath/toLocal (.getEpochSecond now#) 1 ~zone-sym) ~(seconds-multiplier precision))
+                              (quot (.getNano now#) ~(nanos-divisor precision))))
                         (truncate-for-precision precision)))}))
 
 (defmethod expr/codegen-call [:local_timestamp] [_]
@@ -1821,14 +1802,16 @@
   (local-timestamp precision))
 
 (defn- local-time [^long precision]
-  (let [precision (bound-precision precision)]
+  (let [precision (bound-precision precision)
+        [zone-sym zone-binding] (default-zone-binding)]
     {:return-type (st/->type [:time-local (precision-timeunits precision)])
+     :batch-bindings [zone-binding]
      :->call-code (fn [_]
-                    (-> `(long (-> (ZonedDateTime/ofInstant (expr/current-time) expr/*default-tz*)
-                                   (.toLocalTime)
-                                   (.toNanoOfDay)
-                                   (quot ~(nanos-divisor precision))))
-                        (truncate-for-precision precision)))}))
+                    (let [now-sym (gensym 'now)]
+                      (-> `(let [~now-sym (expr/current-time)]
+                             (quot ~(nano-of-day-code `(TemporalMath/toLocal (.getEpochSecond ~now-sym) 1 ~zone-sym) `(.getNano ~now-sym))
+                                   ~(nanos-divisor precision)))
+                          (truncate-for-precision precision))))}))
 
 (defmethod expr/codegen-call [:local_time] [_]
   (local-time default-time-precision))
