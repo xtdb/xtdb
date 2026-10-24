@@ -15,6 +15,7 @@ rules = [('kernel: range select', ('RangePredicate',)),
          ('predicate/projection: evaluation', ('expression$$reify', 'expression$_GT_expression')),
          ('event merge (EntityMerge/AsOfResolver/PQ)', ('EntityMerge', 'AsOfResolver', 'EventRowPointer', 'PriorityQueue')),
          ('bitemporal consumer build', ('BitemporalConsumer',)),
+         ('coalesce copy (concatRels/rowCopier)', ('concatRels', 'RowCopier', 'rowCopier')),
          ('select/indirection compose', ('VectorIndirection', 'IndirectVector.select', 'RelationReader.select')),
          ('project (* price discount)', ('ProjectCursor$$Lambda', 'ProjectCursor.tryAdvance$lambda')),
          ('group-by', ('GroupByCursor', 'group_by$', 'xtdb.operator.group_by', 'agg.'))]
