@@ -875,6 +875,15 @@ fun createBench(benchName: String, properties: Map<String, String>, defaultArgs:
         if (project.hasProperty("kernels"))
             jvmArgs("-Dxtdb.kernels=${project.property("kernels")}")
 
+        if (project.hasProperty("coalesce"))
+            jvmArgs("-Dxtdb.scan.coalesce=${project.property("coalesce")}")
+
+        if (project.hasProperty("coalesceTarget"))
+            jvmArgs("-Dxtdb.scan.coalesceTarget=${project.property("coalesceTarget")}")
+
+        if (project.hasProperty("scanDebug"))
+            jvmArgs("-Dxtdb.scan.debug=true")
+
         if (project.hasProperty("kernelsDebug"))
             jvmArgs("-Dxtdb.kernels.debug=true")
 

@@ -32,12 +32,14 @@ interface Segment<L> : AutoCloseable {
 
     interface Page<L> {
         val sameSystemTimeResolved: Boolean
+        val debugLabel: String get() = "?"
 
         suspend fun loadDataPage(al: BufferAllocator): RelationReader
 
         companion object {
             fun <L> page(segment: Segment<L>, leaf: L) = object : Page<L> {
                 override val sameSystemTimeResolved get() = segment.sameSystemTimeResolved
+                override val debugLabel get() = (segment as? BufferPoolSegment)?.trieKey?.let { k -> k.substringBefore("-rc").let { lvl -> if (k.contains("-p")) lvl + "-p" + k.substringAfter("-p").substringBefore("-") else lvl } } ?: segment.javaClass.simpleName
                 override suspend fun loadDataPage(al: BufferAllocator) = segment.loadDataPage(al, leaf)
             }
         }
