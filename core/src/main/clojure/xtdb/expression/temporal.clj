@@ -805,14 +805,13 @@
     (with-arg-unit-conversion x-unit y-unit
       #(do [:duration %]) #(do `(Math/addExact ~@%)))))
 
-(doseq [[f-kw method-sym] [[:+ '.plus]
-                           [:- '.minus]]]
+(doseq [[f-kw sign] [[:+ 1] [:- -1]]]
   (defmethod expr/codegen-call [f-kw :date :interval] [{[dt-type, ^VectorType$Mono i-type] :arg-types, :as expr}]
     (let [iunit (st/interval-type->unit i-type)]
       (case iunit
         :year-month {:return-type dt-type
                      :->call-code (fn [[x-arg y-arg]]
-                                    `(.toEpochDay (~method-sym (LocalDate/ofEpochDay ~x-arg) (.getPeriod ~y-arg))))}
+                                    `(TemporalMath/datePlusInterval ~x-arg ~y-arg ~sign))}
         :month-day-micro (recall-with-cast2 expr [:timestamp-local :micro] [:interval :month-day-micro])
         :month-day-nano (recall-with-cast2 expr [:timestamp-local :nano] [:interval :month-day-nano]))))
 
@@ -823,19 +822,11 @@
                 (with-first-arg-unit-conversion ts-unit unit-lower-bound
                   #(do [:timestamp-local %])
                   (fn [ts-unit [ts-arg i-arg]]
-                    (-> `(let [i# ~i-arg]
-                           (-> ~(ts->ldt ts-arg ts-unit)
-                               (~method-sym (.getPeriod i#))
-                               (~method-sym (.getDuration i#))))
-                        (ldt->ts ts-unit)))))]
+                    `(TemporalMath/localPlusInterval ~ts-arg ~(types/ts-units-per-second ts-unit) ~i-arg ~sign))))]
         (case iunit
           :year-month {:return-type ts-type
                        :->call-code (fn [[x-arg y-arg]]
-                                      (-> `(let [i# ~y-arg]
-                                             (-> ~(ts->ldt x-arg ts-unit)
-                                                 (~method-sym (.getPeriod i#))
-                                                 (~method-sym (.getDuration i#))))
-                                          (ldt->ts ts-unit)))}
+                                      `(TemporalMath/localPlusInterval ~x-arg ~(types/ts-units-per-second ts-unit) ~y-arg ~sign))}
 
           :month-day-micro (codegen-call :micro)
           :month-day-nano (codegen-call :nano)))))
@@ -843,28 +834,20 @@
   (defmethod expr/codegen-call [f-kw :timestamp-tz :interval] [{[^VectorType$Mono ts-type, ^VectorType$Mono i-type] :arg-types}]
     (let [[ts-unit tz] (st/timestamp-type->unit+tz ts-type)
           iunit (st/interval-type->unit i-type)
-          zone-id-sym (gensym 'zone-id)]
+          zone-sym (-> (gensym 'zone) (expr/with-tag ZoneOffsets))]
       (letfn [(codegen-call [unit-lower-bound]
                 (with-first-arg-unit-conversion ts-unit unit-lower-bound
                   #(do [:timestamp-tz % tz])
                   (fn [ts-unit [ts-arg i-arg]]
-                    (-> `(let [i# ~i-arg]
-                           (-> ~(ts->zdt ts-arg ts-unit zone-id-sym)
-                               (~method-sym (.getPeriod i#))
-                               (~method-sym (.getDuration i#))))
-                        (zdt->ts ts-unit)))))]
+                    `(TemporalMath/tzPlusInterval ~ts-arg ~(types/ts-units-per-second ts-unit) ~zone-sym ~i-arg ~sign))))]
         (-> (case iunit
               :year-month {:return-type ts-type
                            :->call-code (fn [[x-arg y-arg]]
-                                          (-> `(let [y# ~y-arg]
-                                                 (-> ~(ts->zdt x-arg ts-unit zone-id-sym)
-                                                     (~method-sym (.getPeriod y#))
-                                                     (~method-sym (.getDuration y#))))
-                                              (zdt->ts ts-unit)))}
+                                          `(TemporalMath/tzPlusInterval ~x-arg ~(types/ts-units-per-second ts-unit) ~zone-sym ~y-arg ~sign))}
 
               :month-day-micro (codegen-call :micro)
               :month-day-nano (codegen-call :nano))
-            (update :batch-bindings (fnil conj []) [zone-id-sym `(ZoneId/of ~(str tz))]))))))
+            (update :batch-bindings (fnil conj []) [zone-sym `(ZoneOffsets/of (ZoneId/of ~(str tz)))]))))))
 
 (doseq [[t1 t2] [[:duration :timestamp-tz]
                  [:duration :timestamp-local]
@@ -945,15 +928,6 @@
         y-unit (st/duration-type->unit y-type)]
     (with-arg-unit-conversion x-unit y-unit
       #(do [:duration %]) #(do `(Math/subtractExact ~@%)))))
-
-(defmethod expr/codegen-call [:- :date :interval] [{[dt-type, ^VectorType$Mono i-type] :arg-types, :as expr}]
-  (let [iunit (st/interval-type->unit i-type)]
-    (case iunit
-      :year-month {:return-type dt-type
-                   :->call-code (fn [[x-arg y-arg]]
-                                  `(.toEpochDay (.minus (LocalDate/ofEpochDay ~x-arg) (.getPeriod ~y-arg))))}
-      :month-day-nano (recall-with-cast2 expr [:timestamp-local :nano] [:interval :month-day-nano])
-      :month-day-micro (recall-with-cast2 expr [:timestamp-local :micro] [:interval :month-day-micro]))))
 
 ;;; multiply, divide
 

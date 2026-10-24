@@ -3,6 +3,7 @@
 package xtdb.time
 
 import io.kotest.property.Arb
+import io.kotest.property.arbitrary.bind
 import io.kotest.property.arbitrary.choice
 import io.kotest.property.arbitrary.element
 import io.kotest.property.arbitrary.flatMap
@@ -11,13 +12,16 @@ import io.kotest.property.arbitrary.long
 import io.kotest.property.arbitrary.map
 import io.kotest.property.checkAll
 import kotlinx.coroutines.test.runTest
+import org.apache.arrow.vector.PeriodDuration
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import xtdb.InternalApi
 import java.time.DayOfWeek
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.Period
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
@@ -44,6 +48,15 @@ class TemporalMathTest {
             if (hz == 1L) epochSeconds else Arb.long(-(Long.MAX_VALUE - 18L * 3600 * hz)..Long.MAX_VALUE - 18L * 3600 * hz)
 
         private val unitTimestamps = units.flatMap { hz -> timestamps(hz).map { hz to it } }
+
+        private val intervals = Arb.bind(
+            Arb.int(-1000..1000), Arb.int(-3000..3000), Arb.int(-100_000..100_000),
+            Arb.long(-10_000_000_000L..10_000_000_000L), Arb.long(0L..999_999_999L)
+        ) { years, months, days, secs, nanos -> PeriodDuration(Period.of(years, months, days), Duration.ofSeconds(secs, nanos)) }
+
+        // far enough inside LocalDate's range, and a micros timestamp's, that no interval above can push a result out of it
+        private val intervalEpochDays = Arb.long(LocalDate.MIN.toEpochDay() + 1_000_000..LocalDate.MAX.toEpochDay() - 1_000_000)
+        private val intervalMicros = Arb.long(Long.MIN_VALUE + 100_000_000_000_000_000..Long.MAX_VALUE - 100_000_000_000_000_000)
     }
 
     private fun assertLocalReading(zone: ZoneId, ts: Long, hz: Long) {
@@ -127,6 +140,54 @@ class TemporalMathTest {
             assertEquals(ld.withMonth(ld.month.firstMonthOfQuarter().value).withDayOfMonth(1).toEpochDay(), TemporalMath.truncQuarter(d), "trunc quarter $ld")
             assertEquals(ld.withDayOfMonth(1).toEpochDay(), TemporalMath.truncMonth(d), "trunc month $ld")
             assertEquals(ld.with(DayOfWeek.MONDAY).toEpochDay(), TemporalMath.truncWeek(d), "trunc week $ld")
+        }
+    }
+
+    private val micros = 1_000_000L
+
+    private fun Instant.toMicros() = epochSecond * micros + nano / 1000
+    private fun Long.microsToInstant() = Instant.ofEpochSecond(Math.floorDiv(this, micros), Math.floorMod(this, micros) * 1000)
+    private fun LocalDateTime.toMicros() = toInstant(ZoneOffset.UTC).toMicros()
+    private fun Long.microsToLocal() = LocalDateTime.ofEpochSecond(Math.floorDiv(this, micros), (Math.floorMod(this, micros) * 1000).toInt(), ZoneOffset.UTC)
+
+    private fun assertTzPlusInterval(zone: ZoneId, ts: Long, i: PeriodDuration) {
+        val offsets = ZoneOffsets.of(zone)
+        val zdt = ZonedDateTime.ofInstant(ts.microsToInstant(), zone)
+        assertEquals(zdt.plus(i.period).plus(i.duration).toInstant().toMicros(), TemporalMath.tzPlusInterval(ts, micros, offsets, i, 1), "$zdt + $i")
+        assertEquals(zdt.minus(i.period).minus(i.duration).toInstant().toMicros(), TemporalMath.tzPlusInterval(ts, micros, offsets, i, -1), "$zdt - $i")
+    }
+
+    @Test
+    fun `date and local timestamp interval arithmetic matches java time`() = runTest {
+        checkAll(ITERATIONS, intervalEpochDays, intervalMicros, intervals) { d, ts, i ->
+            val ld = LocalDate.ofEpochDay(d)
+            assertEquals(ld.plus(i.period).toEpochDay(), TemporalMath.datePlusInterval(d, i, 1), "$ld + $i")
+            assertEquals(ld.minus(i.period).toEpochDay(), TemporalMath.datePlusInterval(d, i, -1), "$ld - $i")
+
+            val ldt = ts.microsToLocal()
+            assertEquals(ldt.plus(i.period).plus(i.duration).toMicros(), TemporalMath.localPlusInterval(ts, micros, i, 1), "$ldt + $i")
+            assertEquals(ldt.minus(i.period).minus(i.duration).toMicros(), TemporalMath.localPlusInterval(ts, micros, i, -1), "$ldt - $i")
+        }
+    }
+
+    @Test
+    fun `timestamp-tz interval arithmetic matches ZonedDateTime for any instant and zone`() = runTest {
+        checkAll(ITERATIONS, zones, intervalMicros, intervals) { zone, ts, i -> assertTzPlusInterval(zone, ts, i) }
+    }
+
+    @Test
+    fun `timestamp-tz interval arithmetic matches ZonedDateTime around every transition`() {
+        val fixed = listOf(
+            PeriodDuration(Period.ofDays(1), Duration.ZERO),
+            PeriodDuration(Period.ZERO, Duration.ofHours(24)),
+            PeriodDuration(Period.ofMonths(1), Duration.ZERO),
+            PeriodDuration(Period.of(0, 1, -1), Duration.ofMinutes(-90)),
+            PeriodDuration(Period.ZERO, Duration.ofNanos(500)),
+        )
+        for (id in ZoneId.getAvailableZoneIds()) {
+            val zone = ZoneId.of(id)
+            for (s in epochSecondsAroundTransitions(zone))
+                for (i in fixed) assertTzPlusInterval(zone, s * micros + 250_000, i)
         }
     }
 }

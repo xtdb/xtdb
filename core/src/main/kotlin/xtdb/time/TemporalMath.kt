@@ -1,12 +1,15 @@
 package xtdb.time
 
+import org.apache.arrow.vector.PeriodDuration
 import xtdb.InternalApi
 import java.lang.Math.addExact
 import java.lang.Math.floorDiv
 import java.lang.Math.floorMod
 import java.lang.Math.multiplyExact
 import java.lang.Math.subtractExact
+import java.time.Duration
 import java.time.LocalDate
+import java.time.Period
 import java.time.temporal.IsoFields
 
 /**
@@ -23,6 +26,7 @@ import java.time.temporal.IsoFields
 @InternalApi
 object TemporalMath {
     private const val SECS_PER_DAY = 86_400L
+    private const val NANOS_PER_SEC = 1_000_000_000L
 
     @JvmStatic
     fun toLocal(ts: Long, hz: Long, zone: ZoneOffsets): Long =
@@ -83,6 +87,50 @@ object TemporalMath {
 
     @JvmStatic
     fun isoWeek(epochDay: Long): Int = LocalDate.ofEpochDay(epochDay).get(IsoFields.WEEK_OF_WEEK_BASED_YEAR)
+
+    private fun plusPeriod(epochDay: Long, period: Period, sign: Long): Long {
+        val date = LocalDate.ofEpochDay(epochDay)
+        return (if (sign > 0) date.plus(period) else date.minus(period)).toEpochDay()
+    }
+
+    // `LocalDateTime.minus(duration)` floors the result into the timestamp's unit, so subtracting takes the duration's ceiling
+    private fun durationUnits(duration: Duration, hz: Long, sign: Long): Long {
+        val secs = multiplyExact(duration.seconds, hz)
+        val nanosPerUnit = NANOS_PER_SEC / hz
+        return if (sign > 0) addExact(secs, duration.nano / nanosPerUnit)
+        else subtractExact(Math.negateExact(secs), (duration.nano + nanosPerUnit - 1) / nanosPerUnit)
+    }
+
+    private fun localPlusPeriod(localTs: Long, hz: Long, period: Period, sign: Long): Long =
+        if (period.isZero) localTs
+        else addExact(dayToLocal(plusPeriod(epochDay(localTs, hz), period, sign), hz), unitOfDay(localTs, hz))
+
+    /** `LocalDate.plus(interval.period)`, or `minus` where [sign] is -1 */
+    @JvmStatic
+    fun datePlusInterval(epochDay: Long, interval: PeriodDuration, sign: Long): Long =
+        plusPeriod(epochDay, interval.period, sign)
+
+    /** `LocalDateTime.plus(interval.period).plus(interval.duration)`, or `minus` where [sign] is -1 */
+    @JvmStatic
+    fun localPlusInterval(localTs: Long, hz: Long, interval: PeriodDuration, sign: Long): Long =
+        addExact(localPlusPeriod(localTs, hz, interval.period, sign), durationUnits(interval.duration, hz, sign))
+
+    /**
+     * `ZonedDateTime.plus(interval.period).plus(interval.duration)`, or `minus` where [sign] is -1:
+     * the period moves the wall-clock reading, which then resolves near [ts]'s offset; the duration moves the instant.
+     */
+    @JvmStatic
+    fun tzPlusInterval(ts: Long, hz: Long, zone: ZoneOffsets, interval: PeriodDuration, sign: Long): Long {
+        val period = interval.period
+        val moved =
+            if (period.isZero) ts
+            else {
+                val second = floorDiv(ts, hz)
+                val movedSecond = fromLocalNear(localPlusPeriod(toLocal(second, 1, zone), 1, period, sign), 1, zone, second)
+                addExact(multiplyExact(movedSecond, hz), floorMod(ts, hz))
+            }
+        return addExact(moved, durationUnits(interval.duration, hz, sign))
+    }
 
     /** the first day of [epochDay]'s year, rounded towards zero to a multiple of [yearMultiple] */
     @JvmStatic
