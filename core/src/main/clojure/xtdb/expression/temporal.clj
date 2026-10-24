@@ -11,7 +11,6 @@
            (java.time DateTimeException Duration Instant LocalDate LocalDateTime LocalTime Period ZoneId ZonedDateTime)
            (java.time.format DateTimeParseException)
            (java.time.temporal ChronoField ChronoUnit Temporal)
-           (org.apache.arrow.vector PeriodDuration)
            (xtdb.arrow ListValueReader ValueBox ValueReader VectorType VectorType$Mono)
            (xtdb.time Interval LocalDateTimeUtil TemporalMath ZoneOffsets)))
 
@@ -482,13 +481,10 @@
      :cast-opts opts}))
 
 (defn ->interval
-  (^PeriodDuration [^Period p] (->interval p Duration/ZERO))
-  (^PeriodDuration [^Period p ^Duration d]
-   ;; throws past Interval's range
-   (Interval. p d)
-   (PeriodDuration. p d)))
+  (^Interval [^Period p] (->interval p Duration/ZERO))
+  (^Interval [^Period p ^Duration d] (Interval. p d)))
 
-(defn md*-interval->duration [^PeriodDuration x]
+(defn md*-interval->duration [^Interval x]
   (let [period (.getPeriod x)]
     (if (> (.toTotalMonths period) 0)
       (throw (err/incorrect :xtdb.expression/cannot-cast-mdn-interval-with-months
@@ -548,9 +544,9 @@
   (let [^Duration altered-precision-duration (time/alter-duration-precision fractional-precision d)]
     (->interval Period/ZERO (.plusDays altered-precision-duration (.getDays p)))))
 
-(defn normalize-interval-to-md*-iq [^PeriodDuration pd {:keys [start-field end-field fractional-precision]}]
-  (let [period (.getPeriod pd)
-        duration (.getDuration pd)]
+(defn normalize-interval-to-md*-iq [^Interval itvl {:keys [start-field end-field fractional-precision]}]
+  (let [period (.getPeriod itvl)
+        duration (.getDuration itvl)]
 
     (when (> (.toTotalMonths period) 0)
       (throw (throw (err/incorrect :xtdb.expression/cannot-normalize-md*-interval-with-months
@@ -609,8 +605,8 @@
         (cast-duration->mdm-interval d-unit interval-qualifier)))))
 
 
-(defn normalize-interval-to-ym-iq [^PeriodDuration pd {:keys [start-field end-field]}]
-  (let [period (.getPeriod pd)
+(defn normalize-interval-to-ym-iq [^Interval itvl {:keys [start-field end-field]}]
+  (let [period (.getPeriod itvl)
         total-months-in-period (.toTotalMonths period)
         years-in-period (quot total-months-in-period 12)]
     (case [start-field end-field]
@@ -641,13 +637,13 @@
         ;;TODO logic to cast any arbitrary mdm to mdn and vice versa, would just be changing the precision of the seconds
         (cond
           ym-cast?
-          {:return-type #xt/type [:interval :year-month], :->call-code (fn [[pd]] `(normalize-interval-to-ym-iq ~pd ~interval-qualifier))}
+          {:return-type #xt/type [:interval :year-month], :->call-code (fn [[itvl]] `(normalize-interval-to-ym-iq ~itvl ~interval-qualifier))}
 
           (< 6 fractional-precision)
-          {:return-type #xt/type [:interval :month-day-nano], :->call-code (fn [[pd]] `(normalize-interval-to-md*-iq ~pd ~interval-qualifier))}
+          {:return-type #xt/type [:interval :month-day-nano], :->call-code (fn [[itvl]] `(normalize-interval-to-md*-iq ~itvl ~interval-qualifier))}
 
           :else
-          {:return-type #xt/type [:interval :month-day-micro], :->call-code (fn [[pd]] `(normalize-interval-to-md*-iq ~pd ~interval-qualifier))})))))
+          {:return-type #xt/type [:interval :month-day-micro], :->call-code (fn [[itvl]] `(normalize-interval-to-md*-iq ~itvl ~interval-qualifier))})))))
 
 (defmethod expr/codegen-cast [:int :interval] [{{:keys [start-field end-field]} :cast-opts}]
   (when end-field (throw (err/unsupported :xtdb.expression/attempting-to-cast-int-to-multi-field-interval
@@ -667,7 +663,7 @@
                       "MINUTE" `(->interval Period/ZERO (Duration/ofMinutes ~x))
                       "SECOND" `(->interval Period/ZERO (Duration/ofSeconds ~x))))}))
 
-(defn iso8601-string-to-period-duration [iso-string]
+(defn iso8601-string->interval [iso-string]
   (try
     (let [[_ p d] (re-find #"P((?:-?\d+Y)?(?:-?\d+M)?(?:-?\d+W)?(?:-?\d+D)?)?T?((?:-?\d+H)?(?:-?\d+M)?(?:-?\d+\.?\d*?S)?)?" iso-string)]
       (->interval (if (str/blank? p) Period/ZERO (Period/parse (str "P" p)))
@@ -705,20 +701,19 @@
   (if (empty? interval-opts)
     {:return-type #xt/type [:interval :month-day-micro]
      :->call-code (fn [[x]]
-                    `(iso8601-string-to-period-duration (expr/resolve-string ~x)))}
+                    `(iso8601-string->interval (expr/resolve-string ~x)))}
 
     (if (nil? (:end-field interval-opts))
       (->single-field-interval-call expr)
       (->multi-field-interval-call expr))))
 
-(defn interval->iso-string [^PeriodDuration x]
-  (let [p (.getPeriod x)]
-    (Interval/toIsoString (.toTotalMonths p) (.getDays p) (.getDuration x))))
+(defn interval->iso-string [^Interval x]
+  (str x))
 
 (defmethod expr/codegen-cast [:interval :utf8] [_]
   {:return-type #xt/type :utf8
-   :->call-code (fn [[pd]]
-                  `(-> (interval->iso-string ~pd)
+   :->call-code (fn [[itvl]]
+                  `(-> (interval->iso-string ~itvl)
                        (string->byte-buffer)))})
 
 ;;;; SQL:2011 Operations involving datetimes and intervals
@@ -1015,10 +1010,10 @@
     (with-arg-unit-conversion x-unit y-unit
       (constantly :i32) #(do `(Long/compare ~@%)))))
 
-(defn compare-ym-intervals ^long [^PeriodDuration x ^PeriodDuration y]
+(defn compare-ym-intervals ^long [^Interval x ^Interval y]
   (Long/compare (.toTotalMonths (.getPeriod x)) (.toTotalMonths (.getPeriod y))))
 
-(defn compare-md*-intervals ^long [^PeriodDuration x ^PeriodDuration y]
+(defn compare-md*-intervals ^long [^Interval x ^Interval y]
   (let [^Period x-period (.getPeriod x)
         ^Period y-period (.getPeriod y)]
     (if (or (> (.toTotalMonths x-period) 0) (> (.toTotalMonths y-period) 0))
@@ -1116,7 +1111,7 @@
      :batch-bindings batch-bindings
      :->call-code (comp #(do `(zero? ~%)) ->call-code)}))
 
-(defn intervals-equal? [^PeriodDuration x ^PeriodDuration y]
+(defn intervals-equal? [^Interval x ^Interval y]
   (let [period-x (.getPeriod x)
         period-y (.getPeriod y)]
     (and (= (.toTotalMonths period-x) (.toTotalMonths period-y))
@@ -1163,22 +1158,22 @@
 
 ;;;; Intervals
 
-(defn pd-add ^PeriodDuration [^PeriodDuration pd1 ^PeriodDuration pd2]
-  (let [p1 (.getPeriod pd1)
-        p2 (.getPeriod pd2)
-        d1 (.getDuration pd1)
-        d2 (.getDuration pd2)]
+(defn interval-add ^Interval [^Interval itvl1 ^Interval itvl2]
+  (let [p1 (.getPeriod itvl1)
+        p2 (.getPeriod itvl2)
+        d1 (.getDuration itvl1)
+        d2 (.getDuration itvl2)]
     (->interval (.plus p1 p2) (.plus d1 d2))))
 
-(defn pd-sub ^PeriodDuration [^PeriodDuration pd1 ^PeriodDuration pd2]
-  (let [p1 (.getPeriod pd1)
-        p2 (.getPeriod pd2)
-        d1 (.getDuration pd1)
-        d2 (.getDuration pd2)]
+(defn interval-sub ^Interval [^Interval itvl1 ^Interval itvl2]
+  (let [p1 (.getPeriod itvl1)
+        p2 (.getPeriod itvl2)
+        d1 (.getDuration itvl1)
+        d2 (.getDuration itvl2)]
     (->interval (.minus p1 p2) (.minus d1 d2))))
 
-(defn pd-neg ^PeriodDuration [^PeriodDuration pd]
-  (->interval (.negated (.getPeriod pd)) (.negated (.getDuration pd))))
+(defn interval-neg ^Interval [^Interval itvl]
+  (->interval (.negated (.getPeriod itvl)) (.negated (.getDuration itvl))))
 
 (defn- choose-interval-arith-return
   "Given two interval types, return an interval type that can represent the result of an binary arithmetic expression
@@ -1197,22 +1192,22 @@
 (defmethod expr/codegen-call [:+ :interval :interval] [{[l-type r-type] :arg-types}]
   {:return-type (st/->type [:interval (choose-interval-arith-return (st/interval-type->unit l-type)
                                                                     (st/interval-type->unit r-type))])
-   :->call-code (fn [[l r]] `(pd-add ~l ~r))})
+   :->call-code (fn [[l r]] `(interval-add ~l ~r))})
 
 (defmethod expr/codegen-call [:- :interval :interval] [{[l-type r-type] :arg-types}]
   {:return-type (st/->type [:interval (choose-interval-arith-return (st/interval-type->unit l-type)
                                                                     (st/interval-type->unit r-type))])
-   :->call-code (fn [[l r]] `(pd-sub ~l ~r))})
+   :->call-code (fn [[l r]] `(interval-sub ~l ~r))})
 
 (defmethod expr/codegen-call [:- :interval] [{[interval-type] :arg-types}]
   {:return-type interval-type
-   :->call-code (fn [[i]] `(pd-neg ~i))})
+   :->call-code (fn [[i]] `(interval-neg ~i))})
 
 ;;HACK https://clojure.atlassian.net/browse/CLJ-2817
-(def ^PeriodDuration pd-scale
-  (fn ^PeriodDuration [^PeriodDuration pd ^long factor]
-    (let [p (.getPeriod pd)
-          d (.getDuration pd)]
+(def ^Interval interval-scale
+  (fn ^Interval [^Interval itvl ^long factor]
+    (let [p (.getPeriod itvl)
+          d (.getDuration itvl)]
       (->interval (Period/of 0
                              (Math/toIntExact (Math/multiplyExact (.toTotalMonths p) factor))
                              (Math/toIntExact (Math/multiplyExact (long (.getDays p)) factor)))
@@ -1220,11 +1215,11 @@
 
 (defmethod expr/codegen-call [:* :interval :int] [{[l-type _] :arg-types}]
   {:return-type l-type
-   :->call-code (fn [[a b]] `(pd-scale ~a ~b))})
+   :->call-code (fn [[a b]] `(interval-scale ~a ~b))})
 
 (defmethod expr/codegen-call [:* :int :interval] [{[_ r-type] :arg-types}]
   {:return-type r-type
-   :->call-code (fn [[a b]] `(pd-scale ~b ~a))})
+   :->call-code (fn [[a b]] `(interval-scale ~b ~a))})
 
 (defn- mixed-interval? [^long months, ^long days, ^long nanos]
   (> (+ (if (zero? months) 0 1)
@@ -1232,11 +1227,11 @@
         (if (zero? nanos) 0 1))
      1))
 
-(defn pd-div ^PeriodDuration [^PeriodDuration pd ^long divisor]
-  (let [p (.getPeriod pd)
+(defn interval-div ^Interval [^Interval itvl ^long divisor]
+  (let [p (.getPeriod itvl)
         months (.toTotalMonths p)
         days (.getDays p)
-        nanos (.toNanos (.getDuration pd))]
+        nanos (.toNanos (.getDuration itvl))]
     (if (mixed-interval? months days nanos)
       (throw (err/unsupported ::expr/cannot-divide-mixed-intervals "Cannot divide mixed (month, day, time) intervals"))
       (->interval
@@ -1245,7 +1240,7 @@
 
 (defmethod expr/codegen-call [:/ :interval :int] [{[itype _]:arg-types}]
   {:return-type itype
-   :->call-code (fn [[a b]] `(pd-div ~a ~b))})
+   :->call-code (fn [[a b]] `(interval-div ~a ~b))})
 
 (defn interval-abs
   "In SQL the ABS function can be applied to intervals, negating them if they are below some definition of 'zero' for the components
@@ -1255,11 +1250,11 @@
   This seems compliant with the standard which only talks about ABS being applied to a single component interval.
 
   For YEAR_MONTH, we define where ZERO as 0 months."
-  ^PeriodDuration [^PeriodDuration pd]
-  (let [p (.getPeriod pd)
+  ^Interval [^Interval itvl]
+  (let [p (.getPeriod itvl)
         months (.toTotalMonths p)
         days (.getDays p)
-        nanos (.toNanos (.getDuration pd))]
+        nanos (.toNanos (.getDuration itvl))]
     (if (mixed-interval? months days nanos)
       (throw (err/unsupported ::expr/cannot-abs-mixed-intervals "Cannot ABS mixed intervals (month, day, time)"))
       (->interval (Period/of 0 (Math/abs months) (Math/abs days))
@@ -1358,12 +1353,12 @@
     0))
 
 (defn- parse-day-to-second-literal [s unit1 unit2 ^long fractional-precision]
-  (letfn [(negate-if-minus [plus-minus ^PeriodDuration pd]
+  (letfn [(negate-if-minus [plus-minus ^Interval itvl]
             (if (= "-" plus-minus)
               (->interval
-               (.negated (.getPeriod pd))
-               (.negated (.getDuration pd)))
-              pd))]
+               (.negated (.getPeriod itvl))
+               (.negated (.getDuration itvl)))
+              itvl))]
     (case [unit1 unit2]
       ["DAY" "SECOND"]
       (let [re #"^([-+]|)(\d+) (\d+)\:(\d+):(\d+)(\.(\d+)){0,1}$"
@@ -1429,8 +1424,8 @@
                                            (fractional-secs-to->nanos fractional-secs fractional-precision)))))))))
 
 (defn parse-multi-field-interval
-  "This function is used to parse a 2 field interval literal into a PeriodDuration, e.g '12-03' YEAR TO MONTH."
-  ^PeriodDuration [s unit1 unit2 fractional-precision]
+  "This function is used to parse a 2 field interval literal into an Interval, e.g '12-03' YEAR TO MONTH."
+  ^Interval [s unit1 unit2 fractional-precision]
   (or (if (= "YEAR" unit1)
         (parse-year-month-literal s)
         (parse-day-to-second-literal s unit1 unit2 fractional-precision))
@@ -1519,9 +1514,9 @@
 
 (defmethod expr/codegen-call [:extract :utf8 :interval] [{[{field :literal} _] :args}]
   {:return-type #xt/type :i32
-   :->call-code (fn [[_ pd]]
-                  (let [period `(.getPeriod ^PeriodDuration ~pd)
-                        duration `(.getDuration ^PeriodDuration ~pd)]
+   :->call-code (fn [[_ itvl]]
+                  (let [period `(.getPeriod ^Interval ~itvl)
+                        duration `(.getDuration ^Interval ~itvl)]
                     (case field
                       "YEAR" `(-> (.toTotalMonths ~period) (/ 12) (int))
                       "MONTH" `(-> (.toTotalMonths ~period) (rem 12) (int))
@@ -1650,9 +1645,9 @@
 
 (defmethod expr/codegen-call [:date_trunc :utf8 :interval] [{[{field :literal} _] :args, [_ interval-type] :arg-types}]
   {:return-type interval-type
-   :->call-code (fn [[_ pd]]
-                  (let [period `(.getPeriod ^PeriodDuration ~pd)
-                        duration `(.getDuration ^PeriodDuration ~pd)]
+   :->call-code (fn [[_ itvl]]
+                  (let [period `(.getPeriod ^Interval ~itvl)
+                        duration `(.getDuration ^Interval ~itvl)]
                     (case field
                       "MILLENNIUM" `(->interval (truncated-millennium ~period))
                       "CENTURY" `(->interval (truncated-century ~period))
@@ -2117,7 +2112,7 @@
         (doto el-box
           (.writeLong (aget values idx)))))))
 
-(defn date-series ^xtdb.arrow.ListValueReader [^long from, ^long to, ^PeriodDuration stride, inclusive?]
+(defn date-series ^xtdb.arrow.ListValueReader [^long from, ^long to, ^Interval stride, inclusive?]
   (assert (= Duration/ZERO (.getDuration stride))
           "date-series only supports zero-duration strides")
 

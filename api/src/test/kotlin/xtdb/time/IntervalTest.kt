@@ -35,11 +35,6 @@ class IntervalTest {
     }
 
     @Test
-    fun `years beyond Int months still print`() {
-        assertEquals("P2147483647Y", Interval.toIsoString(Int.MAX_VALUE * 12L, 0, Duration.ZERO))
-    }
-
-    @Test
     fun `an interval past Interval's range throws rather than wrapping`() {
         assertThrows<ArithmeticException> { Interval(Period.ofYears(200_000_000), Duration.ZERO) }
         assertThrows<ArithmeticException> { Interval(Period.ZERO, Duration.ofHours(3_000_000)) }

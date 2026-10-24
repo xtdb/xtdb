@@ -405,7 +405,7 @@
 
 (defmethod write-value-code :oid [_ & args] `(.writeInt ~@args))
 
-(doseq [[k tag] {:interval PeriodDuration :decimal BigDecimal,
+(doseq [[k tag] {:interval Interval :decimal BigDecimal,
                  :list ListValueReader, :set ListValueReader, :struct Map}]
   (defmethod read-value-code k [_ & args]
     (-> `(.readObject ~@args) (with-tag tag)))
@@ -481,14 +481,7 @@
 
 (defmethod emit-value PeriodDuration [_ code]
   `(let [^PeriodDuration pd# ~code]
-     ;; throws past Interval's range
-     (Interval. (.getPeriod pd#) (.getDuration pd#))
-     pd#))
-
-;; we emit these to PDs until the EE uses these types directly
-(defmethod emit-value Interval [_ code]
-  `(let [i# ~code]
-     (PeriodDuration. (.getPeriod i#) (.getDuration i#))))
+     (Interval. (.getPeriod pd#) (.getDuration pd#))))
 
 (defmethod codegen-expr :literal [{:keys [literal]} _]
   (let [return-type (types/value->vec-type literal)

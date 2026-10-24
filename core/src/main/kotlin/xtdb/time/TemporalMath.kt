@@ -1,6 +1,5 @@
 package xtdb.time
 
-import org.apache.arrow.vector.PeriodDuration
 import xtdb.InternalApi
 import java.lang.Math.addExact
 import java.lang.Math.floorDiv
@@ -93,7 +92,7 @@ object TemporalMath {
      * one day short where the time of day hasn't yet come round, and the sub-day remainder as the duration.
      */
     @JvmStatic
-    fun ageInterval(endTs: Long, endHz: Long, startTs: Long, startHz: Long): PeriodDuration {
+    fun ageInterval(endTs: Long, endHz: Long, startTs: Long, startHz: Long): Interval {
         val endDay = epochDay(endTs, endHz)
         val startDay = epochDay(startTs, startHz)
         val endNanoOfDay = unitOfDay(endTs, endHz) * (NANOS_PER_SEC / endHz)
@@ -111,7 +110,7 @@ object TemporalMath {
             endNanoOfDay % NANOS_PER_SEC - startNanoOfDay % NANOS_PER_SEC
         )
 
-        return PeriodDuration(period.plusDays(dayAdjustment.toLong()), between.minusDays(between.toDays()))
+        return Interval(period.plusDays(dayAdjustment.toLong()), between.minusDays(between.toDays()))
     }
 
     private fun plusPeriod(epochDay: Long, period: Period, sign: Long): Long {
@@ -120,11 +119,12 @@ object TemporalMath {
     }
 
     // `LocalDateTime.minus(duration)` floors the result into the timestamp's unit, so subtracting takes the duration's ceiling
-    private fun durationUnits(duration: Duration, hz: Long, sign: Long): Long {
-        val secs = multiplyExact(duration.seconds, hz)
+    private fun durationUnits(nanos: Long, hz: Long, sign: Long): Long {
+        val secs = multiplyExact(floorDiv(nanos, NANOS_PER_SEC), hz)
+        val nano = floorMod(nanos, NANOS_PER_SEC)
         val nanosPerUnit = NANOS_PER_SEC / hz
-        return if (sign > 0) addExact(secs, duration.nano / nanosPerUnit)
-        else subtractExact(Math.negateExact(secs), (duration.nano + nanosPerUnit - 1) / nanosPerUnit)
+        return if (sign > 0) addExact(secs, nano / nanosPerUnit)
+        else subtractExact(Math.negateExact(secs), (nano + nanosPerUnit - 1) / nanosPerUnit)
     }
 
     private fun localPlusPeriod(localTs: Long, hz: Long, period: Period, sign: Long): Long =
@@ -133,20 +133,20 @@ object TemporalMath {
 
     /** `LocalDate.plus(interval.period)`, or `minus` where [sign] is -1 */
     @JvmStatic
-    fun datePlusInterval(epochDay: Long, interval: PeriodDuration, sign: Long): Long =
+    fun datePlusInterval(epochDay: Long, interval: Interval, sign: Long): Long =
         plusPeriod(epochDay, interval.period, sign)
 
     /** `LocalDateTime.plus(interval.period).plus(interval.duration)`, or `minus` where [sign] is -1 */
     @JvmStatic
-    fun localPlusInterval(localTs: Long, hz: Long, interval: PeriodDuration, sign: Long): Long =
-        addExact(localPlusPeriod(localTs, hz, interval.period, sign), durationUnits(interval.duration, hz, sign))
+    fun localPlusInterval(localTs: Long, hz: Long, interval: Interval, sign: Long): Long =
+        addExact(localPlusPeriod(localTs, hz, interval.period, sign), durationUnits(interval.nanos, hz, sign))
 
     /**
      * `ZonedDateTime.plus(interval.period).plus(interval.duration)`, or `minus` where [sign] is -1:
      * the period moves the wall-clock reading, which then resolves near [ts]'s offset; the duration moves the instant.
      */
     @JvmStatic
-    fun tzPlusInterval(ts: Long, hz: Long, zone: ZoneOffsets, interval: PeriodDuration, sign: Long): Long {
+    fun tzPlusInterval(ts: Long, hz: Long, zone: ZoneOffsets, interval: Interval, sign: Long): Long {
         val period = interval.period
         val moved =
             if (period.isZero) ts
@@ -155,7 +155,7 @@ object TemporalMath {
                 val movedSecond = fromLocalNear(localPlusPeriod(toLocal(second, 1, zone), 1, period, sign), 1, zone, second)
                 addExact(multiplyExact(movedSecond, hz), floorMod(ts, hz))
             }
-        return addExact(moved, durationUnits(interval.duration, hz, sign))
+        return addExact(moved, durationUnits(interval.nanos, hz, sign))
     }
 
     private class LongSeries {
@@ -189,7 +189,7 @@ object TemporalMath {
 
     // a series steps a (second, nano-of-second) pair rather than a single long, so a nanosecond stride stays exact at any unit
     private inline fun series(
-        from: Long, fromHz: Long, to: Long, toHz: Long, stride: PeriodDuration, outHz: Long, inclusive: Boolean,
+        from: Long, fromHz: Long, to: Long, toHz: Long, stride: Interval, outHz: Long, inclusive: Boolean,
         plusPeriod: (Long) -> Long,
     ): LongArray {
         val out = LongSeries()
@@ -198,14 +198,15 @@ object TemporalMath {
         val toSec = floorDiv(to, toHz)
         val toNano = floorMod(to, toHz) * (NANOS_PER_SEC / toHz)
         val period = stride.period
-        val duration = stride.duration
+        val strideSecs = floorDiv(stride.nanos, NANOS_PER_SEC)
+        val strideNano = floorMod(stride.nanos, NANOS_PER_SEC)
 
         while (stillInSeries(compareSecondNanos(sec, nano, toSec, toNano), inclusive)) {
             out.add(addExact(multiplyExact(sec, outHz), nano / (NANOS_PER_SEC / outHz)))
 
             if (!period.isZero) sec = plusPeriod(sec)
-            sec = addExact(sec, duration.seconds)
-            nano += duration.nano
+            sec = addExact(sec, strideSecs)
+            nano += strideNano
             if (nano >= NANOS_PER_SEC) {
                 nano -= NANOS_PER_SEC
                 sec = addExact(sec, 1)
@@ -216,13 +217,13 @@ object TemporalMath {
 
     /** as iterating `LocalDateTime.plus(stride.period).plus(stride.duration)` from [from], written in [outHz] */
     @JvmStatic
-    fun localSeries(from: Long, fromHz: Long, to: Long, toHz: Long, stride: PeriodDuration, outHz: Long, inclusive: Boolean): LongArray =
+    fun localSeries(from: Long, fromHz: Long, to: Long, toHz: Long, stride: Interval, outHz: Long, inclusive: Boolean): LongArray =
         series(from, fromHz, to, toHz, stride, outHz, inclusive) { sec -> localPlusPeriod(sec, 1, stride.period, 1) }
 
     /** as iterating `ZonedDateTime.plus(stride.period).plus(stride.duration)` from [from] in [zone], written in [outHz] */
     @JvmStatic
     fun tzSeries(
-        from: Long, fromHz: Long, to: Long, toHz: Long, zone: ZoneOffsets, stride: PeriodDuration, outHz: Long, inclusive: Boolean,
+        from: Long, fromHz: Long, to: Long, toHz: Long, zone: ZoneOffsets, stride: Interval, outHz: Long, inclusive: Boolean,
     ): LongArray =
         series(from, fromHz, to, toHz, stride, outHz, inclusive) { sec ->
             fromLocalNear(localPlusPeriod(toLocal(sec, 1, zone), 1, stride.period, 1), 1, zone, sec)

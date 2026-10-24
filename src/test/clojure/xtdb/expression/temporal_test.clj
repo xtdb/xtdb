@@ -1291,6 +1291,13 @@
     (t/is (=  i
               (et/project1 '(+ a b) {:a i, :b #xt/interval "P0D"})))))
 
+(deftest period-duration-inputs-compute-as-intervals
+  (let [pd (PeriodDuration. (Period/ofDays 1) (Duration/ofHours 1))]
+    (t/is (= #xt/interval "P2DT1H" (et/project1 '(+ a b) {:a pd, :b #xt/interval "P1D"}))
+          "as a parameter")
+    (t/is (= #xt/interval "P2DT1H" (et/project1 (list '+ pd 'b) {:b #xt/interval "P1D"}))
+          "as a literal")))
+
 (tct/defspec interval-sub-identity-prop
   (tcp/for-all [i (tcg/one-of [interval-ym-gen interval-mdn-gen interval-mdm-gen])]
     (= i (et/project1 '(- a b) {:a i, :b #xt/interval "P0D"}))))
@@ -1824,8 +1831,8 @@
              :src #xt/zoned-date-time "2024-03-06T14:23:45Z"
              :origin #xt/zoned-date-time "2000-01-01T00:00:00Z"}))))
 
-(deftest test-pd-scale-type-hinting-4252
-  ;;pd accessors in ts +/- interval causes reflection if pd-scale return
+(deftest test-interval-scale-type-hinting-4252
+  ;;interval accessors in ts +/- interval causes reflection if interval-scale return
   ;;type not hinted
   (t/is (= #xt/zoned-date-time "2020-01-03T06:00Z"
            (et/project1
