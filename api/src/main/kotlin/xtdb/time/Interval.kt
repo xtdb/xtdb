@@ -2,6 +2,8 @@ package xtdb.time
 
 import java.lang.Math.addExact
 import java.lang.Math.multiplyExact
+import java.lang.Math.negateExact
+import java.lang.Math.subtractExact
 import java.lang.Math.toIntExact
 import java.time.Duration
 import java.time.Period
@@ -23,6 +25,20 @@ data class Interval(val months: Int, val days: Int, val nanos: Long) {
      */
     constructor(period: Period = Period.ZERO, duration: Duration = Duration.ZERO) : this(
         toIntExact(period.toTotalMonths()), period.days, duration.toNanos()
+    )
+
+    operator fun plus(other: Interval) =
+        Interval(addExact(months, other.months), addExact(days, other.days), addExact(nanos, other.nanos))
+
+    operator fun minus(other: Interval) =
+        Interval(subtractExact(months, other.months), subtractExact(days, other.days), subtractExact(nanos, other.nanos))
+
+    fun negated() = Interval(negateExact(months), negateExact(days), negateExact(nanos))
+
+    fun multipliedBy(factor: Long) = Interval(
+        toIntExact(multiplyExact(months.toLong(), factor)),
+        toIntExact(multiplyExact(days.toLong(), factor)),
+        multiplyExact(nanos, factor)
     )
 
     fun plusYears(years: Long) = Interval(addExact(months, toIntExact(multiplyExact(years, 12))), days, nanos)

@@ -1011,19 +1011,17 @@
       (constantly :i32) #(do `(Long/compare ~@%)))))
 
 (defn compare-ym-intervals ^long [^Interval x ^Interval y]
-  (Long/compare (.toTotalMonths (.getPeriod x)) (.toTotalMonths (.getPeriod y))))
+  (Long/compare (.getMonths x) (.getMonths y)))
 
 (defn compare-md*-intervals ^long [^Interval x ^Interval y]
-  (let [^Period x-period (.getPeriod x)
-        ^Period y-period (.getPeriod y)]
-    (if (or (> (.toTotalMonths x-period) 0) (> (.toTotalMonths y-period) 0))
-      (throw (err/incorrect :xtdb.expression/cannot-compare-mdn-interval-with-months
-                            "Cannot compare month-day-micro/nano intervals when month component is non-zero."))
-      (let [x-period-nanos (* (.getDays x-period) 86400000000000)
-            x-duration-nanos (.toNanos (.getDuration x))
-            y-period-nanos (* (.getDays y-period) 86400000000000)
-            y-duration-nanos (.toNanos (.getDuration y))]
-        (Long/compare (+ x-period-nanos x-duration-nanos) (+ y-period-nanos y-duration-nanos))))))
+  (if (or (> (.getMonths x) 0) (> (.getMonths y) 0))
+    (throw (err/incorrect :xtdb.expression/cannot-compare-mdn-interval-with-months
+                          "Cannot compare month-day-micro/nano intervals when month component is non-zero."))
+    (let [x-period-nanos (* (.getDays x) 86400000000000)
+          x-duration-nanos (.getNanos x)
+          y-period-nanos (* (.getDays y) 86400000000000)
+          y-duration-nanos (.getNanos y)]
+      (Long/compare (+ x-period-nanos x-duration-nanos) (+ y-period-nanos y-duration-nanos)))))
 
 (defmethod expr/codegen-call [:compare :interval :interval] [{[^VectorType$Mono x-type, ^VectorType$Mono y-type] :arg-types}]
   (let [x-unit (st/interval-type->unit x-type)
@@ -1112,11 +1110,9 @@
      :->call-code (comp #(do `(zero? ~%)) ->call-code)}))
 
 (defn intervals-equal? [^Interval x ^Interval y]
-  (let [period-x (.getPeriod x)
-        period-y (.getPeriod y)]
-    (and (= (.toTotalMonths period-x) (.toTotalMonths period-y))
-         (= (.getDays period-x) (.getDays period-y))
-         (= (.getDuration x) (.getDuration y)))))
+  (and (= (.getMonths x) (.getMonths y))
+       (= (.getDays x) (.getDays y))
+       (= (.getNanos x) (.getNanos y))))
 
 (defmethod expr/codegen-call [:== :interval :interval] [_expr]
   {:return-type #xt/type :bool
@@ -1159,21 +1155,13 @@
 ;;;; Intervals
 
 (defn interval-add ^Interval [^Interval itvl1 ^Interval itvl2]
-  (let [p1 (.getPeriod itvl1)
-        p2 (.getPeriod itvl2)
-        d1 (.getDuration itvl1)
-        d2 (.getDuration itvl2)]
-    (->interval (.plus p1 p2) (.plus d1 d2))))
+  (.plus itvl1 itvl2))
 
 (defn interval-sub ^Interval [^Interval itvl1 ^Interval itvl2]
-  (let [p1 (.getPeriod itvl1)
-        p2 (.getPeriod itvl2)
-        d1 (.getDuration itvl1)
-        d2 (.getDuration itvl2)]
-    (->interval (.minus p1 p2) (.minus d1 d2))))
+  (.minus itvl1 itvl2))
 
 (defn interval-neg ^Interval [^Interval itvl]
-  (->interval (.negated (.getPeriod itvl)) (.negated (.getDuration itvl))))
+  (.negated itvl))
 
 (defn- choose-interval-arith-return
   "Given two interval types, return an interval type that can represent the result of an binary arithmetic expression
@@ -1206,12 +1194,7 @@
 ;;HACK https://clojure.atlassian.net/browse/CLJ-2817
 (def ^Interval interval-scale
   (fn ^Interval [^Interval itvl ^long factor]
-    (let [p (.getPeriod itvl)
-          d (.getDuration itvl)]
-      (->interval (Period/of 0
-                             (Math/toIntExact (Math/multiplyExact (.toTotalMonths p) factor))
-                             (Math/toIntExact (Math/multiplyExact (long (.getDays p)) factor)))
-                  (.multipliedBy d factor)))))
+    (.multipliedBy itvl factor)))
 
 (defmethod expr/codegen-call [:* :interval :int] [{[l-type _] :arg-types}]
   {:return-type l-type
@@ -1228,15 +1211,12 @@
      1))
 
 (defn interval-div ^Interval [^Interval itvl ^long divisor]
-  (let [p (.getPeriod itvl)
-        months (.toTotalMonths p)
-        days (.getDays p)
-        nanos (.toNanos (.getDuration itvl))]
+  (let [months (.getMonths itvl)
+        days (.getDays itvl)
+        nanos (.getNanos itvl)]
     (if (mixed-interval? months days nanos)
       (throw (err/unsupported ::expr/cannot-divide-mixed-intervals "Cannot divide mixed (month, day, time) intervals"))
-      (->interval
-       (Period/of 0 (quot months divisor) (quot days divisor))
-       (Duration/ofNanos (quot nanos divisor))))))
+      (Interval. (quot months divisor) (quot days divisor) (quot nanos divisor)))))
 
 (defmethod expr/codegen-call [:/ :interval :int] [{[itype _]:arg-types}]
   {:return-type itype
@@ -1251,14 +1231,12 @@
 
   For YEAR_MONTH, we define where ZERO as 0 months."
   ^Interval [^Interval itvl]
-  (let [p (.getPeriod itvl)
-        months (.toTotalMonths p)
-        days (.getDays p)
-        nanos (.toNanos (.getDuration itvl))]
+  (let [months (.getMonths itvl)
+        days (.getDays itvl)
+        nanos (.getNanos itvl)]
     (if (mixed-interval? months days nanos)
       (throw (err/unsupported ::expr/cannot-abs-mixed-intervals "Cannot ABS mixed intervals (month, day, time)"))
-      (->interval (Period/of 0 (Math/abs months) (Math/abs days))
-                  (Duration/ofNanos (Math/abs nanos))))))
+      (Interval. (Math/abs months) (Math/abs days) (Math/abs nanos)))))
 
 (defmethod expr/codegen-call [:abs :interval] [{[itype] :arg-types}]
   {:return-type itype
@@ -1515,15 +1493,15 @@
 (defmethod expr/codegen-call [:extract :utf8 :interval] [{[{field :literal} _] :args}]
   {:return-type #xt/type :i32
    :->call-code (fn [[_ itvl]]
-                  (let [period `(.getPeriod ^Interval ~itvl)
-                        duration `(.getDuration ^Interval ~itvl)]
+                  (let [months `(.getMonths ^Interval ~itvl)
+                        secs `(Math/floorDiv (.getNanos ^Interval ~itvl) 1000000000)]
                     (case field
-                      "YEAR" `(-> (.toTotalMonths ~period) (/ 12) (int))
-                      "MONTH" `(-> (.toTotalMonths ~period) (rem 12) (int))
-                      "DAY" `(.getDays ~period)
-                      "HOUR" `(-> (.toHours ~duration) (int))
-                      "MINUTE" `(-> (.toMinutes ~duration) (rem 60) (int))
-                      "SECOND" `(-> (.toSeconds ~duration) (rem 60) (int))
+                      "YEAR" `(int (quot ~months 12))
+                      "MONTH" `(int (rem ~months 12))
+                      "DAY" `(.getDays ^Interval ~itvl)
+                      "HOUR" `(int (quot ~secs 3600))
+                      "MINUTE" `(int (rem (quot ~secs 60) 60))
+                      "SECOND" `(int (rem ~secs 60))
                       (throw (err/unsupported ::expr/extract-not-supported
                                              (format "Extract \"%s\" not supported for type interval" field)
                                              {:field field, :source-type :interval})))))})

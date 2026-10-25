@@ -298,7 +298,12 @@
       (t/is (= 3 (extract "HOUR" itvl)))
       (t/is (= 8 (extract "DAY" itvl)))
       (t/is (= 4 (extract "MONTH" itvl)))
-      (t/is (= 1 (extract "YEAR" itvl))))))
+      (t/is (= 1 (extract "YEAR" itvl))))
+
+    (let [itvl (Interval. (Period/of -1 -4 -8) (Duration/parse "PT-59M-59.5S"))]
+      (t/is (= [0 0 -1 -8 -4 -1]
+               (mapv #(extract % itvl) ["SECOND" "MINUTE" "HOUR" "DAY" "MONTH" "YEAR"]))
+            "the time part floors to whole seconds before splitting"))))
 
 (t/deftest test-time-extract
   (letfn [(extract [part time-val] (project1 (list 'extract part 'time) {:time time-val}))]
