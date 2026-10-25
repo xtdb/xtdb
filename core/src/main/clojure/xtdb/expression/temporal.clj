@@ -409,7 +409,7 @@
                               (duration->nano))
                         (with-conversion :nano tgt-tsunit)))}))
 
-(defn string->byte-buffer [^String s]
+(defn string->byte-buffer ^ByteBuffer [^String s]
   (ByteBuffer/wrap (.getBytes s StandardCharsets/UTF_8)))
 
 (defmethod expr/codegen-cast [:timestamp-local :utf8] [{:keys [^VectorType source-type]}]
