@@ -13,7 +13,6 @@ import io.kotest.property.arbitrary.long
 import io.kotest.property.arbitrary.map
 import io.kotest.property.checkAll
 import kotlinx.coroutines.test.runTest
-import org.apache.arrow.vector.PeriodDuration
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import xtdb.InternalApi
@@ -52,8 +51,8 @@ class TemporalMathTest {
 
         private val intervals = Arb.bind(
             Arb.int(-1000..1000), Arb.int(-3000..3000), Arb.int(-100_000..100_000),
-            Arb.long(-10_000_000_000L..10_000_000_000L), Arb.long(0L..999_999_999L)
-        ) { years, months, days, secs, nanos -> PeriodDuration(Period.of(years, months, days), Duration.ofSeconds(secs, nanos)) }
+            Arb.long(-9_000_000_000L..9_000_000_000L), Arb.long(0L..999_999_999L)
+        ) { years, months, days, secs, nanos -> Interval(Period.of(years, months, days), Duration.ofSeconds(secs, nanos)) }
 
         // far enough inside LocalDate's range, and a micros timestamp's, that no interval above can push a result out of it
         private val intervalEpochDays = Arb.long(LocalDate.MIN.toEpochDay() + 1_000_000..LocalDate.MAX.toEpochDay() - 1_000_000)
@@ -66,7 +65,7 @@ class TemporalMathTest {
         private const val SERIES_ITERATIONS = 1_000
 
         private val strides = Arb.bind(Arb.int(0..2), Arb.int(0..2), Arb.long(0L..90_000L), Arb.long(0L..999_999_999L)) { months, days, secs, nanos ->
-            PeriodDuration(Period.of(0, months, days), Duration.ofSeconds(secs, nanos))
+            Interval(Period.of(0, months, days), Duration.ofSeconds(secs, nanos))
         }.filter { !(it.period.isZero && it.duration.isZero) }
     }
 
@@ -161,7 +160,7 @@ class TemporalMathTest {
     private fun LocalDateTime.toMicros() = toInstant(ZoneOffset.UTC).toMicros()
     private fun Long.microsToLocal() = LocalDateTime.ofEpochSecond(Math.floorDiv(this, micros), (Math.floorMod(this, micros) * 1000).toInt(), ZoneOffset.UTC)
 
-    private fun assertTzPlusInterval(zone: ZoneId, ts: Long, i: PeriodDuration) {
+    private fun assertTzPlusInterval(zone: ZoneId, ts: Long, i: Interval) {
         val offsets = ZoneOffsets.of(zone)
         val zdt = ZonedDateTime.ofInstant(ts.microsToInstant(), zone)
         assertEquals(zdt.plus(i.period).plus(i.duration).toInstant().toMicros(), TemporalMath.tzPlusInterval(ts, micros, offsets, i, 1), "$zdt + $i")
@@ -189,11 +188,11 @@ class TemporalMathTest {
     @Test
     fun `timestamp-tz interval arithmetic matches ZonedDateTime around every transition`() {
         val fixed = listOf(
-            PeriodDuration(Period.ofDays(1), Duration.ZERO),
-            PeriodDuration(Period.ZERO, Duration.ofHours(24)),
-            PeriodDuration(Period.ofMonths(1), Duration.ZERO),
-            PeriodDuration(Period.of(0, 1, -1), Duration.ofMinutes(-90)),
-            PeriodDuration(Period.ZERO, Duration.ofNanos(500)),
+            Interval(Period.ofDays(1), Duration.ZERO),
+            Interval(Period.ZERO, Duration.ofHours(24)),
+            Interval(Period.ofMonths(1), Duration.ZERO),
+            Interval(Period.of(0, 1, -1), Duration.ofMinutes(-90)),
+            Interval(Period.ZERO, Duration.ofNanos(500)),
         )
         for (id in ZoneId.getAvailableZoneIds()) {
             val zone = ZoneId.of(id)
@@ -202,7 +201,7 @@ class TemporalMathTest {
         }
     }
 
-    private fun javaTimeAge(end: LocalDateTime, start: LocalDateTime): PeriodDuration {
+    private fun javaTimeAge(end: LocalDateTime, start: LocalDateTime): Interval {
         val period = Period.between(start.toLocalDate(), end.toLocalDate())
         val adjustment = when {
             period.isNegative && start.toLocalTime().isBefore(end.toLocalTime()) -> 1L
@@ -210,7 +209,7 @@ class TemporalMathTest {
             else -> 0L
         }
         val duration = Duration.between(start, end)
-        return PeriodDuration(period.plusDays(adjustment), duration.minusDays(duration.toDays()))
+        return Interval(period.plusDays(adjustment), duration.minusDays(duration.toDays()))
     }
 
     private fun ts(sec: Long, nano: Long, hz: Long) = sec * hz + nano / (1_000_000_000 / hz)
@@ -251,7 +250,7 @@ class TemporalMathTest {
     }
 
     // no stride is shorter than this, so a span of `n` of them holds at most `n + 1` elements
-    private fun PeriodDuration.minNanos() =
+    private fun Interval.minNanos() =
         (period.months * 28L + period.days) * 86_400_000_000_000 + duration.seconds * 1_000_000_000 + duration.nano
 
     @Test

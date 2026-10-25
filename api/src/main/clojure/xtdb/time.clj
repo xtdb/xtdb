@@ -6,7 +6,6 @@
            [java.time.format DateTimeParseException]
            java.time.temporal.ChronoUnit
            (java.util Date)
-           (org.apache.arrow.vector PeriodDuration)
            (xtdb.time Interval Time)))
 
 (defn ->duration [d]
@@ -175,7 +174,5 @@
               Interval/ZERO
               matches))))
 
-(defn alter-md*-interval-precision ^PeriodDuration [^long precision ^PeriodDuration pd]
-  (PeriodDuration.
-   (.getPeriod pd)
-   (alter-duration-precision precision (.getDuration pd))))
+(defn alter-md*-interval-precision ^Interval [^long precision ^Interval i]
+  (Interval. (.getPeriod i) (alter-duration-precision precision (.getDuration i))))

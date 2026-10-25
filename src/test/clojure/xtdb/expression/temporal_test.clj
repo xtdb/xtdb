@@ -6,11 +6,13 @@
             [clojure.test.check.properties :as tcp]
             [xtdb.expression :as expr]
             [xtdb.expression-test :as et]
+            [xtdb.serde :as serde]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
             [xtdb.types :as types])
   (:import (java.time Duration Instant LocalDate LocalDateTime LocalTime Period ZoneId ZoneOffset ZonedDateTime)
            java.time.temporal.ChronoUnit
+           (org.apache.arrow.vector PeriodDuration)
            (xtdb.time Interval)))
 
 (t/use-fixtures :each tu/with-allocator)
@@ -464,11 +466,12 @@
                 first :res))]
     (t/testing "year-month interval -> string"
       (t/are [expected src-value] (= expected (test-cast src-value (types/->type :utf8)))
-        "P12M" #xt/interval "P12M"
-        "P-12M" #xt/interval "-P12M"
-        "P22M" #xt/interval "P22M"
-        "P-22M" #xt/interval "-P22M"
-        "P6M" #xt/interval "P6M"))
+        "P1Y" #xt/interval "P12M"
+        "P-1Y" #xt/interval "-P12M"
+        "P1Y10M" #xt/interval "P22M"
+        "P-1Y-10M" #xt/interval "-P22M"
+        "P6M" #xt/interval "P6M"
+        "P1Y10M-3DT4H" #xt/interval "P22M-3DT4H"))
 
     (t/testing "month-day-* interval -> string"
       (t/are [expected src-value] (= expected (test-cast src-value (types/->type :utf8)))
@@ -486,6 +489,18 @@
         "P-1DT10H10M10.111111S" #xt/interval "-P1DT-10H-10M-10.111111S"
         "P-1DT10H10M10.111111111S" #xt/interval "-P1DT-10H-10M-10.111111111S"
         "PT-10H-10M" #xt/interval "PT-10H-10M"))))
+
+(t/deftest interval-serde-round-trips-normalised-string
+  (t/are [s itvl] (and (= s (str itvl))
+                       (= (str "#xt/interval \"" s "\"") (pr-str itvl))
+                       (= itvl (read-string (pr-str itvl)))
+                       (= itvl (serde/read-transit (serde/write-transit itvl :json) :json)))
+    "P2Y" (Interval. 24 0 0)
+    "P1Y10M" (Interval. 22 0 0)
+    "P-1Y-10M" (Interval. -22 0 0)
+    "P10M" (Interval. 10 0 0)
+    "P1Y-3D" (Interval. 12 -3 0)
+    "P-1Y-10M3DT4H" (Interval. -22 3 (* 4 3600 1000000000))))
 
 (t/deftest cast-interval-to-interval
   (letfn [(test-cast
@@ -1276,6 +1291,13 @@
     (t/is (=  i
               (et/project1 '(+ a b) {:a i, :b #xt/interval "P0D"})))))
 
+(deftest period-duration-inputs-compute-as-intervals
+  (let [pd (PeriodDuration. (Period/ofDays 1) (Duration/ofHours 1))]
+    (t/is (= #xt/interval "P2DT1H" (et/project1 '(+ a b) {:a pd, :b #xt/interval "P1D"}))
+          "as a parameter")
+    (t/is (= #xt/interval "P2DT1H" (et/project1 (list '+ pd 'b) {:b #xt/interval "P1D"}))
+          "as a literal")))
+
 (tct/defspec interval-sub-identity-prop
   (tcp/for-all [i (tcg/one-of [interval-ym-gen interval-mdn-gen interval-mdm-gen])]
     (= i (et/project1 '(- a b) {:a i, :b #xt/interval "P0D"}))))
@@ -1324,6 +1346,13 @@
     #xt/duration "PT1H30M45S" '(abs #xt/duration "PT-1H-30M-45S")
     #xt/duration "PT1.123456S" '(abs #xt/duration "PT-1.123456S")))
 
+(t/deftest period-duration-literal-past-interval-range-raises-overflow-error
+  (t/is (thrown-with-msg? RuntimeException #"data exception - overflow error"
+                          (et/project1 (PeriodDuration. (Period/ofYears 200000000) Duration/ZERO) {}))))
+
+(def ^:private max-interval-hours
+  (dec (quot Long/MAX_VALUE (* 3600 1000000000))))
+
 (def single-interval-constructor-gen
   (->> (tcg/hash-map
         :unit (tcg/elements ["YEAR" "MONTH" "DAY" "HOUR" "MINUTE" "SECOND"])
@@ -1356,7 +1385,8 @@
                   use-fractional-precision fractional-precision
                   :else 2)
 
-                leading-value (mod leading-value (parse-long (str/join (repeat precision "9"))))
+                leading-value (cond-> (mod leading-value (parse-long (str/join (repeat precision "9"))))
+                                (= "HOUR" unit) (mod (inc max-interval-hours)))
 
                 fractional-value
                 (if (pos? fractional-precision)
@@ -1440,7 +1470,8 @@
                              (if (= ending-unit field)
                                (str s prefix (time-values field))
                                (recur (rest fields) (if (= field leading-unit)
-                                                      (mod (time-values leading-unit) (parse-long (str/join (repeat precision "9"))))
+                                                      (cond-> (mod (time-values leading-unit) (parse-long (str/join (repeat precision "9"))))
+                                                        (= "HOUR" leading-unit) (mod (inc max-interval-hours)))
                                                       (str s prefix (time-values field))))))
                            (throw (Exception. "Unreachable"))))
                        (when use-fractional-value (str "." fractional-value)))]
@@ -1800,8 +1831,8 @@
              :src #xt/zoned-date-time "2024-03-06T14:23:45Z"
              :origin #xt/zoned-date-time "2000-01-01T00:00:00Z"}))))
 
-(deftest test-pd-scale-type-hinting-4252
-  ;;pd accessors in ts +/- interval causes reflection if pd-scale return
+(deftest test-interval-scale-type-hinting-4252
+  ;;interval accessors in ts +/- interval causes reflection if interval-scale return
   ;;type not hinted
   (t/is (= #xt/zoned-date-time "2020-01-03T06:00Z"
            (et/project1

@@ -19,10 +19,7 @@ private class IntervalValueReader(private val vec: VectorReader) : ValueReader {
     override var pos = 0
     override val isNull: Boolean get() = vec.isNull(pos)
 
-    override fun readObject(): Any? =
-        vec.getObject(pos)
-            ?.let { it as Interval }
-            ?.let { PeriodDuration(it.period, it.duration) }
+    override fun readObject(): Any? = vec.getObject(pos)
 }
 
 class IntervalYearMonthVector private constructor(

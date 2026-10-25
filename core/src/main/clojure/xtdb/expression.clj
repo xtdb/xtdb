@@ -405,7 +405,7 @@
 
 (defmethod write-value-code :oid [_ & args] `(.writeInt ~@args))
 
-(doseq [[k tag] {:interval PeriodDuration :decimal BigDecimal,
+(doseq [[k tag] {:interval Interval :decimal BigDecimal,
                  :list ListValueReader, :set ListValueReader, :struct Map}]
   (defmethod read-value-code k [_ & args]
     (-> `(.readObject ~@args) (with-tag tag)))
@@ -479,10 +479,9 @@
     (.toEpochDay ^LocalDate code)
     `(.toEpochDay ~code)))
 
-;; we emit these to PDs until the EE uses these types directly
-(defmethod emit-value Interval [_ code]
-  `(let [i# ~code]
-     (PeriodDuration. (.getPeriod i#) (.getDuration i#))))
+(defmethod emit-value PeriodDuration [_ code]
+  `(let [^PeriodDuration pd# ~code]
+     (Interval. (.getPeriod pd#) (.getDuration pd#))))
 
 (defmethod codegen-expr :literal [{:keys [literal]} _]
   (let [return-type (types/value->vec-type literal)
@@ -1877,6 +1876,7 @@
     (resolve-value (.readObject ^ValueReader v))
 
     (instance? ByteBuffer v) (buf->str v)
+    (instance? PeriodDuration v) (let [^PeriodDuration pd v] (Interval. (.getPeriod pd) (.getDuration pd)))
     (instance? Map v) (into {} (map (fn [[k val]] [k (resolve-value val)])) v)
     (map? v) (into {} (map (fn [[k val]] [k (resolve-value val)])) v)
     (sequential? v) (mapv resolve-value v)

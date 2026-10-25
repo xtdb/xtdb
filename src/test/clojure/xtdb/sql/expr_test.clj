@@ -968,10 +968,10 @@
   (t/is (= [{:string "P2Y"}]
            (xt/q tu/*node* "SELECT CAST(INTERVAL '2' YEAR AS VARCHAR) as string")))
 
-  (t/is (= [{:string "P22M"}]
+  (t/is (= [{:string "P1Y10M"}]
            (xt/q tu/*node* "SELECT CAST(INTERVAL '1-10' YEAR TO MONTH AS VARCHAR) as string")))
 
-  (t/is (= [{:string "P-22M"}]
+  (t/is (= [{:string "P-1Y-10M"}]
            (xt/q tu/*node* "SELECT CAST(INTERVAL '-1-10' YEAR TO MONTH AS VARCHAR) as string")))
 
   (t/is (= [{:string "P1D"}]
@@ -980,6 +980,35 @@
   (t/is (= [{:string "P1DT10H10M10S"}]
            (xt/q tu/*node* "SELECT CAST(INTERVAL '1 10:10:10' DAY TO SECOND AS VARCHAR) as string"))))
 
+
+(t/deftest test-cast-nested-interval-to-string-prints-interval
+  (t/is (= [{:s "[#xt/interval \"P1D\"]"}]
+           (xt/q tu/*node* "SELECT CAST([INTERVAL '1' DAY] AS VARCHAR) AS s")))
+
+  (t/is (= [{:s "{\"a\" #xt/interval \"P2Y\"}"}]
+           (xt/q tu/*node* "SELECT CAST({a: INTERVAL '2' YEAR} AS VARCHAR) AS s"))))
+
+(t/deftest test-interval-past-interval-range-raises-overflow-error
+  (t/are [sql] (thrown-with-msg? RuntimeException #"data exception - overflow error" (xt/q tu/*node* sql))
+    "SELECT INTERVAL '3000000' HOUR AS i"
+    "SELECT INTERVAL '2147483647' HOUR AS i"
+    "SELECT INTERVAL '2147483647' MINUTE AS i"
+    "SELECT INTERVAL '2147483647' YEAR AS i"
+    "SELECT INTERVAL '1' HOUR * 2147483647 AS i"
+    "SELECT INTERVAL '1' MONTH * 4294967297 AS i"
+    "SELECT INTERVAL '1' DAY * 4294967297 AS i"
+    "SELECT CAST(INTERVAL '200000' DAY AS INTERVAL HOUR) AS i"
+    "SELECT CAST('PT3000000H' AS INTERVAL) AS i")
+
+  (t/is (= [{:i #xt/interval "PT2000000H"}]
+           (xt/q tu/*node* "SELECT INTERVAL '2000000' HOUR AS i")))
+
+  (t/is (= [{:i #xt/interval "PT4294.967297S"}]
+           (xt/q tu/*node* "SELECT INTERVAL '0.000001' SECOND * 4294967297 AS i"))
+        "a factor past Int is fine where the result fits")
+
+  (t/is (thrown-with-msg? RuntimeException #"Cannot parse interval: P200000000Y"
+                          (xt/q tu/*node* "SELECT INTERVAL 'P200000000Y' AS i"))))
 
 (t/deftest test-timestamp-literal
   (t/are
