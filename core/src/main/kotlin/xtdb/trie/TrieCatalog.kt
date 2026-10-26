@@ -28,14 +28,26 @@ class TrieCatalog internal constructor(private val catalog: Catalog) {
      */
     val state: State get() = catalog.current.trieCat
 
-    fun addTries(table: TableRef, addedTries: Iterable<TrieDetails>, asOf: Instant) {
-        LOG.trace { "Adding tries to table '$table': ${addedTries.map { it.trieKey }}" }
-        try {
+    fun addTries(table: TableRef, addedTries: Iterable<TrieDetails>, asOf: Instant) =
+        logFailure("table $table") {
+            LOG.trace { "Adding tries to table '$table': ${addedTries.map { it.trieKey }}" }
             update { it.withTries(table, addedTries, asOf) }
+        }
+
+    /** Adds [tries] to whichever tables they name, as one write — the shape a replica message carries them in. */
+    fun addTries(tries: Iterable<TrieDetails>, asOf: Instant) =
+        logFailure("tables ${tries.map { it.tableName }.distinct()}") {
+            LOG.trace { "Adding tries: ${tries.map { it.trieKey }}" }
+            update { it.withTries(tries, asOf) }
+        }
+
+    private inline fun logFailure(what: String, f: () -> Unit) {
+        try {
+            f()
         } catch (e: InterruptedException) {
             throw e
         } catch (e: Throwable) {
-            LOG.error(e, "Failed to add tries to table $table")
+            LOG.error(e, "Failed to add tries to $what")
             throw e
         }
     }
@@ -97,13 +109,4 @@ class TrieCatalog internal constructor(private val catalog: Catalog) {
 fun TrieCatalog.State.withTries(tries: Iterable<TrieDetails>, asOf: Instant): TrieCatalog.State =
     tries.groupBy { it.tableName }.entries.fold(this) { state, (tableName, tableTries) ->
         state.withTries(fromSchemaAndTable(tableName), tableTries, asOf)
-    }
-
-/**
- * Adds [tries] to whichever tables they name — the shape a replica message carries them in, where the
- * per-table [TrieCatalog.addTries] wants them already grouped.
- */
-fun TrieCatalog.addTries(tries: Iterable<TrieDetails>, asOf: Instant) =
-    tries.groupBy { it.tableName }.forEach { (tableName, tableTries) ->
-        addTries(fromSchemaAndTable(tableName), tableTries, asOf)
     }

@@ -23,7 +23,6 @@ import xtdb.api.tx.ExternalSource
 import xtdb.database.Database
 import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
-import xtdb.trie.addTries
 import xtdb.types.MessageId
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.closeAllOnCatch
