@@ -32,7 +32,7 @@
 --        THIS is where a committed transaction becomes queryable, and where an external caller's durability handle completes.
 --
 --   Resolution and apply never interleave, so a transaction is never half-applied.
---   Applying does not refresh the shared snapshot: that is a lazily-advanced cache, rebuilt on the next demanding read (see RefreshSharedSnapshot).
+--   Applying does not refresh the shared snapshot: that is a lazily-advanced cache, rebuilt by the next external reader it no longer serves (see OpenExternalSnapshot).
 --
 --   A FOLLOWER has no resolver and no read-back: the messages it imports are already durable, so it advances the durable head directly.
 --
@@ -98,6 +98,14 @@ external entity TableCatalogSnap {}
     -- Frozen per-table metadata for everything already flushed: each table's column types and its count of rows ever written.
     -- The historical half of a column's declared type.
 
+external entity CatalogValue {
+    -- The partition's two catalogs as ONE value behind one pointer, so a reader sees both as of the same catalog write.
+    -- Every catalog write replaces it whole: compaction's TriesAdded, GC's TriesDeleted, block adoption, and table registration on commit.
+    -- A registration that names only tables the catalog already knows leaves the value as it was.
+    trie_catalog_snap: TrieCatalogSnap
+    table_catalog_snap: TableCatalogSnap
+}
+
 external entity DurabilityHandle {}
     -- A per-transaction handle a caller may await, completed once the transaction has been read back and imported into the durable live tables.
     -- Carried by external-source transactions only; source-log transactions carry none.
@@ -156,8 +164,12 @@ entity LiveIndex {
     -- Durable live tables: they hold only applied rows.
     tables: LiveTable with index = this
 
-    -- The current shared external snapshot: a lazily-advanced cache, rebuilt only when a reader demands a basis it does not satisfy.
-    -- Apply and NextBlock leave it stale. Its basis is the durable head as of the last rebuild.
+    -- The partition's current catalog value.
+    catalog: CatalogValue
+
+    -- The current shared external snapshot: a lazily-advanced cache, rebuilt by the first external reader it no longer serves (see OpenExternalSnapshot).
+    -- Apply, NextBlock and catalog writes leave it stale.
+    -- Its basis is the durable head, and its catalog value the one current, as of the last rebuild.
     shared_snap: Snapshot
 
     row_count: tables.sum(t => t.row_count)
@@ -297,9 +309,12 @@ entity Snapshot {
 
     table_snapshots: TableSnapshot with snapshot = this
 
-    -- Frozen catalog state, one value for both halves, captured just before the segments above.
-    trie_catalog_snap: TrieCatalogSnap
-    table_catalog_snap: TableCatalogSnap
+    -- The catalog value current at creation, captured just before the segments above.
+    catalog: CatalogValue
+
+    -- Its two halves.
+    trie_catalog_snap: catalog.trie_catalog_snap
+    table_catalog_snap: catalog.table_catalog_snap
 
     -- Tables the pinned table catalog knows about: everything already flushed, plus the data-backed system tables seeded when the database opens.
     -- A table here resolves with no segment at all.
@@ -572,14 +587,18 @@ rule OpenExternalSnapshot {
     -- min_basis is the caller's minimum read basis, and may be absent.
     --
     -- The index holds a single shared snapshot, whose basis is the durable head as of its last rebuild and whose rows are the DURABLE live rows only.
-    -- It is a lazily-advanced cache: where the caller has no minimum basis, or the cache already satisfies it, the cache is returned as it stands; otherwise it is rebuilt first.
+    -- It is a lazily-advanced cache, returned as it stands only if both hold:
+    --   - it was built from the catalog value current now;
+    --   - the caller has no minimum basis, or the cache's basis satisfies it.
+    -- Otherwise it is rebuilt first, so the first external reader after any catalog write rebuilds it.
     -- The durable basis guarantees the head is at or past min_basis by the time this runs, so a rebuild can always reach a satisfying basis.
     -- The caller holds the snapshot until it closes it.
     when: OpenSnapshot(index, min_basis?)
 
     ensures:
-        -- Rebuild only when the cache is too stale for the requested basis.
-        if min_basis != null and index.shared_snap.basis_tx.system_time < min_basis:
+        -- Rebuild when the cache was built from a superseded catalog value, or is too stale for the requested basis.
+        if index.shared_snap.catalog != index.catalog
+                or (min_basis != null and index.shared_snap.basis_tx.system_time < min_basis):
             RefreshSharedSnapshot(index)
         index.shared_snap
 }
@@ -622,14 +641,15 @@ rule OpenTransactionSnapshot {
 rule RefreshSharedSnapshot {
     -- The rebuild primitive for the shared external snapshot.
     -- NOT triggered by apply or NextBlock — the cache is advanced lazily.
-    -- It is invoked by OpenExternalSnapshot where the cache is too stale for the requested basis, and out of band by compaction, which changes the trie catalog without advancing the durable head.
+    -- It is invoked by OpenExternalSnapshot wherever the cache no longer serves the reader.
     -- Readers already holding the previous shared snapshot keep it, and it stays valid for as long as they do.
     when: RefreshSharedSnapshot(index)
 
     ensures:
         let new_snap = Snapshot.created(
             -- DURABLE basis: an external snapshot sees only durably-replicated transactions, never the RESOLVED head.
-            basis_tx: index.latest_completed_tx
+            basis_tx: index.latest_completed_tx,
+            catalog: index.catalog
         )
         for table in index.tables:
             TableSnapshot.created(
@@ -674,6 +694,6 @@ rule NextBlock {
     ensures: index.tables = {}
 
     -- The shared snapshot is NOT refreshed here.
-    -- A subsequent reader whose basis the now-stale cache still satisfies may reuse it: its segments are frozen, independent of the cleared tables, and remain valid.
-    -- A reader demanding a newer basis rebuilds the cache.
+    -- Its segments are frozen, independent of the cleared tables, and remain valid for whoever still holds it.
+    -- The next external reader rebuilds it wherever OpenExternalSnapshot no longer serves it — as after the block adoption that replaced the catalog value.
 }

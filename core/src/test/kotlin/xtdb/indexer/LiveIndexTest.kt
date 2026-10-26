@@ -379,8 +379,52 @@ class LiveIndexTest {
         }
     }
 
-    // the lazy gate: a commit no longer eagerly rebuilds the shared snapshot — only a read demanding a
-    // basis the cache doesn't yet satisfy does.
+    private fun trie(table: TableRef, key: String) =
+        TrieDetails.newBuilder().setTableName(table.schemaAndTable).setTrieKey(key).setDataFileSize(1024L).build()
+
+    @Test
+    fun `a snapshot opened after a compaction lands reads the compacted tries, while one held from before keeps its own`() {
+        TestDb().use { db ->
+            val table = TableRef("public", "docs")
+
+            db.openTx(0, Instant.parse("2020-01-01T00:00:00Z")).use { tx ->
+                tx.put(table, UUID.randomUUID())
+                db.commitTx(tx)
+            }
+
+            val writtenTrie = runBlocking { db.liveIndex.finishBlock(db.bp, 0L) }.getValue(table).writtenTrie!!
+            db.trieCatalog.addTries(table, listOf(trie(table, writtenTrie.trieKey)), Instant.now())
+            db.liveIndex.nextBlock()
+
+            db.liveIndex.openSnapshot(null).use { held ->
+                assertEquals(listOf("l00-rc-b00"), held.trieCatSnap.listLiveAndNascentTrieKeys(table))
+
+                db.trieCatalog.addTries(table, listOf(trie(table, "l01-rc-b00")), Instant.now())
+
+                db.liveIndex.openSnapshot(null).use { fresh ->
+                    assertAll(
+                        { assertEquals(listOf("l01-rc-b00"), fresh.trieCatSnap.listLiveAndNascentTrieKeys(table)) },
+                        { assertEquals(listOf("l00-rc-b00"), held.trieCatSnap.listLiveAndNascentTrieKeys(table)) },
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `tries replayed after the index opened are served without a new transaction`() {
+        TestDb().use { db ->
+            val table = TableRef("public", "docs")
+
+            db.trieCatalog.addTries(table, listOf(trie(table, "l00-rc-b00")), Instant.now())
+            db.trieCatalog.addTries(table, listOf(trie(table, "l01-rc-b00")), Instant.now())
+
+            db.liveIndex.openSnapshot(null).use { snap ->
+                assertEquals(listOf("l01-rc-b00"), snap.trieCatSnap.listLiveAndNascentTrieKeys(table))
+            }
+        }
+    }
+
     @Test
     fun `snapshot not rebuilt until a newer basis is demanded`() {
         TestDb().use { db ->

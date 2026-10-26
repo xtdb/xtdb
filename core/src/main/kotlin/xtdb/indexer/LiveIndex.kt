@@ -217,15 +217,17 @@ class LiveIndex private constructor(
         }
     }
 
+    // A compaction or GC changes what a scan should read without moving the basis.
     private fun Snapshot.freshEnough(minSystemTime: Instant?) =
-        minSystemTime == null || txBasis?.systemTime?.let { !it.isBefore(minSystemTime) } == true
+        catalogState === catalog.current
+                && (minSystemTime == null || txBasis?.systemTime?.let { !it.isBefore(minSystemTime) } == true)
 
     override fun openSnapshot(minSystemTime: Instant?): Snapshot {
         snapLock.withReadLock {
             sharedSnap!!.let { if (it.freshEnough(minSystemTime)) return it.also { s -> s.retain() } }
         }
 
-        // cache too stale for the caller's basis — rebuild under the write lock, double-checking first
+        // cache no longer serves this caller — rebuild under the write lock, double-checking first
         val stamp = snapLock.writeLock()
         try {
             if (!sharedSnap!!.freshEnough(minSystemTime)) refreshSnap0()
