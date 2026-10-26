@@ -32,9 +32,8 @@ interface TrieCatalog {
     fun withPartitions(table: TableRef, addedTries: Iterable<TrieDetails>, asOf: Instant): List<Partition>
 
     /**
-     * Captures a frozen view of every table's trie state in a single shallow copy of the per-table map.
-     * Per-table values are immutable Clojure persistent maps, so each table's state is already frozen
-     * the moment the [Snap] is taken — addTries / deleteTries that land afterward have no effect on it.
+     * Captures a frozen view of every table's trie state, as of one moment across all tables —
+     * addTries / deleteTries that land afterward have no effect on it.
      *
      * Snapshot lifetime contract: callers MUST close their [xtdb.indexer.Snapshot] within the configured
      * `garbageLifetime` window, otherwise GC may delete trie files the snap still references.

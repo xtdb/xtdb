@@ -7,8 +7,6 @@
             [xtdb.util :as util])
   (:import [clojure.lang MapEntry]
            [java.time Instant LocalDate ZoneOffset]
-           [java.util Map]
-           [java.util.concurrent ConcurrentHashMap]
            (xtdb.log.proto TemporalMetadata TrieDetails TrieMetadata)
            (xtdb.segment Segment$PageMeta)))
 
@@ -449,10 +447,7 @@
                          (assoc :max-block-idx max-block-idx)))))
 
 (defn apply-added-tries
-  "Folds `added-tries` into the per-table trie-catalog value `table-cat`, returning the new one.
-
-  Pure: `table-cat` is one of the catalog's immutable per-table values, so a caller that has not gone
-  through `.compute` leaves the catalog untouched."
+  "Folds `added-tries` into the per-table trie-catalog value `table-cat`, returning the new one."
   [table-cat added-tries {:keys [file-size-target as-of]}]
   (reduce (fn [table-cat ^TrieDetails added-trie]
             (if-let [parsed-key (trie/parse-trie-key (.getTrieKey added-trie))]
@@ -474,27 +469,27 @@
                  (update partition :tries
                          (partial mapv trie/->table-block-trie-details)))))))
 
-(defrecord TrieCatalog [^Map !table-cats, ^long file-size-target]
+(defrecord TrieCatalog [!table-cats, ^long file-size-target]
   xtdb.trie.TrieCatalog
   (addTries [_ table added-tries as-of]
-    (.compute !table-cats table
-              (fn [_table table-cat]
-                (log/tracef "Adding tries to table '%s': %s" table (mapv #(.getTrieKey ^TrieDetails %) added-tries))
-                (try
-                  (let [{:keys [tries] :as new-trie-cat}
-                        (apply-added-tries table-cat added-tries
-                                           {:file-size-target file-size-target, :as-of as-of})]
-                    (s/assert ::catalog-tries tries)
-                    new-trie-cat)
-                  (catch InterruptedException e (throw e))
-                  (catch Throwable e
-                    (log/error e "Failed to add tries to table" table)
-                    (throw e))))))
+    (log/tracef "Adding tries to table '%s': %s" table (mapv #(.getTrieKey ^TrieDetails %) added-tries))
+    (try
+      (swap! !table-cats update table
+             (fn [table-cat]
+               (let [{:keys [tries] :as new-trie-cat}
+                     (apply-added-tries table-cat added-tries
+                                        {:file-size-target file-size-target, :as-of as-of})]
+                 (s/assert ::catalog-tries tries)
+                 new-trie-cat)))
+      (catch InterruptedException e (throw e))
+      (catch Throwable e
+        (log/error e "Failed to add tries to table" table)
+        (throw e))))
 
-  (getTables [_] (set (keys !table-cats)))
+  (getTables [_] (set (keys @!table-cats)))
 
   (garbageTries [_ table as-of]
-    (->> (garbage-tries (.get !table-cats table) as-of)
+    (->> (garbage-tries (get @!table-cats table) as-of)
          (into #{} (map :trie-key))))
 
   (listAllGarbageTrieKeys [this table]
@@ -503,11 +498,11 @@
          (into #{} (map :trie-key))))
 
   (deleteTries [_ table garbage-trie-keys]
-    (.compute !table-cats table
-              (fn [_table tries]
-                (let [{:keys [tries] :as res} (remove-garbage tries garbage-trie-keys)]
-                  (s/assert ::catalog-tries tries)
-                  res))))
+    (swap! !table-cats update table
+           (fn [table-cat]
+             (let [{:keys [tries] :as res} (remove-garbage table-cat garbage-trie-keys)]
+               (s/assert ::catalog-tries tries)
+               res))))
 
   (listAllTrieKeys [this table]
     (mapv :trie-key (all-tries (trie-state this table))))
@@ -521,8 +516,7 @@
         ->block-partitions))
 
   (snapshot [_]
-    ;; Shallow copy of the CHM; per-table values are already immutable Clojure persistent maps.
-    (let [snapped (into {} !table-cats)]
+    (let [snapped @!table-cats]
       (reify xtdb.trie.TrieCatalog$Snap
         (getTables [_] (set (keys snapped)))
         (tableState [_ table] (get snapped table))
@@ -530,53 +524,57 @@
           (long (or (get-in snapped [table :tries [0 nil []] :max-block-idx]) -1))))))
 
   PTrieCatalog
-  (trie-state [_ table] (.get !table-cats table))
+  (trie-state [_ table] (get @!table-cats table))
 
   (reset->l0! [_ table->l0-entries]
     ;; Caller supplies the full set of L0 entries per table — typically enumerated from the
     ;; object store (see `xtdb.compactor.reset/reset-compactor!`). Each table named in the map
     ;; has its catalog state reset to those L0s; higher levels are wiped.
-    (doseq [[table l0-entries] table->l0-entries]
-      (.compute !table-cats table
-                (fn [_table _table-cat]
-                  (reset->l0 l0-entries))))))
+    (swap! !table-cats
+           (fn [table-cats]
+             (reduce (fn [table-cats [table l0-entries]]
+                       (assoc table-cats table (reset->l0 l0-entries)))
+                     table-cats
+                     table->l0-entries)))))
+
+(defn ->trie-catalog [table-cats file-size-target]
+  (->TrieCatalog (atom table-cats) file-size-target))
 
 
-(defn load-tries ^java.util.Map [table->table-block file-size-target]
+(defn load-tries [table->table-block file-size-target]
   ;; We need to check one trie-details message from every table as table block files might come from different nodes. #4664
   ;; Partitions can be empty, so we need to get the first non-empty. #5017
   (if (->> (vals table->table-block)
            (map (comp first :tries first (partial drop-while (comp empty? :tries)) :partitions))
            (filter some?) ;; all empty partitions, should not happen in practice
            (every? new-trie-details?))
-    (let [!table-cats (ConcurrentHashMap.)]
-      (doseq [[table {:keys [partitions]}] table->table-block
-              :let [partitions (update-vals partitions #(update % :tries (partial map trie/<-trie-details)))
-                    tries (into {} (map partition->entry) partitions)
-                    tries (if (new-partition? (first partitions))
-                            tries
-                            (merge-with merge tries (partitions->max-block-idx-map partitions)))
-                    tries (repair-l0-l1c-consistency tries)]]
-        (s/assert ::catalog-tries tries)
-        (.put !table-cats table {:tries tries}))
-
-      !table-cats)
+    (into {}
+          (for [[table {:keys [partitions]}] table->table-block
+                :let [partitions (update-vals partitions #(update % :tries (partial map trie/<-trie-details)))
+                      tries (into {} (map partition->entry) partitions)
+                      tries (if (new-partition? (first partitions))
+                              tries
+                              (merge-with merge tries (partitions->max-block-idx-map partitions)))
+                      tries (repair-l0-l1c-consistency tries)]]
+            (do
+              (s/assert ::catalog-tries tries)
+              [table {:tries tries}])))
 
     ;; TODO: This else statement is here to support block files that have not yet passed to the new extended TrieDetails format
     ;; see #4526
-    (let [cat (TrieCatalog. (ConcurrentHashMap.) file-size-target)
+    (let [cat (->trie-catalog {} file-size-target)
           now (Instant/now)]
       (doseq [[table {:keys [partitions]}] table->table-block
               {:keys [tries]} partitions]
         ;; As all tries get added afresh, max-block-idx is up to date for all existing partitions
         (.addTries cat table tries now))
-      (:!table-cats cat))))
+      @(:!table-cats cat))))
 
 (defn ->factory ^xtdb.trie.TrieCatalog$Factory []
   (reify xtdb.trie.TrieCatalog$Factory
     (open [_ buffer-pool block-cat]
       (log/debug "starting trie catalog...")
       (let [table->table-block (table-cat/load-table-partitions buffer-pool block-cat)
-            cat (TrieCatalog. (load-tries table->table-block *file-size-target*) *file-size-target*)]
+            cat (->trie-catalog (load-tries table->table-block *file-size-target*) *file-size-target*)]
         (log/debug "trie catalog started")
         cat))))

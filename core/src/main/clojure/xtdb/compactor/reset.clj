@@ -95,7 +95,7 @@
                         "\nThen, do not upgrade nodes until the reset is complete.")
 
               (letfn [(freeze-state []
-                        (->> (for [[tbl {:keys [tries]}] (:!table-cats trie-cat)]
+                        (->> (for [[tbl {:keys [tries]}] @(:!table-cats trie-cat)]
                                [tbl (->> (for [[k tries] tries
                                                :let [{:keys [live garbage]} tries]]
                                            [k {:live (count live)

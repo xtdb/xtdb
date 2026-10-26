@@ -15,12 +15,10 @@
   (:import (java.io File)
            [java.nio.file Path]
            (java.time Duration Instant)
-           (java.util.concurrent ConcurrentHashMap)
            (xtdb.api.storage ObjectStore$StoredObject)
            (xtdb.block.proto Block)
            (xtdb.log.proto TemporalMetadata TrieMetadata)
            (xtdb.table TableSlug)
-           (xtdb.trie_catalog TrieCatalog)
            (xtdb.api TableRef)))
 
 (t/use-fixtures :once tu/with-allocator)
@@ -398,8 +396,8 @@
                       (into (sorted-set) (map :trie-key)))))))))
 
 (defn trie-catalog-init [table->table-block]
-  (TrieCatalog. (cat/load-tries table->table-block cat/*file-size-target*)
-                cat/*file-size-target*))
+  (cat/->trie-catalog (cat/load-tries table->table-block cat/*file-size-target*)
+                      cat/*file-size-target*))
 
 (t/deftest test-startup-drops-persisted-l0-garbage
   ;; Block files written before the "drop L0 on supersession" change may persist L0 entries
@@ -578,7 +576,7 @@
                        ["l03-r20250101-p3-b09"]))))
 
 (t/deftest test-dry-trie-catalog-gc
-  (let [cat (TrieCatalog. (ConcurrentHashMap.) 20)] ;file-size-target
+  (let [cat (cat/->trie-catalog {} 20)] ;file-size-target
     (letfn [(add-tries [tries inst]
               (.addTries cat #xt/table foo
                          (map #(apply trie/->trie-details #xt/table foo %) tries)
@@ -794,7 +792,7 @@
               :tries [{:trie-key "l03-r20200101-p0-b07" :block-idx 7}]}]))))
 
 (t/deftest test-delete-garbage-l1-l2-with-live-l3
-  (let [cat (TrieCatalog. (ConcurrentHashMap.) 20)
+  (let [cat (cat/->trie-catalog {} 20)
         table #xt/table foo
         add-tries (fn [tries inst]
                     (.addTries cat table
