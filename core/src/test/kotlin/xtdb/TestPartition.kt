@@ -40,7 +40,7 @@ class TestPartition(
     ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : AutoCloseable {
 
-    val tableCatalog = TableCatalog(bufferPool, block)
+    val tableCatalog = TableCatalog(TableCatalog.initialState(block))
     val trieCatalog = createTrieCatalog()
     val liveIndex = LiveIndex.open(allocator, tableCatalog, trieCatalog, indexerConfig, ioDispatcher)
 

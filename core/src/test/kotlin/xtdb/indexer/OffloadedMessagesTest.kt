@@ -59,7 +59,7 @@ class OffloadedMessagesTest {
         OffloadingLogsDriver(
             delegate,
             PartitionStorage(DatabaseLogs(null, null), bufferPool, null),
-            PartitionState(blockIndex?.let { TableCatalog(bufferPool, block { this.blockIndex = it }) }, null, null),
+            PartitionState(blockIndex?.let { TableCatalog(TableCatalog.initialState(block { this.blockIndex = it })) }, null, null),
         )
 
     @Test
@@ -108,7 +108,7 @@ class OffloadedMessagesTest {
                 val driver = OffloadingLogsDriver(
                     DecliningDriver(maxBytes = 1024),
                     PartitionStorage(DatabaseLogs(null, null), null, null),
-                    PartitionState(TableCatalog(bufferPool), null, null),
+                    PartitionState(TableCatalog(TableCatalog.initialState(null)), null, null),
                 )
 
                 assertThrows<Log.MessageTooLargeException> { driver.appendToReplica(bigTriesAdded()) }

@@ -56,8 +56,7 @@ class PartitionState(
             bufferPool: BufferPool,
             indexerConfig: IndexerConfig = IndexerConfig(),
         ): PartitionState = safelyOpening {
-            val tableCatalog = TableCatalog(bufferPool, bufferPool.latestBlock).also {
-                it.loadTables()
+            val tableCatalog = TableCatalog(TableCatalog.loadState(bufferPool, bufferPool.latestBlock)).also {
                 // xt.txs and xt.role_membership are data-backed, so they're absent from the catalog
                 // until the first transaction / GRANT. Seed them (as empty CREATE TABLEs) so they're
                 // always resolvable - the columns mirror `OpenTx.writeTxRow` / the GRANT path. On a node

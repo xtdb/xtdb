@@ -43,12 +43,8 @@ That's 'functional core, imperative shell' in OO vocabulary.
 
 `PartitionState` and `PartitionStorage` (`xtdb.database`) state the split most explicitly: the former bundles the three state holders, the latter the buffer pool, the source/replica logs and the page-metadata factory.
 
-Two caveats, so you don't read more into this than is there:
-
-* *It isn't a package boundary.*
-  `xtdb.catalog`, `xtdb.compactor` and `xtdb.garbage-collector` are clean, but `xtdb.indexer` holds `LiveIndex` (state) alongside the log processors and `BlockCutter` (services), and `xtdb.trie` holds the `TrieCatalog` interface alongside the trie/data/metadata file writers.
-* *`TableCatalog` keeps a `BufferPool` for its lifetime*, unlike `TrieCatalog` (whose I/O sits in the factory).
-  It's only used by `loadTables`, called once from `PartitionState.open` at startup - so 'state does no runtime I/O' holds here by convention rather than by construction.
+One caveat, so you don't read more into this than is there: *it isn't a package boundary.*
+`xtdb.catalog`, `xtdb.compactor` and `xtdb.garbage-collector` are clean, but `xtdb.indexer` holds `LiveIndex` (state) alongside the log processors and `BlockCutter` (services), and `xtdb.trie` holds `TrieCatalog` alongside the trie/data/metadata file writers.
 
 == The lifecycle of a transaction
 

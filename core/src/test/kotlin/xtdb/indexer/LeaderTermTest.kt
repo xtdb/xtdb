@@ -206,7 +206,7 @@ internal abstract class LeaderTermTest {
         termJob: Job = SupervisorJob(backgroundScope.coroutineContext.job),
     ): LeaderLogProcessor {
         val dbName = if (dbCatalog != null) "xtdb" else "test"
-        val tableCatalog = TableCatalog(bufferPool)
+        val tableCatalog = TableCatalog(TableCatalog.initialState(null))
         val partitionState = PartitionState(tableCatalog, trieCatalog, liveIndex)
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
         val driver = wrapDriver(RealLogsDriver(partitionStorage))
@@ -247,7 +247,7 @@ internal abstract class LeaderTermTest {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val bufferPool = mockk<BufferPool>(relaxed = true) { every { epoch } returns 0 }
         val partitionState =
-            PartitionState(TableCatalog(bufferPool), createTrieCatalog(), liveIndexMock())
+            PartitionState(TableCatalog(TableCatalog.initialState(null)), createTrieCatalog(), liveIndexMock())
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
         val logsDriver = driver(RealLogsDriver(partitionStorage))
         val appender = ReplicaLogAppender(logsDriver, leaderTerm = 1, NoAssertElectionDriver)

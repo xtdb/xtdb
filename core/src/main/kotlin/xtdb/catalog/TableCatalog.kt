@@ -84,7 +84,7 @@ private fun <T, R> StateFlow<T>.mapState(f: (T) -> R): StateFlow<R> = object : S
 }
 
 /** What one database partition knows about its tables, and the block that knowledge is current to. */
-class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = null) {
+class TableCatalog(initialState: State) {
 
     internal data class TableMeta(
         val vecTypes: Map<ColumnName, VectorType>,
@@ -185,9 +185,7 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
         }
     }
 
-    private val _state = initialBlock?.asBlockDetails().let { block ->
-        MutableStateFlow(State(block, emptyMap(), block?.tables.orEmpty().associateBy { it.table }))
-    }
+    private val _state = MutableStateFlow(initialState)
 
     fun snap(): State = _state.value
 
@@ -261,19 +259,6 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
     fun seedTable(table: TableRef, colNames: List<ColumnName>) = _state.update { it.withSeededTable(table, colNames) }
 
     /**
-     * Loads table metadata from storage for the block this catalog opened at, replacing the in-memory
-     * tables wholesale. Called once, at open, *before* [seedTable] - a second call would drop any seeds
-     * not yet persisted to storage.
-     */
-    fun loadTables() {
-        val snap = snap()
-        val blockIndex = snap.blockIdx ?: return
-        val tables = loadTablesFromStorage(bufferPool, snap.recordedEntries, blockIndex)
-
-        _state.update { it.copy(tables = tables) }
-    }
-
-    /**
      * Advances to a newly durable block, folding that block's per-table metadata in with it.
      *
      * A re-delivered block leaves the block half alone but still folds the metadata.
@@ -338,6 +323,21 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
     }
 
     companion object {
+        /** A catalog at [block] — the tables it records, and none of their metadata. */
+        @JvmStatic
+        fun initialState(block: Block?): State =
+            block?.asBlockDetails().let { details ->
+                State(details, emptyMap(), details?.tables.orEmpty().associateBy { it.table })
+            }
+
+        /** [initialState], with each recorded table's metadata loaded from [bufferPool]. */
+        @JvmStatic
+        fun loadState(bufferPool: BufferPool, block: Block?): State {
+            val state = initialState(block)
+            val blockIndex = state.blockIdx ?: return state
+            return state.copy(tables = loadTablesFromStorage(bufferPool, state.recordedEntries, blockIndex))
+        }
+
         private val blocksPath = "blocks".asPath
 
         @JvmStatic

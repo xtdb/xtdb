@@ -177,7 +177,7 @@ class LogProcessorSimTest : SimulationTestBase() {
         private val readOnly: Boolean = false,
     ) : AutoCloseable {
 
-        val tableCatalog = TableCatalog(bp)
+        val tableCatalog = TableCatalog(TableCatalog.initialState(null))
         val trieCatalog = createTrieCatalog()
         val liveIndex =
             LiveIndex.open(allocator, tableCatalog, trieCatalog, indexerConfig, ioDispatcher = dispatcher)

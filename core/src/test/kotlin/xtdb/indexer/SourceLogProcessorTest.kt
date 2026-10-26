@@ -80,7 +80,7 @@ internal class SourceLogProcessorTest : LeaderTermTest() {
     ): ResolveSide {
         val dbName = if (dbCatalog != null) "xtdb" else "test"
         val bufferPool = mockk<BufferPool>(relaxed = true) { every { epoch } returns 0 }
-        val partitionState = PartitionState(TableCatalog(bufferPool), trieCatalog, liveIndexMock())
+        val partitionState = PartitionState(TableCatalog(TableCatalog.initialState(null)), trieCatalog, liveIndexMock())
         val partitionStorage = PartitionStorage(
             DatabaseLogs(
                 InMemoryLog<SourceMessage>(InstantSource.system(), 0),

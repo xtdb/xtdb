@@ -17,7 +17,6 @@
            (xtdb.block.proto Block TableBlock)
            (xtdb.catalog TableCatalog)
            (xtdb.log.proto TrieDetails)
-           (xtdb.storage BufferPool)
            (xtdb.table TableEntry TableSlug)
            (xtdb.util HyperLogLog)))
 
@@ -225,8 +224,7 @@
         entries (map-indexed (fn [idx nm] (TableEntry/mint (+ TableEntry/FIRST_OID idx) (table/->ref nm)))
                              (sort names))
 
-        ;; UNUSED throws on every storage call, so this also pins that resolving the entries reads nothing back.
-        ->entries (fn [^Block block] (vec (.getEntries (.snap (TableCatalog. BufferPool/UNUSED block)))))]
+        ->entries (fn [^Block block] (vec (.getEntries (.snap (TableCatalog. (TableCatalog/initialState block))))))]
 
     (t/is (= ["public$docs" "public$foo" "xt$txs"]
              (mapv #(.getSlug (.getSlug ^TableEntry %)) entries))
@@ -253,10 +251,10 @@
         b11 (->block 11 ["public/docs" "public/orders" "xt/txs"])
 
         ;; started before `orders` existed, then caught up
-        caught-up (doto (TableCatalog. BufferPool/UNUSED (->block 10 ["public/docs" "xt/txs"]))
+        caught-up (doto (TableCatalog. (TableCatalog/initialState (->block 10 ["public/docs" "xt/txs"])))
                     (.refresh b11 {}))
 
-        started-at-b11 (TableCatalog. BufferPool/UNUSED b11)]
+        started-at-b11 (TableCatalog. (TableCatalog/initialState b11))]
 
     (t/is (= {"public/docs" 16384, "public/orders" 16385, "xt/txs" 16386} (->oids started-at-b11)))
 
@@ -268,7 +266,7 @@
         (.getEntries (.snap cat))))
 
 (defn- register-txs ^TableCatalog [txs]
-  (let [cat (TableCatalog. BufferPool/UNUSED nil)]
+  (let [cat (TableCatalog. (TableCatalog/initialState nil))]
     (doseq [tx txs]
       (.registerTables cat (mapv table/->ref tx)))
     cat))

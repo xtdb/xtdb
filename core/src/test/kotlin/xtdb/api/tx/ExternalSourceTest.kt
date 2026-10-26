@@ -44,7 +44,7 @@ internal class ExternalSourceTest : LeaderTermTest() {
     @BeforeEach
     fun openRealIndex() {
         bufferPool = MemoryStorage(allocator, 0)
-        liveIndex = LiveIndex.open(allocator, TableCatalog(bufferPool), createTrieCatalog())
+        liveIndex = LiveIndex.open(allocator, TableCatalog(TableCatalog.initialState(null)), createTrieCatalog())
 
         closeAfterTerm(liveIndex)
         closeAfterTerm(bufferPool)

@@ -114,7 +114,7 @@ class NodeSimulationTest : SimulationTestBase() {
 
         dbs = List(numberOfSystems) {
             val trieCatalog = createTrieCatalog()
-            val tableCatalog = TableCatalog(sharedBufferPool, sharedBufferPool.latestBlock)
+            val tableCatalog = TableCatalog(TableCatalog.initialState(sharedBufferPool.latestBlock))
             val compactor = Compactor.Impl(
                 compactorDriverFactory, null, jobCalculator, false, 2,
                 dispatcher = dispatcher, ioDispatcher = dispatcher
