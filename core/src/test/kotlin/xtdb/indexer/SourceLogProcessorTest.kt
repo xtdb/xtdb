@@ -13,7 +13,8 @@ import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
-import xtdb.SimulationTestUtils.Companion.createTrieCatalog
+import xtdb.catalog.Catalog
+import xtdb.SimulationTestUtils.Companion.createCatalog
 import xtdb.api.IndexerConfig
 import xtdb.api.TableRef
 import xtdb.api.log.InMemoryLog
@@ -23,7 +24,6 @@ import xtdb.api.log.SourceMessage
 import xtdb.api.log.Watchers
 import xtdb.api.storage.Storage
 import xtdb.api.tx.TxIndexer
-import xtdb.catalog.TableCatalog
 import xtdb.database.Database
 import xtdb.database.DatabaseLogs
 import xtdb.database.PartitionState
@@ -32,7 +32,6 @@ import xtdb.log.proto.TrieDetails
 import xtdb.log.proto.trieMetadata
 import xtdb.storage.BufferPool
 import xtdb.trie.Trie
-import xtdb.trie.TrieCatalog
 import xtdb.types.MessageId
 import xtdb.util.closeAll
 import java.time.Instant
@@ -75,12 +74,12 @@ internal class SourceLogProcessorTest : LeaderTermTest() {
     private fun TestScope.resolveSide(
         // Supplying one names this database 'xtdb', since only the primary's leader holds a catalog.
         dbCatalog: Database.Catalog? = null,
-        trieCatalog: TrieCatalog = createTrieCatalog(),
+        catalog: Catalog = createCatalog(),
         skipTxs: Set<MessageId> = emptySet(),
     ): ResolveSide {
         val dbName = if (dbCatalog != null) "xtdb" else "test"
         val bufferPool = mockk<BufferPool>(relaxed = true) { every { epoch } returns 0 }
-        val partitionState = PartitionState(TableCatalog(TableCatalog.initialState(null)), trieCatalog, liveIndexMock())
+        val partitionState = PartitionState(catalog, liveIndexMock())
         val partitionStorage = PartitionStorage(
             DatabaseLogs(
                 InMemoryLog<SourceMessage>(InstantSource.system(), 0),
@@ -152,8 +151,8 @@ internal class SourceLogProcessorTest : LeaderTermTest() {
 
     @Test
     fun `TriesAdded is replicated for every node to apply, this one included`() = runTest {
-        val trieCatalog = createTrieCatalog()
-        val rs = resolveSide(trieCatalog = trieCatalog)
+        val catalog = createCatalog()
+        val rs = resolveSide(catalog = catalog)
 
         // the catalog silently drops a trie whose key it can't parse, so this has to be a real one
         val trieKey = Trie.l0Key(0).toString()
@@ -174,7 +173,7 @@ internal class SourceLogProcessorTest : LeaderTermTest() {
             rs.appended.filterIsInstance<ReplicaMessage.TriesAdded>().flatMap { it.tries }.map { it.trieKey }
         )
         assertEquals(
-            emptySet<TableRef>(), trieCatalog.state.tables,
+            emptySet<TableRef>(), catalog.trieCatalog.state.tables,
             "and the catalog moves when this node reads that record back, not here"
         )
     }

@@ -1,5 +1,6 @@
 package xtdb.catalog
 
+import clojure.lang.PersistentArrayMap
 import kotlinx.coroutines.test.runTest
 import org.apache.arrow.memory.BufferAllocator
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -8,6 +9,7 @@ import org.junit.jupiter.api.extension.ExtendWith
 import org.junit.jupiter.api.io.TempDir
 import xtdb.api.log.ReplicaMessage.OversizedMessage
 import xtdb.api.storage.Storage
+import xtdb.block.proto.Block
 import xtdb.block.proto.block
 import xtdb.block.proto.txKey
 import xtdb.cache.MemoryCache
@@ -16,15 +18,24 @@ import xtdb.garbage_collector.BlockGarbageCollector
 import xtdb.storage.BufferPool
 import xtdb.test.AllocatorResolver
 import xtdb.time.InstantUtil.asMicros
+import xtdb.trie.TrieCatalog
 import xtdb.api.TableRef
 import xtdb.table.TableSlug
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.asPath
+import xtdb.util.requiringResolve
 import java.nio.ByteBuffer
 import java.nio.file.Path
 import java.time.Instant
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+
+
+private val emptyTrieCatState =
+    requiringResolve("xtdb.trie-catalog/->TrieCatalogState").invoke(PersistentArrayMap.EMPTY, 0L) as TrieCatalog.State
+
+private fun tableCatalogAt(block: Block?) =
+    Catalog(Catalog.State(emptyTrieCatState, TableCatalog.initialState(block))).tableCatalog
 
 @ExtendWith(AllocatorResolver::class)
 class BlockGarbageCollectorTest {
@@ -66,7 +77,7 @@ class BlockGarbageCollectorTest {
                 assertBlockCount(bufferPool, table1BlockPath, 10)
                 assertBlockCount(bufferPool, table2BlockPath, 10)
 
-                val blockCat = TableCatalog(TableCatalog.initialState(bufferPool.latestBlock))
+                val blockCat = tableCatalogAt(bufferPool.latestBlock)
 
                 val gc = BlockGarbageCollector(
                     bufferPool, blockCat,
@@ -117,7 +128,7 @@ class BlockGarbageCollectorTest {
                 val kept = payloadAt(9L)
 
                 BlockGarbageCollector(
-                    bufferPool, TableCatalog(TableCatalog.initialState(bufferPool.latestBlock)),
+                    bufferPool, tableCatalogAt(bufferPool.latestBlock),
                     blocksToKeep = 3,
                     enabled = false,
                     dbName = "xtdb",
@@ -146,7 +157,7 @@ class BlockGarbageCollectorTest {
                     }
 
                     val gc = BlockGarbageCollector(
-                        p0, TableCatalog(TableCatalog.initialState(p0.latestBlock)),
+                        p0, tableCatalogAt(p0.latestBlock),
                         blocksToKeep = 3,
                         enabled = false,
                         dbName = "xtdb",

@@ -10,7 +10,7 @@ import xtdb.SimulationTestUtils.Companion.L1TrieKeys
 import xtdb.SimulationTestUtils.Companion.addTriesToBufferPool
 import xtdb.SimulationTestUtils.Companion.buildTrieDetails
 import xtdb.SimulationTestUtils.Companion.createJobCalculator
-import xtdb.SimulationTestUtils.Companion.createTrieCatalog
+import xtdb.SimulationTestUtils.Companion.createCatalog
 import xtdb.SimulationTestUtils.Companion.prefix
 import xtdb.SimulationTestUtils.Companion.setLogLevel
 import xtdb.api.TransactionKey
@@ -113,14 +113,15 @@ class NodeSimulationTest : SimulationTestBase() {
         sharedBufferPool = MemoryStorage(allocator, epoch = 0)
 
         dbs = List(numberOfSystems) {
-            val trieCatalog = createTrieCatalog()
-            val tableCatalog = TableCatalog(TableCatalog.initialState(sharedBufferPool.latestBlock))
+            val catalog = createCatalog(sharedBufferPool.latestBlock)
+            val trieCatalog = catalog.trieCatalog
+            val tableCatalog = catalog.tableCatalog
             val compactor = Compactor.Impl(
                 compactorDriverFactory, null, jobCalculator, false, 2,
                 dispatcher = dispatcher, ioDispatcher = dispatcher
             )
             val partitionStorage = PartitionStorage(DatabaseLogs(null, null), sharedBufferPool, null)
-            val partitionState = PartitionState(tableCatalog, trieCatalog, null)
+            val partitionState = PartitionState(catalog, null)
             val compactorScope = CoroutineScope(dispatcher)
             val compactorForDb = compactor.openForDatabase(compactorScope, allocator, partitionStorage, partitionState, Watchers(latestTxId = -1, latestSourceMsgId = -1))
             val gcScope = CoroutineScope(dispatcher)

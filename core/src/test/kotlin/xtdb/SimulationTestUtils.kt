@@ -1,6 +1,9 @@
 package xtdb
 
 import clojure.lang.PersistentArrayMap
+import xtdb.block.proto.Block
+import xtdb.catalog.Catalog
+import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
 import xtdb.log.proto.TrieDetails
 import xtdb.storage.BufferPool
@@ -37,8 +40,13 @@ class SimulationTestUtils {
         fun createJobCalculator(): Compactor.JobCalculator =
             createJobCalculatorFn.invoke() as Compactor.JobCalculator
 
-        fun createTrieCatalog(): TrieCatalog =
-            TrieCatalog(createTrieCatalogStateFn.invoke(PersistentArrayMap.EMPTY, 100 * 1024 * 1024) as TrieCatalog.State)
+        fun createCatalog(block: Block? = null): Catalog =
+            Catalog(
+                Catalog.State(
+                    createTrieCatalogStateFn.invoke(PersistentArrayMap.EMPTY, 100 * 1024 * 1024) as TrieCatalog.State,
+                    TableCatalog.initialState(block)
+                )
+            )
 
         val L0TrieKeys = sequence {
             var blockIndex = 0

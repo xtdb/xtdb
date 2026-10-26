@@ -15,7 +15,7 @@
            [java.util Map]
            (org.apache.arrow.vector.types.pojo Schema)
            (xtdb.block.proto Block TableBlock)
-           (xtdb.catalog TableCatalog)
+           (xtdb.catalog Catalog Catalog$State TableCatalog TableCatalog$State)
            (xtdb.log.proto TrieDetails)
            (xtdb.table TableEntry TableSlug)
            (xtdb.util HyperLogLog)))
@@ -219,12 +219,15 @@
                                               :tries (partial map (comp :trie-key trie/<-trie-details))))
                                     partitions))))))))))
 
+(defn- ->table-cat ^TableCatalog [^TableCatalog$State table-cat-state]
+  (.getTableCatalog (Catalog. (Catalog$State. (trie-cat/->TrieCatalogState {} 0) table-cat-state))))
+
 (deftest a-block-carrying-names-alone-resolves-to-the-entries-its-files-are-already-under
   (let [names ["public/docs" "public/foo" "xt/txs"]
         entries (map-indexed (fn [idx nm] (TableEntry/mint (+ TableEntry/FIRST_OID idx) (table/->ref nm)))
                              (sort names))
 
-        ->entries (fn [^Block block] (vec (.getEntries (.snap (TableCatalog. (TableCatalog/initialState block))))))]
+        ->entries (fn [^Block block] (vec (.getEntries (.snap (->table-cat (TableCatalog/initialState block))))))]
 
     (t/is (= ["public$docs" "public$foo" "xt$txs"]
              (mapv #(.getSlug (.getSlug ^TableEntry %)) entries))
@@ -251,10 +254,10 @@
         b11 (->block 11 ["public/docs" "public/orders" "xt/txs"])
 
         ;; started before `orders` existed, then caught up
-        caught-up (doto (TableCatalog. (TableCatalog/initialState (->block 10 ["public/docs" "xt/txs"])))
+        caught-up (doto (->table-cat (TableCatalog/initialState (->block 10 ["public/docs" "xt/txs"])))
                     (.refresh b11 {}))
 
-        started-at-b11 (TableCatalog. (TableCatalog/initialState b11))]
+        started-at-b11 (->table-cat (TableCatalog/initialState b11))]
 
     (t/is (= {"public/docs" 16384, "public/orders" 16385, "xt/txs" 16386} (->oids started-at-b11)))
 
@@ -266,7 +269,7 @@
         (.getEntries (.snap cat))))
 
 (defn- register-txs ^TableCatalog [txs]
-  (let [cat (TableCatalog. (TableCatalog/initialState nil))]
+  (let [cat (->table-cat (TableCatalog/initialState nil))]
     (doseq [tx txs]
       (.registerTables cat (mapv table/->ref tx)))
     cat))

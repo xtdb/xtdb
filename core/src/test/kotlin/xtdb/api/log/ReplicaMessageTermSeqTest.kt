@@ -3,7 +3,7 @@ package xtdb.api.log
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
-import xtdb.catalog.TableCatalog
+import xtdb.SimulationTestUtils.Companion.createCatalog
 import java.time.Instant
 
 class ReplicaMessageTermSeqTest {
@@ -38,7 +38,7 @@ class ReplicaMessageTermSeqTest {
     @Test
     fun `the catalog reads back the boundary's term position from the block`() {
         fun catalogWith(boundaryTermSeq: Long?) =
-            TableCatalog(TableCatalog.initialState(null)).also { cat ->
+            createCatalog().tableCatalog.also { cat ->
                 cat.refresh(
                     cat.buildBlock(
                         blockIndex = 0,

@@ -16,11 +16,10 @@ import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import xtdb.SimulationTestUtils.Companion.createTrieCatalog
+import xtdb.SimulationTestUtils.Companion.createCatalog
 import xtdb.api.log.*
 import xtdb.api.error.Incorrect
 import xtdb.api.tx.TxIndexer.TxResult
-import xtdb.catalog.TableCatalog
 import xtdb.database.Database
 import xtdb.database.DatabaseLogs
 import xtdb.database.DatabasePartition
@@ -44,7 +43,7 @@ internal class ExternalSourceTest : LeaderTermTest() {
     @BeforeEach
     fun openRealIndex() {
         bufferPool = MemoryStorage(allocator, 0)
-        liveIndex = LiveIndex.open(allocator, TableCatalog(TableCatalog.initialState(null)), createTrieCatalog())
+        liveIndex = createCatalog().let { LiveIndex.open(allocator, it.tableCatalog, it.trieCatalog) }
 
         closeAfterTerm(liveIndex)
         closeAfterTerm(bufferPool)
@@ -302,7 +301,7 @@ internal class ExternalSourceTest : LeaderTermTest() {
         // note: not .use — Database.close() would close `allocator`, which @AfterEach also closes
         val partition = DatabasePartition(
             storage = PartitionStorage(DatabaseLogs(null, null), null, null),
-            state = PartitionState(null, null, null),
+            state = PartitionState(null, null),
             watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1),
         )
         val db = Database(

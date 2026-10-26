@@ -2,11 +2,9 @@ package xtdb.catalog
 
 import com.google.protobuf.ByteString
 import kotlinx.coroutines.flow.FlowCollector
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.update
 import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.api.TableRef
 import xtdb.api.TransactionKey
@@ -83,8 +81,8 @@ private fun <T, R> StateFlow<T>.mapState(f: (T) -> R): StateFlow<R> = object : S
     }
 }
 
-/** What one database partition knows about its tables, and the block that knowledge is current to. */
-class TableCatalog(initialState: State) {
+/** The table half of a [Catalog]: what the partition knows about its tables, and the block that knowledge is current to. */
+class TableCatalog internal constructor(private val catalog: Catalog) {
 
     internal data class TableMeta(
         val vecTypes: Map<ColumnName, VectorType>,
@@ -163,6 +161,11 @@ class TableCatalog(initialState: State) {
          */
         fun slug(table: TableRef): TableSlug = entry(table)?.slug ?: TableSlug.of(table)
 
+        /**
+         * [this] with a data-backed system table (e.g. `xt.txs`) seeded, as if an empty `CREATE TABLE` had run:
+         * columns are declared but dataless (`Nothing`), so the first real write sets their types
+         * (`Nothing ⊔ X = X`). [this] unchanged if the table was already loaded from storage.
+         */
         internal fun withSeededTable(table: TableRef, colNames: List<ColumnName>): State {
             val meta = TableMeta(colNames.associateWith { VectorType.Nothing }, 0, emptyMap())
 
@@ -185,9 +188,9 @@ class TableCatalog(initialState: State) {
         }
     }
 
-    private val _state = MutableStateFlow(initialState)
+    private fun update(f: (State) -> State) = catalog.update { it.mapTableCat(f) }
 
-    fun snap(): State = _state.value
+    fun snap(): State = catalog.current.tableCat
 
     /**
      * The latest block this catalog knows to be in object storage, advancing on [refresh] — which the
@@ -197,7 +200,7 @@ class TableCatalog(initialState: State) {
      * from storage alone. That is what lets an external source use the emitted `externalSourceToken` as
      * the furthest position it may confirm upstream.
      */
-    val latestBlock: StateFlow<BlockDetails?> = _state.mapState { it.block }
+    val latestBlock: StateFlow<BlockDetails?> = catalog.flow.mapState { it.tableCat.block }
 
     val currentBlockIndex: BlockIndex? get() = snap().blockIdx
 
@@ -245,18 +248,11 @@ class TableCatalog(initialState: State) {
      * this as an unordered map, so arrival order within one transaction differs between them, while the
      * order transactions themselves arrive does not.
      */
-    fun registerTables(tables: Collection<TableRef>) = _state.update { it.withEntriesFor(tables) }
+    fun registerTables(tables: Collection<TableRef>) = update { it.withEntriesFor(tables) }
 
     val secondaryDatabases: Map<String, DatabaseConfig> get() = snap().block?.secondaryDatabases.orEmpty()
 
     fun rowCount(table: TableRef): Long? = snap().rowCount(table)
-
-    /**
-     * Seeds a data-backed system table (e.g. `xt.txs`) so it's present from startup, as if an empty
-     * `CREATE TABLE` had run: columns are declared but dataless (`Nothing`), so the first real write
-     * sets their types (`Nothing ⊔ X = X`). No-op if the table was already loaded from storage.
-     */
-    fun seedTable(table: TableRef, colNames: List<ColumnName>) = _state.update { it.withSeededTable(table, colNames) }
 
     /**
      * Advances to a newly durable block, folding that block's per-table metadata in with it.
@@ -264,7 +260,7 @@ class TableCatalog(initialState: State) {
      * A re-delivered block leaves the block half alone but still folds the metadata.
      */
     fun refresh(block: Block?, metadata: Map<TableRef, LiveTable.BlockMetadata> = emptyMap()) =
-        _state.update { it.refreshed(block, metadata) }
+        update { it.refreshed(block, metadata) }
 
     /**
      * The per-table block files for a block contributing [tableMetadata], with [tablePartitions] as their

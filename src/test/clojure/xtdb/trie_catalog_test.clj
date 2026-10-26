@@ -19,6 +19,7 @@
            (xtdb.block.proto Block)
            (xtdb.log.proto TemporalMetadata TrieMetadata)
            (xtdb.table TableSlug)
+           (xtdb.catalog Catalog Catalog$State TableCatalog)
            (xtdb.trie TrieCatalog)
            (xtdb.api TableRef)))
 
@@ -396,9 +397,12 @@
                  (->> (cat/current-tries (cat/trie-state cat #xt/table foo))
                       (into (sorted-set) (map :trie-key)))))))))
 
+(defn- ->trie-cat ^TrieCatalog [table-cats file-size-target]
+  (.getTrieCatalog (Catalog. (Catalog$State. (cat/->TrieCatalogState table-cats file-size-target)
+                                             (TableCatalog/initialState nil)))))
+
 (defn trie-catalog-init [table->table-block]
-  (TrieCatalog. (cat/->TrieCatalogState (cat/load-tries table->table-block cat/*file-size-target*)
-                                       cat/*file-size-target*)))
+  (->trie-cat (cat/load-tries table->table-block cat/*file-size-target*) cat/*file-size-target*))
 
 (t/deftest test-startup-drops-persisted-l0-garbage
   ;; Block files written before the "drop L0 on supersession" change may persist L0 entries
@@ -577,7 +581,7 @@
                        ["l03-r20250101-p3-b09"]))))
 
 (t/deftest test-dry-trie-catalog-gc
-  (let [cat (TrieCatalog. (cat/->TrieCatalogState {} 20))] ;file-size-target
+  (let [cat (->trie-cat {} 20)] ;file-size-target
     (letfn [(add-tries [tries inst]
               (.addTries cat #xt/table foo
                          (map #(apply trie/->trie-details #xt/table foo %) tries)
@@ -793,7 +797,7 @@
               :tries [{:trie-key "l03-r20200101-p0-b07" :block-idx 7}]}]))))
 
 (t/deftest test-delete-garbage-l1-l2-with-live-l3
-  (let [cat (TrieCatalog. (cat/->TrieCatalogState {} 20))
+  (let [cat (->trie-cat {} 20)
         table #xt/table foo
         add-tries (fn [tries inst]
                     (.addTries cat table

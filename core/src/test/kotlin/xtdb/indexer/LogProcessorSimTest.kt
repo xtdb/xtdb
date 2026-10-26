@@ -18,7 +18,7 @@ import xtdb.NodeBase
 import xtdb.NodeBase.Companion.openBase
 import xtdb.RepeatableSimulationTest
 import xtdb.SimulationTestBase
-import xtdb.SimulationTestUtils.Companion.createTrieCatalog
+import xtdb.SimulationTestUtils.Companion.createCatalog
 import xtdb.api.IndexerConfig
 import xtdb.api.Xtdb
 import xtdb.api.log.*
@@ -177,12 +177,12 @@ class LogProcessorSimTest : SimulationTestBase() {
         private val readOnly: Boolean = false,
     ) : AutoCloseable {
 
-        val tableCatalog = TableCatalog(TableCatalog.initialState(null))
-        val trieCatalog = createTrieCatalog()
+        val catalog = createCatalog()
+        val tableCatalog = catalog.tableCatalog
         val liveIndex =
-            LiveIndex.open(allocator, tableCatalog, trieCatalog, indexerConfig, ioDispatcher = dispatcher)
+            LiveIndex.open(allocator, catalog.tableCatalog, catalog.trieCatalog, indexerConfig, ioDispatcher = dispatcher)
 
-        val partitionState = PartitionState(tableCatalog, trieCatalog, liveIndex)
+        val partitionState = PartitionState(catalog, liveIndex)
 
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
             .also { simExtSource.watch(it) }
