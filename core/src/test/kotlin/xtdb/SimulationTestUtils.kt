@@ -32,13 +32,13 @@ class SimulationTestUtils {
         // Clojure interop to get at internal functions
         val setLogLevel = requiringResolve("xtdb.logging/set-log-level!")
         private val createJobCalculatorFn = requiringResolve("xtdb.compactor.job-calculator/->JobCalculator")
-        private val createTrieCatalogFn = requiringResolve("xtdb.trie-catalog/->trie-catalog")
+        private val createTrieCatalogStateFn = requiringResolve("xtdb.trie-catalog/->TrieCatalogState")
 
         fun createJobCalculator(): Compactor.JobCalculator =
             createJobCalculatorFn.invoke() as Compactor.JobCalculator
 
         fun createTrieCatalog(): TrieCatalog =
-            createTrieCatalogFn.invoke(PersistentArrayMap.EMPTY, 100 * 1024 * 1024) as TrieCatalog
+            TrieCatalog(createTrieCatalogStateFn.invoke(PersistentArrayMap.EMPTY, 100 * 1024 * 1024) as TrieCatalog.State)
 
         val L0TrieKeys = sequence {
             var blockIndex = 0

@@ -6,13 +6,18 @@ import xtdb.log.proto.TrieDetails
 import xtdb.storage.BufferPool
 import xtdb.api.TableRef
 import xtdb.table.fromSchemaAndTable
+import xtdb.util.error
+import xtdb.util.logger
+import xtdb.util.trace
 import java.time.Instant
+import java.util.concurrent.atomic.AtomicReference
 
 typealias FileSize = Long
 
-interface TrieCatalog {
-    fun addTries(table: TableRef, addedTries: Iterable<TrieDetails>, asOf: Instant)
-    fun deleteTries(table: TableRef, garbageTrieKeys: Set<TrieKey>)
+private val LOG = TrieCatalog::class.logger
+
+class TrieCatalog(initialState: State) {
+    private val stateRef = AtomicReference(initialState)
 
     /**
      * The catalog's current value, frozen — addTries / deleteTries that land afterward have no effect on it.
@@ -20,7 +25,28 @@ interface TrieCatalog {
      * Lifetime contract: a holder MUST be done with it within the configured `garbageLifetime` window,
      * otherwise GC may delete trie files it still references.
      */
-    val state: State
+    val state: State get() = stateRef.get()
+
+    fun addTries(table: TableRef, addedTries: Iterable<TrieDetails>, asOf: Instant) {
+        LOG.trace { "Adding tries to table '$table': ${addedTries.map { it.trieKey }}" }
+        try {
+            stateRef.updateAndGet { it.withTries(table, addedTries, asOf) }
+        } catch (e: InterruptedException) {
+            throw e
+        } catch (e: Throwable) {
+            LOG.error(e, "Failed to add tries to table $table")
+            throw e
+        }
+    }
+
+    fun deleteTries(table: TableRef, garbageTrieKeys: Set<TrieKey>) {
+        stateRef.updateAndGet { it.withoutTries(table, garbageTrieKeys) }
+    }
+
+    /** @see State.withL0Reset */
+    fun resetToL0(tableToL0Entries: Map<TableRef, Any?>) {
+        stateRef.updateAndGet { it.withL0Reset(tableToL0Entries) }
+    }
 
     interface State {
         val tables: Set<TableRef>
@@ -63,7 +89,7 @@ interface TrieCatalog {
     }
 
     fun interface Factory {
-        fun open(bufferPool: BufferPool, tableCatalog: TableCatalog): TrieCatalog
+        fun open(bufferPool: BufferPool, tableCatalog: TableCatalog): State
     }
 }
 

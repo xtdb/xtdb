@@ -9,7 +9,7 @@
            [java.time Instant LocalDate ZoneOffset]
            (xtdb.log.proto TemporalMetadata TrieDetails TrieMetadata)
            (xtdb.segment Segment$PageMeta)
-           (xtdb.trie TrieCatalog$State)))
+           (xtdb.trie TrieCatalog TrieCatalog$State)))
 
 (s/def ::level int?)
 (s/def ::recency (s/nilable #(instance? LocalDate %)))
@@ -96,18 +96,6 @@
 ;; e.g. L4C files are sharded by three IID parts; L4H are sharded by recency and two IID parts.
 
 (set! *unchecked-math* :warn-on-boxed)
-
-(defprotocol PTrieCatalog
-  (trie-state [trie-cat table])
-
-  (reset->l0! [trie-cat table->l0-entries]
-    "DANGER: resets the trie-catalog back to L0, use if compaction has gone awry and you
-     want to completely recompact.
-
-     `table->l0-entries` is a `Map<TableRef, Seq<L0Entry>>`; entries are typically enumerated
-     from the object store by the caller (the catalog is no longer the authoritative source
-     for L0 files). Each L0Entry should at minimum have `:level 0`, `:block-idx`, `:trie-key`,
-     `:recency nil`, `:part []`."))
 
 (def ^:const branch-factor 4)
 
@@ -527,34 +515,8 @@
   (withoutTries [this table garbage-trie-keys] (delete-tries this table garbage-trie-keys))
   (withL0Reset [this table->l0-entries] (reset-tables->l0 this table->l0-entries)))
 
-(defrecord TrieCatalog [!state]
-  xtdb.trie.TrieCatalog
-  (addTries [_ table added-tries as-of]
-    (log/tracef "Adding tries to table '%s': %s" table (mapv #(.getTrieKey ^TrieDetails %) added-tries))
-    (try
-      (swap! !state #(.withTries ^TrieCatalog$State % table added-tries as-of))
-      (catch InterruptedException e (throw e))
-      (catch Throwable e
-        (log/error e "Failed to add tries to table" table)
-        (throw e))))
-
-  (deleteTries [_ table garbage-trie-keys]
-    (swap! !state #(.withoutTries ^TrieCatalog$State % table garbage-trie-keys)))
-
-  (getState [_] @!state)
-
-  PTrieCatalog
-  (trie-state [_ table] (.tableState ^TrieCatalog$State @!state table))
-
-  (reset->l0! [_ table->l0-entries]
-    ;; Caller supplies the full set of L0 entries per table — typically enumerated from the
-    ;; object store (see `xtdb.compactor.reset/reset-compactor!`). Each table named in the map
-    ;; has its catalog state reset to those L0s; higher levels are wiped.
-    (swap! !state #(.withL0Reset ^TrieCatalog$State % table->l0-entries))))
-
-(defn ->trie-catalog [table-cats file-size-target]
-  (->TrieCatalog (atom (->TrieCatalogState table-cats file-size-target))))
-
+(defn trie-state [^TrieCatalog trie-cat table]
+  (.tableState (.getState trie-cat) table))
 
 (defn load-tries [table->table-block file-size-target]
   ;; We need to check one trie-details message from every table as table block files might come from different nodes. #4664
@@ -577,19 +539,21 @@
 
     ;; TODO: This else statement is here to support block files that have not yet passed to the new extended TrieDetails format
     ;; see #4526
-    (let [cat (->trie-catalog {} file-size-target)
-          now (Instant/now)]
-      (doseq [[table {:keys [partitions]}] table->table-block
-              {:keys [tries]} partitions]
-        ;; As all tries get added afresh, max-block-idx is up to date for all existing partitions
-        (.addTries cat table tries now))
-      (:table-cats (.getState cat)))))
+    (let [now (Instant/now)]
+      (:table-cats
+       ;; As all tries get added afresh, max-block-idx is up to date for all existing partitions
+       (reduce (fn [^TrieCatalog$State state [table tries]]
+                 (.withTries state table tries now))
+               (->TrieCatalogState {} file-size-target)
+               (for [[table {:keys [partitions]}] table->table-block
+                     {:keys [tries]} partitions]
+                 [table tries]))))))
 
 (defn ->factory ^xtdb.trie.TrieCatalog$Factory []
   (reify xtdb.trie.TrieCatalog$Factory
     (open [_ buffer-pool block-cat]
       (log/debug "starting trie catalog...")
       (let [table->table-block (table-cat/load-table-partitions buffer-pool block-cat)
-            cat (->trie-catalog (load-tries table->table-block *file-size-target*) *file-size-target*)]
+            state (->TrieCatalogState (load-tries table->table-block *file-size-target*) *file-size-target*)]
         (log/debug "trie catalog started")
-        cat))))
+        state))))

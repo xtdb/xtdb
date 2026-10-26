@@ -34,7 +34,7 @@
 
 (defn- list-l0-entries
   "Enumerate the L0 trie files for a table directly from the object store.
-   The catalog is no longer the authoritative source for L0 — see `trie-cat/reset->l0!`.
+   The catalog is no longer the authoritative source for L0 — see `TrieCatalog$State/withL0Reset`.
    Meta is the completion marker (deleted last by GC), so we list it first; data-file-size
    comes from the paired data file. Skips meta files whose data file is missing — those are
    half-written tries that the GC's data-then-meta deletion order leaves transiently visible.
@@ -104,7 +104,7 @@
                                          (into {}))])
                              (into {})))]
                 (let [state-before (freeze-state)]
-                  (trie-cat/reset->l0! trie-cat table->l0-entries)
+                  (.resetToL0 trie-cat table->l0-entries)
                   (let [state-after (freeze-state)]
                     (log/info "Trie catalog state diff:")
                     (pp/pprint (->> (for [tbl (set/union (set (keys state-before))
@@ -134,7 +134,7 @@
             (do
               (log/info "Resetting compaction...")
 
-              (trie-cat/reset->l0! trie-cat table->l0-entries)
+              (.resetToL0 trie-cat table->l0-entries)
               (xt-log/send-flush-block-msg! db)
               (xt-log/sync-db db #xt/duration "PT5M")
               (log/info "Reset complete. Deleting compacted files...")

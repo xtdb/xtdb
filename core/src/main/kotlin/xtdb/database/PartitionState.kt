@@ -66,7 +66,7 @@ class PartitionState(
                 it.seedTable(TableRef("xt", "role_membership"), listOf("user", "role"))
             }
 
-            val trieCatalog = trieCatalogFactory.open(bufferPool, tableCatalog)
+            val trieCatalog = TrieCatalog(trieCatalogFactory.open(bufferPool, tableCatalog))
 
             val liveIndex = open { LiveIndex.open(allocator, tableCatalog, trieCatalog, indexerConfig) }
 

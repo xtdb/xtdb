@@ -19,6 +19,7 @@
            (xtdb.block.proto Block)
            (xtdb.log.proto TemporalMetadata TrieMetadata)
            (xtdb.table TableSlug)
+           (xtdb.trie TrieCatalog)
            (xtdb.api TableRef)))
 
 (t/use-fixtures :once tu/with-allocator)
@@ -396,8 +397,8 @@
                       (into (sorted-set) (map :trie-key)))))))))
 
 (defn trie-catalog-init [table->table-block]
-  (cat/->trie-catalog (cat/load-tries table->table-block cat/*file-size-target*)
-                      cat/*file-size-target*))
+  (TrieCatalog. (cat/->TrieCatalogState (cat/load-tries table->table-block cat/*file-size-target*)
+                                       cat/*file-size-target*)))
 
 (t/deftest test-startup-drops-persisted-l0-garbage
   ;; Block files written before the "drop L0 on supersession" change may persist L0 entries
@@ -576,7 +577,7 @@
                        ["l03-r20250101-p3-b09"]))))
 
 (t/deftest test-dry-trie-catalog-gc
-  (let [cat (cat/->trie-catalog {} 20)] ;file-size-target
+  (let [cat (TrieCatalog. (cat/->TrieCatalogState {} 20))] ;file-size-target
     (letfn [(add-tries [tries inst]
               (.addTries cat #xt/table foo
                          (map #(apply trie/->trie-details #xt/table foo %) tries)
@@ -792,7 +793,7 @@
               :tries [{:trie-key "l03-r20200101-p0-b07" :block-idx 7}]}]))))
 
 (t/deftest test-delete-garbage-l1-l2-with-live-l3
-  (let [cat (cat/->trie-catalog {} 20)
+  (let [cat (TrieCatalog. (cat/->TrieCatalogState {} 20))
         table #xt/table foo
         add-tries (fn [tries inst]
                     (.addTries cat table
@@ -856,9 +857,6 @@
           (t/is (= [[:table_a :table_b :txs] [:table_c :txs]] tables)))))))
 
 (t/deftest test-reset-rebuilds-l0-from-object-store
-  ;; After compaction, the catalog has no L0 entries — they're dropped on supersession.
-  ;; reset->l0! is a passive sink: callers (xtdb.compactor.reset) enumerate L0s from the
-  ;; object store and pass them in. This exercises that flow at the unit level.
   (tu/with-tmp-dirs #{node-dir}
     (with-open [node (tu/->local-node {:node-dir node-dir :compactor-threads 1})]
       (doseq [i (range 4)]
@@ -876,8 +874,6 @@
         (t/is (empty? (->> (foo-state) :tries (get-in [[0 nil []] :garbage])))
               "L0 supersession drops outright; no :garbage entries linger")
 
-        ;; Simulate what reset.clj does: list L0 meta files from the object store, parse keys,
-        ;; build minimal entries, hand them to reset->l0!.
         (let [meta-dir (.metaFileDir (TableSlug/of #xt/table foo))
               l0-entries (->> (.listAllObjects bp meta-dir)
                               (keep (fn [^ObjectStore$StoredObject obj]
@@ -888,7 +884,7 @@
                                             parsed))))))]
           (t/is (= 4 (count l0-entries)) "All four L0 files still on disk")
 
-          (cat/reset->l0! trie-cat {#xt/table foo l0-entries})
+          (.resetToL0 trie-cat {#xt/table foo l0-entries})
 
           (t/is (= #{"l00-rc-b00" "l00-rc-b01" "l00-rc-b02" "l00-rc-b03"}
                    (->> (cat/current-tries (foo-state))
