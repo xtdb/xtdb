@@ -3,7 +3,13 @@ package xtdb.catalog
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
+import xtdb.api.TableRef
+import xtdb.block.proto.Block
+import xtdb.indexer.LiveTable
+import xtdb.log.proto.TrieDetails
 import xtdb.trie.TrieCatalog
+import xtdb.trie.withTries
+import java.time.Instant
 
 /**
  * What one database partition knows about its tables and their tries, as one value behind one pointer.
@@ -22,6 +28,11 @@ class Catalog(initialState: State) {
 
         internal fun mapTrieCat(f: (TrieCatalog.State) -> TrieCatalog.State): State =
             f(trieCat).let { if (it === trieCat) this else State(it, tableCat) }
+
+        internal fun adopting(
+            block: Block, tries: Iterable<TrieDetails>, asOf: Instant,
+            metadata: Map<TableRef, LiveTable.BlockMetadata>,
+        ) = State(trieCat.withTries(tries, asOf), tableCat.refreshed(block, metadata))
     }
 
     private val stateFlow = MutableStateFlow(initialState)

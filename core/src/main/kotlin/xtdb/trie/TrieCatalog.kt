@@ -94,6 +94,11 @@ class TrieCatalog internal constructor(private val catalog: Catalog) {
     }
 }
 
+fun TrieCatalog.State.withTries(tries: Iterable<TrieDetails>, asOf: Instant): TrieCatalog.State =
+    tries.groupBy { it.tableName }.entries.fold(this) { state, (tableName, tableTries) ->
+        state.withTries(fromSchemaAndTable(tableName), tableTries, asOf)
+    }
+
 /**
  * Adds [tries] to whichever tables they name — the shape a replica message carries them in, where the
  * per-table [TrieCatalog.addTries] wants them already grouped.

@@ -272,8 +272,8 @@ entity LiveTableTx {
 --   A snapshot therefore excludes any live table the trie catalog's L0 watermark has reached, so those rows are read once, from the L0.
 --
 --   Their column TYPES are retained regardless.
---   A block becomes visible in two steps: the L0 reaches the trie catalog first, the block's column types reach the table catalog second.
---   A snapshot taken between the two would otherwise have no source for those types at all — declaring a narrower type than the rows it is about to scan, and failing to resolve a brand-new table entirely.
+--   Adopting a block publishes its L0 and its column types in one catalog write, but an L0 can also reach the trie catalog on its own, ahead of its block's types — the TriesAdded re-published for multi-writer nodes.
+--   A snapshot taken in that window would otherwise have no source for those types at all — declaring a narrower type than the rows it is about to scan, and failing to resolve a brand-new table entirely.
 --   Retaining the types bridges that gap, and is safe because the join is idempotent: once the catalog catches up the answer is unchanged, whatever order the writers ran in.
 --
 --   The live table outlives the gap in both directions — it is cleared only after the table catalog has been updated — so a source is always available while the gap is open.

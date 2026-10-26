@@ -11,7 +11,6 @@ import xtdb.storage.BufferPool
 import xtdb.api.TableRef
 import xtdb.log.proto.TrieDetails
 import xtdb.trie.TrieCatalog
-import xtdb.trie.addTries
 import xtdb.types.LogTimestamp
 import xtdb.util.requiringResolve
 import xtdb.util.safelyOpening
@@ -27,8 +26,8 @@ class PartitionState(
     val liveIndex: LiveIndex get() = liveIndexOrNull ?: error("no live-index")
 
     /**
-     * Adopt [block]: register the L0 [tries] it carries, refresh the table catalog onto it, and roll the
-     * live index onto the block behind it.
+     * Adopt [block]: register the L0 [tries] it carries and refresh the table catalog onto it, as one catalog
+     * write, then roll the live index onto the block behind it.
      *
      * The caller MUST have made [block] durable first, because this is what moves the node past it — and
      * MUST call it once per block, the refresh's fold summing row counts.
@@ -36,10 +35,9 @@ class PartitionState(
      * [logTimestamp] is the replica record's, dating the supersession the tries cause.
      */
     fun adoptBlock(block: Block, tries: List<TrieDetails>, logTimestamp: LogTimestamp) {
-        trieCatalog.addTries(tries, logTimestamp)
-
         // `blockMetadata()` reads the live tables that `nextBlock()` then clears.
-        tableCatalog.refresh(block, liveIndex.blockMetadata())
+        val metadata = liveIndex.blockMetadata()
+        catalog.update { it.adopting(block, tries, logTimestamp, metadata) }
         liveIndex.nextBlock()
     }
 
