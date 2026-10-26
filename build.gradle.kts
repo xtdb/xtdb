@@ -608,10 +608,8 @@ dependencies {
 
     projectDep(":modules:bench")
     projectDep(":modules:xtdb-datasets")
-    projectDep(":modules:xtdb-kafka-connect")
 
     // Modules aggregated into the published Kotlin API docs (docs.xtdb.com/drivers/kotlin/kdoc).
-    // xtdb-kafka-connect is configured via Kafka Connect properties, not a JVM API, so it's excluded.
     dokka(project(":xtdb-api"))
     dokka(project(":xtdb-core"))
     dokka(project(":modules:xtdb-aws"))
