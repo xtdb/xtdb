@@ -162,6 +162,27 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
          * been told about — a query naming a table that does not exist.
          */
         fun slug(table: TableRef): TableSlug = entry(table)?.slug ?: TableSlug.of(table)
+
+        internal fun withSeededTable(table: TableRef, colNames: List<ColumnName>): State {
+            val meta = TableMeta(colNames.associateWith { VectorType.Nothing }, 0, emptyMap())
+
+            return copy(tables = if (tables.containsKey(table)) tables else tables + (table to meta))
+                .withEntriesFor(listOf(table))
+        }
+
+        internal fun refreshed(block: Block?, metadata: Map<TableRef, LiveTable.BlockMetadata>): State {
+            val delta = metadata.mapValues { (_, bm) -> TableMeta(bm.vecTypes, bm.rowCount.toLong(), bm.hllDeltas) }
+            val newBlock = if (block != null && block.blockIndex == blockIdx) this.block else block?.asBlockDetails()
+
+            return State(
+                block = newBlock,
+                tables = if (delta.isEmpty()) tables else tables.foldIn(delta),
+                // The block wins over what we allocated: ordinarily the two agree, but a block written
+                // before entries were recorded resolves to derived ones, and those are what every other
+                // node reading it will use.
+                entriesByTable = entriesByTable + newBlock?.tables.orEmpty().associateBy { it.table }
+            )
+        }
     }
 
     private val _state = initialBlock?.asBlockDetails().let { block ->
@@ -237,14 +258,7 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
      * `CREATE TABLE` had run: columns are declared but dataless (`Nothing`), so the first real write
      * sets their types (`Nothing ⊔ X = X`). No-op if the table was already loaded from storage.
      */
-    fun seedTable(table: TableRef, colNames: List<ColumnName>) {
-        val meta = TableMeta(colNames.associateWith { VectorType.Nothing }, 0, emptyMap())
-
-        _state.update { cur ->
-            cur.copy(tables = if (cur.tables.containsKey(table)) cur.tables else cur.tables + (table to meta))
-                .withEntriesFor(listOf(table))
-        }
-    }
+    fun seedTable(table: TableRef, colNames: List<ColumnName>) = _state.update { it.withSeededTable(table, colNames) }
 
     /**
      * Loads table metadata from storage for the block this catalog opened at, replacing the in-memory
@@ -264,23 +278,8 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
      *
      * A re-delivered block leaves the block half alone but still folds the metadata.
      */
-    fun refresh(block: Block?, metadata: Map<TableRef, LiveTable.BlockMetadata> = emptyMap()) {
-        val delta = metadata.mapValues { (_, bm) -> TableMeta(bm.vecTypes, bm.rowCount.toLong(), bm.hllDeltas) }
-
-        _state.update { cur ->
-            val newBlock =
-                if (block != null && block.blockIndex == cur.blockIdx) cur.block else block?.asBlockDetails()
-
-            State(
-                block = newBlock,
-                tables = if (delta.isEmpty()) cur.tables else cur.tables.foldIn(delta),
-                // The block wins over what we allocated: ordinarily the two agree, but a block written
-                // before entries were recorded resolves to derived ones, and those are what every other
-                // node reading it will use.
-                entriesByTable = cur.entriesByTable + newBlock?.tables.orEmpty().associateBy { it.table }
-            )
-        }
-    }
+    fun refresh(block: Block?, metadata: Map<TableRef, LiveTable.BlockMetadata> = emptyMap()) =
+        _state.update { it.refreshed(block, metadata) }
 
     /**
      * The per-table block files for a block contributing [tableMetadata], with [tablePartitions] as their
