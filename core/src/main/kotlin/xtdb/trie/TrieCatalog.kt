@@ -51,6 +51,15 @@ interface TrieCatalog {
          * tries cause exactly as it does in [addTries].
          */
         fun withPartitions(table: TableRef, addedTries: Iterable<TrieDetails>, asOf: Instant): List<Partition>
+
+        fun withTries(table: TableRef, addedTries: Iterable<TrieDetails>, asOf: Instant): State
+        fun withoutTries(table: TableRef, garbageTrieKeys: Set<TrieKey>): State
+
+        /**
+         * DANGER: [this] with each table named in [tableToL0Entries] reset back to those L0s, higher levels wiped.
+         * Each entry is a Clojure map with at least `:level 0`, `:block-idx`, `:trie-key`, `:recency nil`, `:part []`.
+         */
+        fun withL0Reset(tableToL0Entries: Map<TableRef, Any?>): State
     }
 
     fun interface Factory {

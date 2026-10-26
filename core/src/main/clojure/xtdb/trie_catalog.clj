@@ -8,7 +8,8 @@
   (:import [clojure.lang MapEntry]
            [java.time Instant LocalDate ZoneOffset]
            (xtdb.log.proto TemporalMetadata TrieDetails TrieMetadata)
-           (xtdb.segment Segment$PageMeta)))
+           (xtdb.segment Segment$PageMeta)
+           (xtdb.trie TrieCatalog$State)))
 
 (s/def ::level int?)
 (s/def ::recency (s/nilable #(instance? LocalDate %)))
@@ -469,8 +470,32 @@
                  (update partition :tries
                          (partial mapv trie/->table-block-trie-details)))))))
 
+(defn- add-tries [{:keys [file-size-target] :as state} table added-tries as-of]
+  (update-in state [:table-cats table]
+             (fn [table-cat]
+               (let [{:keys [tries] :as new-trie-cat}
+                     (apply-added-tries table-cat added-tries
+                                        {:file-size-target file-size-target, :as-of as-of})]
+                 (s/assert ::catalog-tries tries)
+                 new-trie-cat))))
+
+(defn- delete-tries [state table garbage-trie-keys]
+  (update-in state [:table-cats table]
+             (fn [table-cat]
+               (let [{:keys [tries] :as res} (remove-garbage table-cat garbage-trie-keys)]
+                 (s/assert ::catalog-tries tries)
+                 res))))
+
+(defn- reset-tables->l0 [state table->l0-entries]
+  (update state :table-cats
+          (fn [table-cats]
+            (reduce (fn [table-cats [table l0-entries]]
+                      (assoc table-cats table (reset->l0 l0-entries)))
+                    table-cats
+                    table->l0-entries))))
+
 (defrecord TrieCatalogState [table-cats ^long file-size-target]
-  xtdb.trie.TrieCatalog$State
+  TrieCatalog$State
   (getTables [_] (set (keys table-cats)))
 
   (tableState [_ table] (get table-cats table))
@@ -496,56 +521,36 @@
   (withPartitions [_ table added-tries as-of]
     (-> (apply-added-tries (get table-cats table) added-tries
                            {:file-size-target file-size-target, :as-of as-of})
-        ->block-partitions)))
+        ->block-partitions))
 
-(defn- add-tries [{:keys [file-size-target] :as state} table added-tries as-of]
-  (update-in state [:table-cats table]
-             (fn [table-cat]
-               (let [{:keys [tries] :as new-trie-cat}
-                     (apply-added-tries table-cat added-tries
-                                        {:file-size-target file-size-target, :as-of as-of})]
-                 (s/assert ::catalog-tries tries)
-                 new-trie-cat))))
-
-(defn- delete-tries [state table garbage-trie-keys]
-  (update-in state [:table-cats table]
-             (fn [table-cat]
-               (let [{:keys [tries] :as res} (remove-garbage table-cat garbage-trie-keys)]
-                 (s/assert ::catalog-tries tries)
-                 res))))
-
-(defn- reset-tables->l0 [state table->l0-entries]
-  (update state :table-cats
-          (fn [table-cats]
-            (reduce (fn [table-cats [table l0-entries]]
-                      (assoc table-cats table (reset->l0 l0-entries)))
-                    table-cats
-                    table->l0-entries))))
+  (withTries [this table added-tries as-of] (add-tries this table added-tries as-of))
+  (withoutTries [this table garbage-trie-keys] (delete-tries this table garbage-trie-keys))
+  (withL0Reset [this table->l0-entries] (reset-tables->l0 this table->l0-entries)))
 
 (defrecord TrieCatalog [!state]
   xtdb.trie.TrieCatalog
   (addTries [_ table added-tries as-of]
     (log/tracef "Adding tries to table '%s': %s" table (mapv #(.getTrieKey ^TrieDetails %) added-tries))
     (try
-      (swap! !state add-tries table added-tries as-of)
+      (swap! !state #(.withTries ^TrieCatalog$State % table added-tries as-of))
       (catch InterruptedException e (throw e))
       (catch Throwable e
         (log/error e "Failed to add tries to table" table)
         (throw e))))
 
   (deleteTries [_ table garbage-trie-keys]
-    (swap! !state delete-tries table garbage-trie-keys))
+    (swap! !state #(.withoutTries ^TrieCatalog$State % table garbage-trie-keys)))
 
   (getState [_] @!state)
 
   PTrieCatalog
-  (trie-state [_ table] (.tableState ^xtdb.trie.TrieCatalog$State @!state table))
+  (trie-state [_ table] (.tableState ^TrieCatalog$State @!state table))
 
   (reset->l0! [_ table->l0-entries]
     ;; Caller supplies the full set of L0 entries per table — typically enumerated from the
     ;; object store (see `xtdb.compactor.reset/reset-compactor!`). Each table named in the map
     ;; has its catalog state reset to those L0s; higher levels are wiped.
-    (swap! !state reset-tables->l0 table->l0-entries)))
+    (swap! !state #(.withL0Reset ^TrieCatalog$State % table->l0-entries))))
 
 (defn ->trie-catalog [table-cats file-size-target]
   (->TrieCatalog (atom (->TrieCatalogState table-cats file-size-target))))
