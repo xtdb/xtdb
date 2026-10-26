@@ -34,7 +34,7 @@ ORDER BY _id
 At the end of the day, the market closes with the following prices:
 
 <Xtplay magicContext="my-context">
-  <Txs systemTime="2024-04-01"
+  <Txs systemTime="2024-04-02"
        txs={`
 INSERT INTO commodity_spot_prices
 (_id, spot_price, _valid_from)
@@ -96,7 +96,7 @@ So far so good.
 On Monday morning, after a pleasant weekend's break, you come back into the trading floor.
 
 <Xtplay magicContext="my-context">
-  <Txs systemTime="2024-04-01"
+  <Txs systemTime="2024-04-03"
        txs={`
 INSERT INTO commodity_trades (_id, symbol, quantity, price, _valid_from, trader_name)
 VALUES
@@ -113,7 +113,7 @@ ORDER BY _id
 At the end of this Monday trading day, the market closes with the following prices:
 
 <Xtplay magicContext="my-context">
-  <Txs systemTime="2024-04-01"
+  <Txs systemTime="2024-04-04"
        txs={`
 INSERT INTO commodity_spot_prices (_id, spot_price, _valid_from)
 VALUES
