@@ -360,14 +360,14 @@
 
         ;; in-memory, the seeded-but-dataless xt/role_membership has no trie, so the trie catalog
         ;; doesn't track it yet (unlike after a restart, below, where it's reconstructed from its block)
-        (t/is (= #{#xt/table foo, #xt/table xt/txs} (.getTables cat)))
+        (t/is (= #{#xt/table foo, #xt/table xt/txs} (.getTables (.getState cat))))
         (t/is (= #{"l00-rc-b00" "l00-rc-b01"}
                  (->> (cat/current-tries (cat/trie-state cat #xt/table foo))
                       (into #{} (map :trie-key)))))))
 
     (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
       (let [cat (.getTrieCatalog (db/primary-db node))]
-        (t/is (= #{#xt/table xt/role_membership, #xt/table foo, #xt/table xt/txs} (.getTables cat)))
+        (t/is (= #{#xt/table xt/role_membership, #xt/table foo, #xt/table xt/txs} (.getTables (.getState cat))))
         (t/is (= #{"l00-rc-b01" "l00-rc-b00"}
                  (->> (cat/current-tries (cat/trie-state cat #xt/table foo))
                       (into #{} (map :trie-key)))))))
@@ -833,21 +833,21 @@
   (tu/with-tmp-dirs #{node-dir}
     (with-open [node (tu/->local-node {:node-dir node-dir :compactor-threads 0})]
       (let [trie-cat (.getTrieCatalog (db/primary-db node))]
-        (t/is (empty? (cat/l0-blocks trie-cat))
+        (t/is (empty? (cat/l0-blocks (.getState trie-cat)))
               "Empty node should have no L0 blocks")
 
         (xt/execute-tx node [[:put-docs :table_a {:xt/id 1}]
                              [:put-docs :table_b {:xt/id 2}]])
-        (t/is (empty? (cat/l0-blocks trie-cat))
+        (t/is (empty? (cat/l0-blocks (.getState trie-cat)))
               "Before finish-block, should still have no L0 blocks")
 
         (tu/flush-block! node)
-        (t/is (= [0] (map :block-idx (cat/l0-blocks trie-cat)))
+        (t/is (= [0] (map :block-idx (cat/l0-blocks (.getState trie-cat))))
               "Should have 1 block after first finish-block")
 
         (xt/execute-tx node [[:put-docs :table_c {:xt/id 3}]])
         (tu/flush-block! node)
-        (let [blocks (cat/l0-blocks trie-cat)
+        (let [blocks (cat/l0-blocks (.getState trie-cat))
               tables (for [block blocks]
                        (for [t (:tables block)]
                          (-> t :table TableRef/.getTableName keyword)))]
@@ -909,7 +909,7 @@
       (let [trie-cat (.getTrieCatalog (db/primary-db node))]
         (t/is (seq (cat/compacted-trie-keys (cat/trie-state trie-cat #xt/table foo)))
               "Compaction should have created non-L0 files")
-        (t/is (empty? (->> (cat/l0-blocks trie-cat)
+        (t/is (empty? (->> (cat/l0-blocks (.getState trie-cat))
                            (filter (fn [{:keys [tables]}]
                                      (some #(= #xt/table foo (:table %)) tables)))))
               "All L0s for foo have been compacted into an L1C — no L0 blocks remain in the catalog")))))

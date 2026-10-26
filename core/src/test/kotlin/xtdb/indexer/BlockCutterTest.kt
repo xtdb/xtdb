@@ -211,14 +211,14 @@ internal class BlockCutterTest {
             "the block file has landed, but this node hasn't adopted it — so the block stays re-producible"
         )
         assertNull(term.tableCatalog.rowCount(table), "nothing folded into the table catalog either")
-        assertEquals(emptySet<TableRef>(), term.trieCatalog.tables, "nor the block's L0 tries registered")
+        assertEquals(emptySet<TableRef>(), term.trieCatalog.state.tables, "nor the block's L0 tries registered")
         assertEquals(2, term.liveIndex.blockRowCount, "and the rows are still the open block's")
 
         val held = cutter.closeBlock(term.appended.last() as BlockUploaded, Instant.EPOCH)
 
         assertEquals(0, term.tableCatalog.currentBlockIndex)
         assertEquals(1, term.tableCatalog.rowCount(table))
-        assertEquals(listOf("l00-rc-b00"), term.trieCatalog.listAllTrieKeys(table))
+        assertEquals(listOf("l00-rc-b00"), term.trieCatalog.state.listAllTrieKeys(table))
         assertEquals(0, term.liveIndex.blockRowCount)
         assertTrue(held.bufferedRecords.isEmpty(), "a block this term cut itself holds nothing back")
     }

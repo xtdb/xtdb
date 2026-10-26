@@ -74,10 +74,11 @@
               trie-cat (.getTrieCatalog db)
               table-cat (.getTableCatalog db)
               live-idx (.getLiveIndex db)
-              tables (.getTables trie-cat)
+              trie-cat-state (.getState trie-cat)
+              tables (.getTables trie-cat-state)
               compacted-file-keys (vec (for [^TableRef table tables
                                              :let [slug (.slug table-cat table)]
-                                             ^String trie-key (trie-cat/compacted-trie-keys (trie-cat/trie-state trie-cat table))
+                                             ^String trie-key (trie-cat/compacted-trie-keys (.tableState trie-cat-state table))
 
                                              ;; meta file first, as it's the marker
                                              file-key [(.metaFilePath slug trie-key)
@@ -95,7 +96,7 @@
                         "\nThen, do not upgrade nodes until the reset is complete.")
 
               (letfn [(freeze-state []
-                        (->> (for [[tbl {:keys [tries]}] @(:!table-cats trie-cat)]
+                        (->> (for [[tbl {:keys [tries]}] (:table-cats (.getState trie-cat))]
                                [tbl (->> (for [[k tries] tries
                                                :let [{:keys [live garbage]} tries]]
                                            [k {:live (count live)

@@ -48,7 +48,7 @@ interface Compactor : AutoCloseable {
     }
 
     interface JobCalculator {
-        fun availableJobs(trieCatalog: TrieCatalog): Collection<Job>
+        fun availableJobs(trieCatState: TrieCatalog.State): Collection<Job>
     }
 
     fun interface Factory {
@@ -203,7 +203,7 @@ interface Compactor : AutoCloseable {
 
             init {
                 meterRegistry?.let {
-                    Gauge.builder("compactor.jobs.available") { jobCalculator.availableJobs(trieCatalog).size.toDouble() }
+                    Gauge.builder("compactor.jobs.available") { jobCalculator.availableJobs(trieCatalog.state).size.toDouble() }
                         .register(it)
                 }
             }
@@ -214,7 +214,7 @@ interface Compactor : AutoCloseable {
                     supervisorScope {
                         while (true) {
                             availableJobs =
-                                jobCalculator.availableJobs(trieCatalog)
+                                jobCalculator.availableJobs(trieCatalog.state)
                                     .associateBy { JobKey(it.table, it.outputTrieKey.toString()) }
 
                             availableJobs.keys.forEach { jobKey ->

@@ -298,12 +298,12 @@
 
 (defn l0-blocks
   "Returns a sorted seq of L0 blocks: [{:block-idx N, :tables [{:table TableRef, :trie-key String}]}]"
-  [^xtdb.trie.TrieCatalog trie-cat]
-  (->> (.getTables trie-cat)
+  [^xtdb.trie.TrieCatalog$State trie-cat-state]
+  (->> (.getTables trie-cat-state)
        (mapcat (fn [table]
                  (map (fn [{:keys [block-idx trie-key]}]
                         [block-idx {:table table :trie-key trie-key}])
-                      (l0-tries (trie-state trie-cat table)))))
+                      (l0-tries (.tableState trie-cat-state table)))))
        (group-by first)
        (map (fn [[block-idx pairs]]
               {:block-idx block-idx
@@ -469,76 +469,86 @@
                  (update partition :tries
                          (partial mapv trie/->table-block-trie-details)))))))
 
-(defrecord TrieCatalog [!table-cats, ^long file-size-target]
-  xtdb.trie.TrieCatalog
-  (addTries [_ table added-tries as-of]
-    (log/tracef "Adding tries to table '%s': %s" table (mapv #(.getTrieKey ^TrieDetails %) added-tries))
-    (try
-      (swap! !table-cats update table
+(defrecord TrieCatalogState [table-cats ^long file-size-target]
+  xtdb.trie.TrieCatalog$State
+  (getTables [_] (set (keys table-cats)))
+
+  (tableState [_ table] (get table-cats table))
+
+  (l0MaxBlockIdx [_ table]
+    (long (or (get-in table-cats [table :tries [0 nil []] :max-block-idx]) -1)))
+
+  (garbageTries [_ table as-of]
+    (->> (garbage-tries (get table-cats table) as-of)
+         (into #{} (map :trie-key))))
+
+  (listAllGarbageTrieKeys [_ table]
+    (->> (:tries (get table-cats table))
+         (mapcat (comp :garbage val))
+         (into #{} (map :trie-key))))
+
+  (listAllTrieKeys [_ table]
+    (mapv :trie-key (all-tries (get table-cats table))))
+
+  (listLiveAndNascentTrieKeys [_ table]
+    (mapv :trie-key (live-and-nascent-tries (get table-cats table))))
+
+  (withPartitions [_ table added-tries as-of]
+    (-> (apply-added-tries (get table-cats table) added-tries
+                           {:file-size-target file-size-target, :as-of as-of})
+        ->block-partitions)))
+
+(defn- add-tries [{:keys [file-size-target] :as state} table added-tries as-of]
+  (update-in state [:table-cats table]
              (fn [table-cat]
                (let [{:keys [tries] :as new-trie-cat}
                      (apply-added-tries table-cat added-tries
                                         {:file-size-target file-size-target, :as-of as-of})]
                  (s/assert ::catalog-tries tries)
-                 new-trie-cat)))
+                 new-trie-cat))))
+
+(defn- delete-tries [state table garbage-trie-keys]
+  (update-in state [:table-cats table]
+             (fn [table-cat]
+               (let [{:keys [tries] :as res} (remove-garbage table-cat garbage-trie-keys)]
+                 (s/assert ::catalog-tries tries)
+                 res))))
+
+(defn- reset-tables->l0 [state table->l0-entries]
+  (update state :table-cats
+          (fn [table-cats]
+            (reduce (fn [table-cats [table l0-entries]]
+                      (assoc table-cats table (reset->l0 l0-entries)))
+                    table-cats
+                    table->l0-entries))))
+
+(defrecord TrieCatalog [!state]
+  xtdb.trie.TrieCatalog
+  (addTries [_ table added-tries as-of]
+    (log/tracef "Adding tries to table '%s': %s" table (mapv #(.getTrieKey ^TrieDetails %) added-tries))
+    (try
+      (swap! !state add-tries table added-tries as-of)
       (catch InterruptedException e (throw e))
       (catch Throwable e
         (log/error e "Failed to add tries to table" table)
         (throw e))))
 
-  (getTables [_] (set (keys @!table-cats)))
-
-  (garbageTries [_ table as-of]
-    (->> (garbage-tries (get @!table-cats table) as-of)
-         (into #{} (map :trie-key))))
-
-  (listAllGarbageTrieKeys [this table]
-    (->> (:tries (trie-state this table))
-         (mapcat (comp :garbage val))
-         (into #{} (map :trie-key))))
-
   (deleteTries [_ table garbage-trie-keys]
-    (swap! !table-cats update table
-           (fn [table-cat]
-             (let [{:keys [tries] :as res} (remove-garbage table-cat garbage-trie-keys)]
-               (s/assert ::catalog-tries tries)
-               res))))
+    (swap! !state delete-tries table garbage-trie-keys))
 
-  (listAllTrieKeys [this table]
-    (mapv :trie-key (all-tries (trie-state this table))))
-
-  (listLiveAndNascentTrieKeys [this table]
-    (mapv :trie-key (live-and-nascent-tries (trie-state this table))))
-
-  (withPartitions [this table added-tries as-of]
-    (-> (apply-added-tries (trie-state this table) added-tries
-                           {:file-size-target file-size-target, :as-of as-of})
-        ->block-partitions))
-
-  (snapshot [_]
-    (let [snapped @!table-cats]
-      (reify xtdb.trie.TrieCatalog$Snap
-        (getTables [_] (set (keys snapped)))
-        (tableState [_ table] (get snapped table))
-        (l0MaxBlockIdx [_ table]
-          (long (or (get-in snapped [table :tries [0 nil []] :max-block-idx]) -1))))))
+  (getState [_] @!state)
 
   PTrieCatalog
-  (trie-state [_ table] (get @!table-cats table))
+  (trie-state [_ table] (.tableState ^xtdb.trie.TrieCatalog$State @!state table))
 
   (reset->l0! [_ table->l0-entries]
     ;; Caller supplies the full set of L0 entries per table — typically enumerated from the
     ;; object store (see `xtdb.compactor.reset/reset-compactor!`). Each table named in the map
     ;; has its catalog state reset to those L0s; higher levels are wiped.
-    (swap! !table-cats
-           (fn [table-cats]
-             (reduce (fn [table-cats [table l0-entries]]
-                       (assoc table-cats table (reset->l0 l0-entries)))
-                     table-cats
-                     table->l0-entries)))))
+    (swap! !state reset-tables->l0 table->l0-entries)))
 
 (defn ->trie-catalog [table-cats file-size-target]
-  (->TrieCatalog (atom table-cats) file-size-target))
+  (->TrieCatalog (atom (->TrieCatalogState table-cats file-size-target))))
 
 
 (defn load-tries [table->table-block file-size-target]
@@ -568,7 +578,7 @@
               {:keys [tries]} partitions]
         ;; As all tries get added afresh, max-block-idx is up to date for all existing partitions
         (.addTries cat table tries now))
-      @(:!table-cats cat))))
+      (:table-cats (.getState cat)))))
 
 (defn ->factory ^xtdb.trie.TrieCatalog$Factory []
   (reify xtdb.trie.TrieCatalog$Factory

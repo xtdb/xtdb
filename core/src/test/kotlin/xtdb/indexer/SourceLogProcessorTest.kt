@@ -174,7 +174,7 @@ internal class SourceLogProcessorTest : LeaderTermTest() {
             rs.appended.filterIsInstance<ReplicaMessage.TriesAdded>().flatMap { it.tries }.map { it.trieKey }
         )
         assertEquals(
-            emptySet<TableRef>(), trieCatalog.tables,
+            emptySet<TableRef>(), trieCatalog.state.tables,
             "and the catalog moves when this node reads that record back, not here"
         )
     }

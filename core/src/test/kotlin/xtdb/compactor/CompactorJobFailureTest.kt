@@ -59,7 +59,7 @@ class CompactorJobFailureTest {
         scope = CoroutineScope(Dispatchers.Default)
 
         val jobCalculator = object : Compactor.JobCalculator {
-            override fun availableJobs(trieCatalog: TrieCatalog) = listOf(job)
+            override fun availableJobs(trieCatState: TrieCatalog.State) = listOf(job)
         }
 
         compactor = Compactor.Impl(failingDriverFactory, null, jobCalculator, false, 1)

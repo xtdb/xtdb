@@ -251,7 +251,7 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
         )
 
         assertEquals(
-            listOf(trieKey), partitionState.trieCatalog.listAllTrieKeys(fromSchemaAndTable("public/foo"))
+            listOf(trieKey), partitionState.trieCatalog.state.listAllTrieKeys(fromSchemaAndTable("public/foo"))
         )
         assertEquals(3L, watchers.latestSourceMsgId)
     }
