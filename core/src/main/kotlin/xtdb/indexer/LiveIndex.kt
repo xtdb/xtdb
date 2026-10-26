@@ -15,7 +15,6 @@ import xtdb.api.TableRef
 import xtdb.table.fromSchemaAndTable
 import xtdb.trie.BlockIndex
 import xtdb.trie.MemoryHashTrie
-import xtdb.trie.TrieCatalog
 import xtdb.util.RowCounter
 import xtdb.util.RefCounter
 import xtdb.util.closeAll
@@ -102,14 +101,7 @@ class LiveIndex private constructor(
         oldSnap?.close()
     }
 
-    /**
-     * Rebuilds the cached shared snapshot to pick up out-of-band mutations to the captured
-     * catalogs (notably the [TrieCatalog]) that didn't go through this live-index's own
-     * commit/import/block paths.
-     *
-     * Takes the snap write-lock itself; callers MUST NOT already hold it.
-     */
-    fun refreshSnap() {
+    private fun refreshSnap() {
         val stamp = snapLock.writeLock()
         try {
             refreshSnap0()
