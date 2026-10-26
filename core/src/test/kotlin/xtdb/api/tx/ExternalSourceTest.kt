@@ -43,7 +43,7 @@ internal class ExternalSourceTest : LeaderTermTest() {
     @BeforeEach
     fun openRealIndex() {
         bufferPool = MemoryStorage(allocator, 0)
-        liveIndex = createCatalog().let { LiveIndex.open(allocator, it.tableCatalog, it.trieCatalog) }
+        liveIndex = LiveIndex.open(allocator, createCatalog())
 
         closeAfterTerm(liveIndex)
         closeAfterTerm(bufferPool)

@@ -42,7 +42,7 @@ class TestPartition(
     val catalog = createCatalog(block)
     val tableCatalog = catalog.tableCatalog
     val trieCatalog = catalog.trieCatalog
-    val liveIndex = LiveIndex.open(allocator, tableCatalog, trieCatalog, indexerConfig, ioDispatcher)
+    val liveIndex = LiveIndex.open(allocator, catalog, indexerConfig, ioDispatcher)
 
     val state = PartitionState(catalog, liveIndex)
     val storage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)

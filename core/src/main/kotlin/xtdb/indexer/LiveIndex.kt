@@ -8,7 +8,7 @@ import xtdb.api.TransactionKey
 import xtdb.api.log.ReplicaMessage
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
-import xtdb.catalog.TableCatalog
+import xtdb.catalog.Catalog
 import xtdb.indexer.LiveTable.Companion.finishBlock
 import xtdb.storage.BufferPool
 import xtdb.api.TableRef
@@ -52,8 +52,7 @@ internal fun ReplicaMessage.ResolvedTx.loadTableData(al: BufferAllocator): Map<T
 
 class LiveIndex private constructor(
     private val allocator: BufferAllocator,
-    private val tableCatalog: TableCatalog,
-    val trieCatalog: TrieCatalog,
+    private val catalog: Catalog,
     @Volatile var latestCompletedTx: TransactionKey?,
     initialBlockIdx: Long,
     indexerConfig: IndexerConfig,
@@ -98,7 +97,7 @@ class LiveIndex private constructor(
     private fun refreshSnap0() {
         val oldSnap = sharedSnap
 
-        sharedSnap = Snapshot.open(allocator, tableCatalog, trieCatalog, this)
+        sharedSnap = Snapshot.open(allocator, catalog, this)
 
         oldSnap?.close()
     }
@@ -134,7 +133,7 @@ class LiveIndex private constructor(
             this@LiveIndex.tables[table]?.openTx(systemTimeMicros)
             // The empty value is opened and dropped rather than entered: the transient holds its own
             // references over the same memory, so closing the value it came from frees nothing it needs.
-                ?: LiveTable.open(allocator, table, tableCatalog.slug(table), blockIdx, rowCounter, liveTrieFactory)
+                ?: LiveTable.open(allocator, table, catalog.tableCatalog.slug(table), blockIdx, rowCounter, liveTrieFactory)
                     .use { it.openTx(systemTimeMicros) }
         }
 
@@ -155,7 +154,7 @@ class LiveIndex private constructor(
     fun applyTx(txKey: TransactionKey, tables: MutableMap<TableRef, LiveTable>) {
         val stamp = snapLock.writeLock()
         try {
-            tableCatalog.registerTables(tables.keys)
+            catalog.tableCatalog.registerTables(tables.keys)
 
             val iter = tables.iterator()
             while (iter.hasNext()) {
@@ -189,14 +188,14 @@ class LiveIndex private constructor(
         try {
             // Inside the lock, so a table's identity and its rows reach readers together — snapshot
             // capture brackets itself with the same lock. Whole batch at once, per `registerTables`.
-            tableCatalog.registerTables(tables.keys)
+            catalog.tableCatalog.registerTables(tables.keys)
 
             for ((ref, rel) in tables) {
                 val liveTable =
                     this@LiveIndex.tables[ref]
                     // Pinned at creation, so the L0 trie this table writes at the block boundary lands
                     // under the same slug `BlockCutter` then records for it.
-                        ?: LiveTable.open(allocator, ref, tableCatalog.slug(ref), blockIdx, rowCounter, liveTrieFactory)
+                        ?: LiveTable.open(allocator, ref, catalog.tableCatalog.slug(ref), blockIdx, rowCounter, liveTrieFactory)
 
                 // The next value shares the relation this one appended to, so it replaces rather than
                 // joins it — and the displaced value is dropped without closing, for the same reason.
@@ -239,11 +238,11 @@ class LiveIndex private constructor(
     fun openSnapshot(resolvedTxs: List<ResolvedTx>, ownTx: OpenTx): Snapshot =
         snapLock.withReadLock {
             // Hold the snap read-lock for the whole capture: it blocks `nextBlock` (write-lock) so live
-            // tables can't be cleared mid-iteration, and it brackets the trie-cat snapshot so we can't
-            // end up with a stale (no-L0_N) trie-cat alongside a live-tables view that's already been
-            // reset past N. `addTries` doesn't take the snap lock — it's allowed to land on either side
-            // of our trie-cat capture without breaking correctness.
-            Snapshot.open(allocator, tableCatalog, trieCatalog, this, resolvedTxs, ownTx)
+            // tables can't be cleared mid-iteration, and it brackets the catalog capture so we can't
+            // end up with a stale (no-L0_N) catalog alongside a live-tables view that's already been
+            // reset past N. Trie additions and block adoption don't take the snap lock — they're allowed to land on either side
+            // of our catalog capture without breaking correctness.
+            Snapshot.open(allocator, catalog, this, resolvedTxs, ownTx)
         }
 
     fun isFull() = rowCounter.blockRowCount >= rowsPerBlock
@@ -299,8 +298,8 @@ class LiveIndex private constructor(
         @JvmOverloads
         @JvmName("open")
         fun open(
-            allocator: BufferAllocator, tableCatalog: TableCatalog,
-            trieCatalog: TrieCatalog, indexerConfig: IndexerConfig = IndexerConfig(),
+            allocator: BufferAllocator, catalog: Catalog,
+            indexerConfig: IndexerConfig = IndexerConfig(),
             /**
              * Dispatcher for the per-table block-write fan-out. Sims inject the seeded dispatcher so the
              * fan-out stays on the simulation's thread, and hence within its quiescence fixed point.
@@ -309,9 +308,9 @@ class LiveIndex private constructor(
         ) = safelyOpening {
             LiveIndex(
                 open { allocator.newChildAllocator("live-index", 0, Long.MAX_VALUE) },
-                tableCatalog, trieCatalog,
-                tableCatalog.latestCompletedTx,
-                (tableCatalog.currentBlockIndex ?: -1L) + 1L,
+                catalog,
+                catalog.tableCatalog.latestCompletedTx,
+                (catalog.tableCatalog.currentBlockIndex ?: -1L) + 1L,
                 indexerConfig,
                 ioDispatcher,
             ).also { it.refreshSnap() }

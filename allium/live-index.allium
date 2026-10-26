@@ -260,9 +260,9 @@ entity LiveTableTx {
 -- A Snapshot also pins the two catalogs a reader needs alongside those segments: the trie catalog, which locates the historical tries on disk, and the table catalog's per-table metadata.
 -- Pinning them is what stops a reader combining pinned data with catalog state read live at the moment it happens to ask.
 --
--- The three captures are NOT atomic with respect to one another.
--- They are taken in order — trie catalog, then segments, then table catalog — so a block landing concurrently can fall between them.
--- The table catalog is taken last deliberately: a type view newer than the data view over-approximates, which is always safe, whereas an older one would declare a narrower type than the rows being scanned, which is not.
+-- The two catalogs are one value, captured once, so a reader sees both as of the same catalog write.
+-- The segments are a second capture, taken after the catalog's while the next block roll is held off, so a block adopted in between still has its live table among them.
+-- Whether that table's rows are read is decided by the captured trie catalog's L0 watermark, per "L0 supersession" below.
 --
 -- That matters for a column's declared type, which is the join of what the table catalog knows (flushed blocks), what the segments know (unflushed), and what the superseded live tables know.
 -- The column set and the types resolving it come from one capture, or they can disagree.
@@ -297,7 +297,7 @@ entity Snapshot {
 
     table_snapshots: TableSnapshot with snapshot = this
 
-    -- Frozen catalog state, captured with the segments above.
+    -- Frozen catalog state, one value for both halves, captured just before the segments above.
     trie_catalog_snap: TrieCatalogSnap
     table_catalog_snap: TableCatalogSnap
 

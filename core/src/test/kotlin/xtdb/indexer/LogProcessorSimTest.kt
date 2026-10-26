@@ -180,7 +180,7 @@ class LogProcessorSimTest : SimulationTestBase() {
         val catalog = createCatalog()
         val tableCatalog = catalog.tableCatalog
         val liveIndex =
-            LiveIndex.open(allocator, catalog.tableCatalog, catalog.trieCatalog, indexerConfig, ioDispatcher = dispatcher)
+            LiveIndex.open(allocator, catalog, indexerConfig, ioDispatcher = dispatcher)
 
         val partitionState = PartitionState(catalog, liveIndex)
 

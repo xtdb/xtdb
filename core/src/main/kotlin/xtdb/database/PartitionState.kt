@@ -68,7 +68,7 @@ class PartitionState(
 
             val catalog = Catalog(Catalog.State(trieCatalogFactory.open(bufferPool, tableCatState), tableCatState))
 
-            val liveIndex = open { LiveIndex.open(allocator, catalog.tableCatalog, catalog.trieCatalog, indexerConfig) }
+            val liveIndex = open { LiveIndex.open(allocator, catalog, indexerConfig) }
 
             PartitionState(catalog, liveIndex)
         }
