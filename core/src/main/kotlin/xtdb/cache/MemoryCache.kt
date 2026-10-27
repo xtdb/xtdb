@@ -73,16 +73,17 @@ class MemoryCache @JvmOverloads internal constructor(
         val done = CompletableDeferred<Unit>()
     }
 
-    private class Page(val pathSlice: PathSlice, val frame: ArrowBuf, val length: Long) : Entry {
-        // hits increment this without the lock: a lost increment only blurs the eviction priority
-        @Volatile
-        var freq = 0
+    private class Page(val pathSlice: PathSlice, val frame: ArrowBuf, val length: Long) : Entry, S3Fifo.Entry<PathSlice> {
+        override val key get() = pathSlice
 
-        val bytes get() = frame.capacity()
+        @Volatile
+        override var freq = 0
+
+        override val bytes get() = frame.capacity()
 
         // the cache's own reference is the one the frame was allocated with;
         // a reader that has transferred the page into its own allocator owns it, leaving that reference the only one here
-        val isHeld get() = frame.refCnt() > 1 || (frame.referenceManager as? BufferLedger)?.isOwningLedger == false
+        override val isHeld get() = frame.refCnt() > 1 || (frame.referenceManager as? BufferLedger)?.isOwningLedger == false
 
         /**
          * @return a buffer over the page that the caller closes, or null if the page was evicted and freed since it was found
@@ -101,18 +102,8 @@ class MemoryCache @JvmOverloads internal constructor(
     private val bounceArena = Arena.ofShared()
     private val bounces = ConcurrentLinkedQueue<MemorySegment>()
 
-    // S3-FIFO: a page read once passes through `small`; one read again while there moves to `main`, which is a CLOCK;
-    // `ghost` remembers recent evictions from `small`, so a page re-read soon after goes straight to `main`
     private val lock = Any()
-    private val small = ArrayDeque<Page>()
-    private val main = ArrayDeque<Page>()
-    private var smallBytes = 0L
-    private var mainBytes = 0L
-    private val smallTargetBytes = maxSizeBytes / SMALL_QUEUE_RATIO
-    private val ghost = object : LinkedHashMap<PathSlice, Unit>() {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<PathSlice, Unit>) =
-            size > maxOf(MIN_GHOST_CAPACITY, small.size + main.size)
-    }
+    private val policy = S3Fifo<PathSlice, Page>(maxSizeBytes)
 
     // by directory; 0 where the filesystem doesn't support O_DIRECT
     private val directBlockSizes = ConcurrentHashMap<Path, Long>()
@@ -123,7 +114,7 @@ class MemoryCache @JvmOverloads internal constructor(
         while (true) {
             when (val entry = entries[pathSlice]) {
                 is Page -> entry.retainSlice()?.let { buf ->
-                    if (entry.freq < MAX_FREQ) entry.freq++
+                    if (entry.freq < S3Fifo.MAX_FREQ) entry.freq++
                     return buf
                 }
 
@@ -156,13 +147,7 @@ class MemoryCache @JvmOverloads internal constructor(
 
             val buf = page.retainSlice()!!
 
-            synchronized(lock) {
-                if (ghost.remove(pathSlice) != null) {
-                    main.addLast(page); mainBytes += page.bytes
-                } else {
-                    small.addLast(page); smallBytes += page.bytes
-                }
-            }
+            synchronized(lock) { policy.admit(page) }
 
             entries.replace(pathSlice, loading, page)
             loading.done.complete(Unit)
@@ -293,61 +278,7 @@ class MemoryCache @JvmOverloads internal constructor(
     /**
      * @return the bytes it freed - 0 if every resident page is held
      */
-    private fun evictOne(): Long {
-        // held pages each queue has rotated past since it last made progress - once one has been all the way round, use the other
-        var smallSkips = 0
-        var mainSkips = 0
-
-        // hits raise `freq` without the lock, so this bounds the scan even if they keep pace with it
-        var visits = (MAX_FREQ + 2) * (small.size + main.size) + 1
-
-        while (visits-- > 0) {
-            val smallLive = small.isNotEmpty() && smallSkips < small.size
-            val mainLive = main.isNotEmpty() && mainSkips < main.size
-
-            if (smallLive && (smallBytes >= smallTargetBytes || !mainLive)) {
-                val page = small.removeFirst().also { smallBytes -= it.bytes }
-                when {
-                    page.freq > 0 -> {
-                        smallSkips = 0
-                        page.freq = 0
-                        main.addLast(page); mainBytes += page.bytes
-                    }
-
-                    !page.isHeld -> {
-                        evict(page)
-                        ghost[page.pathSlice] = Unit
-                        return page.bytes
-                    }
-
-                    else -> {
-                        smallSkips++
-                        small.addLast(page); smallBytes += page.bytes
-                    }
-                }
-            } else if (mainLive) {
-                val page = main.removeFirst()
-                when {
-                    // a held page keeps its frequency: it can't be evicted, so ageing it would only count against it later
-                    page.isHeld -> mainSkips++
-
-                    page.freq > 0 -> {
-                        mainSkips = 0
-                        page.freq--
-                    }
-
-                    else -> {
-                        mainBytes -= page.bytes
-                        evict(page)
-                        return page.bytes
-                    }
-                }
-                main.addLast(page)
-            } else return 0
-        }
-
-        return 0
-    }
+    private fun evictOne(): Long = policy.evict()?.let { page -> evict(page); page.bytes } ?: 0
 
     private fun evict(page: Page) {
         entries.remove(page.pathSlice, page)
@@ -362,8 +293,8 @@ class MemoryCache @JvmOverloads internal constructor(
 
         synchronized(lock) {
             entries.clear()
-            (small + main).forEach { it.frame.close() }
-            small.clear(); main.clear(); smallBytes = 0; mainBytes = 0
+            policy.entries.forEach { it.frame.close() }
+            policy.clear()
         }
 
         bounceArena.close()
@@ -390,15 +321,12 @@ class MemoryCache @JvmOverloads internal constructor(
     internal val stats0 get() = al.let { Stats(it.allocatedMemory, it.limit - it.allocatedMemory) }
 
     private fun residentBytes(held: Boolean) =
-        synchronized(lock) { small.sumOf { if (it.isHeld == held) it.bytes else 0 } + main.sumOf { if (it.isHeld == held) it.bytes else 0 } }
+        synchronized(lock) { policy.entries.sumOf { if (it.isHeld == held) it.bytes else 0 } }
 
     companion object {
         private const val IO_PARALLELISM = 8
         private const val BOUNCE_BYTES = 1L shl 20
-        private const val MAX_FREQ = 3
-        private const val SMALL_QUEUE_RATIO = 10
         private const val MAX_BUFFERED_READ_BYTES = 1L shl 30
-        private const val MIN_GHOST_CAPACITY = 16
 
         @JvmStatic
         fun factory() = Factory()
