@@ -16,6 +16,7 @@ enum DatabaseMode {
 message InMemoryLog {
     int32 epoch = 1 [default = 0];
     reserved 2; // was term_epoch, before a term was claimed from the log itself
+    int32 replay_buffer_size = 3;
 }
 
 message LocalLog {
