@@ -36,6 +36,11 @@ interface Segment<L> : AutoCloseable {
         suspend fun loadDataPage(al: BufferAllocator): RelationReader
 
         /**
+         * Asks for the page to be read ahead of a [loadDataPage]; a no-op where the page isn't read from storage.
+         */
+        suspend fun prefetchDataPage() = Unit
+
+        /**
          * Called once the last [MergeTask] that includes this page has finished with it;
          * the relation [loadDataPage] returned mustn't be used afterwards.
          */

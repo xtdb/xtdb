@@ -47,6 +47,8 @@ class BufferPoolSegment private constructor(
                 rel
             }.also { rel = it }
 
+        override suspend fun prefetchDataPage() = bp.prefetchRecordBatch(dataFilePath, dataPageIndex)
+
         override fun close() {
             rel?.close()
             rel = null

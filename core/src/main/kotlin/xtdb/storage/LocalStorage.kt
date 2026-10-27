@@ -6,6 +6,7 @@ import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.coroutines.future.asDeferred
 import kotlinx.coroutines.runBlocking
 import org.apache.arrow.memory.BufferAllocator
+import org.apache.arrow.vector.ipc.message.ArrowBlock
 import org.apache.arrow.vector.ipc.message.ArrowFooter
 import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
 import xtdb.ArrowWriter
@@ -70,29 +71,34 @@ internal class LocalStorage(
             completedFuture(path.openReadableChannel().readArrowFooter())
         }.asDeferred().await()
 
-    override suspend fun getRecordBatch(key: Path, idx: Int): ArrowRecordBatch {
-        recordBatchRequests?.increment()
+    private suspend fun arrowBlock(key: Path, idx: Int): ArrowBlock {
         val path = rootPath.resolve(key).orThrowIfMissing(key)
 
         val footer = arrowFooterCache.get(key) { _, _ ->
             completedFuture(path.openReadableChannel().readArrowFooter())
         }.asDeferred().await()
 
-        val arrowBlock = footer.recordBatches.getOrNull(idx)
+        return footer.recordBatches.getOrNull(idx)
             ?: throw IndexOutOfBoundsException("Record batch index out of bounds of arrow file")
+    }
 
-        return memoryCache.get(
-            key,
-            MemoryCache.Slice(arrowBlock.offset, arrowBlock.metadataLength + arrowBlock.bodyLength)
-        ) { k ->
-            memCacheMisses?.increment()
-            Pair(rootPath.resolve(k).orThrowIfMissing(k), null)
-        }.use { arrowBuf ->
+    private val ArrowBlock.slice get() = MemoryCache.Slice(offset, metadataLength + bodyLength)
+
+    private val fetchRecordBatch = MemoryCache.Fetch { k ->
+        memCacheMisses?.increment()
+        Pair(rootPath.resolve(k).orThrowIfMissing(k), null)
+    }
+
+    override suspend fun getRecordBatch(key: Path, idx: Int): ArrowRecordBatch {
+        recordBatchRequests?.increment()
+        val arrowBlock = arrowBlock(key, idx)
+
+        return memoryCache.get(key, arrowBlock.slice, fetchRecordBatch).use { arrowBuf ->
             arrowBuf.arrowBufToRecordBatch(
                 0,
                 arrowBlock.metadataLength,
                 arrowBlock.bodyLength,
-                "Failed opening record batch '$path' at block-idx $idx"
+                "Failed opening record batch '${rootPath.resolve(key)}' at block-idx $idx"
             )
         }
     }
