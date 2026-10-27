@@ -2,8 +2,8 @@ package xtdb
 
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.tracing.otel.bridge.OtelTracer
+import org.apache.arrow.memory.AllocationListener
 import org.apache.arrow.memory.BufferAllocator
-import org.apache.arrow.memory.RootAllocator
 import xtdb.Metrics.registerRootAllocatorMeters
 import xtdb.Metrics.rootAllocatorListener
 import xtdb.Tracer.openTracer
@@ -17,6 +17,7 @@ import xtdb.compactor.Compactor
 import xtdb.query.IQuerySource
 import xtdb.util.closeAll
 import xtdb.util.maxDirectMemory
+import xtdb.util.openRootAllocator
 import xtdb.util.requiringResolve
 import xtdb.util.safelyOpening
 
@@ -62,12 +63,9 @@ class NodeBase(
                 val al = externalAllocator
                     ?: open {
                         val limit = (maxDirectMemory * 0.9).toLong()
-                        if (meterReg != null) {
-                            RootAllocator(meterReg.rootAllocatorListener(), limit)
-                                .also { meterReg.registerRootAllocatorMeters(it) }
-                        } else {
-                            RootAllocator(limit)
-                        }
+
+                        openRootAllocator(limit, meterReg?.rootAllocatorListener() ?: AllocationListener.NOOP)
+                            .also { meterReg?.registerRootAllocatorMeters(it) }
                     }
 
                 val collisions = config.logClusters.keys.intersect(config.remotes.keys)

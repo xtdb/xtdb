@@ -135,7 +135,7 @@ class BitBufferTest {
         }
 
         BitBuffer(fillingAl, 8).use { buf ->
-            shouldThrow<OutOfMemoryError> { buf.loadBuffer(al.empty, 64) }
+            shouldThrow<OutOfMemoryError> { buf.loadBuffer(al.empty, 1024) }
 
             heldBuf.refCnt() shouldBe 0
             buf.buf.refCnt() shouldBe 1
