@@ -50,6 +50,10 @@ class ScanCursor(
 
     private val bufferedRels: Queue<RelationReader> = LinkedList()
 
+    private val tasks = ReadAhead(mergeTasks, PREFETCH_TASKS) { task ->
+        for (page in task.pages) page.prefetchDataPage()
+    }
+
     private fun bufferTask(task: MergeTask) {
         task.use {
             val iidPred = colPreds["_iid"]
@@ -96,8 +100,8 @@ class ScanCursor(
             return true
         }
 
-        while (mergeTasks.hasNext()) {
-            bufferTask(mergeTasks.next())
+        while (tasks.hasNext()) {
+            bufferTask(tasks.next())
 
             bufferedRels.poll()?.use {
                 c.accept(it)
@@ -109,8 +113,13 @@ class ScanCursor(
     }
 
     override fun close() {
+        tasks.close()
         bufferedRels.apply { closeAll(); clear() }
         bufferedRels.clear()
         ownedSegments.closeAll()
+    }
+
+    companion object {
+        private const val PREFETCH_TASKS = 4
     }
 }

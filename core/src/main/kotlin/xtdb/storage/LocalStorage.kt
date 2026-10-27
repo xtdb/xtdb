@@ -103,6 +103,9 @@ internal class LocalStorage(
         }
     }
 
+    override suspend fun prefetchRecordBatch(key: Path, idx: Int) =
+        memoryCache.prefetch(key, arrowBlock(key, idx).slice, fetchRecordBatch)
+
     private fun ByteBuffer.writeToPath(path: Path) {
         newByteChannel(path, WRITE, TRUNCATE_EXISTING, CREATE).use { channel ->
             while (hasRemaining()) channel.write(this)

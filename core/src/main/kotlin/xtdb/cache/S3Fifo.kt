@@ -17,6 +17,8 @@ import java.util.concurrent.atomic.LongAdder
  * [PROBE_WINDOWS] windows - and ends if nothing but `main` can be evicted; one that ends without paying waits out a
  * doubling number of windows before the next.
  *
+ * `ghost` doesn't remember an entry evicted [unread][Entry.isUnread]: admitting it again is its first read.
+ *
  * Not thread-safe: its owner serialises every call but [hit].
  */
 internal class S3Fifo<K : Any, E : S3Fifo.Entry<K>>(maxBytes: Long, private val detectLoops: Boolean = true) {
@@ -31,6 +33,11 @@ internal class S3Fifo<K : Any, E : S3Fifo.Entry<K>>(maxBytes: Long, private val 
         var freq: Int
 
         val isHeld: Boolean
+
+        /**
+         * Admitted ahead of its first read, which hasn't come yet.
+         */
+        val isUnread: Boolean get() = false
     }
 
     private enum class EvictedFrom { SMALL, MAIN }
@@ -158,7 +165,7 @@ internal class S3Fifo<K : Any, E : S3Fifo.Entry<K>>(maxBytes: Long, private val 
                     }
 
                     !entry.isHeld -> {
-                        ghost[entry.key] = EvictedFrom.SMALL
+                        if (!entry.isUnread) ghost[entry.key] = EvictedFrom.SMALL
                         return entry
                     }
 
@@ -179,7 +186,7 @@ internal class S3Fifo<K : Any, E : S3Fifo.Entry<K>>(maxBytes: Long, private val 
                     }
 
                     else -> {
-                        if (detectLoops) ghost[entry.key] = EvictedFrom.MAIN
+                        if (detectLoops && !entry.isUnread) ghost[entry.key] = EvictedFrom.MAIN
                         if (isFrozen) thaw(paid = false)
                         return entry
                     }
