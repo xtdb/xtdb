@@ -53,7 +53,7 @@ public class BufferLedger implements ValueWithKeyIncluded<BufferAllocator>, Refe
     this.allocationManager = allocationManager;
   }
 
-  boolean isOwningLedger() {
+  public boolean isOwningLedger() {
     return this == allocationManager.getOwningLedger();
   }
 

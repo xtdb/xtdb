@@ -116,7 +116,7 @@
   (.getByteArray bp k))
 
 (t/deftest local-disk-cache-max-size
-  (with-caches {:mem-bytes 12, :disk-bytes 10}
+  (with-caches {:mem-bytes 48, :disk-bytes 10}
     (with-open [bp (-> (Storage/remote (prefixing-obj-store-factory (InMemoryBucket.)))
                        (.open tu/*allocator* *mem-cache* *disk-cache* "xtdb" 0 1 nil Storage/VERSION {}))]
       (t/testing "staying below max size - all elements available"
