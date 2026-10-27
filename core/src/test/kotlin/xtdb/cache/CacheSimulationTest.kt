@@ -3,51 +3,43 @@ package xtdb.cache
 import io.kotest.assertions.throwables.shouldThrow
 import kotlinx.coroutines.*
 import kotlinx.coroutines.test.runTest
+import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.OutOfMemoryException
 import org.apache.arrow.memory.RootAllocator
-import org.junit.jupiter.api.*
-import org.junit.jupiter.api.Assertions.assertEquals
+import org.apache.arrow.memory.rounding.RoundingPolicy
+import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Tag
+import org.junit.jupiter.api.Timeout
+import org.junit.jupiter.api.io.TempDir
 import xtdb.RepeatableSimulationTest
 import xtdb.SimulationTestBase
 import xtdb.cache.MemoryCache.Slice
+import xtdb.util.ReclaimingAllocationListener
 import xtdb.symbol
-import xtdb.util.logger
 import xtdb.util.requiringResolve
-import xtdb.util.trace
-import java.lang.foreign.Arena
-import java.lang.foreign.MemorySegment
-import java.lang.foreign.ValueLayout.JAVA_BYTE
 import java.nio.file.Path
-import java.util.concurrent.ExecutionException
 import java.util.concurrent.TimeUnit
+import kotlin.io.path.writeBytes
 
 private val setLogLevel = requiringResolve("xtdb.logging/set-log-level!")
 
 private const val logLevel = "WARN"
 
-private val LOGGER = CacheSimulationTest::class.logger
-
 @Tag("property")
 class CacheSimulationTest : SimulationTestBase() {
+
+    @TempDir
+    lateinit var dir: Path
+
     private lateinit var allocator: BufferAllocator
-
-    class TestPathLoader : MemoryCache.PathLoader {
-        private val loadCounts = mutableMapOf<Path, Int>()
-
-        override fun load(path: Path, slice: Slice, arena: Arena): MemorySegment {
-            val count = loadCounts.compute(path) { _, c -> (c ?: 0) + 1 }!!
-            return arena.allocate(slice.length)
-                .also { it.set(JAVA_BYTE, 0, 1.toByte()) }
-        }
-
-        fun getLoadCount(path: Path) = loadCounts[path] ?: 0
-    }
 
     @BeforeEach
     fun setUpSimulation() {
         setLogLevel.invoke("xtdb.cache".symbol, logLevel)
-        allocator = RootAllocator()
+        allocator = RootAllocator(ReclaimingAllocationListener(), Long.MAX_VALUE, RoundingPolicy { it })
     }
 
     @AfterEach
@@ -55,220 +47,147 @@ class CacheSimulationTest : SimulationTestBase() {
         allocator.close()
     }
 
-    @RepeatableSimulationTest
-    @Timeout(value = 5, unit = TimeUnit.SECONDS)
-    fun `deterministic single fetch and evict`() = runTest {
-        val loader = TestPathLoader()
-        MemoryCache(allocator, 250, loader, dispatcher).use { cache ->
-            val sliceSize = rand.nextLong(1L, 250L)
-            val path = Path.of("test/$sliceSize")
+    private fun content(len: Int, seed: Int) = ByteArray(len) { ((it + seed * 17) % 251).toByte() }
 
-            var evicted = false
-            val onEvict = AutoCloseable { evicted = true }
+    private fun file(name: String, len: Int, seed: Int): Path =
+        dir.resolve(name).also { it.writeBytes(content(len, seed)) }
 
-            cache.get(path, Slice(0, sliceSize)) { it to onEvict }.use { buf ->
-                Assertions.assertNotNull(buf)
-                assertEquals(sliceSize, buf.readableBytes())
-                assertEquals(MemoryCache.Stats(sliceSize, 250L - sliceSize), cache.stats0)
-            }
+    private fun ArrowBuf.bytes() = ByteArray(capacity().toInt()).also { getBytes(0, it) }
 
-            Assertions.assertTrue(evicted)
-            assertEquals(MemoryCache.Stats(0L, 250L), cache.stats0)
-            assertEquals(1, loader.getLoadCount(path))
+    private inner class CountingFetch : MemoryCache.Fetch {
+        val counts = mutableMapOf<Path, Int>()
+
+        override suspend fun invoke(k: Path): Pair<Path, AutoCloseable?> {
+            counts.merge(k, 1, Int::plus)
+            yield()
+            return k to null
         }
+
+        operator fun get(k: Path) = counts[k] ?: 0
     }
 
-    @RepeatableSimulationTest
-    @Timeout(value = 5, unit = TimeUnit.SECONDS)
-    fun `deterministic reuse of same path-slice`() = runTest {
-        val loader = TestPathLoader()
-        MemoryCache(allocator, 250, loader, dispatcher).use { cache ->
-            val sliceSize = rand.nextLong(1L, 250L)
-            val path = Path.of("test/$sliceSize")
-            val slice = Slice(0, sliceSize)
-
-            // Nested fetches of same path-slice should reuse
-            cache.get(path, slice) { it to null }.use {
-                assertEquals(sliceSize, cache.stats0.usedBytes)
-
-                cache.get(path, slice) { it to null }.use {
-                    // Should reuse, not double-count
-                    assertEquals(sliceSize, cache.stats0.usedBytes)
-
-                    cache.get(path, slice) { it to null }.use {
-                        assertEquals(sliceSize, cache.stats0.usedBytes)
-                    }
-                }
-            }
-
-            assertEquals(MemoryCache.Stats(0L, 250L), cache.stats0)
-        }
-    }
-
-    private inline fun <R> unwrapCause(f: () -> R) =
-        try {
-            f()
-        } catch (e: ExecutionException) {
-            throw e.cause ?: e
-        }
+    private fun cache(maxSizeBytes: Long) = MemoryCache(allocator, maxSizeBytes, dispatcher, directIO = rand.nextBoolean())
 
     @RepeatableSimulationTest
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
-    fun `deterministic oom handling`() = runTest {
-        val loader = TestPathLoader()
-        MemoryCache(allocator, 100, loader, dispatcher).use { cache ->
-            val tooBigSlice = rand.nextLong(101L, 200L)
-            val smallSlice = rand.nextLong(1L, 50L)
+    fun `concurrent fetches of one page read it once`() = runTest {
+        val len = rand.nextInt(1, 250)
+        val f = file("f", len, 0)
+        val fetch = CountingFetch()
 
-            // Try to fetch something larger than cache capacity
-            shouldThrow<OutOfMemoryException> {
-                unwrapCause {
-                    cache.get(Path.of("big/$tooBigSlice"), Slice(0, tooBigSlice)) { it to null }.use { }
-                }
-            }
-
-            // Cache should still be functional
-            cache.get(Path.of("small/$smallSlice"), Slice(0, smallSlice)) { it to null }.use { buf ->
-                assertEquals(smallSlice, buf.readableBytes())
-            }
-        }
-    }
-
-    @RepeatableSimulationTest
-    @Timeout(value = 5, unit = TimeUnit.SECONDS)
-    fun `deterministic concurrent fetch of same path-slice`() = runTest {
-        val loader = TestPathLoader()
-        MemoryCache(allocator, 250, loader, dispatcher).use { cache ->
-            val sliceSize = rand.nextLong(1L, 250L)
-            val path = Path.of("test/$sliceSize")
-            val slice = Slice(0, sliceSize)
-            val concurrentFetches = rand.nextInt(2, 10)
-
-            // Launch multiple concurrent fetches of the same path-slice
-            val deferreds = async(dispatcher) {
-                (1..concurrentFetches).mapIndexed { i, _ ->
+        cache(250).use { cache ->
+            val results = async(dispatcher) {
+                (1..rand.nextInt(2, 10)).map {
                     async(dispatcher) {
-                        cache.get(path, slice) { it to null }.use { buf ->
-                            LOGGER.trace("Fetched buf $buf in concurrent fetch #${i}")
-                            assertEquals(sliceSize, buf.readableBytes())
-                            // Read the first byte to verify content
-                            yield()
-                            buf.getByte(0)
-                        }
+                        cache.get(f, Slice(0, len.toLong()), fetch).use { buf -> yield(); buf.bytes() }
                     }
-                }
+                }.awaitAll()
             }.await()
 
-            // Wait for all fetches to complete
-            val results = deferreds.awaitAll()
-
-            // Verify all fetches got the same data
-            assertEquals(concurrentFetches, results.size)
-            assertEquals(results.first().let { fst -> List(results.size) { fst } }, results)
-
-            // After all fetches complete and buffers are released, cache should be empty
-            assertEquals(MemoryCache.Stats(0L, 250L), cache.stats0)
+            results.forEach { assertArrayEquals(content(len, 0), it) }
+            assertEquals(1, fetch[f])
+            assertEquals(len.toLong(), cache.stats0.usedBytes)
         }
     }
 
     @RepeatableSimulationTest
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
-    fun `deterministic concurrent different slices of same path`() = runTest {
-        val loader = TestPathLoader()
-        val concurrentFetches = rand.nextInt(2, 10)
-        MemoryCache(allocator, 1000L, loader, dispatcher).use { cache ->
-            val path = Path.of("test/file")
+    fun `concurrent fetches of different slices of one file`() = runTest {
+        val n = rand.nextInt(2, 10)
+        val f = file("f", n * 50, 0)
+        val expected = content(n * 50, 0)
 
-            val deferreds = async(dispatcher) {
-                (0 until concurrentFetches).map { i ->
+        cache(1000).use { cache ->
+            val results = async(dispatcher) {
+                (0 until n).map { i ->
                     async(dispatcher) {
-                        val slice = Slice(i * 50L, 50)
-                        cache.get(path, slice) { it to null }.use { buf ->
-                            LOGGER.trace("Fetched slice $i: offset=${i * 50}, buf=$buf")
-                            yield()
-                            buf.getByte(0)
-                        }
+                        cache.get(f, Slice(i * 50L, 50)) { it to null }.use { buf -> yield(); buf.bytes() }
                     }
-                }
+                }.awaitAll()
             }.await()
 
-            val results = deferreds.awaitAll()
-
-            assertEquals(concurrentFetches, results.size)
-            assertEquals(results.first().let { fst -> List(results.size) { fst } }, results)
-            assertEquals(MemoryCache.Stats(0L, 1000L), cache.stats0)
+            results.forEachIndexed { i, bytes -> assertArrayEquals(expected.copyOfRange(i * 50, i * 50 + 50), bytes) }
         }
     }
 
     @RepeatableSimulationTest
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
-    fun `cancelled fetch on cache hit does not leak`() = runTest {
-        val loader = TestPathLoader()
-        MemoryCache(allocator, 250, loader, dispatcher).use { cache ->
-            val path = Path.of("test/100")
-            val slice = Slice(0, 100)
+    fun `cancelled fetches leave nothing held`() = runTest {
+        val f = file("f", 100, 0)
 
+        cache(250).use { cache ->
             async(dispatcher) {
                 val jobs = (0..1).map {
-                    launch {
-                        cache.get(path, slice) { it to null }.use { yield() }
-                    }
+                    launch { cache.get(f, null) { it to null }.use { yield() } }
                 }
                 yield()
                 jobs.forEach { it.cancel() }
                 jobs.joinAll()
             }.await()
 
-            assertEquals(MemoryCache.Stats(0L, 250L), cache.stats0)
+            // a page still held would fail this OOM
+            cache.get(file("g", 250, 1), null) { it to null }.use { assertArrayEquals(content(250, 1), it.bytes()) }
         }
     }
 
     @RepeatableSimulationTest
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
-    fun `deterministic concurrent fetches with some OOMs`() = runTest {
-        val loader = TestPathLoader()
-        MemoryCache(allocator, 100L, loader, dispatcher).use { cache ->
-            val concurrentFetches = rand.nextInt(4, 10)
-
-            // Mix of small (will succeed) and big (will OOM) fetches
-            // Small = 10 bytes, Big = 150 bytes (cache is 100)
-            val deferreds = async(dispatcher) {
-                (0 until concurrentFetches).map { i ->
+    fun `pages larger than the cache fail without disturbing the rest`() = runTest {
+        cache(100).use { cache ->
+            val results = async(dispatcher) {
+                (0 until rand.nextInt(4, 10)).map { i ->
+                    val len = if (i % 2 == 0) 10 else 150
+                    val f = file("f$i", len, i)
                     async(dispatcher) {
-                        val size = if (i % 2 == 0) 10L else 150L
-                        val path = Path.of("test/$i")
-                        val slice = Slice(0, size)
+                        runCatching { cache.get(f, null) { it to null }.use { buf -> yield(); buf.bytes() } }
+                    }
+                }.awaitAll()
+            }.await()
 
-                        runCatching {
-                            cache.get(path, slice) { it to null }.use { buf ->
-                                LOGGER.trace("Fetch $i (size=$size): got buf $buf")
-                                yield()
-                                buf.getByte(0)
+            results.forEachIndexed { i, result ->
+                if (i % 2 == 0) assertArrayEquals(content(10, i), result.getOrThrow())
+                else assertTrue(result.exceptionOrNull() is OutOfMemoryException, "fetch $i: $result")
+            }
+
+            shouldThrow<OutOfMemoryException> { cache.get(file("big", 101, 0), null) { it to null } }
+        }
+    }
+
+    @RepeatableSimulationTest
+    @Timeout(value = 10, unit = TimeUnit.SECONDS)
+    fun `random workload reads correct bytes within the budget`() = runTest {
+        val maxSizeBytes = rand.nextLong(500, 5000)
+        val files = (0 until rand.nextInt(5, 30)).map { i ->
+            val len = rand.nextInt(1, 600)
+            Triple(file("f$i", len, i), len, i)
+        }
+
+        var heldBytes = 0L
+
+        cache(maxSizeBytes).use { cache ->
+            async(dispatcher) {
+                (0 until rand.nextInt(1, 6)).map {
+                    async(dispatcher) {
+                        repeat(rand.nextInt(10, 50)) {
+                            val (f, len, seed) = files[rand.nextInt(files.size)]
+                            val offset = rand.nextInt(0, len)
+                            val sliceLen = rand.nextInt(1, len - offset + 1)
+
+                            try {
+                                cache.get(f, Slice(offset.toLong(), sliceLen.toLong())) { yield(); it to null }.use { buf ->
+                                    heldBytes += sliceLen
+                                    assertTrue(cache.stats0.usedBytes <= maxSizeBytes)
+                                    repeat(rand.nextInt(0, 3)) { yield() }
+                                    assertArrayEquals(content(len, seed).copyOfRange(offset, offset + sliceLen), buf.bytes())
+                                    heldBytes -= sliceLen
+                                }
+                            } catch (e: OutOfMemoryException) {
+                                assertTrue(heldBytes + sliceLen > maxSizeBytes, "OOM with $heldBytes held of $maxSizeBytes: $e")
                             }
                         }
                     }
-                }
+                }.awaitAll()
             }.await()
-
-            val results = deferreds.awaitAll()
-
-            // Check that small ones succeeded and big ones failed
-            results.forEachIndexed { i, result ->
-                if (i % 2 == 0) {
-                    Assertions.assertTrue(result.isSuccess, "Small fetch $i should succeed")
-                    Assertions.assertEquals(1L, result.getOrNull()?.toLong())
-                } else {
-                    Assertions.assertTrue(result.isFailure, "Big fetch $i should fail with OOM")
-                    Assertions.assertTrue(result.exceptionOrNull() is OutOfMemoryException)
-                }
-            }
-
-            // Cache should still be functional
-            val finalResult = cache.get(Path.of("final/10"), Slice(0, 10)) { it to null }.use { buf ->
-                buf.getByte(0)
-            }
-
-            assertEquals(MemoryCache.Stats(0L, 100L), cache.stats0)
         }
     }
 }
