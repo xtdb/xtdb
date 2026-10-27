@@ -81,11 +81,11 @@ EOF
 docker pull -q "$PAUSE_IMAGE" >/dev/null
 docker pull -q "$JVM_IMAGE" >/dev/null
 
-# run_scenario NAME MAIN_IMAGE MAIN_SCRIPT [SIDECAR_ENV]
+# run_scenario NAME MAIN_IMAGE MAIN_SCRIPT [SIDECAR_ENV] [SIDECAR_VOLUME]
 # Starts the pod's pause container, then the sidecar, then (3s later, as containers start
 # concurrently) the main container. Waits for the sidecar to exit and leaves results in $WORK/NAME.
 run_scenario() {
-  local name=$1 main_image=$2 main_script=$3 sidecar_env=${4:-UNUSED=}
+  local name=$1 main_image=$2 main_script=$3 sidecar_env=${4:-UNUSED=} sidecar_volume=${5:-/dev/null:/unused:ro}
   local out="$WORK/$name" id="dump-uploader-test-$$-$name"
   mkdir -p "$out/dumps"
   CONTAINERS+=("$id-pause" "$id-sidecar" "$id-main")
@@ -95,7 +95,7 @@ run_scenario() {
   docker run -d --name "$id-sidecar" --pid "container:$id-pause" --platform linux/amd64 \
     -m "$DOCKER_MEM" --memory-swap "$DOCKER_MEM" \
     -v "$WORK/upload-dumps.sh:/scripts/upload-dumps.sh:ro" \
-    -v "$WORK/stub:/stub:ro" -v "$out:/out" -v "$out/dumps:/dumps" \
+    -v "$WORK/stub:/stub:ro" -v "$out:/out" -v "$out/dumps:/dumps" -v "$sidecar_volume" \
     -e AZURE_STORAGE_ACCOUNT=acct -e AZURE_STORAGE_CONTAINER=ctr \
     -e XTDB_NODE_ID=test-node -e BENCH_TYPE=tpch -e "$sidecar_env" \
     "$IMAGE" bash -c '
@@ -126,7 +126,7 @@ assert_dumps_fully_uploaded() {
   local name=$1 out="$WORK/$1" f base final last found=0
   [[ "$(cat "$out/oom-kills")" == 0 ]] || fail "$name: sidecar was OOM-killed under its ${MEM_LIMIT} limit"
   [[ "$(cat "$out/exit-code")" == 0 ]] || fail "$name: sidecar exited $(cat "$out/exit-code")"
-  grep -q "peak memory" "$out/sidecar.log" || fail "$name: sidecar didn't log its peak memory"
+  grep -q "OOM kills: 0" "$out/sidecar.log" || fail "$name: sidecar didn't log its memory summary"
   # The Job can't complete until the sidecar exits, so it mustn't linger after the JVM has gone
   [[ "$(cat "$out/exit-lag")" -le 30 ]] || fail "$name: sidecar took $(cat "$out/exit-lag")s to exit after the main container"
   for f in "$out"/dumps/*.hprof; do
@@ -147,12 +147,16 @@ run_scenario real-jvm-oom "$JVM_IMAGE" \
 assert_dumps_fully_uploaded real-jvm-oom
 grep -q '^java_pid.*\.hprof ' "$WORK/real-jvm-oom/uploads.log" || fail "real-jvm-oom: the JVM's own java_pid*.hprof wasn't uploaded"
 
-# A writer that pauses mid-dump for longer than the poll interval, while the JVM stays up
+# A writer that pauses mid-dump for longer than the poll interval, while the JVM stays up.
+# memory.peak is masked, as on the AKS nodes' 5.15 kernel (it arrived in 5.19).
 run_scenario stalled-write "$JVM_IMAGE" '
   ( sleep 4;  head -c 1000000 /dev/zero >  /dumps/stalled.hprof
     sleep 12; head -c 1000000 /dev/zero >> /dumps/stalled.hprof ) &
-  exec java /src/Idle.java 30'
+  exec java /src/Idle.java 30' \
+  UNUSED= /dev/null:/sys/fs/cgroup/memory.peak:ro
 assert_dumps_fully_uploaded stalled-write
+grep -q "peak (incl. page cache): n/a" "$WORK/stalled-write/sidecar.log" \
+  || fail "stalled-write: without memory.peak the sidecar should say its peak is n/a, not guess one"
 grep -q '^stalled.hprof 2000000 alive$' "$WORK/stalled-write/uploads.log" \
   || fail "stalled-write: the completed dump wasn't uploaded while the JVM was still running"
 

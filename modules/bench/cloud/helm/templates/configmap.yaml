@@ -143,14 +143,16 @@ data:
       echo "Cleanup already triggered by main container."
     fi
 
-    # Headroom against this container's memory limit, visible in every run's logs (cgroup v2 only).
+    # Memory summary, visible in every run's logs (cgroup v2 only). OOM kills are the real signal.
     # The peak includes page cache: uploading a 3GB dump takes it to the limit while `az` itself
-    # stays under ~100Mi, because cache is reclaimed rather than OOM-killed. OOM kills are the real signal.
-    if [[ -r /sys/fs/cgroup/memory.peak ]]; then
-      peak=$(cat /sys/fs/cgroup/memory.peak)
-      limit=$(cat /sys/fs/cgroup/memory.max 2>/dev/null || echo unknown)
+    # stays under ~100Mi, because cache is reclaimed rather than OOM-killed. memory.peak needs
+    # kernel 5.19+, which the AKS nodes (5.15) don't have, so it's reported only where present.
+    if [[ -r /sys/fs/cgroup/memory.events ]]; then
+      oom_kills=$(grep '^oom_kill ' /sys/fs/cgroup/memory.events | cut -d' ' -f2)
+      limit=$(cat /sys/fs/cgroup/memory.max 2>/dev/null || true)
       [[ "$limit" =~ ^[0-9]+$ ]] && limit="$(( limit / 1048576 ))Mi"
-      oom_kills=$(grep '^oom_kill ' /sys/fs/cgroup/memory.events 2>/dev/null | cut -d' ' -f2)
-      echo "Sidecar peak memory (incl. page cache): $(( peak / 1048576 ))Mi (limit: $limit, OOM kills: ${oom_kills:-unknown})"
+      peak=$(cat /sys/fs/cgroup/memory.peak 2>/dev/null || true)
+      [[ "$peak" =~ ^[0-9]+$ ]] && peak="$(( peak / 1048576 ))Mi" || peak="n/a"
+      echo "Sidecar memory - OOM kills: ${oom_kills:-unknown}, peak (incl. page cache): $peak, limit: ${limit:-unknown}"
     fi
     echo "Sidecar exiting."
