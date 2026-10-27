@@ -30,14 +30,9 @@ data:
     DUMP_DIR=/dumps
     PREFIX="dumps/${XTDB_NODE_ID:-unknown}/$(date +%Y-%m-%dT%H-%M-%S)"
 
-    echo "Installing inotify-tools and procps..."
-    if command -v apk &>/dev/null; then
-      apk add --no-cache inotify-tools procps >/dev/null 2>&1
-    elif command -v tdnf &>/dev/null; then
-      tdnf install -y inotify-tools procps-ng >/dev/null 2>&1
-    else
-      apt-get update -qq && apt-get install -y -qq inotify-tools procps >/dev/null 2>&1
-    fi
+    # Nothing is installed at runtime: a package install's memory grows with the distro's
+    # repo metadata, and by Oct 2026 tdnf alone outgrew this container's memory limit.
+    # Everything below is bash builtins + coreutils.
 
     # Azure workload identity login
     if [[ -n "${AZURE_FEDERATED_TOKEN_FILE:-}" ]]; then
@@ -52,41 +47,74 @@ data:
       az login --identity --username "$AZURE_CLIENT_ID" --output none
     fi
 
+    # Returns non-zero only if every attempt fails, so the caller can try again on a later sweep
     upload_file() {
-      local file=$1
-      echo "Uploading $file to $PREFIX/$file..."
-      az storage blob upload \
-        --account-name "$AZURE_STORAGE_ACCOUNT" \
-        --container-name "${AZURE_DUMPS_CONTAINER:-$AZURE_STORAGE_CONTAINER}" \
-        --name "$PREFIX/$file" \
-        --file "$DUMP_DIR/$file" \
-        --auth-mode login \
-        --overwrite
-      echo "Uploaded: $PREFIX/$file"
+      local file=$1 attempt
+      for attempt in 1 2 3; do
+        echo "Uploading $file to $PREFIX/$file (attempt $attempt)..."
+        if az storage blob upload \
+          --account-name "$AZURE_STORAGE_ACCOUNT" \
+          --container-name "${AZURE_DUMPS_CONTAINER:-$AZURE_STORAGE_CONTAINER}" \
+          --name "$PREFIX/$file" \
+          --file "$DUMP_DIR/$file" \
+          --auth-mode login \
+          --overwrite; then
+          echo "Uploaded: $PREFIX/$file"
+          return 0
+        fi
+        sleep $(( attempt * 5 ))
+      done
+      echo "Upload failed after $attempt attempts: $file"
+      return 1
     }
 
+    # Relies on shareProcessNamespace: true to see the main container's JVM
+    java_running() {
+      local c
+      for c in /proc/[0-9]*/comm; do
+        [[ "$(cat "$c" 2>/dev/null)" == java ]] && return 0
+      done
+      return 1
+    }
+
+    declare -A uploaded_size=() last_size=()
+
+    # Uploads a dump once its size has held steady for a poll interval (or unconditionally on
+    # the final sweep, once the JVM has gone). A steady size can also be a writer that's paused
+    # mid-file, so a dump that grows after its upload is uploaded again (--overwrite).
+    sweep_dumps() {
+      local f name size
+      for f in "$DUMP_DIR"/*.hprof; do
+        [[ -f "$f" ]] || continue
+        name=$(basename "$f")
+        size=$(stat -c %s "$f")
+        [[ "${uploaded_size[$name]:-}" == "$size" ]] && continue
+        if [[ "${1:-}" == final || "${last_size[$name]:-}" == "$size" ]]; then
+          upload_file "$name" && uploaded_size[$name]=$size
+        fi
+        last_size[$name]=$size
+      done
+    }
+
+    # The JVM may not be up yet - or may already have come and gone, if it failed fast.
+    # A dump or the main container's cleanup marker means it has run, so stop waiting.
+    jvm_has_run() {
+      compgen -G "$DUMP_DIR/*.hprof" >/dev/null || [[ -f "$DUMP_DIR/.cleanup-triggered" ]]
+    }
+    echo "Waiting for the JVM to start..."
+    for _ in $(seq 300); do
+      java_running || jvm_has_run && break
+      sleep 1
+    done
+
     echo "Watching $DUMP_DIR for heap dumps..."
-
-    # Start inotifywait in background so we can kill it later
-    inotifywait -m -e close_write --format '%f' "$DUMP_DIR" 2>/dev/null | while read -r file; do
-      if [[ "$file" == *.hprof ]]; then
-        upload_file "$file"
-      fi
-    done &
-    WATCH_PID=$!
-
-    # Wait for main container (java process) to exit
-    while pgrep -x java >/dev/null 2>&1; do
+    while java_running; do
+      sweep_dumps
       sleep 5
     done
 
-    echo "Main container exited, waiting 10s for any final uploads..."
-    sleep 10
-
-    # Upload any dumps that might have been missed
-    for f in "$DUMP_DIR"/*.hprof; do
-      [[ -f "$f" ]] && upload_file "$(basename "$f")"
-    done
+    echo "Main container exited, uploading any remaining dumps..."
+    sweep_dumps final
 
     # Fallback: trigger cleanup workflow if main container didn't (e.g. OOM kill)
     if [ ! -f "$DUMP_DIR/.cleanup-triggered" ] && [ -n "${GITHUB_PAT:-}" ]; then
@@ -115,5 +143,16 @@ data:
       echo "Cleanup already triggered by main container."
     fi
 
+    # Memory summary, visible in every run's logs (cgroup v2 only). OOM kills are the real signal.
+    # The peak includes page cache: uploading a 3GB dump takes it to the limit while `az` itself
+    # stays under ~100Mi, because cache is reclaimed rather than OOM-killed. memory.peak needs
+    # kernel 5.19+, which the AKS nodes (5.15) don't have, so it's reported only where present.
+    if [[ -r /sys/fs/cgroup/memory.events ]]; then
+      oom_kills=$(grep '^oom_kill ' /sys/fs/cgroup/memory.events | cut -d' ' -f2)
+      limit=$(cat /sys/fs/cgroup/memory.max 2>/dev/null || true)
+      [[ "$limit" =~ ^[0-9]+$ ]] && limit="$(( limit / 1048576 ))Mi"
+      peak=$(cat /sys/fs/cgroup/memory.peak 2>/dev/null || true)
+      [[ "$peak" =~ ^[0-9]+$ ]] && peak="$(( peak / 1048576 ))Mi" || peak="n/a"
+      echo "Sidecar memory - OOM kills: ${oom_kills:-unknown}, peak (incl. page cache): $peak, limit: ${limit:-unknown}"
+    fi
     echo "Sidecar exiting."
-    kill $WATCH_PID 2>/dev/null || true
