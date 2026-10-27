@@ -114,7 +114,7 @@ class MemoryCache @JvmOverloads internal constructor(
         while (true) {
             when (val entry = entries[pathSlice]) {
                 is Page -> entry.retainSlice()?.let { buf ->
-                    if (entry.freq < S3Fifo.MAX_FREQ) entry.freq++
+                    policy.hit(entry)
                     return buf
                 }
 
