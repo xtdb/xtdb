@@ -1,6 +1,7 @@
 package xtdb.cache
 
 import io.kotest.assertions.throwables.shouldThrow
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.test.runTest
@@ -240,6 +241,120 @@ class MemoryCacheTest {
 
             results.forEach { assertTrue(it.exceptionOrNull() is IOException, "$it") }
             assertEquals(1, fetches.get())
+        }
+    }
+
+    @Test
+    fun `a prefetched page is read without a fetch of its own`() = runTest {
+        val f = file("f", 100)
+        val fetch = CountingFetch()
+
+        cache(1000).use { cache ->
+            cache.prefetch(f, Slice(0, 100), fetch)
+            cache.prefetch(f, Slice(0, 100), fetch)
+            assertEquals(1, fetch[f])
+
+            cache.get(f, Slice(0, 100), fetch).use { assertArrayEquals(content(100), it.bytes()) }
+            assertEquals(1, fetch[f])
+        }
+    }
+
+    @Test
+    fun `a read while a prefetch is in flight waits for it rather than reading again`() = runTest {
+        val f = file("f", 100)
+        val fetches = AtomicInteger()
+        val gate = CompletableDeferred<Unit>()
+
+        cache(1000).use { cache ->
+            val prefetch = async { cache.prefetch(f, null) { fetches.incrementAndGet(); gate.await(); it to null } }
+            yield()
+
+            val read = async { cache.get(f, null) { fetches.incrementAndGet(); it to null }.use { it.bytes() } }
+            yield()
+            gate.complete(Unit)
+
+            prefetch.await()
+            assertArrayEquals(content(100), read.await())
+            assertEquals(1, fetches.get())
+        }
+    }
+
+    @Test
+    fun `a prefetched page read once is evicted like any page read once`() = runTest {
+        val f = file("f", 100)
+        val others = (0 until 3).map { file("o$it", 100, it + 1) }
+        val fetch = CountingFetch()
+
+        cache(300).use { cache ->
+            cache.prefetch(f, null, fetch)
+            cache.get(f, null, fetch).close()
+
+            for (o in others) cache.get(o, null, fetch).close()
+
+            cache.get(f, null, fetch).close()
+            assertEquals(2, fetch[f], "read once, so it was the first evicted")
+        }
+    }
+
+    @Test
+    fun `prefetches read a few pages at a time, and a read doesn't wait for them`() = runTest {
+        val pages = (0 until 3 * MemoryCache.PREFETCH_PARALLELISM).map { file("p$it", 100, it) }
+        val g = file("g", 100)
+        val fetches = AtomicInteger()
+        val gate = CompletableDeferred<Unit>()
+
+        cache(10_000).use { cache ->
+            val prefetches = pages.map { p -> async { cache.prefetch(p, null) { fetches.incrementAndGet(); gate.await(); it to null } } }
+            yield()
+            assertEquals(MemoryCache.PREFETCH_PARALLELISM, fetches.get())
+
+            cache.get(g, null) { it to null }.use { assertArrayEquals(content(100), it.bytes()) }
+
+            gate.complete(Unit)
+            prefetches.awaitAll()
+            assertEquals(pages.size, fetches.get())
+        }
+    }
+
+    @Test
+    fun `a read waiting on a prefetch that fails reads the page itself`() = runTest {
+        val f = file("f", 100)
+        val fetches = AtomicInteger()
+        val gate = CompletableDeferred<Unit>()
+
+        cache(1000).use { cache ->
+            val prefetch = async {
+                runCatching { cache.prefetch(f, null) { fetches.incrementAndGet(); gate.await(); throw IOException("boom") } }
+            }
+            yield()
+
+            val read = async { cache.get(f, null) { fetches.incrementAndGet(); it to null }.use { it.bytes() } }
+            yield()
+            gate.complete(Unit)
+
+            assertTrue(prefetch.await().isFailure)
+            assertArrayEquals(content(100), read.await())
+            assertEquals(2, fetches.get())
+        }
+    }
+
+    @Test
+    fun `a prefetched page evicted before it's read is read again as if for the first time`() = runTest {
+        val f = file("f", 100)
+        val others = (0 until 6).map { file("o$it", 100, it + 1) }
+        val fetch = CountingFetch()
+
+        cache(300).use { cache ->
+            cache.prefetch(f, null, fetch)
+            for (o in others.take(3)) cache.get(o, null, fetch).close()
+
+            cache.get(f, null, fetch).close()
+            assertEquals(2, fetch[f])
+
+            for (o in others.drop(3)) cache.get(o, null, fetch).close()
+
+            cache.get(f, null, fetch).close()
+            assertEquals(3, fetch[f], "read once since it was evicted, so evicted again")
         }
     }
 

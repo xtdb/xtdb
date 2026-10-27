@@ -11,6 +11,8 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import org.apache.arrow.memory.ArrowBuf
@@ -31,6 +33,7 @@ import java.nio.file.Path
 import java.nio.file.StandardOpenOption.READ
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.io.path.fileSize
 
 /**
@@ -69,15 +72,22 @@ class MemoryCache @JvmOverloads internal constructor(
 
     private sealed interface Entry
 
-    private class Loading : Entry {
+    private class Loading(val prefetched: Boolean) : Entry {
         val done = CompletableDeferred<Unit>()
     }
 
-    private class Page(val pathSlice: PathSlice, val frame: ArrowBuf, val length: Long) : Entry, S3Fifo.Entry<PathSlice> {
+    private class Page(val pathSlice: PathSlice, val frame: ArrowBuf, val length: Long, unread: Boolean) :
+        Entry, S3Fifo.Entry<PathSlice> {
         override val key get() = pathSlice
 
         @Volatile
         override var freq = 0
+
+        private val unread = AtomicBoolean(unread)
+
+        override val isUnread get() = unread.get()
+
+        fun takeUnread() = unread.get() && unread.compareAndSet(true, false)
 
         override val bytes get() = frame.capacity()
 
@@ -99,6 +109,8 @@ class MemoryCache @JvmOverloads internal constructor(
 
     private val entries = ConcurrentHashMap<PathSlice, Entry>()
 
+    private val prefetchPermits = Semaphore(PREFETCH_PARALLELISM)
+
     private val bounceArena = Arena.ofShared()
     private val bounces = ConcurrentLinkedQueue<MemorySegment>()
 
@@ -114,7 +126,7 @@ class MemoryCache @JvmOverloads internal constructor(
         while (true) {
             when (val entry = entries[pathSlice]) {
                 is Page -> entry.retainSlice()?.let { buf ->
-                    policy.hit(entry)
+                    if (!entry.takeUnread()) policy.hit(entry)
                     return buf
                 }
 
@@ -126,10 +138,28 @@ class MemoryCache @JvmOverloads internal constructor(
                 }
 
                 null -> {
-                    val loading = Loading()
+                    val loading = Loading(prefetched = false)
                     if (entries.putIfAbsent(pathSlice, loading) == null) return load(pathSlice, loading, fetch)
                 }
             }
+        }
+    }
+
+    /**
+     * Reads a page into the cache ahead of a [get] for it, unless it's resident or being read already.
+     *
+     * Returns once the read has completed; a failure propagates, leaving nothing behind, and a [get] waiting on the read
+     * makes its own.
+     * The first [get] of a prefetched page counts as its first read.
+     */
+    suspend fun prefetch(key: Path, slice: Slice? = null, fetch: Fetch) {
+        val pathSlice = PathSlice(key, slice)
+        if (entries.containsKey(pathSlice)) return
+
+        // a prefetch's frame can't be evicted until its read completes, so few are allocated at a time
+        prefetchPermits.withPermit {
+            val loading = Loading(prefetched = true)
+            if (entries.putIfAbsent(pathSlice, loading) == null) load(pathSlice, loading, fetch).close()
         }
     }
 
@@ -137,7 +167,9 @@ class MemoryCache @JvmOverloads internal constructor(
         try {
             val (localPath, onRead) = fetch(pathSlice.path)
 
-            val page = onRead.closeOnCatch { readPage(pathSlice, localPath, pathSlice.slice ?: Slice.from(localPath)) }
+            val page = onRead.closeOnCatch {
+                readPage(pathSlice, localPath, pathSlice.slice ?: Slice.from(localPath), unread = loading.prefetched)
+            }
             try {
                 onRead?.close()
             } catch (t: Throwable) {
@@ -154,11 +186,11 @@ class MemoryCache @JvmOverloads internal constructor(
             buf
         } catch (t: Throwable) {
             entries.remove(pathSlice, loading)
-            loading.done.completeExceptionally(t)
+            if (loading.prefetched) loading.done.complete(Unit) else loading.done.completeExceptionally(t)
             throw t
         }
 
-    private suspend fun readPage(pathSlice: PathSlice, path: Path, slice: Slice): Page =
+    private suspend fun readPage(pathSlice: PathSlice, path: Path, slice: Slice, unread: Boolean): Page =
         // allocated outside `withContext`, which discards the block's result if we're cancelled meanwhile
         allocate(slice.length).closeOnCatch { frame ->
             val dest = MemorySegment.ofAddress(frame.memoryAddress()).reinterpret(slice.length)
@@ -173,7 +205,7 @@ class MemoryCache @JvmOverloads internal constructor(
                 }
             }
 
-            Page(pathSlice, frame, slice.length)
+            Page(pathSlice, frame, slice.length, unread)
         }
 
     private fun FileChannel.readFully(path: Path, dest: MemorySegment, position: Long) {
@@ -325,6 +357,7 @@ class MemoryCache @JvmOverloads internal constructor(
 
     companion object {
         private const val IO_PARALLELISM = 8
+        internal const val PREFETCH_PARALLELISM = IO_PARALLELISM / 2
         private const val BOUNCE_BYTES = 1L shl 20
         private const val MAX_BUFFERED_READ_BYTES = 1L shl 30
 

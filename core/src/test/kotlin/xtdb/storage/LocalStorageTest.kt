@@ -1,5 +1,7 @@
 package xtdb.storage
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
+import kotlinx.coroutines.runBlocking
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
 import org.junit.jupiter.api.AfterEach
@@ -9,6 +11,9 @@ import org.junit.jupiter.api.io.TempDir
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import xtdb.api.storage.Storage
+import xtdb.arrow.Relation
+import xtdb.arrow.VectorType.Companion.I32
+import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.cache.MemoryCache
 import xtdb.util.asPath
 import java.nio.ByteBuffer
@@ -89,6 +94,32 @@ class LocalStorageTest : PartitionedStorageTest() {
             partitionedPath.resolve(Storage.storageRoot(Storage.VERSION, 0))
                 .resolve("blocks/b00.binpb").exists()
         )
+    }
+
+    @Test
+    fun `a prefetched record batch is read from disk once`(@TempDir root: Path) {
+        val meterRegistry = SimpleMeterRegistry()
+        val key = "aw".asPath
+
+        Storage.local(root).open(allocator, memoryCache, null, "xtdb", meterRegistry = meterRegistry).use { bp ->
+            Relation(allocator, "a" ofType I32).use { rel ->
+                bp.openArrowWriter(key, rel).use { writer ->
+                    for (i in 0 until 10) {
+                        rel["a"].writeInt(i)
+                        rel.endRow()
+                    }
+                    writer.writePage()
+                    writer.endSync()
+                }
+            }
+
+            runBlocking {
+                bp.prefetchRecordBatch(key, 0)
+                bp.getRecordBatch(key, 0).close()
+            }
+
+            assertEquals(1.0, meterRegistry.counter("memory-cache-misses").count())
+        }
     }
 
     @Test
