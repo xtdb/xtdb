@@ -38,6 +38,7 @@ import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption.*
+import java.util.UUID
 import kotlin.io.path.deleteIfExists
 import kotlin.io.path.fileSize
 
@@ -68,6 +69,10 @@ internal class RemoteBufferPool(
     // databases (and, at N>1, multiple partitions of the same database)
     // the caches themselves have no knowledge of this
     private val cacheRootPath = dbName.asPath.resolve(partition.toString())
+
+    // pages stay resident in the memory cache after this pool closes, so its keys there are this pool's alone -
+    // a database later attached under the same name mustn't be served them
+    private val memoryCacheRootPath = cacheRootPath.resolve(UUID.randomUUID().toString())
 
     companion object {
         internal var minMultipartPartSize = 5 * 1024 * 1024
@@ -129,9 +134,9 @@ internal class RemoteBufferPool(
         }
 
     override fun getByteArray(key: Path): ByteArray = runBlocking {
-        memoryCache.get(cacheRootPath.resolve(key)) { path ->
+        memoryCache.get(memoryCacheRootPath.resolve(key)) {
             memCacheMisses?.increment()
-            diskCache.get(path) { k, tmpFile ->
+            diskCache.get(cacheRootPath.resolve(key)) { k, tmpFile ->
                 diskCacheMisses?.increment()
                 getObject(cacheRootPath.relativize(k), tmpFile)
             }.thenApply { entry -> Pair(entry.path, entry) }.await()
@@ -155,11 +160,11 @@ internal class RemoteBufferPool(
             ?: throw IndexOutOfBoundsException("Record batch index out of bounds of arrow file")
 
         return memoryCache.get(
-            cacheRootPath.resolve(key),
+            memoryCacheRootPath.resolve(key),
             MemoryCache.Slice(arrowBlock.offset, arrowBlock.metadataLength + arrowBlock.bodyLength)
-        ) { path ->
+        ) {
             memCacheMisses?.increment()
-            diskCache.get(path) { k, tmpFile ->
+            diskCache.get(cacheRootPath.resolve(key)) { k, tmpFile ->
                 diskCacheMisses?.increment()
                 getObject(cacheRootPath.relativize(k), tmpFile)
             }.thenApply { entry -> Pair(entry.path, entry) }.await()

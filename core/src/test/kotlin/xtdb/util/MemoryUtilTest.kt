@@ -1,5 +1,7 @@
 package xtdb.util
 
+import org.apache.arrow.memory.AllocationListener
+import org.apache.arrow.memory.BufferAllocator
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 
@@ -25,5 +27,21 @@ class MemoryUtilTest {
                 assertEquals(640L * 1024, al.allocatedMemory)
             }
         }
+    }
+
+    @Test
+    fun `the root allocator's own listener still hears about child allocators`() {
+        val children = mutableListOf<String>()
+        val listener = object : AllocationListener {
+            override fun onChildAdded(parentAllocator: BufferAllocator, childAllocator: BufferAllocator) {
+                children += childAllocator.name
+            }
+        }
+
+        openRootAllocator(listener = listener).use { al ->
+            al.newChildAllocator("child", 0, Long.MAX_VALUE).close()
+        }
+
+        assertEquals(listOf("child"), children)
     }
 }

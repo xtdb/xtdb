@@ -27,6 +27,7 @@ import java.nio.file.Files.newByteChannel
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption.*
+import java.util.UUID
 import kotlin.io.path.*
 
 internal class LocalStorage(
@@ -47,8 +48,10 @@ internal class LocalStorage(
 
     // we scope the cache keys by dbName/partition as the cache is shared between multiple
     // databases (and, at N>1, multiple partitions of the same database)
-    // the cache itself has no knowledge of this
-    private val cacheRootPath = dbName.asPath.resolve(partition.toString())
+    // the cache itself has no knowledge of this.
+    // pages stay resident after this pool closes, so the keys are this pool's alone - a database later attached under the
+    // same name mustn't be served them
+    private val cacheRootPath = dbName.asPath.resolve(partition.toString()).resolve(UUID.randomUUID().toString())
 
     companion object {
         private fun Path.createTempUploadFile(): Path {
