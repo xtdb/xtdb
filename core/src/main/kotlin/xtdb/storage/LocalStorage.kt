@@ -5,6 +5,7 @@ import io.micrometer.core.instrument.Counter
 import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.coroutines.runBlocking
 import org.apache.arrow.memory.BufferAllocator
+import org.apache.arrow.vector.ipc.message.ArrowBlock
 import org.apache.arrow.vector.ipc.message.ArrowFooter
 import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
 import xtdb.ArrowWriter
@@ -83,31 +84,36 @@ internal class LocalStorage(
             path.openReadableChannel().readArrowFooter()
         }
 
-    override suspend fun getRecordBatch(key: Path, idx: Int): ArrowRecordBatch {
-        recordBatchRequests?.increment()
+    private fun arrowBlock(key: Path, idx: Int): ArrowBlock {
         val path = rootPath.resolve(key).orThrowIfMissing(key)
 
         val footer = arrowFooterCache.get(key) { path.openReadableChannel().readArrowFooter() }
 
-        val arrowBlock = footer.recordBatches.getOrNull(idx)
+        return footer.recordBatches.getOrNull(idx)
             ?: throw IndexOutOfBoundsException("Record batch index out of bounds of arrow file")
+    }
 
-        return memoryCache.get(
-            cacheRootPath.resolve(key),
-            MemoryCache.Slice(arrowBlock.offset, arrowBlock.metadataLength + arrowBlock.bodyLength)
-        ) { path ->
-            memCacheMisses?.increment()
-            val bufferCachePath =
-                rootPath.resolve(cacheRootPath.relativize(path))
-                    .takeIf { it.exists() } ?: throw objectMissingException(path)
+    private val ArrowBlock.slice get() = MemoryCache.Slice(offset, metadataLength + bodyLength)
 
-            Pair(bufferCachePath, null)
-        }.use { arrowBuf ->
+    private val fetchRecordBatch = MemoryCache.Fetch { path ->
+        memCacheMisses?.increment()
+        val bufferCachePath =
+            rootPath.resolve(cacheRootPath.relativize(path))
+                .takeIf { it.exists() } ?: throw objectMissingException(path)
+
+        Pair(bufferCachePath, null)
+    }
+
+    override suspend fun getRecordBatch(key: Path, idx: Int): ArrowRecordBatch {
+        recordBatchRequests?.increment()
+        val arrowBlock = arrowBlock(key, idx)
+
+        return memoryCache.get(cacheRootPath.resolve(key), arrowBlock.slice, fetchRecordBatch).use { arrowBuf ->
             arrowBuf.arrowBufToRecordBatch(
                 0,
                 arrowBlock.metadataLength,
                 arrowBlock.bodyLength,
-                "Failed opening record batch '$path' at block-idx $idx"
+                "Failed opening record batch '${rootPath.resolve(key)}' at block-idx $idx"
             )
         }
     }
