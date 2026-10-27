@@ -83,8 +83,10 @@ xtdbConfig:
     sizeLimit: "150Gi"
 
 dumpUpload:
+  # Pinned: a moving tag can change the sidecar's memory use between runs with no change here
+  image: "mcr.microsoft.com/azure-cli:2.91.0"
   # Sidecar container resources for heap dump upload
-  # azure-cli image + tdnf install needs ~512Mi during package install
+  # The sidecar installs nothing; `az` peaks around 150Mi
   resources:
     requests:
       memory: "256Mi"
