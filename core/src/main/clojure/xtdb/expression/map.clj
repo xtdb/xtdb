@@ -37,18 +37,21 @@
 (def ^:private pg-class-schema-hack
   {"pg_catalog/pg_class" #{}})
 
-(defn ->equi-comparator [^VectorReader left-col, ^VectorReader right-col, params
-                         {:keys [nil-keys-equal? param-types]}]
+(defn ->equi-comparator-fn [left-type right-type params {:keys [nil-keys-equal? param-types]}]
   (let [f (build-comparator {:op :call, :f (if nil-keys-equal? :null-eq :==)
                              :args [{:op :variable, :variable left-vec, :rel left-rel, :idx left-idx}
                                     {:op :variable, :variable right-vec, :rel right-rel, :idx right-idx}]}
-                            {:var-types {left-vec (.getType left-col)
-                                         right-vec (.getType right-col)}
+                            {:var-types {left-vec left-type
+                                         right-vec right-type}
                              :param-types param-types})]
-    (f (vr/rel-reader [(.withName left-col (str left-vec))])
-       (vr/rel-reader [(.withName right-col (str right-vec))])
-       pg-class-schema-hack
-       params)))
+    (fn [^VectorReader left-col, ^VectorReader right-col]
+      (f (vr/rel-reader [(.withName left-col (str left-vec))])
+         (vr/rel-reader [(.withName right-col (str right-vec))])
+         pg-class-schema-hack
+         params))))
+
+(defn ->equi-comparator [^VectorReader left-col, ^VectorReader right-col, params opts]
+  ((->equi-comparator-fn (.getType left-col) (.getType right-col) params opts) left-col right-col))
 
 (defn ->theta-comparator [build-rel probe-rel theta-expr params {:keys [build-vec-types probe-vec-types param-types]}]
   (let [var-types (merge build-vec-types probe-vec-types)
