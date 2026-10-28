@@ -83,7 +83,7 @@ class NodeBase(
                     (config.logClusters + config.remotes)
                         .mapValues { (_, factory) -> open { factory.open() } }
 
-                val compactor = open { compactorFactory.create(meterReg, config.compactor.threads) }
+                val compactor = open { compactorFactory.create(meterReg, config.compactor) }
 
                 val infoSchema = infoSchemaFactory.invoke(al, meterReg, config.authn)
                 val scanEmitter = scanEmitterFactory.invoke(infoSchema)

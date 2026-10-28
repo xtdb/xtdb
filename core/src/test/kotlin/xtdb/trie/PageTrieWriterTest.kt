@@ -4,12 +4,17 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertArrayEquals
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import xtdb.arrow.FixedSizeBinaryVector
+import xtdb.arrow.Vector
 import xtdb.arrow.VectorReader
+import xtdb.arrow.VectorType.Companion.I64
 import xtdb.trie.PageTrieWriter.Companion.iidPartitions
 import xtdb.trie.PageTrieWriter.Companion.partitionSlices
+import xtdb.trie.PageTrieWriter.Companion.recencyParts
+import xtdb.trie.PageTrieWriter.Companion.recencyTurn
 import java.nio.ByteBuffer
 import java.util.*
 
@@ -106,5 +111,44 @@ internal class PageTrieWriterTest {
                 "nothing in first or last partitions"
             )
         }
+    }
+
+    @Test
+    fun `recency parts keep each part's rows in selection order, with the range they actually hold`() {
+        Vector.fromList(allocator, "_recency", I64, listOf(150L, 100L, 199L, 160L, 101L)).use { recencyReader ->
+            val parts = IntArray(5) { it }.recencyParts(recencyReader, RecencyRange(100, 199), 4)
+
+            assertEquals(
+                listOf(
+                    Triple(0, RecencyRange(100, 101), listOf(1, 4)),
+                    Triple(2, RecencyRange(150, 160), listOf(0, 3)),
+                    Triple(3, RecencyRange(199, 199), listOf(2)),
+                ),
+                parts.map { Triple(it.idx, it.range, it.sel.toList()) },
+                "the second part is empty"
+            )
+        }
+    }
+
+    @Test
+    fun `below the pinned IID levels, IID and recency alternate, IID first`() {
+        fun schedule(pinnedDepth: Int): String {
+            var depth = 0
+            var levelsUsed = 0
+
+            return buildString {
+                repeat(6) {
+                    if (recencyTurn(depth, levelsUsed, pinnedDepth)) {
+                        append('R'); levelsUsed++
+                    } else {
+                        append('I'); depth++
+                    }
+                }
+            }
+        }
+
+        assertEquals("IRIRIR", schedule(0))
+        assertEquals("IRIRIR", schedule(1))
+        assertEquals("IIRIRI", schedule(2))
     }
 }

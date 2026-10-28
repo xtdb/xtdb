@@ -86,4 +86,29 @@ class MergePlannerTest {
                 )
         }
     }
+
+    @Test
+    fun `each page is released after the last task that includes it`() = runTest {
+        val releaseLog = mutableListOf<TestSegment.Page>()
+        val t1 = seg("t1", b(b(null, l(0), null, l(1)), l(2), null, l(3)), releaseLog)
+        val log = seg("log", l(0), releaseLog)
+
+        MergePlanner.plan(listOf(t1, log), null)
+            .map { task ->
+                releaseLog.clear()
+                task.release()
+                ByteArrayList.from(*task.path) to releaseLog.map { RenderedMergeTask.Page(it.name, it.pageIdx) }
+            }
+            .shouldBe(
+                listOf(
+                    ByteArrayList.from(0, 0) to emptyList(),
+                    ByteArrayList.from(0, 1) to listOf("t1" page 0),
+                    ByteArrayList.from(0, 2) to emptyList(),
+                    ByteArrayList.from(0, 3) to listOf("t1" page 1),
+                    ByteArrayList.from(1) to listOf("t1" page 2),
+                    ByteArrayList.from(2) to emptyList(),
+                    ByteArrayList.from(3) to listOf("t1" page 3, "log" page 0),
+                )
+            )
+    }
 }

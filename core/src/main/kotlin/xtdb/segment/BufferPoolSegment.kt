@@ -15,9 +15,10 @@ import xtdb.trie.Trie
 import xtdb.trie.RecencyMicros
 import xtdb.trie.TrieKey
 import xtdb.time.LocalDateTimeUtil.asMicros
+import xtdb.util.closeOnCatch
 
 class BufferPoolSegment(
-    al: BufferAllocator, private val bp: BufferPool, private val mm: PageMetadata.Factory,
+    private val al: BufferAllocator, private val bp: BufferPool, private val mm: PageMetadata.Factory,
     val slug: TableSlug, val trieKey: TrieKey, val metadataPredicate: MetadataPredicate? = null,
 ) : Segment<ArrowHashTrie.Leaf> {
     val dataFilePath = slug.dataFilePath(trieKey)
@@ -29,10 +30,28 @@ class BufferPoolSegment(
 
     override val sameSystemTimeResolved = parsedTrieKey.level != 0L
 
-    override val schema: Schema = bp.getFooter(dataFilePath).schema
+    private val footer = bp.getFooter(dataFilePath)
 
-    private val dataRel = Relation(al, schema)
-    private var currentDataPageIndex: Int = -1
+    override val schema: Schema = footer.schema
+
+    private inner class DataPage(private val dataPageIndex: Int) : Segment.Page<ArrowHashTrie.Leaf> {
+        private var rel: Relation? = null
+
+        override val sameSystemTimeResolved get() = this@BufferPoolSegment.sameSystemTimeResolved
+
+        override suspend fun loadDataPage(al: BufferAllocator): RelationReader =
+            rel ?: Relation(this@BufferPoolSegment.al, schema).closeOnCatch { rel ->
+                bp.getRecordBatch(dataFilePath, dataPageIndex).use { rb -> rel.load(rb) }
+                rel
+            }.also { rel = it }
+
+        override fun release() {
+            rel?.close()
+            rel = null
+        }
+    }
+
+    private val dataPages = List(footer.recordBatches.size) { DataPage(it) }
 
     inner class Metadata(private val pageMetadata: PageMetadata) : Segment.Metadata<ArrowHashTrie.Leaf> {
 
@@ -47,9 +66,9 @@ class BufferPoolSegment(
 
             return pages[dataPageIndex]
                 ?: pageMeta(
-                    this@BufferPoolSegment, this, leaf,
+                    dataPages[dataPageIndex], this, leaf,
                     pageMetadata.temporalMetadata(dataPageIndex),
-                    recency
+                    minOf(recency, leaf.recencyBound, pageMetadata.maxRecency(dataPageIndex) ?: Long.MAX_VALUE)
                 ).also { pages[dataPageIndex] = it }
         }
 
@@ -60,14 +79,7 @@ class BufferPoolSegment(
 
     override suspend fun openMetadata(): Metadata = Metadata(mm.openPageMetadata(slug.metaFilePath(trieKey)))
 
-    override suspend fun loadDataPage(al: BufferAllocator, leaf: ArrowHashTrie.Leaf): RelationReader =
-        if (currentDataPageIndex == leaf.dataPageIndex) dataRel
-        else {
-            currentDataPageIndex = leaf.dataPageIndex
-            bp.getRecordBatch(dataFilePath, leaf.dataPageIndex).use { rb -> dataRel.apply { load(rb) } }
-        }
-
     override fun close() {
-        dataRel.close()
+        dataPages.forEach { it.release() }
     }
 }
