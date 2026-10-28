@@ -1,6 +1,6 @@
 ---
 name: xtdb-github
-description: XTDB-specific conventions for issues, PRs and the 2.x project board — what goes on the board, sub-issue parenting, the two tests a milestone has to pass, what to read and which edits to make when picking up a card, the cached project and field IDs, and driving all of it through chalk. Read this before opening an issue or PR, adding a card, setting a milestone or label, or picking up a card in this repo — invoke it whenever you pick a card up, alongside `chalk:pick-up`, which takes its tracker edits from here.
+description: XTDB-specific conventions for issues, PRs, the 2.x project board and the client project board — what goes on each board, sub-issue parenting, the two tests a milestone has to pass, what to read and which edits to make when picking up a card, the cached project and field IDs, and driving all of it through chalk. Read this before opening an issue or PR, adding a card, setting a milestone or label, or picking up a card in this repo — invoke it whenever you pick a card up, alongside `chalk:pick-up`, which takes its tracker edits from here.
 ---
 
 # GitHub issues, PRs and the project board in XTDB
@@ -22,8 +22,8 @@ gh api graphql -f query='query { repository(owner:"xtdb",name:"xtdb"){
     nodes{ isArchived project{ number title } } } } } }'
 ```
 
-Not all of those projects are public, so this file names none of them and you MUST NOT record their names, numbers or contents here.
-You MUST treat a hit from another project as "already tracked, leave it alone".
+Not all of those projects are public, so beyond the [client project board](#the-client-project-board) this file names none of them, and you MUST NOT record their names, numbers or contents here.
+You MUST treat a hit from any other project as "already tracked, leave it alone".
 
 ## What goes where
 
@@ -43,6 +43,61 @@ Two board fields, once the card exists:
 - **You SHOULD set `Stream` where the right category is obvious, and MUST NOT invent one.**
   Otherwise ask, or leave it blank and let a human classify it.
   A sub-issue does NOT inherit its parent's stream — the parent's category says nothing about a child whose subject is something else — so "obvious from the parent" is not obvious, and where that's the only candidate you'd have, ask.
+
+## The client project board
+
+Some work is for a client, and their issues also go on the [client project board](https://github.com/orgs/xtdb/projects/42), which tracks what has reached their deployments.
+The board's title is the client's name.
+You MUST NOT write that name here, nor in any issue, PR or commit message; where you need to refer to the board, call it the client project board.
+
+The recipes under [Using chalk](#using-chalk) are written against the 2.x board.
+On this one, you MUST swap in project `42` and its IDs from [Cached IDs](#cached-ids), and with chalk in use its moves go through the `github` agent like any other board edit.
+
+- **A card goes on it where the work is for the client** — they raised it, they hit it in their deployment, or they're waiting on it.
+  It's on top of the 2.x board, not instead of it, and what goes on as the card is the same: the issue, or the standalone PR.
+  Where you can't tell whether the work is theirs, you MUST ask; a parent on the client board makes a sub-issue a candidate, not a given.
+- **`Status` tracks the client's deployments, not our development.**
+  - While the work is open, the card's status follows its 2.x `Status`: `💭 Backlog` there is `Backlog` here, and anything from `🔖 Selected` onwards is `Selected`.
+    When you change the 2.x `Status`, you MUST make the matching move here.
+  - When the card closes on `main`, you MUST move it to `Awaiting test-env deploy`.
+  - You can't see the client's deployments, so a card moves past that only when you're told what they've deployed, per [A deployment moves every card it contains](#a-deployment-moves-every-card-it-contains).
+
+### A deployment moves every card it contains
+
+When you're told the client has deployed a version to an environment — "they've deployed nightly-20261028 to the test env" — you MUST move every card that version contains, and no others:
+
+1. **Resolve the version to a commit.**
+   A release is its git tag, e.g. `v2.2.0`.
+   A nightly is a Docker image tag with no git tag behind it, so read the commit off the image:
+
+   ```bash
+   docker buildx imagetools inspect ghcr.io/xtdb/xtdb:nightly-YYYYMMDD --format '{{json .Image}}' \
+     | jq -r '(.["linux/amd64"] // .).config.Labels["org.opencontainers.image.revision"]'
+   ```
+
+2. **Take the candidates from the board.**
+   For the test environment, they're the cards in `Awaiting test-env deploy`; for prod, the cards in either `Awaiting` column.
+
+3. **Find the commit that closed each candidate.**
+   For a PR that's its merge commit, and for an issue, the closer on its last `ClosedEvent`:
+
+   ```bash
+   gh api graphql -f query='query($n:Int!){repository(owner:"xtdb",name:"xtdb"){issueOrPullRequest(number:$n){
+     ... on Issue{timelineItems(itemTypes:CLOSED_EVENT,last:1){nodes{... on ClosedEvent{closer{
+       ... on Commit{oid} ... on PullRequest{mergeCommit{oid}}}}}}}
+     ... on PullRequest{mergeCommit{oid}}}}}' -F n=N --jq '[.. | .oid? // empty] | first // "none"'
+   ```
+
+   An issue closed by hand has no closer, so you MUST ask about that card rather than guess.
+
+4. **Keep the candidates whose closer the version contains.**
+   `gh api repos/xtdb/xtdb/compare/<closer>...<version-commit> --jq .status` is `ahead` or `identical` when it does.
+   `behind` means the fix landed after the version, so the card stays put.
+   `diverged` means the closer isn't on `main`, so you MUST ask about that card.
+
+5. **Move them.**
+   A test-environment deploy moves each to `Awaiting prod deploy`.
+   A prod deploy archives each off the board, with `item-archive` and never `item-delete`, per [Using chalk](#using-chalk).
 
 ## Sub-issues
 
@@ -157,6 +212,7 @@ Two edits, and they're the whole of it:
 - **Set board `Status` to `🏗 In progress`.**
   `gh project item-edit --id <item-id> --project-id PVT_kwDOBNKmUs4AJUwS --field-id PVTSSF_lADOBNKmUs4AJUwSzgFuIbk --single-select-option-id 1ef0eeb9`
   Get `<item-id>` from `gh project item-list 13 --owner xtdb --format json`, matching on the issue number — it's the *project item's* id, not the issue's.
+  Where the card is also on the [client project board](#the-client-project-board), this is the move that takes it to `Selected` there too.
 
 The board is where everybody else sees who is on what, and for anyone outside your session it's the only place they can see it.
 An unassigned card sitting in `🔖 Selected` while somebody is halfway through the work is how two people start the same thing.
@@ -165,7 +221,7 @@ The chalk skills do both of these for you — see [Using chalk](#using-chalk).
 
 ## Cached IDs
 
-The 2.x board's IDs are stable — cached here to avoid re-fetching each session.
+The boards' IDs are stable — cached here to avoid re-fetching each session.
 The `2-NEXT` milestone number is *not* cached because it changes on release (see the `gh api` lookup above).
 
 - Project (number): `13`, owner `xtdb`
@@ -183,6 +239,16 @@ The `2-NEXT` milestone number is *not* cached because it changes on release (see
   - `Multi-DB`: `549cec84`
   - `Authn/Authz`: `c4ecefe6`
   - `CDC / IVM`: `83edd538`
+
+The client project board's IDs:
+
+- Project (number): `42`, owner `xtdb`
+- Project (node ID): `PVT_kwDOBNKmUs4BPBHB`
+- `Status` field ID: `PVTSSF_lADOBNKmUs4BPBHBzg9jM28`
+  - `Backlog`: `fe1476f9`
+  - `Selected`: `17322c07`
+  - `Awaiting test-env deploy`: `10fe088c`
+  - `Awaiting prod deploy`: `62df88c7`
 
 Issue types (org-level, set on the issue itself rather than the project board):
 
