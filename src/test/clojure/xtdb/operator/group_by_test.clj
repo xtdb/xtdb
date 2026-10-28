@@ -526,6 +526,15 @@
                                       {:with-types? true})
                          (update :res set))))))
 
+(t/deftest test-count-distinct-across-pages
+  (t/is (= #{{:k :a, :n 2} {:k :b, :n 1} {:k :c, :n 1}}
+           (set (tu/query-ra '[:group-by {:columns [k {n (count-distinct v)}]}
+                               [::tu/pages
+                                [[{:k :a, :v 1} {:k :b, :v 1}]
+                                 [{:k :c, :v 2} {:k :a, :v 1} {:k :a, :v 2}]
+                                 [{:k :b, :v 1} {:k :c, :v 2} {:k :c, :v nil}]]]])))
+        "a group's distinct values span pages, and a group first seen on a later page counts from there"))
+
 (t/deftest test-group-by-with-nils-coerce-to-boolean-npe-regress
   (t/is (= {:res #{{:a 42} {}}
             :types '{a #xt/type [:? :i64]}}
