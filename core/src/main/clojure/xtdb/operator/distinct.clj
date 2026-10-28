@@ -4,7 +4,7 @@
             [xtdb.logical-plan :as lp]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr])
-  (:import (java.util Map)
+  (:import (java.util HashMap Map)
            (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator)
            (xtdb.api ICursor)
@@ -63,12 +63,19 @@
     (DistinctRelationMap. allocator ^Map vec-types
                           (map str build-key-col-names)
                           (boolean store-full-build-rel?)
-                          (reify DistinctRelationMap$ComparatorFactory
-                            (buildEqui [_ build-col in-col]
-                              (emap/->equi-comparator build-col in-col
-                                                      args
-                                                      {:nil-keys-equal? nil-keys-equal?
-                                                       :param-types param-types})))
+                          (let [comparator-fns (HashMap.)]
+                            (reify DistinctRelationMap$ComparatorFactory
+                              (buildEqui [_ build-col in-col]
+                                (let [types [(.getType build-col) (.getType in-col)]
+                                      comparator-fn (or (.get comparator-fns types)
+                                                        (let [[build-type in-type] types
+                                                              comparator-fn (emap/->equi-comparator-fn build-type in-type
+                                                                                                       args
+                                                                                                       {:nil-keys-equal? nil-keys-equal?
+                                                                                                        :param-types param-types})]
+                                                          (.put comparator-fns types comparator-fn)
+                                                          comparator-fn))]
+                                  (comparator-fn build-col in-col)))))
                           64 4)))
 
 (defmethod lp/emit-expr :distinct [{:keys [_opts relation]} args]
