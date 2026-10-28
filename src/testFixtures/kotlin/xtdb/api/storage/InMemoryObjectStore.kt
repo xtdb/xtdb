@@ -9,6 +9,7 @@ import java.nio.file.StandardOpenOption.CREATE
 import java.nio.file.StandardOpenOption.TRUNCATE_EXISTING
 import java.nio.file.StandardOpenOption.WRITE
 import java.util.NavigableMap
+import java.util.UUID
 import java.util.concurrent.ConcurrentSkipListMap
 
 /**
@@ -23,6 +24,8 @@ import java.util.concurrent.ConcurrentSkipListMap
 class InMemoryObjectStore(
     private val objects: NavigableMap<Path, ByteBuffer> = ConcurrentSkipListMap()
 ) : ObjectStore {
+
+    override val location = "memory://${UUID.randomUUID()}"
 
     override suspend fun getObject(k: Path): ByteBuffer = (objects[k] ?: throwMissingKey(k)).slice()
 
