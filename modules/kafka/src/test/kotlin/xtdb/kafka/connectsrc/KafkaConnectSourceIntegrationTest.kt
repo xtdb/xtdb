@@ -27,6 +27,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNotSame
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assertions.fail
 import org.junit.jupiter.api.BeforeAll
@@ -54,6 +55,8 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
+import xtdb.kafka.connectsrc.proto.KafkaConnectSourceToken
+import xtdb.kafka.connectsrc.proto.kafkaConnectSourceToken
 import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.time.Duration
@@ -141,7 +144,7 @@ class KafkaConnectSourceIntegrationTest {
         }
     }
 
-    private class RecordingIndexer(val partition: Int) : RecordIndexer {
+    private class RecordingIndexer(val partition: Int, val afterToken: ExternalSourceToken?) : RecordIndexer {
         @Volatile var closed = false
 
         override suspend fun indexRecords(records: List<SinkRecord>, txIndexer: TxIndexer) = Unit
@@ -154,7 +157,8 @@ class KafkaConnectSourceIntegrationTest {
     private class RecordingIndexerFactory : RecordIndexer.Factory {
         val opened = CopyOnWriteArrayList<RecordingIndexer>()
 
-        override fun open(partition: Int): RecordIndexer = RecordingIndexer(partition).also { opened.add(it) }
+        override fun open(partition: Int, afterToken: ExternalSourceToken?): RecordIndexer =
+            RecordingIndexer(partition, afterToken).also { opened.add(it) }
     }
 
     private object UnusedTxIndexer : TxIndexer {
@@ -233,6 +237,24 @@ class KafkaConnectSourceIntegrationTest {
         }
 
         assertEquals(listOf(1), factory.opened.map { it.partition })
+    }
+
+    @Test
+    fun `an indexer is opened with the token its term resumes after`() = runTest(timeout = 120.seconds) {
+        val topic = "test-topic-${UUID.randomUUID()}"
+        createTopic(topic)
+        val factory = RecordingIndexerFactory()
+
+        KafkaCluster.ClusterFactory(kafka.bootstrapServers).open().use { cluster ->
+            openTermSource(topic, cluster, factory).use { source ->
+                runLeaderTerm(source, factory, afterToken = null)
+                runLeaderTerm(source, factory, afterToken = kafkaConnectSourceToken { offset = -1 }.toByteArray())
+            }
+        }
+
+        val (noTransaction, resumed) = factory.opened
+        assertNull(noTransaction.afterToken, "no transaction indexed yet")
+        assertEquals(-1, KafkaConnectSourceToken.parseFrom(resumed.afterToken).offset)
     }
 
     @Test

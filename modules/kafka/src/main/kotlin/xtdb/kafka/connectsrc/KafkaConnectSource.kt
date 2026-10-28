@@ -199,7 +199,7 @@ class KafkaConnectSource internal constructor(
         val mergedConsumerConfig: Map<String, Any> =
             DEFAULT_CONSUMER_CONFIG + cluster.kafkaConfigMap + HARDCODED_CONSUMER_CONFIG
 
-        val indexer = indexerFactory.open(partition)
+        val indexer = indexerFactory.open(partition, afterToken)
         try {
             connectConfig.keyConverter.open().use { keyConverter ->
                 connectConfig.valueConverter.open().use { valueConverter ->

@@ -43,7 +43,7 @@ class DocsIndexerTest {
 
     @Test
     fun `table field parses through TableRef`() {
-        fun tableOf(table: String) = (DocsIndexer.Factory(table = table).open(0) as DocsIndexer).table
+        fun tableOf(table: String) = (DocsIndexer.Factory(table = table).open(0, null) as DocsIndexer).table
 
         assertEquals(TableRef("public", "events"), tableOf("events"))
         assertEquals(TableRef("analytics", "events"), tableOf("analytics.events"))
@@ -116,7 +116,7 @@ class DocsIndexerTest {
             error("writer should have thrown")
         }
 
-        val indexer = DocsIndexer.Factory(table = "events").open(0) as DocsIndexer
+        val indexer = DocsIndexer.Factory(table = "events").open(0, null) as DocsIndexer
 
         assertSame(interrupt, assertThrows<InterruptedException> {
             runBlocking { indexer.indexRecords(listOf(recWithKey("k1")), txIndexer) }
