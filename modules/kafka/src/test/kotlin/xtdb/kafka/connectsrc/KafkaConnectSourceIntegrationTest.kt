@@ -3,6 +3,7 @@ package xtdb.kafka.connectsrc
 import clojure.lang.ILookup
 import clojure.lang.Keyword
 import io.micrometer.core.instrument.MeterRegistry
+import com.google.protobuf.ByteString
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancelAndJoin
@@ -255,6 +256,25 @@ class KafkaConnectSourceIntegrationTest {
         val (noTransaction, resumed) = factory.opened
         assertNull(noTransaction.afterToken, "no transaction indexed yet")
         assertEquals(-1, KafkaConnectSourceToken.parseFrom(resumed.afterToken).offset)
+    }
+
+    @Test
+    fun `an indexer reads back the user token its last transaction carried`() = runTest(timeout = 120.seconds) {
+        val topic = "test-topic-${UUID.randomUUID()}"
+        createTopic(topic)
+        val factory = RecordingIndexerFactory()
+
+        KafkaCluster.ClusterFactory(kafka.bootstrapServers).open().use { cluster ->
+            openTermSource(topic, cluster, factory).use { source ->
+                runLeaderTerm(source, factory, afterToken = kafkaConnectSourceToken {
+                    offset = -1
+                    userToken = ByteString.copyFromUtf8("indexer state")
+                }.toByteArray())
+            }
+        }
+
+        val token = KafkaConnectSourceToken.parseFrom(factory.opened.single().afterToken)
+        assertEquals("indexer state", token.userToken.toStringUtf8())
     }
 
     @Test
