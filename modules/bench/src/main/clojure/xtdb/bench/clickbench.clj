@@ -170,6 +170,7 @@
     :parse-fn keyword
     :default :small]
 
+   b/no-load-flag
    ["-h" "--help"]])
 
 (def query-sqlvec-fns

@@ -388,6 +388,7 @@
   [["-s" "--scale-factor SCALE_FACTOR" "Yakbench scale factor to use"
     :parse-fn parse-double
     :default 0.1]
+   b/no-load-flag
    ["-h" "--help"]])
 
 (defmethod b/->benchmark :yakbench [_ {:keys [scale-factor seed no-load?],

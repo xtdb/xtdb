@@ -103,6 +103,7 @@
     :parse-fn parse-long
     :default 10000]
 
+   b/no-load-flag
    ["-h" "--help"]])
 
 (defmethod b/->benchmark :readings [_ {:keys [readings devices seed no-load?] :or {seed 0}}]

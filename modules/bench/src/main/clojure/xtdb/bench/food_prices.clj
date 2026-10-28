@@ -352,6 +352,7 @@
    [nil "--dropout" "close out rows the incoming batch no longer mentions"
     :id :dropout?]
 
+   b/no-load-flag
    ["-h" "--help"]])
 
 (defmethod b/->benchmark :food-prices [_ {:keys [size dropout? seed no-load?] :or {seed 0}}]

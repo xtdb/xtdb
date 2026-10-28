@@ -222,6 +222,7 @@
    ["-t" "--id-type ID_TYPE" "ID type: uuid, string, keyword"
     :parse-fn keyword
     :default :uuid]
+   b/no-load-flag
    ["-h" "--help"]])
 
 (defmethod b/->benchmark :scan-perf [_ {:keys [n-items id-type seed no-load?]

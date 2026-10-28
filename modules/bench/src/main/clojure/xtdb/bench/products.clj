@@ -39,35 +39,34 @@
 
    ["-h" "--help"]])
 
-(defmethod b/->benchmark :products [_ {:keys [no-load? limit]}]
-  (log/info {:no-load? no-load? :limit limit})
+(defmethod b/->benchmark :products [_ {:keys [limit]}]
+  (log/info {:limit limit})
 
   {:title "Products"
-   :parameters {:no-load? no-load? :limit limit}
+   :parameters {:limit limit}
    :tasks [{:t :call, :stage :download, :setup? true
             :f (fn [_]
                  (download-dataset))}
 
            {:t :do, :stage :ingest
-            :tasks (concat (when-not no-load?
-                             [{:t :do
-                               :stage :submit-docs
-                               :tasks [{:t :call
-                                        :f (fn [{:keys [node]}]
-                                             (with-open [is (-> products-file
-                                                                io/input-stream
-                                                                (GZIPInputStream.))]
-                                               (store-documents! node (cond->> (serde/transit-seq (transit/reader is :msgpack))
-                                                                        limit (take limit)))))}]}])
+            :tasks [{:t :do
+                     :stage :submit-docs
+                     :tasks [{:t :call
+                              :f (fn [{:keys [node]}]
+                                   (with-open [is (-> products-file
+                                                      io/input-stream
+                                                      (GZIPInputStream.))]
+                                     (store-documents! node (cond->> (serde/transit-seq (transit/reader is :msgpack))
+                                                              limit (take limit)))))}]}
 
-                           [{:t :call, :stage :sync
-                             :f (fn [{:keys [node]}]
-                                  (b/sync-node node (Duration/ofHours 5)))}
+                    {:t :call, :stage :sync
+                     :f (fn [{:keys [node]}]
+                          (b/sync-node node (Duration/ofHours 5)))}
 
-                            {:t :call, :stage :finish-block
-                             :f (fn [{:keys [node]}]
-                                  (b/flush-block! node))}
+                    {:t :call, :stage :finish-block
+                     :f (fn [{:keys [node]}]
+                          (b/flush-block! node))}
 
-                            {:t :call, :stage :compact
-                             :f (fn [{:keys [node]}]
-                                  (b/compact! node))}])}]})
+                    {:t :call, :stage :compact
+                     :f (fn [{:keys [node]}]
+                          (b/compact! node))}]}]})

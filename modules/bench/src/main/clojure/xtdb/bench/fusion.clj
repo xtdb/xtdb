@@ -450,6 +450,7 @@
    ["-d" "--duration DURATION" "OLTP phase duration" :parse-fn #(Duration/parse %) :default (Duration/parse "PT30S")]
    ["-t" "--threads THREADS" "OLTP thread count" :parse-fn parse-long :default 4]
    [nil "--staged-only" "Run staged workload only, skip OLTP" :id :staged-only?]
+   b/no-load-flag
    ["-h" "--help"]])
 
 (defmethod b/->benchmark :fusion [_ {:keys [devices readings batch-size update-batch-size

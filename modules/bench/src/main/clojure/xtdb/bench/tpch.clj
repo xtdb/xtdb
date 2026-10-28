@@ -50,6 +50,7 @@
     :default :ra
     :validate [#{:ra :sql} "query language must be one of ra, sql"]]
 
+   b/no-load-flag
    ["-h" "--help"]])
 
 (defmethod b/->benchmark :tpch [_ {:keys [scale-factor query-language seed no-load?],

@@ -64,6 +64,7 @@
     :parse-fn parse-long
     :default 10]
 
+   b/no-load-flag
    ["-h" "--help"]])
 
 (defmethod b/->benchmark :patch [_ {:keys [doc-count patch-count seed no-load?]

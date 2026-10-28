@@ -559,13 +559,14 @@
 (defn- parse-duration-arg [s]
   (Duration/parse s))
 
+(def no-load-flag
+  [nil "--no-load" "skip loading data; run against the existing `--node-dir`"
+   :id :no-load?])
+
 (def ^:private default-cli-flags
   [[nil "--node-dir NODE_DIR"
     "Directory to run the node in - will clear before running the benchmark unless `--no-load` is provided."
     :parse-fn util/->path]
-
-   [nil "--no-load" "don't run any load phases (use with an existing directory)"
-    :id :no-load?]
 
    ["-f" "--config-file CONFIG_FILE" "Config file to load XTDB options from - EDN, YAML"
     :id :config-file
