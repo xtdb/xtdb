@@ -573,24 +573,16 @@
 (def ^:private default-github-action-url
   "https://api.github.com/repos/xtdb/xtdb/actions/workflows/nightly-benchmark-cleanup.yml/dispatches")
 
-(defn trigger-cleanup [benchmark-type success?]
+(defn trigger-cleanup [benchmark-type]
   (when-let [pat (System/getenv "GITHUB_PAT")]
     (try
-      (let [node-id (System/getenv "XTDB_NODE_ID")
-            git-branch (or (get-env "GIT_BRANCH") "main")
-            run-queue (System/getenv "RUN_QUEUE")
-            queue-entry (get-env "QUEUE_ENTRY")
+      (let [git-branch (or (get-env "GIT_BRANCH") "main")
             workflow-url (or (get-env "GITHUB_ACTION_URL") default-github-action-url)]
         (http/post workflow-url
                    {:headers {"Accept" "application/vnd.github+json"
                               "Authorization" (str "Bearer " pat)}
                     :content-type :json
-                    :body (json/write-str {"ref" git-branch
-                                           "inputs" (cond-> {"benchType" (name benchmark-type)
-                                                             "status" (if success? "success" "failure")
-                                                             "nodeId" node-id}
-                                                      run-queue (assoc "runQueue" "true")
-                                                      queue-entry (assoc "queueEntry" queue-entry))})})
+                    :body (json/write-str {"ref" git-branch})})
         (log/info "Triggered cleanup workflow for" benchmark-type "on" git-branch))
       (catch Exception e
         (log/warn e "Failed to trigger cleanup workflow")))))
@@ -634,27 +626,25 @@
                                                    (log/info "Benchmark stopped."))))
                                              "xtdb.shutdown-hook-thread")))
 
-              (let [ok? (atom false)]
-                (try
-                  (run-benchmark (->benchmark benchmark-type options) options)
-                  (reset! ok? true)
-                  (catch Throwable t
-                    (if @shutting-down?
-                      (log/warn t "Error during shutdown (ignored):")
-                      (do
-                        (when (instance? InterruptedException t)
-                          (.interrupt (Thread/currentThread)))
-                        (log/error t "Benchmark failed:")
-                        (throw t))))
-                  (finally
-                    ;; Mark as shutting down for cleanup phase
-                    (reset! shutting-down? true)
-                    (try
-                      (trigger-cleanup benchmark-type @ok?)
-                      ;; Signal to dump-uploader sidecar that cleanup was triggered (k8s only)
-                      (when (.isDirectory (java.io.File. "/dumps"))
-                        (spit "/dumps/.cleanup-triggered" "true"))
-                      (catch Throwable u
-                        (log/warn u "Cleanup trigger failed (ignored):")))))))))
+              (try
+                (run-benchmark (->benchmark benchmark-type options) options)
+                (catch Throwable t
+                  (if @shutting-down?
+                    (log/warn t "Error during shutdown (ignored):")
+                    (do
+                      (when (instance? InterruptedException t)
+                        (.interrupt (Thread/currentThread)))
+                      (log/error t "Benchmark failed:")
+                      (throw t))))
+                (finally
+                  ;; Mark as shutting down for cleanup phase
+                  (reset! shutting-down? true)
+                  (try
+                    (trigger-cleanup benchmark-type)
+                    ;; Signal to dump-uploader sidecar that cleanup was triggered (k8s only)
+                    (when (.isDirectory (java.io.File. "/dumps"))
+                      (spit "/dumps/.cleanup-triggered" "true"))
+                    (catch Throwable u
+                      (log/warn u "Cleanup trigger failed (ignored):"))))))))
 
   (shutdown-agents))
