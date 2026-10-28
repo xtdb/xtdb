@@ -38,7 +38,7 @@ class DocsIndexer(internal val table: TableRef) : RecordIndexer {
         val table: String,
     ) : RecordIndexer.Factory {
 
-        override fun open(): RecordIndexer =
+        override fun open(partition: Int): RecordIndexer =
             DocsIndexer(TableRef.parse(table))
 
         class Registration : RecordIndexer.Registration<Factory> {

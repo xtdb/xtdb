@@ -3,6 +3,13 @@ package xtdb.kafka.connectsrc
 import clojure.lang.ILookup
 import clojure.lang.Keyword
 import io.micrometer.core.instrument.MeterRegistry
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.test.runTest
 import org.apache.avro.Conversions
@@ -14,10 +21,12 @@ import org.apache.kafka.clients.producer.KafkaProducer
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.serialization.ByteArraySerializer
 import org.apache.kafka.common.serialization.StringSerializer
+import org.apache.kafka.connect.sink.SinkRecord
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNotSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assertions.fail
 import org.junit.jupiter.api.BeforeAll
@@ -31,8 +40,13 @@ import org.testcontainers.containers.wait.strategy.Wait
 import org.testcontainers.kafka.ConfluentKafkaContainer
 import org.testcontainers.lifecycle.Startables
 import xtdb.XtdbInternal
+import xtdb.api.TransactionResult
 import xtdb.api.Xtdb
 import xtdb.api.log.KafkaCluster
+import xtdb.api.tx.BlockDetails
+import xtdb.api.tx.ExternalSourceToken
+import xtdb.api.tx.OpenTx
+import xtdb.api.tx.TxIndexer
 import java.math.BigDecimal
 import java.nio.ByteBuffer
 import java.sql.Array as SqlArray
@@ -41,6 +55,7 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
 import java.util.UUID
+import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import io.kotest.assertions.nondeterministic.eventually
@@ -83,9 +98,9 @@ class KafkaConnectSourceIntegrationTest {
         }
     }
 
-    private fun createTopic(topic: String) {
+    private fun createTopic(topic: String, partitions: Int = 1) {
         AdminClient.create(mapOf("bootstrap.servers" to kafka.bootstrapServers)).use { admin ->
-            admin.createTopics(listOf(NewTopic(topic, 1, 1.toShort()))).all().get()
+            admin.createTopics(listOf(NewTopic(topic, partitions, 1.toShort()))).all().get()
         }
     }
 
@@ -126,6 +141,53 @@ class KafkaConnectSourceIntegrationTest {
         }
     }
 
+    private class RecordingIndexer(val partition: Int) : RecordIndexer {
+        @Volatile var closed = false
+
+        override suspend fun indexRecords(records: List<SinkRecord>, txIndexer: TxIndexer) = Unit
+
+        override fun close() {
+            closed = true
+        }
+    }
+
+    private class RecordingIndexerFactory : RecordIndexer.Factory {
+        val opened = CopyOnWriteArrayList<RecordingIndexer>()
+
+        override fun open(partition: Int): RecordIndexer = RecordingIndexer(partition).also { opened.add(it) }
+    }
+
+    private object UnusedTxIndexer : TxIndexer {
+        override val latestBlock: StateFlow<BlockDetails?> = MutableStateFlow(null)
+
+        override suspend fun executeTx(
+            externalSourceToken: ExternalSourceToken?, systemTime: Instant?, writer: suspend (OpenTx) -> TxIndexer.TxResult,
+        ): TransactionResult = error("no records are produced, so nothing is indexed")
+
+        override suspend fun submitTx(
+            externalSourceToken: ExternalSourceToken?, systemTime: Instant?, writer: suspend (OpenTx) -> TxIndexer.TxResult,
+        ): Deferred<TransactionResult> = error("no records are produced, so nothing is indexed")
+    }
+
+    private fun openTermSource(topic: String, cluster: KafkaCluster, factory: RecordIndexer.Factory) =
+        KafkaConnectSource(
+            "termdb", cluster, topic,
+            ConnectConfig.parse(mapOf(
+                "key.converter" to "org.apache.kafka.connect.storage.StringConverter",
+                "value.converter" to "org.apache.kafka.connect.storage.StringConverter",
+            )),
+            factory,
+        )
+
+    private suspend fun runLeaderTerm(
+        source: KafkaConnectSource, factory: RecordingIndexerFactory, partition: Int = 0, afterToken: ExternalSourceToken? = null,
+    ) = coroutineScope {
+        val openedBefore = factory.opened.size
+        val term = launch(Dispatchers.Default) { source.onPartitionAssigned(partition, afterToken, UnusedTxIndexer) }
+        eventually(30.seconds) { assertEquals(openedBefore + 1, factory.opened.size, "indexer opened for the term") }
+        term.cancelAndJoin()
+    }
+
     private fun xtQueryDb(node: Xtdb, dbName: String, sql: String): List<Map<String, Any?>> =
         node.createConnectionBuilder().database(dbName).build().use { conn ->
             conn.createStatement().use { stmt ->
@@ -138,6 +200,40 @@ class KafkaConnectSourceIntegrationTest {
                 }
             }
         }
+
+    @Test
+    fun `each leader term runs on a fresh indexer, closed when the term ends`() = runTest(timeout = 120.seconds) {
+        val topic = "test-topic-${UUID.randomUUID()}"
+        createTopic(topic)
+        val factory = RecordingIndexerFactory()
+
+        KafkaCluster.ClusterFactory(kafka.bootstrapServers).open().use { cluster ->
+            openTermSource(topic, cluster, factory).use { source ->
+                runLeaderTerm(source, factory)
+                runLeaderTerm(source, factory)
+            }
+        }
+
+        val (first, second) = factory.opened
+        assertNotSame(first, second)
+        assertTrue(first.closed, "first term's indexer closed")
+        assertTrue(second.closed, "second term's indexer closed")
+    }
+
+    @Test
+    fun `an indexer is opened for the partition its term was assigned`() = runTest(timeout = 120.seconds) {
+        val topic = "test-topic-${UUID.randomUUID()}"
+        createTopic(topic, partitions = 2)
+        val factory = RecordingIndexerFactory()
+
+        KafkaCluster.ClusterFactory(kafka.bootstrapServers).open().use { cluster ->
+            openTermSource(topic, cluster, factory).use { source ->
+                runLeaderTerm(source, factory, partition = 1)
+            }
+        }
+
+        assertEquals(listOf(1), factory.opened.map { it.partition })
+    }
 
     @Test
     fun `JsonConverter happy path snapshot + streaming`() = runTest(timeout = 120.seconds) {
