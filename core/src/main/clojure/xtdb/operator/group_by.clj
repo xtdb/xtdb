@@ -17,9 +17,8 @@
            (java.util.stream IntStream IntStream$Builder)
            (org.apache.arrow.memory BufferAllocator)
            (xtdb.api ICursor)
-           (xtdb.arrow IntVector MonoVector RelationReader Vector VectorIndirection$Mask VectorIndirection$Mask$Builder VectorReader VectorType VectorWriter)
+           (xtdb.arrow MonoVector RelationReader Vector VectorIndirection$Mask VectorIndirection$Mask$Builder VectorReader VectorType VectorWriter)
            (xtdb.arrow.agg AggregateSpec AggregateSpec$Factory Average Count GroupMapper GroupMapper$Mapper GroupMapper$Null RowCount StdDevPop StdDevSamp Sum VarWidthMinMax VariancePop VarianceSamp)
-           (xtdb.expression.map IndexHasher RelationMapBuilder)
            xtdb.operator.SelectionSpec
            xtdb.operator.SelectionSpec$Factory
            xtdb.operator.ExternalSorter
@@ -243,46 +242,30 @@
 
     (build [_ al args]
       (let [agg-spec (.build agg-factory al args)
-            rel-maps (ArrayList.)
-            hashes (IntVector/open al false)
-            hash-scratch (IntVector/open al false)]
+            ^DistinctRelationMap rel-map (distinct/->relation-map al {:build-vec-types {"group-idx" #xt/type :i32
+                                                                                         "value" from-type}
+                                                                       :build-key-col-names ["group-idx" "value"]})]
         (reify
           AggregateSpec
           (aggregate [_ in-rel group-mapping mask]
             (let [in-vec (.vectorForOrNull in-rel (str from-name))
                   row-count (.getValueCount in-vec)
-                  builders (ArrayList. (.size rel-maps))
-                  in-key-rel (vr/keyed-rel-reader {(str from-name) in-vec} row-count)]
-              (.hashTo (IndexHasher. in-key-rel [in-vec]) hashes hash-scratch)
-              (let [mask-builder (VectorIndirection$Mask$Builder. row-count)]
-                (dotimes [idx row-count]
-                  (when (.isSet mask idx)
-                    (let [group-idx (.getInt group-mapping idx)]
-                      (while (<= (.size rel-maps) group-idx)
-                        (.add rel-maps (distinct/->relation-map al {:build-vec-types {from-name from-type}
-                                                                    :build-key-col-names [from-name]})))
-                      (let [^DistinctRelationMap rel-map (nth rel-maps group-idx)]
-                        (while (<= (.size builders) group-idx)
-                          (.add builders nil))
+                  key-rel (vr/keyed-rel-reader {"group-idx" group-mapping, "value" in-vec} row-count)
+                  builder (.buildFromRelation rel-map key-rel (.hashesFor rel-map key-rel))
+                  mask-builder (VectorIndirection$Mask$Builder. row-count)]
+              (dotimes [idx row-count]
+                (when (and (.isSet mask idx)
+                           (neg? (.addIfNotPresent builder idx)))
+                  (.add mask-builder idx)))
 
-                        (let [^RelationMapBuilder
-                              builder (or (nth builders group-idx)
-                                          (let [builder (.buildFromRelation rel-map in-key-rel hashes)]
-                                            (.set builders group-idx builder)
-                                            builder))]
-                          (when (neg? (.addIfNotPresent builder idx))
-                            (.add mask-builder idx)))))))
-
-                (.aggregate agg-spec in-rel group-mapping (.build mask-builder)))))
+              (.aggregate agg-spec in-rel group-mapping (.build mask-builder))))
 
           (openFinishedVector [_] (.openFinishedVector agg-spec))
 
           Closeable
           (close [_]
             (util/close agg-spec)
-            (util/close rel-maps)
-            (util/close hashes)
-            (util/close hash-scratch)))))))
+            (util/close rel-map)))))))
 
 (defmethod ->aggregate-factory :count_distinct [{:keys [from-name from-type] :as agg-opts}]
   (-> (->aggregate-factory (assoc agg-opts :f :count))
