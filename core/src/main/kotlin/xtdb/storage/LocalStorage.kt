@@ -20,13 +20,19 @@ import xtdb.database.DatabaseName
 import xtdb.trie.FileSize
 import xtdb.util.*
 import java.io.Closeable
+import java.io.IOException
 import java.nio.ByteBuffer
 import java.nio.channels.ClosedByInterruptException
+import java.nio.file.FileVisitResult
+import java.nio.file.FileVisitResult.CONTINUE
 import java.nio.file.Files
 import java.nio.file.Files.newByteChannel
+import java.nio.file.NoSuchFileException
 import java.nio.file.Path
+import java.nio.file.SimpleFileVisitor
 import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption.*
+import java.nio.file.attribute.BasicFileAttributes
 import kotlin.io.path.*
 
 internal class LocalStorage(
@@ -127,11 +133,27 @@ internal class LocalStorage(
         }
     }
 
-    private fun Path.listAll() = walk()
-        .map { StoredObject(rootPath.relativize(it), it.fileSize()) }
-        .filter { it.key.getName(0).toString() != ".tmp" }
-        .sortedBy { it.key }
-        .toList()
+    private fun Path.listAll(): List<StoredObject> {
+        val objects = mutableListOf<StoredObject>()
+
+        Files.walkFileTree(this, object : SimpleFileVisitor<Path>() {
+            override fun visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult {
+                objects.add(StoredObject(rootPath.relativize(file), attrs.size()))
+                return CONTINUE
+            }
+
+            // deleted since its directory was read, e.g. by block GC (#6237)
+            override fun visitFileFailed(file: Path, exc: IOException): FileVisitResult =
+                if (exc is NoSuchFileException) CONTINUE else throw exc
+
+            override fun postVisitDirectory(dir: Path, exc: IOException?): FileVisitResult =
+                if (exc == null || exc is NoSuchFileException) CONTINUE else throw exc
+        })
+
+        return objects
+            .filter { it.key.getName(0).toString() != ".tmp" }
+            .sortedBy { it.key }
+    }
 
     override fun listAllObjects(): Iterable<StoredObject> = rootPath.listAll()
     override fun listAllObjects(dir: Path) = rootPath.resolve(dir).listAll()
