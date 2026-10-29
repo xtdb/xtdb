@@ -18,6 +18,11 @@ import xtdb.arrow.VectorType.Companion.asStructOf
 import xtdb.arrow.VectorType.Companion.maybe
 import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.arrow.VectorType.Companion.structOf
+import io.kotest.matchers.shouldBe
+import io.kotest.property.Arb
+import io.kotest.property.arbitrary.*
+import io.kotest.property.checkAll
+import kotlinx.coroutines.test.runTest
 import java.io.ByteArrayOutputStream
 import java.nio.channels.Channels
 
@@ -411,5 +416,47 @@ class StructVectorTest {
                     assertEquals(maybe(UTF8), dest.vectorFor("name").type)
                 }
             }
+    }
+
+    private val arbScalar: Arb<Any?> =
+        Arb.choice(Arb.constant(null), Arb.long(-3L..3L), Arb.string(0..3), Arb.boolean(), Arb.double())
+
+    private fun arbDoc(depth: Int): Arb<Map<String, Any?>> =
+        Arb.map(Arb.element("a", "b", "c"), if (depth == 0) arbScalar else Arb.choice(arbScalar, arbDoc(depth - 1)), 0, 3)
+
+    @Test
+    fun `copyRows reads back the same values as copyRow`() = runTest {
+        fun arbRow(nullable: Boolean) = if (nullable) Arb.choice(Arb.constant(null), arbDoc(2)) else arbDoc(2)
+
+        checkAll(arbitrary {
+            val srcNullable = Arb.boolean().bind()
+            val destNullable = Arb.boolean().bind()
+            val srcRows = Arb.list(arbRow(srcNullable), 0..40).bind()
+            val destRows = Arb.list(arbRow(destNullable), 0..4).bind()
+            val sel = if (srcRows.isEmpty()) IntArray(0) else Arb.list(Arb.int(srcRows.indices), 0..48).bind().toIntArray()
+            val split = Arb.int(0..sel.size).bind()
+            Triple(srcNullable to srcRows, destNullable to destRows, sel.copyOfRange(0, split) to sel.copyOfRange(split, sel.size))
+        }) { (srcCase, destCase, sels) ->
+            val (firstSel, secondSel) = sels
+
+            fun openVec(nullableRows: Pair<Boolean, List<Any?>>) =
+                StructVector(allocator, "docs", nullableRows.first).apply { nullableRows.second.forEach { writeObject(it) } }
+
+            openVec(srcCase).use { src ->
+                openVec(destCase).use { perRow ->
+                    openVec(destCase).use { batched ->
+                        val perRowCopier = src.rowCopier(perRow)
+                        (firstSel + secondSel).forEach { perRowCopier.copyRow(it) }
+
+                        val batchedCopier = src.rowCopier(batched)
+                        batchedCopier.copyRows(firstSel)
+                        batchedCopier.copyRows(secondSel)
+
+                        batched.asList shouldBe perRow.asList
+                        batched.vectors.forEach { it.valueCount shouldBe batched.valueCount }
+                    }
+                }
+            }
+        }
     }
 }
