@@ -1,4 +1,4 @@
-Avenue B (bitmasks, #4964) has been darted end to end: <PR-LINK>.
+Avenue B (bitmasks, #4964) has been darted end to end: #PR_NUMBER.
 
 Scan filters compose one `long[]` mask over the direct vectors, and project and group-by iterate its set bits. Results verify, and the hot change is Q1 −3.2%, Q6 −5.8% at SF1.
 
