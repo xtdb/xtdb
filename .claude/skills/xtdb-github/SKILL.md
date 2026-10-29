@@ -53,9 +53,10 @@ You MUST NOT write that name here, nor in any issue, PR or commit message; where
 The recipes under [Using chalk](#using-chalk) are written against the 2.x board.
 On this one, you MUST swap in project `42` and its IDs from [Cached IDs](#cached-ids), and with chalk in use its moves go through the `github` agent like any other board edit.
 
-- **A card goes on it where the work is for the client** — they raised it, they hit it in their deployment, or they're waiting on it.
+- **A card goes on it for anything end-user-visible that will reach the client in a deploy** — not only work they raised, hit, or are waiting on.
+  Apply the same test [Milestones](#milestones) uses for `2-NEXT`: internal refactors, SPI tightening, and test/build/dev-infra changes stay off both boards; everything else that closes on `main` gets a card here too.
   It's on top of the 2.x board, not instead of it, and what goes on as the card is the same: the issue, or the standalone PR.
-  Where you can't tell whether the work is theirs, you MUST ask; a parent on the client board makes a sub-issue a candidate, not a given.
+  Where you can't tell whether a change is end-user-visible, you MUST ask; a parent on the client board makes a sub-issue a candidate, not a given.
 - **`Status` tracks the client's deployments, not our development.**
   - While the work is open, the card's status follows its 2.x `Status`: `💭 Backlog` there is `Backlog` here, and anything from `🔖 Selected` onwards is `Selected`.
     When you change the 2.x `Status`, you MUST make the matching move here.
