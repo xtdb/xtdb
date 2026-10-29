@@ -136,6 +136,18 @@ interface VectorReader : ILookup, AutoCloseable {
 
     val metadataFlavours: Collection<MetadataFlavour> get() = unsupported("metadataFlavours")
 
+    /**
+     * Each of [metadataFlavours], in the same order, paired with a mask over that flavour's own rows.
+     *
+     * [mask] is over this vector's rows; each flavour's mask selects the flavour rows that the rows [mask] selects hold.
+     * [VectorMask.ALL] maps to [VectorMask.ALL].
+     *
+     * The default passes [mask] through, which holds only where the flavours are indexed by this vector's rows.
+     * A vector whose flavours aren't - a union's legs - overrides this to translate it.
+     */
+    fun metadataFlavours(mask: VectorMask): List<Pair<MetadataFlavour, VectorMask>> =
+        metadataFlavours.map { it to mask }
+
     fun rowCopier(dest: VectorWriter): RowCopier
 
     companion object {

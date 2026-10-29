@@ -2,6 +2,7 @@ package xtdb.arrow.metadata
 
 import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.arrow.UNION_TYPE
+import xtdb.arrow.VectorMask
 import xtdb.arrow.VectorReader
 import xtdb.arrow.VectorType
 import xtdb.util.Hasher
@@ -15,6 +16,21 @@ sealed interface MetadataFlavour {
 
     sealed interface Numeric : MetadataFlavour {
         fun getMetaDouble(idx: Int): Double
+
+        fun minMaxInto(minMax: DoubleMinMax, mask: VectorMask) {
+            var min = Double.POSITIVE_INFINITY
+            var max = Double.NEGATIVE_INFINITY
+
+            repeat(valueCount) {
+                if (mask.isSet(it) && !isNull(it)) {
+                    val value = getMetaDouble(it)
+                    min = min.coerceAtMost(value)
+                    max = max.coerceAtLeast(value)
+                }
+            }
+
+            minMax.applyMinMax(min, max)
+        }
     }
 
     interface Presence : MetadataFlavour

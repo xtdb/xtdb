@@ -7,6 +7,7 @@ import xtdb.arrow.I32_TYPE
 import xtdb.arrow.LIST_TYPE
 import xtdb.arrow.STRUCT_TYPE
 import xtdb.arrow.VAR_BINARY_TYPE
+import xtdb.arrow.VectorMask
 import xtdb.arrow.VectorReader
 import xtdb.arrow.VectorType
 import xtdb.arrow.VectorType.Companion.BOOL
@@ -14,6 +15,7 @@ import xtdb.arrow.VectorType.Companion.F64
 import xtdb.arrow.VectorType.Companion.I32
 import xtdb.arrow.VectorType.Companion.VAR_BINARY
 import xtdb.arrow.VectorWriter
+import xtdb.arrow.metadata.DoubleMinMax
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.arrow.metadata.MetadataFlavour.*
 import xtdb.arrow.metadata.MetadataFlavour.Companion.metaColName
@@ -28,39 +30,30 @@ class ColumnMetadata(private val colsVec: VectorWriter, private val calculateBlo
     private val rootColVec = colsVec["root-col?"]
     private val countVec = colsVec["count"]
 
-    private fun writeNumericMetadata(flavours: List<Numeric>, type: KClass<out Numeric>) {
+    private fun writeNumericMetadata(flavours: List<Pair<Numeric, VectorMask>>, type: KClass<out Numeric>) {
         if (flavours.isNotEmpty()) {
             val typeVec = colsVec.vectorFor(type.java.metaColName, STRUCT_TYPE, true)
             val minVec = typeVec.vectorFor("min", F64_TYPE, false)
             val maxVec = typeVec.vectorFor("max", F64_TYPE, false)
 
-            var minValue = Double.POSITIVE_INFINITY
-            var maxValue = Double.NEGATIVE_INFINITY
+            val minMax = DoubleMinMax()
+            for ((flavour, mask) in flavours) flavour.minMaxInto(minMax, mask)
 
-            for (flavour in flavours) {
-                repeat(flavour.valueCount) {
-                    if (!flavour.isNull(it)) {
-                        val value = flavour.getMetaDouble(it)
-                        minValue = minValue.coerceAtMost(value)
-                        maxValue = maxValue.coerceAtLeast(value)
-                    }
-                }
-            }
-
-            if (minValue != Double.POSITIVE_INFINITY) minVec.writeDouble(minValue)
-            if (maxValue != Double.NEGATIVE_INFINITY) maxVec.writeDouble(maxValue)
+            if (minMax.min != Double.POSITIVE_INFINITY) minVec.writeDouble(minMax.min)
+            if (minMax.max != Double.NEGATIVE_INFINITY) maxVec.writeDouble(minMax.max)
             typeVec.endStruct()
         }
     }
 
-    private fun writeBytesMetadata(flavours: List<Bytes>, calculateBlooms: Boolean) {
+    private fun writeBytesMetadata(flavours: List<Pair<Bytes, VectorMask>>, calculateBlooms: Boolean) {
         if (flavours.isNotEmpty()) {
             val typeVec = colsVec.vectorFor(Bytes::class.java.metaColName, STRUCT_TYPE, false)
             val bloomVec = typeVec.vectorFor("bloom", VAR_BINARY_TYPE, true)
 
             if (calculateBlooms) {
                 val bloomBuilder = BloomBuilder()
-                flavours.forEach { bloomBuilder.add(it) }
+                for ((flavour, mask) in flavours)
+                    repeat(flavour.valueCount) { if (mask.isSet(it)) bloomBuilder.add(flavour, it) }
                 bloomVec.writeBytes(bloomBuilder.build().toByteBuffer())
             }
 
@@ -74,32 +67,39 @@ class ColumnMetadata(private val colsVec: VectorWriter, private val calculateBlo
         }
     }
 
-    private fun writeMetadata(col: VectorReader, rootCol: Boolean): RowIndex {
-        val flavours = col.metadataFlavours
+    private fun writeMetadata(col: VectorReader, rootCol: Boolean, mask: VectorMask): RowIndex {
+        val flavours = col.metadataFlavours(mask)
 
         val childIdxs = IntArrayList()
 
-        for (flavour in flavours) {
+        for ((flavour, flavourMask) in flavours) {
             when (flavour) {
-                is MetadataFlavour.List -> childIdxs.add(writeMetadata(flavour.listElements, false))
-                is MetadataFlavour.Set -> childIdxs.add(writeMetadata(flavour.listElements, false))
-                is Struct -> flavour.vectors.forEach { childIdxs.add(writeMetadata(it, false)) }
+                is MetadataFlavour.List -> childIdxs.add(writeMetadata(flavour.listElements, false, VectorMask.ALL))
+                is MetadataFlavour.Set -> childIdxs.add(writeMetadata(flavour.listElements, false, VectorMask.ALL))
+                is Struct -> {
+                    val childMask =
+                        if (!flavour.nullable) flavourMask
+                        else object : VectorMask {
+                            override fun isSet(idx: Int) = flavourMask.isSet(idx) && !flavour.isNull(idx)
+                        }
+                    flavour.vectors.forEach { childIdxs.add(writeMetadata(it, false, childMask)) }
+                }
                 else -> Unit
             }
         }
 
         var childIdx = 0
 
-        val bytes = mutableListOf<Bytes>()
-        val dateTimes = mutableListOf<Numeric>()
-        val durations = mutableListOf<Numeric>()
-        val numbers = mutableListOf<Numeric>()
-        val times = mutableListOf<Numeric>()
+        val bytes = mutableListOf<Pair<Bytes, VectorMask>>()
+        val dateTimes = mutableListOf<Pair<Numeric, VectorMask>>()
+        val durations = mutableListOf<Pair<Numeric, VectorMask>>()
+        val numbers = mutableListOf<Pair<Numeric, VectorMask>>()
+        val times = mutableListOf<Pair<Numeric, VectorMask>>()
         val presence = mutableListOf<Presence>()
 
-        for (flavour in flavours) {
+        for ((flavour, flavourMask) in flavours) {
             when (flavour) {
-                is Bytes -> bytes.add(flavour)
+                is Bytes -> bytes.add(flavour to flavourMask)
 
                 is MetadataFlavour.List ->
                     colsVec.vectorFor("list", I32_TYPE, true)
@@ -109,10 +109,10 @@ class ColumnMetadata(private val colsVec: VectorWriter, private val calculateBlo
                     colsVec.vectorFor("set", I32_TYPE, true)
                         .writeInt(childIdxs[childIdx++])
 
-                is DateTime -> dateTimes.add(flavour)
-                is Duration -> durations.add(flavour)
-                is MetadataFlavour.Number -> numbers.add(flavour)
-                is TimeOfDay -> times.add(flavour)
+                is DateTime -> dateTimes.add(flavour to flavourMask)
+                is Duration -> durations.add(flavour to flavourMask)
+                is MetadataFlavour.Number -> numbers.add(flavour to flavourMask)
+                is TimeOfDay -> times.add(flavour to flavourMask)
 
                 is Struct -> {
                     val keysVec = colsVec.vectorFor("struct", LIST_TYPE, true)
@@ -131,7 +131,7 @@ class ColumnMetadata(private val colsVec: VectorWriter, private val calculateBlo
 
         colNameVec.writeObject(col.name)
         rootColVec.writeBoolean(rootCol)
-        countVec.writeLong((0 until col.valueCount).count { !col.isNull(it) }.toLong())
+        countVec.writeLong((0 until col.valueCount).count { mask.isSet(it) && !col.isNull(it) }.toLong())
 
         writeNumericMetadata(numbers, MetadataFlavour.Number::class)
         writeNumericMetadata(dateTimes, DateTime::class)
@@ -147,5 +147,5 @@ class ColumnMetadata(private val colsVec: VectorWriter, private val calculateBlo
         return colsVec.valueCount - 1
     }
 
-    fun writeMetadata(col: VectorReader) = writeMetadata(col, true)
+    fun writeMetadata(col: VectorReader) = writeMetadata(col, true, VectorMask.ALL)
 }

@@ -18,6 +18,7 @@ import xtdb.util.Hasher
 import xtdb.util.safeMap
 import xtdb.util.safelyOpening
 import java.nio.ByteBuffer
+import java.util.BitSet
 import org.apache.arrow.vector.complex.DenseUnionVector as ArrowDenseUnionVector
 
 class DenseUnionVector private constructor(
@@ -312,6 +313,24 @@ class DenseUnionVector private constructor(
     override val metadataFlavours: Collection<MetadataFlavour>
         get() = legVectors.flatMap { it.metadataFlavours }
 
+    override fun metadataFlavours(mask: VectorMask): List<Pair<MetadataFlavour, VectorMask>> {
+        if (mask === VectorMask.ALL) return legVectors.flatMap { it.metadataFlavours(mask) }
+
+        val legRows = Array(legVectors.size) { BitSet() }
+        repeat(valueCount) { idx ->
+            if (mask.isSet(idx)) {
+                val typeId = getTypeId(idx).toInt()
+                if (typeId >= 0) legRows[typeId].set(getOffset(idx))
+            }
+        }
+
+        return legVectors.flatMapIndexed { typeId, leg ->
+            leg.metadataFlavours(object : VectorMask {
+                override fun isSet(idx: Int) = legRows[typeId][idx]
+            })
+        }
+    }
+
     override fun hashCode(idx: Int, hasher: Hasher) = leg(idx)!!.hashCode(getOffset(idx), hasher)
 
     override fun rowCopier0(src: VectorReader): RowCopier =
@@ -332,6 +351,38 @@ class DenseUnionVector private constructor(
                         val typeId = src.getTypeId(srcIdx).toInt()
 
                         if (typeId < 0) writeUndefined() else copiers[typeId].copier.copyRow(src.getOffset(srcIdx))
+                    }
+
+                    override fun copyRows(sel: IntArray) {
+                        val destTypeBuffer = this@DenseUnionVector.typeBuffer
+                        val destOffsetBuffer = this@DenseUnionVector.offsetBuffer
+
+                        val legSelSizes = IntArray(copiers.size)
+                        for (srcIdx in sel) {
+                            val srcTypeId = src.getTypeId(srcIdx).toInt()
+                            if (srcTypeId >= 0) legSelSizes[srcTypeId]++
+                        }
+
+                        val legSels = Array(copiers.size) { IntArray(legSelSizes[it]) }
+                        val legSelIdxs = IntArray(copiers.size)
+                        val destOffsets = IntArray(copiers.size) { copiers[it].dest.inner.valueCount }
+
+                        for (srcIdx in sel) {
+                            val srcTypeId = src.getTypeId(srcIdx).toInt()
+                            if (srcTypeId < 0) {
+                                destTypeBuffer.writeByte(-1)
+                                destOffsetBuffer.writeInt(0)
+                            } else {
+                                val legSelIdx = legSelIdxs[srcTypeId]++
+                                destTypeBuffer.writeByte(destTypeIds[srcTypeId])
+                                destOffsetBuffer.writeInt(destOffsets[srcTypeId] + legSelIdx)
+                                legSels[srcTypeId][legSelIdx] = src.getOffset(srcIdx)
+                            }
+                        }
+
+                        copiers.forEachIndexed { srcTypeId, legCopier -> legCopier.innerCopier.copyRows(legSels[srcTypeId]) }
+
+                        this@DenseUnionVector.valueCount += sel.size
                     }
 
                     override fun copyRange(startIdx: Int, len: Int) {
@@ -360,7 +411,7 @@ class DenseUnionVector private constructor(
 
                             this@DenseUnionVector.valueCount += len
                         } else {
-                            repeat(len) { copyRow(startIdx + it) }
+                            copyRows(IntArray(len) { startIdx + it })
                         }
                     }
                 }}
