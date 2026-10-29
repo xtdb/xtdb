@@ -1,4 +1,4 @@
-The avenue-A dart (`IndirectRelation` applied to select/project) is parked as a draft PR: #PR_NUMBER. Its description carries the findings, the sub-goals that would land them, and the open questions; the branch is evidence, not for landing.
+The avenue-A dart (`IndirectRelation` applied to select/project) is parked as #PR_NUMBER, closed unmerged. Its description carries the findings, the sub-goals that would land them, and the open questions; the branch is evidence, not for landing.
 
 - **Filtering the scan's selection array instead of composing one per predicate makes Q6 ~8% faster in the refreshed-snapshot layout (#6174)**
   Q1 is flat there: its predicate saving is offset by the group-by.
