@@ -6,9 +6,11 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.vector.types.pojo.Schema
+import xtdb.arrow.Encoding
 import xtdb.arrow.MergeFields.Companion.mergeFields
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
+import xtdb.arrow.RunEndWidth
 import xtdb.bitemporal.PolygonCalculator
 import xtdb.compactor.OutWriter.OutWriters
 import xtdb.compactor.OutWriter.RecencyRowCopier
@@ -112,7 +114,12 @@ fun resolveSameSystemTimeEvents(
     return relWriter
 }
 
-internal class SegmentMerge(private val al: BufferAllocator) : AutoCloseable {
+private val IID_RUNS = Encoding.RunEnd(RunEndWidth.I32)
+
+internal class SegmentMerge(
+    private val al: BufferAllocator,
+    private val reeIids: Boolean = false
+) : AutoCloseable {
 
     class Result(internal val path: Path, val recency: LocalDate?, val leaves: List<PageTree.Leaf>) : AutoCloseable {
         fun openForRead() = path.openReadableChannel()
@@ -223,11 +230,14 @@ internal class SegmentMerge(private val al: BufferAllocator) : AutoCloseable {
         // an all-put-less merge (deletes/erases only) contributes no put fields — omit the put leg
         // rather than minting a present Null one, matching a raw L0 block. dataRelSchema drops a null
         // putDocField from the op union. #5714
-        val schema = dataRelSchema(putFields.takeIf { it.isNotEmpty() }?.let { mergeFields(it).withName("put") })
+        val putDocField = putFields.takeIf { it.isNotEmpty() }?.let { mergeFields(it).withName("put") }
+
+        fun schemaFor(recency: LocalDate?) =
+            dataRelSchema(putDocField, if (reeIids && recency != null) IID_RUNS else Encoding.Plain)
 
         val outWriter = when (recencyPartitioning) {
-            RecencyPartitioning.Partition -> outWriters.PartitionedOutWriter(schema, recencyPartition)
-            is RecencyPartitioning.Preserve -> outWriters.OutRel(schema, recency = recencyPartitioning.recency)
+            RecencyPartitioning.Partition -> outWriters.PartitionedOutWriter(::schemaFor, recencyPartition)
+            is RecencyPartitioning.Preserve -> outWriters.OutRel(schemaFor(recencyPartitioning.recency), recency = recencyPartitioning.recency)
         }
 
         return outWriter.use {

@@ -21,9 +21,6 @@ import org.apache.arrow.vector.complex.RunEndEncodedVector as ArrowRunEndEncoded
  *
  * Every accessor takes a **logical** index, so this reads exactly like the plain column it encodes, with
  * [runIdx] the only place the encoding surfaces.
- *
- * XTDB reads this encoding but does not yet write it, so that a node on this version can read a data file
- * a later version writes (#5914).
  */
 class RunEndEncodedVector private constructor(
     override var name: String,
@@ -117,6 +114,13 @@ class RunEndEncodedVector private constructor(
     override fun getLongLongHigh(idx: Int) = (valuesVector as LongLongVectorReader).getLongLongHigh(runIdx(idx))
     override fun getLongLongLow(idx: Int) = (valuesVector as LongLongVectorReader).getLongLongLow(runIdx(idx))
 
+    override fun storedRunEnd(idx: Int) = runEnd(runIdx(idx))
+
+    override fun equalRunEnd(idx: Int, limit: Int): Int {
+        val lastRun = (valuesVector as LongLongVectorReader).equalRunEnd(runIdx(idx), runCount) - 1
+        return minOf(runEnd(lastRun), limit)
+    }
+
     override fun hashCode(idx: Int, hasher: Hasher) = valuesVector.hashCode(runIdx(idx), hasher)
 
     override fun getLeg(idx: Int) = valuesVector.getLeg(runIdx(idx))
@@ -180,6 +184,28 @@ class RunEndEncodedVector private constructor(
     fun writeRun(value: Any?, runLength: Int = 1) {
         valuesVector.writeObject(value)
         endRun(runLength)
+    }
+
+    /**
+     * Appends a row holding the 128-bit value ([high], [low]), extending the last run if it holds the same value.
+     *
+     * Requires non-null 16-byte fixed-size binary values and int32 run-ends - an iid column, as the compactor writes it.
+     */
+    fun appendLongLong(high: Long, low: Long) {
+        val values = valuesVector as FixedSizeBinaryVector
+        val lastRun = runCount - 1
+
+        if (lastRun >= 0 && values.getLongLongHigh(lastRun) == high && values.getLongLongLow(lastRun) == low) {
+            when (runEndsVector) {
+                is IntVector -> runEndsVector.increment(lastRun, 1)
+                else -> unsupported("extending a run over ${runEndsVector.arrowType} run-ends")
+            }
+
+            valueCount++
+        } else {
+            values.writeLongLong(high, low)
+            endRun(1)
+        }
     }
 
     private inline fun writeSingletonRun(writeValue: (VectorWriter) -> Unit) {

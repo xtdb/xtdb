@@ -9,6 +9,7 @@ import xtdb.compactor.RecencyPartition.*
 import xtdb.compactor.SegmentMerge.Results
 import xtdb.time.microsAsInstant
 import xtdb.trie.Trie
+import xtdb.trie.rowCopierFor
 import xtdb.util.closeAll
 import xtdb.util.openWritableChannel
 import java.nio.file.Path
@@ -82,7 +83,7 @@ internal interface OutWriter : AutoCloseable {
 
         private class CopierFactory(private val dataRel: Relation) {
             fun rowCopier(dataReader: RelationReader) = object : RecencyRowCopier {
-                private val copier = dataReader.rowCopier(dataRel)
+                private val copier = dataReader.rowCopierFor(dataRel)
 
                 override fun copyRow(recency: RecencyMicros, sourceIndex: Int) = copier.copyRow(sourceIndex)
             }
@@ -128,14 +129,17 @@ internal interface OutWriter : AutoCloseable {
             }
         }
 
-        internal inner class PartitionedOutWriter(private val schema: Schema, private val recencyPartition: RecencyPartition?) : OutWriter {
+        internal inner class PartitionedOutWriter(
+            private val schemaFor: (recency: LocalDate?) -> Schema,
+            private val recencyPartition: RecencyPartition?
+        ) : OutWriter {
             private val outDir = createTempDirectory(tempDir, "merged-segments")
-            private var currentRel = OutRel(schema, outDir.resolve("rc.arrow"), null)
+            private var currentRel = OutRel(schemaFor(null), outDir.resolve("rc.arrow"), null)
 
             private val historicalRels = mutableMapOf<LocalDate, OutRel>()
 
             private fun historicalRel(recencyPartition: LocalDate) = historicalRels.computeIfAbsent(recencyPartition) {
-                OutRel(schema, outDir.resolve("r${Trie.RECENCY_FMT.format(it)}.arrow"), recencyPartition)
+                OutRel(schemaFor(it), outDir.resolve("r${Trie.RECENCY_FMT.format(it)}.arrow"), recencyPartition)
             }
 
             override fun rowCopier(reader: RelationReader) = object : RecencyRowCopier {

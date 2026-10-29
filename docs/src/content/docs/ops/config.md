@@ -3,7 +3,28 @@ title: Configuration
 ---
 
 <details>
-<summary>Changelog (last updated v2.2)</summary>
+<summary>Changelog (last updated v2-NEXT)</summary>
+
+v2-NEXT: the compactor can run-end encode `_iid`, behind `reeIids`
+
+: With `compactor.reeIids` on, compacted historical data files store each entity's `_iid` once per run of its versions, rather than once per version — see [Compactor](#compactor).
+  Current-tier files, where an entity usually has one version, stay as they were.
+
+  It's off by default, and with it off the compactor writes the same files as v2.2, so upgrading from v2.2 needs no extra steps.
+  Every v2-NEXT node reads files written either way.
+
+  Every node that compacts a database must write the same format, so turning it on takes two rolls:
+
+  1. Roll with the compactor off (`compactor.threads: 0`).
+     Where several clusters write to the same database, every one of them finishes this roll before the next step starts anywhere.
+  2. Roll again with the compactor on and `reeIids: true` (or `XTDB_REE_IIDS=true`).
+
+  A new cluster can set it from the start.
+  Earlier releases can't process the files it writes, so going back to one once it's on takes three steps:
+
+  1. Stop every node, and turn `reeIids` off (unset `XTDB_REE_IIDS` too) - a compactor left with it on re-encodes everything `reset-compactor` puts back.
+  2. Run `reset-compactor`.
+  3. Start the earlier release.
 
 v2.2: blocks are flushed every 15 minutes
 
@@ -239,6 +260,11 @@ compactor:
   # Defaults to !Env XTDB_COMPACTOR_THREADS # or if that's not specified min(availableProcessors / 2, 1).
   # Set to 0 to disable the compactor.
   threads: 4
+
+  # (v2-NEXT+) Run-end encode `_iid` in compacted historical data files.
+  # Every node compacting a database must agree - see the v2-NEXT changelog entry above before turning it on for an existing cluster.
+  # Defaults to !Env XTDB_REE_IIDS # or if that's not specified false.
+  reeIids: false
 ```
 
 ### Indexer

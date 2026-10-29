@@ -1,22 +1,29 @@
 package xtdb.compactor
 
 import clojure.lang.Keyword
+import kotlinx.coroutines.runBlocking
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
 import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import xtdb.TaggedValue
 import xtdb.api.TableRef
 import xtdb.api.query.IKeyFn.KeyFn.SNAKE_CASE_STRING
+import xtdb.arrow.Relation
+import xtdb.arrow.RunEndEncodedVector
 import xtdb.arrow.STRUCT_TYPE
+import xtdb.compactor.PageTree.Companion.asTree
 import xtdb.compactor.SegmentMerge.RecencyPartitioning
 import xtdb.indexer.LiveTable
 import xtdb.segment.MemorySegment
+import xtdb.storage.MemoryStorage
 import xtdb.table.TableSlug
 import xtdb.time.InstantUtil.asMicros
 import xtdb.time.microsAsInstant
+import xtdb.trie.PageTrieWriter
 import xtdb.trie.Trie
 import xtdb.util.RowCounter
 import xtdb.util.asIid
@@ -24,6 +31,7 @@ import xtdb.util.safeMap
 import xtdb.util.useAll
 import java.nio.ByteBuffer
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZonedDateTime
 
@@ -157,6 +165,112 @@ class SegmentMergeTest {
             }
         }
     }
+
+    private fun SegmentMerge.iidRunEndsOf(result: SegmentMerge.Result) =
+        result.openAllAsRelation().use { rel ->
+            (rel["_iid"] as? RunEndEncodedVector)?.let { iid -> (0..<iid.runCount).map { iid.runEnd(it) } }
+        }
+
+    private val historical = RecencyPartitioning.Preserve(LocalDate.of(2023, 1, 2))
+
+    @Test
+    fun `with the iid run-end encoded, a historical merge writes the same rows as one run per entity`() = withSegments { segments ->
+        SegmentMerge(al).use { plain ->
+            SegmentMerge(al, reeIids = true).use { encoded ->
+                plain.mergeSegmentsSync(segments, null, historical).use { plainResults ->
+                    encoded.mergeSegmentsSync(segments, null, historical).use { encodedResults ->
+                        assertEquals(plainResults.map { plain.rowsOf(it) }, encodedResults.map { encoded.rowsOf(it) })
+                        assertEquals(listOf(listOf(3, 6)), encodedResults.map { encoded.iidRunEndsOf(it) })
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `with the iid run-end encoded, a current-tier merge still stores its iids plain`() = withSegments { segments ->
+        SegmentMerge(al, reeIids = true).use { encoded ->
+            encoded.mergeSegmentsSync(segments, null, RecencyPartitioning.Preserve(null)).use { results ->
+                assertEquals(listOf(null), results.map { encoded.iidRunEndsOf(it) })
+            }
+        }
+    }
+
+    @Test
+    fun `with the iid run-end encoded, each weekly file holds its own runs and the current file stays plain`() = withSegments { segments ->
+        SegmentMerge(al).use { plain ->
+            SegmentMerge(al, reeIids = true).use { encoded ->
+                plain.mergeSegmentsSync(segments, null, RecencyPartitioning.Partition).use { plainResults ->
+                    encoded.mergeSegmentsSync(segments, null, RecencyPartitioning.Partition).use { encodedResults ->
+                        assertEquals(
+                            plainResults.associate { it.path.fileName.toString() to plain.rowsOf(it) },
+                            encodedResults.associate { it.path.fileName.toString() to encoded.rowsOf(it) }
+                        )
+
+                        assertEquals(
+                            mapOf(
+                                "r20210104.arrow" to listOf(1),
+                                "r20220103.arrow" to listOf(1),
+                                "r20230102.arrow" to listOf(1, 2),
+                                "rc.arrow" to null
+                            ),
+                            encodedResults.associate { it.path.fileName.toString() to encoded.iidRunEndsOf(it) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `a trie written with the iid run-end encoded has the same metadata and pages as a plain one`() =
+        withSegments { segments ->
+            MemoryStorage(al, epoch = 0).use { bp ->
+                val slug = TableSlug.of(foo)
+                val trieWriter = PageTrieWriter(al, bp, calculateBlooms = true)
+
+                fun writeTrie(reeIids: Boolean, trieKey: String, pageSize: Int) =
+                    SegmentMerge(al, reeIids).use { segMerge ->
+                        segMerge.mergeSegmentsSync(segments, null, historical).use { results ->
+                            val result = results.single()
+                            Relation.loader(al, result.openForRead()).use { loader ->
+                                runBlocking { trieWriter.writePageTree(slug, trieKey, loader, result.leaves.asTree, pageSize) }
+                            }
+                        }
+                    }
+
+                fun pagesOf(trieKey: String) =
+                    Relation.loader(al, bp.getByteArray(slug.dataFilePath(trieKey))).use { loader ->
+                        Relation(al, loader.schema).use { rel ->
+                            buildList {
+                                while (loader.loadNextPage(rel))
+                                    add(rel.toMaps(SNAKE_CASE_STRING).map { row -> row.mapValues { (_, v) -> if (v is ByteArray) ByteBuffer.wrap(v) else v } })
+                            }
+                        }
+                    }
+
+                fun iidRunCountsOf(trieKey: String) =
+                    Relation.loader(al, bp.getByteArray(slug.dataFilePath(trieKey))).use { loader ->
+                        Relation(al, loader.schema).use { rel ->
+                            buildList { while (loader.loadNextPage(rel)) add((rel["_iid"] as RunEndEncodedVector).runCount) }
+                        }
+                    }
+
+                for ((pageSize, expectedRunCounts) in listOf(1024 to listOf(2), 2 to listOf(1, 1))) {
+                    writeTrie(false, "l01-r20230102-b00", pageSize)
+                    writeTrie(true, "l01-r20230102-b01", pageSize)
+
+                    assertArrayEquals(
+                        bp.getByteArray(slug.metaFilePath("l01-r20230102-b00")),
+                        bp.getByteArray(slug.metaFilePath("l01-r20230102-b01")),
+                        "meta files, page size $pageSize"
+                    )
+
+                    assertEquals(pagesOf("l01-r20230102-b00"), pagesOf("l01-r20230102-b01"), "pages, page size $pageSize")
+                    assertEquals(expectedRunCounts, iidRunCountsOf("l01-r20230102-b01"), "runs per page, page size $pageSize")
+                }
+            }
+        }
 
     @Test
     fun `a same-transaction event overridden by a later one is resolved away before partitioning by recency`() {
