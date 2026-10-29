@@ -19,7 +19,7 @@ Before adding a card on the grounds that an issue looks orphaned, you MUST check
 ```bash
 gh api graphql -f query='query { repository(owner:"xtdb",name:"xtdb"){
   issue(number:NNNN){ projectItems(first:10, includeArchived:true){
-    nodes{ isArchived project{ number title } } } } }'
+    nodes{ isArchived project{ number title } } } } } }'
 ```
 
 Not all of those projects are public, so this file names none of them and you MUST NOT record their names, numbers or contents here.
