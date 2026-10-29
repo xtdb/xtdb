@@ -1,5 +1,10 @@
 package xtdb.arrow
 
+import io.kotest.matchers.shouldBe
+import io.kotest.property.Arb
+import io.kotest.property.arbitrary.*
+import io.kotest.property.checkAll
+import kotlinx.coroutines.test.runTest
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
 import org.junit.jupiter.api.AfterEach
@@ -280,6 +285,77 @@ class DenseUnionVectorTest {
                 assertEquals(listOf("existing", 99, 12, "hello", 34), dest.asList)
                 assertEquals(listOf(1, 0, 0, 1, 0).map { it.toByte() }, dest.typeIds())
                 assertEquals(listOf(0, 0, 1, 1, 2), dest.offsets())
+            }
+        }
+    }
+
+    private object Undefined
+
+    private val arbScalar: Arb<Any?> =
+        Arb.choice(
+            Arb.constant(null), Arb.long(-3L..3L), Arb.string(0..3), Arb.boolean(), Arb.numericDouble(),
+            Arb.list(Arb.long(-3L..3L), 0..3)
+        )
+
+    private fun arbDoc(depth: Int): Arb<Map<String, Any?>> =
+        Arb.map(Arb.element("a", "b", "c"), if (depth == 0) arbScalar else Arb.choice(arbScalar, arbDoc(depth - 1)), 0, 3)
+
+    private val arbRow: Arb<Any?> = Arb.choice(arbScalar, arbDoc(2), Arb.constant(Undefined))
+
+    private fun openDuv(rows: List<Any?>) =
+        DenseUnionVector(allocator, "docs").apply {
+            for (row in rows) if (row === Undefined) writeUndefined() else writeObject(row)
+        }
+
+    private val DenseUnionVector.rows
+        get() = (0..<valueCount).map { if (getTypeId(it) < 0) Undefined else getObject(it) }
+
+    private fun checkSameValuesAsCopyRow(srcRows: List<Any?>, destRows: List<Any?>, sel: IntArray, copy: (RowCopier) -> Unit) {
+        openDuv(srcRows).use { src ->
+            openDuv(destRows).use { perRow ->
+                openDuv(destRows).use { batched ->
+                    val perRowCopier = src.rowCopier(perRow)
+                    sel.forEach { perRowCopier.copyRow(it) }
+
+                    copy(src.rowCopier(batched))
+
+                    batched.rows shouldBe perRow.rows
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `copyRows reads back the same values as copyRow`() = runTest {
+        checkAll(arbitrary {
+            val srcRows = Arb.list(arbRow, 0..40).bind()
+            val destRows = Arb.list(arbRow, 0..4).bind()
+            val sel = if (srcRows.isEmpty()) IntArray(0) else Arb.list(Arb.int(srcRows.indices), 0..48).bind().toIntArray()
+            val split = Arb.int(0..sel.size).bind()
+            Triple(srcRows, destRows, sel to split)
+        }) { (srcRows, destRows, selSplit) ->
+            val (sel, split) = selSplit
+
+            checkSameValuesAsCopyRow(srcRows, destRows, sel) { copier ->
+                copier.copyRows(sel.copyOfRange(0, split))
+                copier.copyRows(sel.copyOfRange(split, sel.size))
+            }
+        }
+    }
+
+    @Test
+    fun `copyRange over part of the source reads back the same values as copyRow`() = runTest {
+        checkAll(arbitrary {
+            val srcRows = Arb.list(arbRow, 1..40).bind()
+            val destRows = Arb.list(arbRow, 0..4).bind()
+            val start = Arb.int(0..srcRows.size).bind()
+            val len = Arb.int(0..srcRows.size - start - (if (start == 0) 1 else 0)).bind()
+            Triple(srcRows, destRows, start to len)
+        }) { (srcRows, destRows, range) ->
+            val (start, len) = range
+
+            checkSameValuesAsCopyRow(srcRows, destRows, IntArray(len) { start + it }) { copier ->
+                copier.copyRange(start, len)
             }
         }
     }

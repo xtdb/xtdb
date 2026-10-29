@@ -353,6 +353,38 @@ class DenseUnionVector private constructor(
                         if (typeId < 0) writeUndefined() else copiers[typeId].copier.copyRow(src.getOffset(srcIdx))
                     }
 
+                    override fun copyRows(sel: IntArray) {
+                        val destTypeBuffer = this@DenseUnionVector.typeBuffer
+                        val destOffsetBuffer = this@DenseUnionVector.offsetBuffer
+
+                        val legSelSizes = IntArray(copiers.size)
+                        for (srcIdx in sel) {
+                            val srcTypeId = src.getTypeId(srcIdx).toInt()
+                            if (srcTypeId >= 0) legSelSizes[srcTypeId]++
+                        }
+
+                        val legSels = Array(copiers.size) { IntArray(legSelSizes[it]) }
+                        val legSelIdxs = IntArray(copiers.size)
+                        val destOffsets = IntArray(copiers.size) { copiers[it].dest.inner.valueCount }
+
+                        for (srcIdx in sel) {
+                            val srcTypeId = src.getTypeId(srcIdx).toInt()
+                            if (srcTypeId < 0) {
+                                destTypeBuffer.writeByte(-1)
+                                destOffsetBuffer.writeInt(0)
+                            } else {
+                                val legSelIdx = legSelIdxs[srcTypeId]++
+                                destTypeBuffer.writeByte(destTypeIds[srcTypeId])
+                                destOffsetBuffer.writeInt(destOffsets[srcTypeId] + legSelIdx)
+                                legSels[srcTypeId][legSelIdx] = src.getOffset(srcIdx)
+                            }
+                        }
+
+                        copiers.forEachIndexed { srcTypeId, legCopier -> legCopier.innerCopier.copyRows(legSels[srcTypeId]) }
+
+                        this@DenseUnionVector.valueCount += sel.size
+                    }
+
                     override fun copyRange(startIdx: Int, len: Int) {
                         if (startIdx == 0 && len == src.valueCount) {
                             val srcTypeBuffer = src.typeBuffer
@@ -379,7 +411,7 @@ class DenseUnionVector private constructor(
 
                             this@DenseUnionVector.valueCount += len
                         } else {
-                            repeat(len) { copyRow(startIdx + it) }
+                            copyRows(IntArray(len) { startIdx + it })
                         }
                     }
                 }}
