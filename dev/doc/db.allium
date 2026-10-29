@@ -1461,7 +1461,7 @@ deferred ProduceBlock
   -- Produce the block a boundary cut: finish the live index's block, build and upload the per-table block files and the block file, and append the upload under this term.
   -- See: The block cycle, above.
 deferred AdoptBlock
-  -- Adopt a block a confirmation names: add its L0 tries to the trie catalog, refresh the table catalog onto the block, and roll the live index onto the block behind it.
+  -- Adopt a block a confirmation names: add its L0 tries to the trie catalog and refresh the table catalog onto the block, as one catalog write, then roll the live index onto the block behind it.
   -- See: Adopting a block, above.
 deferred ApplyResolvedTxFromRecord
   -- Apply a resolved transaction this term did not resolve: import the record's rows into the durable live tables, advance the DURABLE head to it, and report it to the watchers from the record.

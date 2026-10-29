@@ -17,7 +17,6 @@ import xtdb.database.PartitionState
 import xtdb.api.error.Anomaly
 import xtdb.storage.BufferPool
 import xtdb.table.fromSchemaAndTable
-import xtdb.trie.addTries
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.closeAll
 import xtdb.util.debug

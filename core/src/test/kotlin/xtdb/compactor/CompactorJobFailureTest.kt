@@ -13,7 +13,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
-import xtdb.SimulationTestUtils.Companion.createTrieCatalog
+import xtdb.SimulationTestUtils.Companion.createCatalog
 import xtdb.api.log.SourceMessage.TriesAdded
 import xtdb.api.log.Watchers
 import xtdb.database.DatabaseLogs
@@ -59,14 +59,14 @@ class CompactorJobFailureTest {
         scope = CoroutineScope(Dispatchers.Default)
 
         val jobCalculator = object : Compactor.JobCalculator {
-            override fun availableJobs(trieCatalog: TrieCatalog) = listOf(job)
+            override fun availableJobs(trieCatState: TrieCatalog.State) = listOf(job)
         }
 
         compactor = Compactor.Impl(failingDriverFactory, null, jobCalculator, false, 1)
             .openForDatabase(
                 scope, allocator,
                 PartitionStorage(DatabaseLogs(null, null), storage, null),
-                PartitionState(null, createTrieCatalog(), null),
+                PartitionState(createCatalog(), null),
                 Watchers(latestTxId = -1, latestSourceMsgId = -1)
             )
     }

@@ -18,8 +18,9 @@ import kotlinx.coroutines.test.TestScope
 import org.apache.arrow.memory.BufferAllocator
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
+import xtdb.catalog.Catalog
 import xtdb.NodeBase
-import xtdb.SimulationTestUtils.Companion.createTrieCatalog
+import xtdb.SimulationTestUtils.Companion.createCatalog
 import xtdb.api.DatabaseName
 import xtdb.api.IndexerConfig
 import xtdb.api.log.InMemoryLog
@@ -28,7 +29,6 @@ import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.SourceMessage
 import xtdb.api.log.Watchers
 import xtdb.api.tx.ExternalSource
-import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
 import xtdb.database.Database
 import xtdb.database.DatabaseLogs
@@ -37,7 +37,6 @@ import xtdb.database.PartitionStorage
 import xtdb.indexer.LogProcessor.LogsDriver
 import xtdb.indexer.LogProcessor.RealLogsDriver
 import xtdb.storage.BufferPool
-import xtdb.trie.TrieCatalog
 import xtdb.types.MessageId
 import xtdb.util.closeAll
 import java.time.InstantSource
@@ -192,7 +191,7 @@ internal abstract class LeaderTermTest {
         replicaLog: InMemoryLog<ReplicaMessage> = InMemoryLog(InstantSource.system(), 0),
         bufferPool: BufferPool = mockk(relaxed = true) { every { epoch } returns 0 },
         liveIndex: LiveIndex = liveIndexMock(),
-        trieCatalog: TrieCatalog = createTrieCatalog(),
+        catalog: Catalog = createCatalog(),
         compactor: Compactor.ForDatabase = mockk(relaxed = true),
         watchers: Watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1),
         // These tests submit through the processor rather than driving an adapter, so the source only has
@@ -206,8 +205,7 @@ internal abstract class LeaderTermTest {
         termJob: Job = SupervisorJob(backgroundScope.coroutineContext.job),
     ): LeaderLogProcessor {
         val dbName = if (dbCatalog != null) "xtdb" else "test"
-        val tableCatalog = TableCatalog(bufferPool)
-        val partitionState = PartitionState(tableCatalog, trieCatalog, liveIndex)
+        val partitionState = PartitionState(catalog, liveIndex)
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
         val driver = wrapDriver(RealLogsDriver(partitionStorage))
 
@@ -247,7 +245,7 @@ internal abstract class LeaderTermTest {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val bufferPool = mockk<BufferPool>(relaxed = true) { every { epoch } returns 0 }
         val partitionState =
-            PartitionState(TableCatalog(bufferPool), createTrieCatalog(), liveIndexMock())
+            PartitionState(createCatalog(), liveIndexMock())
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
         val logsDriver = driver(RealLogsDriver(partitionStorage))
         val appender = ReplicaLogAppender(logsDriver, leaderTerm = 1, NoAssertElectionDriver)

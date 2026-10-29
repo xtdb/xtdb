@@ -3,6 +3,7 @@ package xtdb.database
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.IndexerConfig
 import xtdb.block.proto.Block
+import xtdb.catalog.Catalog
 import xtdb.catalog.TableCatalog
 import xtdb.catalog.TableCatalog.Companion.latestBlock
 import xtdb.indexer.LiveIndex
@@ -10,23 +11,23 @@ import xtdb.storage.BufferPool
 import xtdb.api.TableRef
 import xtdb.log.proto.TrieDetails
 import xtdb.trie.TrieCatalog
-import xtdb.trie.addTries
 import xtdb.types.LogTimestamp
 import xtdb.util.requiringResolve
 import xtdb.util.safelyOpening
 
 class PartitionState(
-    val tableCatalogOrNull: TableCatalog?,
-    val trieCatalogOrNull: TrieCatalog?,
+    val catalogOrNull: Catalog?,
     val liveIndexOrNull: LiveIndex?,
 ) : AutoCloseable {
-    val tableCatalog: TableCatalog get() = tableCatalogOrNull ?: error("no table-catalog")
-    val trieCatalog: TrieCatalog get() = trieCatalogOrNull ?: error("no trie-catalog")
+    val catalog: Catalog get() = catalogOrNull ?: error("no catalog")
+    val tableCatalogOrNull: TableCatalog? get() = catalogOrNull?.tableCatalog
+    val tableCatalog: TableCatalog get() = catalog.tableCatalog
+    val trieCatalog: TrieCatalog get() = catalog.trieCatalog
     val liveIndex: LiveIndex get() = liveIndexOrNull ?: error("no live-index")
 
     /**
-     * Adopt [block]: register the L0 [tries] it carries, refresh the table catalog onto it, and roll the
-     * live index onto the block behind it.
+     * Adopt [block]: register the L0 [tries] it carries and refresh the table catalog onto it, as one catalog
+     * write, then roll the live index onto the block behind it.
      *
      * The caller MUST have made [block] durable first, because this is what moves the node past it — and
      * MUST call it once per block, the refresh's fold summing row counts.
@@ -34,10 +35,9 @@ class PartitionState(
      * [logTimestamp] is the replica record's, dating the supersession the tries cause.
      */
     fun adoptBlock(block: Block, tries: List<TrieDetails>, logTimestamp: LogTimestamp) {
-        trieCatalog.addTries(tries, logTimestamp)
-
         // `blockMetadata()` reads the live tables that `nextBlock()` then clears.
-        tableCatalog.refresh(block, liveIndex.blockMetadata())
+        val metadata = liveIndex.blockMetadata()
+        catalog.update { it.adopting(block, tries, logTimestamp, metadata) }
         liveIndex.nextBlock()
     }
 
@@ -56,21 +56,19 @@ class PartitionState(
             bufferPool: BufferPool,
             indexerConfig: IndexerConfig = IndexerConfig(),
         ): PartitionState = safelyOpening {
-            val tableCatalog = TableCatalog(bufferPool, bufferPool.latestBlock).also {
-                it.loadTables()
+            val tableCatState = TableCatalog.loadState(bufferPool, bufferPool.latestBlock)
                 // xt.txs and xt.role_membership are data-backed, so they're absent from the catalog
                 // until the first transaction / GRANT. Seed them (as empty CREATE TABLEs) so they're
                 // always resolvable - the columns mirror `OpenTx.writeTxRow` / the GRANT path. On a node
                 // that already has these tables, the loaded types win (no-op seed).
-                it.seedTable(TableRef("xt", "txs"), listOf("_id", "system_time", "committed", "user_metadata", "error"))
-                it.seedTable(TableRef("xt", "role_membership"), listOf("user", "role"))
-            }
+                .withSeededTable(TableRef("xt", "txs"), listOf("_id", "system_time", "committed", "user_metadata", "error"))
+                .withSeededTable(TableRef("xt", "role_membership"), listOf("user", "role"))
 
-            val trieCatalog = trieCatalogFactory.open(bufferPool, tableCatalog)
+            val catalog = Catalog(Catalog.State(trieCatalogFactory.open(bufferPool, tableCatState), tableCatState))
 
-            val liveIndex = open { LiveIndex.open(allocator, tableCatalog, trieCatalog, indexerConfig) }
+            val liveIndex = open { LiveIndex.open(allocator, catalog, indexerConfig) }
 
-            PartitionState(tableCatalog, trieCatalog, liveIndex)
+            PartitionState(catalog, liveIndex)
         }
     }
 }

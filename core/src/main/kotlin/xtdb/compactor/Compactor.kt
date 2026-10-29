@@ -48,7 +48,7 @@ interface Compactor : AutoCloseable {
     }
 
     interface JobCalculator {
-        fun availableJobs(trieCatalog: TrieCatalog): Collection<Job>
+        fun availableJobs(trieCatState: TrieCatalog.State): Collection<Job>
     }
 
     fun interface Factory {
@@ -182,7 +182,6 @@ interface Compactor : AutoCloseable {
         override fun openForDatabase(scope: CoroutineScope, allocator: BufferAllocator, partitionStorage: PartitionStorage, partitionState: PartitionState, watchers: Watchers) = object : ForDatabase {
 
             private val trieCatalog = partitionState.trieCatalog
-            private val liveIndex = partitionState.liveIndexOrNull
 
             val driver = driverFactory.create(allocator, partitionStorage, partitionState, watchers)
 
@@ -203,7 +202,7 @@ interface Compactor : AutoCloseable {
 
             init {
                 meterRegistry?.let {
-                    Gauge.builder("compactor.jobs.available") { jobCalculator.availableJobs(trieCatalog).size.toDouble() }
+                    Gauge.builder("compactor.jobs.available") { jobCalculator.availableJobs(trieCatalog.state).size.toDouble() }
                         .register(it)
                 }
             }
@@ -214,7 +213,7 @@ interface Compactor : AutoCloseable {
                     supervisorScope {
                         while (true) {
                             availableJobs =
-                                jobCalculator.availableJobs(trieCatalog)
+                                jobCalculator.availableJobs(trieCatalog.state)
                                     .associateBy { JobKey(it.table, it.outputTrieKey.toString()) }
 
                             availableJobs.keys.forEach { jobKey ->
@@ -299,12 +298,6 @@ interface Compactor : AutoCloseable {
                 LOGGER.trace("compactAll: waiting for idle")
                 promise.await()
                 LOGGER.trace("compactAll: idle")
-
-                // Compaction lands `TriesAdded` on the trie-cat asynchronously, so the live-index's
-                // cached `sharedSnap` would otherwise stay frozen at the last commit/`nextBlock`.
-                // Callers waiting for `compactAll` are explicitly synchronising on the post-compaction
-                // catalog, so refresh the snap here rather than at every test/dev call-site.
-                liveIndex?.refreshSnap()
             }
 
             override fun close() {

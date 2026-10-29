@@ -251,16 +251,14 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
         )
 
         assertEquals(
-            listOf(trieKey), partitionState.trieCatalog.listAllTrieKeys(fromSchemaAndTable("public/foo"))
+            listOf(trieKey), partitionState.trieCatalog.state.listAllTrieKeys(fromSchemaAndTable("public/foo"))
         )
         assertEquals(3L, watchers.latestSourceMsgId)
     }
 
-    // Inert, because these two are about when the commit returns rather than about what it removes: a
-    // `deleteTries` for a shard the catalog doesn't hold trips its own spec assertion.
     private fun TestScope.gcTerm(append: GatedAppend, termJob: Job = SupervisorJob(backgroundScope.coroutineContext.job)) =
         leaderProc(
-            StandardTestDispatcher(testScheduler), trieCatalog = mockk(relaxed = true),
+            StandardTestDispatcher(testScheduler),
             wrapDriver = append::wrap, termJob = termJob,
         )
 

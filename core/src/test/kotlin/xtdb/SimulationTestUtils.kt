@@ -1,5 +1,9 @@
 package xtdb
 
+import clojure.lang.PersistentArrayMap
+import xtdb.block.proto.Block
+import xtdb.catalog.Catalog
+import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
 import xtdb.log.proto.TrieDetails
 import xtdb.storage.BufferPool
@@ -10,7 +14,6 @@ import xtdb.trie.TrieKey
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.requiringResolve
 import java.nio.ByteBuffer
-import java.util.concurrent.ConcurrentHashMap
 
 class SimulationTestUtils {
     companion object {
@@ -32,13 +35,18 @@ class SimulationTestUtils {
         // Clojure interop to get at internal functions
         val setLogLevel = requiringResolve("xtdb.logging/set-log-level!")
         private val createJobCalculatorFn = requiringResolve("xtdb.compactor.job-calculator/->JobCalculator")
-        private val createTrieCatalogFn = requiringResolve("xtdb.trie-catalog/->TrieCatalog")
+        private val createTrieCatalogStateFn = requiringResolve("xtdb.trie-catalog/->TrieCatalogState")
 
         fun createJobCalculator(): Compactor.JobCalculator =
             createJobCalculatorFn.invoke() as Compactor.JobCalculator
 
-        fun createTrieCatalog(): TrieCatalog =
-            createTrieCatalogFn.invoke(ConcurrentHashMap<Any, Any>(), 100 * 1024 * 1024) as TrieCatalog
+        fun createCatalog(block: Block? = null): Catalog =
+            Catalog(
+                Catalog.State(
+                    createTrieCatalogStateFn.invoke(PersistentArrayMap.EMPTY, 100 * 1024 * 1024) as TrieCatalog.State,
+                    TableCatalog.initialState(block)
+                )
+            )
 
         val L0TrieKeys = sequence {
             var blockIndex = 0

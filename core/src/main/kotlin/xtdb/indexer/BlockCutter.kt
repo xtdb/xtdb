@@ -207,8 +207,9 @@ internal class BlockCutter(
         // partitions as of itself, and the add below is what the catalog will agree with afterwards.
         val allTables = finishedBlocks.keys + tableCatalog.allTables
 
+        val trieCatState = trieCatalog.state
         val tablePartitions = allTables.associateWith { table ->
-            trieCatalog.withPartitions(table, listOfNotNull(addedTriesByTable[table]), triesAsOf)
+            trieCatState.withPartitions(table, listOfNotNull(addedTriesByTable[table]), triesAsOf)
         }
 
         val tableBlocks = tableCatalog.buildTableBlocks(finishedBlocks, tablePartitions)

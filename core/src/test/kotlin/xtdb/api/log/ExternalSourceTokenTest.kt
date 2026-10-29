@@ -1,11 +1,9 @@
 package xtdb.api.log
 
-import io.mockk.mockk
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import xtdb.block.proto.Block
-import xtdb.catalog.TableCatalog
-import xtdb.storage.BufferPool
+import xtdb.SimulationTestUtils.Companion.createCatalog
 
 class ExternalSourceTokenTest {
 
@@ -50,7 +48,7 @@ class ExternalSourceTokenTest {
 
     @Test
     fun `Block proto round-trips external source token`() {
-        val tableCatalog = TableCatalog(mockk<BufferPool>(relaxed = true))
+        val tableCatalog = createCatalog().tableCatalog
 
         val block = tableCatalog.buildBlock(
             blockIndex = 0,
@@ -71,7 +69,7 @@ class ExternalSourceTokenTest {
 
     @Test
     fun `TableCatalog externalSourceToken reads from latest block`() {
-        val tableCatalog = TableCatalog(mockk<BufferPool>(relaxed = true))
+        val tableCatalog = createCatalog().tableCatalog
 
         assertNull(tableCatalog.externalSourceToken)
 
@@ -93,7 +91,7 @@ class ExternalSourceTokenTest {
 
     @Test
     fun `TableCatalog externalSourceToken returns null when no token`() {
-        val tableCatalog = TableCatalog(mockk<BufferPool>(relaxed = true))
+        val tableCatalog = createCatalog().tableCatalog
 
         val block = tableCatalog.buildBlock(
             blockIndex = 0,

@@ -2,11 +2,9 @@ package xtdb.catalog
 
 import com.google.protobuf.ByteString
 import kotlinx.coroutines.flow.FlowCollector
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.update
 import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.api.TableRef
 import xtdb.api.TransactionKey
@@ -83,8 +81,8 @@ private fun <T, R> StateFlow<T>.mapState(f: (T) -> R): StateFlow<R> = object : S
     }
 }
 
-/** What one database partition knows about its tables, and the block that knowledge is current to. */
-class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = null) {
+/** The table half of a [Catalog]: what the partition knows about its tables, and the block that knowledge is current to. */
+class TableCatalog internal constructor(private val catalog: Catalog) {
 
     internal data class TableMeta(
         val vecTypes: Map<ColumnName, VectorType>,
@@ -162,13 +160,37 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
          * been told about — a query naming a table that does not exist.
          */
         fun slug(table: TableRef): TableSlug = entry(table)?.slug ?: TableSlug.of(table)
+
+        /**
+         * [this] with a data-backed system table (e.g. `xt.txs`) seeded, as if an empty `CREATE TABLE` had run:
+         * columns are declared but dataless (`Nothing`), so the first real write sets their types
+         * (`Nothing ⊔ X = X`). [this] unchanged if the table was already loaded from storage.
+         */
+        internal fun withSeededTable(table: TableRef, colNames: List<ColumnName>): State {
+            val meta = TableMeta(colNames.associateWith { VectorType.Nothing }, 0, emptyMap())
+
+            return copy(tables = if (tables.containsKey(table)) tables else tables + (table to meta))
+                .withEntriesFor(listOf(table))
+        }
+
+        internal fun refreshed(block: Block?, metadata: Map<TableRef, LiveTable.BlockMetadata>): State {
+            val delta = metadata.mapValues { (_, bm) -> TableMeta(bm.vecTypes, bm.rowCount.toLong(), bm.hllDeltas) }
+            val newBlock = if (block != null && block.blockIndex == blockIdx) this.block else block?.asBlockDetails()
+
+            return State(
+                block = newBlock,
+                tables = if (delta.isEmpty()) tables else tables.foldIn(delta),
+                // The block wins over what we allocated: ordinarily the two agree, but a block written
+                // before entries were recorded resolves to derived ones, and those are what every other
+                // node reading it will use.
+                entriesByTable = entriesByTable + newBlock?.tables.orEmpty().associateBy { it.table }
+            )
+        }
     }
 
-    private val _state = initialBlock?.asBlockDetails().let { block ->
-        MutableStateFlow(State(block, emptyMap(), block?.tables.orEmpty().associateBy { it.table }))
-    }
+    private fun update(f: (State) -> State) = catalog.update { it.mapTableCat(f) }
 
-    fun snap(): State = _state.value
+    fun snap(): State = catalog.current.tableCat
 
     /**
      * The latest block this catalog knows to be in object storage, advancing on [refresh] — which the
@@ -178,7 +200,7 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
      * from storage alone. That is what lets an external source use the emitted `externalSourceToken` as
      * the furthest position it may confirm upstream.
      */
-    val latestBlock: StateFlow<BlockDetails?> = _state.mapState { it.block }
+    val latestBlock: StateFlow<BlockDetails?> = catalog.flow.mapState { it.tableCat.block }
 
     val currentBlockIndex: BlockIndex? get() = snap().blockIdx
 
@@ -226,61 +248,19 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
      * this as an unordered map, so arrival order within one transaction differs between them, while the
      * order transactions themselves arrive does not.
      */
-    fun registerTables(tables: Collection<TableRef>) = _state.update { it.withEntriesFor(tables) }
+    fun registerTables(tables: Collection<TableRef>) = update { it.withEntriesFor(tables) }
 
     val secondaryDatabases: Map<String, DatabaseConfig> get() = snap().block?.secondaryDatabases.orEmpty()
 
     fun rowCount(table: TableRef): Long? = snap().rowCount(table)
 
     /**
-     * Seeds a data-backed system table (e.g. `xt.txs`) so it's present from startup, as if an empty
-     * `CREATE TABLE` had run: columns are declared but dataless (`Nothing`), so the first real write
-     * sets their types (`Nothing ⊔ X = X`). No-op if the table was already loaded from storage.
-     */
-    fun seedTable(table: TableRef, colNames: List<ColumnName>) {
-        val meta = TableMeta(colNames.associateWith { VectorType.Nothing }, 0, emptyMap())
-
-        _state.update { cur ->
-            cur.copy(tables = if (cur.tables.containsKey(table)) cur.tables else cur.tables + (table to meta))
-                .withEntriesFor(listOf(table))
-        }
-    }
-
-    /**
-     * Loads table metadata from storage for the block this catalog opened at, replacing the in-memory
-     * tables wholesale. Called once, at open, *before* [seedTable] - a second call would drop any seeds
-     * not yet persisted to storage.
-     */
-    fun loadTables() {
-        val snap = snap()
-        val blockIndex = snap.blockIdx ?: return
-        val tables = loadTablesFromStorage(bufferPool, snap.recordedEntries, blockIndex)
-
-        _state.update { it.copy(tables = tables) }
-    }
-
-    /**
      * Advances to a newly durable block, folding that block's per-table metadata in with it.
      *
      * A re-delivered block leaves the block half alone but still folds the metadata.
      */
-    fun refresh(block: Block?, metadata: Map<TableRef, LiveTable.BlockMetadata> = emptyMap()) {
-        val delta = metadata.mapValues { (_, bm) -> TableMeta(bm.vecTypes, bm.rowCount.toLong(), bm.hllDeltas) }
-
-        _state.update { cur ->
-            val newBlock =
-                if (block != null && block.blockIndex == cur.blockIdx) cur.block else block?.asBlockDetails()
-
-            State(
-                block = newBlock,
-                tables = if (delta.isEmpty()) cur.tables else cur.tables.foldIn(delta),
-                // The block wins over what we allocated: ordinarily the two agree, but a block written
-                // before entries were recorded resolves to derived ones, and those are what every other
-                // node reading it will use.
-                entriesByTable = cur.entriesByTable + newBlock?.tables.orEmpty().associateBy { it.table }
-            )
-        }
-    }
+    fun refresh(block: Block?, metadata: Map<TableRef, LiveTable.BlockMetadata> = emptyMap()) =
+        update { it.refreshed(block, metadata) }
 
     /**
      * The per-table block files for a block contributing [tableMetadata], with [tablePartitions] as their
@@ -339,6 +319,21 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
     }
 
     companion object {
+        /** A catalog at [block] — the tables it records, and none of their metadata. */
+        @JvmStatic
+        fun initialState(block: Block?): State =
+            block?.asBlockDetails().let { details ->
+                State(details, emptyMap(), details?.tables.orEmpty().associateBy { it.table })
+            }
+
+        /** [initialState], with each recorded table's metadata loaded from [bufferPool]. */
+        @JvmStatic
+        fun loadState(bufferPool: BufferPool, block: Block?): State {
+            val state = initialState(block)
+            val blockIndex = state.blockIdx ?: return state
+            return state.copy(tables = loadTablesFromStorage(bufferPool, state.recordedEntries, blockIndex))
+        }
+
         private val blocksPath = "blocks".asPath
 
         @JvmStatic

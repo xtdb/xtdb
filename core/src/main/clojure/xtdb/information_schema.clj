@@ -25,7 +25,7 @@
            (xtdb.query IQuerySource IQuerySource$QueryCatalog IQuerySource$QueryDatabase)
            xtdb.api.TableRef
            xtdb.table.TableEntry
-           xtdb.trie.TrieCatalog))
+           xtdb.trie.TrieCatalog$State))
 
 (defn name->oid [s]
   (Math/abs ^Integer (hash s)))
@@ -461,9 +461,9 @@
   (for [[user role] (RoleMembership/scanMemberships query-source db-cat)]
     {:roleid (name->oid role), :member (name->oid user), :grantor nil, :admin-option false}))
 
-(defn trie-stats [^TrieCatalog trie-catalog]
-  (for [^TableRef table (.getTables trie-catalog)
-        :let [trie-state (trie-cat/trie-state trie-catalog table)]
+(defn trie-stats [^TrieCatalog$State trie-cat-state]
+  (for [^TableRef table (.getTables trie-cat-state)
+        :let [trie-state (.tableState trie-cat-state table)]
         {:keys [trie-key level recency state data-file-size trie-metadata]} (trie-cat/all-tries trie-state)
         :let [{:keys [row-count] :as trie-meta} (some-> trie-metadata trie-cat/<-trie-metadata)]]
     {:schema-name (.getSchemaName table), :table-name (.getTableName table)
@@ -619,7 +619,7 @@
                                      pg_catalog/pg_roles (pg-roles authn query-source db-cat)
                                      pg_catalog/pg_auth_members (pg-auth-members query-source db-cat)
                                      pg_catalog/pg_depend nil
-                                     xt/trie_stats (trie-stats trie-catalog)
+                                     xt/trie_stats (trie-stats (.getState trie-catalog))
                                      xt/live_tables (live-tables snap)
                                      xt/live_columns (live-columns snap)
                                      xt/metrics_timers (metrics-timers metrics-registry)

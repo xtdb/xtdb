@@ -5,6 +5,7 @@ import xtdb.api.TransactionKey
 import xtdb.arrow.MergeTypes.Companion.mergeTypes
 import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorType
+import xtdb.catalog.Catalog
 import xtdb.catalog.TableCatalog
 import xtdb.indexer.LiveTable.Companion.logRelTypes
 import xtdb.api.TableRef
@@ -27,13 +28,12 @@ import xtdb.api.tx.OpenTx
  * A frozen view of **one partition** at a point in time — see [DatabaseSnapshot] for the whole database.
  *
  * It pins the in-memory segments, the trie catalog and the historical table metadata, so a reader is not
- * combining pinned data with a catalog read live at call time. The two catalog captures are not atomic with
- * respect to each other, though — see [open].
+ * combining pinned data with a catalog read live at call time. The catalog is one capture, the segments another
+ * — see [open].
  */
 class Snapshot(
     val txBasis: TransactionKey?,
-    val trieCatSnap: TrieCatalog.Snap,
-    val tableCatSnap: TableCatalog.State,
+    val catalogState: Catalog.State,
     // A table already has several of these on a transaction snapshot - the live-index segment, one
     // per staged tx that touched it, and the tx's own writes. Those are all tx-visibility layers,
     // so an external snapshot still sees one segment per table. Dual-slot LiveTable (#4495) is what
@@ -45,6 +45,9 @@ class Snapshot(
     private val supersededLiveTypes: Map<TableRef, Map<ColumnName, VectorType>>,
     val tableInfo: Map<TableRef, Set<ColumnName>>,
 ) : AutoCloseable {
+
+    val trieCatSnap: TrieCatalog.State get() = catalogState.trieCat
+    val tableCatSnap: TableCatalog.State get() = catalogState.tableCat
 
     /**
      * Where [table]'s files live, as of this snapshot — so the slugs a scan reads by are the ones recorded
@@ -131,23 +134,25 @@ class Snapshot(
         // behind plus itself (read-your-writes across the batch).
         @JvmStatic
         fun open(
-            al: BufferAllocator, tableCat: TableCatalog,
-            trieCatalog: TrieCatalog, liveIndex: LiveIndex,
+            al: BufferAllocator, catalog: Catalog, liveIndex: LiveIndex,
             resolvedTxs: List<ResolvedTx> = emptyList(),
             ownTx: OpenTx? = null,
         ): Snapshot = safelyOpening {
-            val trieCatSnap = trieCatalog.snapshot()
+            // Before the live tables: the caller holds off the next block roll, so a block adopted after this
+            // capture still has its live table here to be read.
+            val catalogState = catalog.current
+            val trieCatSnap = catalogState.trieCat
 
             // Live-tables already covered by a published L0 contribute no *rows* — they'd duplicate the
             // L0's data. The watermark is monotonic, so once L0_N exists we drop the live-table-N entry
             // for good (its rows are now in L0_N).
             //
-            // Their *types* we keep. `addTries` and `tableCatalog.refresh` are separate steps, and
-            // between them the L0 is readable while the catalog still holds the pre-block types — so
-            // dropping the live half outright would leave nobody able to answer, declaring a narrower
-            // type than the rows about to be scanned. The write path keeps both copies alive across that
-            // gap (`nextBlock` runs after the catalog update on the leader and follower paths alike);
-            // this keeps the read path inside it. See #5873.
+            // Their *types* we keep. Adopting a block publishes its L0 and its types in one catalog write,
+            // but an L0 can also arrive on its own — the `TriesAdded` re-published for multi-writer nodes —
+            // and until its block's types reach the catalog, dropping the live half outright would leave
+            // nobody able to answer, declaring a narrower type than the rows about to be scanned. The
+            // write path keeps the live table alive until the catalog has the types (`nextBlock` runs after
+            // the adoption); this keeps the read path inside it. See #5873.
             val (liveTables, supersededTables) = liveIndex.tableRefs
                 .mapNotNull { liveIndex.table(it) }
                 .partition { it.blockIdx > trieCatSnap.l0MaxBlockIdx(it.table) }
@@ -181,15 +186,10 @@ class Snapshot(
             for (t in stagedTables) liveColumnNames.getOrPut(t.ref) { linkedSetOf() }.addAll(t.columnTypes.keys)
             for ((table, types) in supersededLiveTypes) liveColumnNames.getOrPut(table) { linkedSetOf() }.addAll(types.keys)
 
-            // Captured after the trie-cat and the live tables, deliberately: the type view must not lag the
-            // data view. A declared type narrower than the rows being scanned is unsound; a wider one is
-            // always safe, so a catalog read that's newer than the tries it covers errs in the safe direction.
-            val tableCatSnap = tableCat.snap()
-
-            val tableInfo = tableCatSnap.buildTableInfo(liveColumnNames)
+            val tableInfo = catalogState.tableCat.buildTableInfo(liveColumnNames)
 
             Snapshot(
-                ownTx?.txKey ?: liveIndex.latestCompletedTx, trieCatSnap, tableCatSnap,
+                ownTx?.txKey ?: liveIndex.latestCompletedTx, catalogState,
                 byTable, supersededLiveTypes, tableInfo
             )
         }

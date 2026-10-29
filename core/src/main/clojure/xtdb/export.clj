@@ -14,7 +14,7 @@
            (xtdb.database Database)
            xtdb.api.storage.Storage
            xtdb.api.TableRef
-           (xtdb.trie Trie)))
+           (xtdb.trie Trie TrieCatalog$State)))
 
 (defn- export-dir-path ^java.nio.file.Path [block-idx ^Instant now]
   (-> (util/->path "exports")
@@ -23,9 +23,9 @@
                         (.format (DateTimeFormatter/ofPattern "yyyyMMdd'T'HHmmss'Z'")
                                  (.atZone now (ZoneId/of "UTC")))))))
 
-(defn- all-trie-keys [trie-cat ^TableRef table]
+(defn- all-trie-keys [^TrieCatalog$State trie-cat-state ^TableRef table]
   (->> (trie-cat/all-tries
-        (trie-cat/trie-state trie-cat table))
+        (.tableState trie-cat-state table))
        (into []
              (comp (filter (comp #{:live :nascent} :state))
                    (map :trie-key)))))
@@ -51,7 +51,7 @@
                                                     {:db-name db-name})))
              buffer-pool (.getBufferPool db)
              table-cat (.getTableCatalog db)
-             trie-cat (.getTrieCatalog db)
+             trie-cat-state (.getState (.getTrieCatalog db))
 
              start-time (Instant/now)]
 
@@ -64,7 +64,7 @@
                  ;; form — that would key every export under parts/N/ and break restore. The input
                  ;; side is the open question (#5838), not this.
                  export-root (.resolve export-dir (Storage/storageRoot Storage/VERSION 0))
-                 tables (.getTables trie-cat)]
+                 tables (.getTables trie-cat-state)]
 
              (log/infof "Export directory: %s" export-dir)
              (log/infof "Found %d tables to export" (count tables))
@@ -74,7 +74,7 @@
                                        (-> (.getTablePath (.slug table-cat table))
                                            (table-cat/->table-block-metadata-obj-key block-idx)))
                    trie-files (for [^TableRef table tables
-                                    :let [trie-keys (all-trie-keys trie-cat table)
+                                    :let [trie-keys (all-trie-keys trie-cat-state table)
                                           _ (log/infof "Table %s: %d active trie files" (pr-str table) (count trie-keys))
                                           slug (.slug table-cat table)]
                                     ^String trie-key trie-keys

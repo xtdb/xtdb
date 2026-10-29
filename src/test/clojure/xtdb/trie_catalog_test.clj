@@ -15,12 +15,12 @@
   (:import (java.io File)
            [java.nio.file Path]
            (java.time Duration Instant)
-           (java.util.concurrent ConcurrentHashMap)
            (xtdb.api.storage ObjectStore$StoredObject)
            (xtdb.block.proto Block)
            (xtdb.log.proto TemporalMetadata TrieMetadata)
            (xtdb.table TableSlug)
-           (xtdb.trie_catalog TrieCatalog)
+           (xtdb.catalog Catalog Catalog$State TableCatalog)
+           (xtdb.trie TrieCatalog)
            (xtdb.api TableRef)))
 
 (t/use-fixtures :once tu/with-allocator)
@@ -362,14 +362,14 @@
 
         ;; in-memory, the seeded-but-dataless xt/role_membership has no trie, so the trie catalog
         ;; doesn't track it yet (unlike after a restart, below, where it's reconstructed from its block)
-        (t/is (= #{#xt/table foo, #xt/table xt/txs} (.getTables cat)))
+        (t/is (= #{#xt/table foo, #xt/table xt/txs} (.getTables (.getState cat))))
         (t/is (= #{"l00-rc-b00" "l00-rc-b01"}
                  (->> (cat/current-tries (cat/trie-state cat #xt/table foo))
                       (into #{} (map :trie-key)))))))
 
     (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
       (let [cat (.getTrieCatalog (db/primary-db node))]
-        (t/is (= #{#xt/table xt/role_membership, #xt/table foo, #xt/table xt/txs} (.getTables cat)))
+        (t/is (= #{#xt/table xt/role_membership, #xt/table foo, #xt/table xt/txs} (.getTables (.getState cat))))
         (t/is (= #{"l00-rc-b01" "l00-rc-b00"}
                  (->> (cat/current-tries (cat/trie-state cat #xt/table foo))
                       (into #{} (map :trie-key)))))))
@@ -397,9 +397,12 @@
                  (->> (cat/current-tries (cat/trie-state cat #xt/table foo))
                       (into (sorted-set) (map :trie-key)))))))))
 
+(defn- ->trie-cat ^TrieCatalog [table-cats file-size-target]
+  (.getTrieCatalog (Catalog. (Catalog$State. (cat/->TrieCatalogState table-cats file-size-target)
+                                             (TableCatalog/initialState nil)))))
+
 (defn trie-catalog-init [table->table-block]
-  (TrieCatalog. (cat/load-tries table->table-block cat/*file-size-target*)
-                cat/*file-size-target*))
+  (->trie-cat (cat/load-tries table->table-block cat/*file-size-target*) cat/*file-size-target*))
 
 (t/deftest test-startup-drops-persisted-l0-garbage
   ;; Block files written before the "drop L0 on supersession" change may persist L0 entries
@@ -578,7 +581,7 @@
                        ["l03-r20250101-p3-b09"]))))
 
 (t/deftest test-dry-trie-catalog-gc
-  (let [cat (TrieCatalog. (ConcurrentHashMap.) 20)] ;file-size-target
+  (let [cat (->trie-cat {} 20)] ;file-size-target
     (letfn [(add-tries [tries inst]
               (.addTries cat #xt/table foo
                          (map #(apply trie/->trie-details #xt/table foo %) tries)
@@ -794,7 +797,7 @@
               :tries [{:trie-key "l03-r20200101-p0-b07" :block-idx 7}]}]))))
 
 (t/deftest test-delete-garbage-l1-l2-with-live-l3
-  (let [cat (TrieCatalog. (ConcurrentHashMap.) 20)
+  (let [cat (->trie-cat {} 20)
         table #xt/table foo
         add-tries (fn [tries inst]
                     (.addTries cat table
@@ -835,21 +838,21 @@
   (tu/with-tmp-dirs #{node-dir}
     (with-open [node (tu/->local-node {:node-dir node-dir :compactor-threads 0})]
       (let [trie-cat (.getTrieCatalog (db/primary-db node))]
-        (t/is (empty? (cat/l0-blocks trie-cat))
+        (t/is (empty? (cat/l0-blocks (.getState trie-cat)))
               "Empty node should have no L0 blocks")
 
         (xt/execute-tx node [[:put-docs :table_a {:xt/id 1}]
                              [:put-docs :table_b {:xt/id 2}]])
-        (t/is (empty? (cat/l0-blocks trie-cat))
+        (t/is (empty? (cat/l0-blocks (.getState trie-cat)))
               "Before finish-block, should still have no L0 blocks")
 
         (tu/flush-block! node)
-        (t/is (= [0] (map :block-idx (cat/l0-blocks trie-cat)))
+        (t/is (= [0] (map :block-idx (cat/l0-blocks (.getState trie-cat))))
               "Should have 1 block after first finish-block")
 
         (xt/execute-tx node [[:put-docs :table_c {:xt/id 3}]])
         (tu/flush-block! node)
-        (let [blocks (cat/l0-blocks trie-cat)
+        (let [blocks (cat/l0-blocks (.getState trie-cat))
               tables (for [block blocks]
                        (for [t (:tables block)]
                          (-> t :table TableRef/.getTableName keyword)))]
@@ -858,9 +861,6 @@
           (t/is (= [[:table_a :table_b :txs] [:table_c :txs]] tables)))))))
 
 (t/deftest test-reset-rebuilds-l0-from-object-store
-  ;; After compaction, the catalog has no L0 entries — they're dropped on supersession.
-  ;; reset->l0! is a passive sink: callers (xtdb.compactor.reset) enumerate L0s from the
-  ;; object store and pass them in. This exercises that flow at the unit level.
   (tu/with-tmp-dirs #{node-dir}
     (with-open [node (tu/->local-node {:node-dir node-dir :compactor-threads 1})]
       (doseq [i (range 4)]
@@ -878,8 +878,6 @@
         (t/is (empty? (->> (foo-state) :tries (get-in [[0 nil []] :garbage])))
               "L0 supersession drops outright; no :garbage entries linger")
 
-        ;; Simulate what reset.clj does: list L0 meta files from the object store, parse keys,
-        ;; build minimal entries, hand them to reset->l0!.
         (let [meta-dir (.metaFileDir (TableSlug/of #xt/table foo))
               l0-entries (->> (.listAllObjects bp meta-dir)
                               (keep (fn [^ObjectStore$StoredObject obj]
@@ -890,7 +888,7 @@
                                             parsed))))))]
           (t/is (= 4 (count l0-entries)) "All four L0 files still on disk")
 
-          (cat/reset->l0! trie-cat {#xt/table foo l0-entries})
+          (.resetToL0 trie-cat {#xt/table foo l0-entries})
 
           (t/is (= #{"l00-rc-b00" "l00-rc-b01" "l00-rc-b02" "l00-rc-b03"}
                    (->> (cat/current-tries (foo-state))
@@ -911,7 +909,7 @@
       (let [trie-cat (.getTrieCatalog (db/primary-db node))]
         (t/is (seq (cat/compacted-trie-keys (cat/trie-state trie-cat #xt/table foo)))
               "Compaction should have created non-L0 files")
-        (t/is (empty? (->> (cat/l0-blocks trie-cat)
+        (t/is (empty? (->> (cat/l0-blocks (.getState trie-cat))
                            (filter (fn [{:keys [tables]}]
                                      (some #(= #xt/table foo (:table %)) tables)))))
               "All L0s for foo have been compacted into an L1C — no L0 blocks remain in the catalog")))))
