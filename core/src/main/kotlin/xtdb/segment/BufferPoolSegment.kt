@@ -67,6 +67,9 @@ class BufferPoolSegment(
             bp.getRecordBatch(dataFilePath, leaf.dataPageIndex).use { rb -> dataRel.apply { load(rb) } }
         }
 
+    override suspend fun prefetchDataPage(leaf: ArrowHashTrie.Leaf) =
+        bp.prefetchRecordBatch(dataFilePath, leaf.dataPageIndex)
+
     override fun close() {
         dataRel.close()
     }

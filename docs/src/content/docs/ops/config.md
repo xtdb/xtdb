@@ -3,7 +3,17 @@ title: Configuration
 ---
 
 <details>
-<summary>Changelog (last updated v2.2)</summary>
+<summary>Changelog (last updated v2-NEXT)</summary>
+
+v2-NEXT: the memory cache holds its pages itself
+
+: The memory cache reads pages into direct memory it allocates and keeps them until it needs the room — see [Caching](#caching).
+
+  Previously it memory-mapped each page from the local file and unmapped it as soon as no query held it, so pages lived in the OS page cache: reclaimable, but outside the cache's budget, and mapped afresh on every read.
+  The cache now reads past the page cache where the filesystem supports `O_DIRECT`, so a page is held once, in the cache's own budget, rather than twice.
+
+  No config changes.
+  Expect the node's anonymous (non-reclaimable) memory to rise towards `heap + memoryCache` as the cache fills, and its page-cache usage to fall — size the container's memory limit against the JVM's maximum heap plus its maximum direct memory.
 
 v2.2: blocks are flushed every 15 minutes
 
@@ -79,6 +89,12 @@ By default a [single root user](config/authentication#single-root-user-v22) name
 ## Caching
 
 XTDB has two caches for [object store](config/storage) data:
+
+- The memory cache holds pages read from the object store in direct memory it allocates, and keeps them until it needs the room for others.
+  It reads past the OS page cache where the filesystem supports `O_DIRECT`, so a container's memory limit has to cover the JVM's maximum heap plus its maximum direct memory.
+  It gives back pages no query is using when the node needs the memory for something else.
+  If every page in the cache is in use by a running query, a query that needs another page fails rather than exceeding the budget.
+- The disk cache keeps files downloaded from a remote object store on local disk.
 
 ```yaml
 # By default configured to use half the JVM's maximum direct memory

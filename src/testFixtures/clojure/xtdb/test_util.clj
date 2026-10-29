@@ -28,7 +28,7 @@
            (java.time Duration Instant InstantSource LocalTime Period YearMonth ZoneId ZoneOffset)
            (java.time.temporal ChronoUnit Temporal)
            (java.util List)
-           (org.apache.arrow.memory BufferAllocator RootAllocator)
+           (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector.types.pojo ArrowType$Struct Field Schema)
            (org.testcontainers.containers GenericContainer)
            (xtdb Bytes PagesCursor TaggedValue)
@@ -48,13 +48,13 @@
            xtdb.storage.BufferPool
            (xtdb.tx TxOp$PatchDocs TxOp$PutDocs TxOpts TxWriter)
            xtdb.types.ZonedDateTimeRange
-           (xtdb.util RefCounter RowCounter TemporalBounds TemporalDimension)))
+           (xtdb.util MemoryUtil RefCounter RowCounter TemporalBounds TemporalDimension)))
 
 #_{:clj-kondo/ignore [:uninitialized-var]}
 (def ^:dynamic ^org.apache.arrow.memory.BufferAllocator *allocator*)
 
 (defn with-allocator [f]
-  (util/with-open [allocator (RootAllocator.)]
+  (util/with-open [allocator (MemoryUtil/openRootAllocator)]
     (binding [*allocator* allocator]
       (f))))
 

@@ -5,6 +5,7 @@ import io.micrometer.core.instrument.Counter
 import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.coroutines.runBlocking
 import org.apache.arrow.memory.BufferAllocator
+import org.apache.arrow.vector.ipc.message.ArrowBlock
 import org.apache.arrow.vector.ipc.message.ArrowFooter
 import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
 import xtdb.ArrowWriter
@@ -27,6 +28,7 @@ import java.nio.file.Files.newByteChannel
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption.*
+import java.util.UUID
 import kotlin.io.path.*
 
 internal class LocalStorage(
@@ -47,8 +49,10 @@ internal class LocalStorage(
 
     // we scope the cache keys by dbName/partition as the cache is shared between multiple
     // databases (and, at N>1, multiple partitions of the same database)
-    // the cache itself has no knowledge of this
-    private val cacheRootPath = dbName.asPath.resolve(partition.toString())
+    // the cache itself has no knowledge of this.
+    // pages stay resident after this pool closes, so the keys are this pool's alone - a database later attached under the
+    // same name mustn't be served them
+    private val cacheRootPath = dbName.asPath.resolve(partition.toString()).resolve(UUID.randomUUID().toString())
 
     companion object {
         private fun Path.createTempUploadFile(): Path {
@@ -80,34 +84,42 @@ internal class LocalStorage(
             path.openReadableChannel().readArrowFooter()
         }
 
-    override suspend fun getRecordBatch(key: Path, idx: Int): ArrowRecordBatch {
-        recordBatchRequests?.increment()
+    private fun arrowBlock(key: Path, idx: Int): ArrowBlock {
         val path = rootPath.resolve(key).orThrowIfMissing(key)
 
         val footer = arrowFooterCache.get(key) { path.openReadableChannel().readArrowFooter() }
 
-        val arrowBlock = footer.recordBatches.getOrNull(idx)
+        return footer.recordBatches.getOrNull(idx)
             ?: throw IndexOutOfBoundsException("Record batch index out of bounds of arrow file")
+    }
 
-        return memoryCache.get(
-            cacheRootPath.resolve(key),
-            MemoryCache.Slice(arrowBlock.offset, arrowBlock.metadataLength + arrowBlock.bodyLength)
-        ) { path ->
-            memCacheMisses?.increment()
-            val bufferCachePath =
-                rootPath.resolve(cacheRootPath.relativize(path))
-                    .takeIf { it.exists() } ?: throw objectMissingException(path)
+    private val ArrowBlock.slice get() = MemoryCache.Slice(offset, metadataLength + bodyLength)
 
-            Pair(bufferCachePath, null)
-        }.use { arrowBuf ->
+    private val fetchRecordBatch = MemoryCache.Fetch { path ->
+        memCacheMisses?.increment()
+        val bufferCachePath =
+            rootPath.resolve(cacheRootPath.relativize(path))
+                .takeIf { it.exists() } ?: throw objectMissingException(path)
+
+        Pair(bufferCachePath, null)
+    }
+
+    override suspend fun getRecordBatch(key: Path, idx: Int): ArrowRecordBatch {
+        recordBatchRequests?.increment()
+        val arrowBlock = arrowBlock(key, idx)
+
+        return memoryCache.get(cacheRootPath.resolve(key), arrowBlock.slice, fetchRecordBatch).use { arrowBuf ->
             arrowBuf.arrowBufToRecordBatch(
                 0,
                 arrowBlock.metadataLength,
                 arrowBlock.bodyLength,
-                "Failed opening record batch '$path' at block-idx $idx"
+                "Failed opening record batch '${rootPath.resolve(key)}' at block-idx $idx"
             )
         }
     }
+
+    override suspend fun prefetchRecordBatch(key: Path, idx: Int) =
+        memoryCache.prefetch(cacheRootPath.resolve(key), arrowBlock(key, idx).slice, fetchRecordBatch)
 
     private fun ByteBuffer.writeToPath(path: Path) {
         newByteChannel(path, WRITE, TRUNCATE_EXISTING, CREATE).use { channel ->
