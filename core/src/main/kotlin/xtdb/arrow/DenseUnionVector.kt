@@ -18,6 +18,7 @@ import xtdb.util.Hasher
 import xtdb.util.safeMap
 import xtdb.util.safelyOpening
 import java.nio.ByteBuffer
+import java.util.BitSet
 import org.apache.arrow.vector.complex.DenseUnionVector as ArrowDenseUnionVector
 
 class DenseUnionVector private constructor(
@@ -311,6 +312,24 @@ class DenseUnionVector private constructor(
 
     override val metadataFlavours: Collection<MetadataFlavour>
         get() = legVectors.flatMap { it.metadataFlavours }
+
+    override fun metadataFlavours(mask: VectorMask): List<Pair<MetadataFlavour, VectorMask>> {
+        if (mask === VectorMask.ALL) return legVectors.flatMap { it.metadataFlavours(mask) }
+
+        val legRows = Array(legVectors.size) { BitSet() }
+        repeat(valueCount) { idx ->
+            if (mask.isSet(idx)) {
+                val typeId = getTypeId(idx).toInt()
+                if (typeId >= 0) legRows[typeId].set(getOffset(idx))
+            }
+        }
+
+        return legVectors.flatMapIndexed { typeId, leg ->
+            leg.metadataFlavours(object : VectorMask {
+                override fun isSet(idx: Int) = legRows[typeId][idx]
+            })
+        }
+    }
 
     override fun hashCode(idx: Int, hasher: Hasher) = leg(idx)!!.hashCode(getOffset(idx), hasher)
 
