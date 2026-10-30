@@ -4,7 +4,7 @@ ARG BUILDER_IMAGE=ghcr.io/xtdb/xtdb-builder:20260926-1
 FROM ${BUILDER_IMAGE} AS jlink
 
 # Runtime
-FROM alpine:3.23.3
+FROM alpine:3.23.7
 
 ARG VARIANT=standalone
 ARG GIT_SHA
