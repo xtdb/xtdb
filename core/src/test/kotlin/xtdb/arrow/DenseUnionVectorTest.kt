@@ -50,6 +50,42 @@ class DenseUnionVectorTest {
     }
 
     @Test
+    fun `value reader follows each row's leg`() {
+        DenseUnionVector(
+            allocator, "duv",
+            listOf(
+                IntVector.open(allocator, "i32", false),
+                Utf8Vector(allocator, "utf8", true)
+            )
+        ).use { duv ->
+            val i32Leg = duv.vectorFor("i32")
+            val utf8Leg = duv.vectorFor("utf8")
+
+            i32Leg.writeInt(12)
+            utf8Leg.writeObject("hello")
+            utf8Leg.writeNull()
+            i32Leg.writeInt(34)
+
+            val rdr = duv.valueReader()
+
+            fun readAt(pos: Int): Triple<String?, Boolean, Any?> {
+                rdr.pos = pos
+                return Triple(rdr.leg, rdr.isNull, if (rdr.isNull) null else rdr.readObject())
+            }
+
+            assertEquals(
+                listOf(Triple("i32", false, 12), Triple("utf8", false, "hello"),
+                    Triple("utf8", true, null), Triple("i32", false, 34)),
+                listOf(0, 1, 2, 3).map(::readAt)
+            )
+
+            assertEquals(Triple("i32", false, 34), readAt(3))
+            assertEquals(Triple("utf8", false, "hello"), readAt(1))
+            assertEquals(34, rdr.also { it.pos = 3 }.readInt())
+        }
+    }
+
+    @Test
     fun `scalar into DUV #3609`() {
         IntVector.open(allocator, "my-int", false).use { myIntVec ->
             myIntVec.writeInt(32)

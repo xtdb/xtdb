@@ -281,9 +281,8 @@ class DenseUnionVector private constructor(
     private fun legWriter(arrowType: ArrowType, nullable: Boolean) = vectorFor(arrowType.toLeg(), arrowType, nullable)
 
     override fun valueReader(): ValueReader {
-        val legReaders = legVectors
-            .mapIndexed { typeId, leg -> LegVector(typeId.toByte(), leg) }
-            .associate { it.name to it.valueReader() }
+        val legReaders = Array(legVectors.size) { LegVector(it.toByte(), legVectors[it]).valueReader() }
+        val legNames = Array(legVectors.size) { legVectors[it].name }
 
         return object : ValueReader {
             lateinit var legReader: ValueReader
@@ -292,8 +291,9 @@ class DenseUnionVector private constructor(
             override var pos = -1
                 set(value) {
                     field = value
-                    leg = getLeg(value)
-                    legReader = legReaders[leg]!!.also { it.pos = value }
+                    val typeId = typeBuffer.getByte(value).toInt()
+                    leg = legNames[typeId]
+                    legReader = legReaders[typeId].also { it.pos = value }
                 }
 
             override val isNull: Boolean get() = legReader.isNull
