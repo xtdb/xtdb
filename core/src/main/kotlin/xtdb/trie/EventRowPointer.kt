@@ -114,16 +114,5 @@ class EventRowPointer(private val relReader: RelationReader, path: ByteArray) {
 
         @JvmStatic
         fun comparator(): Comparator<in EventRowPointer> = Comparator(::compare)
-
-        /** Orders pages by the iid each is currently sitting on. */
-        @JvmStatic
-        fun iidComparator(): Comparator<in EventRowPointer> = Comparator { l, r ->
-            compareUnsigned(l.iidHigh, r.iidHigh).takeIf { it != 0 } ?: compareUnsigned(l.iidLow, r.iidLow)
-        }
-
-        /** Orders one entity's events, newest system-time first. */
-        @JvmStatic
-        fun systemFromComparator(): Comparator<in EventRowPointer> =
-            Comparator { l, r -> r.systemFrom.compareTo(l.systemFrom) }
     }
 }
