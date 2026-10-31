@@ -1,10 +1,7 @@
 package xtdb.operator.scan
 
-import xtdb.trie.EventRowPointer
-import java.util.Comparator.comparing
-import java.util.PriorityQueue
-
-internal class LeafPointer(val evPtr: EventRowPointer, val relIdx: Int)
+import xtdb.trie.LeafHeap
+import xtdb.trie.LeafPointer
 
 /** One entity's events, newest system-time first. */
 internal interface EntityEvents {
@@ -16,66 +13,47 @@ internal interface EntityEvents {
  * an inner pass over its events in reverse system-time order.
  */
 internal class EntityMerge(pointers: List<LeafPointer>) : EntityEvents {
-    // outer: one entry per page, ordered by the iid that page is currently on.
-    // inner: the pages sitting on the entity being resolved, newest system-time first.
-    private val iidQueue = PriorityQueue<LeafPointer>(comparing({ it.evPtr }, EventRowPointer.iidComparator()))
-    private val eventQueue = PriorityQueue<LeafPointer>(comparing({ it.evPtr }, EventRowPointer.systemFromComparator()))
+    private val heap = LeafHeap(pointers)
 
-    init {
-        iidQueue.addAll(pointers)
-    }
-
+    private var onEntity = false
     private var iidHigh = 0L
     private var iidLow = 0L
 
     // advanced on the next `nextEvent` rather than eagerly, so the caller can still read the row it's on.
     private var current: LeafPointer? = null
 
+    private fun topOnEntity() = heap.top()?.takeIf { it.evPtr.sameIidAs(iidHigh, iidLow) }
+
     /** Advances to the next entity, returning false once the task's pages are exhausted. */
     fun nextEntity(): Boolean {
-        // a resolver that stopped early leaves its entity's pointers queued, and `nextEvent` polls
-        // without an iid check, so they'd be served as this entity's events
-        skipEntity()
+        if (onEntity) {
+            current = null
 
-        val firstOfIid = iidQueue.poll() ?: return false
+            while (true) {
+                val leafPtr = topOnEntity() ?: break
+                leafPtr.evPtr.skipToNextIid()
+                heap.reseatTop()
+            }
+        }
 
-        iidHigh = firstOfIid.evPtr.iidHigh
-        iidLow = firstOfIid.evPtr.iidLow
+        val top = heap.top()
+        onEntity = top != null
+        if (top == null) return false
 
-        eventQueue.add(firstOfIid)
-        while (iidQueue.peek()?.evPtr?.sameIidAs(iidHigh, iidLow) == true)
-            eventQueue.add(iidQueue.poll())
-
+        iidHigh = top.evPtr.iidHigh
+        iidLow = top.evPtr.iidLow
         return true
     }
 
     override fun nextEvent(): LeafPointer? {
+        if (!onEntity) return null
+
         current?.let { leafPtr ->
             current = null
             leafPtr.evPtr.nextIndex()
-            requeue(leafPtr)
+            heap.reseatTop()
         }
 
-        return eventQueue.poll()?.also { current = it }
-    }
-
-    private fun skipEntity() {
-        current?.let { leafPtr ->
-            current = null
-            leafPtr.evPtr.skipToNextIid()
-            requeue(leafPtr)
-        }
-
-        while (true) {
-            val leafPtr = eventQueue.poll() ?: break
-            leafPtr.evPtr.skipToNextIid()
-            requeue(leafPtr)
-        }
-    }
-
-    private fun requeue(leafPtr: LeafPointer) {
-        val evPtr = leafPtr.evPtr
-        if (evPtr.isValid())
-            (if (evPtr.sameIidAs(iidHigh, iidLow)) eventQueue else iidQueue).add(leafPtr)
+        return topOnEntity()?.also { current = it }
     }
 }
