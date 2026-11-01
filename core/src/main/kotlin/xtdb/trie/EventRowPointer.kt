@@ -111,8 +111,5 @@ class EventRowPointer(private val relReader: RelationReader, path: ByteArray) {
             if (l.iidLow != r.iidLow) return compareUnsigned(l.iidLow, r.iidLow)
             return r.systemFrom.compareTo(l.systemFrom)
         }
-
-        @JvmStatic
-        fun comparator(): Comparator<in EventRowPointer> = Comparator(::compare)
     }
 }
