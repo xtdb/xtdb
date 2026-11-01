@@ -19,6 +19,7 @@
            (xtdb.block.proto Block)
            (xtdb.log.proto TemporalMetadata TrieMetadata)
            (xtdb.table TableSlug)
+           (xtdb.catalog Catalog Catalog$State TableCatalog)
            (xtdb.trie TrieCatalog)
            (xtdb.api TableRef)))
 
@@ -376,13 +377,14 @@
     (t/testing "artifically adding tries"
 
       (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
-        (let [cat (.getTrieCatalog (db/primary-db node))]
-          (.addTries cat #xt/table foo
+        (let [catalog (.getCatalog (.getQueryState (db/primary-db node)))
+              cat (.getTrieCatalog (db/primary-db node))]
+          (.update ^Catalog catalog (fn [^Catalog$State s] (.withTries s #xt/table foo
                      (->> [["l00-rc-b00" 1] ["l00-rc-b01" 1] ["l00-rc-b02" 1] ["l00-rc-b03" 1]
                            ["l01-rc-b00" 2] ["l01-rc-b01" 2] ["l01-rc-b02" 2]
                            ["l02-rc-p0-b01" 4] ["l02-rc-p1-b01" 4] ["l02-rc-p2-b01" 4] ["l02-rc-p3-b01" 4]]
                           (map #(apply trie/->trie-details #xt/table foo %)))
-                     (Instant/now))
+                     (Instant/now))))
           (tu/flush-block! node))))
 
     (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
@@ -396,9 +398,15 @@
                  (->> (cat/current-tries (cat/trie-state cat #xt/table foo))
                       (into (sorted-set) (map :trie-key)))))))))
 
+(defn- ->catalog ^Catalog [table-cats file-size-target]
+  (Catalog. (Catalog$State. (cat/->TrieCatalogState table-cats file-size-target)
+                            (TableCatalog/initialState nil))))
+
+(defn- ->trie-cat ^TrieCatalog [table-cats file-size-target]
+  (.getTrieCatalog (->catalog table-cats file-size-target)))
+
 (defn trie-catalog-init [table->table-block]
-  (TrieCatalog. (cat/->TrieCatalogState (cat/load-tries table->table-block cat/*file-size-target*)
-                                       cat/*file-size-target*)))
+  (->trie-cat (cat/load-tries table->table-block cat/*file-size-target*) cat/*file-size-target*))
 
 (t/deftest test-startup-drops-persisted-l0-garbage
   ;; Block files written before the "drop L0 on supersession" change may persist L0 entries
@@ -577,11 +585,12 @@
                        ["l03-r20250101-p3-b09"]))))
 
 (t/deftest test-dry-trie-catalog-gc
-  (let [cat (TrieCatalog. (cat/->TrieCatalogState {} 20))] ;file-size-target
+  (let [catalog (->catalog {} 20) ;file-size-target
+        cat (.getTrieCatalog catalog)]
     (letfn [(add-tries [tries inst]
-              (.addTries cat #xt/table foo
+              (.update ^Catalog catalog (fn [^Catalog$State s] (.withTries s #xt/table foo
                          (map #(apply trie/->trie-details #xt/table foo %) tries)
-                         inst))
+                         inst))))
             (all-tries []
               (->> (cat/all-tries (cat/trie-state cat #xt/table foo))
                    (sort-by (juxt :trie-key :state))
@@ -592,7 +601,7 @@
                    (sort-by (juxt :trie-key :state))
                    (map (juxt :trie-key :state :garbage-as-of))))
             (delete-tries [garbage-trie-keys]
-              (.deleteTries cat #xt/table foo garbage-trie-keys))]
+              (.update ^Catalog catalog (fn [^Catalog$State s] (.withoutTries s #xt/table foo garbage-trie-keys))))]
 
       (add-tries [["l00-rc-b00" 1] ["l01-rc-b00" 1]]
                  #xt/instant "2000-01-01T00:00:00Z")
@@ -793,12 +802,13 @@
               :tries [{:trie-key "l03-r20200101-p0-b07" :block-idx 7}]}]))))
 
 (t/deftest test-delete-garbage-l1-l2-with-live-l3
-  (let [cat (TrieCatalog. (cat/->TrieCatalogState {} 20))
+  (let [catalog (->catalog {} 20)
+        cat (.getTrieCatalog catalog)
         table #xt/table foo
         add-tries (fn [tries inst]
-                    (.addTries cat table
+                    (.update ^Catalog catalog (fn [^Catalog$State s] (.withTries s table
                                (map #(apply trie/->trie-details table %) tries)
-                               inst))]
+                               inst))))]
 
     ;; Setup: Create L0s, L1s, L2s, then L3s that supersede L2 partition 0
     (add-tries [["l00-rc-b00" 1] ["l00-rc-b01" 1]] #xt/instant "2000-01-01T00:00:00Z")
@@ -821,7 +831,7 @@
       ;; Delete garbage tries
       (let [garbage (trie-keys (cat/garbage-tries state #xt/instant "2004-01-01T00:00:00Z"))]
         (t/is (= #{"l01-rc-b00" "l01-rc-b01" "l02-rc-p0-b01"} garbage))
-        (.deleteTries cat table garbage))
+        (.update ^Catalog catalog (fn [^Catalog$State s] (.withoutTries s table garbage))))
 
       ;; Verify remaining tries — L0s left the catalog when L1Cs landed (no :garbage trace),
       ;; so they don't reappear here even though their files still exist on the object store.
@@ -884,7 +894,7 @@
                                             parsed))))))]
           (t/is (= 4 (count l0-entries)) "All four L0 files still on disk")
 
-          (.resetToL0 trie-cat {#xt/table foo l0-entries})
+          (.update ^Catalog (.getCatalog (.getQueryState db)) (fn [^Catalog$State s] (.withL0Reset s {#xt/table foo l0-entries})))
 
           (t/is (= #{"l00-rc-b00" "l00-rc-b01" "l00-rc-b02" "l00-rc-b03"}
                    (->> (cat/current-tries (foo-state))

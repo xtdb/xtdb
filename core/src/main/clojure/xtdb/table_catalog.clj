@@ -9,7 +9,7 @@
            [java.nio.file Path]
            (org.apache.arrow.vector.types.pojo Field Schema)
            (xtdb.block.proto TableBlock Partition)
-           (xtdb.catalog TableCatalog)
+           (xtdb.catalog TableCatalog$State)
            xtdb.storage.BufferPool
            xtdb.api.TableRef
            (xtdb.table TableEntry TableSlug)
@@ -75,10 +75,10 @@
                (update-vals #(-> (.toByteArray ^ByteString %) HyperLogLog/toHLL)))
      :partitions (table-block->partitions table-block)}))
 
-(defn load-table-partitions ^java.util.Map [^BufferPool buffer-pool, ^TableCatalog table-cat]
-  (when-let [block-idx (.getCurrentBlockIndex table-cat)]
+(defn load-table-partitions ^java.util.Map [^BufferPool buffer-pool, ^TableCatalog$State table-cat-state]
+  (when-let [block-idx (.getBlockIdx table-cat-state)]
     ;; recorded, not all: a table allocated but not yet written has no block file to read
-    (let [entries (.getRecordedEntries (.snap table-cat))]
+    (let [entries (.getRecordedEntries table-cat-state)]
       (->> (for [^TableEntry entry entries
                  :let [table-block-path (->table-block-metadata-obj-key (.getTablePath (.getSlug entry)) block-idx)]]
              (MapEntry/create (.getTable entry)

@@ -3,7 +3,7 @@ package xtdb.api.log
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import xtdb.block.proto.Block
-import xtdb.catalog.TableCatalog
+import xtdb.SimulationTestUtils.Companion.createCatalog
 
 class ExternalSourceTokenTest {
 
@@ -48,7 +48,8 @@ class ExternalSourceTokenTest {
 
     @Test
     fun `Block proto round-trips external source token`() {
-        val tableCatalog = TableCatalog(TableCatalog.initialState(null))
+        val catalog = createCatalog()
+        val tableCatalog = catalog.tableCatalog
 
         val block = tableCatalog.buildBlock(
             blockIndex = 0,
@@ -69,7 +70,8 @@ class ExternalSourceTokenTest {
 
     @Test
     fun `TableCatalog externalSourceToken reads from latest block`() {
-        val tableCatalog = TableCatalog(TableCatalog.initialState(null))
+        val catalog = createCatalog()
+        val tableCatalog = catalog.tableCatalog
 
         assertNull(tableCatalog.externalSourceToken)
 
@@ -84,14 +86,15 @@ class ExternalSourceTokenTest {
             termId = term,
             boundaryTermSeq = null
         )
-        tableCatalog.refresh(block)
+        catalog.update { it.refreshed(block) }
 
         assertArrayEquals(testToken, tableCatalog.externalSourceToken)
     }
 
     @Test
     fun `TableCatalog externalSourceToken returns null when no token`() {
-        val tableCatalog = TableCatalog(TableCatalog.initialState(null))
+        val catalog = createCatalog()
+        val tableCatalog = catalog.tableCatalog
 
         val block = tableCatalog.buildBlock(
             blockIndex = 0,
@@ -103,7 +106,7 @@ class ExternalSourceTokenTest {
             termId = term,
             boundaryTermSeq = null
         )
-        tableCatalog.refresh(block)
+        catalog.update { it.refreshed(block) }
 
         assertNull(tableCatalog.externalSourceToken)
     }

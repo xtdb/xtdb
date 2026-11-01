@@ -98,6 +98,14 @@ external entity TableCatalogSnap {}
     -- Frozen per-table metadata for everything already flushed: each table's column types and its count of rows ever written.
     -- The historical half of a column's declared type.
 
+external entity CatalogValue {
+    -- The partition's two catalogs as ONE immutable value, replaced whole by every catalog write.
+    -- A write that changes neither half leaves the value as it was.
+    -- Writes happen only under the partition's catalog lock, which the live tables are guarded by too.
+    trie_catalog_snap: TrieCatalogSnap
+    table_catalog_snap: TableCatalogSnap
+}
+
 external entity DurabilityHandle {}
     -- A per-transaction handle a caller may await, completed once the transaction has been read back and imported into the durable live tables.
     -- Carried by external-source transactions only; source-log transactions carry none.
@@ -155,6 +163,8 @@ entity LiveIndex {
 
     -- Durable live tables: they hold only applied rows.
     tables: LiveTable with index = this
+
+    catalog: CatalogValue
 
     -- The current shared external snapshot: a lazily-advanced cache, rebuilt only when a reader demands a basis it does not satisfy.
     -- Apply and NextBlock leave it stale. Its basis is the durable head as of the last rebuild.
@@ -260,9 +270,8 @@ entity LiveTableTx {
 -- A Snapshot also pins the two catalogs a reader needs alongside those segments: the trie catalog, which locates the historical tries on disk, and the table catalog's per-table metadata.
 -- Pinning them is what stops a reader combining pinned data with catalog state read live at the moment it happens to ask.
 --
--- The three captures are NOT atomic with respect to one another.
--- They are taken in order — trie catalog, then segments, then table catalog — so a block landing concurrently can fall between them.
--- The table catalog is taken last deliberately: a type view newer than the data view over-approximates, which is always safe, whereas an older one would declare a narrower type than the rows being scanned, which is not.
+-- The catalogs and the segments are captured together, under one hold of the partition's catalog lock.
+-- Every write to either — block adoption, compaction's and GC's tries, table registration, a commit — takes that lock exclusively, so a snapshot sees a catalog value and a set of live tables that were current at the same moment.
 --
 -- That matters for a column's declared type, which is the join of what the table catalog knows (flushed blocks), what the segments know (unflushed), and what the superseded live tables know.
 -- The column set and the types resolving it come from one capture, or they can disagree.
@@ -272,7 +281,7 @@ entity LiveTableTx {
 --   A snapshot therefore excludes any live table the trie catalog's L0 watermark has reached, so those rows are read once, from the L0.
 --
 --   Their column TYPES are retained regardless.
---   A block becomes visible in two steps: the L0 reaches the trie catalog first, the block's column types reach the table catalog second.
+--   A block becomes visible in two catalog writes: the L0 reaches the trie catalog first, the block's column types reach the table catalog second.
 --   A snapshot taken between the two would otherwise have no source for those types at all — declaring a narrower type than the rows it is about to scan, and failing to resolve a brand-new table entirely.
 --   Retaining the types bridges that gap, and is safe because the join is idempotent: once the catalog catches up the answer is unchanged, whatever order the writers ran in.
 --
@@ -281,7 +290,7 @@ entity LiveTableTx {
 -- Consistency guarantees:
 --   - A snapshot's segments are frozen at creation and do not observe later writes.
 --   - Its captured catalogs are likewise frozen.
---   - Those captures are ordered, not simultaneous: a concurrently-landing block can fall between them, which is what "L0 supersession" above covers.
+--   - Its catalog value and its segments are one capture: no write falls between them.
 --   - Commits are atomic: all of a transaction's rows become visible together, or none do.
 --   - Multiple snapshots can be held concurrently without interference.
 --   - Writes don't block reads: the shared external snapshot is rebuilt lazily, and an existing snapshot stays valid until released.
@@ -297,9 +306,11 @@ entity Snapshot {
 
     table_snapshots: TableSnapshot with snapshot = this
 
-    -- Frozen catalog state, captured with the segments above.
-    trie_catalog_snap: TrieCatalogSnap
-    table_catalog_snap: TableCatalogSnap
+    -- The catalog value current at creation, captured under the same lock hold as the segments above.
+    catalog: CatalogValue
+
+    trie_catalog_snap: catalog.trie_catalog_snap
+    table_catalog_snap: catalog.table_catalog_snap
 
     -- Tables the pinned table catalog knows about: everything already flushed, plus the data-backed system tables seeded when the database opens.
     -- A table here resolves with no segment at all.

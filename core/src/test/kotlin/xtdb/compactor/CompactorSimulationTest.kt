@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.extension.BeforeEachCallback
 import org.junit.jupiter.api.extension.ExtendWith
 import org.junit.jupiter.api.extension.ExtensionContext
+import xtdb.catalog.Catalog
 import xtdb.RepeatableSimulationTest
 import xtdb.SimulationTestBase
 import xtdb.SimulationTestUtils.Companion.L0TrieKeys
@@ -17,7 +18,7 @@ import xtdb.SimulationTestUtils.Companion.L1TrieKeys
 import xtdb.SimulationTestUtils.Companion.addTriesToBufferPool
 import xtdb.SimulationTestUtils.Companion.buildTrieDetails
 import xtdb.SimulationTestUtils.Companion.createJobCalculator
-import xtdb.SimulationTestUtils.Companion.createTrieCatalog
+import xtdb.SimulationTestUtils.Companion.createCatalog
 import xtdb.SimulationTestUtils.Companion.prefix
 import xtdb.SimulationTestUtils.Companion.setLogLevel
 import xtdb.api.log.SourceMessage.TriesAdded
@@ -52,12 +53,13 @@ import kotlin.random.Random
 
 class MockDb(
     val name: DatabaseName,
-    val trieCatalog: TrieCatalog,
+    val catalog: Catalog,
     val bufferPool: BufferPool,
     val compactor: Compactor,
 ) {
     val partitionStorage: PartitionStorage get() = PartitionStorage(DatabaseLogs(null, null), bufferPool, null)
-    val partitionState: PartitionState get() = PartitionState(null, trieCatalog, null)
+    val trieCatalog: TrieCatalog get() = catalog.trieCatalog
+    val partitionState: PartitionState get() = PartitionState(catalog, null)
 }
 
 private val LOGGER = CompactorMockDriverFactory::class.logger
@@ -104,7 +106,7 @@ class CompactorMockDriverFactory(
     }
 
     private inner class CompactorMockDriver(val partitionStorage: PartitionStorage, val partitionState: PartitionState, val systemId: Int) : Driver {
-        val trieCatalog = partitionState.trieCatalog
+        val catalog = partitionState.catalog
         val bufferPool = partitionStorage.bufferPool
 
         init {
@@ -116,7 +118,7 @@ class CompactorMockDriverFactory(
                     msg.triesAdded.tries.groupBy { it.tableName }.forEach { (tableName, tries) ->
                         val tableRef = fromSchemaAndTable(tableName)
                         addTriesToBufferPool(bufferPool, tableRef, tries)
-                        trieCatalog.addTries(tableRef, tries, msg.msgTimestamp)
+                        catalog.update { it.withTries(tableRef, tries, msg.msgTimestamp) }
                     }
 
                     LOGGER.debug("[channel msg processed] systemId=$systemId added ${trieKeys.size} tries to catalog: $trieKeys")
@@ -222,7 +224,7 @@ class CompactorMockDriverFactory(
             triesAdded.tries.groupBy { it.tableName }.forEach { (tableName, tries) ->
                 val tableRef = fromSchemaAndTable(tableName)
                 addTriesToBufferPool(bufferPool, tableRef, tries)
-                trieCatalog.addTries(tableRef, tries, logTimestamp)
+                catalog.update { it.withTries(tableRef, tries, logTimestamp) }
             }
             LOGGER.debug("[publishTries completed] systemId=$systemId")
         }
@@ -301,7 +303,7 @@ class CompactorSimulationTest : SimulationTestBase() {
         dbs = List(numberOfSystems) {
             MockDb(
                 name = "xtdb",
-                trieCatalog = createTrieCatalog(),
+                catalog = createCatalog(),
                 bufferPool = sharedBufferPool,
                 compactor = Compactor.Impl(
                     mockDriverFactory, null, jobCalculator, false, 2,
@@ -326,7 +328,7 @@ class CompactorSimulationTest : SimulationTestBase() {
         }
         dbs.forEach { db ->
             addTriesToBufferPool(sharedBufferPool, tableRef, tries)
-            db.trieCatalog.addTries(tableRef, tries, Instant.now())
+            db.catalog.update { it.withTries(tableRef, tries, Instant.now()) }
         }
     }
 

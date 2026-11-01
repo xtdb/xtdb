@@ -3,7 +3,7 @@ package xtdb.api.log
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
-import xtdb.catalog.TableCatalog
+import xtdb.SimulationTestUtils.Companion.createCatalog
 import java.time.Instant
 
 class ReplicaMessageTermSeqTest {
@@ -38,20 +38,19 @@ class ReplicaMessageTermSeqTest {
     @Test
     fun `the catalog reads back the boundary's term position from the block`() {
         fun catalogWith(boundaryTermSeq: Long?) =
-            TableCatalog(TableCatalog.initialState(null)).also { cat ->
-                cat.refresh(
-                    cat.buildBlock(
-                        blockIndex = 0,
-                        latestCompletedTx = null,
-                        latestProcessedMsgId = 100,
-                        boundaryReplicaMsgId = 42,
-                        tables = emptySet(),
-                        secondaryDatabases = null,
-                        termId = 3,
-                        boundaryTermSeq = boundaryTermSeq,
-                    )
+            createCatalog().also { catalog ->
+                val block = catalog.tableCatalog.buildBlock(
+                    blockIndex = 0,
+                    latestCompletedTx = null,
+                    latestProcessedMsgId = 100,
+                    boundaryReplicaMsgId = 42,
+                    tables = emptySet(),
+                    secondaryDatabases = null,
+                    termId = 3,
+                    boundaryTermSeq = boundaryTermSeq,
                 )
-            }
+                catalog.update { it.refreshed(block) }
+            }.tableCatalog
 
         assertEquals(0L, catalogWith(0).boundaryTermSeq)
         assertEquals(17L, catalogWith(17).boundaryTermSeq)

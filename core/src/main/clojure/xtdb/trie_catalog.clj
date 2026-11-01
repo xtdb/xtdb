@@ -551,9 +551,9 @@
 
 (defn ->factory ^xtdb.trie.TrieCatalog$Factory []
   (reify xtdb.trie.TrieCatalog$Factory
-    (open [_ buffer-pool block-cat]
+    (open [_ buffer-pool table-cat-state]
       (log/debug "starting trie catalog...")
-      (let [table->table-block (table-cat/load-table-partitions buffer-pool block-cat)
+      (let [table->table-block (table-cat/load-table-partitions buffer-pool table-cat-state)
             state (->TrieCatalogState (load-tries table->table-block *file-size-target*) *file-size-target*)]
         (log/debug "trie catalog started")
         state))))

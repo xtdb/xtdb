@@ -59,6 +59,9 @@ class LiveIndexTest {
         private val partition = TestPartition(allocator, bp)
 
         val trieCatalog get() = partition.trieCatalog
+
+        fun addTries(table: TableRef, tries: List<TrieDetails>, asOf: Instant) =
+            partition.catalog.update { it.withTries(table, tries, asOf) }
         val liveIndex get() = partition.liveIndex
 
         fun openTx(txId: Long, systemTime: Instant) =
@@ -290,7 +293,7 @@ class LiveIndexTest {
 
             val writtenTrie = runBlocking { db.liveIndex.finishBlock(db.bp, 0L) }.getValue(table).writtenTrie!!
 
-            db.trieCatalog.addTries(
+            db.addTries(
                 table,
                 listOf(
                     TrieDetails.newBuilder()
@@ -368,7 +371,7 @@ class LiveIndexTest {
                         .setDataFileSize(writtenTrie.dataFileSize)
                         .also { it.setTrieMetadata(writtenTrie.trieMetadata) }
                         .build()
-                    db.trieCatalog.addTries(t, listOf(trieDetails), Instant.now())
+                    db.addTries(t, listOf(trieDetails), Instant.now())
                 }
 
                 db.liveIndex.openSnapshot(emptyList(), observerTx).use { snap ->

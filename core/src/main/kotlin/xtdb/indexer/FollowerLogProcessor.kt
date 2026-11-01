@@ -17,7 +17,6 @@ import xtdb.database.PartitionState
 import xtdb.api.error.Anomaly
 import xtdb.storage.BufferPool
 import xtdb.table.fromSchemaAndTable
-import xtdb.trie.addTries
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.closeAll
 import xtdb.util.debug
@@ -87,7 +86,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
         private set
 
     private val tableCatalog = partitionState.tableCatalog
-    private val trieCatalog = partitionState.trieCatalog
+    private val catalog = partitionState.catalog
     private val liveIndex = partitionState.liveIndex
 
     private val allocator = allocator.newChildAllocator("follower-log-processor", 0, Long.MAX_VALUE)
@@ -100,7 +99,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
                 is ReplicaMessage.BlockBoundary -> blockIndex <= (tableCatalog.currentBlockIndex ?: -1)
                 is ReplicaMessage.BlockUploaded -> blockIndex <= (tableCatalog.currentBlockIndex ?: -1)
                 is ReplicaMessage.NoOp -> srcMsgId != null && srcMsgId <= watchers.latestSourceMsgId
-                // `trieCatalog.deleteTries` is set-removal — idempotent — so replay is always safe.
+                // `deleteTries` is set-removal — idempotent — so replay is always safe.
                 is ReplicaMessage.TriesDeleted -> false
 
                 is ReplicaMessage.OversizedMessage ->
@@ -154,7 +153,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
 
             is ReplicaMessage.TriesAdded -> triesAddedTimer.timed {
                 if (msg.storageVersion == Storage.VERSION && msg.storageEpoch == bufferPool.epoch)
-                    trieCatalog.addTries(msg.tries, record.logTimestamp)
+                    catalog.update { it.withTries(msg.tries, record.logTimestamp) }
 
                 watchers.notifyApplied(msg.sourceMsgId)
             }
@@ -172,7 +171,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
             is ReplicaMessage.NoOp -> watchers.notifyApplied(msg.srcMsgId)
 
             is ReplicaMessage.TriesDeleted -> triesDeletedTimer.timed {
-                trieCatalog.deleteTries(fromSchemaAndTable(msg.tableName), msg.trieKeys)
+                catalog.update { it.withoutTries(fromSchemaAndTable(msg.tableName), msg.trieKeys) }
             }
 
             is ReplicaMessage.OversizedMessage -> error(

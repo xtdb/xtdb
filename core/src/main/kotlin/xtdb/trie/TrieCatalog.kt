@@ -1,52 +1,24 @@
 package xtdb.trie
 
 import xtdb.block.proto.Partition
+import xtdb.catalog.Catalog
 import xtdb.catalog.TableCatalog
 import xtdb.log.proto.TrieDetails
 import xtdb.storage.BufferPool
 import xtdb.api.TableRef
-import xtdb.table.fromSchemaAndTable
-import xtdb.util.error
-import xtdb.util.logger
-import xtdb.util.trace
 import java.time.Instant
-import java.util.concurrent.atomic.AtomicReference
 
 typealias FileSize = Long
 
-private val LOG = TrieCatalog::class.logger
-
-class TrieCatalog(initialState: State) {
-    private val stateRef = AtomicReference(initialState)
-
+/** The trie half of a [Catalog]. */
+class TrieCatalog internal constructor(private val catalog: Catalog) {
     /**
      * The catalog's current value, frozen — addTries / deleteTries that land afterward have no effect on it.
      *
      * Lifetime contract: a holder MUST be done with it within the configured `garbageLifetime` window,
      * otherwise GC may delete trie files it still references.
      */
-    val state: State get() = stateRef.get()
-
-    fun addTries(table: TableRef, addedTries: Iterable<TrieDetails>, asOf: Instant) {
-        LOG.trace { "Adding tries to table '$table': ${addedTries.map { it.trieKey }}" }
-        try {
-            stateRef.updateAndGet { it.withTries(table, addedTries, asOf) }
-        } catch (e: InterruptedException) {
-            throw e
-        } catch (e: Throwable) {
-            LOG.error(e, "Failed to add tries to table $table")
-            throw e
-        }
-    }
-
-    fun deleteTries(table: TableRef, garbageTrieKeys: Set<TrieKey>) {
-        stateRef.updateAndGet { it.withoutTries(table, garbageTrieKeys) }
-    }
-
-    /** @see State.withL0Reset */
-    fun resetToL0(tableToL0Entries: Map<TableRef, Any?>) {
-        stateRef.updateAndGet { it.withL0Reset(tableToL0Entries) }
-    }
+    val state: State get() = catalog.current.trieCat
 
     interface State {
         val tables: Set<TableRef>
@@ -89,15 +61,6 @@ class TrieCatalog(initialState: State) {
     }
 
     fun interface Factory {
-        fun open(bufferPool: BufferPool, tableCatalog: TableCatalog): State
+        fun open(bufferPool: BufferPool, tableCatState: TableCatalog.State): State
     }
 }
-
-/**
- * Adds [tries] to whichever tables they name — the shape a replica message carries them in, where the
- * per-table [TrieCatalog.addTries] wants them already grouped.
- */
-fun TrieCatalog.addTries(tries: Iterable<TrieDetails>, asOf: Instant) =
-    tries.groupBy { it.tableName }.forEach { (tableName, tableTries) ->
-        addTries(fromSchemaAndTable(tableName), tableTries, asOf)
-    }

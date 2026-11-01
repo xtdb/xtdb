@@ -15,7 +15,7 @@
            [java.util Map]
            (org.apache.arrow.vector.types.pojo Schema)
            (xtdb.block.proto Block TableBlock)
-           (xtdb.catalog TableCatalog)
+           (xtdb.catalog Catalog Catalog$State TableCatalog TableCatalog$State)
            (xtdb.log.proto TrieDetails)
            (xtdb.table TableEntry TableSlug)
            (xtdb.util HyperLogLog)))
@@ -34,7 +34,7 @@
     (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
       (let [db (db/primary-db node)
             bp (.getBufferPool db)
-            trie-catalog (.getTrieCatalog db)]
+            catalog (.getCatalog (.getQueryState db))]
         (xt/execute-tx node [[:put-docs :foo {:xt/id 1}]])
         (tu/flush-block! node)
 
@@ -88,12 +88,12 @@
           (t/is (<= 1.99 (HyperLogLog/estimate (get hlls2 "_id")) 2.01)))
 
         (t/testing "artifically adding tries (simulating another node finishing and compacting these)"
-          (.addTries trie-catalog #xt/table foo
+          (.update ^Catalog catalog (fn [^Catalog$State s] (.withTries s #xt/table foo
                      (->> [["l00-rc-b00" 1] ["l00-rc-b01" 1] ["l00-rc-b02" 1] ["l00-rc-b03" 1]
                            ["l01-rc-b00" 2] ["l01-rc-b01" 2] ["l01-rc-b02" 2]
                            ["l02-rc-p0-b01" 4] ["l02-rc-p1-b01" 4] ["l02-rc-p2-b01" 4] ["l02-rc-p3-b01"4]]
                           (map #(apply trie/->trie-details #xt/table foo %)))
-                     (Instant/now))
+                     (Instant/now))))
 
           (tu/flush-block! node)
 
@@ -119,15 +119,15 @@
       (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
         ;; need some dummy tx for latest-completed-txt
         (xt/execute-tx node [[:put-docs :foo {:xt/id 1}]])
-        (let [cat (.getTrieCatalog (db/primary-db node))]
-          (.addTries cat #xt/table foo
+        (let [catalog (.getCatalog (.getQueryState (db/primary-db node)))]
+          (.update ^Catalog catalog (fn [^Catalog$State s] (.withTries s #xt/table foo
                      (->> [["l00-rc-b00" 1] ["l00-rc-b01" 1] ["l00-rc-b02" 1] ["l00-rc-b03" 1]
                            ["l01-r20200101-b00" 5] ["l01-rc-b00" 2]
                            ["l01-r20200102-b01" 5] ["l01-rc-b01" 2]
                            ["l01-r20200101-b02" 5] ["l01-r20200102-b02" 5] ["l01-rc-b02" 2]
                            ["l02-rc-p0-b01" 4] ["l02-rc-p2-b01" 4]]
                           (map #(apply trie/->trie-details #xt/table foo %)))
-                     (Instant/now))
+                     (Instant/now))))
           (tu/flush-block! node))))
 
     (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
@@ -219,12 +219,18 @@
                                               :tries (partial map (comp :trie-key trie/<-trie-details))))
                                     partitions))))))))))
 
+(defn- ->catalog ^Catalog [^TableCatalog$State table-cat-state]
+  (Catalog. (Catalog$State. (trie-cat/->TrieCatalogState {} 0) table-cat-state)))
+
+(defn- ->table-cat ^TableCatalog [^TableCatalog$State table-cat-state]
+  (.getTableCatalog (->catalog table-cat-state)))
+
 (deftest a-block-carrying-names-alone-resolves-to-the-entries-its-files-are-already-under
   (let [names ["public/docs" "public/foo" "xt/txs"]
         entries (map-indexed (fn [idx nm] (TableEntry/mint (+ TableEntry/FIRST_OID idx) (table/->ref nm)))
                              (sort names))
 
-        ->entries (fn [^Block block] (vec (.getEntries (.snap (TableCatalog. (TableCatalog/initialState block))))))]
+        ->entries (fn [^Block block] (vec (.getEntries (.snap (->table-cat (TableCatalog/initialState block))))))]
 
     (t/is (= ["public$docs" "public$foo" "xt$txs"]
              (mapv #(.getSlug (.getSlug ^TableEntry %)) entries))
@@ -251,10 +257,11 @@
         b11 (->block 11 ["public/docs" "public/orders" "xt/txs"])
 
         ;; started before `orders` existed, then caught up
-        caught-up (doto (TableCatalog. (TableCatalog/initialState (->block 10 ["public/docs" "xt/txs"])))
-                    (.refresh b11 {}))
+        caught-up (let [catalog (->catalog (TableCatalog/initialState (->block 10 ["public/docs" "xt/txs"])))]
+                    (.update ^Catalog catalog (fn [^Catalog$State s] (.refreshed s b11 {})))
+                    (.getTableCatalog catalog))
 
-        started-at-b11 (TableCatalog. (TableCatalog/initialState b11))]
+        started-at-b11 (->table-cat (TableCatalog/initialState b11))]
 
     (t/is (= {"public/docs" 16384, "public/orders" 16385, "xt/txs" 16386} (->oids started-at-b11)))
 
@@ -265,11 +272,14 @@
   (into {} (map (juxt #(str (.getSym (.getTable ^TableEntry %))) #(.getOid ^TableEntry %)))
         (.getEntries (.snap cat))))
 
-(defn- register-txs ^TableCatalog [txs]
-  (let [cat (TableCatalog. (TableCatalog/initialState nil))]
+(defn- register-txs* ^Catalog [txs]
+  (let [catalog (Catalog. (Catalog$State. (trie-cat/->TrieCatalogState {} 0) (TableCatalog/initialState nil)))]
     (doseq [tx txs]
-      (.registerTables cat (mapv table/->ref tx)))
-    cat))
+      (.update ^Catalog catalog (fn [^Catalog$State s] (.withEntriesFor s (mapv table/->ref tx)))))
+    catalog))
+
+(defn- register-txs ^TableCatalog [txs]
+  (.getTableCatalog (register-txs* txs)))
 
 (deftest two-nodes-replaying-one-log-allocate-the-same-oids
   ;; a leader learns of a table as it resolves the tx that writes it, a follower as it applies the same
@@ -284,10 +294,11 @@
 
 (deftest a-block-records-the-oid-the-catalog-has-already-published
   (let [tables ["public/docs" "public/orders" "xt/txs"]
-        cat (register-txs [tables])
-        published (->oids cat)
+        catalog (register-txs* [tables])
+        published (->oids (.getTableCatalog catalog))
         recorded (into {} (map (juxt #(str (.getSym (.getTable ^TableEntry %))) #(.getOid ^TableEntry %)))
-                       (.resolveTables cat (mapv table/->ref tables)))]
+                       (let [refs (mapv table/->ref tables)]
+                         (.entriesFor (.update ^Catalog catalog (fn [^Catalog$State s] (.withEntriesFor s refs))) refs)))]
 
     (t/is (= published recorded)
           "a table's oid is fixed when the catalog learns of it, so its first block changes nothing")))

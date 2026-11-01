@@ -12,7 +12,7 @@
             [xtdb.trie-catalog :as trie-cat])
   (:import (java.nio.file Path)
            (xtdb.api.storage ObjectStore$StoredObject)
-           (xtdb.catalog TableCatalog)
+           (xtdb.catalog Catalog Catalog$State TableCatalog)
            (xtdb.database Database)
            (xtdb.storage BufferPool)
            (xtdb.table TableSlug)
@@ -71,6 +71,7 @@
         (log/info "Node caught up - resetting compaction...")
 
         (let [bp (.getBufferPool db)
+              ^Catalog catalog (.getCatalog (.getQueryState db))
               trie-cat (.getTrieCatalog db)
               table-cat (.getTableCatalog db)
               live-idx (.getLiveIndex db)
@@ -104,7 +105,7 @@
                                          (into {}))])
                              (into {})))]
                 (let [state-before (freeze-state)]
-                  (.resetToL0 trie-cat table->l0-entries)
+                  (.update catalog (fn [^Catalog$State s] (.withL0Reset s table->l0-entries)))
                   (let [state-after (freeze-state)]
                     (log/info "Trie catalog state diff:")
                     (pp/pprint (->> (for [tbl (set/union (set (keys state-before))
@@ -134,7 +135,7 @@
             (do
               (log/info "Resetting compaction...")
 
-              (.resetToL0 trie-cat table->l0-entries)
+              (.update catalog (fn [^Catalog$State s] (.withL0Reset s table->l0-entries)))
               (xt-log/send-flush-block-msg! db)
               (xt-log/sync-db db #xt/duration "PT5M")
               (log/info "Reset complete. Deleting compacted files...")

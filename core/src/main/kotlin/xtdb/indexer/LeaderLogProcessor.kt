@@ -23,7 +23,6 @@ import xtdb.api.tx.ExternalSource
 import xtdb.database.Database
 import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
-import xtdb.trie.addTries
 import xtdb.types.MessageId
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.closeAllOnCatch
@@ -62,7 +61,7 @@ internal class LeaderLogProcessor(
 
     private val bufferPool = partitionStorage.bufferPool
     private val tableCatalog = partitionState.tableCatalog
-    private val trieCatalog = partitionState.trieCatalog
+    private val catalog = partitionState.catalog
     private val liveIndex = partitionState.liveIndex
 
     // Resolves each source-log / attach-detach / ext-source tx and holds it — with every other
@@ -195,7 +194,7 @@ internal class LeaderLogProcessor(
 
             is ReplicaMessage.TriesAdded -> {
                 if (msg.storageVersion == Storage.VERSION && msg.storageEpoch == bufferPool.epoch)
-                    trieCatalog.addTries(msg.tries, record.logTimestamp)
+                    catalog.update { it.withTries(msg.tries, record.logTimestamp) }
 
                 // Below the guard, not above it: the compactor awaits this watermark and then
                 // recalculates jobs off the catalog, so notifying first would have it re-select the

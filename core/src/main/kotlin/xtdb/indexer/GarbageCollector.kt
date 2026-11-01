@@ -33,7 +33,7 @@ internal class GarbageCollector(
 
     private val bufferPool = partitionStorage.bufferPool
     private val tableCatalog = partitionState.tableCatalog
-    private val trieCatalog = partitionState.trieCatalog
+    private val catalog = partitionState.catalog
 
     private val blockGc = nodeBase.config.garbageCollector.let { cfg ->
         BlockGarbageCollector(
@@ -91,7 +91,7 @@ internal class GarbageCollector(
             ?: error("[$dbName] TriesDeleted for '${msg.tableName}' read back with nothing in flight")
 
         // From the record, not from `task`, so this node applies exactly what every other node applies.
-        trieCatalog.deleteTries(fromSchemaAndTable(msg.tableName), msg.trieKeys)
+        catalog.update { it.withoutTries(fromSchemaAndTable(msg.tableName), msg.trieKeys) }
 
         task.onComplete.complete(Unit)
     }

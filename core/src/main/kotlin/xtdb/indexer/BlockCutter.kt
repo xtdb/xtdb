@@ -60,6 +60,7 @@ internal class BlockCutter(
     private val liveIndex = partitionState.liveIndex
     private val trieCatalog = partitionState.trieCatalog
     private val tableCatalog = partitionState.tableCatalog
+    private val catalog = partitionState.catalog
 
     private val blockUploadTimer: Timer? = meterRegistry?.let {
         Timer.builder("block.upload.timer")
@@ -216,7 +217,7 @@ internal class BlockCutter(
 
         // A table new in this block has already written its L0 trie by now, under the slug its LiveTable was
         // created with — the same one minted here, because both resolve through `State.slug`.
-        val entries = tableCatalog.resolveTables(tableBlocks.keys).associateBy { it.table }
+        val entries = catalog.update { it.withEntriesFor(tableBlocks.keys) }.entriesFor(tableBlocks.keys).associateBy { it.table }
 
         coroutineScope {
             tableBlocks.forEach { (table, tableBlock) ->
