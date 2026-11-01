@@ -93,7 +93,7 @@ class Database(
         DatabaseSnapshot(partitions.mapIndexed { idx, part -> part.openSnapshot(minBasis?.getOrNull(idx)) })
 
     /** This database's read basis right now — latest-completed system-time per partition, in partition-index order. */
-    fun currentBasis(): List<Instant?> = partitions.map { it.liveIndex.latestCompletedTx?.systemTime }
+    fun currentBasis(): List<Instant?> = partitions.map { it.liveIndex.state.latestCompletedTx?.systemTime }
 
     val tableCatalog: TableCatalog get() = partition0.tableCatalog
 
@@ -292,7 +292,7 @@ class Database(
             // tx-id and source-msg-id can diverge under ext-source — seed them independently:
             // tx-id from the live-index's last committed tx, source-msg-id from the persisted
             // block-catalog watermark (or the source-log epoch floor on a fresh epoch).
-            val txId = state.liveIndex.latestCompletedTx?.txId ?: -1L
+            val txId = state.liveIndex.state.latestCompletedTx?.txId ?: -1L
 
             // Catch log/storage divergence (rotated/truncated/wrong topic) before we wire up
             // the indexer — see /ops/backup-and-restore/out-of-sync-log.
@@ -374,7 +374,7 @@ class Database(
 
                 listOf(
                     gauge("node.tx.latestCompletedTxId") {
-                        (state.liveIndex.latestCompletedTx?.txId ?: -1).toDouble()
+                        (state.liveIndex.state.latestCompletedTx?.txId ?: -1).toDouble()
                     },
                     gauge("node.tx.latestSubmittedMsgId") {
                         logs.sourceLog.latestSubmittedMsgId().toDouble()
@@ -592,7 +592,7 @@ class Database(
                 // databaseNames and databaseOrNull are read separately, so a concurrent detach can drop a db
                 // between them — skip it, as the sibling awaitAll0/syncAll0 do, rather than NPE.
                 databaseOrNull(dbName)?.let { db ->
-                    dbName to db.partitions.map { it.liveIndex.latestCompletedTx }
+                    dbName to db.partitions.map { it.liveIndex.state.latestCompletedTx }
                 }
             }.toMap()
 

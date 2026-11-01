@@ -161,7 +161,7 @@ class FollowerLogProcessorTest {
         // Applying either of the first two would go backwards through `Watchers.notifyApplied`, whose
         // monotonicity check throws — so reaching here is half of what says they were skipped.
         assertEquals(43L, watchers.latestTxId)
-        assertEquals(43L, liveIndex.latestCompletedTx?.txId)
+        assertEquals(43L, liveIndex.state.latestCompletedTx?.txId)
     }
 
     @Test
@@ -181,7 +181,7 @@ class FollowerLogProcessorTest {
             record(4, ReplicaMessage.ResolvedTx(1000, Instant.now(), true, null, emptyMap(), srcMsgId = 1000, termId = TERM)),
         ))
 
-        assertNull(liveIndex.latestCompletedTx, "nothing applied")
+        assertNull(liveIndex.state.latestCompletedTx, "nothing applied")
         assertEquals(5L, tableCatalog.snap().blockIdx, "and the catalog did not go back to b1")
         assertEquals(1000L, watchers.latestSourceMsgId)
     }
@@ -217,7 +217,7 @@ class FollowerLogProcessorTest {
             record(1, ReplicaMessage.ResolvedTx(1001, Instant.now(), true, null, emptyMap(), srcMsgId = 1001, termId = TERM)),
         ))
 
-        assertEquals(1001L, liveIndex.latestCompletedTx?.txId)
+        assertEquals(1001L, liveIndex.state.latestCompletedTx?.txId)
         assertEquals(1001L, watchers.latestSourceMsgId)
     }
 
@@ -236,7 +236,7 @@ class FollowerLogProcessorTest {
             record(2, ReplicaMessage.BlockUploaded(Storage.VERSION, 1, 0, -1, emptyList(), termId = TERM)),
         ))
 
-        assertEquals(0L, liveIndex.latestCompletedTx?.txId, "the ext tx applied")
+        assertEquals(0L, liveIndex.state.latestCompletedTx?.txId, "the ext tx applied")
         assertEquals(-1L, watchers.latestSourceMsgId,
             "ext-source ResolvedTx must not bump latestSourceMsgId")
         assertEquals(0L, tableCatalog.snap().blockIdx)

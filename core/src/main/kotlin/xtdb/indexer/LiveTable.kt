@@ -15,7 +15,6 @@ import xtdb.table.TableSlug
 import xtdb.api.TableRef
 import xtdb.trie.*
 import xtdb.util.HLL
-import xtdb.util.RowCounter
 import xtdb.util.closeOnCatch
 
 class LiveTable private constructor(
@@ -23,7 +22,6 @@ class LiveTable private constructor(
     val table: TableRef,
     val slug: TableSlug,
     val blockIdx: Long,
-    private val rowCounter: RowCounter,
     private val liveTrieFactory: LiveTrieFactory,
     private val state: State,
 ) : AutoCloseable {
@@ -49,7 +47,7 @@ class LiveTable private constructor(
     val trie get() = state.trie
 
     private fun withState(state: State) =
-        LiveTable(al, table, slug, blockIdx, rowCounter, liveTrieFactory, state)
+        LiveTable(al, table, slug, blockIdx, liveTrieFactory, state)
 
     private val opVec = relation["op"]
 
@@ -93,6 +91,15 @@ class LiveTable private constructor(
             state = State(relation, state.trie.addRange(pos, count))
         }
 
+        /** Appends [data]'s rows, which arrive already written — their system-from included — and indexes them. */
+        fun importRows(data: RelationReader) {
+            val pos = relation.rowCount
+
+            relation.append(data)
+
+            state = State(relation, state.trie.addRange(pos, data.rowCount))
+        }
+
         // Set once the value that takes this transient's relation exists, and only then: a constructor
         // that threw would leave the relation this transient's to free.
         private var committed = false
@@ -104,7 +111,7 @@ class LiveTable private constructor(
          * the way a Clojure transient stops being usable once `persistent!` has taken it. Without that,
          * a caller closing both would release the relation twice while the value is still reading it.
          *
-         * The rows reach [LiveIndex.blockRowCount] when that value is installed rather than here: that
+         * The rows reach [LiveIndex.State.blockRowCount] when that value is installed rather than here: that
          * count spans terms, where a transient is committed at resolve and a term ending before its
          * resolved transactions come back discards them.
          */
@@ -129,21 +136,15 @@ class LiveTable private constructor(
         }
 
     /**
-     * This table's next value, with [data]'s rows appended.
+     * This table's next value, with [data]'s rows — those of the transaction at [systemTimeMicros] — appended.
      *
-     * The relation is appended in place and so is shared with the value this is called on, which the
-     * caller therefore replaces rather than keeping: what the next value holds of its own is the trie
-     * over the wider range.
+     * This value is left as it was, and stays the caller's to close; the next value holds references of its own.
      */
-    fun importData(data: RelationReader): LiveTable {
-        val offset = relation.rowCount
-        val count = data.rowCount
-
-        relation.append(data)
-        rowCounter.addRows(count)
-
-        return withState(State(relation, trie.addRange(offset, count)))
-    }
+    fun importData(systemTimeMicros: Long, data: RelationReader): LiveTable =
+        openTx(systemTimeMicros).use { tx ->
+            tx.importRows(data)
+            tx.commit()
+        }
 
     data class BlockMetadata(
         val vecTypes: Map<FieldName, VectorType>,
@@ -222,12 +223,12 @@ class LiveTable private constructor(
         @JvmStatic
         @JvmOverloads
         fun open(
-            al: BufferAllocator, table: TableRef, slug: TableSlug, blockIdx: Long, rowCounter: RowCounter,
+            al: BufferAllocator, table: TableRef, slug: TableSlug, blockIdx: Long,
             liveTrieFactory: LiveTrieFactory = LiveTrieFactory { MemoryHashTrie.emptyTrie(it) },
         ): LiveTable =
             Trie.openLogDataWriter(al).closeOnCatch { rel ->
                 LiveTable(
-                    al, table, slug, blockIdx, rowCounter, liveTrieFactory,
+                    al, table, slug, blockIdx, liveTrieFactory,
                     State(rel, liveTrieFactory(rel["_iid"]))
                 )
             }

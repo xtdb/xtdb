@@ -137,6 +137,7 @@ class Snapshot(
             ownTx: OpenTx? = null,
         ): Snapshot = safelyOpening {
             val trieCatSnap = trieCatalog.state
+            val live = liveIndex.state
 
             // Live-tables already covered by a published L0 contribute no *rows* — they'd duplicate the
             // L0's data. The watermark is monotonic, so once L0_N exists we drop the live-table-N entry
@@ -148,8 +149,7 @@ class Snapshot(
             // type than the rows about to be scanned. The write path keeps both copies alive across that
             // gap (`nextBlock` runs after the catalog update on the leader and follower paths alike);
             // this keeps the read path inside it. See #5873.
-            val (liveTables, supersededTables) = liveIndex.tableRefs
-                .mapNotNull { liveIndex.table(it) }
+            val (liveTables, supersededTables) = live.tables.values
                 .partition { it.blockIdx > trieCatSnap.l0MaxBlockIdx(it.table) }
 
             val supersededLiveTypes = supersededTables.associate { it.table to it.relation.logRelTypes.orEmpty() }
@@ -189,7 +189,7 @@ class Snapshot(
             val tableInfo = tableCatSnap.buildTableInfo(liveColumnNames)
 
             Snapshot(
-                ownTx?.txKey ?: liveIndex.latestCompletedTx, trieCatSnap, tableCatSnap,
+                ownTx?.txKey ?: live.latestCompletedTx, trieCatSnap, tableCatSnap,
                 byTable, supersededLiveTypes, tableInfo
             )
         }

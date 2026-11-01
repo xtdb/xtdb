@@ -462,7 +462,7 @@ class LogProcessorSimTest : SimulationTestBase() {
     private fun assertLiveIndexesCaughtUp(nodes: List<SimNode>) {
         for ((idx, node) in nodes.withIndex())
             assertEquals(
-                lastAppliedTxId(), node.liveIndex.latestCompletedTx?.txId,
+                lastAppliedTxId(), node.liveIndex.state.latestCompletedTx?.txId,
                 "node $idx's live index has not applied the log to its end (seed=$currentSeed)"
             )
     }
@@ -484,10 +484,11 @@ class LogProcessorSimTest : SimulationTestBase() {
     }
 
     private fun assertSnapshotHasNoAbortedRows(node: SimNode, abortedTxIds: Set<MessageId>) {
-        node.liveIndex.openSnapshot(node.liveIndex.latestCompletedTx?.systemTime).use { snap ->
+        val latestCompletedTx = node.liveIndex.state.latestCompletedTx
+        node.liveIndex.openSnapshot(latestCompletedTx?.systemTime).use { snap ->
             assertEquals(
-                node.liveIndex.latestCompletedTx?.txId, snap.txBasis?.txId,
-                "snapshot basis should equal liveIndex.latestCompletedTx (seed=$currentSeed)"
+                latestCompletedTx?.txId, snap.txBasis?.txId,
+                "snapshot basis should equal the live index's latestCompletedTx (seed=$currentSeed)"
             )
 
             val basisTxId = snap.txBasis?.txId ?: -1L

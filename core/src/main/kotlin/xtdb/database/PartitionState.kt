@@ -37,7 +37,7 @@ class PartitionState(
         trieCatalog.addTries(tries, logTimestamp)
 
         // `blockMetadata()` reads the live tables that `nextBlock()` then clears.
-        tableCatalog.refresh(block, liveIndex.blockMetadata())
+        tableCatalog.refresh(block, liveIndex.state.blockMetadata())
         liveIndex.nextBlock()
     }
 

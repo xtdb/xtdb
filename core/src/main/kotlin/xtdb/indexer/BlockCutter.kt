@@ -83,7 +83,7 @@ internal class BlockCutter(
      */
     private class Uploading(val pendingBlock: PendingBlock, val block: Block) : BlockState
 
-    private var blockState: BlockState = Filling(liveIndex.blockRowCount)
+    private var blockState: BlockState = Filling(liveIndex.state.blockRowCount)
 
     /**
      * The block this term has produced and is waiting to read back, holding whatever arrived behind its
@@ -112,7 +112,7 @@ internal class BlockCutter(
     /**
      * Whether the rows resolved into this block have reached the threshold.
      *
-     * Ahead of [LiveIndex.blockRowCount], which moves only as transactions apply: the boundary is injected
+     * Ahead of [LiveIndex.State.blockRowCount], which moves only as transactions apply: the boundary is injected
      * in resolution order, so it is the resolved rows that decide where it falls. Seeded from the rows
      * already applied into the open block, because a leader promoted mid-block must cut where the previous
      * one would have or block sizes drift across restarts (the #5817 stop/start off-by-one).
@@ -233,7 +233,7 @@ internal class BlockCutter(
         val externalSourceToken = boundary.externalSourceToken
 
         val block = tableCatalog.buildBlock(
-            blockIdx, liveIndex.latestCompletedTx, latestProcessedMsgId,
+            blockIdx, liveIndex.state.latestCompletedTx, latestProcessedMsgId,
             boundaryReplicaMsgId, entries.values, secondaryDatabasesForBlock,
             externalSourceToken,
             boundary.termId, // not leaderTerm - #6059

@@ -26,9 +26,12 @@ import xtdb.storage.MemoryStorage
 import xtdb.api.TableRef
 import xtdb.api.query.IKeyFn.KeyFn.SNAKE_CASE_STRING
 import xtdb.arrow.Relation
+import xtdb.arrow.STRUCT_TYPE
 import xtdb.arrow.VectorType.Companion.I64
 import xtdb.api.error.Incorrect
 import xtdb.trie.Bucketer
+import xtdb.trie.Trie
+import xtdb.time.InstantUtil.asMicros
 import java.nio.ByteBuffer
 import java.time.Instant
 import java.util.UUID
@@ -152,8 +155,9 @@ class LiveIndexTest {
             db.openTx(1, Instant.parse("2020-01-02T00:00:00Z")).use { tx1 ->
                 tx1.put(bar, UUID(0, 0))
                 // not committing — bar must not appear
-                assertNotNull(db.liveIndex.table(foo))
-                assertNull(db.liveIndex.table(bar))
+                val live = db.liveIndex.state
+                assertNotNull(live.table(foo))
+                assertNull(live.table(bar))
             }
         }
     }
@@ -255,6 +259,33 @@ class LiveIndexTest {
     }
 
     @Test
+    fun `an imported transaction's rows are readable and count towards the block`() {
+        TestDb().use { db ->
+            val table = TableRef("public", "docs")
+
+            fun import(txId: Long, systemTime: Instant, iid: Byte) =
+                Trie.openLogDataWriter(allocator).use { rel ->
+                    rel["_iid"].writeBytes(ByteBuffer.wrap(ByteArray(16) { iid }))
+                    rel["_system_from"].writeLong(systemTime.asMicros)
+                    rel["_valid_from"].writeLong(systemTime.asMicros)
+                    rel["_valid_to"].writeLong(Long.MAX_VALUE)
+                    rel["op"].vectorFor("put", STRUCT_TYPE, false).endStruct()
+                    rel.endRow()
+                    db.liveIndex.commitTx(TransactionKey(txId, systemTime), mapOf(table to rel))
+                }
+
+            import(0, Instant.parse("2020-01-01T00:00:00Z"), 1)
+            import(1, Instant.parse("2020-01-02T00:00:00Z"), 2)
+
+            assertEquals(2, db.liveIndex.state.blockRowCount)
+
+            db.liveIndex.openSnapshot(Instant.parse("2020-01-02T00:00:00Z")).use { snap ->
+                assertEquals(2, snap.table(table).sumOf { it.relation.rowCount })
+            }
+        }
+    }
+
+    @Test
     fun `nextBlock removes tables`() {
         TestDb().use { db ->
             val table = TableRef("public", "test-table")
@@ -264,12 +295,12 @@ class LiveIndexTest {
                 db.commitTx(tx)
             }
 
-            assertNotNull(db.liveIndex.table(table))
+            assertNotNull(db.liveIndex.state.table(table))
 
             runBlocking { db.liveIndex.finishBlock(db.bp, 0L) }
             db.liveIndex.nextBlock()
 
-            assertNull(db.liveIndex.table(table))
+            assertNull(db.liveIndex.state.table(table))
         }
     }
 
@@ -486,7 +517,7 @@ class LiveIndexTest {
                         .closeAllOnCatch { error("apply faulted") }
                 }
 
-                assertNull(db.liveIndex.table(TableRef("public", "docs")), "nothing half-installed")
+                assertNull(db.liveIndex.state.table(TableRef("public", "docs")), "nothing half-installed")
             }
         }
     }

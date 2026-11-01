@@ -36,7 +36,7 @@
     (t/testing "commit"
       (xt/execute-tx tu/*node* (for [iid iids] [:put-docs :docs {:xt/id iid, :some :doc}]))
 
-      (let [live-table (.table live-index #xt/table docs)
+      (let [live-table (.table (.getState live-index) #xt/table docs)
             live-rel (.getRelation live-table)
             iid-vec (.vectorFor live-rel "_iid")
 

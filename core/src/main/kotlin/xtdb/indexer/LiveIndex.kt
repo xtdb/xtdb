@@ -1,5 +1,7 @@
 package xtdb.indexer
 
+import clojure.lang.IPersistentMap
+import clojure.lang.PersistentHashMap
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import org.apache.arrow.memory.BufferAllocator
@@ -16,7 +18,7 @@ import xtdb.table.fromSchemaAndTable
 import xtdb.trie.BlockIndex
 import xtdb.trie.MemoryHashTrie
 import xtdb.trie.TrieCatalog
-import xtdb.util.RowCounter
+import xtdb.time.InstantUtil.asMicros
 import xtdb.util.RefCounter
 import xtdb.util.closeAll
 import xtdb.util.closeAllOnCatch
@@ -24,10 +26,11 @@ import xtdb.util.closeOnCatch
 import xtdb.util.logger
 import xtdb.util.safelyOpening
 import xtdb.util.warn
+import xtdb.util.withReadLock
+import xtdb.util.withWriteLock
 import java.nio.channels.Channels
 import java.time.Duration
 import java.time.Instant
-import java.util.HashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.locks.StampedLock
 import xtdb.api.tx.OpenTx
@@ -54,27 +57,56 @@ class LiveIndex private constructor(
     private val allocator: BufferAllocator,
     private val tableCatalog: TableCatalog,
     val trieCatalog: TrieCatalog,
-    @Volatile var latestCompletedTx: TransactionKey?,
+    initialLatestCompletedTx: TransactionKey?,
     initialBlockIdx: Long,
     indexerConfig: IndexerConfig,
     private val ioDispatcher: CoroutineDispatcher,
 ) : Snapshot.Source, AutoCloseable {
 
-    private val tables = HashMap<TableRef, LiveTable>()
-
     /**
-     * The block index that data committed *now* belongs to — handed to each [LiveTable] on creation.
-     * Bumped under [snapLock]'s write lock in [nextBlock] so subsequent commit/import paths see the new value.
+     * The live tables, the block they belong to, the rows that block has gained and the latest transaction
+     * applied into them, as one value: replaced whole under [snapLock]'s write lock.
      */
+    class State private constructor(
+        private val tableMap: IPersistentMap,
+        val blockIdx: Long,
+        val blockRowCount: Long,
+        val latestCompletedTx: TransactionKey?,
+    ) {
+        internal constructor(blockIdx: Long, latestCompletedTx: TransactionKey?) :
+                this(PersistentHashMap.EMPTY, blockIdx, 0, latestCompletedTx)
+
+        @Suppress("UNCHECKED_CAST")
+        val tables: Map<TableRef, LiveTable> get() = tableMap as Map<TableRef, LiveTable>
+
+        fun table(table: TableRef): LiveTable? = tables[table]
+
+        fun blockMetadata(): Map<TableRef, LiveTable.BlockMetadata> =
+            tables.mapValues { (_, lt) -> lt.blockMetadata() }
+
+        /**
+         * [table] in place of whatever [ref] held, counting the rows the block gained off the two values rather
+         * than accumulating them: a value carries every row below it, so this stays right even where the value it
+         * displaces is several transactions behind — a stale tx skipped on the way in, say.
+         */
+        internal fun withTable(ref: TableRef, table: LiveTable): State {
+            val addedRows = table.relation.rowCount - (tables[ref]?.relation?.rowCount ?: 0)
+            return State(tableMap.assoc(ref, table), blockIdx, blockRowCount + addedRows, latestCompletedTx)
+        }
+
+        internal fun withLatestCompletedTx(txKey: TransactionKey) = State(tableMap, blockIdx, blockRowCount, txKey)
+
+        internal fun nextBlock() = State(blockIdx + 1, latestCompletedTx)
+    }
+
     @Volatile
-    var blockIdx: Long = initialBlockIdx
+    var state = State(initialBlockIdx, initialLatestCompletedTx)
         private set
 
     @Volatile
     private var sharedSnap: Snapshot? = null
     private val snapLock = StampedLock()
     private val snapRefCounter = RefCounter()
-    private val rowCounter = RowCounter()
 
     @JvmField
     val logLimit = indexerConfig.logLimit
@@ -111,16 +143,10 @@ class LiveIndex private constructor(
      * Takes the snap write-lock itself; callers MUST NOT already hold it.
      */
     fun refreshSnap() {
-        val stamp = snapLock.writeLock()
-        try {
+        snapLock.withWriteLock {
             refreshSnap0()
-        } finally {
-            snapLock.unlock(stamp)
         }
     }
-
-    fun table(table: TableRef): LiveTable? = this@LiveIndex.tables[table]
-    val tableRefs: Iterable<TableRef> get() = this@LiveIndex.tables.keys
 
     /**
      * A transient for [table], over the rows the live index holds for it now.
@@ -131,10 +157,11 @@ class LiveIndex private constructor(
      */
     fun openTable(table: TableRef, systemTimeMicros: Long): LiveTable.Tx =
         snapLock.withReadLock {
-            this@LiveIndex.tables[table]?.openTx(systemTimeMicros)
+            val state = state
+            state.table(table)?.openTx(systemTimeMicros)
             // The empty value is opened and dropped rather than entered: the transient holds its own
             // references over the same memory, so closing the value it came from frees nothing it needs.
-                ?: LiveTable.open(allocator, table, tableCatalog.snap().slug(table), blockIdx, rowCounter, liveTrieFactory)
+                ?: LiveTable.open(allocator, table, tableCatalog.snap().slug(table), state.blockIdx, liveTrieFactory)
                     .use { it.openTx(systemTimeMicros) }
         }
 
@@ -153,68 +180,50 @@ class LiveIndex private constructor(
      * a promoted leader catching up — arrives as a deserialised relation and goes through [commitTx].
      */
     fun applyTx(txKey: TransactionKey, tables: MutableMap<TableRef, LiveTable>) {
-        val stamp = snapLock.writeLock()
-        try {
+        snapLock.withWriteLock {
             tableCatalog.registerTables(tables.keys)
 
             val iter = tables.iterator()
             while (iter.hasNext()) {
                 val (ref, liveTable) = iter.next()
 
-                // Installing is what can fail — a map grows — and it fails before it has taken anything,
+                // Installing is what can fail — the next state allocates — and it fails before it has taken anything,
                 // so at that instant the value is still the caller's and their guard frees it. The
                 // removal that follows cannot fail, so the value is never reachable from neither.
-                val displaced = this@LiveIndex.tables.put(ref, liveTable)
+                val displaced = state.tables[ref]
+                state = state.withTable(ref, liveTable)
                 iter.remove()
-
-                // The rows the block gained, read off the two values rather than accumulated: a value
-                // carries every row below it, so this stays right even where the value it displaces is
-                // several transactions behind — a stale tx skipped on the way in, say.
-                rowCounter.addRows(liveTable.relation.rowCount - (displaced?.relation?.rowCount ?: 0))
 
                 if (displaced !== liveTable) displaced?.close()
             }
 
-            latestCompletedTx = txKey
-        } finally {
-            snapLock.unlock(stamp)
+            state = state.withLatestCompletedTx(txKey)
         }
     }
 
-    // Promote a committed tx into the live tables straight from its relations — no IPC round-trip.
-    // The leader passes its staged relation slices; a follower deserializes the replica message's
-    // table data first (see `loadTableData`). The caller owns [tables] and closes them afterwards.
+    // Promote a committed tx into the live tables from the replica message's deserialised table data
+    // (see `loadTableData`) — a follower, or a leader catching up. The caller owns [tables] and closes them afterwards.
     fun commitTx(txKey: TransactionKey, tables: Map<TableRef, RelationReader>) {
-        val stamp = snapLock.writeLock()
-        try {
+        snapLock.withWriteLock {
             // Inside the lock, so a table's identity and its rows reach readers together — snapshot
             // capture brackets itself with the same lock. Whole batch at once, per `registerTables`.
             tableCatalog.registerTables(tables.keys)
 
+            val systemTimeMicros = txKey.systemTime.asMicros
+
             for ((ref, rel) in tables) {
-                val liveTable =
-                    this@LiveIndex.tables[ref]
+                val displaced = state.tables[ref]
+                val next = displaced?.importData(systemTimeMicros, rel)
                     // Pinned at creation, so the L0 trie this table writes at the block boundary lands
                     // under the same slug `BlockCutter` then records for it.
-                        ?: LiveTable.open(allocator, ref, tableCatalog.snap().slug(ref), blockIdx, rowCounter, liveTrieFactory)
+                    ?: LiveTable.open(allocator, ref, tableCatalog.snap().slug(ref), state.blockIdx, liveTrieFactory)
+                        .use { it.importData(systemTimeMicros, rel) }
 
-                // The next value shares the relation this one appended to, so it replaces rather than
-                // joins it — and the displaced value is dropped without closing, for the same reason.
-                this@LiveIndex.tables[ref] = liveTable.importData(rel)
+                next.closeOnCatch { state = state.withTable(ref, it) }
+                if (displaced !== next) displaced?.close()
             }
 
-            latestCompletedTx = txKey
-        } finally {
-            snapLock.unlock(stamp)
-        }
-    }
-
-    private inline fun <R> StampedLock.withReadLock(block: () -> R): R {
-        val stamp = readLock()
-        return try {
-            block()
-        } finally {
-            unlock(stamp)
+            state = state.withLatestCompletedTx(txKey)
         }
     }
 
@@ -227,12 +236,9 @@ class LiveIndex private constructor(
         }
 
         // cache too stale for the caller's basis — rebuild under the write lock, double-checking first
-        val stamp = snapLock.writeLock()
-        try {
+        snapLock.withWriteLock {
             if (!sharedSnap!!.freshEnough(minSystemTime)) refreshSnap0()
             return sharedSnap!!.also { it.retain() }
-        } finally {
-            snapLock.unlock(stamp)
         }
     }
 
@@ -246,34 +252,23 @@ class LiveIndex private constructor(
             Snapshot.open(allocator, tableCatalog, trieCatalog, this, resolvedTxs, ownTx)
         }
 
-    fun isFull() = rowCounter.blockRowCount >= rowsPerBlock
-
-    /** Rows applied into the current (open) block — used to seed the leader's resolve-side block gauge. */
-    val blockRowCount: Long get() = rowCounter.blockRowCount
-
-    fun blockMetadata(): Map<TableRef, LiveTable.BlockMetadata> =
-        this@LiveIndex.tables.mapValues { (_, lt) -> lt.blockMetadata() }
+    fun isFull() = state.blockRowCount >= rowsPerBlock
 
     suspend fun finishBlock(bp: BufferPool, blockIdx: BlockIndex) =
-        this@LiveIndex.tables.finishBlock(bp, blockIdx, ioDispatcher)
+        state.tables.finishBlock(bp, blockIdx, ioDispatcher)
 
     private val skipTxsLogged = AtomicBoolean(false)
 
     fun nextBlock() {
-        rowCounter.nextBlock()
-
-        val stamp = snapLock.writeLock()
-        try {
-            this@LiveIndex.tables.values.closeAll()
-            this@LiveIndex.tables.clear()
-
-            blockIdx += 1L
-        } finally {
-            snapLock.unlock(stamp)
+        snapLock.withWriteLock {
+            val finished = state
+            finished.tables.values.closeAll()
+            state = finished.nextBlock()
         }
 
+        val latestCompletedTx = state.latestCompletedTx
         if (skipTxs.isNotEmpty() && latestCompletedTx != null
-            && latestCompletedTx!!.txId >= skipTxs.last()
+            && latestCompletedTx.txId >= skipTxs.last()
             && skipTxsLogged.compareAndSet(false, true)
         ) {
             LOG.warn("All XTDB_SKIP_TXS have been skipped and block has been finished - it is safe to remove the XTDB_SKIP_TXS environment variable.")
@@ -282,11 +277,12 @@ class LiveIndex private constructor(
 
     override fun close() {
         sharedSnap?.close()
-        this@LiveIndex.tables.values.closeAll()
 
         // Emptied as well as closed, as `nextBlock` does: these relations are slices sharing memory with
         // readers' own, so releasing one a second time underflows a ledger somebody else is still holding.
-        this@LiveIndex.tables.clear()
+        val closing = state
+        closing.tables.values.closeAll()
+        state = State(closing.blockIdx, closing.latestCompletedTx)
 
         if (!snapRefCounter.tryClose(Duration.ofMinutes(1)))
             LOG.warn("Failed to shut down live-index after 60s due to outstanding watermarks.")

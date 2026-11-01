@@ -199,7 +199,7 @@ internal class BlockCutterTest {
         val cutter = term.cutter(backgroundScope)
 
         term.applyRows(txId = 0, rows = 1)
-        assertEquals(2, term.liveIndex.blockRowCount, "the put, and the tx's own row in the txs table")
+        assertEquals(2, term.liveIndex.state.blockRowCount, "the put, and the tx's own row in the txs table")
 
         cutter.cut(latestProcessedMsgId = 0, extToken = null)
         runCurrent()
@@ -213,7 +213,7 @@ internal class BlockCutterTest {
         )
         assertNull(uploaded.rowCount(table), "nothing folded into the table catalog either")
         assertEquals(emptySet<TableRef>(), term.trieCatalog.state.tables, "nor the block's L0 tries registered")
-        assertEquals(2, term.liveIndex.blockRowCount, "and the rows are still the open block's")
+        assertEquals(2, term.liveIndex.state.blockRowCount, "and the rows are still the open block's")
 
         val held = cutter.closeBlock(term.appended.last() as BlockUploaded, Instant.EPOCH)
 
@@ -221,7 +221,7 @@ internal class BlockCutterTest {
         assertEquals(0, adopted.blockIdx)
         assertEquals(1, adopted.rowCount(table))
         assertEquals(listOf("l00-rc-b00"), term.trieCatalog.state.listAllTrieKeys(table))
-        assertEquals(0, term.liveIndex.blockRowCount)
+        assertEquals(0, term.liveIndex.state.blockRowCount)
         assertTrue(held.bufferedRecords.isEmpty(), "a block this term cut itself holds nothing back")
     }
 
@@ -265,7 +265,7 @@ internal class BlockCutterTest {
         // The rows a previous leader had already applied into the open block, which replay leaves behind.
         // Eight puts, because the tx's own row in `xt$txs` counts towards the block like any other.
         term.applyRows(txId = 0, rows = 8)
-        assertEquals(9, term.liveIndex.blockRowCount, "one short of the threshold")
+        assertEquals(9, term.liveIndex.state.blockRowCount, "one short of the threshold")
 
         val cutter = term.cutter(backgroundScope)
         assertFalse(cutter.isFull)

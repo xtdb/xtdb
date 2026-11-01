@@ -68,7 +68,7 @@ class CrashLogger @JvmOverloads constructor(
 
         bufferPool.putObjectSync(crashDir.resolve("crash.edn"), ByteBuffer.wrap(crashEdn.toByteArray()))
 
-        val liveTable = liveIndex.table(table) ?: return
+        val liveTable = liveIndex.state.table(table) ?: return
 
         bufferPool.putObjectSync(
             crashDir.resolve("live-trie.binpb"),

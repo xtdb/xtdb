@@ -127,7 +127,7 @@
                         (->> (map #(str "  " %) compacted-file-keys)
                              (str/join "\n"))))
 
-            (nil? (.getLatestCompletedTx live-idx))
+            (nil? (.getLatestCompletedTx (.getState live-idx)))
             (log/error "No completed transactions found in the live index. Cannot reset compaction.")
 
             :else
