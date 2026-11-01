@@ -22,6 +22,7 @@ import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
 import xtdb.arrow.STRUCT_TYPE
 import xtdb.trie.EventRowPointer
+import xtdb.trie.LeafPointer
 import xtdb.trie.Trie
 import xtdb.util.TemporalBounds
 import xtdb.util.TemporalDimension

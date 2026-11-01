@@ -11,7 +11,6 @@ import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
 import xtdb.bitemporal.PolygonCalculator
 import xtdb.compactor.OutWriter.OutWriters
-import xtdb.compactor.OutWriter.RecencyRowCopier
 import xtdb.compactor.RecencyPartition.WEEK
 import xtdb.metadata.PageMetadata
 import xtdb.metadata.UNBOUND_TEMPORAL_METADATA
@@ -24,6 +23,8 @@ import xtdb.table.TableSlug
 import xtdb.table.fromSchemaAndTable
 import xtdb.trie.ArrowHashTrie
 import xtdb.trie.EventRowPointer
+import xtdb.trie.LeafHeap
+import xtdb.trie.LeafPointer
 import xtdb.trie.Trie
 import xtdb.trie.Trie.dataRelSchema
 import xtdb.trie.RecencyMicros
@@ -145,13 +146,10 @@ internal class SegmentMerge(private val al: BufferAllocator) : AutoCloseable {
             }
         }
 
-    private data class QueueElem(val evPtr: EventRowPointer, val rowCopier: RecencyRowCopier)
-
     private val outWriters = OutWriters(al)
 
     private suspend fun MergeTask.merge(outWriter: OutWriter, pathFilter: ByteArray?) {
         val path = path.let { if (pathFilter == null || it.size > pathFilter.size) it else pathFilter }
-        val mergeQueue = PriorityQueue(Comparator.comparing(QueueElem::evPtr, EventRowPointer.comparator()))
 
         val resolvedRels = mutableListOf<Relation>()
 
@@ -162,29 +160,22 @@ internal class SegmentMerge(private val al: BufferAllocator) : AutoCloseable {
                 else Relation(al, rel.schema).also { resolvedRels.add(it) }.let { resolveSameSystemTimeEvents(rel, it) }
             }
 
-            for (rel in rels) {
-                val evPtr = EventRowPointer(rel, path)
-                val rowCopier = outWriter.rowCopier(rel)
-
-                if (evPtr.isValid())
-                    mergeQueue.add(QueueElem(evPtr, rowCopier))
-            }
+            val rowCopiers = rels.map { outWriter.rowCopier(it) }
+            val heap = LeafHeap(rels.mapIndexed { idx, rel -> LeafPointer(EventRowPointer(rel, path), idx) })
 
             val polygonCalculator = PolygonCalculator()
 
             while (true) {
-                val elem = mergeQueue.poll() ?: break
-                val (evPtr, rowCopier) = elem
+                val leafPtr = heap.top() ?: break
+                val evPtr = leafPtr.evPtr
 
                 polygonCalculator.calculate(evPtr)
                     ?.let { polygon ->
-                        rowCopier.copyRow(polygon.recency, evPtr.index)
+                        rowCopiers[leafPtr.relIdx].copyRow(polygon.recency, evPtr.index)
                     }
 
                 evPtr.nextIndex()
-
-                if (evPtr.isValid())
-                    mergeQueue.add(elem)
+                heap.reseatTop()
             }
 
             outWriter.endPage(ByteArrayList.from(*this.path))

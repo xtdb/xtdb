@@ -104,22 +104,12 @@ class EventRowPointer(private val relReader: RelationReader, path: ByteArray) {
     fun sameIidAs(iidHigh: Long, iidLow: Long) = this.iidHigh == iidHigh && this.iidLow == iidLow
 
     companion object {
+        /** Orders events by iid ascending (unsigned), then newest system-time first. */
         @JvmStatic
-        fun comparator(): Comparator<in EventRowPointer> = Comparator { l, r ->
-            compareUnsigned(l.iidHigh, r.iidHigh).takeIf { it != 0 }?.let { return@Comparator it }
-            compareUnsigned(l.iidLow, r.iidLow).takeIf { it != 0 }?.let { return@Comparator it }
-            r.systemFrom.compareTo(l.systemFrom)
+        fun compare(l: EventRowPointer, r: EventRowPointer): Int {
+            if (l.iidHigh != r.iidHigh) return compareUnsigned(l.iidHigh, r.iidHigh)
+            if (l.iidLow != r.iidLow) return compareUnsigned(l.iidLow, r.iidLow)
+            return r.systemFrom.compareTo(l.systemFrom)
         }
-
-        /** Orders pages by the iid each is currently sitting on. */
-        @JvmStatic
-        fun iidComparator(): Comparator<in EventRowPointer> = Comparator { l, r ->
-            compareUnsigned(l.iidHigh, r.iidHigh).takeIf { it != 0 } ?: compareUnsigned(l.iidLow, r.iidLow)
-        }
-
-        /** Orders one entity's events, newest system-time first. */
-        @JvmStatic
-        fun systemFromComparator(): Comparator<in EventRowPointer> =
-            Comparator { l, r -> r.systemFrom.compareTo(l.systemFrom) }
     }
 }
