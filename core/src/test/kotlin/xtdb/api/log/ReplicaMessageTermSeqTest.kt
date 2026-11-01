@@ -55,8 +55,8 @@ class ReplicaMessageTermSeqTest {
                 )
             }
 
-        assertEquals(0L, catalogWith(0).boundaryTermSeq)
-        assertEquals(17L, catalogWith(17).boundaryTermSeq)
-        assertNull(catalogWith(null).boundaryTermSeq)
+        assertEquals(0L, catalogWith(0).snap().boundaryTermSeq)
+        assertEquals(17L, catalogWith(17).snap().boundaryTermSeq)
+        assertNull(catalogWith(null).snap().boundaryTermSeq)
     }
 }

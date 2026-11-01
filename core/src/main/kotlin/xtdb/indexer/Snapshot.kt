@@ -32,7 +32,7 @@ import xtdb.api.tx.OpenTx
  */
 class Snapshot(
     val txBasis: TransactionKey?,
-    val trieCatSnap: TrieCatalog.Snap,
+    val trieCatSnap: TrieCatalog.State,
     val tableCatSnap: TableCatalog.State,
     // A table already has several of these on a transaction snapshot - the live-index segment, one
     // per staged tx that touched it, and the tx's own writes. Those are all tx-visibility layers,
@@ -136,7 +136,7 @@ class Snapshot(
             resolvedTxs: List<ResolvedTx> = emptyList(),
             ownTx: OpenTx? = null,
         ): Snapshot = safelyOpening {
-            val trieCatSnap = trieCatalog.snapshot()
+            val trieCatSnap = trieCatalog.state
 
             // Live-tables already covered by a published L0 contribute no *rows* — they'd duplicate the
             // L0's data. The watermark is monotonic, so once L0_N exists we drop the live-table-N entry

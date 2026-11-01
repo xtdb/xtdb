@@ -152,7 +152,7 @@ class TrieGarbageCollector(
 
     private suspend fun garbageCollectTable(entry: TableEntry, asOf: Instant) {
         val tableName = entry.table
-        val garbageTries = trieCatalog.garbageTries(tableName, asOf)
+        val garbageTries = trieCatalog.state.garbageTries(tableName, asOf)
         if (garbageTries.isEmpty()) return
 
         // Chunked so a single `TriesDeleted` stays under Kafka's max-message-bytes; per-table

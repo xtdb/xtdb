@@ -123,7 +123,7 @@ class FollowerLogProcessorTest {
                 record(2, ReplicaMessage.BlockUploaded(Storage.VERSION, 1, 0, 0, emptyList(), termId = TERM)),
             ))
 
-            assertEquals(0L, tableCatalog.currentBlockIndex, "the block closed, so the follower stopped buffering")
+            assertEquals(0L, tableCatalog.snap().blockIdx, "the block closed, so the follower stopped buffering")
             assertEquals(7L, watchers.latestTxId, "and the record it was holding applied behind it")
         }
 
@@ -143,7 +143,7 @@ class FollowerLogProcessorTest {
         )
 
         assertNull(proc.pendingBlock)
-        assertEquals(0L, tableCatalog.currentBlockIndex, "the inherited block closed on the upload it was waiting for")
+        assertEquals(0L, tableCatalog.snap().blockIdx, "the inherited block closed on the upload it was waiting for")
         assertEquals(3L, watchers.latestTxId, "and the record it was holding applied behind it")
     }
 
@@ -182,7 +182,7 @@ class FollowerLogProcessorTest {
         ))
 
         assertNull(liveIndex.latestCompletedTx, "nothing applied")
-        assertEquals(5L, tableCatalog.currentBlockIndex, "and the catalog did not go back to b1")
+        assertEquals(5L, tableCatalog.snap().blockIdx, "and the catalog did not go back to b1")
         assertEquals(1000L, watchers.latestSourceMsgId)
     }
 
@@ -194,7 +194,7 @@ class FollowerLogProcessorTest {
 
         writeBlockFile(0)
 
-        assertNull(tableCatalog.currentBlockIndex, "no block before processing")
+        assertNull(tableCatalog.snap().blockIdx, "no block before processing")
 
         val txId = 100L
         proc.processRecords(listOf(
@@ -203,7 +203,7 @@ class FollowerLogProcessorTest {
             record(2, ReplicaMessage.BlockUploaded(Storage.VERSION, 1, 0, txId, emptyList(), termId = TERM)),
         ))
 
-        assertEquals(0L, tableCatalog.currentBlockIndex,
+        assertEquals(0L, tableCatalog.snap().blockIdx,
             "block catalog should advance to block 0 even when BlockBoundary.latestProcessedMsgId == last txId")
     }
 
@@ -239,7 +239,7 @@ class FollowerLogProcessorTest {
         assertEquals(0L, liveIndex.latestCompletedTx?.txId, "the ext tx applied")
         assertEquals(-1L, watchers.latestSourceMsgId,
             "ext-source ResolvedTx must not bump latestSourceMsgId")
-        assertEquals(0L, tableCatalog.currentBlockIndex)
+        assertEquals(0L, tableCatalog.snap().blockIdx)
     }
 
     @Test

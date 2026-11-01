@@ -113,11 +113,11 @@ abstract class PostgresSourceTestBase {
 
     protected suspend fun flushBlock(node: Xtdb) {
         val cdc = (node as XtdbInternal).dbCatalog["cdc"]!!
-        val before = cdc.tableCatalog.currentBlockIndex
+        val before = cdc.tableCatalog.snap().blockIdx
         cdc.sendFlushBlockMessage()
         // wait for *this* flush's block, not just any block — matters when flushing repeatedly
         eventually(30.seconds) {
-            assertTrue(cdc.tableCatalog.currentBlockIndex.let { it != null && (before == null || it > before) }, "block persisted for cdc")
+            assertTrue(cdc.tableCatalog.snap().blockIdx.let { it != null && (before == null || it > before) }, "block persisted for cdc")
         }
     }
 

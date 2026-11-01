@@ -24,7 +24,7 @@ data class BlockFlusher(
         flushTimeout: Duration, tableCatalog: TableCatalog
     ) : this(
         flushTimeout, Instant.now(),
-        previousBlockTxId = tableCatalog.latestCompletedTx?.txId ?: -1
+        previousBlockTxId = tableCatalog.snap().latestCompletedTx?.txId ?: -1
     )
 
     fun checkBlockTimeout(now: Instant, currentBlockTxId: MessageId): Boolean =
@@ -46,5 +46,5 @@ data class BlockFlusher(
         }
 
     fun checkBlockTimeout(tableCatalog: TableCatalog) =
-        checkBlockTimeout(Instant.now(), currentBlockTxId = tableCatalog.latestCompletedTx?.txId ?: -1)
+        checkBlockTimeout(Instant.now(), currentBlockTxId = tableCatalog.snap().latestCompletedTx?.txId ?: -1)
 }

@@ -82,7 +82,7 @@
       (util/with-open [node (tu/->local-node {:node-dir node-dir :compactor-threads 0})]
         (let [db (db/primary-db node)
               table-cat (.getTableCatalog db)]
-          (t/is (nil? (.getCurrentBlockIndex table-cat)))
+          (t/is (nil? (.getBlockIdx (.snap table-cat))))
 
           (t/is (= {:tx-id magic-last-tx-id}
                    (last (for [tx-ops txs]
@@ -92,7 +92,7 @@
 
           (tu/flush-block! node)
 
-          (t/is (= last-tx-key (.getLatestCompletedTx table-cat)))
+          (t/is (= last-tx-key (.getLatestCompletedTx (.snap table-cat))))
 
           (let [expected-dir (io/as-file (io/resource "xtdb/indexer-test/can-build-block-as-arrow-ipc-file-format"))]
             (aet/check-arrow-edn-dir (io/file expected-dir "arrow")
@@ -353,7 +353,7 @@
           (t/is (= {"xtdb" [last-tx-key]} (tu/latest-completed-txs node)))
           (tu/flush-block! node)
 
-          (t/is (= last-tx-key (.getLatestCompletedTx table-cat)))
+          (t/is (= last-tx-key (.getLatestCompletedTx (.snap table-cat))))
 
           (let [objs (mapv (comp str :key os/<-StoredObject) (.listAllObjects bp))]
             (t/is (= 4 (count (filter #(re-matches #"blocks/b\p{XDigit}+\.binpb" %) objs))))
@@ -401,7 +401,7 @@
                                                             (t/is (= first-half-tx-id
                                                                      (-> (tu/latest-completed-txs node2) (get-in ["xtdb" 0 :tx-id]))))
 
-                                                            (let [latest-completed-tx (.getLatestCompletedTx table-cat)]
+                                                            (let [latest-completed-tx (.getLatestCompletedTx (.snap table-cat))]
                                                               (t/is (< (:tx-id latest-completed-tx) first-half-tx-id))
 
                                                               (Thread/sleep 250)    ; wait for the block to finish writing to disk
@@ -513,7 +513,7 @@
                                          :instant-src (tu/->mock-clock)
                                          :compactor-threads 0})]
         (let [table-cat (.getTableCatalog (db/primary-db node))]
-          (t/is (nil? (.getCurrentBlockIndex table-cat)))
+          (t/is (nil? (.getBlockIdx (.snap table-cat))))
 
           (t/is (= (serde/->TxKey 0 (time/->instant #inst "2020-01-01"))
                    (xt/execute-tx node [[:sql "INSERT INTO table (_id, foo, bar, baz) VALUES (?, ?, ?, ?)"

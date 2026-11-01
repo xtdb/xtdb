@@ -134,7 +134,7 @@ class LiveIndex private constructor(
             this@LiveIndex.tables[table]?.openTx(systemTimeMicros)
             // The empty value is opened and dropped rather than entered: the transient holds its own
             // references over the same memory, so closing the value it came from frees nothing it needs.
-                ?: LiveTable.open(allocator, table, tableCatalog.slug(table), blockIdx, rowCounter, liveTrieFactory)
+                ?: LiveTable.open(allocator, table, tableCatalog.snap().slug(table), blockIdx, rowCounter, liveTrieFactory)
                     .use { it.openTx(systemTimeMicros) }
         }
 
@@ -196,7 +196,7 @@ class LiveIndex private constructor(
                     this@LiveIndex.tables[ref]
                     // Pinned at creation, so the L0 trie this table writes at the block boundary lands
                     // under the same slug `BlockCutter` then records for it.
-                        ?: LiveTable.open(allocator, ref, tableCatalog.slug(ref), blockIdx, rowCounter, liveTrieFactory)
+                        ?: LiveTable.open(allocator, ref, tableCatalog.snap().slug(ref), blockIdx, rowCounter, liveTrieFactory)
 
                 // The next value shares the relation this one appended to, so it replaces rather than
                 // joins it — and the displaced value is dropped without closing, for the same reason.
@@ -307,11 +307,12 @@ class LiveIndex private constructor(
              */
             ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
         ) = safelyOpening {
+            val tableCat = tableCatalog.snap()
             LiveIndex(
                 open { allocator.newChildAllocator("live-index", 0, Long.MAX_VALUE) },
                 tableCatalog, trieCatalog,
-                tableCatalog.latestCompletedTx,
-                (tableCatalog.currentBlockIndex ?: -1L) + 1L,
+                tableCat.latestCompletedTx,
+                (tableCat.blockIdx ?: -1L) + 1L,
                 indexerConfig,
                 ioDispatcher,
             ).also { it.refreshSnap() }

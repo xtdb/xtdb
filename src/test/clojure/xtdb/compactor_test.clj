@@ -33,7 +33,7 @@
   (let [db (db/primary-db node)]
     (-> ^LocalStorage (.getBufferPool db)
         (.getRootPath)
-        (.resolve (.getTablePath (.slug (.getTableCatalog db) (table/->ref table-name)))))))
+        (.resolve (.getTablePath (.slug (.snap (.getTableCatalog db)) (table/->ref table-name)))))))
 
 (t/deftest test-l1-compaction
   (let [node-dir (util/->path "target/compactor/test-l1-compaction")]

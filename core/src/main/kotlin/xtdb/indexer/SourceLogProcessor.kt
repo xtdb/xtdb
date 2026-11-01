@@ -141,7 +141,7 @@ internal class SourceLogProcessor(
 
             is SourceMessage.FlushBlock -> {
                 val expectedBlockIdx = msg.expectedBlockIdx
-                val cut = expectedBlockIdx != null && expectedBlockIdx == (tableCatalog.currentBlockIndex ?: -1L)
+                val cut = expectedBlockIdx != null && expectedBlockIdx == (tableCatalog.snap().blockIdx ?: -1L)
 
                 if (cut) blockCutter.cut(msgId, txResolver.resolvedExtToken)
                 // see #5680
@@ -247,7 +247,7 @@ internal class SourceLogProcessor(
 
     private suspend fun maybeFlushBlock() {
         if (blockFlusher.checkBlockTimeout(tableCatalog))
-            logsDriver.requestFlushBlock(tableCatalog.currentBlockIndex ?: -1)
+            logsDriver.requestFlushBlock(tableCatalog.snap().blockIdx ?: -1)
     }
 
     /** The source-log tail's edge: hand a poll batch over and await its resolution. */

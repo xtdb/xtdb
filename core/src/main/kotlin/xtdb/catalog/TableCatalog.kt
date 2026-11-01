@@ -116,6 +116,24 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
     ) {
         val blockIdx: BlockIndex? get() = block?.blockIndex
 
+        val latestCompletedTx: TransactionKey? get() = block?.latestCompletedTx
+
+        val latestProcessedMsgId: MessageId? get() = block.let { it?.latestProcessedMsgId ?: it?.latestCompletedTx?.txId }
+
+        val boundaryReplicaMsgId: MessageId? get() = block?.boundaryReplicaMsgId
+
+        // the leader term that produced the latest block's boundary; a follower seeds its read-side term
+        // fence from here. Default 0 (plain scalar) for blocks written before term-fencing. See #5817.
+        val boundaryTermId: Long get() = block?.termId ?: 0
+
+        val boundaryTermSeq: Long? get() = block?.boundaryTermSeq
+
+        val externalSourceToken: ExternalSourceToken? get() = block?.externalSourceToken
+
+        val secondaryDatabases: Map<String, DatabaseConfig> get() = block?.secondaryDatabases.orEmpty()
+
+        val allTables: List<TableRef> get() = entries.map { it.table }
+
         // Copies the outer map on each read - the per-table maps are shared references, not copies. Cheap
         // where it is used: `buildTableInfo` reads it once per `Snapshot.open`. Worth knowing before
         // reaching for it per column.
@@ -162,6 +180,27 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
          * been told about — a query naming a table that does not exist.
          */
         fun slug(table: TableRef): TableSlug = entry(table)?.slug ?: TableSlug.of(table)
+
+        internal fun withSeededTable(table: TableRef, colNames: List<ColumnName>): State {
+            val meta = TableMeta(colNames.associateWith { VectorType.Nothing }, 0, emptyMap())
+
+            return copy(tables = if (tables.containsKey(table)) tables else tables + (table to meta))
+                .withEntriesFor(listOf(table))
+        }
+
+        internal fun refreshed(block: Block?, metadata: Map<TableRef, LiveTable.BlockMetadata>): State {
+            val delta = metadata.mapValues { (_, bm) -> TableMeta(bm.vecTypes, bm.rowCount.toLong(), bm.hllDeltas) }
+            val newBlock = if (block != null && block.blockIndex == blockIdx) this.block else block?.asBlockDetails()
+
+            return State(
+                block = newBlock,
+                tables = if (delta.isEmpty()) tables else tables.foldIn(delta),
+                // The block wins over what we allocated: ordinarily the two agree, but a block written
+                // before entries were recorded resolves to derived ones, and those are what every other
+                // node reading it will use.
+                entriesByTable = entriesByTable + newBlock?.tables.orEmpty().associateBy { it.table }
+            )
+        }
     }
 
     private val _state = initialBlock?.asBlockDetails().let { block ->
@@ -179,27 +218,6 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
      * the furthest position it may confirm upstream.
      */
     val latestBlock: StateFlow<BlockDetails?> = _state.mapState { it.block }
-
-    val currentBlockIndex: BlockIndex? get() = snap().blockIdx
-
-    val latestCompletedTx: TransactionKey? get() = snap().block?.latestCompletedTx
-
-    val latestProcessedMsgId: MessageId?
-        get() = snap().block.let { it?.latestProcessedMsgId ?: it?.latestCompletedTx?.txId }
-
-    val boundaryReplicaMsgId: MessageId? get() = snap().block?.boundaryReplicaMsgId
-
-    // the leader term that produced the latest block's boundary; a follower seeds its read-side term
-    // fence from here. Default 0 (plain scalar) for blocks written before term-fencing. See #5817.
-    val boundaryTermId: Long get() = snap().block?.termId ?: 0
-
-    val boundaryTermSeq: Long? get() = snap().block?.boundaryTermSeq
-
-    val externalSourceToken: ExternalSourceToken? get() = snap().block?.externalSourceToken
-
-    val allTables: List<TableRef> get() = snap().entries.map { it.table }
-
-    fun slug(table: TableRef): TableSlug = snap().slug(table)
 
     /**
      * The registry for a block covering [tables]: the entry this catalog already holds for each, carried
@@ -228,23 +246,12 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
      */
     fun registerTables(tables: Collection<TableRef>) = _state.update { it.withEntriesFor(tables) }
 
-    val secondaryDatabases: Map<String, DatabaseConfig> get() = snap().block?.secondaryDatabases.orEmpty()
-
-    fun rowCount(table: TableRef): Long? = snap().rowCount(table)
-
     /**
      * Seeds a data-backed system table (e.g. `xt.txs`) so it's present from startup, as if an empty
      * `CREATE TABLE` had run: columns are declared but dataless (`Nothing`), so the first real write
      * sets their types (`Nothing ⊔ X = X`). No-op if the table was already loaded from storage.
      */
-    fun seedTable(table: TableRef, colNames: List<ColumnName>) {
-        val meta = TableMeta(colNames.associateWith { VectorType.Nothing }, 0, emptyMap())
-
-        _state.update { cur ->
-            cur.copy(tables = if (cur.tables.containsKey(table)) cur.tables else cur.tables + (table to meta))
-                .withEntriesFor(listOf(table))
-        }
-    }
+    fun seedTable(table: TableRef, colNames: List<ColumnName>) = _state.update { it.withSeededTable(table, colNames) }
 
     /**
      * Loads table metadata from storage for the block this catalog opened at, replacing the in-memory
@@ -264,23 +271,8 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
      *
      * A re-delivered block leaves the block half alone but still folds the metadata.
      */
-    fun refresh(block: Block?, metadata: Map<TableRef, LiveTable.BlockMetadata> = emptyMap()) {
-        val delta = metadata.mapValues { (_, bm) -> TableMeta(bm.vecTypes, bm.rowCount.toLong(), bm.hllDeltas) }
-
-        _state.update { cur ->
-            val newBlock =
-                if (block != null && block.blockIndex == cur.blockIdx) cur.block else block?.asBlockDetails()
-
-            State(
-                block = newBlock,
-                tables = if (delta.isEmpty()) cur.tables else cur.tables.foldIn(delta),
-                // The block wins over what we allocated: ordinarily the two agree, but a block written
-                // before entries were recorded resolves to derived ones, and those are what every other
-                // node reading it will use.
-                entriesByTable = cur.entriesByTable + newBlock?.tables.orEmpty().associateBy { it.table }
-            )
-        }
-    }
+    fun refresh(block: Block?, metadata: Map<TableRef, LiveTable.BlockMetadata> = emptyMap()) =
+        _state.update { it.refreshed(block, metadata) }
 
     /**
      * The per-table block files for a block contributing [tableMetadata], with [tablePartitions] as their
@@ -312,7 +304,7 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
         termId: Long,
         boundaryTermSeq: Long?,
     ): Block {
-        val currentBlockIndex = this.currentBlockIndex
+        val currentBlockIndex = snap().blockIdx
         check(currentBlockIndex == null || currentBlockIndex < blockIndex) {
             "Cannot finish block $blockIndex when current block is $currentBlockIndex"
         }

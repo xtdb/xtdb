@@ -177,7 +177,7 @@
   a slug can't change; once renaming lands, this has to read the registry out of the block it's looking at."
   [^BufferPool buffer-pool ^TableCatalog table-cat ^String table-name ^long block-idx]
   (let [table-ref (table/->ref table-name)
-        table-path (.getTablePath (.slug table-cat table-ref))
+        table-path (.getTablePath (.slug (.snap table-cat) table-ref))
         obj-key (table-cat/->table-block-metadata-obj-key table-path block-idx)]
     (try
       (-> (.getByteArray buffer-pool obj-key)

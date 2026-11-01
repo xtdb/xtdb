@@ -297,7 +297,7 @@
                                      :when (not (types/temporal-col-name? col-name))]
                                  select))
 
-            row-count (.rowCount table-catalog table)]
+            row-count (.rowCount (.snap table-catalog) table)]
 
         {:op :scan
          :children []

@@ -176,7 +176,7 @@ class Database(
     }
 
     fun sendFlushBlockMessage(): Log.MessageMetadata = runBlocking {
-        sourceLog.appendMessage(SourceMessage.FlushBlock(tableCatalog.currentBlockIndex ?: -1))
+        sourceLog.appendMessage(SourceMessage.FlushBlock(tableCatalog.snap().blockIdx ?: -1))
     }
 
     fun sendAttachDbMessage(dbName: DatabaseName, config: Config): Log.MessageMetadata = runBlocking {
@@ -284,9 +284,9 @@ class Database(
             val logs = open { DatabaseLogs.open(base, dbConfig) }
 
             val storage = PartitionStorage(logs, bufferPool, metadataManager, partition = 0)
-            val tableCatalog = state.tableCatalog
+            val tableCat = state.tableCatalog.snap()
             val sourceMsgId = maxOf(
-                tableCatalog.latestProcessedMsgId ?: -1,
+                tableCat.latestProcessedMsgId ?: -1,
                 offsetToMsgId(logs.sourceLog.epoch, -1)
             )
             // tx-id and source-msg-id can diverge under ext-source — seed them independently:
@@ -296,12 +296,12 @@ class Database(
 
             // Catch log/storage divergence (rotated/truncated/wrong topic) before we wire up
             // the indexer — see /ops/backup-and-restore/out-of-sync-log.
-            validateOffsets(dbName, logs.sourceLog, tableCatalog.latestProcessedMsgId)
+            validateOffsets(dbName, logs.sourceLog, tableCat.latestProcessedMsgId)
 
             val watchers = Watchers(
                 latestTxId = txId,
                 latestSourceMsgId = sourceMsgId,
-                externalSourceToken = tableCatalog.externalSourceToken,
+                externalSourceToken = tableCat.externalSourceToken,
             )
 
             val crashLogger = CrashLogger(allocator, storage.bufferPool, base.config.nodeId)

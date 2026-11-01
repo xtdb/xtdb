@@ -76,11 +76,9 @@ class BlockGarbageCollectorTest {
                 )
 
                 // Validate that the latest block is correct
-                val latestBlockIndex = blockCat.currentBlockIndex
-                assertEquals(10L, latestBlockIndex)
-
-                val latestCompletedTx = blockCat.latestCompletedTx
-                assertEquals(10L, latestCompletedTx?.txId)
+                val latest = blockCat.snap()
+                assertEquals(10L, latest.blockIdx)
+                assertEquals(10L, latest.latestCompletedTx?.txId)
 
                 gc.garbageCollectBlocks()
 

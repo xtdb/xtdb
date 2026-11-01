@@ -73,7 +73,7 @@ class ExternalSourceTokenTest {
     fun `TableCatalog externalSourceToken reads from latest block`() {
         val tableCatalog = TableCatalog(mockk<BufferPool>(relaxed = true))
 
-        assertNull(tableCatalog.externalSourceToken)
+        assertNull(tableCatalog.snap().externalSourceToken)
 
         val block = tableCatalog.buildBlock(
             blockIndex = 0,
@@ -88,7 +88,7 @@ class ExternalSourceTokenTest {
         )
         tableCatalog.refresh(block)
 
-        assertArrayEquals(testToken, tableCatalog.externalSourceToken)
+        assertArrayEquals(testToken, tableCatalog.snap().externalSourceToken)
     }
 
     @Test
@@ -107,6 +107,6 @@ class ExternalSourceTokenTest {
         )
         tableCatalog.refresh(block)
 
-        assertNull(tableCatalog.externalSourceToken)
+        assertNull(tableCatalog.snap().externalSourceToken)
     }
 }

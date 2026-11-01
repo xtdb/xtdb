@@ -151,7 +151,7 @@ internal class BlockCutter(
      */
     suspend fun cut(latestProcessedMsgId: MessageId, extToken: ExternalSourceToken?) {
         val boundary = BlockBoundary(
-            (tableCatalog.currentBlockIndex ?: -1) + 1, latestProcessedMsgId, extToken,
+            (tableCatalog.snap().blockIdx ?: -1) + 1, latestProcessedMsgId, extToken,
             termId = leaderTerm
         )
         replicaAppender.append(ControlItem(boundary))
@@ -205,10 +205,11 @@ internal class BlockCutter(
 
         // The layout these tries imply rather than the one the catalog holds: the block records the
         // partitions as of itself, and the add below is what the catalog will agree with afterwards.
-        val allTables = finishedBlocks.keys + tableCatalog.allTables
+        val allTables = finishedBlocks.keys + tableCatalog.snap().allTables
 
+        val trieCatState = trieCatalog.state
         val tablePartitions = allTables.associateWith { table ->
-            trieCatalog.withPartitions(table, listOfNotNull(addedTriesByTable[table]), triesAsOf)
+            trieCatState.withPartitions(table, listOfNotNull(addedTriesByTable[table]), triesAsOf)
         }
 
         val tableBlocks = tableCatalog.buildTableBlocks(finishedBlocks, tablePartitions)

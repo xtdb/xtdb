@@ -15,12 +15,11 @@
   (:import (java.io File)
            [java.nio.file Path]
            (java.time Duration Instant)
-           (java.util.concurrent ConcurrentHashMap)
            (xtdb.api.storage ObjectStore$StoredObject)
            (xtdb.block.proto Block)
            (xtdb.log.proto TemporalMetadata TrieMetadata)
            (xtdb.table TableSlug)
-           (xtdb.trie_catalog TrieCatalog)
+           (xtdb.trie TrieCatalog$State)
            (xtdb.api TableRef)))
 
 (t/use-fixtures :once tu/with-allocator)
@@ -362,16 +361,17 @@
 
         ;; in-memory, the seeded-but-dataless xt/role_membership has no trie, so the trie catalog
         ;; doesn't track it yet (unlike after a restart, below, where it's reconstructed from its block)
-        (t/is (= #{#xt/table foo, #xt/table xt/txs} (.getTables cat)))
-        (t/is (= #{"l00-rc-b00" "l00-rc-b01"}
-                 (->> (cat/current-tries (cat/trie-state cat #xt/table foo))
-                      (into #{} (map :trie-key)))))))
+        (let [cat-state (.getState cat)]
+          (t/is (= #{#xt/table foo, #xt/table xt/txs} (.getTables cat-state)))
+          (t/is (= #{"l00-rc-b00" "l00-rc-b01"}
+                   (->> (cat/current-tries (.tableState cat-state #xt/table foo))
+                        (into #{} (map :trie-key))))))))
 
     (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
-      (let [cat (.getTrieCatalog (db/primary-db node))]
-        (t/is (= #{#xt/table xt/role_membership, #xt/table foo, #xt/table xt/txs} (.getTables cat)))
+      (let [cat-state (.getState (.getTrieCatalog (db/primary-db node)))]
+        (t/is (= #{#xt/table xt/role_membership, #xt/table foo, #xt/table xt/txs} (.getTables cat-state)))
         (t/is (= #{"l00-rc-b01" "l00-rc-b00"}
-                 (->> (cat/current-tries (cat/trie-state cat #xt/table foo))
+                 (->> (cat/current-tries (.tableState cat-state #xt/table foo))
                       (into #{} (map :trie-key)))))))
 
     (t/testing "artifically adding tries"
@@ -397,9 +397,9 @@
                  (->> (cat/current-tries (cat/trie-state cat #xt/table foo))
                       (into (sorted-set) (map :trie-key)))))))))
 
-(defn trie-catalog-init [table->table-block]
-  (TrieCatalog. (cat/load-tries table->table-block cat/*file-size-target*)
-                cat/*file-size-target*))
+(defn trie-catalog-init ^TrieCatalog$State [table->table-block]
+  (cat/->TrieCatalogState (cat/load-tries table->table-block cat/*file-size-target*)
+                          cat/*file-size-target*))
 
 (t/deftest test-startup-drops-persisted-l0-garbage
   ;; Block files written before the "drop L0 on supersession" change may persist L0 entries
@@ -413,8 +413,8 @@
                                                  :state :garbage
                                                  :garbage-as-of #xt/instant "2000-01-01T00:00:00Z"})
                                 (->trie-details {:trie-key "l00-rc-b01" :data-file-size 10 :state :live})]}]}
-        cat (trie-catalog-init {#xt/table foo table-blocks})
-        l0-state (get-in (cat/trie-state cat #xt/table foo) [:tries [0 nil []]])]
+        cat-state (trie-catalog-init {#xt/table foo table-blocks})
+        l0-state (get-in (.tableState cat-state #xt/table foo) [:tries [0 nil []]])]
 
     (t/is (= #{"l00-rc-b01"}
              (into #{} (map :trie-key) (:live l0-state)))
@@ -440,12 +440,12 @@
                            {:level 1 :recency nil :part []
                             :tries [(->trie-details {:trie-key "l01-rc-b00" :data-file-size 10 :state :live})]}]}
 
-        cat (trie-catalog-init {#xt/table bar new-table-blocks
-                                #xt/table foo old-table-blocks})]
+        cat-state (trie-catalog-init {#xt/table bar new-table-blocks
+                                      #xt/table foo old-table-blocks})]
     (t/is (= #{"l00-rc-b01" "l01-rc-b00"}
-             (->> (cat/current-tries (cat/trie-state cat #xt/table foo))
+             (->> (cat/current-tries (.tableState cat-state #xt/table foo))
                   (into (sorted-set) (map :trie-key)))
-             (->> (cat/current-tries (cat/trie-state cat #xt/table bar))
+             (->> (cat/current-tries (.tableState cat-state #xt/table bar))
                   (into (sorted-set) (map :trie-key)))))))
 
 (t/deftest test-trie-catalog-init
@@ -460,12 +460,12 @@
                              {:level 1 :recency #xt/date "2020-01-01" :part []
                               :tries [(->trie-details {:trie-key "l01-r20200101-b00" :data-file-size 10})]}]}
 
-          cat (trie-catalog-init {#xt/table foo old-table-blocks})]
+          cat-state (trie-catalog-init {#xt/table foo old-table-blocks})]
 
-      (t/is (= #{"l00-rc-b01" "l01-rc-b00" "l01-r20200101-b00"} (->> (cat/current-tries (cat/trie-state cat #xt/table foo))
+      (t/is (= #{"l00-rc-b01" "l01-rc-b00" "l01-r20200101-b00"} (->> (cat/current-tries (.tableState cat-state #xt/table foo))
                                                                      (into (sorted-set) (map :trie-key)))))
 
-      (t/is (= #{} (->> (cat/garbage-tries (cat/trie-state cat #xt/table foo)
+      (t/is (= #{} (->> (cat/garbage-tries (.tableState cat-state #xt/table foo)
                                            #xt/instant "2025-01-01T00:00:00Z")
                         (into (sorted-set) (map :trie-key))))))
 
@@ -479,13 +479,13 @@
                               :tries [(->trie-details {:trie-key "l01-rc-b00" :data-file-size 10 :state :live})]}
                              {:level 1 :recency #xt/date "2020-01-01" :part []
                               :tries [(->trie-details {:trie-key "l01-r20200101-b00" :data-file-size 10 :state :live})]}]}
-          cat (trie-catalog-init {#xt/table foo new-table-blocks})]
+          cat-state (trie-catalog-init {#xt/table foo new-table-blocks})]
 
       (t/is (= #{"l00-rc-b01" "l01-rc-b00" "l01-r20200101-b00"}
-               (->> (cat/current-tries (cat/trie-state cat #xt/table foo))
+               (->> (cat/current-tries (.tableState cat-state #xt/table foo))
                     (into (sorted-set) (map :trie-key)))))
 
-      (t/is (= #{} (->> (cat/garbage-tries (cat/trie-state cat #xt/table foo)
+      (t/is (= #{} (->> (cat/garbage-tries (.tableState cat-state #xt/table foo)
                                            #xt/instant "2025-01-01T00:00:00Z")
                         (into (sorted-set) (map :trie-key))))))
 
@@ -502,13 +502,13 @@
                              {:level 1 :recency #xt/date "2020-01-01" :part []
                               :max-block-idx 0
                               :tries [(->trie-details {:trie-key "l01-r20200101-b00" :data-file-size 10 :state :live})]}]}
-          cat (trie-catalog-init {#xt/table foo new-table-blocks})]
+          cat-state (trie-catalog-init {#xt/table foo new-table-blocks})]
 
       (t/is (= #{"l00-rc-b01" "l01-rc-b00" "l01-r20200101-b00"}
-               (->> (cat/current-tries (cat/trie-state cat #xt/table foo))
+               (->> (cat/current-tries (.tableState cat-state #xt/table foo))
                     (into (sorted-set) (map :trie-key)))))
 
-      (t/is (= #{} (->> (cat/garbage-tries (cat/trie-state cat #xt/table foo)
+      (t/is (= #{} (->> (cat/garbage-tries (.tableState cat-state #xt/table foo)
                                            #xt/instant "2025-01-01T00:00:00Z")
                         (into (sorted-set) (map :trie-key))))))))
 
@@ -525,13 +525,13 @@
                           :max-block-idx 1
                           :tries [(->trie-details {:trie-key "l00-rc-b00" :data-file-size 10 :state :live})
                                   (->trie-details {:trie-key "l00-rc-b01" :data-file-size 10 :state :live})]}]}
-          cat (trie-catalog-init {#xt/table foo table-blocks})]
+          cat-state (trie-catalog-init {#xt/table foo table-blocks})]
 
       (t/is (= #{"l00-rc-b00" "l00-rc-b01"}
-               (->> (cat/current-tries (cat/trie-state cat #xt/table foo))
+               (->> (cat/current-tries (.tableState cat-state #xt/table foo))
                     (into (sorted-set) (map :trie-key)))))
 
-      (t/is (= #{} (->> (cat/garbage-tries (cat/trie-state cat #xt/table foo)
+      (t/is (= #{} (->> (cat/garbage-tries (.tableState cat-state #xt/table foo)
                                            #xt/instant "2025-01-01T00:00:00Z")
                         (into (sorted-set) (map :trie-key)))))))
 
@@ -544,10 +544,10 @@
                             {:level 0 :recency nil :part []
                              :max-block-idx 1
                              :tries []}]}
-          cat (trie-catalog-init {#xt/table foo no-table-blocks})]
+          cat-state (trie-catalog-init {#xt/table foo no-table-blocks})]
 
       (t/is (= #{}
-               (->> (cat/current-tries (cat/trie-state cat #xt/table foo))
+               (->> (cat/current-tries (.tableState cat-state #xt/table foo))
                     (into (sorted-set) (map :trie-key))))))))
 
 (t/deftest handles-l1h-l1c-ordering-4301
@@ -578,18 +578,21 @@
                        ["l03-r20250101-p3-b09"]))))
 
 (t/deftest test-dry-trie-catalog-gc
-  (let [cat (TrieCatalog. (ConcurrentHashMap.) 20)] ;file-size-target
+  (let [cat (cat/->trie-catalog {} 20)] ;file-size-target
     (letfn [(add-tries [tries inst]
               (.addTries cat #xt/table foo
                          (map #(apply trie/->trie-details #xt/table foo %) tries)
                          inst))
-            (all-tries []
-              (->> (cat/all-tries (cat/trie-state cat #xt/table foo))
+            (foo-state []
+              (cat/trie-state cat #xt/table foo))
+
+            (all-tries [table-state]
+              (->> (cat/all-tries table-state)
                    (sort-by (juxt :trie-key :state))
                    (map (juxt :trie-key :state :garbage-as-of))))
 
-            (garbage-tries [as-of]
-              (->> (cat/garbage-tries (cat/trie-state cat #xt/table foo) as-of)
+            (garbage-tries [table-state as-of]
+              (->> (cat/garbage-tries table-state as-of)
                    (sort-by (juxt :trie-key :state))
                    (map (juxt :trie-key :state :garbage-as-of))))
             (delete-tries [garbage-trie-keys]
@@ -602,7 +605,7 @@
 
       (t/is (= [["l01-rc-b00" :garbage #xt/instant "2001-01-01T00:00:00Z"]
                 ["l01-rc-b01" :live nil]]
-               (all-tries))
+               (all-tries (foo-state)))
             "L0s superseded by L1C are dropped from the catalog outright; the L0 files
              stay on the object store as the recovery substrate for `reset-compactor!`")
 
@@ -611,19 +614,20 @@
                   ["l02-rc-p0-b01" 4] ["l02-rc-p1-b01" 4] ["l02-rc-p2-b01" 4] ["l02-rc-p3-b01" 4]]
                  #xt/instant "2002-01-01T00:00:00Z")
 
-      (t/is (= [["l00-rc-b03" :live nil]
-                ["l01-rc-b00" :garbage #xt/instant "2001-01-01T00:00:00Z"]
-                ["l01-rc-b01" :garbage #xt/instant "2002-01-01T00:00:00Z"]
-                ["l01-rc-b02" :live nil]
-                ["l02-rc-p0-b01" :live nil]
-                ["l02-rc-p1-b01" :live nil]
-                ["l02-rc-p2-b01" :live nil]
-                ["l02-rc-p3-b01" :live nil]]
-               (all-tries)))
+      (let [foo (foo-state)]
+        (t/is (= [["l00-rc-b03" :live nil]
+                  ["l01-rc-b00" :garbage #xt/instant "2001-01-01T00:00:00Z"]
+                  ["l01-rc-b01" :garbage #xt/instant "2002-01-01T00:00:00Z"]
+                  ["l01-rc-b02" :live nil]
+                  ["l02-rc-p0-b01" :live nil]
+                  ["l02-rc-p1-b01" :live nil]
+                  ["l02-rc-p2-b01" :live nil]
+                  ["l02-rc-p3-b01" :live nil]]
+                 (all-tries foo)))
 
-      (t/is (= [["l01-rc-b00" :garbage #xt/instant "2001-01-01T00:00:00Z"]
-                ["l01-rc-b01" :garbage #xt/instant "2002-01-01T00:00:00Z"]]
-               (garbage-tries #xt/instant "2003-01-01T00:00:00Z")))
+        (t/is (= [["l01-rc-b00" :garbage #xt/instant "2001-01-01T00:00:00Z"]
+                  ["l01-rc-b01" :garbage #xt/instant "2002-01-01T00:00:00Z"]]
+                 (garbage-tries foo #xt/instant "2003-01-01T00:00:00Z"))))
 
       (delete-tries #{"l01-rc-b00" "l01-rc-b01"})
 
@@ -633,7 +637,7 @@
                 ["l02-rc-p1-b01" :live nil]
                 ["l02-rc-p2-b01" :live nil]
                 ["l02-rc-p3-b01" :live nil]]
-               (all-tries))))))
+               (all-tries (foo-state)))))))
 
 (t/deftest test-default-garbage-collection
   (binding [c/*ignore-signal-block?* true]
@@ -794,7 +798,7 @@
               :tries [{:trie-key "l03-r20200101-p0-b07" :block-idx 7}]}]))))
 
 (t/deftest test-delete-garbage-l1-l2-with-live-l3
-  (let [cat (TrieCatalog. (ConcurrentHashMap.) 20)
+  (let [cat (cat/->trie-catalog {} 20)
         table #xt/table foo
         add-tries (fn [tries inst]
                     (.addTries cat table
@@ -835,21 +839,21 @@
   (tu/with-tmp-dirs #{node-dir}
     (with-open [node (tu/->local-node {:node-dir node-dir :compactor-threads 0})]
       (let [trie-cat (.getTrieCatalog (db/primary-db node))]
-        (t/is (empty? (cat/l0-blocks trie-cat))
+        (t/is (empty? (cat/l0-blocks (.getState trie-cat)))
               "Empty node should have no L0 blocks")
 
         (xt/execute-tx node [[:put-docs :table_a {:xt/id 1}]
                              [:put-docs :table_b {:xt/id 2}]])
-        (t/is (empty? (cat/l0-blocks trie-cat))
+        (t/is (empty? (cat/l0-blocks (.getState trie-cat)))
               "Before finish-block, should still have no L0 blocks")
 
         (tu/flush-block! node)
-        (t/is (= [0] (map :block-idx (cat/l0-blocks trie-cat)))
+        (t/is (= [0] (map :block-idx (cat/l0-blocks (.getState trie-cat))))
               "Should have 1 block after first finish-block")
 
         (xt/execute-tx node [[:put-docs :table_c {:xt/id 3}]])
         (tu/flush-block! node)
-        (let [blocks (cat/l0-blocks trie-cat)
+        (let [blocks (cat/l0-blocks (.getState trie-cat))
               tables (for [block blocks]
                        (for [t (:tables block)]
                          (-> t :table TableRef/.getTableName keyword)))]
@@ -873,10 +877,11 @@
             trie-cat (.getTrieCatalog db)
             foo-state #(cat/trie-state trie-cat #xt/table foo)]
 
-        (t/is (empty? (->> (foo-state) :tries (get-in [[0 nil []] :live])))
-              "All L0s for foo have been compacted into an L1C — none remain in the catalog")
-        (t/is (empty? (->> (foo-state) :tries (get-in [[0 nil []] :garbage])))
-              "L0 supersession drops outright; no :garbage entries linger")
+        (let [l0s (get-in (foo-state) [:tries [0 nil []]])]
+          (t/is (empty? (:live l0s))
+                "All L0s for foo have been compacted into an L1C — none remain in the catalog")
+          (t/is (empty? (:garbage l0s))
+                "L0 supersession drops outright; no :garbage entries linger"))
 
         ;; Simulate what reset.clj does: list L0 meta files from the object store, parse keys,
         ;; build minimal entries, hand them to reset->l0!.
@@ -908,10 +913,10 @@
         (tu/flush-block! node))
       (c/compact-all! node #xt/duration "PT1S")
 
-      (let [trie-cat (.getTrieCatalog (db/primary-db node))]
-        (t/is (seq (cat/compacted-trie-keys (cat/trie-state trie-cat #xt/table foo)))
+      (let [cat-state (.getState (.getTrieCatalog (db/primary-db node)))]
+        (t/is (seq (cat/compacted-trie-keys (.tableState cat-state #xt/table foo)))
               "Compaction should have created non-L0 files")
-        (t/is (empty? (->> (cat/l0-blocks trie-cat)
+        (t/is (empty? (->> (cat/l0-blocks cat-state)
                            (filter (fn [{:keys [tables]}]
                                      (some #(= #xt/table foo (:table %)) tables)))))
               "All L0s for foo have been compacted into an L1C — no L0 blocks remain in the catalog")))))
@@ -929,15 +934,15 @@
                             :tries [(->trie-details {:trie-key "l01-rc-b02" :data-file-size 10 :state :live})
                                     (->trie-details {:trie-key "l01-rc-b01" :data-file-size 10 :state :garbage
                                                      :garbage-as-of #xt/instant "2000-01-01T00:00:00Z"})]}]}
-            cat (trie-catalog-init {#xt/table foo table-blocks})]
+            cat-state (trie-catalog-init {#xt/table foo table-blocks})]
 
         (t/is (= #{"l00-rc-b03" "l01-rc-b02"}
-                 (->> (cat/current-tries (cat/trie-state cat #xt/table foo))
+                 (->> (cat/current-tries (.tableState cat-state #xt/table foo))
                       (into (sorted-set) (map :trie-key))))
               "L0 b02 dropped (superseded by L1C b02); L0 b03 remains live")
 
         (t/is (= #{}
-                 (->> (cat/l0-tries (cat/trie-state cat #xt/table foo))
+                 (->> (cat/l0-tries (.tableState cat-state #xt/table foo))
                       (filter (comp #{:garbage} :state))
                       (into #{} (map :trie-key))))
               "no L0 garbage entries — L0 supersession drops outright, not via :garbage")))
@@ -948,8 +953,8 @@
                             :max-block-idx 2
                             :tries [(->trie-details {:trie-key "l00-rc-b01" :data-file-size 10 :state :live})
                                     (->trie-details {:trie-key "l00-rc-b02" :data-file-size 10 :state :live})]}]}
-            cat (trie-catalog-init {#xt/table foo table-blocks})]
+            cat-state (trie-catalog-init {#xt/table foo table-blocks})]
 
         (t/is (= #{"l00-rc-b01" "l00-rc-b02"}
-                 (->> (cat/current-tries (cat/trie-state cat #xt/table foo))
+                 (->> (cat/current-tries (.tableState cat-state #xt/table foo))
                       (into (sorted-set) (map :trie-key)))))))))

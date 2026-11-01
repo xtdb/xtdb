@@ -196,14 +196,14 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
             "the block file has landed and the upload is appended, but this node has not adopted it"
         )
         assertNull(
-            partitionState.tableCatalog.currentBlockIndex,
+            partitionState.tableCatalog.snap().blockIdx,
             "so the catalog has not moved past the block, which is what keeps it re-producible"
         )
 
         proc.applyReplicaMessage(record(1, uploaded(blockIdx = 0, latestProcessedMsgId = 5)))
 
         assertNull(proc.pendingBlock)
-        assertEquals(0L, partitionState.tableCatalog.currentBlockIndex)
+        assertEquals(0L, partitionState.tableCatalog.snap().blockIdx)
     }
 
     @Test
@@ -251,7 +251,7 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
         )
 
         assertEquals(
-            listOf(trieKey), partitionState.trieCatalog.listAllTrieKeys(fromSchemaAndTable("public/foo"))
+            listOf(trieKey), partitionState.trieCatalog.state.listAllTrieKeys(fromSchemaAndTable("public/foo"))
         )
         assertEquals(3L, watchers.latestSourceMsgId)
     }

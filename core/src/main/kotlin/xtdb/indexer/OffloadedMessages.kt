@@ -35,7 +35,7 @@ internal class OffloadingLogsDriver(
 
             val ref = ReplicaMessage.OversizedMessage(
                 Storage.VERSION, bufferPool.epoch,
-                (partitionState.tableCatalogOrNull?.currentBlockIndex ?: -1) + 1,
+                (partitionState.tableCatalogOrNull?.snap()?.blockIdx ?: -1) + 1,
                 randomUUID().toString(),
                 termId = msg.termId, termSeq = msg.termSeq,
             )

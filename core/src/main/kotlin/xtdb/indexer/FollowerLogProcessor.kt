@@ -97,8 +97,8 @@ class FollowerLogProcessor @JvmOverloads constructor(
             when (this) {
                 is ReplicaMessage.ResolvedTx -> txId <= watchers.latestTxId
                 is ReplicaMessage.TriesAdded -> sourceMsgId <= watchers.latestSourceMsgId
-                is ReplicaMessage.BlockBoundary -> blockIndex <= (tableCatalog.currentBlockIndex ?: -1)
-                is ReplicaMessage.BlockUploaded -> blockIndex <= (tableCatalog.currentBlockIndex ?: -1)
+                is ReplicaMessage.BlockBoundary -> blockIndex <= (tableCatalog.snap().blockIdx ?: -1)
+                is ReplicaMessage.BlockUploaded -> blockIndex <= (tableCatalog.snap().blockIdx ?: -1)
                 is ReplicaMessage.NoOp -> srcMsgId != null && srcMsgId <= watchers.latestSourceMsgId
                 // `trieCatalog.deleteTries` is set-removal — idempotent — so replay is always safe.
                 is ReplicaMessage.TriesDeleted -> false

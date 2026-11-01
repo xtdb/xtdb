@@ -418,7 +418,7 @@ class LogProcessorSimTest : SimulationTestBase() {
 
         for ((idx, node) in nodes.withIndex())
             assertEquals(
-                lastUploaded, node.tableCatalog.currentBlockIndex,
+                lastUploaded, node.tableCatalog.snap().blockIdx,
                 "node $idx's block catalog is not on the last uploaded block (seed=$currentSeed)"
             )
     }
@@ -468,15 +468,16 @@ class LogProcessorSimTest : SimulationTestBase() {
     }
 
     private fun assertNodesConverged(nodes: List<SimNode>) {
-        val expected = nodes.first()
+        val expected = nodes.first().tableCatalog.snap()
 
         for ((idx, node) in nodes.withIndex()) {
+            val actual = node.tableCatalog.snap()
             assertEquals(
-                expected.tableCatalog.latestProcessedMsgId, node.tableCatalog.latestProcessedMsgId,
+                expected.latestProcessedMsgId, actual.latestProcessedMsgId,
                 "node $idx disagrees on latestProcessedMsgId (seed=$currentSeed)"
             )
             assertEquals(
-                expected.tableCatalog.latestCompletedTx, node.tableCatalog.latestCompletedTx,
+                expected.latestCompletedTx, actual.latestCompletedTx,
                 "node $idx disagrees on the block catalog's latestCompletedTx (seed=$currentSeed)"
             )
         }
