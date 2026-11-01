@@ -14,6 +14,8 @@ import xtdb.catalog.TableCatalog
 import xtdb.indexer.LiveTable.Companion.finishBlock
 import xtdb.storage.BufferPool
 import xtdb.api.TableRef
+import xtdb.table.BlockMetadata
+import xtdb.table.TableSlug
 import xtdb.table.fromSchemaAndTable
 import xtdb.trie.BlockIndex
 import xtdb.trie.MemoryHashTrie
@@ -81,7 +83,7 @@ class LiveIndex private constructor(
 
         fun table(table: TableRef): LiveTable? = tables[table]
 
-        fun blockMetadata(): Map<TableRef, LiveTable.BlockMetadata> =
+        fun blockMetadata(): Map<TableRef, BlockMetadata> =
             tables.mapValues { (_, lt) -> lt.blockMetadata() }
 
         /**
@@ -161,7 +163,7 @@ class LiveIndex private constructor(
             state.table(table)?.openTx(systemTimeMicros)
             // The empty value is opened and dropped rather than entered: the transient holds its own
             // references over the same memory, so closing the value it came from frees nothing it needs.
-                ?: LiveTable.open(allocator, table, tableCatalog.snap().slug(table), state.blockIdx, liveTrieFactory)
+                ?: LiveTable.open(allocator, table, state.blockIdx, liveTrieFactory)
                     .use { it.openTx(systemTimeMicros) }
         }
 
@@ -214,9 +216,7 @@ class LiveIndex private constructor(
             for ((ref, rel) in tables) {
                 val displaced = state.tables[ref]
                 val next = displaced?.importData(systemTimeMicros, rel)
-                    // Pinned at creation, so the L0 trie this table writes at the block boundary lands
-                    // under the same slug `BlockCutter` then records for it.
-                    ?: LiveTable.open(allocator, ref, tableCatalog.snap().slug(ref), state.blockIdx, liveTrieFactory)
+                    ?: LiveTable.open(allocator, ref, state.blockIdx, liveTrieFactory)
                         .use { it.importData(systemTimeMicros, rel) }
 
                 next.closeOnCatch { state = state.withTable(ref, it) }
@@ -254,8 +254,8 @@ class LiveIndex private constructor(
 
     fun isFull() = state.blockRowCount >= rowsPerBlock
 
-    suspend fun finishBlock(bp: BufferPool, blockIdx: BlockIndex) =
-        state.tables.finishBlock(bp, blockIdx, ioDispatcher)
+    suspend fun finishBlock(bp: BufferPool, blockIdx: BlockIndex, slug: (TableRef) -> TableSlug) =
+        state.tables.finishBlock(bp, blockIdx, slug, ioDispatcher)
 
     private val skipTxsLogged = AtomicBoolean(false)
 

@@ -14,7 +14,6 @@ import xtdb.arrow.STRUCT_TYPE
 import xtdb.compactor.SegmentMerge.RecencyPartitioning
 import xtdb.indexer.LiveTable
 import xtdb.segment.MemorySegment
-import xtdb.table.TableSlug
 import xtdb.time.InstantUtil.asMicros
 import xtdb.time.microsAsInstant
 import xtdb.trie.Trie
@@ -93,11 +92,11 @@ class SegmentMergeTest {
         }
 
     private fun withSegments(block: (List<MemorySegment>) -> Unit) {
-        LiveTable.open(al, foo, TableSlug.of(foo), 0L)
+        LiveTable.open(al, foo, 0L)
             .indexTx(Instant.parse("2020-01-01T00:00:00Z"), "foo" to 0L, "bar" to 0L)
             .indexTx(Instant.parse("2021-01-01T00:00:00Z"), "bar" to 1L)
             .use { lt0 ->
-                LiveTable.open(al, foo, TableSlug.of(foo), 0L)
+                LiveTable.open(al, foo, 0L)
                     .indexTx(Instant.parse("2022-01-01T00:00:00Z"), "foo" to 1L)
                     .indexTx(Instant.parse("2023-01-01T00:00:00Z"), "foo" to 2L, "bar" to 2L)
                     .use { lt1 ->
@@ -159,7 +158,7 @@ class SegmentMergeTest {
 
     @Test
     fun `a same-transaction event overridden by a later one is resolved away before partitioning by recency`() {
-        LiveTable.open(al, foo, TableSlug.of(foo), 0L).indexTxEvents(
+        LiveTable.open(al, foo, 0L).indexTxEvents(
             Instant.parse("2020-01-01T00:00:00Z"),
             Triple(1L, 2023, 2024), Triple(2L, 2022, 2025)
         ).use { lt ->

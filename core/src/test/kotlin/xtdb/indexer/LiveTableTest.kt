@@ -24,7 +24,7 @@ class LiveTableTest {
         RootAllocator().use { allocator ->
             val table = TableRef("public", "docs")
 
-            LiveTable.open(allocator, table, TableSlug.of(table), 0L).use { base ->
+            LiveTable.open(allocator, table, 0L).use { base ->
                 Trie.openLogDataWriter(allocator).use { sourceRel ->
                     sourceRel["_iid"].writeBytes(ByteBuffer.wrap(ByteArray(16)))
                     sourceRel["_system_from"].writeLong(1000L)
@@ -63,7 +63,7 @@ class LiveTableTest {
         RootAllocator().use { allocator ->
             val table = TableRef("public", "docs")
 
-            LiveTable.open(allocator, table, TableSlug.of(table), 0L).use { base ->
+            LiveTable.open(allocator, table, 0L).use { base ->
                 Trie.openLogDataWriter(allocator).use { rel ->
                     rel["_iid"].writeBytes(ByteBuffer.wrap(ByteArray(16)))
                     rel["_system_from"].writeLong(1000L)
@@ -119,7 +119,7 @@ class LiveTableTest {
         val uuid = UUID.fromString("7fffffff-ffff-ffff-4fff-ffffffffffff")
 
         RootAllocator().use { allocator ->
-            LiveTable.open(allocator, DOCS, TableSlug.of(DOCS), 0L, liveTrieFactory).use { base ->
+            LiveTable.open(allocator, DOCS, 0L, liveTrieFactory).use { base ->
                 Trie.openLogDataWriter(allocator).use { sourceRel ->
                     val iid = uuid.toIidBytes()
                     repeat(n) { writePut(sourceRel, iid, 0, 0, 0) }
@@ -166,7 +166,7 @@ class LiveTableTest {
 
         RootAllocator().use { allocator ->
             MemoryStorage(allocator, epoch = 0).use { bp ->
-                LiveTable.open(allocator, DOCS, TableSlug.of(DOCS), 0L).use { base ->
+                LiveTable.open(allocator, DOCS, 0L).use { base ->
                     Trie.openLogDataWriter(allocator).use { sourceRel ->
                         writePut(sourceRel, uuid.toIidBytes(), 0, 0, 0)
                         base.importData(0L, sourceRel)
@@ -174,7 +174,7 @@ class LiveTableTest {
                         TableSnapshot.open(allocator, liveTable).use { snap ->
                             val before = snap.snapData()
 
-                            runBlocking { liveTable.finishBlock(bp, 0L) }
+                            runBlocking { liveTable.finishBlock(bp, TableSlug.of(DOCS), 0L) }
 
                             val after = snap.snapData()
 
@@ -209,7 +209,7 @@ class LiveTableTest {
     @Test
     fun `a transaction's rows reach the table only when it commits`() {
         RootAllocator().use { allocator ->
-            LiveTable.open(allocator, DOCS, TableSlug.of(DOCS), 0L).use { opened ->
+            LiveTable.open(allocator, DOCS, 0L).use { opened ->
                 opened.seededWith(allocator, iid(0)).use { base ->
                     val before = TableSnapshot.open(allocator, base).use { it.snapData() }
 
@@ -238,7 +238,7 @@ class LiveTableTest {
     @Test
     fun `a discarded transaction's rows are overwritten by the next one`() {
         RootAllocator().use { allocator ->
-            LiveTable.open(allocator, DOCS, TableSlug.of(DOCS), 0L).use { opened ->
+            LiveTable.open(allocator, DOCS, 0L).use { opened ->
                 opened.seededWith(allocator, iid(0)).use { base ->
                     base.openTx(1000L).use { discarded ->
                         discarded.writePut(iid(8), 98)
@@ -266,7 +266,7 @@ class LiveTableTest {
     @Test
     fun `a discarded transaction's columns never reach the table`() {
         RootAllocator().use { allocator ->
-            LiveTable.open(allocator, DOCS, TableSlug.of(DOCS), 0L).use { opened ->
+            LiveTable.open(allocator, DOCS, 0L).use { opened ->
                 opened.seededWith(allocator, iid(0)).use { base ->
                     val before = base.relation.logRelTypes
 

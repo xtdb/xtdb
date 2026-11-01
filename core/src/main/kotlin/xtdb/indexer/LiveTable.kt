@@ -1,5 +1,7 @@
 package xtdb.indexer
 
+import xtdb.table.FinishedBlock
+import xtdb.table.BlockMetadata
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -20,7 +22,6 @@ import xtdb.util.closeOnCatch
 class LiveTable private constructor(
     private val al: BufferAllocator,
     val table: TableRef,
-    val slug: TableSlug,
     val blockIdx: Long,
     private val liveTrieFactory: LiveTrieFactory,
     private val state: State,
@@ -47,7 +48,7 @@ class LiveTable private constructor(
     val trie get() = state.trie
 
     private fun withState(state: State) =
-        LiveTable(al, table, slug, blockIdx, liveTrieFactory, state)
+        LiveTable(al, table, blockIdx, liveTrieFactory, state)
 
     private val opVec = relation["op"]
 
@@ -146,12 +147,6 @@ class LiveTable private constructor(
             tx.commit()
         }
 
-    data class BlockMetadata(
-        val vecTypes: Map<FieldName, VectorType>,
-        val rowCount: Int,
-        val hllDeltas: Map<FieldName, HLL>
-    )
-
     fun blockMetadata(): BlockMetadata {
         val rowCount = relation.rowCount
         return BlockMetadata(
@@ -161,32 +156,12 @@ class LiveTable private constructor(
         )
     }
 
-    data class FinishedBlock(
-        val vecTypes: Map<FieldName, VectorType>,
-        val rowCount: Int,
-        val hllDeltas: Map<FieldName, HLL>,
-        /**
-         * Null exactly when [rowCount] is zero.
-         *
-         * A table can be staged by a transaction without taking any rows from it — `CREATE TABLE`,
-         * or DML whose predicate matched nothing — and it still has to reach the table catalog so
-         * that its declared columns survive. It has no trie to write, though, and an empty L0 costs
-         * two objects and a trie-catalog entry for nothing.
-         */
-        val writtenTrie: WrittenTrie?
-    ) {
-        data class WrittenTrie(
-            val trieKey: TrieKey,
-            val dataFileSize: FileSize,
-            val trieMetadata: TrieMetadata
-        )
-    }
-
     /** For callers that aren't coroutine-native — see [finishBlock]. */
-    fun finishBlockSync(bp: BufferPool, blockIdx: BlockIndex): FinishedBlock =
-        runBlocking { finishBlock(bp, blockIdx) }
+    fun finishBlockSync(bp: BufferPool, slug: TableSlug, blockIdx: BlockIndex): FinishedBlock =
+        runBlocking { finishBlock(bp, slug, blockIdx) }
 
-    suspend fun finishBlock(bp: BufferPool, blockIdx: BlockIndex): FinishedBlock {
+    /** Writes this table's block, its L0 trie under [slug] — the table catalog's, so it lands where the block records it. */
+    suspend fun finishBlock(bp: BufferPool, slug: TableSlug, blockIdx: BlockIndex): FinishedBlock {
         val rowCount = relation.rowCount
         val vecTypes = relation.logRelTypes.orEmpty()
         val hllDeltas = computeHlls(opVec, 0, rowCount)
@@ -223,12 +198,12 @@ class LiveTable private constructor(
         @JvmStatic
         @JvmOverloads
         fun open(
-            al: BufferAllocator, table: TableRef, slug: TableSlug, blockIdx: Long,
+            al: BufferAllocator, table: TableRef, blockIdx: Long,
             liveTrieFactory: LiveTrieFactory = LiveTrieFactory { MemoryHashTrie.emptyTrie(it) },
         ): LiveTable =
             Trie.openLogDataWriter(al).closeOnCatch { rel ->
                 LiveTable(
-                    al, table, slug, blockIdx, liveTrieFactory,
+                    al, table, blockIdx, liveTrieFactory,
                     State(rel, liveTrieFactory(rel["_iid"]))
                 )
             }
@@ -251,13 +226,13 @@ class LiveTable private constructor(
          * means outside the scheduler whose quiescence the simulation treats as its fixed point.
          */
         suspend fun Map<TableRef, LiveTable>.finishBlock(
-            bp: BufferPool, blockIdx: BlockIndex, ioDispatcher: CoroutineDispatcher
+            bp: BufferPool, blockIdx: BlockIndex, slug: (TableRef) -> TableSlug, ioDispatcher: CoroutineDispatcher
         ): Map<TableRef, FinishedBlock> =
             coroutineScope {
                 this@finishBlock
                     .map { (tableName, liveTable) ->
                         async(ioDispatcher) {
-                            tableName to liveTable.finishBlock(bp, blockIdx)
+                            tableName to liveTable.finishBlock(bp, slug(tableName), blockIdx)
                         }
                     }
                     .awaitAll()

@@ -180,7 +180,7 @@ internal class BlockCutter(
 
         val timer = meterRegistry?.let { Timer.start(it) }
 
-        val finishedBlocks = liveIndex.finishBlock(bufferPool, blockIdx)
+        val finishedBlocks = liveIndex.finishBlock(bufferPool, blockIdx, tableCatalog.snap()::slug)
 
         // One timestamp for the whole block rather than one per table: it dates the supersession these
         // tries cause, and they all supersede as of the same block.
@@ -214,8 +214,6 @@ internal class BlockCutter(
 
         val tableBlocks = tableCatalog.buildTableBlocks(finishedBlocks, tablePartitions)
 
-        // A table new in this block has already written its L0 trie by now, under the slug its LiveTable was
-        // created with — the same one minted here, because both resolve through `State.slug`.
         val entries = tableCatalog.resolveTables(tableBlocks.keys).associateBy { it.table }
 
         coroutineScope {

@@ -23,6 +23,7 @@ import xtdb.TestPartition
 import xtdb.api.TransactionKey
 import xtdb.log.proto.TrieDetails
 import xtdb.storage.MemoryStorage
+import xtdb.table.TableSlug
 import xtdb.api.TableRef
 import xtdb.api.query.IKeyFn.KeyFn.SNAKE_CASE_STRING
 import xtdb.arrow.Relation
@@ -297,7 +298,7 @@ class LiveIndexTest {
 
             assertNotNull(db.liveIndex.state.table(table))
 
-            runBlocking { db.liveIndex.finishBlock(db.bp, 0L) }
+            runBlocking { db.liveIndex.finishBlock(db.bp, 0L, TableSlug::of) }
             db.liveIndex.nextBlock()
 
             assertNull(db.liveIndex.state.table(table))
@@ -319,7 +320,7 @@ class LiveIndexTest {
                 db.commitTx(tx)
             }
 
-            val writtenTrie = runBlocking { db.liveIndex.finishBlock(db.bp, 0L) }.getValue(table).writtenTrie!!
+            val writtenTrie = runBlocking { db.liveIndex.finishBlock(db.bp, 0L, TableSlug::of) }.getValue(table).writtenTrie!!
 
             db.trieCatalog.addTries(
                 table,
@@ -362,7 +363,7 @@ class LiveIndexTest {
 
             db.liveIndex.openSnapshot(Instant.parse("2000-01-01T00:00:00Z")).use { snap ->
                 val before = snap.table(table).single().relation.rowCount
-                runBlocking { db.liveIndex.finishBlock(db.bp, 0L) }
+                runBlocking { db.liveIndex.finishBlock(db.bp, 0L, TableSlug::of) }
                 assertEquals(before, snap.table(table).single().relation.rowCount)
                 assertEquals(1, before)
             }
@@ -391,7 +392,7 @@ class LiveIndexTest {
                 }
 
                 // drive the BlockCutter flow up to (but not including) nextBlock
-                for ((t, fb) in runBlocking { db.liveIndex.finishBlock(db.bp, 0L) }) {
+                for ((t, fb) in runBlocking { db.liveIndex.finishBlock(db.bp, 0L, TableSlug::of) }) {
                     val writtenTrie = fb.writtenTrie ?: continue
                     val trieDetails = TrieDetails.newBuilder()
                         .setTableName(t.schemaAndTable)

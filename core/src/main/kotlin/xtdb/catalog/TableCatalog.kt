@@ -1,5 +1,7 @@
 package xtdb.catalog
 
+import xtdb.table.FinishedBlock
+import xtdb.table.BlockMetadata
 import com.google.protobuf.ByteString
 import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,7 +25,6 @@ import xtdb.block.proto.TableBlock
 import xtdb.block.proto.block
 import xtdb.block.proto.txKey
 import xtdb.database.proto.DatabaseConfig
-import xtdb.indexer.LiveTable
 import xtdb.storage.BufferPool
 import xtdb.table.ColumnMeta
 import xtdb.table.TableEntry
@@ -188,7 +189,7 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
                 .withEntriesFor(listOf(table))
         }
 
-        internal fun refreshed(block: Block?, metadata: Map<TableRef, LiveTable.BlockMetadata>): State {
+        internal fun refreshed(block: Block?, metadata: Map<TableRef, BlockMetadata>): State {
             val delta = metadata.mapValues { (_, bm) -> TableMeta(bm.vecTypes, bm.rowCount.toLong(), bm.hllDeltas) }
             val newBlock = if (block != null && block.blockIndex == blockIdx) this.block else block?.asBlockDetails()
 
@@ -271,7 +272,7 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
      *
      * A re-delivered block leaves the block half alone but still folds the metadata.
      */
-    fun refresh(block: Block?, metadata: Map<TableRef, LiveTable.BlockMetadata> = emptyMap()) =
+    fun refresh(block: Block?, metadata: Map<TableRef, BlockMetadata> = emptyMap()) =
         _state.update { it.refreshed(block, metadata) }
 
     /**
@@ -282,7 +283,7 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
      * block is durable and adopted. The two must not both do it, because [mergeTables] sums row counts.
      */
     fun buildTableBlocks(
-        tableMetadata: Map<TableRef, LiveTable.FinishedBlock>,
+        tableMetadata: Map<TableRef, FinishedBlock>,
         tablePartitions: Map<TableRef, List<Partition>>
     ): Map<TableRef, TableBlock> {
         val delta = tableMetadata.mapValues { (_, fb) -> TableMeta(fb.vecTypes, fb.rowCount.toLong(), fb.hllDeltas) }
