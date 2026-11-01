@@ -7,7 +7,7 @@
 -- Block files (`blocks/b{idx}.binpb`) and per-table block files
 -- (`tables/{table}/blocks/b{idx}.binpb`) are snapshots of catalog state at a
 -- given block index. They are consumed only at node startup or catch-up, to
--- hydrate the in-memory catalogs (TableCatalog.open, load-tries in
+-- hydrate the in-memory catalogs (TableCatalog.loadState, load-tries in
 -- trie_catalog.clj). Followers do not reference them during online query
 -- execution, so a concurrent delete by the leader cannot break a running
 -- read path. As a result this collector needs NO replica-log coordination —

@@ -15,11 +15,15 @@
            [java.util Map]
            (org.apache.arrow.vector.types.pojo Schema)
            (xtdb.block.proto Block TableBlock)
-           (xtdb.catalog TableCatalog)
+           (xtdb.catalog TableCatalog TableCatalog$State)
+           (kotlinx.coroutines.flow StateFlowKt)
+           (xtdb.database DatabasePartition PartitionState)
            (xtdb.log.proto TrieDetails)
-           (xtdb.storage BufferPool)
            (xtdb.table TableEntry TableSlug)
            (xtdb.util HyperLogLog)))
+
+(defn- primary-partition-state ^PartitionState [node]
+  (.getState ^DatabasePartition (first (.getPartitions (db/primary-db node)))))
 
 (defn trie-details->edn [^TrieDetails trie]
   ;; In-block tries don't carry table_name (#5512); the table comes from the
@@ -35,7 +39,8 @@
     (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
       (let [db (db/primary-db node)
             bp (.getBufferPool db)
-            trie-catalog (.getTrieCatalog db)]
+            trie-catalog (.getTrieCatalog db)
+            partition-state (primary-partition-state node)]
         (xt/execute-tx node [[:put-docs :foo {:xt/id 1}]])
         (tu/flush-block! node)
 
@@ -89,7 +94,7 @@
           (t/is (<= 1.99 (HyperLogLog/estimate (get hlls2 "_id")) 2.01)))
 
         (t/testing "artifically adding tries (simulating another node finishing and compacting these)"
-          (.addTries trie-catalog #xt/table foo
+          (.addTries partition-state #xt/table foo
                      (->> [["l00-rc-b00" 1] ["l00-rc-b01" 1] ["l00-rc-b02" 1] ["l00-rc-b03" 1]
                            ["l01-rc-b00" 2] ["l01-rc-b01" 2] ["l01-rc-b02" 2]
                            ["l02-rc-p0-b01" 4] ["l02-rc-p1-b01" 4] ["l02-rc-p2-b01" 4] ["l02-rc-p3-b01"4]]
@@ -120,8 +125,8 @@
       (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
         ;; need some dummy tx for latest-completed-txt
         (xt/execute-tx node [[:put-docs :foo {:xt/id 1}]])
-        (let [cat (.getTrieCatalog (db/primary-db node))]
-          (.addTries cat #xt/table foo
+        (let [partition-state (primary-partition-state node)]
+          (.addTries partition-state #xt/table foo
                      (->> [["l00-rc-b00" 1] ["l00-rc-b01" 1] ["l00-rc-b02" 1] ["l00-rc-b03" 1]
                            ["l01-r20200101-b00" 5] ["l01-rc-b00" 2]
                            ["l01-r20200102-b01" 5] ["l01-rc-b01" 2]
@@ -225,8 +230,7 @@
         entries (map-indexed (fn [idx nm] (TableEntry/mint (+ TableEntry/FIRST_OID idx) (table/->ref nm)))
                              (sort names))
 
-        ;; UNUSED throws on every storage call, so this also pins that resolving the entries reads nothing back.
-        ->entries (fn [^Block block] (vec (.getEntries (.snap (TableCatalog. BufferPool/UNUSED block)))))]
+        ->entries (fn [^Block block] (vec (.getEntries (TableCatalog/initialState block))))]
 
     (t/is (= ["public$docs" "public$foo" "xt$txs"]
              (mapv #(.getSlug (.getSlug ^TableEntry %)) entries))
@@ -246,32 +250,31 @@
 (deftest resolving-a-block-with-no-entries-depends-on-nothing-but-that-block
   (let [->block (fn [block-idx names]
                   (-> (Block/newBuilder) (.setBlockIndex block-idx) (.addAllTableNames names) (.build)))
-        ->oids (fn [^TableCatalog cat]
+        ->oids (fn [^TableCatalog$State cat-state]
                  (into {} (map (juxt #(str (.getSym (.getTable ^TableEntry %))) #(.getOid ^TableEntry %)))
-                       (.getEntries (.snap cat))))
+                       (.getEntries cat-state)))
 
         b11 (->block 11 ["public/docs" "public/orders" "xt/txs"])
 
         ;; started before `orders` existed, then caught up
-        caught-up (doto (TableCatalog. BufferPool/UNUSED (->block 10 ["public/docs" "xt/txs"]))
-                    (.refresh b11 {}))
+        caught-up (.refreshed (TableCatalog/initialState (->block 10 ["public/docs" "xt/txs"])) b11 {})
 
-        started-at-b11 (TableCatalog. BufferPool/UNUSED b11)]
+        started-at-b11 (TableCatalog/initialState b11)]
 
     (t/is (= {"public/docs" 16384, "public/orders" 16385, "xt/txs" 16386} (->oids started-at-b11)))
 
     (t/is (= (->oids started-at-b11) (->oids caught-up))
           "two nodes reading one entry-less block agree, whatever each of them read before it")))
 
-(defn- ->oids [^TableCatalog cat]
+(defn- ->oids [^TableCatalog$State cat-state]
   (into {} (map (juxt #(str (.getSym (.getTable ^TableEntry %))) #(.getOid ^TableEntry %)))
-        (.getEntries (.snap cat))))
+        (.getEntries cat-state)))
 
-(defn- register-txs ^TableCatalog [txs]
-  (let [cat (TableCatalog. BufferPool/UNUSED nil)]
-    (doseq [tx txs]
-      (.registerTables cat (mapv table/->ref tx)))
-    cat))
+(defn- register-txs ^TableCatalog$State [txs]
+  (reduce (fn [^TableCatalog$State cat-state tx]
+            (.withEntriesFor cat-state (mapv table/->ref tx)))
+          (TableCatalog/initialState nil)
+          txs))
 
 (deftest two-nodes-replaying-one-log-allocate-the-same-oids
   ;; a leader learns of a table as it resolves the tx that writes it, a follower as it applies the same
@@ -289,7 +292,7 @@
         cat (register-txs [tables])
         published (->oids cat)
         recorded (into {} (map (juxt #(str (.getSym (.getTable ^TableEntry %))) #(.getOid ^TableEntry %)))
-                       (.resolveTables cat (mapv table/->ref tables)))]
+                       (.resolveTables (TableCatalog. (StateFlowKt/MutableStateFlow cat)) (mapv table/->ref tables)))]
 
     (t/is (= published recorded)
           "a table's oid is fixed when the catalog learns of it, so its first block changes nothing")))

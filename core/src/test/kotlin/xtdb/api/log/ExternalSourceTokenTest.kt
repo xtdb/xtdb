@@ -1,11 +1,12 @@
 package xtdb.api.log
 
-import io.mockk.mockk
+import java.time.Instant
+import xtdb.database.PartitionState
+import xtdb.SimulationTestUtils.Companion.createPartitionValue
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import xtdb.block.proto.Block
 import xtdb.catalog.TableCatalog
-import xtdb.storage.BufferPool
 
 class ExternalSourceTokenTest {
 
@@ -50,7 +51,8 @@ class ExternalSourceTokenTest {
 
     @Test
     fun `Block proto round-trips external source token`() {
-        val tableCatalog = TableCatalog(mockk<BufferPool>(relaxed = true))
+        val partitionState = PartitionState(createPartitionValue())
+        val tableCatalog = partitionState.tableCatalog
 
         val block = tableCatalog.buildBlock(
             blockIndex = 0,
@@ -71,9 +73,10 @@ class ExternalSourceTokenTest {
 
     @Test
     fun `TableCatalog externalSourceToken reads from latest block`() {
-        val tableCatalog = TableCatalog(mockk<BufferPool>(relaxed = true))
+        val partitionState = PartitionState(createPartitionValue())
+        val tableCatalog = partitionState.tableCatalog
 
-        assertNull(tableCatalog.externalSourceToken)
+        assertNull(tableCatalog.snap().externalSourceToken)
 
         val block = tableCatalog.buildBlock(
             blockIndex = 0,
@@ -86,14 +89,15 @@ class ExternalSourceTokenTest {
             termId = term,
             boundaryTermSeq = null
         )
-        tableCatalog.refresh(block)
+        partitionState.adoptBlock(block, emptyList(), Instant.now())
 
-        assertArrayEquals(testToken, tableCatalog.externalSourceToken)
+        assertArrayEquals(testToken, tableCatalog.snap().externalSourceToken)
     }
 
     @Test
     fun `TableCatalog externalSourceToken returns null when no token`() {
-        val tableCatalog = TableCatalog(mockk<BufferPool>(relaxed = true))
+        val partitionState = PartitionState(createPartitionValue())
+        val tableCatalog = partitionState.tableCatalog
 
         val block = tableCatalog.buildBlock(
             blockIndex = 0,
@@ -105,8 +109,8 @@ class ExternalSourceTokenTest {
             termId = term,
             boundaryTermSeq = null
         )
-        tableCatalog.refresh(block)
+        partitionState.adoptBlock(block, emptyList(), Instant.now())
 
-        assertNull(tableCatalog.externalSourceToken)
+        assertNull(tableCatalog.snap().externalSourceToken)
     }
 }

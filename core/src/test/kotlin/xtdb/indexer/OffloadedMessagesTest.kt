@@ -1,5 +1,6 @@
 package xtdb.indexer
 
+import xtdb.SimulationTestUtils.Companion.createPartitionValue
 import com.google.protobuf.ByteString
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Deferred
@@ -14,7 +15,6 @@ import xtdb.api.log.Log
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.storage.Storage
 import xtdb.block.proto.block
-import xtdb.catalog.TableCatalog
 import xtdb.database.DatabaseLogs
 import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
@@ -59,7 +59,7 @@ class OffloadedMessagesTest {
         OffloadingLogsDriver(
             delegate,
             PartitionStorage(DatabaseLogs(null, null), bufferPool, null),
-            PartitionState(blockIndex?.let { TableCatalog(bufferPool, block { this.blockIndex = it }) }, null, null),
+            PartitionState(createPartitionValue(blockIndex?.let { block { this.blockIndex = it } })),
         )
 
     @Test
@@ -108,7 +108,7 @@ class OffloadedMessagesTest {
                 val driver = OffloadingLogsDriver(
                     DecliningDriver(maxBytes = 1024),
                     PartitionStorage(DatabaseLogs(null, null), null, null),
-                    PartitionState(TableCatalog(bufferPool), null, null),
+                    PartitionState(createPartitionValue()),
                 )
 
                 assertThrows<Log.MessageTooLargeException> { driver.appendToReplica(bigTriesAdded()) }

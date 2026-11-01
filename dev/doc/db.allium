@@ -588,7 +588,7 @@ config {
 -- ADOPT, on reading a confirmation of the held block back: see Adopting a block.
 --   The role that produced the block holds it until here, because only the produce can build it; the tries and the log timestamp come off the confirming record, as a follower's do.
 --   The records held behind the boundary are applied once the adopt has returned.
---   Nothing may apply a transaction between the produce's step 1 and the roll the adopt ends on: the live tables have been snapshotted into L0 and are about to be cleared, so a transaction applied in between is written nowhere.
+--   Nothing may apply a transaction between the produce's step 1 and the block adoption's write: the live tables have been snapshotted into L0 and are about to be cleared, so a transaction applied in between is written nowhere.
 --   The pending-block hold is what holds a record arriving in that window, and the resolution pause is what keeps the set of held records small.
 --
 -- The MATCH that closes a block is on block index, storage version and storage epoch, and never on term — the term having been settled by the fence before the record reaches the match.
@@ -606,7 +606,8 @@ config {
 --
 -- Adopting a block is ONE operation, run by whichever role holds the block.
 -- It adds the block's L0 tries to the trie catalog as of the record's log timestamp, refreshes the table catalog onto the block, folding in the live index's block metadata, and rolls the live index onto the block behind it.
--- The metadata read precedes the roll, which clears the live tables it reads.
+-- All three are ONE write of the partition's value, under the partition's write lock, so a reader sees all of them or none.
+-- The metadata is read from the finished block's live tables ahead of that write, and those tables are closed after it.
 -- The leader and the follower run that one operation, not two matching sequences: what each supplies differently is the block itself — the leader passes the one its produce built and has held since, the follower one it reads from storage off the block index the boundary carried.
 -- The tries and the log timestamp come off the record either way.
 --
@@ -1461,7 +1462,7 @@ deferred ProduceBlock
   -- Produce the block a boundary cut: finish the live index's block, build and upload the per-table block files and the block file, and append the upload under this term.
   -- See: The block cycle, above.
 deferred AdoptBlock
-  -- Adopt a block a confirmation names: add its L0 tries to the trie catalog, refresh the table catalog onto the block, and roll the live index onto the block behind it.
+  -- Adopt a block a confirmation names: add its L0 tries to the trie catalog, refresh the table catalog onto the block, and roll the live index onto the block behind it, in one write of the partition's value.
   -- See: Adopting a block, above.
 deferred ApplyResolvedTxFromRecord
   -- Apply a resolved transaction this term did not resolve: import the record's rows into the durable live tables, advance the DURABLE head to it, and report it to the watchers from the record.

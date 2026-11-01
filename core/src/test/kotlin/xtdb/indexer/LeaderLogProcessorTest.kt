@@ -1,5 +1,6 @@
 package xtdb.indexer
 
+import xtdb.SimulationTestUtils.Companion.createPartitionValue
 import clojure.lang.Keyword
 import com.google.protobuf.ByteString
 import io.mockk.coEvery
@@ -196,14 +197,14 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
             "the block file has landed and the upload is appended, but this node has not adopted it"
         )
         assertNull(
-            partitionState.tableCatalog.currentBlockIndex,
+            partitionState.tableCatalog.snap().blockIdx,
             "so the catalog has not moved past the block, which is what keeps it re-producible"
         )
 
         proc.applyReplicaMessage(record(1, uploaded(blockIdx = 0, latestProcessedMsgId = 5)))
 
         assertNull(proc.pendingBlock)
-        assertEquals(0L, partitionState.tableCatalog.currentBlockIndex)
+        assertEquals(0L, partitionState.tableCatalog.snap().blockIdx)
     }
 
     @Test
@@ -251,16 +252,27 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
         )
 
         assertEquals(
-            listOf(trieKey), partitionState.trieCatalog.listAllTrieKeys(fromSchemaAndTable("public/foo"))
+            listOf(trieKey), partitionState.trieCatalog.state.listAllTrieKeys(fromSchemaAndTable("public/foo"))
         )
         assertEquals(3L, watchers.latestSourceMsgId)
     }
 
-    // Inert, because these two are about when the commit returns rather than about what it removes: a
-    // `deleteTries` for a shard the catalog doesn't hold trips its own spec assertion.
+    // Holds the trie the commit below deletes, so that the delete is one the catalog can apply.
     private fun TestScope.gcTerm(append: GatedAppend, termJob: Job = SupervisorJob(backgroundScope.coroutineContext.job)) =
         leaderProc(
-            StandardTestDispatcher(testScheduler), trieCatalog = mockk(relaxed = true),
+            StandardTestDispatcher(testScheduler),
+            initial = createPartitionValue().let { pv ->
+                pv.withTrieCat(pv.trieCat.withTries(
+                    TableRef("public", "foo"),
+                    listOf(
+                        TrieDetails.newBuilder()
+                            .setTableName("public/foo").setTrieKey("l01-rc-b00").setDataFileSize(100)
+                            .setTrieMetadata(trieMetadata {})
+                            .build()
+                    ),
+                    Instant.now(),
+                ))
+            },
             wrapDriver = append::wrap, termJob = termJob,
         )
 

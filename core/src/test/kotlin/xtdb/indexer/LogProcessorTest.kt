@@ -445,7 +445,7 @@ class LogProcessorTest {
                 awaitReplicaMsg(node, staleUpload.msgId)
 
                 assertNull(
-                    node.partitionState.tableCatalog.currentBlockIndex,
+                    node.partitionState.tableCatalog.snap().blockIdx,
                     "the superseded term's upload is discarded like any other record it wrote"
                 )
 
@@ -456,7 +456,7 @@ class LogProcessorTest {
                 awaitReplicaMsg(node, reUpload.msgId)
 
                 assertEquals(
-                    0L, node.partitionState.tableCatalog.currentBlockIndex,
+                    0L, node.partitionState.tableCatalog.snap().blockIdx,
                     "b0 closes on the successor re-uploading it, so the follower stops buffering behind it"
                 )
             }
@@ -482,7 +482,7 @@ class LogProcessorTest {
                 node.watchers.awaitTx(1)
 
                 assertEquals(
-                    0L, node.partitionState.tableCatalog.currentBlockIndex,
+                    0L, node.partitionState.tableCatalog.snap().blockIdx,
                     "the incoming leader finished the block its predecessor left open"
                 )
                 assertEquals(
@@ -622,7 +622,7 @@ class LogProcessorTest {
                 awaitReplicaMsg(node, reUpload.msgId)
 
                 assertEquals(
-                    0L, node.partitionState.tableCatalog.currentBlockIndex,
+                    0L, node.partitionState.tableCatalog.snap().blockIdx,
                     "the follower the failed promotion left behind closed the block"
                 )
                 assertEquals(1L, node.watchers.latestTxId, "and applied what was held behind it")
@@ -666,7 +666,7 @@ class LogProcessorTest {
                 awaitReplicaMsg(node, reUpload.msgId)
 
                 assertEquals(
-                    0L, node.partitionState.tableCatalog.currentBlockIndex,
+                    0L, node.partitionState.tableCatalog.snap().blockIdx,
                     "the follower that replaced the term closed the block that term was holding"
                 )
                 assertEquals(1L, node.watchers.latestTxId, "and applied what was held behind it")
@@ -701,7 +701,7 @@ class LogProcessorTest {
                 node.watchers.awaitTx(1)
 
                 assertEquals(
-                    0L, node.partitionState.tableCatalog.currentBlockIndex,
+                    0L, node.partitionState.tableCatalog.snap().blockIdx,
                     "the block closed on this term's own upload, the superseded term's having been fenced"
                 )
                 assertTrue(node.logProc.isLeader, "and the fenced one cost the term nothing")

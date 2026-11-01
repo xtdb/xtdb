@@ -18,7 +18,7 @@ import xtdb.NodeBase
 import xtdb.NodeBase.Companion.openBase
 import xtdb.RepeatableSimulationTest
 import xtdb.SimulationTestBase
-import xtdb.SimulationTestUtils.Companion.createTrieCatalog
+import xtdb.SimulationTestUtils.Companion.createPartitionValue
 import xtdb.api.IndexerConfig
 import xtdb.api.Xtdb
 import xtdb.api.log.*
@@ -177,12 +177,9 @@ class LogProcessorSimTest : SimulationTestBase() {
         private val readOnly: Boolean = false,
     ) : AutoCloseable {
 
-        val tableCatalog = TableCatalog(bp)
-        val trieCatalog = createTrieCatalog()
-        val liveIndex =
-            LiveIndex.open(allocator, tableCatalog, trieCatalog, indexerConfig, ioDispatcher = dispatcher)
-
-        val partitionState = PartitionState(tableCatalog, trieCatalog, liveIndex)
+        val partitionState = PartitionState.open(allocator, createPartitionValue(), indexerConfig, dispatcher)
+        val liveIndex = partitionState.liveIndex
+        val tableCatalog = partitionState.tableCatalog
 
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
             .also { simExtSource.watch(it) }
@@ -418,7 +415,7 @@ class LogProcessorSimTest : SimulationTestBase() {
 
         for ((idx, node) in nodes.withIndex())
             assertEquals(
-                lastUploaded, node.tableCatalog.currentBlockIndex,
+                lastUploaded, node.tableCatalog.snap().blockIdx,
                 "node $idx's block catalog is not on the last uploaded block (seed=$currentSeed)"
             )
     }
@@ -462,31 +459,33 @@ class LogProcessorSimTest : SimulationTestBase() {
     private fun assertLiveIndexesCaughtUp(nodes: List<SimNode>) {
         for ((idx, node) in nodes.withIndex())
             assertEquals(
-                lastAppliedTxId(), node.liveIndex.latestCompletedTx?.txId,
+                lastAppliedTxId(), node.liveIndex.state.latestCompletedTx?.txId,
                 "node $idx's live index has not applied the log to its end (seed=$currentSeed)"
             )
     }
 
     private fun assertNodesConverged(nodes: List<SimNode>) {
-        val expected = nodes.first()
+        val expected = nodes.first().tableCatalog.snap()
 
         for ((idx, node) in nodes.withIndex()) {
+            val actual = node.tableCatalog.snap()
             assertEquals(
-                expected.tableCatalog.latestProcessedMsgId, node.tableCatalog.latestProcessedMsgId,
+                expected.latestProcessedMsgId, actual.latestProcessedMsgId,
                 "node $idx disagrees on latestProcessedMsgId (seed=$currentSeed)"
             )
             assertEquals(
-                expected.tableCatalog.latestCompletedTx, node.tableCatalog.latestCompletedTx,
+                expected.latestCompletedTx, actual.latestCompletedTx,
                 "node $idx disagrees on the block catalog's latestCompletedTx (seed=$currentSeed)"
             )
         }
     }
 
     private fun assertSnapshotHasNoAbortedRows(node: SimNode, abortedTxIds: Set<MessageId>) {
-        node.liveIndex.openSnapshot(node.liveIndex.latestCompletedTx?.systemTime).use { snap ->
+        val latestCompletedTx = node.liveIndex.state.latestCompletedTx
+        node.partitionState.openSnapshot(latestCompletedTx?.systemTime).use { snap ->
             assertEquals(
-                node.liveIndex.latestCompletedTx?.txId, snap.txBasis?.txId,
-                "snapshot basis should equal liveIndex.latestCompletedTx (seed=$currentSeed)"
+                latestCompletedTx?.txId, snap.txBasis?.txId,
+                "snapshot basis should equal the live index's latestCompletedTx (seed=$currentSeed)"
             )
 
             val basisTxId = snap.txBasis?.txId ?: -1L

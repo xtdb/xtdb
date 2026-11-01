@@ -91,7 +91,7 @@ internal class GarbageCollector(
             ?: error("[$dbName] TriesDeleted for '${msg.tableName}' read back with nothing in flight")
 
         // From the record, not from `task`, so this node applies exactly what every other node applies.
-        trieCatalog.deleteTries(fromSchemaAndTable(msg.tableName), msg.trieKeys)
+        partitionState.deleteTries(fromSchemaAndTable(msg.tableName), msg.trieKeys)
 
         task.onComplete.complete(Unit)
     }

@@ -3,14 +3,13 @@ package xtdb
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import org.apache.arrow.memory.BufferAllocator
-import xtdb.SimulationTestUtils.Companion.createTrieCatalog
+import xtdb.SimulationTestUtils.Companion.createPartitionValue
 import xtdb.api.IndexerConfig
 import xtdb.api.log.InMemoryLog
 import xtdb.api.log.Log
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.SourceMessage
 import xtdb.block.proto.Block
-import xtdb.catalog.TableCatalog
 import xtdb.database.DatabaseLogs
 import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
@@ -40,11 +39,10 @@ class TestPartition(
     ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : AutoCloseable {
 
-    val tableCatalog = TableCatalog(bufferPool, block)
-    val trieCatalog = createTrieCatalog()
-    val liveIndex = LiveIndex.open(allocator, tableCatalog, trieCatalog, indexerConfig, ioDispatcher)
-
-    val state = PartitionState(tableCatalog, trieCatalog, liveIndex)
+    val state = PartitionState.open(allocator, createPartitionValue(block), indexerConfig, ioDispatcher)
+    val liveIndex = state.liveIndex
+    val tableCatalog = state.tableCatalog
+    val trieCatalog = state.trieCatalog
     val storage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
 
     override fun close() = state.close()

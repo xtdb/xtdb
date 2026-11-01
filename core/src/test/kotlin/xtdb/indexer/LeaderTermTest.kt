@@ -1,7 +1,9 @@
 package xtdb.indexer
 
+import xtdb.database.PartitionValue
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.spyk
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
@@ -19,7 +21,7 @@ import org.apache.arrow.memory.BufferAllocator
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import xtdb.NodeBase
-import xtdb.SimulationTestUtils.Companion.createTrieCatalog
+import xtdb.SimulationTestUtils.Companion.createPartitionValue
 import xtdb.api.DatabaseName
 import xtdb.api.IndexerConfig
 import xtdb.api.log.InMemoryLog
@@ -28,7 +30,6 @@ import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.SourceMessage
 import xtdb.api.log.Watchers
 import xtdb.api.tx.ExternalSource
-import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
 import xtdb.database.Database
 import xtdb.database.DatabaseLogs
@@ -37,7 +38,6 @@ import xtdb.database.PartitionStorage
 import xtdb.indexer.LogProcessor.LogsDriver
 import xtdb.indexer.LogProcessor.RealLogsDriver
 import xtdb.storage.BufferPool
-import xtdb.trie.TrieCatalog
 import xtdb.types.MessageId
 import xtdb.util.closeAll
 import java.time.InstantSource
@@ -91,16 +91,11 @@ internal abstract class LeaderTermTest {
         nodeBase.close()
     }
 
-    /** A partition over [bufferPool] with a real live index, closed after the term; [wrapLiveIndex] is where a test injects a fault. */
+    /** A partition from [initial] with a real live index, closed after the term; [wrap] is where a test injects a fault. */
     protected fun openPartitionState(
-        bufferPool: BufferPool,
-        trieCatalog: TrieCatalog = createTrieCatalog(),
-        wrapLiveIndex: (LiveIndex) -> LiveIndex = { it },
-    ): PartitionState {
-        val tableCatalog = TableCatalog(bufferPool)
-        val liveIndex = LiveIndex.open(allocator, tableCatalog, trieCatalog).also { closeAfterTerm(it) }
-        return PartitionState(tableCatalog, trieCatalog, wrapLiveIndex(liveIndex))
-    }
+        initial: PartitionValue = createPartitionValue(),
+        wrap: (PartitionState) -> PartitionState = { it },
+    ): PartitionState = wrap(PartitionState.open(allocator, initial).also { closeAfterTerm(it) })
 
     // Records what was asked of it, so a test can ask what this node's set holds rather than what was
     // called. Nothing here opens a database, so a name is attached the moment it is asked for.
@@ -191,8 +186,8 @@ internal abstract class LeaderTermTest {
         sourceLog: InMemoryLog<SourceMessage> = InMemoryLog(InstantSource.system(), 0),
         replicaLog: InMemoryLog<ReplicaMessage> = InMemoryLog(InstantSource.system(), 0),
         bufferPool: BufferPool = mockk(relaxed = true) { every { epoch } returns 0 },
-        trieCatalog: TrieCatalog = createTrieCatalog(),
-        wrapLiveIndex: (LiveIndex) -> LiveIndex = { it },
+        initial: PartitionValue = createPartitionValue(),
+        wrapPartitionState: (PartitionState) -> PartitionState = { it },
         compactor: Compactor.ForDatabase = mockk(relaxed = true),
         watchers: Watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1),
         // These tests submit through the processor rather than driving an adapter, so the source only has
@@ -206,7 +201,7 @@ internal abstract class LeaderTermTest {
         termJob: Job = SupervisorJob(backgroundScope.coroutineContext.job),
     ): LeaderLogProcessor {
         val dbName = if (dbCatalog != null) "xtdb" else "test"
-        val partitionState = openPartitionState(bufferPool, trieCatalog, wrapLiveIndex)
+        val partitionState = openPartitionState(initial, wrapPartitionState)
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
         val driver = wrapDriver(RealLogsDriver(partitionStorage))
 
@@ -245,7 +240,7 @@ internal abstract class LeaderTermTest {
         val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0)
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val bufferPool = mockk<BufferPool>(relaxed = true) { every { epoch } returns 0 }
-        val partitionState = openPartitionState(bufferPool)
+        val partitionState = openPartitionState()
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
         val logsDriver = driver(RealLogsDriver(partitionStorage))
         val appender = ReplicaLogAppender(logsDriver, leaderTerm = 1, NoAssertElectionDriver)

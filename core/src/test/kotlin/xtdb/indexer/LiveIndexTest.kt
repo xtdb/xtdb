@@ -2,6 +2,11 @@
 
 package xtdb.indexer
 
+import org.junit.jupiter.api.Assertions.assertFalse
+import xtdb.log.proto.trieMetadata
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import xtdb.database.PartitionValue
 import clojure.lang.Keyword
 import kotlinx.coroutines.runBlocking
 import org.apache.arrow.memory.BufferAllocator
@@ -22,13 +27,18 @@ import xtdb.NodeBase.Companion.openBase
 import xtdb.TestPartition
 import xtdb.api.TransactionKey
 import xtdb.log.proto.TrieDetails
+import xtdb.block.proto.block
 import xtdb.storage.MemoryStorage
+import xtdb.table.TableSlug
 import xtdb.api.TableRef
 import xtdb.api.query.IKeyFn.KeyFn.SNAKE_CASE_STRING
 import xtdb.arrow.Relation
+import xtdb.arrow.STRUCT_TYPE
 import xtdb.arrow.VectorType.Companion.I64
 import xtdb.api.error.Incorrect
 import xtdb.trie.Bucketer
+import xtdb.trie.Trie
+import xtdb.time.InstantUtil.asMicros
 import java.nio.ByteBuffer
 import java.time.Instant
 import java.util.UUID
@@ -60,6 +70,7 @@ class LiveIndexTest {
 
         val trieCatalog get() = partition.trieCatalog
         val liveIndex get() = partition.liveIndex
+        val state get() = partition.state
 
         fun openTx(txId: Long, systemTime: Instant) =
             OpenTx(
@@ -70,7 +81,7 @@ class LiveIndexTest {
         fun commitTx(openTx: OpenTx) {
             openTx.writeTxRow(null, null)
             openTx.sealTables().associateTo(mutableMapOf()) { it.ref to it.liveTable }
-                .closeAllOnCatch { liveIndex.applyTx(openTx.txKey, it) }
+                .closeAllOnCatch { state.applyTx(openTx.txKey, it) }
         }
 
         override fun close() {
@@ -101,7 +112,7 @@ class LiveIndexTest {
             db.openTx(1, Instant.parse("2020-01-02T00:00:00Z")).use { tx2 ->
                 tx2.put(table, UUID.randomUUID())
 
-                db.liveIndex.openSnapshot(emptyList(), tx2).use { snap ->
+                db.state.openSnapshot(emptyList(), tx2).use { snap ->
                     val tableSnaps = snap.table(table)
                     assertEquals(1, tableSnaps.size, "the tx's own view subsumes the committed one")
                     assertEquals(listOf(2), tableSnaps.map { it.relation.rowCount })
@@ -152,8 +163,9 @@ class LiveIndexTest {
             db.openTx(1, Instant.parse("2020-01-02T00:00:00Z")).use { tx1 ->
                 tx1.put(bar, UUID(0, 0))
                 // not committing — bar must not appear
-                assertNotNull(db.liveIndex.table(foo))
-                assertNull(db.liveIndex.table(bar))
+                val live = db.liveIndex.state
+                assertNotNull(live.table(foo))
+                assertNull(live.table(bar))
             }
         }
     }
@@ -166,11 +178,11 @@ class LiveIndexTest {
             db.openTx(0, Instant.parse("2020-01-01T00:00:00Z")).use { tx ->
                 tx.put(table, UUID.randomUUID())
 
-                db.liveIndex.openSnapshot(null).use { snap ->
+                db.state.openSnapshot(null).use { snap ->
                     assertTrue(snap.table(table).isEmpty())
                 }
 
-                db.liveIndex.openSnapshot(emptyList(), tx).use { snap ->
+                db.state.openSnapshot(emptyList(), tx).use { snap ->
                     val snaps = snap.table(table)
                     assertEquals(1, snaps.size)
                     assertEquals(1, snaps.single().relation.rowCount)
@@ -179,7 +191,7 @@ class LiveIndexTest {
                 db.commitTx(tx)
             }
 
-            db.liveIndex.openSnapshot(Instant.parse("2020-01-01T00:00:00Z")).use { snap ->
+            db.state.openSnapshot(Instant.parse("2020-01-01T00:00:00Z")).use { snap ->
                 assertEquals(1, snap.table(table).single().relation.rowCount)
             }
         }
@@ -195,7 +207,7 @@ class LiveIndexTest {
                 db.commitTx(tx1)
             }
 
-            db.liveIndex.openSnapshot(Instant.parse("2020-01-01T00:00:00Z")).use { snapBefore ->
+            db.state.openSnapshot(Instant.parse("2020-01-01T00:00:00Z")).use { snapBefore ->
                 val before = snapBefore.table(table).single()
                 assertEquals(1, before.relation.rowCount)
 
@@ -206,7 +218,7 @@ class LiveIndexTest {
 
                 assertEquals(1, before.relation.rowCount)
 
-                db.liveIndex.openSnapshot(Instant.parse("2020-01-02T00:00:00Z")).use { snapAfter ->
+                db.state.openSnapshot(Instant.parse("2020-01-02T00:00:00Z")).use { snapAfter ->
                     assertEquals(2, snapAfter.table(table).single().relation.rowCount)
                 }
             }
@@ -230,7 +242,7 @@ class LiveIndexTest {
                     endPut()
                 }
 
-                db.liveIndex.openSnapshot(emptyList(), tx).use { snap ->
+                db.state.openSnapshot(emptyList(), tx).use { snap ->
                     assertEquals(1, snap.table(table).single().relation.rowCount)
                 }
             }
@@ -248,14 +260,99 @@ class LiveIndexTest {
                 db.commitTx(tx)
             }
 
-            db.liveIndex.openSnapshot(Instant.parse("2020-01-01T00:00:00Z")).use { snap ->
+            db.state.openSnapshot(Instant.parse("2020-01-01T00:00:00Z")).use { snap ->
                 assertEquals(3, snap.table(table).single().relation.rowCount)
             }
         }
     }
 
     @Test
-    fun `nextBlock removes tables`() {
+    fun `an imported transaction's rows are readable and count towards the block`() {
+        TestDb().use { db ->
+            val table = TableRef("public", "docs")
+
+            fun import(txId: Long, systemTime: Instant, iid: Byte) =
+                Trie.openLogDataWriter(allocator).use { rel ->
+                    rel["_iid"].writeBytes(ByteBuffer.wrap(ByteArray(16) { iid }))
+                    rel["_system_from"].writeLong(systemTime.asMicros)
+                    rel["_valid_from"].writeLong(systemTime.asMicros)
+                    rel["_valid_to"].writeLong(Long.MAX_VALUE)
+                    rel["op"].vectorFor("put", STRUCT_TYPE, false).endStruct()
+                    rel.endRow()
+                    db.state.commitTx(TransactionKey(txId, systemTime), mapOf(table to rel))
+                }
+
+            import(0, Instant.parse("2020-01-01T00:00:00Z"), 1)
+            import(1, Instant.parse("2020-01-02T00:00:00Z"), 2)
+
+            assertEquals(2, db.liveIndex.state.blockRowCount)
+
+            db.state.openSnapshot(Instant.parse("2020-01-02T00:00:00Z")).use { snap ->
+                assertEquals(2, snap.table(table).sumOf { it.relation.rowCount })
+            }
+        }
+    }
+
+    @Test
+    fun `a reader never sees an adopted block's tries without its table metadata and the next block's live tables`() {
+        TestDb().use { db ->
+            val table = TableRef("public", "docs")
+
+            db.openTx(0, Instant.parse("2020-01-01T00:00:00Z")).use { tx ->
+                tx.put(table, UUID.randomUUID())
+                db.commitTx(tx)
+            }
+
+            val writtenTrie = runBlocking { db.liveIndex.finishBlock(db.bp, 0L, TableSlug::of) }.getValue(table).writtenTrie!!
+            val l0 = TrieDetails.newBuilder()
+                .setTableName(table.schemaAndTable)
+                .setTrieKey(writtenTrie.trieKey)
+                .setDataFileSize(writtenTrie.dataFileSize)
+                .setTrieMetadata(writtenTrie.trieMetadata)
+                .build()
+
+            val seen = mutableListOf<PartitionValue>()
+            runBlocking {
+                val collector = launch(Dispatchers.Unconfined) { db.state.value.collect { seen += it } }
+                db.state.adoptBlock(block { blockIndex = 0 }, listOf(l0), Instant.parse("2020-01-01T00:00:00Z"))
+                collector.cancel()
+            }
+
+            val withL0 = seen.filter { it.trieCat.l0MaxBlockIdx(table) == 0L }
+            assertTrue(withL0.isNotEmpty(), "the block adoption was observed")
+            for (v in withL0) {
+                assertAll(
+                    { assertEquals(0L, v.tableCat.blockIdx, "the block's table metadata is there") },
+                    { assertEquals(1L, v.live.blockIdx, "the live tables are the next block's") },
+                    { assertTrue(v.live.tables.isEmpty()) },
+                    { assertNull(v.liveSnap, "the live snapshot over the finished block's tables is dropped with them") },
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `a snapshot held across a block's adoption stays readable until it closes`() {
+        TestDb().use { db ->
+            val table = TableRef("public", "docs")
+            val t0 = Instant.parse("2020-01-01T00:00:00Z")
+
+            db.put(0, t0, table)
+
+            db.state.openSnapshot(t0).use { held ->
+                db.state.adoptBlock(block { blockIndex = 0 }, listOf(db.finishBlock0L0(table)), t0)
+
+                db.state.openSnapshot(null).use { after ->
+                    assertTrue(after.table(table).isEmpty(), "the next snapshot reads the block from its L0")
+                }
+
+                assertEquals(1, held.table(table).single().relation.rowCount)
+            }
+        }
+    }
+
+    @Test
+    fun `adopting a block removes its live tables`() {
         TestDb().use { db ->
             val table = TableRef("public", "test-table")
 
@@ -264,20 +361,15 @@ class LiveIndexTest {
                 db.commitTx(tx)
             }
 
-            assertNotNull(db.liveIndex.table(table))
+            assertNotNull(db.liveIndex.state.table(table))
 
-            runBlocking { db.liveIndex.finishBlock(db.bp, 0L) }
-            db.liveIndex.nextBlock()
+            runBlocking { db.liveIndex.finishBlock(db.bp, 0L, TableSlug::of) }
+            db.state.adoptBlock(block { blockIndex = 0 }, emptyList(), Instant.parse("2020-01-01T00:00:00Z"))
 
-            assertNull(db.liveIndex.table(table))
+            assertNull(db.liveIndex.state.table(table))
         }
     }
 
-    /**
-     * Stops between `BlockCutter`'s two adopt steps — `trieCatalog.addTries` has run, `tableCatalog.refresh`
-     * deliberately has not. The L0's rows are scannable by then and the catalog can't yet type them, which
-     * leaves the live table as the only source that can. See #5873.
-     */
     @Test
     fun `a live table superseded by its L0 still declares its column types`() {
         TestDb().use { db ->
@@ -288,9 +380,9 @@ class LiveIndexTest {
                 db.commitTx(tx)
             }
 
-            val writtenTrie = runBlocking { db.liveIndex.finishBlock(db.bp, 0L) }.getValue(table).writtenTrie!!
+            val writtenTrie = runBlocking { db.liveIndex.finishBlock(db.bp, 0L, TableSlug::of) }.getValue(table).writtenTrie!!
 
-            db.trieCatalog.addTries(
+            db.state.addTries(
                 table,
                 listOf(
                     TrieDetails.newBuilder()
@@ -304,7 +396,7 @@ class LiveIndexTest {
             )
 
             db.openTx(1, Instant.parse("2020-01-02T00:00:00Z")).use { tx ->
-                db.liveIndex.openSnapshot(emptyList(), tx).use { snap ->
+                db.state.openSnapshot(emptyList(), tx).use { snap ->
                     // the two symptoms are independent - assertAll so a regression in either is reported,
                     // rather than the table-level one masking the column-level one
                     assertAll(
@@ -329,18 +421,15 @@ class LiveIndexTest {
                 db.commitTx(tx)
             }
 
-            db.liveIndex.openSnapshot(Instant.parse("2000-01-01T00:00:00Z")).use { snap ->
+            db.state.openSnapshot(Instant.parse("2000-01-01T00:00:00Z")).use { snap ->
                 val before = snap.table(table).single().relation.rowCount
-                runBlocking { db.liveIndex.finishBlock(db.bp, 0L) }
+                runBlocking { db.liveIndex.finishBlock(db.bp, 0L, TableSlug::of) }
                 assertEquals(before, snap.table(table).single().relation.rowCount)
                 assertEquals(1, before)
             }
         }
     }
 
-    // #5525 — between BlockCutter's addTries(L0_N) and nextBlock, the live-table for block N still
-    // holds the rows the L0 trie now does. A snapshot opened in that window must not double-count:
-    // the live-table is filtered, leaving L0 as the sole source of N's rows.
     @Test
     fun `snapshot filters live-table once L0 published`() {
         TestDb().use { db ->
@@ -351,16 +440,13 @@ class LiveIndexTest {
                 db.commitTx(tx)
             }
 
-            // observer tx forces a fresh snapshot capture each time — the cached sharedSnap was last
-            // refreshed on commit, before our manual addTries below, so it wouldn't see the L0.
             db.openTx(1, Instant.parse("2020-01-01T00:00:01Z")).use { observerTx ->
-                db.liveIndex.openSnapshot(emptyList(), observerTx).use { snap ->
+                db.state.openSnapshot(emptyList(), observerTx).use { snap ->
                     assertEquals(1, snap.table(table).size, "live-table is the only source before finishBlock")
                     assertEquals(-1L, snap.trieCatSnap.l0MaxBlockIdx(table), "no L0 published yet")
                 }
 
-                // drive the BlockCutter flow up to (but not including) nextBlock
-                for ((t, fb) in runBlocking { db.liveIndex.finishBlock(db.bp, 0L) }) {
+                for ((t, fb) in runBlocking { db.liveIndex.finishBlock(db.bp, 0L, TableSlug::of) }) {
                     val writtenTrie = fb.writtenTrie ?: continue
                     val trieDetails = TrieDetails.newBuilder()
                         .setTableName(t.schemaAndTable)
@@ -368,10 +454,10 @@ class LiveIndexTest {
                         .setDataFileSize(writtenTrie.dataFileSize)
                         .also { it.setTrieMetadata(writtenTrie.trieMetadata) }
                         .build()
-                    db.trieCatalog.addTries(t, listOf(trieDetails), Instant.now())
+                    db.state.addTries(t, listOf(trieDetails), Instant.now())
                 }
 
-                db.liveIndex.openSnapshot(emptyList(), observerTx).use { snap ->
+                db.state.openSnapshot(emptyList(), observerTx).use { snap ->
                     assertTrue(snap.table(table).isEmpty(), "live-table must be filtered — its rows now live in L0_0")
                     assertEquals(0L, snap.trieCatSnap.l0MaxBlockIdx(table), "L0_0 must be visible in the snap's trie-cat")
                 }
@@ -391,20 +477,119 @@ class LiveIndexTest {
                 db.commitTx(tx)
             }
 
-            db.liveIndex.openSnapshot(Instant.parse("2020-01-01T00:00:00Z")).use { snap0 ->
+            db.state.openSnapshot(Instant.parse("2020-01-01T00:00:00Z")).use { snap0 ->
                 // a second commit, with no read in between — must not eagerly rebuild the cached snapshot
                 db.openTx(1, Instant.parse("2020-01-02T00:00:00Z")).use { tx ->
                     tx.put(table, UUID.randomUUID())
                     db.commitTx(tx)
                 }
 
-                db.liveIndex.openSnapshot(Instant.parse("2020-01-01T00:00:00Z")).use { reused ->
-                    assertSame(snap0, reused, "a basis the cache already satisfies reuses it — the commit did not rebuild the snapshot")
+                db.state.openSnapshot(Instant.parse("2020-01-01T00:00:00Z")).use { reused ->
+                    assertSame(snap0.table(table).single(), reused.table(table).single(), "a basis the cache already satisfies reuses its segments — the commit did not rebuild them")
                 }
 
-                db.liveIndex.openSnapshot(Instant.parse("2020-01-02T00:00:00Z")).use { rebuilt ->
-                    assertNotSame(snap0, rebuilt, "a newer basis rebuilds the snapshot on demand")
+                db.state.openSnapshot(Instant.parse("2020-01-02T00:00:00Z")).use { rebuilt ->
+                    assertNotSame(snap0.table(table).single(), rebuilt.table(table).single(), "a newer basis rebuilds them on demand")
                 }
+            }
+        }
+    }
+
+    private fun l1Trie(table: TableRef, trieKey: String): TrieDetails =
+        TrieDetails.newBuilder()
+            .setTableName(table.schemaAndTable).setTrieKey(trieKey).setDataFileSize(100)
+            .setTrieMetadata(trieMetadata {})
+            .build()
+
+    private fun TestDb.put(txId: Long, systemTime: Instant, table: TableRef) =
+        openTx(txId, systemTime).use { tx ->
+            tx.put(table, UUID.randomUUID())
+            commitTx(tx)
+        }
+
+    private fun TestDb.finishBlock0L0(table: TableRef): TrieDetails {
+        val writtenTrie = runBlocking { liveIndex.finishBlock(bp, 0L, TableSlug::of) }.getValue(table).writtenTrie!!
+        return TrieDetails.newBuilder()
+            .setTableName(table.schemaAndTable)
+            .setTrieKey(writtenTrie.trieKey)
+            .setDataFileSize(writtenTrie.dataFileSize)
+            .setTrieMetadata(writtenTrie.trieMetadata)
+            .build()
+    }
+
+    @Test
+    fun `a compaction's tries reach the next query without a new transaction`() {
+        TestDb().use { db ->
+            val table = TableRef("public", "docs")
+            val t1 = Instant.parse("2020-01-02T00:00:00Z")
+
+            db.put(0, Instant.parse("2020-01-01T00:00:00Z"), table)
+            db.state.adoptBlock(block { blockIndex = 0 }, listOf(db.finishBlock0L0(table)), Instant.parse("2020-01-01T00:00:00Z"))
+            db.put(1, t1, table)
+
+            db.state.openSnapshot(t1).use { before ->
+                db.state.addTries(table, listOf(l1Trie(table, "l01-rc-b00")), t1)
+
+                db.state.openSnapshot(t1).use { after ->
+                    assertAll(
+                        { assertFalse("l01-rc-b00" in before.trieCatSnap.listAllTrieKeys(table)) },
+                        { assertTrue("l01-rc-b00" in after.trieCatSnap.listAllTrieKeys(table)) },
+                        { assertEquals(before.txBasis, after.txBasis) },
+                        { assertSame(before.table(table).single(), after.table(table).single(), "the live segments are shared, not re-sliced") },
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `a snapshot held across tries updates and a rebuild stays readable until it closes`() {
+        TestDb().use { db ->
+            val table = TableRef("public", "docs")
+            val t1 = Instant.parse("2020-01-02T00:00:00Z")
+            val t2 = Instant.parse("2020-01-03T00:00:00Z")
+
+            db.put(0, Instant.parse("2020-01-01T00:00:00Z"), table)
+            db.state.adoptBlock(block { blockIndex = 0 }, listOf(db.finishBlock0L0(table)), Instant.parse("2020-01-01T00:00:00Z"))
+            db.put(1, t1, table)
+
+            db.state.openSnapshot(t1).use { held ->
+                db.state.addTries(table, listOf(l1Trie(table, "l01-rc-b00")), t1)
+                db.state.deleteTries(table, setOf("l01-rc-b00"))
+
+                db.put(2, t2, table)
+                db.state.openSnapshot(t2).use { rebuilt ->
+                    assertEquals(2, rebuilt.table(table).single().relation.rowCount)
+                }
+
+                assertEquals(1, held.table(table).single().relation.rowCount)
+            }
+        }
+    }
+
+    @Test
+    fun `an L0 reaching the trie catalog ahead of its block's adoption hides the live rows it covers but not their types`() {
+        TestDb().use { db ->
+            val table = TableRef("public", "docs")
+            val t0 = Instant.parse("2020-01-01T00:00:00Z")
+
+            db.openTx(0, t0).use { tx ->
+                tx.table(table).writePut(mapOf("_id" to UUID.randomUUID(), "v" to 1L))
+                db.commitTx(tx)
+            }
+
+            db.state.openSnapshot(t0).use { before ->
+                assertEquals(1, before.table(table).size)
+            }
+
+            db.state.addTries(table, listOf(db.finishBlock0L0(table)), t0)
+
+            db.state.openSnapshot(t0).use { after ->
+                assertAll(
+                    { assertEquals(0L, after.trieCatSnap.l0MaxBlockIdx(table)) },
+                    { assertTrue(after.table(table).isEmpty(), "the L0 covers the live table's rows") },
+                    { assertEquals(mapOf("v" to I64), after.columnTypes(table, listOf("v"))) },
+                )
             }
         }
     }
@@ -419,7 +604,7 @@ class LiveIndexTest {
                 db.commitTx(tx)
             }
 
-            db.liveIndex.openSnapshot(Instant.parse("2020-01-01T00:00:00Z")).use { snap ->
+            db.state.openSnapshot(Instant.parse("2020-01-01T00:00:00Z")).use { snap ->
                 assertEquals(
                     Instant.parse("2020-01-01T00:00:00Z"), snap.txBasis?.systemTime,
                     "snapshot basis covers the demanded tx"
@@ -463,11 +648,11 @@ class LiveIndexTest {
                 val tables = tx.sealTables().associateTo(mutableMapOf()) { it.ref to it.liveTable }
                 assertTrue(tables.isNotEmpty())
 
-                db.liveIndex.applyTx(tx.txKey, tables)
+                db.state.applyTx(tx.txKey, tables)
 
                 assertTrue(
                     tables.isEmpty(),
-                    "drained as it installs, so what is left after a throw is exactly what never landed"
+                    "drained once taken, so what is left after a throw is exactly what never landed"
                 )
             }
         }
@@ -486,7 +671,7 @@ class LiveIndexTest {
                         .closeAllOnCatch { error("apply faulted") }
                 }
 
-                assertNull(db.liveIndex.table(TableRef("public", "docs")), "nothing half-installed")
+                assertNull(db.liveIndex.state.table(TableRef("public", "docs")), "nothing half-installed")
             }
         }
     }

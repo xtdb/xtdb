@@ -10,7 +10,7 @@ import xtdb.SimulationTestUtils.Companion.L1TrieKeys
 import xtdb.SimulationTestUtils.Companion.addTriesToBufferPool
 import xtdb.SimulationTestUtils.Companion.buildTrieDetails
 import xtdb.SimulationTestUtils.Companion.createJobCalculator
-import xtdb.SimulationTestUtils.Companion.createTrieCatalog
+import xtdb.SimulationTestUtils.Companion.createPartitionValue
 import xtdb.SimulationTestUtils.Companion.prefix
 import xtdb.SimulationTestUtils.Companion.setLogLevel
 import xtdb.api.TransactionKey
@@ -47,14 +47,16 @@ data class MockDatabase(
     val name: DatabaseName,
     val allocator: BufferAllocator,
     val bufferPool: BufferPool,
-    val trieCatalog: TrieCatalog,
-    val tableCatalog: TableCatalog,
+    val partitionState: PartitionState,
     val compactor: Compactor,
     val compactorForDb: Compactor.ForDatabase,
     val garbageCollector: TrieGarbageCollector,
     val gcScope: CoroutineScope,
     val compactorScope: CoroutineScope,
 ) {
+    val trieCatalog get() = partitionState.trieCatalog
+    val tableCatalog get() = partitionState.tableCatalog
+
     fun close() {
         // Cancel+join the GC and compaction scopes (runBlocking only because this teardown is
         // non-suspend), then free the compactor's driver once its loop has joined.
@@ -113,14 +115,15 @@ class NodeSimulationTest : SimulationTestBase() {
         sharedBufferPool = MemoryStorage(allocator, epoch = 0)
 
         dbs = List(numberOfSystems) {
-            val trieCatalog = createTrieCatalog()
-            val tableCatalog = TableCatalog(sharedBufferPool, sharedBufferPool.latestBlock)
+            val partitionValue = createPartitionValue(sharedBufferPool.latestBlock)
             val compactor = Compactor.Impl(
                 compactorDriverFactory, null, jobCalculator, false, 2,
                 dispatcher = dispatcher, ioDispatcher = dispatcher
             )
             val partitionStorage = PartitionStorage(DatabaseLogs(null, null), sharedBufferPool, null)
-            val partitionState = PartitionState(tableCatalog, trieCatalog, null)
+            val partitionState = PartitionState(partitionValue)
+            val trieCatalog = partitionState.trieCatalog
+            val tableCatalog = partitionState.tableCatalog
             val compactorScope = CoroutineScope(dispatcher)
             val compactorForDb = compactor.openForDatabase(compactorScope, allocator, partitionStorage, partitionState, Watchers(latestTxId = -1, latestSourceMsgId = -1))
             val gcScope = CoroutineScope(dispatcher)
@@ -129,14 +132,14 @@ class NodeSimulationTest : SimulationTestBase() {
                 commitTriesDeleted = { tableName, trieKeys ->
                     // No replica log in the mock — apply the catalog mutation directly so the
                     // simulation's view of the catalog still converges as the test asserts.
-                    trieCatalog.deleteTries(tableName, trieKeys)
+                    partitionState.deleteTries(tableName, trieKeys)
                 },
                 blocksToKeep = 2,
                 garbageLifetime = garbageLifetime,
                 enabled = false,
                 dispatcher = dispatcher,
             ).also { gcScope.launch { it.run() } }
-            MockDatabase("xtdb", allocator, sharedBufferPool, trieCatalog, tableCatalog, compactor, compactorForDb, garbageCollector, gcScope, compactorScope)
+            MockDatabase("xtdb", allocator, sharedBufferPool, partitionState, compactor, compactorForDb, garbageCollector, gcScope, compactorScope)
         }
     }
 
@@ -154,7 +157,7 @@ class NodeSimulationTest : SimulationTestBase() {
             compactorDriverFactory.trieKeyToFileSize[compactorDriverFactory.fileSizeKey(tableRef.tableName, it.trieKey.toString())] = it.dataFileSize
         }
         dbs.forEach { db ->
-            db.trieCatalog.addTries(tableRef, tries, timestamp)
+            db.partitionState.addTries(tableRef, tries, timestamp)
             addTriesToBufferPool(db.bufferPool, tableRef, tries)
         }
     }
@@ -189,15 +192,15 @@ class NodeSimulationTest : SimulationTestBase() {
                 boundaryTermSeq = null
             )
             sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
-            tableCatalog.refresh(block)
+            db.partitionState.adoptBlock(block, emptyList(), Instant.now())
         }
 
-        assertEquals(l1Tries, trieCatalog.listAllTrieKeys(table), "l1s present in trie catalog")
+        assertEquals(l1Tries, trieCatalog.state.listAllTrieKeys(table), "l1s present in trie catalog")
         assertEquals(l1Tries, sharedBufferPool.listTrieNames(table), "l1s present in buffer pool")
 
         runBlocking { garbageCollector.garbageCollectTries(Instant.now() + Duration.ofHours(1)) }
 
-        assertEquals(l1Tries, trieCatalog.listAllTrieKeys(table), "live l1s haven't been garbage collected")
+        assertEquals(l1Tries, trieCatalog.state.listAllTrieKeys(table), "live l1s haven't been garbage collected")
         assertEquals(l1Tries, sharedBufferPool.listTrieNames(table), "live l1s haven't been garbage collected")
 
         compactorForDb.compactAllSync(null)
@@ -206,11 +209,11 @@ class NodeSimulationTest : SimulationTestBase() {
         val allTries = (l1Tries + l2Tries).toSet()
 
         assertEquals(allTries, sharedBufferPool.listTrieNames(table).toSet(), "l2s present in buffer pool")
-        assertEquals(allTries, trieCatalog.listAllTrieKeys(table).toSet(), "l2s present in trie catalog")
+        assertEquals(allTries, trieCatalog.state.listAllTrieKeys(table).toSet(), "l2s present in trie catalog")
 
         runBlocking { garbageCollector.garbageCollectTries(Instant.now() + Duration.ofHours(1)) }
 
-        assertEquals(l2Tries.toSet(), trieCatalog.listAllTrieKeys(table).toSet(), "l1s should get garbage collected from trie catalog")
+        assertEquals(l2Tries.toSet(), trieCatalog.state.listAllTrieKeys(table).toSet(), "l1s should get garbage collected from trie catalog")
         assertEquals(l2Tries.toSet(), sharedBufferPool.listTrieNames(table).toSet(), "l1s should get garbage collected from buffer pool")
     }
 
@@ -249,10 +252,10 @@ class NodeSimulationTest : SimulationTestBase() {
                 boundaryTermSeq = null
             )
             sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
-            tableCatalog.refresh(block)
+            db.partitionState.adoptBlock(block, emptyList(), Instant.now())
         }
 
-        assertEquals(l1Tries, trieCatalog.listAllTrieKeys(table), "l1s present initially")
+        assertEquals(l1Tries, trieCatalog.state.listAllTrieKeys(table), "l1s present initially")
         assertEquals(l1Tries, sharedBufferPool.listTrieNames(table), "l1s present in buffer pool initially")
 
         // Launch both compaction and GC on the dispatcher using coroutines
@@ -262,7 +265,7 @@ class NodeSimulationTest : SimulationTestBase() {
             }
             val gcJob = launch {
                 val asOf = Instant.now() + Duration.ofHours(1)
-                while(trieCatalog.garbageTries(table, asOf).isEmpty()) { yield() } // wait for compaction to mark tries as garbage
+                while(trieCatalog.state.garbageTries(table, asOf).isEmpty()) { yield() } // wait for compaction to mark tries as garbage
                 garbageCollector.garbageCollectTries(asOf)
             }
 
@@ -270,7 +273,7 @@ class NodeSimulationTest : SimulationTestBase() {
             gcJob.join()
         }
 
-        val triesInCatalog = trieCatalog.listAllTrieKeys(table)
+        val triesInCatalog = trieCatalog.state.listAllTrieKeys(table)
         val triesInBufferPool = sharedBufferPool.listTrieNames(table)
 
         assertTrue(expectedL2Tries.all { it in triesInCatalog }, "All L2 tries should be present in catalog.")
@@ -281,7 +284,7 @@ class NodeSimulationTest : SimulationTestBase() {
 
         runBlocking { garbageCollector.garbageCollectTries(Instant.now() + Duration.ofHours(1)) }
 
-        assertEquals(expectedL2Tries.toSet(), trieCatalog.listAllTrieKeys(table).toSet(), "l1s should get garbage collected from trie catalog, leaving l2s")
+        assertEquals(expectedL2Tries.toSet(), trieCatalog.state.listAllTrieKeys(table).toSet(), "l1s should get garbage collected from trie catalog, leaving l2s")
     }
 
     @RepeatableSimulationTest
@@ -305,7 +308,7 @@ class NodeSimulationTest : SimulationTestBase() {
             Instant.now()
         )
 
-        assertEquals(oldTries, trieCatalog.listAllTrieKeys(table), "tries present in catalog")
+        assertEquals(oldTries, trieCatalog.state.listAllTrieKeys(table), "tries present in catalog")
         assertEquals(oldTries, sharedBufferPool.listTrieNames(table), "tries present in buffer pool")
 
         val newL1Tries = listOf("l01-rc-b04", "l01-rc-b05", "l01-rc-b06", "l01-rc-b07")
@@ -328,7 +331,7 @@ class NodeSimulationTest : SimulationTestBase() {
                 boundaryTermSeq = null
             )
             sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
-            tableCatalog.refresh(block)
+            db.partitionState.adoptBlock(block, emptyList(), Instant.now())
         }
 
         val expectedNewL2Tries = listOf("l02-rc-p0-b07", "l02-rc-p1-b07", "l02-rc-p2-b07", "l02-rc-p3-b07")
@@ -346,7 +349,7 @@ class NodeSimulationTest : SimulationTestBase() {
             gcJob.join()
         }
 
-        val finalTriesInCatalog = trieCatalog.listAllTrieKeys(table).toSet()
+        val finalTriesInCatalog = trieCatalog.state.listAllTrieKeys(table).toSet()
         val finalTriesInBufferPool = sharedBufferPool.listTrieNames(table).toSet()
 
         assertTrue(oldl1Tries.none { it in finalTriesInCatalog }, "Old L1 tries should be garbage collected")
@@ -360,7 +363,7 @@ class NodeSimulationTest : SimulationTestBase() {
 
         runBlocking { garbageCollector.garbageCollectTries(Instant.now() + Duration.ofHours(1)) }
         val l2Set = (oldl2Tries + expectedNewL2Tries).toSet()
-        assertEquals(l2Set.toSet(), trieCatalog.listAllTrieKeys(table).toSet(), "l1s should get garbage collected from trie catalog, leaving l2s")
+        assertEquals(l2Set.toSet(), trieCatalog.state.listAllTrieKeys(table).toSet(), "l1s should get garbage collected from trie catalog, leaving l2s")
     }
 
     @RepeatableSimulationTest
@@ -401,7 +404,7 @@ class NodeSimulationTest : SimulationTestBase() {
                     boundaryTermSeq = null
                 )
                 sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
-                db.tableCatalog.refresh(block)
+                db.partitionState.adoptBlock(block, emptyList(), Instant.now())
             }
         }
 
@@ -427,7 +430,7 @@ class NodeSimulationTest : SimulationTestBase() {
 
         // Verify all catalogs have the expected L2 tries and some old L1s were GCed
         dbs.forEach { db ->
-            val triesInCatalog = db.trieCatalog.listAllTrieKeys(table).toSet()
+            val triesInCatalog = db.trieCatalog.state.listAllTrieKeys(table).toSet()
             assertTrue(expectedL2Tries.all { it in triesInCatalog }, "All L2 tries should be present in all catalogs")
 
             val oldL1sRemaining = oldL1Tries.count { it in triesInCatalog }
@@ -442,7 +445,7 @@ class NodeSimulationTest : SimulationTestBase() {
         }
 
         // Verify all systems converged to the same state
-        val allTrieSets = dbs.map { it.trieCatalog.listAllTrieKeys(table).toSet() }
+        val allTrieSets = dbs.map { it.trieCatalog.state.listAllTrieKeys(table).toSet() }
         assertEquals(1, allTrieSets.distinct().size, "All systems should have converged to the same trie set")
         assertEquals(expectedL2Tries.toSet(), allTrieSets.first(), "Final state should only contain L2 tries")
     }
@@ -475,7 +478,7 @@ class NodeSimulationTest : SimulationTestBase() {
                     boundaryTermSeq = null
                 )
                 sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
-                db.tableCatalog.refresh(block)
+                db.partitionState.adoptBlock(block, emptyList(), Instant.now())
             }
         }
 
@@ -499,7 +502,7 @@ class NodeSimulationTest : SimulationTestBase() {
             system0GC.join()
 
             // Verify system 0 has completed its work
-            val system0Tries = dbs[0].trieCatalog.listAllTrieKeys(table).toSet()
+            val system0Tries = dbs[0].trieCatalog.state.listAllTrieKeys(table).toSet()
             assertTrue(
                 expectedL2Tries.all { it in system0Tries },
                 "System 0 should have all L2 tries after compaction"
@@ -519,7 +522,7 @@ class NodeSimulationTest : SimulationTestBase() {
 
         // Verify both systems have the expected L2 tries after all operations
         dbs.forEachIndexed { index, db ->
-            val triesInCatalog = db.trieCatalog.listAllTrieKeys(table).toSet()
+            val triesInCatalog = db.trieCatalog.state.listAllTrieKeys(table).toSet()
             assertTrue(
                 expectedL2Tries.all { it in triesInCatalog },
                 "System $index should have all L2 tries present"
@@ -533,7 +536,7 @@ class NodeSimulationTest : SimulationTestBase() {
             }
         }
 
-        val allTrieSets = dbs.map { it.trieCatalog.listAllTrieKeys(table).toSet() }
+        val allTrieSets = dbs.map { it.trieCatalog.state.listAllTrieKeys(table).toSet() }
         assertEquals(1, allTrieSets.distinct().size, "All systems should converge to the same trie set despite staggered startup")
         assertEquals(expectedL2Tries.toSet(), allTrieSets.first(), "Final state should only contain L2 tries, no L1s should remain")
 
@@ -572,13 +575,13 @@ class NodeSimulationTest : SimulationTestBase() {
                 boundaryTermSeq = null
             )
             sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
-            tableCatalog.refresh(block)
+            db.partitionState.adoptBlock(block, emptyList(), Instant.now())
         }
 
         compactorForDb.compactAllSync(null)
         runBlocking { garbageCollector.garbageCollectTries(Instant.now() + Duration.ofHours(1)) }
 
-        val triesInCatalog = trieCatalog.listAllTrieKeys(table)
+        val triesInCatalog = trieCatalog.state.listAllTrieKeys(table)
         val l0Count = triesInCatalog.prefix("l00-rc-").size
         val l1Count = triesInCatalog.prefix("l01-rc-").size
         val l2Count = triesInCatalog.prefix("l02-rc-").size
@@ -625,7 +628,7 @@ class NodeSimulationTest : SimulationTestBase() {
                     boundaryTermSeq = null
                 )
                 sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
-                db.tableCatalog.refresh(block)
+                db.partitionState.adoptBlock(block, emptyList(), Instant.now())
             }
         }
 
@@ -647,7 +650,7 @@ class NodeSimulationTest : SimulationTestBase() {
         }
 
         dbs.forEach { db ->
-            val triesInCatalog = db.trieCatalog.listAllTrieKeys(table)
+            val triesInCatalog = db.trieCatalog.state.listAllTrieKeys(table)
             val l0Count = triesInCatalog.prefix("l00-rc-").size
             val l3Count = triesInCatalog.prefix("l03-rc-").size
 
@@ -663,7 +666,7 @@ class NodeSimulationTest : SimulationTestBase() {
         }
 
         // Verify all systems converged
-        val allTrieSets = dbs.map { it.trieCatalog.listAllTrieKeys(table).toSet() }
+        val allTrieSets = dbs.map { it.trieCatalog.state.listAllTrieKeys(table).toSet() }
         assertEquals(1, allTrieSets.distinct().size, "All systems should converge to the same trie set")
 
         val finalTries = allTrieSets.first()
@@ -717,7 +720,7 @@ class NodeSimulationTest : SimulationTestBase() {
                     boundaryTermSeq = null
                 )
                 sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
-                db.tableCatalog.refresh(block)
+                db.partitionState.adoptBlock(block, emptyList(), Instant.now())
             }
         }
 
@@ -743,7 +746,7 @@ class NodeSimulationTest : SimulationTestBase() {
         }
 
         dbs.first().let { db ->
-            val triesInCatalog = db.trieCatalog.listAllTrieKeys(table)
+            val triesInCatalog = db.trieCatalog.state.listAllTrieKeys(table)
             val l4Count = triesInCatalog.prefix("l04-rc-").size
             assertEquals(48, l4Count, "Should have 16 L4 tries (from 4 complete L3 sets)")
         }
@@ -756,7 +759,7 @@ class NodeSimulationTest : SimulationTestBase() {
         }
 
         // Verify all systems converged
-        val allTrieSets = dbs.map { it.trieCatalog.listAllTrieKeys(table).toSet() }
+        val allTrieSets = dbs.map { it.trieCatalog.state.listAllTrieKeys(table).toSet() }
         assertEquals(1, allTrieSets.distinct().size, "All systems should converge to the same trie set")
 
         // Validate final counts - we should have L3 and L4 tries

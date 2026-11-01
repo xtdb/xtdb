@@ -6,7 +6,6 @@ import xtdb.arrow.MergeTypes.Companion.mergeTypes
 import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorType
 import xtdb.catalog.TableCatalog
-import xtdb.indexer.LiveTable.Companion.logRelTypes
 import xtdb.api.TableRef
 import xtdb.table.Oid
 import xtdb.trie.ColumnName
@@ -17,6 +16,7 @@ import xtdb.util.safeMap
 import xtdb.util.safelyOpening
 import java.time.Instant
 import java.util.HashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.collections.component1
 import kotlin.collections.component2
@@ -26,25 +26,32 @@ import xtdb.api.tx.OpenTx
 /**
  * A frozen view of **one partition** at a point in time — see [DatabaseSnapshot] for the whole database.
  *
- * It pins the in-memory segments, the trie catalog and the historical table metadata, so a reader is not
- * combining pinned data with a catalog read live at call time. The two catalog captures are not atomic with
- * respect to each other, though — see [open].
+ * It pins both catalogs, and a [LiveSnap] of the in-memory segments, so a reader is not combining pinned data with
+ * a catalog read live at call time.
+ *
+ * Which live segments it reads rows from follows from its trie catalog: a live table whose block a published L0
+ * already covers contributes its types but not its rows.
  */
-class Snapshot(
-    val txBasis: TransactionKey?,
-    val trieCatSnap: TrieCatalog.Snap,
+class Snapshot internal constructor(
+    val trieCatSnap: TrieCatalog.State,
     val tableCatSnap: TableCatalog.State,
-    // A table already has several of these on a transaction snapshot - the live-index segment, one
-    // per staged tx that touched it, and the tx's own writes. Those are all tx-visibility layers,
-    // so an external snapshot still sees one segment per table. Dual-slot LiveTable (#4495) is what
-    // changes that, adding a second *durable* slot for as long as block N is uploading.
-    private val tableSnaps: Map<TableRef, List<TableSnapshot>>,
-    // Live tables whose rows a published L0 already covers — see [open] for why their types outlive
-    // their rows. A type map rather than the TableSnapshot itself, so the excluded rows stay
-    // unreachable from here.
-    private val supersededLiveTypes: Map<TableRef, Map<ColumnName, VectorType>>,
-    val tableInfo: Map<TableRef, Set<ColumnName>>,
+    private val live: LiveSnap,
 ) : AutoCloseable {
+
+    val txBasis: TransactionKey? get() = live.txBasis
+
+    /** Column *names* only - [tableInfo] answers which columns a table has; [columnTypes] answers their types. */
+    val tableInfo: Map<TableRef, Set<ColumnName>> by lazy {
+        val tableInfo = HashMap<TableRef, MutableSet<ColumnName>>()
+
+        for ((table, types) in tableCatSnap.types)
+            tableInfo.getOrPut(table) { mutableSetOf() }.addAll(types.keys)
+
+        for ((table, colNames) in live.columnNames)
+            tableInfo.getOrPut(table) { mutableSetOf() }.addAll(colNames)
+
+        tableInfo
+    }
 
     /**
      * Where [table]'s files live, as of this snapshot — so the slugs a scan reads by are the ones recorded
@@ -59,7 +66,24 @@ class Snapshot(
         fun openSnapshot(minSystemTime: Instant?): Snapshot
     }
 
-    fun table(table: TableRef): List<TableSnapshot> = tableSnaps[table].orEmpty()
+    private fun LiveSnap.Durable.superseded() = blockIdx <= trieCatSnap.l0MaxBlockIdx(snap.table)
+
+    // One segment per table, newest wins — these views subsume rather than complement, so scanning
+    // more than one of them would count a row once per view able to see it.
+    private val tableSnaps: Map<TableRef, TableSnapshot> by lazy {
+        val byTable = LinkedHashMap<TableRef, TableSnapshot>()
+        for ((table, durable) in live.durable) if (!durable.superseded()) byTable[table] = durable.snap
+        byTable.putAll(live.layered)
+        byTable
+    }
+
+    // Live tables whose rows a published L0 already covers. A type map rather than the TableSnapshot itself,
+    // so the excluded rows stay unreachable from here.
+    private val supersededLiveTypes: Map<TableRef, Map<ColumnName, VectorType>> by lazy {
+        live.durable.filterValues { it.superseded() }.mapValues { (_, durable) -> durable.snap.types }
+    }
+
+    fun table(table: TableRef): List<TableSnapshot> = listOfNotNull(tableSnaps[table])
     val tables get() = tableSnaps.keys
 
     /** The frozen per-table trie-cat state for [table], for downstream `current-tries` planning. */
@@ -98,100 +122,86 @@ class Snapshot(
         tableInfo.keys.associateWith { columnTypes(it) }
     }
 
+    private val closed = AtomicBoolean(false)
+
+    override fun close() {
+        if (closed.compareAndSet(false, true)) live.release()
+    }
+
+    companion object {
+        // Precedence, bottom→top (later layers win): durable live tables ⊕ in-flight staged txs
+        // (oldest→newest) ⊕ the resolving tx's own writes. External snapshots pass neither and see
+        // durable only (strict visibility); a resolving tx passes the in-flight staged txs it must read
+        // behind plus itself (read-your-writes across the batch).
+        internal fun open(
+            al: BufferAllocator, trieCat: TrieCatalog.State, tableCat: TableCatalog.State, live: LiveIndex.State,
+            resolvedTxs: List<ResolvedTx>, ownTx: OpenTx?,
+        ): Snapshot = Snapshot(trieCat, tableCat, LiveSnap.open(al, live, resolvedTxs, ownTx))
+    }
+}
+
+/**
+ * The live half of a [Snapshot]: a slice of every live table, and the one count every snapshot over them shares —
+ * the slices are closed when it reaches zero.
+ */
+internal class LiveSnap private constructor(
+    val txBasis: TransactionKey?,
+    // Every durable live table, whether or not a published L0 covers its block: which ones a snapshot reads rows
+    // from is its trie catalog's to say.
+    internal val durable: Map<TableRef, Durable>,
+    // The newest of a transaction's staged predecessors' segments and its own, per table it has written; empty for
+    // an external snapshot.
+    internal val layered: Map<TableRef, TableSnapshot>,
+    // Every column a live segment declares, plus each staged table's declared columns — see [open].
+    internal val columnNames: Map<TableRef, Set<ColumnName>>,
+) {
+    internal class Durable(val blockIdx: Long, val snap: TableSnapshot)
+
     private val refCount = AtomicInteger(1)
 
     fun retain() {
         if (0 == refCount.getAndIncrement()) throw IllegalStateException("snapshot closed")
     }
 
-    override fun close() {
-        if (0 == refCount.decrementAndGet()) tableSnaps.values.flatten().closeAll()
+    fun release() {
+        if (0 == refCount.decrementAndGet()) (durable.values.map { it.snap } + layered.values).closeAll()
     }
 
     companion object {
-        /** Column *names* only - [tableInfo] answers which columns a table has; [columnTypes] answers their types. */
-        @JvmStatic
-        private fun TableCatalog.State.buildTableInfo(
-            liveColumnNames: Map<TableRef, Set<ColumnName>>
-        ): Map<TableRef, Set<ColumnName>> {
-            val tableInfo = HashMap<TableRef, MutableSet<ColumnName>>()
-
-            for ((table, types) in types)
-                tableInfo.getOrPut(table) { mutableSetOf() }.addAll(types.keys)
-
-            for ((table, colNames) in liveColumnNames)
-                tableInfo.getOrPut(table) { mutableSetOf() }.addAll(colNames)
-
-            return tableInfo
-        }
-
-        // Precedence, bottom→top (later layers win): durable live tables ⊕ in-flight staged txs
-        // (oldest→newest) ⊕ the resolving tx's own writes. External snapshots pass neither and see
-        // durable only (strict visibility); a resolving tx passes the in-flight staged txs it must read
-        // behind plus itself (read-your-writes across the batch).
-        @JvmStatic
-        fun open(
-            al: BufferAllocator, tableCat: TableCatalog,
-            trieCatalog: TrieCatalog, liveIndex: LiveIndex,
-            resolvedTxs: List<ResolvedTx> = emptyList(),
-            ownTx: OpenTx? = null,
-        ): Snapshot = safelyOpening {
-            val trieCatSnap = trieCatalog.snapshot()
-
-            // Live-tables already covered by a published L0 contribute no *rows* — they'd duplicate the
-            // L0's data. The watermark is monotonic, so once L0_N exists we drop the live-table-N entry
-            // for good (its rows are now in L0_N).
-            //
-            // Their *types* we keep. `addTries` and `tableCatalog.refresh` are separate steps, and
-            // between them the L0 is readable while the catalog still holds the pre-block types — so
-            // dropping the live half outright would leave nobody able to answer, declaring a narrower
-            // type than the rows about to be scanned. The write path keeps both copies alive across that
-            // gap (`nextBlock` runs after the catalog update on the leader and follower paths alike);
-            // this keeps the read path inside it. See #5873.
-            val (liveTables, supersededTables) = liveIndex.tableRefs
-                .mapNotNull { liveIndex.table(it) }
-                .partition { it.blockIdx > trieCatSnap.l0MaxBlockIdx(it.table) }
-
-            val supersededLiveTypes = supersededTables.associate { it.table to it.relation.logRelTypes.orEmpty() }
+        internal fun open(
+            al: BufferAllocator, live: LiveIndex.State,
+            resolvedTxs: List<ResolvedTx>, ownTx: OpenTx?,
+        ): LiveSnap = safelyOpening {
+            val liveTables = live.tables.values.toList()
+            val durable = liveTables.zip(openAll { liveTables.safeMap { TableSnapshot.open(al, it) } })
+                .associate { (lt, snap) -> lt.table to Durable(lt.blockIdx, snap) }
 
             val stagedTables = resolvedTxs.flatMap { it.allTables }
 
-            // One segment per table, newest wins — these views subsume rather than complement, so scanning
-            // more than one of them would count a row once per view able to see it. A staged tx's rows are
-            // the committed rows plus its own, and the resolving tx's are those plus its own again, every
-            // one of them over the table's own relation. Newest is whatever writes last here, which is what
-            // makes the resolver's queue order load-bearing.
-            val newestRows = LinkedHashMap<TableRef, Pair<RelationReader, MemoryHashTrie>>()
-            for (lt in liveTables) newestRows[lt.table] = lt.relation to lt.trie
-            for (staged in stagedTables) newestRows[staged.ref] = staged.liveTable.relation to staged.liveTable.trie
-            ownTx?.tables?.forEach { (ref, tableTx) -> newestRows[ref] = tableTx.tx.relation to tableTx.tx.trie }
+            // A staged tx's rows are the committed rows plus its own, and the resolving tx's are those plus its own
+            // again, every one of them over the table's own relation. Newest is whatever writes last here, which is
+            // what makes the resolver's queue order load-bearing.
+            val newestLayered = LinkedHashMap<TableRef, Pair<RelationReader, MemoryHashTrie>>()
+            for (staged in stagedTables) newestLayered[staged.ref] = staged.liveTable.relation to staged.liveTable.trie
+            ownTx?.tables?.forEach { (ref, tableTx) -> newestLayered[ref] = tableTx.tx.relation to tableTx.tx.trie }
 
-            val byTable =
-                openAll { newestRows.entries.safeMap { (ref, rows) -> TableSnapshot.open(al, ref, rows.first, rows.second) } }
-                    .groupBy { it.table }
+            val layered = openAll { newestLayered.entries.safeMap { (ref, rows) -> TableSnapshot.open(al, ref, rows.first, rows.second) } }
+                .associateBy { it.table }
 
-            // tableInfo drives base-table resolution — an unresolved table throws `Table not found`. It
+            // Snapshot.tableInfo, built from these, drives base-table resolution — an unresolved table throws `Table not found`. It
             // must carry every staged table's declared columns *including* 0-row ones (e.g. `CREATE TABLE`),
             // whose segment declares none — column types are read off the `put` leg, which a table nothing
             // has written to hasn't got — so a tx resolving behind a freshly created empty table in the
             // same batch still sees it exists.
+            //
+            // A durable table's columns are listed whether or not an L0 covers it — a covered table's types are
+            // still read — and a layered segment's are a superset of the durable one it is written over.
             val liveColumnNames = LinkedHashMap<TableRef, MutableSet<ColumnName>>()
-            for ((table, snaps) in byTable)
-                snaps.flatMapTo(liveColumnNames.getOrPut(table) { linkedSetOf() }) { it.types.keys }
+            for ((table, d) in durable) liveColumnNames.getOrPut(table) { linkedSetOf() }.addAll(d.snap.types.keys)
+            for ((table, snap) in layered) liveColumnNames.getOrPut(table) { linkedSetOf() }.addAll(snap.types.keys)
             for (t in stagedTables) liveColumnNames.getOrPut(t.ref) { linkedSetOf() }.addAll(t.columnTypes.keys)
-            for ((table, types) in supersededLiveTypes) liveColumnNames.getOrPut(table) { linkedSetOf() }.addAll(types.keys)
 
-            // Captured after the trie-cat and the live tables, deliberately: the type view must not lag the
-            // data view. A declared type narrower than the rows being scanned is unsound; a wider one is
-            // always safe, so a catalog read that's newer than the tries it covers errs in the safe direction.
-            val tableCatSnap = tableCat.snap()
-
-            val tableInfo = tableCatSnap.buildTableInfo(liveColumnNames)
-
-            Snapshot(
-                ownTx?.txKey ?: liveIndex.latestCompletedTx, trieCatSnap, tableCatSnap,
-                byTable, supersededLiveTypes, tableInfo
-            )
+            LiveSnap(ownTx?.txKey ?: live.latestCompletedTx, durable, layered, liveColumnNames)
         }
     }
 }

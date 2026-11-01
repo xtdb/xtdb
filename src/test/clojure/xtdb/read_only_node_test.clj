@@ -146,5 +146,5 @@
               "ro node sees all data after isFull()-triggered block")
 
         (let [ro-table-cat (.getTableCatalog (db/primary-db ro-node))]
-          (t/is (= 0 (.getCurrentBlockIndex ro-table-cat))
+          (t/is (= 0 (.getBlockIdx (.snap ro-table-cat)))
                 "follower's block catalog should advance after isFull()-triggered block"))))))

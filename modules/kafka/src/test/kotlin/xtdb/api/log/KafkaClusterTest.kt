@@ -354,7 +354,7 @@ class KafkaClusterTest {
 
             assertNotNull(
                 withTimeoutOrNull(30.seconds) {
-                    while (tableCatalog.currentBlockIndex == null) delay(100.milliseconds)
+                    while (tableCatalog.snap().blockIdx == null) delay(100.milliseconds)
                 },
                 "flush timeout cuts a block",
             )
@@ -675,20 +675,22 @@ class KafkaClusterTest {
             val tableCat = (node as XtdbInternal).dbCatalog.primary.tableCatalog
             val deadline = System.currentTimeMillis() + 120_000
 
-            while (tableCat.boundaryReplicaMsgId == null && System.currentTimeMillis() < deadline) Thread.sleep(100)
-            assertNotNull(tableCat.boundaryReplicaMsgId, "the flush timeout must have cut a block")
-            val src0 = tableCat.latestProcessedMsgId!!
-            val replica0 = tableCat.boundaryReplicaMsgId!!
+            while (tableCat.snap().boundaryReplicaMsgId == null && System.currentTimeMillis() < deadline) Thread.sleep(100)
+            val cut = tableCat.snap()
+            assertNotNull(cut.boundaryReplicaMsgId, "the flush timeout must have cut a block")
+            val src0 = cut.latestProcessedMsgId!!
+            val replica0 = cut.boundaryReplicaMsgId!!
 
             // Not another write from here — only the flush timeout can move these on. This is what
             // makes a finite `retention.ms` safe on a database nobody is writing to: the anchors stay
             // near the head of both logs, so retention only ever reclaims what a block already covers.
             while (System.currentTimeMillis() < deadline &&
-                (tableCat.latestProcessedMsgId!! <= src0 || tableCat.boundaryReplicaMsgId!! <= replica0)
+                tableCat.snap().let { it.latestProcessedMsgId!! <= src0 || it.boundaryReplicaMsgId!! <= replica0 }
             ) Thread.sleep(100)
 
-            val src1 = tableCat.latestProcessedMsgId!!
-            val replica1 = tableCat.boundaryReplicaMsgId!!
+            val later = tableCat.snap()
+            val src1 = later.latestProcessedMsgId!!
+            val replica1 = later.boundaryReplicaMsgId!!
             assertTrue(src1 > src0, "idle source anchor must keep advancing (was $src0, now $src1)")
             assertTrue(replica1 > replica0, "idle replica anchor must keep advancing (was $replica0, now $replica1)")
 

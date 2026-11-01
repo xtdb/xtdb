@@ -17,11 +17,10 @@ import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import xtdb.SimulationTestUtils.Companion.createTrieCatalog
+import xtdb.SimulationTestUtils.Companion.createPartitionValue
 import xtdb.api.log.*
 import xtdb.api.error.Incorrect
 import xtdb.api.tx.TxIndexer.TxResult
-import xtdb.catalog.TableCatalog
 import xtdb.database.Database
 import xtdb.database.DatabaseLogs
 import xtdb.database.DatabasePartition
@@ -103,7 +102,7 @@ internal class ExternalSourceTest : LeaderTermTest() {
 
     private fun TestScope.extTerm(
         extSource: ExternalSource,
-        wrapLiveIndex: (LiveIndex) -> LiveIndex = { it },
+        wrapPartitionState: (PartitionState) -> PartitionState = { it },
         wrapDriver: (LogsDriver) -> LogsDriver = { it },
     ): ExtTerm {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
@@ -112,7 +111,7 @@ internal class ExternalSourceTest : LeaderTermTest() {
 
         leaderProc(
             StandardTestDispatcher(testScheduler),
-            replicaLog = replicaLog, bufferPool = bufferPool, wrapLiveIndex = wrapLiveIndex,
+            replicaLog = replicaLog, bufferPool = bufferPool, wrapPartitionState = wrapPartitionState,
             watchers = watchers, extSource = extSource, wrapDriver = wrapDriver,
             termJob = termJob,
         )
@@ -185,7 +184,7 @@ internal class ExternalSourceTest : LeaderTermTest() {
     @Test
     fun `fault in the commit pipeline tips watchers into Failed`() = runTest {
         val extSource = InMemoryExternalSource()
-        val term = extTerm(extSource, wrapLiveIndex = ::faulting)
+        val term = extTerm(extSource, wrapPartitionState = ::faulting)
 
         extSource.channel.send(null)
 
@@ -261,7 +260,7 @@ internal class ExternalSourceTest : LeaderTermTest() {
             override fun close() {}
         }
 
-        extTerm(extSource, wrapLiveIndex = ::faulting)
+        extTerm(extSource, wrapPartitionState = ::faulting)
 
         val e = thrown.await()
         assertEquals(
@@ -299,7 +298,7 @@ internal class ExternalSourceTest : LeaderTermTest() {
         // note: not .use — Database.close() would close `allocator`, which @AfterEach also closes
         val partition = DatabasePartition(
             storage = PartitionStorage(DatabaseLogs(null, null), null, null),
-            state = PartitionState(null, null, null),
+            state = PartitionState(createPartitionValue()),
             watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1),
         )
         val db = Database(
@@ -320,7 +319,7 @@ internal class ExternalSourceTest : LeaderTermTest() {
 
     // Both apply paths: a tx this term resolved is applied by `applyTx`, one read back without having been
     // staged by `commitTx`, and these tests drive the former.
-    private fun faulting(liveIndex: LiveIndex) = spyk(liveIndex) {
+    private fun faulting(partitionState: PartitionState) = spyk(partitionState) {
         every { applyTx(any(), any()) } throws RuntimeException("commit pipeline fault")
         every { commitTx(any(), any()) } throws RuntimeException("commit pipeline fault")
     }

@@ -14,11 +14,9 @@ import xtdb.arrow.STRUCT_TYPE
 import xtdb.compactor.SegmentMerge.RecencyPartitioning
 import xtdb.indexer.LiveTable
 import xtdb.segment.MemorySegment
-import xtdb.table.TableSlug
 import xtdb.time.InstantUtil.asMicros
 import xtdb.time.microsAsInstant
 import xtdb.trie.Trie
-import xtdb.util.RowCounter
 import xtdb.util.asIid
 import xtdb.util.safeMap
 import xtdb.util.useAll
@@ -48,7 +46,7 @@ class SegmentMergeTest {
 
     private val endOfTime: ZonedDateTime = Long.MAX_VALUE.microsAsInstant.atZone(utc)
 
-    private fun LiveTable.indexTx(systemTime: Instant, vararg docs: Pair<String, Long>): LiveTable =
+    private fun LiveTable.indexTx(systemTime: Instant, vararg docs: Pair<String, Long>): LiveTable = use { base ->
         Trie.openLogDataWriter(al).use { rel ->
             val systemFrom = systemTime.asMicros
             for ((id, v) in docs) {
@@ -59,10 +57,11 @@ class SegmentMergeTest {
                 rel["op"].vectorFor("put", STRUCT_TYPE, false).writeObject(mapOf("_id" to id, "v" to v))
                 rel.endRow()
             }
-            importData(rel)
+            base.importData(systemFrom, rel)
         }
+    }
 
-    private fun LiveTable.indexTxEvents(systemTime: Instant, vararg events: Triple<Long, Int, Int>): LiveTable =
+    private fun LiveTable.indexTxEvents(systemTime: Instant, vararg events: Triple<Long, Int, Int>): LiveTable = use { base ->
         Trie.openLogDataWriter(al).use { rel ->
             val systemFrom = systemTime.asMicros
             for ((v, validFrom, validTo) in events) {
@@ -73,8 +72,9 @@ class SegmentMergeTest {
                 rel["op"].vectorFor("put", STRUCT_TYPE, false).writeObject(mapOf("_id" to "foo", "v" to v))
                 rel.endRow()
             }
-            importData(rel)
+            base.importData(systemFrom, rel)
         }
+    }
 
     private fun put(id: String, v: Long, year: Int) = mapOf(
         "_iid" to ByteBuffer.wrap(id.asIid),
@@ -92,24 +92,22 @@ class SegmentMergeTest {
         }
 
     private fun withSegments(block: (List<MemorySegment>) -> Unit) {
-        LiveTable.open(al, foo, TableSlug.of(foo), 0L, RowCounter()).use { lt0Base ->
-            LiveTable.open(al, foo, TableSlug.of(foo), 0L, RowCounter()).use { lt1Base ->
-                val lt0 = lt0Base
-                    .indexTx(Instant.parse("2020-01-01T00:00:00Z"), "foo" to 0L, "bar" to 0L)
-                    .indexTx(Instant.parse("2021-01-01T00:00:00Z"), "bar" to 1L)
-
-                val lt1 = lt1Base
+        LiveTable.open(al, foo, 0L)
+            .indexTx(Instant.parse("2020-01-01T00:00:00Z"), "foo" to 0L, "bar" to 0L)
+            .indexTx(Instant.parse("2021-01-01T00:00:00Z"), "bar" to 1L)
+            .use { lt0 ->
+                LiveTable.open(al, foo, 0L)
                     .indexTx(Instant.parse("2022-01-01T00:00:00Z"), "foo" to 1L)
                     .indexTx(Instant.parse("2023-01-01T00:00:00Z"), "foo" to 2L, "bar" to 2L)
-
-                listOf(lt0, lt1)
-                    .safeMap { lt ->
-                        val rel = lt.relation.openSlice(al)
-                        MemorySegment(lt.trie.compactLogs().withIidReader(rel["_iid"]), rel)
+                    .use { lt1 ->
+                        listOf(lt0, lt1)
+                            .safeMap { lt ->
+                                val rel = lt.relation.openSlice(al)
+                                MemorySegment(lt.trie.compactLogs().withIidReader(rel["_iid"]), rel)
+                            }
+                            .useAll(block)
                     }
-                    .useAll(block)
             }
-        }
     }
 
     @Test
@@ -160,12 +158,10 @@ class SegmentMergeTest {
 
     @Test
     fun `a same-transaction event overridden by a later one is resolved away before partitioning by recency`() {
-        LiveTable.open(al, foo, TableSlug.of(foo), 0L, RowCounter()).use { liveTable ->
-            val lt = liveTable.indexTxEvents(
-                Instant.parse("2020-01-01T00:00:00Z"),
-                Triple(1L, 2023, 2024), Triple(2L, 2022, 2025)
-            )
-
+        LiveTable.open(al, foo, 0L).indexTxEvents(
+            Instant.parse("2020-01-01T00:00:00Z"),
+            Triple(1L, 2023, 2024), Triple(2L, 2022, 2025)
+        ).use { lt ->
             val rel = lt.relation.openSlice(al)
             MemorySegment(lt.trie.compactLogs().withIidReader(rel["_iid"]), rel).use { segment ->
                 SegmentMerge(al).use { segMerge ->

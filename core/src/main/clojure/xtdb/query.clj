@@ -191,7 +191,7 @@
                     ;; this one is just to reset the cache for up-to-date stats
                     ;; probably over-zealous
                     :last-known-blocks (->> (for [[db-name ^IQuerySource$QueryDatabase db] dbs]
-                                              [db-name (-> db .getQueryState .getTableCatalog .getCurrentBlockIndex)]))
+                                              [db-name (-> db .getQueryState .getTableCatalog .snap .getBlockIdx)]))
 
                     :default-tz default-tz
                     :param-types param-types
