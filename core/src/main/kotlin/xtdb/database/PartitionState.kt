@@ -35,12 +35,14 @@ class PartitionState(
      * [logTimestamp] is the replica record's, dating the supersession the tries cause.
      */
     fun adoptBlock(block: Block, tries: List<TrieDetails>, logTimestamp: LogTimestamp) {
-        catalog.update { it.withTries(tries, logTimestamp) }
-
-        // `blockMetadata()` reads the live tables that `nextBlock()` then clears.
+        // Read ahead of the lock: it scans every row of the block, and only this thread changes the live
+        // tables. `nextBlock` then clears them.
         val blockMetadata = liveIndex.blockMetadata()
-        catalog.update { it.refreshed(block, blockMetadata) }
-        liveIndex.nextBlock()
+
+        catalog.update { s ->
+            s.withTries(tries, logTimestamp).refreshed(block, blockMetadata)
+                .also { liveIndex.nextBlock() }
+        }
     }
 
     override fun close() {

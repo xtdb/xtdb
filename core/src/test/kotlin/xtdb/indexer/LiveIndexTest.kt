@@ -62,6 +62,9 @@ class LiveIndexTest {
 
         fun addTries(table: TableRef, tries: List<TrieDetails>, asOf: Instant) =
             partition.catalog.update { it.withTries(table, tries, asOf) }
+
+        fun nextBlock() = partition.catalog.update { s -> s.also { liveIndex.nextBlock() } }
+
         val liveIndex get() = partition.liveIndex
 
         fun openTx(txId: Long, systemTime: Instant) =
@@ -270,17 +273,12 @@ class LiveIndexTest {
             assertNotNull(db.liveIndex.table(table))
 
             runBlocking { db.liveIndex.finishBlock(db.bp, 0L) }
-            db.liveIndex.nextBlock()
+            db.nextBlock()
 
             assertNull(db.liveIndex.table(table))
         }
     }
 
-    /**
-     * Stops between `BlockCutter`'s two adopt steps — `trieCatalog.addTries` has run, `tableCatalog.refresh`
-     * deliberately has not. The L0's rows are scannable by then and the catalog can't yet type them, which
-     * leaves the live table as the only source that can. See #5873.
-     */
     @Test
     fun `a live table superseded by its L0 still declares its column types`() {
         TestDb().use { db ->
@@ -341,9 +339,6 @@ class LiveIndexTest {
         }
     }
 
-    // #5525 — between BlockCutter's addTries(L0_N) and nextBlock, the live-table for block N still
-    // holds the rows the L0 trie now does. A snapshot opened in that window must not double-count:
-    // the live-table is filtered, leaving L0 as the sole source of N's rows.
     @Test
     fun `snapshot filters live-table once L0 published`() {
         TestDb().use { db ->
@@ -362,7 +357,6 @@ class LiveIndexTest {
                     assertEquals(-1L, snap.trieCatSnap.l0MaxBlockIdx(table), "no L0 published yet")
                 }
 
-                // drive the BlockCutter flow up to (but not including) nextBlock
                 for ((t, fb) in runBlocking { db.liveIndex.finishBlock(db.bp, 0L) }) {
                     val writtenTrie = fb.writtenTrie ?: continue
                     val trieDetails = TrieDetails.newBuilder()

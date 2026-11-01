@@ -233,17 +233,16 @@ class LiveIndex private constructor(
 
     private val skipTxsLogged = AtomicBoolean(false)
 
+    /** Inside the same [Catalog.update] as the catalog's adoption of the block, so no reader sees one without the other. */
     fun nextBlock() {
+        check(catalog.isWriteLocked) { "nextBlock outside the catalog's write lock" }
+
         rowCounter.nextBlock()
 
-        catalog.update { s ->
-            s.also {
-                this@LiveIndex.tables.values.closeAll()
-                this@LiveIndex.tables.clear()
+        this@LiveIndex.tables.values.closeAll()
+        this@LiveIndex.tables.clear()
 
-                blockIdx += 1L
-            }
-        }
+        blockIdx += 1L
 
         if (skipTxs.isNotEmpty() && latestCompletedTx != null
             && latestCompletedTx!!.txId >= skipTxs.last()
