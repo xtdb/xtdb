@@ -99,13 +99,7 @@ class LiveIndex private constructor(
         oldSnap?.close()
     }
 
-    /**
-     * Rebuilds the cached shared snapshot to pick up catalog writes that didn't go through this
-     * live-index's own commit/import/block paths.
-     *
-     * Takes the catalog's write lock itself; callers MUST NOT already hold it.
-     */
-    fun refreshSnap() {
+    private fun refreshSnap() {
         catalog.update { s -> s.also { refreshSnap0(it) } }
     }
 

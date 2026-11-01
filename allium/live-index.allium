@@ -639,7 +639,7 @@ rule OpenTransactionSnapshot {
 rule RefreshSharedSnapshot {
     -- The rebuild primitive for the shared external snapshot.
     -- NOT triggered by apply or NextBlock — the cache is advanced lazily.
-    -- It is invoked by OpenExternalSnapshot where the cache is too stale for the requested basis, and out of band by compaction, which changes the trie catalog without advancing the durable head.
+    -- It is invoked by OpenExternalSnapshot wherever the cache no longer serves the reader.
     -- Readers already holding the previous shared snapshot keep it, and it stays valid for as long as they do.
     when: RefreshSharedSnapshot(index)
 
