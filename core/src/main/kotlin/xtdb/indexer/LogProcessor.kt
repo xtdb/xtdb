@@ -137,12 +137,12 @@ class LogProcessor(
      * Written by the reader coroutine alone. Volatile because tests read it from another thread.
      */
     @Volatile
-    internal var highestTermSeen: Long = partitionState.tableCatalogOrNull?.snap()?.boundaryTermId ?: 0
+    internal var highestTermSeen: Long = partitionState.tableCatalog.snap().boundaryTermId
         private set
 
     /** The position the next record of [highestTermSeen] has to carry, or one of the sentinels above. */
     private var nextTermSeq: Long =
-        partitionState.tableCatalogOrNull?.snap()?.boundaryTermSeq?.let { it + 1 }
+        partitionState.tableCatalog.snap().boundaryTermSeq?.let { it + 1 }
             ?: if (highestTermSeen == 0L) UNSEQUENCED else UNKNOWN_TERM_SEQ
 
     private enum class Verdict {
@@ -199,7 +199,7 @@ class LogProcessor(
     /** Volatile: the tail is the only writer, but tests read it from another thread. */
     @Volatile
     internal var latestReplicaMsgId: MessageId =
-        partitionState.tableCatalogOrNull?.snap()?.boundaryReplicaMsgId ?: -1
+        partitionState.tableCatalog.snap().boundaryReplicaMsgId ?: -1
         private set
 
     // The role state machine — see allium/log-processor-lifecycle.allium.

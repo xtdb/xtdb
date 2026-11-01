@@ -79,8 +79,8 @@ class ResolvedTx private constructor(
      * presence in a map, so a tx discarded on teardown releases everything with no was-applied flag to
      * guard.
      *
-     * The result is the caller's to free, and MUST be taken under `closeAllOnCatch` — [LiveIndex.applyTx]
-     * drains it as it installs, so what is left in it if that throws is exactly what never landed.
+     * The result is the caller's to free, and MUST be taken under `closeAllOnCatch` — [xtdb.database.PartitionState.applyTx]
+     * drains it only once it has taken the tables, so what is left in it if that throws is exactly what never landed.
      */
     fun sealTables(): MutableMap<TableRef, LiveTable> =
         tables.mapValuesTo(mutableMapOf()) { it.value.liveTable }.also { tables.clear() }
@@ -88,7 +88,7 @@ class ResolvedTx private constructor(
     /**
      * Assemble this tx's replica-log message, serializing each table's own row range to Arrow IPC here —
      * at seal, on the drain path — rather than eagerly at resolve, so the relation→bytes cost stays off
-     * the resolver's hot path. The leader takes the table values directly ([LiveIndex.applyTx]); these
+     * the resolver's hot path. The leader takes the table values directly ([xtdb.database.PartitionState.applyTx]); these
      * bytes exist only for the replica log.
      */
     fun toReplicaMessage(termId: Long): ReplicaMessage.ResolvedTx {

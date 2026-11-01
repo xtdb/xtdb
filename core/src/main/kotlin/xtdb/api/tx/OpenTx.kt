@@ -62,7 +62,7 @@ class OpenTx
 // It can drop the marker and go `internal` once those tests (crash_logger_test, live_index_test's
 // staged-create-table-5507) obtain their OpenTx through the public `TxIndexer.executeTx` SPI instead —
 // an ext-src-driven ingest node hands the writer a live OpenTx (spiked, works). The same migration
-// unblocks `internal` on `ResolvedTx` (+ its `stage`) and `LiveIndex.openSnapshot(resolvedTxs, ownTx)`.
+// unblocks `internal` on `ResolvedTx` (+ its `stage`) and `PartitionState.openSnapshot(resolvedTxs, ownTx)`.
 @InternalApi
 @JvmOverloads constructor(
     private val allocator: BufferAllocator,
@@ -131,7 +131,7 @@ class OpenTx
      */
     private fun openTableTx(ref: TableRef): LiveTable.Tx =
         resolvedTxs.asReversed().firstNotNullOfOrNull { it.liveTable(ref) }?.openTx(systemTimeMicros)
-            ?: partitionState.liveIndex.openTable(ref, systemTimeMicros)
+            ?: partitionState.openTable(ref, systemTimeMicros)
 
     internal fun writeTxRow(error: Throwable?, userMetadata: Map<*, *>?) {
         val txId = txKey.txId
@@ -179,15 +179,13 @@ class OpenTx
     // #5843 covers the separate question of whether the narrowing should be visible in the method names.
     internal val queryCatalog: IQuerySource.QueryCatalog
         get() {
-            val liveIndex = partitionState.liveIndex
-
             val queryDb = object : IQuerySource.QueryDatabase {
                 override val name get() = dbName
                 override val storage get() = partitionStorage
                 override val queryState get() = partitionState
                 // a tx always builds a fresh read-your-writes snapshot; the read basis doesn't apply
                 override fun openSnapshot(minBasis: List<Instant?>?) =
-                    DatabaseSnapshot(listOf(liveIndex.openSnapshot(resolvedTxs, this@OpenTx)))
+                    DatabaseSnapshot(listOf(partitionState.openSnapshot(resolvedTxs, this@OpenTx)))
             }
 
             return object : IQuerySource.QueryCatalog {

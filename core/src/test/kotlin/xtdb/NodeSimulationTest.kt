@@ -10,7 +10,7 @@ import xtdb.SimulationTestUtils.Companion.L1TrieKeys
 import xtdb.SimulationTestUtils.Companion.addTriesToBufferPool
 import xtdb.SimulationTestUtils.Companion.buildTrieDetails
 import xtdb.SimulationTestUtils.Companion.createJobCalculator
-import xtdb.SimulationTestUtils.Companion.createTrieCatalog
+import xtdb.SimulationTestUtils.Companion.createPartitionValue
 import xtdb.SimulationTestUtils.Companion.prefix
 import xtdb.SimulationTestUtils.Companion.setLogLevel
 import xtdb.api.TransactionKey
@@ -47,14 +47,16 @@ data class MockDatabase(
     val name: DatabaseName,
     val allocator: BufferAllocator,
     val bufferPool: BufferPool,
-    val trieCatalog: TrieCatalog,
-    val tableCatalog: TableCatalog,
+    val partitionState: PartitionState,
     val compactor: Compactor,
     val compactorForDb: Compactor.ForDatabase,
     val garbageCollector: TrieGarbageCollector,
     val gcScope: CoroutineScope,
     val compactorScope: CoroutineScope,
 ) {
+    val trieCatalog get() = partitionState.trieCatalog
+    val tableCatalog get() = partitionState.tableCatalog
+
     fun close() {
         // Cancel+join the GC and compaction scopes (runBlocking only because this teardown is
         // non-suspend), then free the compactor's driver once its loop has joined.
@@ -113,14 +115,15 @@ class NodeSimulationTest : SimulationTestBase() {
         sharedBufferPool = MemoryStorage(allocator, epoch = 0)
 
         dbs = List(numberOfSystems) {
-            val trieCatalog = createTrieCatalog()
-            val tableCatalog = TableCatalog(sharedBufferPool, sharedBufferPool.latestBlock)
+            val partitionValue = createPartitionValue(sharedBufferPool.latestBlock)
             val compactor = Compactor.Impl(
                 compactorDriverFactory, null, jobCalculator, false, 2,
                 dispatcher = dispatcher, ioDispatcher = dispatcher
             )
             val partitionStorage = PartitionStorage(DatabaseLogs(null, null), sharedBufferPool, null)
-            val partitionState = PartitionState(tableCatalog, trieCatalog, null)
+            val partitionState = PartitionState(partitionValue)
+            val trieCatalog = partitionState.trieCatalog
+            val tableCatalog = partitionState.tableCatalog
             val compactorScope = CoroutineScope(dispatcher)
             val compactorForDb = compactor.openForDatabase(compactorScope, allocator, partitionStorage, partitionState, Watchers(latestTxId = -1, latestSourceMsgId = -1))
             val gcScope = CoroutineScope(dispatcher)
@@ -129,14 +132,14 @@ class NodeSimulationTest : SimulationTestBase() {
                 commitTriesDeleted = { tableName, trieKeys ->
                     // No replica log in the mock — apply the catalog mutation directly so the
                     // simulation's view of the catalog still converges as the test asserts.
-                    trieCatalog.deleteTries(tableName, trieKeys)
+                    partitionState.deleteTries(tableName, trieKeys)
                 },
                 blocksToKeep = 2,
                 garbageLifetime = garbageLifetime,
                 enabled = false,
                 dispatcher = dispatcher,
             ).also { gcScope.launch { it.run() } }
-            MockDatabase("xtdb", allocator, sharedBufferPool, trieCatalog, tableCatalog, compactor, compactorForDb, garbageCollector, gcScope, compactorScope)
+            MockDatabase("xtdb", allocator, sharedBufferPool, partitionState, compactor, compactorForDb, garbageCollector, gcScope, compactorScope)
         }
     }
 
@@ -154,7 +157,7 @@ class NodeSimulationTest : SimulationTestBase() {
             compactorDriverFactory.trieKeyToFileSize[compactorDriverFactory.fileSizeKey(tableRef.tableName, it.trieKey.toString())] = it.dataFileSize
         }
         dbs.forEach { db ->
-            db.trieCatalog.addTries(tableRef, tries, timestamp)
+            db.partitionState.addTries(tableRef, tries, timestamp)
             addTriesToBufferPool(db.bufferPool, tableRef, tries)
         }
     }
@@ -189,7 +192,7 @@ class NodeSimulationTest : SimulationTestBase() {
                 boundaryTermSeq = null
             )
             sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
-            tableCatalog.refresh(block)
+            db.partitionState.adoptBlock(block, emptyList(), Instant.now())
         }
 
         assertEquals(l1Tries, trieCatalog.state.listAllTrieKeys(table), "l1s present in trie catalog")
@@ -249,7 +252,7 @@ class NodeSimulationTest : SimulationTestBase() {
                 boundaryTermSeq = null
             )
             sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
-            tableCatalog.refresh(block)
+            db.partitionState.adoptBlock(block, emptyList(), Instant.now())
         }
 
         assertEquals(l1Tries, trieCatalog.state.listAllTrieKeys(table), "l1s present initially")
@@ -328,7 +331,7 @@ class NodeSimulationTest : SimulationTestBase() {
                 boundaryTermSeq = null
             )
             sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
-            tableCatalog.refresh(block)
+            db.partitionState.adoptBlock(block, emptyList(), Instant.now())
         }
 
         val expectedNewL2Tries = listOf("l02-rc-p0-b07", "l02-rc-p1-b07", "l02-rc-p2-b07", "l02-rc-p3-b07")
@@ -401,7 +404,7 @@ class NodeSimulationTest : SimulationTestBase() {
                     boundaryTermSeq = null
                 )
                 sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
-                db.tableCatalog.refresh(block)
+                db.partitionState.adoptBlock(block, emptyList(), Instant.now())
             }
         }
 
@@ -475,7 +478,7 @@ class NodeSimulationTest : SimulationTestBase() {
                     boundaryTermSeq = null
                 )
                 sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
-                db.tableCatalog.refresh(block)
+                db.partitionState.adoptBlock(block, emptyList(), Instant.now())
             }
         }
 
@@ -572,7 +575,7 @@ class NodeSimulationTest : SimulationTestBase() {
                 boundaryTermSeq = null
             )
             sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
-            tableCatalog.refresh(block)
+            db.partitionState.adoptBlock(block, emptyList(), Instant.now())
         }
 
         compactorForDb.compactAllSync(null)
@@ -625,7 +628,7 @@ class NodeSimulationTest : SimulationTestBase() {
                     boundaryTermSeq = null
                 )
                 sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
-                db.tableCatalog.refresh(block)
+                db.partitionState.adoptBlock(block, emptyList(), Instant.now())
             }
         }
 
@@ -717,7 +720,7 @@ class NodeSimulationTest : SimulationTestBase() {
                     boundaryTermSeq = null
                 )
                 sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
-                db.tableCatalog.refresh(block)
+                db.partitionState.adoptBlock(block, emptyList(), Instant.now())
             }
         }
 

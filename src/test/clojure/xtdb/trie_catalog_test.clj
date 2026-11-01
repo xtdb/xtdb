@@ -19,10 +19,18 @@
            (xtdb.block.proto Block)
            (xtdb.log.proto TemporalMetadata TrieMetadata)
            (xtdb.table TableSlug)
+           (xtdb.catalog TableCatalog)
+           (xtdb.database DatabasePartition PartitionState PartitionValue)
            (xtdb.trie TrieCatalog$State)
            (xtdb.api TableRef)))
 
 (t/use-fixtures :once tu/with-allocator)
+
+(defn- ->partition-state ^PartitionState [trie-cat-state]
+  (PartitionState. (PartitionValue/loaded trie-cat-state (TableCatalog/initialState nil))))
+
+(defn- primary-partition-state ^PartitionState [node]
+  (.getState ^DatabasePartition (first (.getPartitions (db/primary-db node)))))
 
 (def ^:private as-of-time (time/->instant #inst "2000"))
 
@@ -377,8 +385,8 @@
     (t/testing "artifically adding tries"
 
       (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
-        (let [cat (.getTrieCatalog (db/primary-db node))]
-          (.addTries cat #xt/table foo
+        (let [partition-state (primary-partition-state node)]
+          (.addTries partition-state #xt/table foo
                      (->> [["l00-rc-b00" 1] ["l00-rc-b01" 1] ["l00-rc-b02" 1] ["l00-rc-b03" 1]
                            ["l01-rc-b00" 2] ["l01-rc-b01" 2] ["l01-rc-b02" 2]
                            ["l02-rc-p0-b01" 4] ["l02-rc-p1-b01" 4] ["l02-rc-p2-b01" 4] ["l02-rc-p3-b01" 4]]
@@ -578,9 +586,10 @@
                        ["l03-r20250101-p3-b09"]))))
 
 (t/deftest test-dry-trie-catalog-gc
-  (let [cat (cat/->trie-catalog {} 20)] ;file-size-target
+  (let [ps (->partition-state (cat/->TrieCatalogState {} 20)) ;file-size-target
+        cat (.getTrieCatalog ps)]
     (letfn [(add-tries [tries inst]
-              (.addTries cat #xt/table foo
+              (.addTries ps #xt/table foo
                          (map #(apply trie/->trie-details #xt/table foo %) tries)
                          inst))
             (foo-state []
@@ -596,7 +605,7 @@
                    (sort-by (juxt :trie-key :state))
                    (map (juxt :trie-key :state :garbage-as-of))))
             (delete-tries [garbage-trie-keys]
-              (.deleteTries cat #xt/table foo garbage-trie-keys))]
+              (.deleteTries ps #xt/table foo garbage-trie-keys))]
 
       (add-tries [["l00-rc-b00" 1] ["l01-rc-b00" 1]]
                  #xt/instant "2000-01-01T00:00:00Z")
@@ -798,10 +807,11 @@
               :tries [{:trie-key "l03-r20200101-p0-b07" :block-idx 7}]}]))))
 
 (t/deftest test-delete-garbage-l1-l2-with-live-l3
-  (let [cat (cat/->trie-catalog {} 20)
+  (let [ps (->partition-state (cat/->TrieCatalogState {} 20))
+        cat (.getTrieCatalog ps)
         table #xt/table foo
         add-tries (fn [tries inst]
-                    (.addTries cat table
+                    (.addTries ps table
                                (map #(apply trie/->trie-details table %) tries)
                                inst))]
 
@@ -826,7 +836,7 @@
       ;; Delete garbage tries
       (let [garbage (trie-keys (cat/garbage-tries state #xt/instant "2004-01-01T00:00:00Z"))]
         (t/is (= #{"l01-rc-b00" "l01-rc-b01" "l02-rc-p0-b01"} garbage))
-        (.deleteTries cat table garbage))
+        (.deleteTries ps table garbage))
 
       ;; Verify remaining tries — L0s left the catalog when L1Cs landed (no :garbage trace),
       ;; so they don't reappear here even though their files still exist on the object store.
@@ -862,9 +872,6 @@
           (t/is (= [[:table_a :table_b :txs] [:table_c :txs]] tables)))))))
 
 (t/deftest test-reset-rebuilds-l0-from-object-store
-  ;; After compaction, the catalog has no L0 entries — they're dropped on supersession.
-  ;; reset->l0! is a passive sink: callers (xtdb.compactor.reset) enumerate L0s from the
-  ;; object store and pass them in. This exercises that flow at the unit level.
   (tu/with-tmp-dirs #{node-dir}
     (with-open [node (tu/->local-node {:node-dir node-dir :compactor-threads 1})]
       (doseq [i (range 4)]
@@ -875,6 +882,7 @@
       (let [db (db/primary-db node)
             bp (.getBufferPool db)
             trie-cat (.getTrieCatalog db)
+            partition-state (primary-partition-state node)
             foo-state #(cat/trie-state trie-cat #xt/table foo)]
 
         (let [l0s (get-in (foo-state) [:tries [0 nil []]])]
@@ -883,8 +891,6 @@
           (t/is (empty? (:garbage l0s))
                 "L0 supersession drops outright; no :garbage entries linger"))
 
-        ;; Simulate what reset.clj does: list L0 meta files from the object store, parse keys,
-        ;; build minimal entries, hand them to reset->l0!.
         (let [meta-dir (.metaFileDir (TableSlug/of #xt/table foo))
               l0-entries (->> (.listAllObjects bp meta-dir)
                               (keep (fn [^ObjectStore$StoredObject obj]
@@ -895,7 +901,7 @@
                                             parsed))))))]
           (t/is (= 4 (count l0-entries)) "All four L0 files still on disk")
 
-          (cat/reset->l0! trie-cat {#xt/table foo l0-entries})
+          (.resetToL0 partition-state {#xt/table foo l0-entries})
 
           (t/is (= #{"l00-rc-b00" "l00-rc-b01" "l00-rc-b02" "l00-rc-b03"}
                    (->> (cat/current-tries (foo-state))

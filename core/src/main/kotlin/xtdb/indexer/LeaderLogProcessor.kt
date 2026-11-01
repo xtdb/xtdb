@@ -23,7 +23,6 @@ import xtdb.api.tx.ExternalSource
 import xtdb.database.Database
 import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
-import xtdb.trie.addTries
 import xtdb.types.MessageId
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.closeAllOnCatch
@@ -36,7 +35,7 @@ internal class LeaderLogProcessor(
     nodeBase: NodeBase,
     partitionStorage: PartitionStorage,
     crashLogger: CrashLogger,
-    partitionState: PartitionState,
+    private val partitionState: PartitionState,
     private val dbName: DatabaseName,
     logsDriver: LogProcessor.LogsDriver,
     private val blockCutter: BlockCutter,
@@ -63,7 +62,6 @@ internal class LeaderLogProcessor(
     private val bufferPool = partitionStorage.bufferPool
     private val tableCatalog = partitionState.tableCatalog
     private val trieCatalog = partitionState.trieCatalog
-    private val liveIndex = partitionState.liveIndex
 
     // Resolves each source-log / attach-detach / ext-source tx and holds it — with every other
     // resolved-but-not-yet-applied tx — until we've read it back off our own replica log and committed it
@@ -104,7 +102,7 @@ internal class LeaderLogProcessor(
     private fun applyResolvedTx(msg: ReplicaMessage.ResolvedTx) {
         val txKey = TransactionKey(msg.txId, msg.systemTime)
 
-        msg.loadTableData(al).useAll { tables -> liveIndex.commitTx(txKey, tables) }
+        msg.loadTableData(al).useAll { tables -> partitionState.commitTx(txKey, tables) }
 
         val result =
             if (msg.committed) TransactionResult.Committed(txKey)
@@ -127,7 +125,7 @@ internal class LeaderLogProcessor(
 
     private fun applyResolvedTx(tx: ResolvedTx) {
         try {
-            tx.sealTables().closeAllOnCatch { liveIndex.applyTx(tx.txKey, it) }
+            tx.sealTables().closeAllOnCatch { partitionState.applyTx(tx.txKey, it) }
 
             watchers.notifyApplied(tx.srcMsgId, tx.txResult, tx.externalSourceToken)
 
@@ -195,7 +193,7 @@ internal class LeaderLogProcessor(
 
             is ReplicaMessage.TriesAdded -> {
                 if (msg.storageVersion == Storage.VERSION && msg.storageEpoch == bufferPool.epoch)
-                    trieCatalog.addTries(msg.tries, record.logTimestamp)
+                    partitionState.addTries(msg.tries, record.logTimestamp)
 
                 // Below the guard, not above it: the compactor awaits this watermark and then
                 // recalculates jobs off the catalog, so notifying first would have it re-select the

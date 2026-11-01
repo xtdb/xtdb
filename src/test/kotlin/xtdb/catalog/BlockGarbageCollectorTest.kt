@@ -8,6 +8,7 @@ import org.junit.jupiter.api.extension.ExtendWith
 import org.junit.jupiter.api.io.TempDir
 import xtdb.api.log.ReplicaMessage.OversizedMessage
 import xtdb.api.storage.Storage
+import xtdb.block.proto.Block
 import xtdb.block.proto.block
 import xtdb.block.proto.txKey
 import xtdb.cache.MemoryCache
@@ -19,6 +20,7 @@ import xtdb.time.InstantUtil.asMicros
 import xtdb.api.TableRef
 import xtdb.table.TableSlug
 import xtdb.util.StringUtil.asLexHex
+import kotlinx.coroutines.flow.MutableStateFlow
 import xtdb.util.asPath
 import java.nio.ByteBuffer
 import java.nio.file.Path
@@ -28,6 +30,10 @@ import kotlin.test.assertFalse
 
 @ExtendWith(AllocatorResolver::class)
 class BlockGarbageCollectorTest {
+
+    private fun tableCatalogAt(block: Block?) =
+        TableCatalog(MutableStateFlow(TableCatalog.initialState(block)))
+
     private fun writeBlock(bufferPool: BufferPool, index: Long, tableNames: List<String>, basePaths: List<Path>) {
         val block = block {
             blockIndex = index
@@ -66,7 +72,7 @@ class BlockGarbageCollectorTest {
                 assertBlockCount(bufferPool, table1BlockPath, 10)
                 assertBlockCount(bufferPool, table2BlockPath, 10)
 
-                val blockCat = TableCatalog(bufferPool, bufferPool.latestBlock)
+                val blockCat = tableCatalogAt(bufferPool.latestBlock)
 
                 val gc = BlockGarbageCollector(
                     bufferPool, blockCat,
@@ -115,7 +121,7 @@ class BlockGarbageCollectorTest {
                 val kept = payloadAt(9L)
 
                 BlockGarbageCollector(
-                    bufferPool, TableCatalog(bufferPool, bufferPool.latestBlock),
+                    bufferPool, tableCatalogAt(bufferPool.latestBlock),
                     blocksToKeep = 3,
                     enabled = false,
                     dbName = "xtdb",
@@ -144,7 +150,7 @@ class BlockGarbageCollectorTest {
                     }
 
                     val gc = BlockGarbageCollector(
-                        p0, TableCatalog(p0, p0.latestBlock),
+                        p0, tableCatalogAt(p0.latestBlock),
                         blocksToKeep = 3,
                         enabled = false,
                         dbName = "xtdb",

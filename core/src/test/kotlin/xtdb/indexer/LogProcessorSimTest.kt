@@ -18,7 +18,7 @@ import xtdb.NodeBase
 import xtdb.NodeBase.Companion.openBase
 import xtdb.RepeatableSimulationTest
 import xtdb.SimulationTestBase
-import xtdb.SimulationTestUtils.Companion.createTrieCatalog
+import xtdb.SimulationTestUtils.Companion.createPartitionValue
 import xtdb.api.IndexerConfig
 import xtdb.api.Xtdb
 import xtdb.api.log.*
@@ -177,12 +177,9 @@ class LogProcessorSimTest : SimulationTestBase() {
         private val readOnly: Boolean = false,
     ) : AutoCloseable {
 
-        val tableCatalog = TableCatalog(bp)
-        val trieCatalog = createTrieCatalog()
-        val liveIndex =
-            LiveIndex.open(allocator, tableCatalog, trieCatalog, indexerConfig, ioDispatcher = dispatcher)
-
-        val partitionState = PartitionState(tableCatalog, trieCatalog, liveIndex)
+        val partitionState = PartitionState.open(allocator, createPartitionValue(), indexerConfig, dispatcher)
+        val liveIndex = partitionState.liveIndex
+        val tableCatalog = partitionState.tableCatalog
 
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
             .also { simExtSource.watch(it) }
@@ -485,7 +482,7 @@ class LogProcessorSimTest : SimulationTestBase() {
 
     private fun assertSnapshotHasNoAbortedRows(node: SimNode, abortedTxIds: Set<MessageId>) {
         val latestCompletedTx = node.liveIndex.state.latestCompletedTx
-        node.liveIndex.openSnapshot(latestCompletedTx?.systemTime).use { snap ->
+        node.partitionState.openSnapshot(latestCompletedTx?.systemTime).use { snap ->
             assertEquals(
                 latestCompletedTx?.txId, snap.txBasis?.txId,
                 "snapshot basis should equal the live index's latestCompletedTx (seed=$currentSeed)"

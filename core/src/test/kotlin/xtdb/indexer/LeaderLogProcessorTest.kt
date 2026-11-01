@@ -1,5 +1,6 @@
 package xtdb.indexer
 
+import xtdb.SimulationTestUtils.Companion.createPartitionValue
 import clojure.lang.Keyword
 import com.google.protobuf.ByteString
 import io.mockk.coEvery
@@ -256,11 +257,22 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
         assertEquals(3L, watchers.latestSourceMsgId)
     }
 
-    // Inert, because these two are about when the commit returns rather than about what it removes: a
-    // `deleteTries` for a shard the catalog doesn't hold trips its own spec assertion.
+    // Holds the trie the commit below deletes, so that the delete is one the catalog can apply.
     private fun TestScope.gcTerm(append: GatedAppend, termJob: Job = SupervisorJob(backgroundScope.coroutineContext.job)) =
         leaderProc(
-            StandardTestDispatcher(testScheduler), trieCatalog = mockk(relaxed = true),
+            StandardTestDispatcher(testScheduler),
+            initial = createPartitionValue().let { pv ->
+                pv.withTrieCat(pv.trieCat.withTries(
+                    TableRef("public", "foo"),
+                    listOf(
+                        TrieDetails.newBuilder()
+                            .setTableName("public/foo").setTrieKey("l01-rc-b00").setDataFileSize(100)
+                            .setTrieMetadata(trieMetadata {})
+                            .build()
+                    ),
+                    Instant.now(),
+                ))
+            },
             wrapDriver = append::wrap, termJob = termJob,
         )
 

@@ -1,5 +1,6 @@
 package xtdb.trie
 
+import kotlinx.coroutines.flow.StateFlow
 import xtdb.block.proto.Partition
 import xtdb.catalog.TableCatalog
 import xtdb.log.proto.TrieDetails
@@ -10,17 +11,16 @@ import java.time.Instant
 
 typealias FileSize = Long
 
-interface TrieCatalog {
-    fun addTries(table: TableRef, addedTries: Iterable<TrieDetails>, asOf: Instant)
-    fun deleteTries(table: TableRef, garbageTrieKeys: Set<TrieKey>)
+/** A partition's trie catalog: a read view of the trie part of its value, which [xtdb.database.PartitionState] writes. */
+class TrieCatalog(private val flow: StateFlow<State>) {
 
     /**
-     * The catalog's current value, frozen — addTries / deleteTries that land afterward have no effect on it.
+     * The catalog's current value, frozen — writes that land afterward have no effect on it.
      *
      * Lifetime contract: a holder MUST be done with it within the configured `garbageLifetime` window,
      * otherwise GC may delete trie files it still references.
      */
-    val state: State
+    val state: State get() = flow.value
 
     interface State {
         val tables: Set<TableRef>
@@ -48,7 +48,7 @@ interface TrieCatalog {
          * The partition layout [table] would have with [addedTries] folded in.
          *
          * An empty [addedTries] gives the layout as it stands, and [asOf] dates the supersession the added
-         * tries cause exactly as it does in [addTries].
+         * tries cause exactly as it does in [withTries].
          */
         fun withPartitions(table: TableRef, addedTries: Iterable<TrieDetails>, asOf: Instant): List<Partition>
 
@@ -63,15 +63,12 @@ interface TrieCatalog {
     }
 
     fun interface Factory {
-        fun open(bufferPool: BufferPool, tableCatalog: TableCatalog): TrieCatalog
+        fun open(bufferPool: BufferPool, tableCatState: TableCatalog.State): State
     }
 }
 
-/**
- * Adds [tries] to whichever tables they name — the shape a replica message carries them in, where the
- * per-table [TrieCatalog.addTries] wants them already grouped.
- */
-fun TrieCatalog.addTries(tries: Iterable<TrieDetails>, asOf: Instant) =
-    tries.groupBy { it.tableName }.forEach { (tableName, tableTries) ->
-        addTries(fromSchemaAndTable(tableName), tableTries, asOf)
+/** [this], with [tries] added to whichever tables they name — the shape a replica message carries them in. */
+fun TrieCatalog.State.withTries(tries: Iterable<TrieDetails>, asOf: Instant): TrieCatalog.State =
+    tries.groupBy { it.tableName }.entries.fold(this) { state, (tableName, tableTries) ->
+        state.withTries(fromSchemaAndTable(tableName), tableTries, asOf)
     }

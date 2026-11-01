@@ -127,7 +127,7 @@ internal class BlockCutter(
      * Records that a transaction of [rows] rows resolved into this block.
      *
      * Nothing may resolve between the cut and the block being adopted: a transaction that did would hold a
-     * transient over a relation [LiveIndex.nextBlock] removes, and apply one block's rows into a table
+     * transient over a relation the block's adoption removes, and apply one block's rows into a table
      * re-created at the next block index.
      */
     fun txResolved(rows: Long) {
@@ -268,7 +268,7 @@ internal class BlockCutter(
      * Adopt the block [msg] confirms, re-open the one behind it, and hand back what was held meanwhile.
      *
      * The caller applies those held records only after this returns. They belong to the block opening
-     * here, and a tx applied between `finishBlock` and `nextBlock` would land in live tables already
+     * here, and a tx applied between `finishBlock` and the block adoption would land in live tables already
      * snapshotted into L0 and about to be cleared — so the rows would be written nowhere.
      */
     fun closeBlock(msg: BlockUploaded, logTimestamp: LogTimestamp): PendingBlock {

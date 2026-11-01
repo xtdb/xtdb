@@ -1,11 +1,10 @@
 package xtdb.api.log
 
-import io.mockk.mockk
+import xtdb.database.PartitionState
+import xtdb.SimulationTestUtils.Companion.createPartitionValue
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
-import xtdb.catalog.TableCatalog
-import xtdb.storage.BufferPool
 import java.time.Instant
 
 class ReplicaMessageTermSeqTest {
@@ -40,9 +39,9 @@ class ReplicaMessageTermSeqTest {
     @Test
     fun `the catalog reads back the boundary's term position from the block`() {
         fun catalogWith(boundaryTermSeq: Long?) =
-            TableCatalog(mockk<BufferPool>(relaxed = true)).also { cat ->
-                cat.refresh(
-                    cat.buildBlock(
+            PartitionState(createPartitionValue()).also { ps ->
+                ps.adoptBlock(
+                    ps.tableCatalog.buildBlock(
                         blockIndex = 0,
                         latestCompletedTx = null,
                         latestProcessedMsgId = 100,
@@ -51,9 +50,10 @@ class ReplicaMessageTermSeqTest {
                         secondaryDatabases = null,
                         termId = 3,
                         boundaryTermSeq = boundaryTermSeq,
-                    )
+                    ),
+                    emptyList(), Instant.now(),
                 )
-            }
+            }.tableCatalog
 
         assertEquals(0L, catalogWith(0).snap().boundaryTermSeq)
         assertEquals(17L, catalogWith(17).snap().boundaryTermSeq)

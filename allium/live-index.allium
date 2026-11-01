@@ -156,9 +156,9 @@ entity LiveIndex {
     -- Durable live tables: they hold only applied rows.
     tables: LiveTable with index = this
 
-    -- The current shared external snapshot: a lazily-advanced cache, rebuilt only when a reader demands a basis it does not satisfy.
-    -- Apply and NextBlock leave it stale. Its basis is the durable head as of the last rebuild.
-    shared_snap: Snapshot
+    -- The external snapshots' shared segments: a lazily-advanced cache, rebuilt only when a reader demands a basis it does not satisfy, or finds none.
+    -- Apply leaves it stale; NextBlock drops it. Its basis is the durable head as of the last rebuild.
+    shared_snap: Snapshot?
 
     row_count: tables.sum(t => t.row_count)
     is_full: row_count >= rows_per_block
@@ -260,9 +260,9 @@ entity LiveTableTx {
 -- A Snapshot also pins the two catalogs a reader needs alongside those segments: the trie catalog, which locates the historical tries on disk, and the table catalog's per-table metadata.
 -- Pinning them is what stops a reader combining pinned data with catalog state read live at the moment it happens to ask.
 --
--- The three captures are NOT atomic with respect to one another.
--- They are taken in order — trie catalog, then segments, then table catalog — so a block landing concurrently can fall between them.
--- The table catalog is taken last deliberately: a type view newer than the data view over-approximates, which is always safe, whereas an older one would declare a narrower type than the rows being scanned, which is not.
+-- A snapshot takes both catalogs from one read of the partition's value, the value current when it opens.
+-- A transaction snapshot takes its segments from that same read.
+-- An external snapshot takes the value's shared segments, which can be older than its catalogs: compaction and GC change the trie catalog without moving the durable head, and the next reader sees them.
 --
 -- That matters for a column's declared type, which is the join of what the table catalog knows (flushed blocks), what the segments know (unflushed), and what the superseded live tables know.
 -- The column set and the types resolving it come from one capture, or they can disagree.
@@ -272,23 +272,27 @@ entity LiveTableTx {
 --   A snapshot therefore excludes any live table the trie catalog's L0 watermark has reached, so those rows are read once, from the L0.
 --
 --   Their column TYPES are retained regardless.
---   A block becomes visible in two steps: the L0 reaches the trie catalog first, the block's column types reach the table catalog second.
---   A snapshot taken between the two would otherwise have no source for those types at all — declaring a narrower type than the rows it is about to scan, and failing to resolve a brand-new table entirely.
+--   Adopting a block is one write of the partition's value: its L0 reaches the trie catalog, its column types reach the table catalog, the live index rolls onto the next block, and the shared segments over the finished block are dropped, together.
+--   Retaining the types covers an L0 that reaches the trie catalog on its own, ahead of its block's adoption, should one.
+--   A snapshot taken in that gap would otherwise have no source for the block's column types at all — declaring a narrower type than the rows it is about to scan, and failing to resolve a brand-new table entirely.
 --   Retaining the types bridges that gap, and is safe because the join is idempotent: once the catalog catches up the answer is unchanged, whatever order the writers ran in.
 --
---   The live table outlives the gap in both directions — it is cleared only after the table catalog has been updated — so a source is always available while the gap is open.
+--   The live table outlives the gap: the write that adopts its block removes it, and that same write brings the block's types into the table catalog.
+--   So a source for the types is always available while the gap is open.
 --
 -- Consistency guarantees:
 --   - A snapshot's segments are frozen at creation and do not observe later writes.
 --   - Its captured catalogs are likewise frozen.
---   - Those captures are ordered, not simultaneous: a concurrently-landing block can fall between them, which is what "L0 supersession" above covers.
+--   - Its catalogs are one read of the partition's value; an external snapshot's shared segments can be from an earlier one.
+--     An L0 that reaches the trie catalog ahead of its block's adoption is covered by "L0 supersession" above.
 --   - Commits are atomic: all of a transaction's rows become visible together, or none do.
 --   - Multiple snapshots can be held concurrently without interference.
 --   - Writes don't block reads: the shared external snapshot is rebuilt lazily, and an existing snapshot stays valid until released.
 --
 -- Sharing:
---   External snapshots are shared — the live index publishes a single current one, and each external reader holds it until it closes it.
---   A snapshot's segments survive exactly as long as its last holder.
+--   External snapshots share their segments — the partition's value holds the latest built, and each external reader holds them until it closes its snapshot.
+--   Each reader's snapshot takes the catalogs as they stand when it opens.
+--   A snapshot's segments survive exactly as long as their last holder.
 --   Transaction snapshots are per-transaction and are not shared.
 ------------------------------------------------------------
 
@@ -297,7 +301,7 @@ entity Snapshot {
 
     table_snapshots: TableSnapshot with snapshot = this
 
-    -- Frozen catalog state, captured with the segments above.
+    -- Frozen catalog state, as of the value the snapshot opened against.
     trie_catalog_snap: TrieCatalogSnap
     table_catalog_snap: TableCatalogSnap
 
@@ -573,13 +577,15 @@ rule OpenExternalSnapshot {
     --
     -- The index holds a single shared snapshot, whose basis is the durable head as of its last rebuild and whose rows are the DURABLE live rows only.
     -- It is a lazily-advanced cache: where the caller has no minimum basis, or the cache already satisfies it, the cache is returned as it stands; otherwise it is rebuilt first.
+    -- The cache is the shared segments only, held in the partition's value: each caller's snapshot takes the catalogs current when it opens, so compaction and GC reach the next reader without a rebuild.
+    -- A block's adoption drops the cache with the finished block's live tables, so the next reader rebuilds it over the new block's.
     -- The durable basis guarantees the head is at or past min_basis by the time this runs, so a rebuild can always reach a satisfying basis.
     -- The caller holds the snapshot until it closes it.
     when: OpenSnapshot(index, min_basis?)
 
     ensures:
         -- Rebuild only when the cache is too stale for the requested basis.
-        if min_basis != null and index.shared_snap.basis_tx.system_time < min_basis:
+        if index.shared_snap = null or (min_basis != null and index.shared_snap.basis_tx.system_time < min_basis):
             RefreshSharedSnapshot(index)
         index.shared_snap
 }
@@ -622,7 +628,7 @@ rule OpenTransactionSnapshot {
 rule RefreshSharedSnapshot {
     -- The rebuild primitive for the shared external snapshot.
     -- NOT triggered by apply or NextBlock — the cache is advanced lazily.
-    -- It is invoked by OpenExternalSnapshot where the cache is too stale for the requested basis, and out of band by compaction, which changes the trie catalog without advancing the durable head.
+    -- It is invoked by OpenExternalSnapshot where the cache is too stale for the requested basis.
     -- Readers already holding the previous shared snapshot keep it, and it stays valid for as long as they do.
     when: RefreshSharedSnapshot(index)
 
@@ -673,7 +679,13 @@ rule NextBlock {
     -- Tables are recreated on demand by future transactions.
     ensures: index.tables = {}
 
-    -- The shared snapshot is NOT refreshed here.
-    -- A subsequent reader whose basis the now-stale cache still satisfies may reuse it: its segments are frozen, independent of the cleared tables, and remain valid.
-    -- A reader demanding a newer basis rebuilds the cache.
+    -- The shared segments go with the tables, in the same write: the next reader rebuilds them over the new block's.
+    -- A reader already holding them keeps them: they are frozen, independent of the cleared tables, and remain valid until it closes its snapshot.
+    ensures: index.shared_snap = null
 }
+
+------------------------------------------------------------
+-- Open Questions
+------------------------------------------------------------
+
+open question "Does any path still deliver an L0 to the trie catalog ahead of its block's adoption? The TriesAdded re-published to the source log does not: it is appended only after the block adoption, and reaches the replica log behind the BlockUploaded. If no path does, the retention of superseded live tables' column types under L0 supersession can go."
