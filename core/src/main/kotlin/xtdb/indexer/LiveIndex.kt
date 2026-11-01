@@ -194,12 +194,14 @@ class LiveIndex private constructor(
         latestCompletedTx = txKey
     }
 
-    private fun Snapshot.freshEnough(minSystemTime: Instant?) =
-        minSystemTime == null || txBasis?.systemTime?.let { !it.isBefore(minSystemTime) } == true
+    // A compaction or GC changes what a scan should read without moving the basis.
+    private fun Snapshot.freshEnough(state: Catalog.State, minSystemTime: Instant?) =
+        catalogState === state
+                && (minSystemTime == null || txBasis?.systemTime?.let { !it.isBefore(minSystemTime) } == true)
 
     override fun openSnapshot(minSystemTime: Instant?): Snapshot {
-        catalog.withReadLock {
-            sharedSnap!!.takeIf { it.freshEnough(minSystemTime) }?.also { it.retain() }
+        catalog.withReadLock { s ->
+            sharedSnap!!.takeIf { it.freshEnough(s, minSystemTime) }?.also { it.retain() }
         }?.let { return it }
 
         // Retained under the lock that rebuilt it, so no other rebuild can close it first. Returned even where
@@ -207,7 +209,7 @@ class LiveIndex private constructor(
         var snap: Snapshot? = null
         catalog.update { s ->
             s.also {
-                if (!sharedSnap!!.freshEnough(minSystemTime)) refreshSnap0(it)
+                if (!sharedSnap!!.freshEnough(it, minSystemTime)) refreshSnap0(it)
                 snap = sharedSnap!!.also { it.retain() }
             }
         }
