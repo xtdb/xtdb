@@ -2,6 +2,7 @@ package xtdb.api.tx
 
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.spyk
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Deferred
@@ -39,14 +40,10 @@ import kotlin.time.Duration.Companion.milliseconds
 internal class ExternalSourceTest : LeaderTermTest() {
 
     private lateinit var bufferPool: MemoryStorage
-    private lateinit var liveIndex: LiveIndex
 
     @BeforeEach
-    fun openRealIndex() {
+    fun openBufferPool() {
         bufferPool = MemoryStorage(allocator, 0)
-        liveIndex = LiveIndex.open(allocator, TableCatalog(bufferPool), createTrieCatalog())
-
-        closeAfterTerm(liveIndex)
         closeAfterTerm(bufferPool)
     }
 
@@ -106,7 +103,7 @@ internal class ExternalSourceTest : LeaderTermTest() {
 
     private fun TestScope.extTerm(
         extSource: ExternalSource,
-        liveIndex: LiveIndex = this@ExternalSourceTest.liveIndex,
+        wrapLiveIndex: (LiveIndex) -> LiveIndex = { it },
         wrapDriver: (LogsDriver) -> LogsDriver = { it },
     ): ExtTerm {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
@@ -115,7 +112,7 @@ internal class ExternalSourceTest : LeaderTermTest() {
 
         leaderProc(
             StandardTestDispatcher(testScheduler),
-            replicaLog = replicaLog, bufferPool = bufferPool, liveIndex = liveIndex,
+            replicaLog = replicaLog, bufferPool = bufferPool, wrapLiveIndex = wrapLiveIndex,
             watchers = watchers, extSource = extSource, wrapDriver = wrapDriver,
             termJob = termJob,
         )
@@ -188,7 +185,7 @@ internal class ExternalSourceTest : LeaderTermTest() {
     @Test
     fun `fault in the commit pipeline tips watchers into Failed`() = runTest {
         val extSource = InMemoryExternalSource()
-        val term = extTerm(extSource, liveIndex = faultingLiveIndex())
+        val term = extTerm(extSource, wrapLiveIndex = ::faulting)
 
         extSource.channel.send(null)
 
@@ -264,7 +261,7 @@ internal class ExternalSourceTest : LeaderTermTest() {
             override fun close() {}
         }
 
-        extTerm(extSource, liveIndex = faultingLiveIndex())
+        extTerm(extSource, wrapLiveIndex = ::faulting)
 
         val e = thrown.await()
         assertEquals(
@@ -323,7 +320,7 @@ internal class ExternalSourceTest : LeaderTermTest() {
 
     // Both apply paths: a tx this term resolved is applied by `applyTx`, one read back without having been
     // staged by `commitTx`, and these tests drive the former.
-    private fun faultingLiveIndex() = mockk<LiveIndex>(relaxed = true) {
+    private fun faulting(liveIndex: LiveIndex) = spyk(liveIndex) {
         every { applyTx(any(), any()) } throws RuntimeException("commit pipeline fault")
         every { commitTx(any(), any()) } throws RuntimeException("commit pipeline fault")
     }

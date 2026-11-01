@@ -1,7 +1,6 @@
 package xtdb.indexer
 
 import com.google.protobuf.ByteString
-import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -80,7 +79,7 @@ internal class SourceLogProcessorTest : LeaderTermTest() {
     ): ResolveSide {
         val dbName = if (dbCatalog != null) "xtdb" else "test"
         val bufferPool = mockk<BufferPool>(relaxed = true) { every { epoch } returns 0 }
-        val partitionState = PartitionState(TableCatalog(bufferPool), trieCatalog, liveIndexMock())
+        val partitionState = openPartitionState(bufferPool, trieCatalog)
         val partitionStorage = PartitionStorage(
             DatabaseLogs(
                 InMemoryLog<SourceMessage>(InstantSource.system(), 0),
@@ -225,10 +224,6 @@ internal class SourceLogProcessorTest : LeaderTermTest() {
             val lp = leaderProc(
                 StandardTestDispatcher(testScheduler),
                 replicaLog = replicaLog,
-                liveIndex = liveIndexMock {
-                    coEvery { finishBlock(any(), any()) } returns emptyMap()
-                    every { latestCompletedTx } returns null
-                },
                 watchers = watchers,
                 extSource = mockk(relaxed = true),
                 skipTxs = setOf(10),

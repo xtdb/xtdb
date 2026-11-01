@@ -91,16 +91,16 @@ internal abstract class LeaderTermTest {
         nodeBase.close()
     }
 
-    /**
-     * A relaxed [LiveIndex] mock carrying the production block threshold. Worth stubbing explicitly:
-     * a bare relaxed mock answers 0 for `rowsPerBlock`, which the leader's resolve-side gauge reads as
-     * "cut a block on every tx". These tests drive their cuts explicitly, via FlushBlock or the CAS.
-     */
-    protected fun liveIndexMock(configure: LiveIndex.() -> Unit = {}) =
-        mockk<LiveIndex>(relaxed = true) {
-            every { rowsPerBlock } returns IndexerConfig().rowsPerBlock
-            configure()
-        }
+    /** A partition over [bufferPool] with a real live index, closed after the term; [wrapLiveIndex] is where a test injects a fault. */
+    protected fun openPartitionState(
+        bufferPool: BufferPool,
+        trieCatalog: TrieCatalog = createTrieCatalog(),
+        wrapLiveIndex: (LiveIndex) -> LiveIndex = { it },
+    ): PartitionState {
+        val tableCatalog = TableCatalog(bufferPool)
+        val liveIndex = LiveIndex.open(allocator, tableCatalog, trieCatalog).also { closeAfterTerm(it) }
+        return PartitionState(tableCatalog, trieCatalog, wrapLiveIndex(liveIndex))
+    }
 
     // Records what was asked of it, so a test can ask what this node's set holds rather than what was
     // called. Nothing here opens a database, so a name is attached the moment it is asked for.
@@ -191,8 +191,8 @@ internal abstract class LeaderTermTest {
         sourceLog: InMemoryLog<SourceMessage> = InMemoryLog(InstantSource.system(), 0),
         replicaLog: InMemoryLog<ReplicaMessage> = InMemoryLog(InstantSource.system(), 0),
         bufferPool: BufferPool = mockk(relaxed = true) { every { epoch } returns 0 },
-        liveIndex: LiveIndex = liveIndexMock(),
         trieCatalog: TrieCatalog = createTrieCatalog(),
+        wrapLiveIndex: (LiveIndex) -> LiveIndex = { it },
         compactor: Compactor.ForDatabase = mockk(relaxed = true),
         watchers: Watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1),
         // These tests submit through the processor rather than driving an adapter, so the source only has
@@ -206,8 +206,7 @@ internal abstract class LeaderTermTest {
         termJob: Job = SupervisorJob(backgroundScope.coroutineContext.job),
     ): LeaderLogProcessor {
         val dbName = if (dbCatalog != null) "xtdb" else "test"
-        val tableCatalog = TableCatalog(bufferPool)
-        val partitionState = PartitionState(tableCatalog, trieCatalog, liveIndex)
+        val partitionState = openPartitionState(bufferPool, trieCatalog, wrapLiveIndex)
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
         val driver = wrapDriver(RealLogsDriver(partitionStorage))
 
@@ -246,8 +245,7 @@ internal abstract class LeaderTermTest {
         val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0)
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val bufferPool = mockk<BufferPool>(relaxed = true) { every { epoch } returns 0 }
-        val partitionState =
-            PartitionState(TableCatalog(bufferPool), createTrieCatalog(), liveIndexMock())
+        val partitionState = openPartitionState(bufferPool)
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
         val logsDriver = driver(RealLogsDriver(partitionStorage))
         val appender = ReplicaLogAppender(logsDriver, leaderTerm = 1, NoAssertElectionDriver)
