@@ -120,6 +120,36 @@
                                {:preserve-pages? true})
                   (mapv set))))))
 
+(t/deftest test-set-ops-treat-nulls-as-not-distinct
+  (let [left [::tu/pages [[{:a nil, :b 1}, {:a 2, :b 2}]]]
+        right [::tu/pages [[{:a nil, :b 1}]]]]
+    (t/is (= [{:b 1}] (tu/query-ra [:intersect {} left right])))
+    (t/is (= [{:a 2, :b 2}] (tu/query-ra [:difference {} left right]))))
+
+  (t/is (= [{}] (tu/query-ra [:intersect {}
+                              [::tu/pages [[{:a nil}, {:a nil}]]]
+                              [::tu/pages [[{:a nil}]]]]))
+        "one match per row on the right")
+
+  (t/is (= [{}] (tu/query-ra [:difference {}
+                              [::tu/pages [[{:a nil}, {:a nil}]]]
+                              [::tu/pages [[{:a nil}]]]]))
+        "one removal per row on the right")
+
+  (t/is (= [{:b 1}] (tu/query-ra [:intersect {}
+                                  [::tu/pages [[{:a nil, :b 1, :c nil}, {:a nil, :b 2, :c nil}]]]
+                                  [::tu/pages [[{:a nil, :b 1, :c nil}]]]]))
+        "NULLs in more than one column")
+
+  (t/is (= [] (tu/query-ra [:intersect {}
+                            [::tu/pages [[{:a 1}]]]
+                            [::tu/pages [[{:a nil}]]]]))
+        "a NULL only on one side")
+
+  (t/is (= [{:a 1}] (tu/query-ra [:difference {}
+                                  [::tu/pages [[{:a 1}]]]
+                                  [::tu/pages [[{:a nil}]]]]))))
+
 (t/deftest first-tuple-in-rhs-is-taken-into-account-test
   (t/is
    (= {:res [{:x1 2}], :types '{x1 #xt/type :i64}}
