@@ -40,6 +40,8 @@ Applies to docs-only and meta/repo-admin work too (1.x work is the only category
 Two board fields, once the card exists:
 
 - **`Status` is set automatically on item creation**, so you don't set it when you file — but you MUST set it when you pick the card up, per [Starting work on a card](#starting-work-on-a-card).
+- **You MUST NOT back-date a closed card into `✅ Awaiting demo`.**
+  It asserts the work still needs demoing when it has most likely already been through one.
 - **You SHOULD set `Stream` where the right category is obvious, and MUST NOT invent one.**
   Otherwise ask, or leave it blank and let a human classify it.
   A sub-issue does NOT inherit its parent's stream — the parent's category says nothing about a child whose subject is something else — so "obvious from the parent" is not obvious, and where that's the only candidate you'd have, ask.
