@@ -37,3 +37,16 @@
                            [::tu/pages '{a #xt/type :null}
                             [[{:a nil}, {:a nil}]
                              [{:a nil}]]]])))))
+
+(t/deftest test-distinct-lists-and-structs-holding-nulls
+  (t/is (= [{:a [8 nil]}]
+           (tu/query-ra [:distinct {}
+                         [::tu/pages [[{:a [8 nil]}, {:a [8 nil]}]]]])))
+
+  (t/is (= [{:a {:c 1}}]
+           (tu/query-ra [:distinct {}
+                         [::tu/pages [[{:a {:b nil, :c 1}}, {:a {:b nil, :c 1}}]]]])))
+
+  (t/is (= [{:a [{:b [nil 1]}]}]
+           (tu/query-ra [:distinct {}
+                         [::tu/pages [[{:a [{:b [nil 1]}]}, {:a [{:b [nil 1]}]}]]]]))))
