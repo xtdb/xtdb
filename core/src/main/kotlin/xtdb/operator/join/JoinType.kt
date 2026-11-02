@@ -147,7 +147,7 @@ interface JoinType {
 
         internal fun ProbeSide.antiJoinSelection() =
             IntArrayList().let { sel ->
-                repeat(rowCount) { if (matches(it) < 0) sel.add(it) }
+                repeat(rowCount) { if (matches(it) != 1) sel.add(it) }
 
                 sel.toArray()
             }

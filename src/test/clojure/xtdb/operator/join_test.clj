@@ -690,7 +690,7 @@
                   (mapv set)))))
 
   (t/testing "nulls"
-    (t/is (= []
+    (t/is (= [{}]
              (tu/query-ra [:anti-join '{:conditions [{a b}]}
                            [:table {:rows [{:a nil}]}]
                            [:table {:rows [{:b 12}, {:b 2}]}]])))
@@ -700,7 +700,7 @@
                            [:table {:rows [{:a 12}]}]
                            [:table {:rows [{:b 12}, {:b nil}]}]])))
 
-    (t/is (= []
+    (t/is (= [{:a 4}]
              (tu/query-ra [:anti-join '{:conditions [{a b}]}
                            [:table {:rows [{:a 4}]}]
                            [:table {:rows [{:b 12}, {:b nil}]}]]))))
@@ -898,7 +898,7 @@
     (t/is (= [] (run-anti false true true)))
 
     (t/is (= [{{:a 12} 1, {:a 0} 1}] (run-anti true true false)))
-    (t/is (= [] (run-anti true true nil)))
+    (t/is (= [{{:a 12} 1, {:a 0} 1}] (run-anti true true nil)))
 
     (t/is (= [] (run-anti true true true)))))
 
