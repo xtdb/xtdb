@@ -10,7 +10,7 @@
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import (clojure.lang IPersistentMap)
-           (com.carrotsearch.hppc IntArrayList LongLongHashMap LongLongMap)
+           (com.carrotsearch.hppc IntArrayList)
            (java.io Closeable)
            (java.util LinkedList List Map Spliterator)
            (org.apache.arrow.memory BufferAllocator)
@@ -57,10 +57,25 @@
                                                 :window-agg (row-number)}}]}
               [:table {:rows [{}]}]]))
 
+(deftype SortedPartitions [^ints sortMapping
+                           ^IntArrayList partitionStarts])
+
+(defn- ->sorted-partitions
+  "`partitionStarts` holds the sorted index at which each partition starts, with the row count as final sentinel:
+  partition n runs from starts[n] (inclusive) to starts[n+1] (exclusive)."
+  ^xtdb.operator.window.SortedPartitions [^VectorReader group-mapping, ^ints sort-mapping]
+  (let [row-count (alength sort-mapping)
+        starts (IntArrayList.)]
+    (dotimes [sorted-idx row-count]
+      (let [group-id (.getInt group-mapping (aget sort-mapping sorted-idx))]
+        (when (= (.size starts) group-id)
+          (.add starts sorted-idx))))
+    (.add starts row-count)
+    (SortedPartitions. sort-mapping starts)))
+
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IWindowFnSpec
-  (^xtdb.arrow.VectorReader aggregate [^xtdb.arrow.VectorReader groupMapping
-                                       ^ints sort-mapping
+  (^xtdb.arrow.VectorReader aggregate [^xtdb.operator.window.SortedPartitions sortedPartitions
                                        ^xtdb.arrow.RelationReader in-rel]))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
@@ -80,33 +95,20 @@
     (getToColumnType [_] #xt/type :i64)
 
     (build [_ al]
-      (let [out-vec (LongVector. al (str to-name) false)
-            ^LongLongMap group-to-cnt (LongLongHashMap.)]
+      (let [out-vec (LongVector. al (str to-name) false)]
         (reify
           IWindowFnSpec
-          (aggregate [_ group-mapping sort-mapping _in-rel]
-            (let [offset (.getValueCount out-vec)
-                  row-count (.getValueCount group-mapping)]
-              (dotimes [idx row-count]
-                (.setLong out-vec (+ offset idx) (.putOrAdd group-to-cnt (.getInt group-mapping (aget sort-mapping idx)) 1 1)))
+          (aggregate [_ sorted-partitions _in-rel]
+            (let [^IntArrayList partition-starts (.partitionStarts sorted-partitions)]
+              (dotimes [part-idx (dec (.size partition-starts))]
+                (let [partition-start (.get partition-starts part-idx)
+                      partition-end (.get partition-starts (inc part-idx))]
+                  (dotimes [within-part-idx (- partition-end partition-start)]
+                    (.writeLong out-vec (inc within-part-idx)))))
               (.openSlice out-vec al)))
 
           Closeable
           (close [_] (.close out-vec)))))))
-
-(defn- build-partition-starts
-  "Returns an IntArrayList of partition start indices, with row-count as final sentinel.
-  Partition n runs from starts[n] (inclusive) to starts[n+1] (exclusive)."
-  ^IntArrayList [^VectorReader group-mapping, ^ints sort-mapping]
-  (let [row-count (alength sort-mapping)
-        starts (IntArrayList.)]
-    (dotimes [sorted-idx row-count]
-      (let [orig-idx (aget sort-mapping sorted-idx)
-            group-id (.getInt group-mapping orig-idx)]
-        (when (= (.size starts) group-id)
-          (.add starts sorted-idx))))
-    (.add starts row-count)
-    starts))
 
 (defmethod ->window-fn-factory :lead [{:keys [to-name from-name from-type ^long offset]}]
   (let [out-type (types/->nullable-type from-type)]
@@ -117,10 +119,11 @@
       (build [_ al]
         (let [out-vec (Vector/open al (str to-name) out-type)]
           (reify IWindowFnSpec
-            (aggregate [_ group-mapping sort-mapping in-rel]
+            (aggregate [_ sorted-partitions in-rel]
               (let [from-vec (.vectorFor in-rel (str from-name))
                     row-copier (.rowCopier from-vec out-vec)
-                    partition-starts (build-partition-starts group-mapping sort-mapping)
+                    ^ints sort-mapping (.sortMapping sorted-partitions)
+                    ^IntArrayList partition-starts (.partitionStarts sorted-partitions)
                     n-partitions (dec (.size partition-starts))]
                 (dotimes [part-idx n-partitions]
                   (let [partition-start (.get partition-starts part-idx)
@@ -129,7 +132,7 @@
                       (let [sorted-idx (+ partition-start within-part-idx)
                             lead-row-idx (+ sorted-idx offset)]
                         (if (< lead-row-idx partition-end)
-                          (.copyRow row-copier (aget ^ints sort-mapping lead-row-idx))
+                          (.copyRow row-copier (aget sort-mapping lead-row-idx))
                           (.writeNull out-vec)))))))
 
               (.openSlice out-vec al))
@@ -146,10 +149,11 @@
       (build [_ al]
         (let [out-vec (Vector/open al (str to-name) out-type)]
           (reify IWindowFnSpec
-            (aggregate [_ group-mapping sort-mapping in-rel]
+            (aggregate [_ sorted-partitions in-rel]
               (let [from-vec (.vectorFor in-rel (str from-name))
                     row-copier (.rowCopier from-vec out-vec)
-                    partition-starts (build-partition-starts group-mapping sort-mapping)
+                    ^ints sort-mapping (.sortMapping sorted-partitions)
+                    ^IntArrayList partition-starts (.partitionStarts sorted-partitions)
                     n-partitions (dec (.size partition-starts))]
                 (dotimes [part-idx n-partitions]
                   (let [partition-start (.get partition-starts part-idx)
@@ -158,7 +162,7 @@
                       (let [sorted-idx (+ partition-start within-part-idx)
                             lag-row-idx (- sorted-idx offset)]
                         (if (>= lag-row-idx partition-start)
-                          (.copyRow row-copier (aget ^ints sort-mapping lag-row-idx))
+                          (.copyRow row-copier (aget sort-mapping lag-row-idx))
                           (.writeNull out-vec)))))))
 
               (.openSlice out-vec al))
@@ -192,9 +196,10 @@
                                           (.append group-mapping (.groupMapping group-mapper in-rel))))
 
            (let [sort-mapping (order-by/sorted-idxs (RelationReader/from (conj (seq out-rel) group-mapping) (.getValueCount group-mapping))
-                                                    (into [[window-groups]] order-specs))]
+                                                    (into [[window-groups]] order-specs))
+                 sorted-partitions (->sorted-partitions group-mapping sort-mapping)]
              (util/with-open [window-cols (->> window-specs
-                                               (mapv #(.aggregate ^IWindowFnSpec % group-mapping sort-mapping out-rel)))]
+                                               (mapv #(.aggregate ^IWindowFnSpec % sorted-partitions out-rel)))]
                (let [out-rel (vr/rel-reader (concat (.select out-rel sort-mapping) window-cols))]
                  (if (pos? (.getRowCount out-rel))
                    (do
