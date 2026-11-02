@@ -1000,7 +1000,8 @@
       (when (and (= mode :mark-join)
                  (not (parameters-referenced-in-relation? dependent-relation (vals columns))))
         [:mark-join
-         {:mark-spec (w/postwalk-replace (set/map-invert columns) (update-vals mark-join-projection vector))}
+         {:conditions []
+          :mark-spec (w/postwalk-replace (set/map-invert columns) (update-vals mark-join-projection vector))}
          independent-relation
          dependent-relation]))))
 
@@ -1029,17 +1030,17 @@
      [:mark-join mark-join-opts lhs rhs]]
     ;; =>
     (let [{:keys [predicate]} opts
-          {:keys [mark-spec]} mark-join-opts
-          mj-col (key (first mark-spec))]
+          {:keys [conditions mark-spec]} mark-join-opts
+          [mj-col mark-exprs] (first mark-spec)]
       (cond
         (= predicate mj-col)
         [:map {:projections [{mj-col true}]}
-         [:semi-join {:conditions (val (first mark-spec))}
+         [:semi-join {:conditions (into conditions mark-exprs)}
           lhs rhs]]
 
         (= predicate (list 'not mj-col))
         [:map {:projections [{mj-col true}]}
-         [:anti-join {:conditions (val (first mark-spec))}
+         [:anti-join {:conditions (into conditions mark-exprs)}
           lhs rhs]]))))
 
 (defn- apply-table-col->unnest [z]
@@ -1223,19 +1224,11 @@
     (:join :semi-join :anti-join :left-outer-join :single-join :mark-join :full-outer-join)
     (r/zmatch
       z
-      [:mark-join opts lhs rhs]
-      (let [{:keys [mark-spec]} opts
-            projected-col (first (keys mark-spec))
-            join-expressions (first (vals mark-spec))
-            new-join-expressions (optimize-join-expression join-expressions lhs rhs)]
-        (when (not= new-join-expressions join-expressions)
-          [:mark-join {:mark-spec {projected-col new-join-expressions}} lhs rhs]))
-
       [join-type opts lhs rhs]
       (let [{:keys [conditions]} opts
             new-conditions (optimize-join-expression conditions lhs rhs)]
         (when (not= new-conditions conditions)
-          [join-type {:conditions new-conditions} lhs rhs])))
+          [join-type (assoc opts :conditions new-conditions) lhs rhs])))
 
     nil))
 
