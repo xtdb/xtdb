@@ -222,8 +222,9 @@ const fn = rr.Sequence("<function name>", "(", rr.ZeroOrMore("<value>", ",", "sk
 const rowNumber = rr.Sequence("ROW_NUMBER", "(", ")")
 const leadLagOffset = rr.Optional(rr.Sequence(",", "<offset>"), "skip")
 const rank = rr.Sequence(rr.Choice(0, "RANK", "DENSE_RANK", "PERCENT_RANK", "CUME_DIST"), "(", ")")
+const ntile = rr.Sequence("NTILE", "(", "<number of tiles>", ")")
 const leadLag = rr.Sequence(rr.Choice(0, "LEAD", "LAG"), "(", "<value>", leadLagOffset, ")")
-const wfn = rr.Sequence(rr.Choice(0, rowNumber, rank, leadLag), "OVER", "(", "<window>", ")")
+const wfn = rr.Sequence(rr.Choice(0, rowNumber, rank, ntile, leadLag), "OVER", "(", "<window>", ")")
 
 const cast = rr.Sequence("CAST", "(", "<value>", "AS", "<data type>", ")")
 const caseValue = rr.Sequence("<value>", rr.ZeroOrMore(rr.Sequence("WHEN", "<value>", "THEN", "<value>"), ","))
@@ -327,6 +328,12 @@ Without an `ORDER BY`, every row in the partition is a peer.
 `CUME_DIST`
 : the number of rows up to and including the peer group, divided by the number of rows in the partition.
   Returns `DOUBLE PRECISION`.
+
+`NTILE(n)` (v2.3+) divides each partition into `n` tiles, numbered from 1, as equal in size as possible.
+When the rows don't divide evenly, the first tiles take one extra row each; with more tiles than rows, each row gets its own tile.
+Rows are numbered in `ORDER BY` order, so peers can fall in different tiles.
+`n` is an unsigned integer literal or a parameter (`?` / `$n`); it must be greater than zero, and a null parameter gives a null result.
+Returns `BIGINT`.
 
 Note:
 

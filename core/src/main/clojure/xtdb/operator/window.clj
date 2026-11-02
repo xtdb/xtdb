@@ -1,5 +1,6 @@
 (ns xtdb.operator.window
   (:require [clojure.spec.alpha :as s]
+            [xtdb.error :as err]
             [xtdb.expression :as expr]
             [xtdb.expression.comparator :as expr.comp]
             [xtdb.logical-plan :as lp]
@@ -31,7 +32,9 @@
 (s/def ::windows (s/map-of ::window-name ::window-spec))
 
 (s/def ::window-agg-expr
-  (s/or :nullary (s/cat :f simple-symbol?)
+  (s/or :ntile (s/cat :f #{'ntile}
+                      :tiles (s/or :literal integer?, :param ::lp/param))
+        :nullary (s/cat :f simple-symbol?)
         :unary (s/cat :f simple-symbol?
                       :from-column ::lp/column)
         :unary-with-offset (s/cat :f simple-symbol?
@@ -264,6 +267,63 @@
                             (dotimes [_ (- ge gs)]
                               (.writeDouble out-vec dist))))))
 
+(defn- resolve-tiles [[tag arg] ^RelationReader args]
+  (let [n (case tag
+            :literal arg
+            :param (some-> (.vectorForOrNull args (str arg)) (.getObject 0)))]
+    (when (some? n)
+      (when-not (integer? n)
+        (throw (err/incorrect ::ntile-tiles-not-integer
+                              (format "NTILE: expected an integer number of tiles, got: %s" n)
+                              {:tiles n})))
+      (let [n (long n)]
+        (when-not (pos? n)
+          (throw (err/incorrect ::ntile-tiles-not-positive
+                                (format "NTILE: number of tiles must be greater than zero, got: %d" n)
+                                {:tiles n})))
+        n))))
+
+(defmethod ->window-fn-factory :ntile [{:keys [to-name tiles]}]
+  (when-not tiles
+    (throw (err/incorrect ::ntile-tiles-missing
+                          "NTILE: expected a number of tiles, as an integer literal or a parameter")))
+
+  (let [out-type (cond-> #xt/type :i64
+                   (= :param (first tiles)) types/->nullable-type)]
+    (reify IWindowFnSpecFactory
+      (getToColumnName [_] to-name)
+      (getToColumnType [_] out-type)
+      (getNeedsPeers [_] false)
+
+      (build [_ al args]
+        (let [n (resolve-tiles tiles args)
+              out-vec (Vector/open al (str to-name) out-type)]
+          (reify IWindowFnSpec
+            (aggregate [_ sorted-partitions _in-rel]
+              (let [^IntArrayList partition-starts (.partitionStarts sorted-partitions)
+                    n-partitions (dec (.size partition-starts))]
+                (if (nil? n)
+                  (dotimes [_ (.get partition-starts n-partitions)]
+                    (.writeNull out-vec))
+
+                  (let [n (long n)]
+                    (dotimes [part-idx n-partitions]
+                      (let [row-count (- (.get partition-starts (inc part-idx))
+                                         (.get partition-starts part-idx))
+                            base (quot row-count n)
+                            extra (rem row-count n)
+                            big-tiles-rows (* extra (inc base))]
+                        (dotimes [row-idx row-count]
+                          (.writeLong out-vec
+                                      (if (< row-idx big-tiles-rows)
+                                        (inc (quot row-idx (inc base)))
+                                        (+ extra 1 (quot (- row-idx big-tiles-rows) base))))))))))
+
+              (.openSlice out-vec al))
+
+            Closeable
+            (close [_] (.close out-vec))))))))
+
 (deftype WindowFnCursor [^BufferAllocator allocator
                          ^ICursor in-cursor
                          static-vec-types
@@ -319,6 +379,9 @@
                                                                        :zero-row? (empty? partition-cols)}
                                                                       (zmatch window-agg
                                                                         [:nullary agg-opts]
+                                                                        agg-opts
+
+                                                                        [:ntile agg-opts]
                                                                         agg-opts
 
                                                                         [:unary agg-opts]

@@ -1355,6 +1355,48 @@
              (q "RANK() OVER ()"))
           "no ORDER BY: all peers")))
 
+(t/deftest test-ntile-5959
+  (xt/submit-tx tu/*node* [[:put-docs :docs
+                            {:xt/id 0, :a 1, :b 10}
+                            {:xt/id 1, :a 1, :b 20}
+                            {:xt/id 2, :a 1, :b 30}
+                            {:xt/id 3, :a 1, :b 40}
+                            {:xt/id 4, :a 1, :b 50}
+                            {:xt/id 5, :a 2, :b 5}]])
+
+  (let [q (fn [sql & params]
+            (->> (xt/q tu/*node* (into [(format "SELECT b, %s AS x FROM docs" sql)] params))
+                 (map (juxt :b :x))
+                 sort))]
+    (t/is (= [[5 1] [10 1] [20 1] [30 2] [40 2] [50 3]]
+             (q "NTILE(3) OVER (PARTITION BY a ORDER BY b)"))
+          "literal tile count")
+
+    (t/is (= [[5 1] [10 1] [20 1] [30 2] [40 2] [50 3]]
+             (q "NTILE(?) OVER (PARTITION BY a ORDER BY b)" 3))
+          "positional parameter")
+
+    (t/is (= [[5 1] [10 1] [20 1] [30 2] [40 2] [50 3]]
+             (q "NTILE($1) OVER (PARTITION BY a ORDER BY b)" 3))
+          "numbered parameter")
+
+    (t/is (= [[5 nil] [10 nil] [20 nil] [30 nil] [40 nil] [50 nil]]
+             (q "NTILE(?) OVER (PARTITION BY a ORDER BY b)" nil))
+          "null parameter")
+
+    (t/is (anomalous? [:incorrect nil #"number of tiles must be greater than zero"]
+                      (q "NTILE(0) OVER (ORDER BY b)")))
+
+    (t/is (anomalous? [:incorrect nil #"number of tiles must be greater than zero"]
+                      (sql/plan "SELECT NTILE(0) OVER (ORDER BY b) FROM docs"))
+          "a literal zero is rejected when planning")
+
+    (t/is (anomalous? [:incorrect nil #"number of tiles must be greater than zero"]
+                      (q "NTILE(?) OVER (ORDER BY b)" 0)))
+
+    (t/is (anomalous? [:incorrect nil #"number of tiles out of range"]
+                      (q "NTILE(9223372036854775808) OVER (ORDER BY b)")))))
+
 (t/deftest test-operators-with-unresolved-column-references-3640
   (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1}]])
 

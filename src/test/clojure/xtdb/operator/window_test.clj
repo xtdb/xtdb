@@ -223,3 +223,65 @@
 
     (t/is (= [] (run-test '{:partition-cols [a], :order-specs [[b]]} '(rank) [[] []]))
           "empty input")))
+
+(deftest test-ntile
+  (letfn [(run-test
+            ([window-spec agg batches] (run-test window-spec agg batches []))
+            ([window-spec agg batches args]
+             (let [window-name (gensym "window")]
+               (->> (tu/query-ra [:window {:windows {window-name window-spec}
+                                           :projections [{'x {:window-name window-name, :window-agg agg}}]}
+                                  [::tu/pages '{a #xt/type :i64, b #xt/type :i64} batches]]
+                                 {:args args})
+                    (map (juxt :a :b :x))
+                    (sort-by (fn [[a b _x]] [a b]))))))]
+    (let [spec '{:partition-cols [a], :order-specs [[b]]}
+          batches [[{:a 1 :b 10} {:a 1 :b 20} {:a 1 :b 30}]
+                   [{:a 1 :b 40} {:a 1 :b 50} {:a 2 :b 5}]]]
+      (t/is (= [[1 10 1] [1 20 1] [1 30 2] [1 40 2] [1 50 3] [2 5 1]]
+               (run-test spec '(ntile 3) batches))
+            "five rows into three tiles: the first two tiles take the extra row")
+
+      (t/is (= [[1 10 1] [1 20 2] [1 30 3] [1 40 4] [1 50 5] [2 5 1]]
+               (run-test spec '(ntile 10) batches))
+            "more tiles than rows: one row per tile")
+
+      (t/is (= [[1 10 1] [1 20 1] [1 30 1] [1 40 1] [1 50 1] [2 5 1]]
+               (run-test spec '(ntile 1) batches)))
+
+      (t/is (= [[1 10 1] [1 20 1] [1 30 2] [1 40 2] [1 50 3] [2 5 1]]
+               (run-test spec '(ntile ?_0) batches [3]))
+            "tile count from a parameter")
+
+      (t/is (= [[1 10 nil] [1 20 nil] [1 30 nil] [1 40 nil] [1 50 nil] [2 5 nil]]
+               (run-test spec '(ntile ?_0) batches [nil]))
+            "null parameter gives null tiles")
+
+      (t/is (= [[1 10 1] [1 20 1] [1 30 2] [1 40 2] [1 50 3] [2 5 1]]
+               (run-test spec '(ntile 3) (vec (reverse batches))))
+            "tiles follow the window's order, whatever the input order"))
+
+    (t/is (= [[1 10 1] [1 10 1] [1 10 2]]
+             (run-test '{:partition-cols [a], :order-specs [[b]]} '(ntile 2)
+                       [[{:a 1 :b 10} {:a 1 :b 10} {:a 1 :b 10}]]))
+          "peers are split across tiles")
+
+    (t/is (= [] (run-test '{:partition-cols [a]} '(ntile 2) [[] []]))
+          "empty input")
+
+    (doseq [n [0 -1]]
+      (t/is (anomalous? [:incorrect nil #"number of tiles must be greater than zero"]
+                        (run-test '{:partition-cols [a]} '(ntile ?_0) [[{:a 1 :b 1}]] [n]))
+            (str "non-positive parameter: " n)))
+
+    (t/is (anomalous? [:incorrect nil #"number of tiles must be greater than zero"]
+                      (run-test '{:partition-cols [a]} '(ntile 0) [[{:a 1 :b 1}]]))
+          "zero literal")
+
+    (t/is (anomalous? [:incorrect nil #"expected an integer"]
+                      (run-test '{:partition-cols [a]} '(ntile ?_0) [[{:a 1 :b 1}]] ["two"]))
+          "non-integer parameter")
+
+    (t/is (anomalous? [:incorrect nil #"expected a number of tiles"]
+                      (run-test '{:partition-cols [a]} '(ntile b) [[{:a 1 :b 1}]]))
+          "column reference instead of a tile count")))

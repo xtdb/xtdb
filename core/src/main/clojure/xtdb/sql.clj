@@ -2151,6 +2151,26 @@
                          (vary-meta assoc :window-out-sym? true))]
       [window-sym {:window-agg (list fn-name)}]))
 
+  (visitNtileWindowFunction [{{:keys [!id-count]} :env :as this} ctx]
+    (let [tiles-ctx (.numberOfTiles ctx)
+          tiles (if-let [param-ctx (.parameterSpecification tiles-ctx)]
+                  (.accept param-ctx this)
+                  (let [text (.getText tiles-ctx)
+                        n (long (try
+                                  (Long/parseLong text)
+                                  (catch NumberFormatException e
+                                    (throw (err/incorrect ::ntile-tiles-out-of-range
+                                                          (format "NTILE: number of tiles out of range: %s" text)
+                                                          {:tiles text, ::err/cause e})))))]
+                    (when-not (pos? n)
+                      (throw (err/incorrect ::ntile-tiles-not-positive
+                                            (format "NTILE: number of tiles must be greater than zero, got: %d" n)
+                                            {:tiles n})))
+                    n))
+          window-sym (-> (->col-sym (str "xt$ntile_" (swap! !id-count inc)))
+                         (vary-meta assoc :window-out-sym? true))]
+      [window-sym {:window-agg (list 'ntile tiles)}]))
+
   (visitLeadOrLagWindowFunction [{{:keys [!id-count]} :env :as this} ctx]
     (let [fn-name (if (.LEAD ctx) 'lead 'lag)
           extent-expr (-> (.leadOrLagExtent ctx) (.accept this))
