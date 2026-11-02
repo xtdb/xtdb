@@ -108,7 +108,8 @@
   (^clojure.lang.Symbol getToColumnName [])
   (^xtdb.arrow.VectorType getToColumnType [])
   (^boolean getNeedsPeers [])
-  (^xtdb.operator.window.IWindowFnSpec build [^org.apache.arrow.memory.BufferAllocator allocator]))
+  (^xtdb.operator.window.IWindowFnSpec build [^org.apache.arrow.memory.BufferAllocator allocator
+                                              ^xtdb.arrow.RelationReader args]))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti ^xtdb.operator.window.IWindowFnSpecFactory ->window-fn-factory
@@ -121,7 +122,7 @@
     (getToColumnType [_] #xt/type :i64)
     (getNeedsPeers [_] false)
 
-    (build [_ al]
+    (build [_ al _args]
       (let [out-vec (LongVector. al (str to-name) false)]
         (reify
           IWindowFnSpec
@@ -144,7 +145,7 @@
       (getToColumnType [_] out-type)
       (getNeedsPeers [_] false)
 
-      (build [_ al]
+      (build [_ al _args]
         (let [out-vec (Vector/open al (str to-name) out-type)]
           (reify IWindowFnSpec
             (aggregate [_ sorted-partitions in-rel]
@@ -175,7 +176,7 @@
       (getToColumnType [_] out-type)
       (getNeedsPeers [_] false)
 
-      (build [_ al]
+      (build [_ al _args]
         (let [out-vec (Vector/open al (str to-name) out-type)]
           (reify IWindowFnSpec
             (aggregate [_ sorted-partitions in-rel]
@@ -225,7 +226,7 @@
     (getToColumnType [_] out-type)
     (getNeedsPeers [_] true)
 
-    (build [_ al]
+    (build [_ al _args]
       (let [out-vec (Vector/open al (str to-name) out-type)]
         (reify IWindowFnSpec
           (aggregate [_ sorted-partitions _in-rel]
@@ -343,10 +344,10 @@
                                                       [to-column (pr-str window-agg)]))))}
            :vec-types out-vec-types
 
-           :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]} in-cursor]
+           :->cursor (fn [{:keys [allocator args explain-analyze? tracer query-span]} in-cursor]
                        (cond-> (util/with-close-on-catch [window-fn-specs (LinkedList.)]
                                  (doseq [^IWindowFnSpecFactory factory window-fn-factories]
-                                   (.add window-fn-specs (.build factory allocator)))
+                                   (.add window-fn-specs (.build factory allocator (or args vw/empty-args))))
 
                                  (WindowFnCursor. allocator in-cursor vec-types
                                                   (group-by/->group-mapper allocator (select-keys vec-types partition-cols))
