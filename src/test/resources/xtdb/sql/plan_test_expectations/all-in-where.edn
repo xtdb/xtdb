@@ -1,10 +1,12 @@
 [:project
  {:projections [{y x.1/y}]}
- [:map
-  {:projections [{_sq_2 true}]}
-  [:anti-join
-   {:conditions [(<= x.1/z z)]}
-   [:rename {:prefix x.1} [:scan {:db-name "xtdb", :table #xt/table x, :columns [y z]}]]
+ [:select
+  {:predicate (not _sq_2)}
+  [:mark-join
+   {:conditions [], :mark-spec {_sq_2 [(<= x.1/z z)]}}
+   [:rename
+    {:prefix x.1}
+    [:scan {:db-name "xtdb", :table #xt/table x, :columns [y z]}]]
    [:project
     {:projections [{z y.3/z}]}
     [:rename
