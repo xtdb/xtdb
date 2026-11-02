@@ -1,6 +1,7 @@
 (ns xtdb.operator.window
   (:require [clojure.spec.alpha :as s]
             [xtdb.expression :as expr]
+            [xtdb.expression.comparator :as expr.comp]
             [xtdb.logical-plan :as lp]
             [xtdb.operator.group-by :as group-by]
             [xtdb.operator.order-by :as order-by]
@@ -13,6 +14,7 @@
            (com.carrotsearch.hppc IntArrayList)
            (java.io Closeable)
            (java.util LinkedList List Map Spliterator)
+           (java.util.function IntBinaryOperator)
            (org.apache.arrow.memory BufferAllocator)
            (xtdb.api ICursor)
            (xtdb.arrow IntVector LongVector RelationReader Relation Vector VectorReader)
@@ -58,20 +60,43 @@
               [:table {:rows [{}]}]]))
 
 (deftype SortedPartitions [^ints sortMapping
-                           ^IntArrayList partitionStarts])
+                           ^IntArrayList partitionStarts
+                           ^IntArrayList peerStarts])
 
 (defn- ->sorted-partitions
   "`partitionStarts` holds the sorted index at which each partition starts, with the row count as final sentinel:
-  partition n runs from starts[n] (inclusive) to starts[n+1] (exclusive)."
-  ^xtdb.operator.window.SortedPartitions [^VectorReader group-mapping, ^ints sort-mapping]
+  partition n runs from starts[n] (inclusive) to starts[n+1] (exclusive).
+
+  `peerStarts` is the same for peer groups - runs of rows within a partition that are equal on every ORDER BY column.
+  It is only computed when `peers?`, and is nil otherwise."
+  ^xtdb.operator.window.SortedPartitions [^VectorReader group-mapping, ^ints sort-mapping, ^RelationReader in-rel, order-specs, peers?]
   (let [row-count (alength sort-mapping)
-        starts (IntArrayList.)]
+        ^"[Ljava.util.function.IntBinaryOperator;" order-cmps
+        (into-array IntBinaryOperator
+                    (map (fn [[col]]
+                           (let [rdr (.vectorFor in-rel (str col))]
+                             (expr.comp/->comparator rdr rdr :nulls-last)))
+                         order-specs))
+        n-cmps (alength order-cmps)
+        partition-starts (IntArrayList.)
+        peer-starts (when peers? (IntArrayList.))]
     (dotimes [sorted-idx row-count]
-      (let [group-id (.getInt group-mapping (aget sort-mapping sorted-idx))]
-        (when (= (.size starts) group-id)
-          (.add starts sorted-idx))))
-    (.add starts row-count)
-    (SortedPartitions. sort-mapping starts)))
+      (let [orig-idx (aget sort-mapping sorted-idx)
+            group-id (.getInt group-mapping orig-idx)]
+        (if (= (.size partition-starts) group-id)
+          (do
+            (.add partition-starts sorted-idx)
+            (when peers? (.add peer-starts sorted-idx)))
+          (when peers?
+            (let [prev-idx (aget sort-mapping (dec sorted-idx))]
+              (when-not (loop [i 0]
+                          (or (== i n-cmps)
+                              (and (zero? (.applyAsInt ^IntBinaryOperator (aget order-cmps i) prev-idx orig-idx))
+                                   (recur (inc i)))))
+                (.add peer-starts sorted-idx)))))))
+    (.add partition-starts row-count)
+    (when peers? (.add peer-starts row-count))
+    (SortedPartitions. sort-mapping partition-starts peer-starts)))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IWindowFnSpec
@@ -82,6 +107,7 @@
 (definterface IWindowFnSpecFactory
   (^clojure.lang.Symbol getToColumnName [])
   (^xtdb.arrow.VectorType getToColumnType [])
+  (^boolean getNeedsPeers [])
   (^xtdb.operator.window.IWindowFnSpec build [^org.apache.arrow.memory.BufferAllocator allocator]))
 
 #_{:clj-kondo/ignore [:unused-binding]}
@@ -93,6 +119,7 @@
   (reify IWindowFnSpecFactory
     (getToColumnName [_] to-name)
     (getToColumnType [_] #xt/type :i64)
+    (getNeedsPeers [_] false)
 
     (build [_ al]
       (let [out-vec (LongVector. al (str to-name) false)]
@@ -115,6 +142,7 @@
     (reify IWindowFnSpecFactory
       (getToColumnName [_] to-name)
       (getToColumnType [_] out-type)
+      (getNeedsPeers [_] false)
 
       (build [_ al]
         (let [out-vec (Vector/open al (str to-name) out-type)]
@@ -145,6 +173,7 @@
     (reify IWindowFnSpecFactory
       (getToColumnName [_] to-name)
       (getToColumnType [_] out-type)
+      (getNeedsPeers [_] false)
 
       (build [_ al]
         (let [out-vec (Vector/open al (str to-name) out-type)]
@@ -170,12 +199,77 @@
             Closeable
             (close [_] (.close out-vec))))))))
 
+(defmacro ^:private peer-group-writer
+  "A fn of `[out-vec sorted-partitions]` that runs `body` once per peer group, in sorted order.
+  `ps`/`pe` bound the group's partition, `gs`/`ge` the group itself (sorted indices, end exclusive),
+  and `ordinal` is the group's 1-based position within its partition."
+  [[out-vec ps pe gs ge ordinal] & body]
+  `(fn [~(vary-meta out-vec assoc :tag `Vector) ^xtdb.operator.window.SortedPartitions sp#]
+     (let [^IntArrayList partition-starts# (.partitionStarts sp#)
+           ^IntArrayList peer-starts# (.peerStarts sp#)
+           n-groups# (dec (.size peer-starts#))]
+       (loop [g# 0, part-idx# 0, ~ordinal 1]
+         (when (< g# n-groups#)
+           (let [~gs (.get peer-starts# g#)
+                 ~ge (.get peer-starts# (inc g#))
+                 part-idx# (if (>= ~gs (.get partition-starts# (inc part-idx#))) (inc part-idx#) part-idx#)
+                 ~ps (.get partition-starts# part-idx#)
+                 ~pe (.get partition-starts# (inc part-idx#))
+                 ~ordinal (if (= ~gs ~ps) 1 ~ordinal)]
+             ~@body
+             (recur (inc g#) part-idx# (inc ~ordinal))))))))
+
+(defn- ->peer-group-factory [to-name out-type write-groups!]
+  (reify IWindowFnSpecFactory
+    (getToColumnName [_] to-name)
+    (getToColumnType [_] out-type)
+    (getNeedsPeers [_] true)
+
+    (build [_ al]
+      (let [out-vec (Vector/open al (str to-name) out-type)]
+        (reify IWindowFnSpec
+          (aggregate [_ sorted-partitions _in-rel]
+            (write-groups! out-vec sorted-partitions)
+            (.openSlice out-vec al))
+
+          Closeable
+          (close [_] (.close out-vec)))))))
+
+(defmethod ->window-fn-factory :rank [{:keys [to-name]}]
+  (->peer-group-factory to-name #xt/type :i64
+                        (peer-group-writer [out-vec ps _pe gs ge _ordinal]
+                          (dotimes [_ (- ge gs)]
+                            (.writeLong out-vec (inc (- gs ps)))))))
+
+(defmethod ->window-fn-factory :dense_rank [{:keys [to-name]}]
+  (->peer-group-factory to-name #xt/type :i64
+                        (peer-group-writer [out-vec _ps _pe gs ge ordinal]
+                          (dotimes [_ (- ge gs)]
+                            (.writeLong out-vec ordinal)))))
+
+(defmethod ->window-fn-factory :percent_rank [{:keys [to-name]}]
+  (->peer-group-factory to-name #xt/type :f64
+                        (peer-group-writer [out-vec ps pe gs ge _ordinal]
+                          (let [pct (if (= 1 (- pe ps))
+                                      0.0
+                                      (/ (double (- gs ps)) (double (dec (- pe ps)))))]
+                            (dotimes [_ (- ge gs)]
+                              (.writeDouble out-vec pct))))))
+
+(defmethod ->window-fn-factory :cume_dist [{:keys [to-name]}]
+  (->peer-group-factory to-name #xt/type :f64
+                        (peer-group-writer [out-vec ps pe gs ge _ordinal]
+                          (let [dist (/ (double (- ge ps)) (double (- pe ps)))]
+                            (dotimes [_ (- ge gs)]
+                              (.writeDouble out-vec dist))))))
+
 (deftype WindowFnCursor [^BufferAllocator allocator
                          ^ICursor in-cursor
                          static-vec-types
                          ^GroupMapper group-mapper
                          order-specs
                          ^List window-specs
+                         peers?
                          ^:unsynchronized-mutable ^boolean done?]
   ICursor
   (getCursorType [_] "window")
@@ -197,7 +291,7 @@
 
            (let [sort-mapping (order-by/sorted-idxs (RelationReader/from (conj (seq out-rel) group-mapping) (.getValueCount group-mapping))
                                                     (into [[window-groups]] order-specs))
-                 sorted-partitions (->sorted-partitions group-mapping sort-mapping)]
+                 sorted-partitions (->sorted-partitions group-mapping sort-mapping out-rel order-specs peers?)]
              (util/with-open [window-cols (->> window-specs
                                                (mapv #(.aggregate ^IWindowFnSpec % sorted-partitions out-rel)))]
                (let [out-rel (vr/rel-reader (concat (.select out-rel sort-mapping) window-cols))]
@@ -258,5 +352,6 @@
                                                   (group-by/->group-mapper allocator (select-keys vec-types partition-cols))
                                                   order-specs
                                                   (vec window-fn-specs)
+                                                  (boolean (some #(.getNeedsPeers ^IWindowFnSpecFactory %) window-fn-factories))
                                                   false))
                          (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))})))))

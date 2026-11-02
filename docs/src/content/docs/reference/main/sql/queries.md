@@ -221,8 +221,9 @@ const fn = rr.Sequence("<function name>", "(", rr.ZeroOrMore("<value>", ",", "sk
 
 const rowNumber = rr.Sequence("ROW_NUMBER", "(", ")")
 const leadLagOffset = rr.Optional(rr.Sequence(",", "<offset>"), "skip")
+const rank = rr.Sequence(rr.Choice(0, "RANK", "DENSE_RANK", "PERCENT_RANK", "CUME_DIST"), "(", ")")
 const leadLag = rr.Sequence(rr.Choice(0, "LEAD", "LAG"), "(", "<value>", leadLagOffset, ")")
-const wfn = rr.Sequence(rr.Choice(0, rowNumber, leadLag), "OVER", "(", "<window>", ")")
+const wfn = rr.Sequence(rr.Choice(0, rowNumber, rank, leadLag), "OVER", "(", "<window>", ")")
 
 const cast = rr.Sequence("CAST", "(", "<value>", "AS", "<data type>", ")")
 const caseValue = rr.Sequence("<value>", rr.ZeroOrMore(rr.Sequence("WHEN", "<value>", "THEN", "<value>"), ","))
@@ -307,6 +308,25 @@ const wfnOrder = rr.Sequence("ORDER", "BY", rr.OneOrMore(rr.Sequence("<value>", 
 
 return rr.Diagram(rr.Optional(wfnPartition), rr.Optional(wfnOrder))
 ```
+
+The ranking functions `RANK`, `DENSE_RANK`, `PERCENT_RANK` and `CUME_DIST` (v2.3+) are computed over *peer groups*: rows within a partition that are equal on every `ORDER BY` column, with NULLs equal to each other.
+Without an `ORDER BY`, every row in the partition is a peer.
+
+`RANK`
+: the number of the first row in the peer group (1-based) - gaps follow ties.
+  Returns `BIGINT`.
+
+`DENSE_RANK`
+: the number of the peer group within its partition - no gaps.
+  Returns `BIGINT`.
+
+`PERCENT_RANK`
+: `(RANK - 1) / (partition rows - 1)`, or `0` for a single-row partition.
+  Returns `DOUBLE PRECISION`.
+
+`CUME_DIST`
+: the number of rows up to and including the peer group, divided by the number of rows in the partition.
+  Returns `DOUBLE PRECISION`.
 
 Note:
 

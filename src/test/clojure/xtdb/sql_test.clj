@@ -1325,6 +1325,36 @@
                 set))
         "LAG with default offset of 1"))
 
+(t/deftest test-ranking-window-functions-5959
+  (xt/submit-tx tu/*node* [[:put-docs :docs
+                            {:xt/id 0, :a 1, :b 10}
+                            {:xt/id 1, :a 1, :b 20}
+                            {:xt/id 2, :a 1, :b 20}
+                            {:xt/id 3, :a 1}
+                            {:xt/id 4, :a 1}
+                            {:xt/id 5, :a 2, :b 40}]])
+
+  (let [q (fn [fn-sql]
+            (->> (xt/q tu/*node* (format "SELECT b, %s AS x FROM docs" fn-sql))
+                 (map (juxt :b :x))
+                 (sort-by (comp str first))))]
+    (t/is (= [[nil 4] [nil 4] [10 1] [20 2] [20 2] [40 1]]
+             (q "RANK() OVER (PARTITION BY a ORDER BY b)"))
+          "null keys are peers, sorted last")
+
+    (t/is (= [[nil 3] [nil 3] [10 1] [20 2] [20 2] [40 1]]
+             (q "DENSE_RANK() OVER (PARTITION BY a ORDER BY b)")))
+
+    (t/is (= [[nil 0.75] [nil 0.75] [10 0.0] [20 0.25] [20 0.25] [40 0.0]]
+             (q "PERCENT_RANK() OVER (PARTITION BY a ORDER BY b)")))
+
+    (t/is (= [[nil 1.0] [nil 1.0] [10 0.2] [20 0.6] [20 0.6] [40 1.0]]
+             (q "CUME_DIST() OVER (PARTITION BY a ORDER BY b)")))
+
+    (t/is (= [[nil 1] [nil 1] [10 1] [20 1] [20 1] [40 1]]
+             (q "RANK() OVER ()"))
+          "no ORDER BY: all peers")))
+
 (t/deftest test-operators-with-unresolved-column-references-3640
   (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1}]])
 

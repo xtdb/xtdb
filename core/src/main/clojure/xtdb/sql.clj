@@ -2145,6 +2145,12 @@
                          (vary-meta assoc :window-out-sym? true))]
       [window-sym {:window-agg '(row-number)}]))
 
+  (visitRankWindowFunction [{{:keys [!id-count]} :env} ctx]
+    (let [fn-name (symbol (str/lower-case (.getText (.rankFunctionType ctx))))
+          window-sym (-> (->col-sym (str "xt$" fn-name "_" (swap! !id-count inc)))
+                         (vary-meta assoc :window-out-sym? true))]
+      [window-sym {:window-agg (list fn-name)}]))
+
   (visitLeadOrLagWindowFunction [{{:keys [!id-count]} :env :as this} ctx]
     (let [fn-name (if (.LEAD ctx) 'lead 'lag)
           extent-expr (-> (.leadOrLagExtent ctx) (.accept this))
