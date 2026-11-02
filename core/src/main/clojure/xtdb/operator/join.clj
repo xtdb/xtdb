@@ -318,11 +318,11 @@
                 (boolean with-nil-row?)
                 *disk-join-threshold-rows*)))
 
-(defn ->cmp-factory [{:keys [build-vec-types probe-vec-types theta-expr param-types args with-nil-row?]}]
+(defn ->cmp-factory [{:keys [build-vec-types probe-vec-types theta-expr param-types args nil-keys-equal?]}]
   (reify ComparatorFactory
     (buildEqui [_ build-col probe-col]
       (emap/->equi-comparator build-col probe-col args
-                              {:nil-keys-equal? with-nil-row?
+                              {:nil-keys-equal? nil-keys-equal?
                                :param-types param-types}))
 
     (buildTheta [_ build-rel probe-rel]
@@ -419,8 +419,8 @@
                                                         (TreeSet. Bytes/COMPARATOR)))))
                            cmp-factory (->cmp-factory {:build-vec-types build-vec-types
                                                        :probe-vec-types probe-vec-types
-                                                       :with-nil-row? with-nil-row?
                                                        :key-col-names probe-key-col-names
+                                                       :nil-keys-equal? false
                                                        :theta-expr theta-expr
                                                        :param-types param-types
                                                        :args args})]

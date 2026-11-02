@@ -909,6 +909,21 @@
                             [::tu/pages [[{:x 0}]]]
                             [::tu/pages {y #xt/type :i64} []]])))))
 
+(t/deftest test-equi-joins-dont-match-null-keys
+  (let [left [::tu/pages [[{:a nil, :l 0}, {:a 1, :l 1}]]]
+        right [::tu/pages [[{:b nil, :r 0}, {:b 1, :r 1}]]]]
+    (t/is (= #{{:a 1, :l 1, :b 1, :r 1}}
+             (set (tu/query-ra [:join '{:conditions [{a b}]} left right]))))
+
+    (t/is (= #{{:l 0} {:a 1, :l 1, :b 1, :r 1}}
+             (set (tu/query-ra [:left-outer-join '{:conditions [{a b}]} left right]))))
+
+    (t/is (= #{{:l 0} {:r 0} {:a 1, :l 1, :b 1, :r 1}}
+             (set (tu/query-ra [:full-outer-join '{:conditions [{a b}]} left right]))))
+
+    (t/is (= #{{:l 0} {:a 1, :l 1, :b 1, :r 1}}
+             (set (tu/query-ra [:single-join '{:conditions [{a b}]} left right]))))))
+
 (t/deftest test-mega-join
   (t/is (= [{:x1 1, :x2 1, :x4 3, :x3 1}]
            (tu/query-ra
