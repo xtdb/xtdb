@@ -780,3 +780,8 @@
     (t/is (= [{:sm 20}]
              (tu/query-ra '[:group-by {:columns [{sm (sum b {:filter (== c "yes")})}]}
                             [:table {:rows [{:b 10 :c "no"} {:b 20 :c "yes"}]}]])))))
+
+(t/deftest test-group-by-lists-holding-nulls
+  (t/is (= [{:a [8 nil], :n 2}]
+           (tu/query-ra '[:group-by {:columns [a {n (row-count)}]}
+                          [::tu/pages [[{:a [8 nil]}, {:a [8 nil]}]]]]))))
