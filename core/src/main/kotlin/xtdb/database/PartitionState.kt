@@ -166,7 +166,8 @@ class PartitionState private constructor(
 
         try {
             snapLock.withWriteLock {
-                check(ref.value.live === finished.live) { "the live tables moved while adopting block ${block.blockIndex}" }
+                val displaced = ref.value
+                check(displaced.live === finished.live) { "the live tables moved while adopting block ${block.blockIndex}" }
 
                 ref.update { v ->
                     v.withTrieCat(v.trieCat.withTries(tries, logTimestamp))
@@ -174,7 +175,7 @@ class PartitionState private constructor(
                         .withLive(v.live.nextBlock())
                         .withLiveSnap(null)
                 }
-                finished.releaseLive()
+                displaced.releaseLive()
             }
         } catch (e: InterruptedException) {
             throw e

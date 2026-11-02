@@ -9,6 +9,9 @@ import kotlinx.coroutines.launch
 import xtdb.database.PartitionValue
 import clojure.lang.Keyword
 import kotlinx.coroutines.runBlocking
+import io.mockk.every
+import io.mockk.mockkConstructor
+import io.mockk.unmockkConstructor
 import org.apache.arrow.memory.BufferAllocator
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertAll
@@ -42,6 +45,9 @@ import xtdb.time.InstantUtil.asMicros
 import java.nio.ByteBuffer
 import java.time.Instant
 import java.util.UUID
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import kotlin.concurrent.thread
 import xtdb.api.tx.OpenTx
 
 class LiveIndexTest {
@@ -564,6 +570,57 @@ class LiveIndexTest {
 
                 assertEquals(1, held.table(table).single().relation.rowCount)
             }
+        }
+    }
+
+    @Test
+    fun `a snapshot held across a block adoption that races a fresher snapshot stays readable and nothing leaks`() {
+        val inMetadata = CountDownLatch(1)
+        val resumeAdoption = CountDownLatch(1)
+
+        mockkConstructor(LiveIndex.State::class)
+        try {
+            every { anyConstructed<LiveIndex.State>().blockMetadata() } answers {
+                inMetadata.countDown()
+                resumeAdoption.await()
+                callOriginal()
+            }
+
+            TestDb().use { db ->
+                val table = TableRef("public", "docs")
+                val t0 = Instant.parse("2020-01-01T00:00:00Z")
+                val t1 = Instant.parse("2020-01-02T00:00:00Z")
+
+                db.put(0, t0, table)
+
+                db.state.openSnapshot(t0).use { held ->
+                    db.put(1, t1, table)
+                    val l0 = db.finishBlock0L0(table)
+
+                    var adoption: Throwable? = null
+                    val adopting = thread {
+                        try {
+                            db.state.adoptBlock(block { blockIndex = 0 }, listOf(l0), t1)
+                        } catch (e: Throwable) {
+                            adoption = e
+                        }
+                    }
+
+                    try {
+                        assertTrue(inMetadata.await(30, TimeUnit.SECONDS), "adoption reached blockMetadata()")
+                        db.state.openSnapshot(t1).use { }
+                    } finally {
+                        resumeAdoption.countDown()
+                        adopting.join(30_000)
+                        assertFalse(adopting.isAlive, "adoption finished")
+                    }
+
+                    assertNull(adoption)
+                    assertEquals(1, held.table(table).single().relation.rowCount)
+                }
+            }
+        } finally {
+            unmockkConstructor(LiveIndex.State::class)
         }
     }
 
