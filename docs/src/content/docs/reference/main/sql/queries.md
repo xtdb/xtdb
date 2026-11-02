@@ -3,7 +3,17 @@ title: SQL Queries
 ---
 
 <details>
-<summary>Changelog (last updated v2.2.1)</summary>
+<summary>Changelog (last updated v2.3.0)</summary>
+
+v2.3.0: outer joins no longer match NULL join keys
+
+: An [outer join](#from-clause-joins)'s `ON a.k = b.k` matches no row where either key is NULL, as an inner join's already didn't.
+
+  Previously `LEFT`, `RIGHT` and `FULL OUTER` joins could pair a row whose key is NULL with another row whose key is NULL, and so could the joins that correlated subqueries are rewritten into: `(SELECT COUNT(*) FROM r WHERE r.k = l.k)` counted `r`'s NULL-keyed rows for an `l` row whose `k` is NULL.
+  That contradicted SQL's `=`, under which NULL equals nothing.
+  A row whose key is NULL is now padded with NULLs, as any unmatched row is, and that correlated `COUNT(*)` returns 0 for it.
+
+  To keep pairing NULL keys, join on `a.k IS NOT DISTINCT FROM b.k`.
 
 v2.2.1: `WITH MATERIALIZED` spills to disk
 

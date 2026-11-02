@@ -677,6 +677,17 @@
                                        (where (= n 1)))
                                    [e]))))))
 
+(deftest left-join-doesnt-unify-nil-6339
+  (xt/execute-tx tu/*node* [[:put-docs :l {:xt/id 1, :k nil} {:xt/id 2, :k 1}]
+                            [:put-docs :r {:xt/id 10, :k nil} {:xt/id 11, :k 1}]])
+
+  (t/is (= #{{:l 1} {:l 2, :r 11}}
+           (set (xt/q tu/*node*
+                      '(-> (unify (from :l [{:xt/id l} k])
+                                  (left-join (from :r [{:xt/id r} k])
+                                             [r k]))
+                           (return l r)))))))
+
 (deftest test-exists
   (xt/submit-tx tu/*node*
                 [[:put-docs :docs {:xt/id :ivan, :name "Ivan"}]
