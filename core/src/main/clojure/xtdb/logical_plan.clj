@@ -981,47 +981,16 @@
     z
     [:apply opts independent-relation dependent-relation]
     ;;=>
-    (let [{:keys [mode columns]} opts]
+    (let [{:keys [mode columns mark-join-projection]} opts]
       (when-not (parameters-referenced-in-relation? dependent-relation (vals columns))
         (case mode
           :cross-join [:cross-join {} independent-relation dependent-relation]
           (:semi-join :anti-join :left-outer-join :single-join) [mode {:conditions []} independent-relation dependent-relation]
+          :mark-join [:mark-join
+                      {:conditions []
+                       :mark-spec (w/postwalk-replace (set/map-invert columns) (update-vals mark-join-projection vector))}
+                      independent-relation dependent-relation]
           nil)))))
-
-(defn- apply-mark-join->mark-join
-  "If the only references to apply parameters are within the mark-join expression it should be
-   valid to convert the apply mark-join to a mark-join"
-  [z]
-  (r/zmatch
-    z
-    [:apply opts independent-relation dependent-relation]
-    ;;=>
-    (let [{:keys [mode columns mark-join-projection]} opts]
-      (when (and (= mode :mark-join)
-                 (not (parameters-referenced-in-relation? dependent-relation (vals columns))))
-        [:mark-join
-         {:mark-spec (w/postwalk-replace (set/map-invert columns) (update-vals mark-join-projection vector))}
-         independent-relation
-         dependent-relation]))))
-
-(defn- pull-apply-mark-join-select->mark-join-cond [z]
-  (r/zmatch z
-    [:apply opts
-     independent-relation
-     [:select select-opts
-      dependent-relation]]
-    ;; =>
-    (let [{:keys [predicate]} select-opts
-          {:keys [mode columns mark-join-projection]} opts]
-      (when (and (= mode :mark-join) mark-join-projection)
-        (let [[mj-col mj-expr] (first mark-join-projection)]
-          [:apply (->apply-opts {:mode :mark-join
-                                 :columns columns
-                                 :mark-join-projection {mj-col (if (true? mj-expr)
-                                                                 predicate
-                                                                 (list 'and predicate mj-expr))}})
-           independent-relation
-           dependent-relation])))))
 
 (defn- select-mark-join->semi-join [z]
   (r/zmatch z
@@ -1029,17 +998,18 @@
      [:mark-join mark-join-opts lhs rhs]]
     ;; =>
     (let [{:keys [predicate]} opts
-          {:keys [mark-spec]} mark-join-opts
-          mj-col (key (first mark-spec))]
+          {:keys [conditions mark-spec]} mark-join-opts
+          [mj-col mark-exprs] (first mark-spec)]
       (cond
         (= predicate mj-col)
         [:map {:projections [{mj-col true}]}
-         [:semi-join {:conditions (val (first mark-spec))}
+         [:semi-join {:conditions (into conditions (remove true?) mark-exprs)}
           lhs rhs]]
 
-        (= predicate (list 'not mj-col))
+        (and (= predicate (list 'not mj-col))
+             (= mark-exprs [true]))
         [:map {:projections [{mj-col true}]}
-         [:anti-join {:conditions (val (first mark-spec))}
+         [:anti-join {:conditions conditions}
           lhs rhs]]))))
 
 (defn- apply-table-col->unnest [z]
@@ -1088,17 +1058,18 @@
      [:select select-opts dependent-relation]]
     ;;=>
     (let [{:keys [predicate]} select-opts
-          {:keys [mode columns]} opts]
-      (when-not (= mode :mark-join)
-        (when (seq (expr-correlated-symbols predicate))
-          (when-not (parameters-referenced-in-relation?
-                      dependent-relation
-                      (vals columns))
-            [(if (= mode :cross-join)
-               :join
-               mode)
-             {:conditions [(w/postwalk-replace (set/map-invert columns) predicate)]}
-             independent-relation dependent-relation]))))))
+          {:keys [mode columns mark-join-projection]} opts]
+      (when (seq (expr-correlated-symbols predicate))
+        (when-not (parameters-referenced-in-relation?
+                    dependent-relation
+                    (vals columns))
+          [(if (= mode :cross-join)
+             :join
+             mode)
+           (w/postwalk-replace (set/map-invert columns)
+                               (cond-> {:conditions [predicate]}
+                                 (= mode :mark-join) (assoc :mark-spec (update-vals mark-join-projection vector))))
+           independent-relation dependent-relation])))))
 
 (defn- decorrelate-apply-rule-3
   "R A× (σp E) = σp (R A× E)"
@@ -1223,19 +1194,11 @@
     (:join :semi-join :anti-join :left-outer-join :single-join :mark-join :full-outer-join)
     (r/zmatch
       z
-      [:mark-join opts lhs rhs]
-      (let [{:keys [mark-spec]} opts
-            projected-col (first (keys mark-spec))
-            join-expressions (first (vals mark-spec))
-            new-join-expressions (optimize-join-expression join-expressions lhs rhs)]
-        (when (not= new-join-expressions join-expressions)
-          [:mark-join {:mark-spec {projected-col new-join-expressions}} lhs rhs]))
-
       [join-type opts lhs rhs]
       (let [{:keys [conditions]} opts
             new-conditions (optimize-join-expression conditions lhs rhs)]
         (when (not= new-conditions conditions)
-          [join-type {:conditions new-conditions} lhs rhs])))
+          [join-type (assoc opts :conditions new-conditions) lhs rhs])))
 
     nil))
 
@@ -1526,8 +1489,6 @@
    #'push-decorrelated-selections-with-fewer-variables-down
    #'squash-correlated-selects
    #'decorrelate-apply-rule-1
-   #'apply-mark-join->mark-join
-   #'pull-apply-mark-join-select->mark-join-cond
    #'select-mark-join->semi-join
    #'apply-table-col->unnest
    #'decorrelate-apply-rule-2

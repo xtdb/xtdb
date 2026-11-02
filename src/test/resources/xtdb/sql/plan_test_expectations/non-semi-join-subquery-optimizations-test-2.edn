@@ -3,7 +3,7 @@
  [:select
   {:predicate (== true _sq_2)}
   [:mark-join
-   {:mark-spec {_sq_2 [true]}}
+   {:conditions [], :mark-spec {_sq_2 [true]}}
    [:rename {:prefix f.1} [:scan {:db-name "xtdb", :table #xt/table foo, :columns [a]}]]
    [:project
     {:projections [{c foo.3/c}]}

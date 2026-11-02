@@ -1,10 +1,13 @@
 [:project
  {:projections [{_column_1 _sq_2}]}
  [:mark-join
-  {:mark-spec {_sq_2 [{x.1/y z}]}}
+  {:conditions [{x.1/y z}], :mark-spec {_sq_2 [true]}}
   [:rename
    {:prefix x.1}
-   [:scan {:db-name "xtdb", :table #xt/table x, :columns [y {z (== z 10)}]}]]
+   [:scan
+    {:db-name "xtdb", :table #xt/table x, :columns [y {z (== z 10)}]}]]
   [:project
    {:projections [{z y.3/z}]}
-   [:rename {:prefix y.3} [:scan {:db-name "xtdb", :table #xt/table y, :columns [z]}]]]]]
+   [:rename
+    {:prefix y.3}
+    [:scan {:db-name "xtdb", :table #xt/table y, :columns [z]}]]]]]

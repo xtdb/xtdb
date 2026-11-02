@@ -1,7 +1,7 @@
 [:project
  {:projections [{_column_1 (not _sq_2)}]}
  [:mark-join
-  {:mark-spec {_sq_2 [(> x.1/z z)]}}
+  {:conditions [], :mark-spec {_sq_2 [(> x.1/z z)]}}
   [:rename {:prefix x.1} [:scan {:db-name "xtdb", :table #xt/table x, :columns [z]}]]
   [:project
    {:projections [{z y.3/z}]}

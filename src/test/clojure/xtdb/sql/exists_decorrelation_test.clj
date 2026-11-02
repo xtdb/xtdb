@@ -63,8 +63,6 @@
            (xt/q tu/*node* "SELECT x.y FROM x WHERE EXISTS (SELECT 1 FROM y WHERE y.z = x.y) ORDER BY x.y"))
         "the two spellings now compile to the same operator and must still agree"))
 
-;; EXISTS as a projected value keeps its mark-join: a semi-join can't carry the null the
-;; three-valued result needs
 (t/deftest exists-in-a-projection-keeps-its-mark-join
   (let [ops (plan-ops "SELECT EXISTS (SELECT 1 FROM y WHERE y.z = x.y) AS e FROM x")]
     (t/is (not (contains? ops :semi-join)))))
