@@ -981,29 +981,16 @@
     z
     [:apply opts independent-relation dependent-relation]
     ;;=>
-    (let [{:keys [mode columns]} opts]
+    (let [{:keys [mode columns mark-join-projection]} opts]
       (when-not (parameters-referenced-in-relation? dependent-relation (vals columns))
         (case mode
           :cross-join [:cross-join {} independent-relation dependent-relation]
           (:semi-join :anti-join :left-outer-join :single-join) [mode {:conditions []} independent-relation dependent-relation]
+          :mark-join [:mark-join
+                      {:conditions []
+                       :mark-spec (w/postwalk-replace (set/map-invert columns) (update-vals mark-join-projection vector))}
+                      independent-relation dependent-relation]
           nil)))))
-
-(defn- apply-mark-join->mark-join
-  "If the only references to apply parameters are within the mark-join expression it should be
-   valid to convert the apply mark-join to a mark-join"
-  [z]
-  (r/zmatch
-    z
-    [:apply opts independent-relation dependent-relation]
-    ;;=>
-    (let [{:keys [mode columns mark-join-projection]} opts]
-      (when (and (= mode :mark-join)
-                 (not (parameters-referenced-in-relation? dependent-relation (vals columns))))
-        [:mark-join
-         {:conditions []
-          :mark-spec (w/postwalk-replace (set/map-invert columns) (update-vals mark-join-projection vector))}
-         independent-relation
-         dependent-relation]))))
 
 (defn- select-mark-join->semi-join [z]
   (r/zmatch z
@@ -1502,7 +1489,6 @@
    #'push-decorrelated-selections-with-fewer-variables-down
    #'squash-correlated-selects
    #'decorrelate-apply-rule-1
-   #'apply-mark-join->mark-join
    #'select-mark-join->semi-join
    #'apply-table-col->unnest
    #'decorrelate-apply-rule-2
