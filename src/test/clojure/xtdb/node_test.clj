@@ -543,6 +543,15 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
            (xt/q tu/*node*
                  "EXPLAIN SELECT u._id, u.foo FROM users u WHERE u.a + u.b = 12 AND u.b = 1"))))
 
+(t/deftest test-explain-plan-shows-a-mark-joins-mark
+  (xt/execute-tx tu/*node* [[:sql "INSERT INTO x RECORDS {_id: 1, v: 5}"]
+                            [:sql "INSERT INTO t RECORDS {_id: 1, z: 6}"]])
+
+  (t/is (= [{:condition "[]", :mark "(and (== x.1/v z))"}]
+           (->> (xt/q tu/*node* "EXPLAIN SELECT x.v IN (SELECT t.z FROM t) AS m FROM x")
+                (filter #(= :mark-join (:op %)))
+                (mapv :explain)))))
+
 (t/deftest test-explain-plan-window-fn-5990
   (xt/execute-tx tu/*node* [[:sql "INSERT INTO docs RECORDS {_id: 7, name: 'seven'}"]])
 

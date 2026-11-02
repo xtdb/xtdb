@@ -36,7 +36,7 @@
   (s/coll-of ::join-condition-clause :kind vector?))
 
 (s/def ::conditions ::join-condition)
-(s/def ::mark-spec (s/map-of ::lp/column ::join-condition, :count 1, :conform-keys true))
+(s/def ::mark-spec (s/map-of ::lp/column (s/coll-of (s/and ::lp/expression (complement map?)) :kind vector?), :count 1, :conform-keys true))
 
 (defmethod lp/ra-expr :join [_]
   (s/cat :op #{:⋈ :join}
@@ -70,7 +70,7 @@
 
 (defmethod lp/ra-expr :mark-join [_]
   (s/cat :op #{:mark-join}
-         :opts (s/keys :req-un [::mark-spec])
+         :opts (s/keys :req-un [::conditions ::mark-spec])
          :left ::lp/ra-expression
          :right ::lp/ra-expression))
 
@@ -237,7 +237,7 @@
 
 (deftype MarkJoinCursor [^BufferAllocator allocator,
                          ^BuildSide build-side, ^ICursor build-cursor, build-plan-side
-                         ->probe-cursor, probe-key-col-names, ^ComparatorFactory cmp-factory,
+                         ->probe-cursor, probe-key-col-names, ^ComparatorFactory cmp-factory, ->mark-cmp,
                          ^:unsynchronized-mutable ^ICursor probe-cursor
                          mark-col-name
                          pushdown-blooms]
@@ -268,7 +268,7 @@
 
                                       (with-open [mark-col (doto (BitVector. allocator (name mark-col-name) true)
                                                              (.ensureCapacity row-count))]
-                                        (JoinType/mark build-side probe-rel probe-key-col-names cmp-factory mark-col)
+                                        (JoinType/mark build-side probe-rel probe-key-col-names cmp-factory ->mark-cmp mark-col)
                                         (let [out-cols (conj (seq probe-rel) mark-col)]
                                           (.accept c (vr/rel-reader out-cols row-count))))))))))
        (aget advanced? 0))))
@@ -331,7 +331,7 @@
                                   :param-types param-types})))))
 
 (defn- emit-join-expr {:style/indent 2}
-  [{:keys [condition left right]}
+  [{:keys [condition mark-condition left right]}
    {:keys [param-types]}
    {build-plan-side :build-side
     :keys [merge-vec-types-fn join-type
@@ -395,7 +395,8 @@
            ::mark-join :mark-join)
 
      :children [left right]
-     :explain {:condition (pr-str (mapv second condition))}
+     :explain (cond-> {:condition (pr-str (mapv second condition))}
+                mark-condition (assoc :mark (pr-str mark-condition)))
 
      :vec-types (projection-specs->vec-types output-projections)
 
@@ -425,7 +426,14 @@
                        (project/->project-cursor opts
                                                  (cond-> (if (= join-type ::mark-join)
                                                            (MarkJoinCursor. allocator build-side build-cursor build-plan-side
-                                                                            ->probe-cursor-with-pushdowns (map str probe-key-col-names) cmp-factory nil
+                                                                            ->probe-cursor-with-pushdowns (map str probe-key-col-names) cmp-factory
+                                                                            (when-not (every? true? (rest mark-condition))
+                                                                              (fn [build-rel probe-rel]
+                                                                                (emap/->theta-comparator build-rel probe-rel mark-condition args
+                                                                                                         {:build-vec-types build-vec-types
+                                                                                                          :probe-vec-types probe-vec-types
+                                                                                                          :param-types param-types})))
+                                                                            nil
                                                                             mark-col-name pushdown-blooms)
                                                            (JoinCursor. allocator build-side build-cursor build-plan-side
                                                                         probe-vec-types probe-key-col-names
@@ -512,10 +520,11 @@
                      :join-type ::anti-semi-join})))
 
 (defmethod lp/emit-expr :mark-join [{:keys [opts] :as join-expr} args]
-  (let [{:keys [mark-spec]} opts
-        [mark-col-name mark-condition] (first mark-spec)]
+  (let [{:keys [conditions mark-spec]} opts
+        [mark-col-name mark-exprs] (first mark-spec)]
     (emit-join-expr (-> (emit-join-children join-expr args)
-                        (assoc :condition mark-condition))
+                        (assoc :condition conditions
+                               :mark-condition (list* 'and mark-exprs)))
                     args
                     {:build-side :right
                      :merge-vec-types-fn (fn [left-vec-types _] (assoc left-vec-types mark-col-name #xt/type [:? :bool]))

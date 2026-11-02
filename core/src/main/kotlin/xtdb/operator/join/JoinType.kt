@@ -7,6 +7,8 @@ import xtdb.api.error.Incorrect
 import xtdb.arrow.FieldName
 import xtdb.operator.join.ComparatorFactory.Companion.build
 import xtdb.operator.join.JoinType.OuterJoinType.*
+import java.util.function.BiFunction
+import java.util.function.IntBinaryOperator
 
 interface JoinType {
     fun probe(probeSide: ProbeSide): RelationReader
@@ -87,15 +89,30 @@ interface JoinType {
         @JvmField
         val FULL_OUTER = Outer(FULL)
 
+        /**
+         * @param markCmpFactory builds the `:mark-spec` comparator over the loaded build rows and [probeRel];
+         *   null where the mark is constant `true` (EXISTS), so a row is marked TRUE wherever `:conditions` match.
+         */
         @JvmStatic
         fun BuildSide.mark(
             probeRel: RelationReader, probeKeyColNames: List<FieldName>,
-            cmpFactory: ComparatorFactory, markCol: BitVector
+            cmpFactory: ComparatorFactory,
+            markCmpFactory: BiFunction<RelationReader, RelationReader, IntBinaryOperator>?,
+            markCol: BitVector
         ) {
             val res = IntArray(probeRel.rowCount) { -1 }
 
             fun markAgainstLoadedRows() {
-                val probeSide = ProbeSide(this, probeRel, probeKeyColNames, cmpFactory.build(this, probeRel, probeKeyColNames))
+                val conditionsCmp = cmpFactory.build(this, probeRel, probeKeyColNames)
+                val markCmp = markCmpFactory?.apply(dataRel, probeRel)
+                val cmp = IntBinaryOperator { buildIdx, probeIdx ->
+                    when {
+                        conditionsCmp.applyAsInt(buildIdx, probeIdx) != 1 -> -1
+                        markCmp == null -> 1
+                        else -> markCmp.applyAsInt(buildIdx, probeIdx)
+                    }
+                }
+                val probeSide = ProbeSide(this, probeRel, probeKeyColNames, cmp)
                 repeat(probeSide.rowCount) { probeIdx ->
                     if (res[probeIdx] != 1) res[probeIdx] = maxOf(res[probeIdx], probeSide.matches(probeIdx))
                 }

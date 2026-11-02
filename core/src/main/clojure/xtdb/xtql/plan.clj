@@ -493,7 +493,7 @@
        [:map {:projections tmp-expr-sym->expr-vec}
         (wrap-expr-subqueries* plan arg-subqueries)]
        subquery]
-      [:mark-join {:mark-spec {placeholder [true]}}
+      [:mark-join {:conditions [], :mark-spec {placeholder [true]}}
        plan
        subquery])))
 
