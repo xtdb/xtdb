@@ -28,6 +28,7 @@ buildRepl
 !.claude/commands/
 !.claude/skills/
 !.claude/agents/
+!.claude/settings.json
 
 .tasks/
 
