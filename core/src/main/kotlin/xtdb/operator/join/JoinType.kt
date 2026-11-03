@@ -4,6 +4,8 @@ import com.carrotsearch.hppc.IntArrayList
 import xtdb.arrow.BitVector
 import xtdb.arrow.RelationReader
 import xtdb.api.error.Incorrect
+import xtdb.arrow.FieldName
+import xtdb.operator.join.ComparatorFactory.Companion.build
 import xtdb.operator.join.JoinType.OuterJoinType.*
 
 interface JoinType {
@@ -86,9 +88,24 @@ interface JoinType {
         val FULL_OUTER = Outer(FULL)
 
         @JvmStatic
-        fun ProbeSide.mark(markCol: BitVector) {
-            repeat(rowCount) { probeIdx ->
-                when (matches(probeIdx)) {
+        fun BuildSide.mark(
+            probeRel: RelationReader, probeKeyColNames: List<FieldName>,
+            cmpFactory: ComparatorFactory, markCol: BitVector
+        ) {
+            val res = IntArray(probeRel.rowCount) { -1 }
+
+            fun markAgainstLoadedRows() {
+                val probeSide = ProbeSide(this, probeRel, probeKeyColNames, cmpFactory.build(this, probeRel, probeKeyColNames))
+                repeat(probeSide.rowCount) { probeIdx ->
+                    if (res[probeIdx] != 1) res[probeIdx] = maxOf(res[probeIdx], probeSide.matches(probeIdx))
+                }
+            }
+
+            if (shuffle == null) markAgainstLoadedRows()
+            else repeat(partCount) { partIdx -> loadPart(partIdx); markAgainstLoadedRows() }
+
+            res.forEachIndexed { probeIdx, r ->
+                when (r) {
                     0 -> markCol.setNull(probeIdx)
                     1 -> markCol.setBoolean(probeIdx, true)
                     -1 -> markCol.setBoolean(probeIdx, false)

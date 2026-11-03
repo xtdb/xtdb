@@ -18,7 +18,7 @@
            (xtdb.arrow BitVector RelationReader VectorType)
            (xtdb.bloom BloomUtils)
            (xtdb.operator ProjectionSpec)
-           (xtdb.operator.join BuildSide ComparatorFactory DiskHashJoin JoinType MemoryHashJoin ProbeSide)))
+           (xtdb.operator.join BuildSide ComparatorFactory DiskHashJoin JoinType MemoryHashJoin)))
 
 (defmethod lp/ra-expr :cross-join [_]
   (s/cat :op #{:⨯ :cross-join}
@@ -262,15 +262,13 @@
        (while (and (not (aget advanced? 0))
                    (.tryAdvance ^ICursor (.probe-cursor this)
                                 (fn [^RelationReader probe-rel]
-                                  (let [cmp (ComparatorFactory/build cmp-factory build-side probe-rel probe-key-col-names)
-                                        ^ProbeSide probe-side (ProbeSide. build-side probe-rel probe-key-col-names cmp)
-                                        row-count (.getRowCount probe-rel)]
+                                  (let [row-count (.getRowCount probe-rel)]
                                     (when (pos? row-count)
                                       (aset advanced? 0 true)
 
                                       (with-open [mark-col (doto (BitVector. allocator (name mark-col-name) true)
                                                              (.ensureCapacity row-count))]
-                                        (JoinType/mark probe-side mark-col)
+                                        (JoinType/mark build-side probe-rel probe-key-col-names cmp-factory mark-col)
                                         (let [out-cols (conj (seq probe-rel) mark-col)]
                                           (.accept c (vr/rel-reader out-cols row-count))))))))))
        (aget advanced? 0))))

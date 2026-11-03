@@ -297,6 +297,26 @@
                          [::tu/pages
                           [[{:b 12}, {:b nil}]]]]))))
 
+(t/deftest test-mark-join-spilled-build-side
+  (binding [join/*disk-join-threshold-rows* 1]
+    (t/is (= (concat (for [a (range 20)] {:a a, :m true})
+                     [{:a 20, :m false}, {}])
+             (tu/query-ra [:mark-join '{:mark-spec {m [{a b}]}}
+                           [::tu/pages
+                            [(conj (mapv #(hash-map :a %) (range 21)) {:a nil})]]
+                           [::tu/pages
+                            (->> (range 20) (map #(hash-map :b %)) (partition-all 10) (mapv vec))]]))
+          "every build key is probed, so an unread partition loses a match")
+
+    (t/is (= [{:a 12, :m true}, {:a 14}, {}]
+             (tu/query-ra [:mark-join '{:mark-spec {m [{a b}]}}
+                           [::tu/pages
+                            [[{:a 12}, {:a 14}, {:a nil}]]]
+                           [::tu/pages
+                            [[{:b 12}, {:b 13}]
+                             [{:b nil}]]]]))
+          "a NULL `b`, in whichever partition, makes every unmatched mark NULL")))
+
 (t/deftest test-exists-as-mark-join
   ;;These are arguably not tests of mark-join functionality itself,
   ;;but prove that exist/not-exists can be expressed via mark-join (and a negation)
