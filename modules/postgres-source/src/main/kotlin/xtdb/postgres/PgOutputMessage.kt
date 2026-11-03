@@ -17,9 +17,9 @@ sealed interface PgOutputMessage {
         val schema: String,
         val table: String,
         val replicaIdentity: ReplicaIdentity,
-        val columns: List<Column>,
+        val columns: List<PgColumn>,
     ) : PgOutputMessage {
-        data class Column(val name: String, val typeOid: Int)
+        fun toPgTable() = PgTable(schema, table, columns)
     }
 
     enum class ReplicaIdentity(val code: Char) {
@@ -91,7 +91,7 @@ sealed interface PgOutputMessage {
                 val name = buf.readCString()
                 val typeOid = buf.getInt()
                 buf.getInt() // type modifier
-                Relation.Column(name, typeOid)
+                PgColumn(name, typeOid)
             }
             return Relation(relationId, schema, table, replicaIdentity, columns)
         }

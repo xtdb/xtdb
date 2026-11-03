@@ -106,8 +106,6 @@ class PgWireDriver(
     private val ignoreTables: Set<TableRef>,
 ) : PostgresDriver {
 
-    private data class ColumnInfo(val name: String, val typeOid: Int)
-
     // PGProperty.set() is the correct API here — it resolves the internal property name string.
     // props[PGProperty.USER] = "..." silently breaks: it puts the enum object as the key,
     // but pgjdbc looks up by string (e.g. "user"), so the password is never found.
@@ -177,6 +175,7 @@ class PgWireDriver(
                         }
 
                         val columns = handle.discoverColumns(schema, table)
+                        val source = PgTable(schema, table, columns)
 
                         LOG.info("[$dbName] Snapshotting $fullTableName (${columns.size} columns: ${columns.joinToString { it.name }})")
 
@@ -194,7 +193,7 @@ class PgWireDriver(
                                     .forEach { batch ->
                                         rowCount += batch.size
                                         LOG.debug { "[$dbName] Flushing $fullTableName batch: ${batch.size} rows (total: $rowCount)" }
-                                        yield(batch.map { row -> RowOp.Put(schema, table, row) })
+                                        yield(batch.map { row -> RowOp.Put(source, row) })
                                     }
                             }
 
@@ -224,7 +223,7 @@ class PgWireDriver(
             .map { rs, _ -> rs.getString("schemaname") to rs.getString("tablename") }
             .list()
 
-    private fun Handle.discoverColumns(schema: String, table: String): List<ColumnInfo> =
+    private fun Handle.discoverColumns(schema: String, table: String): List<PgColumn> =
         createQuery(
             """
             SELECT a.attname, a.atttypid::int
@@ -237,7 +236,7 @@ class PgWireDriver(
         )
             .bind("schema", schema)
             .bind("table", table)
-            .map { rs, _ -> ColumnInfo(rs.getString("attname"), rs.getInt("atttypid")) }
+            .map { rs, _ -> PgColumn(rs.getString("attname"), rs.getInt("atttypid")) }
             .list()
 
     // --- Streaming ---
@@ -410,11 +409,14 @@ class PgWireDriver(
 
     // --- Row conversion ---
 
-    private fun toRowOp(relation: PgOutputMessage.Relation, msg: PgOutputMessage): RowOp = when (msg) {
-        is PgOutputMessage.Insert -> RowOp.Put(relation.schema, relation.table, toRowMap(relation, msg.values))
-        is PgOutputMessage.Update -> RowOp.Put(relation.schema, relation.table, toRowMap(relation, msg.newValues, msg.oldValues))
-        is PgOutputMessage.Delete -> RowOp.Delete(relation.schema, relation.table, toRowMap(relation, msg.oldValues))
-        else -> error("Unexpected op type: ${msg::class.simpleName}")
+    private fun toRowOp(relation: PgOutputMessage.Relation, msg: PgOutputMessage): RowOp {
+        val source = relation.toPgTable()
+        return when (msg) {
+            is PgOutputMessage.Insert -> RowOp.Put(source, toRowMap(relation, msg.values))
+            is PgOutputMessage.Update -> RowOp.Put(source, toRowMap(relation, msg.newValues, msg.oldValues))
+            is PgOutputMessage.Delete -> RowOp.Delete(source, toRowMap(relation, msg.oldValues))
+            else -> error("Unexpected op type: ${msg::class.simpleName}")
+        }
     }
 
     private fun toRowMap(relation: PgOutputMessage.Relation, values: List<PgOutputMessage.ColumnValue>, oldValues: List<PgOutputMessage.ColumnValue>? = null): Map<String, Any?> =

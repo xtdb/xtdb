@@ -47,6 +47,9 @@ abstract class PostgresSourceTestBase {
             c.createStatement().use { it.execute("COMMIT") }
         }
 
+    protected fun pgWireDriver(slot: String, pub: String, pg: PostgreSQLContainer = postgres) =
+        PgWireDriver("cdc", pg.host, pg.firstMappedPort, pg.databaseName, pg.username, pg.password, slot, pub, emptySet())
+
     protected fun dropSlot(slot: String) =
         pgExecute("SELECT pg_drop_replication_slot('$slot') FROM pg_replication_slots WHERE slot_name = '$slot'")
 

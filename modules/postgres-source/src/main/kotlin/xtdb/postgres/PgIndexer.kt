@@ -16,7 +16,7 @@ import com.google.protobuf.Any as ProtoAny
  * [PostgresDriver.Transaction]; the snapshot path synthesises one per batch so there is a single
  * entry point.
  *
- * Each op carries its source `schema`/`table` ([RowOp]), so an indexer can re-route tables, derive
+ * Each op carries its source table's description ([RowOp.source]), so an indexer can re-route tables, derive
  * `_id`, drop or mask columns, or filter ops entirely. The reference [DirectMirror] mirrors the
  * upstream as-is and has no privileged access — it uses the same [OpenTx] surface as any indexer.
  */

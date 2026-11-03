@@ -26,9 +26,10 @@ class TestRerouteIndexer(
 
     override fun indexTx(tx: PostgresDriver.Transaction, openTx: OpenTx) {
         val rerouted = tx.ops.map { op ->
+            val source = PgTable("public", target, op.source.columns.filter { it.name != dropColumn })
             when (op) {
-                is RowOp.Put -> RowOp.Put("public", target, op.row - dropColumn)
-                is RowOp.Delete -> RowOp.Delete("public", target, op.row)
+                is RowOp.Put -> RowOp.Put(source, op.row - dropColumn)
+                is RowOp.Delete -> RowOp.Delete(source, op.row)
             }
         }
         DirectMirror().indexTx(PostgresDriver.Transaction(tx.lsn, tx.commitTime, rerouted), openTx)

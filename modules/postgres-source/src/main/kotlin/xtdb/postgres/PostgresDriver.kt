@@ -2,12 +2,29 @@ package xtdb.postgres
 
 import java.time.Instant
 
+/**
+ * A column of a published table.
+ *
+ * @property typeOid the column's Postgres type OID (`pg_attribute.atttypid`)
+ * @suppress
+ */
+data class PgColumn(val name: String, val typeOid: Int)
+
+/**
+ * A published table as the source describes it: its name and its columns, in attribute order.
+ *
+ * @suppress
+ */
+data class PgTable(val schema: String, val table: String, val columns: List<PgColumn>)
+
 /** @suppress */
 sealed interface RowOp {
-    val schema: String
-    val table: String
-    data class Put(override val schema: String, override val table: String, val row: Map<String, Any?>) : RowOp
-    data class Delete(override val schema: String, override val table: String, val row: Map<String, Any?>) : RowOp
+    val source: PgTable
+    val schema: String get() = source.schema
+    val table: String get() = source.table
+
+    data class Put(override val source: PgTable, val row: Map<String, Any?>) : RowOp
+    data class Delete(override val source: PgTable, val row: Map<String, Any?>) : RowOp
 }
 
 /**
