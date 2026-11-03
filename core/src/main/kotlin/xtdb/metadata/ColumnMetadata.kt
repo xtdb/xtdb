@@ -6,6 +6,7 @@ import xtdb.arrow.I32_TYPE
 import xtdb.arrow.LIST_TYPE
 import xtdb.arrow.STRUCT_TYPE
 import xtdb.arrow.VAR_BINARY_TYPE
+import xtdb.arrow.VectorMask
 import xtdb.arrow.VectorReader
 import xtdb.arrow.VectorType
 import xtdb.arrow.VectorType.Companion.BOOL
@@ -49,7 +50,7 @@ class ColumnMetadata(private val colsVec: VectorWriter, private val calculateBlo
         typeVec.endStruct()
     }
 
-    private fun writeMetadata(col: VectorReader, rootCol: Boolean): RowIndex {
+    private fun writeMetadata(col: VectorReader, rootCol: Boolean, mask: VectorMask): RowIndex {
         val withBloom = calculateBlooms || (col.name == "_iid" && rootCol)
 
         val childRefWrites = mutableListOf<() -> Unit>()
@@ -61,22 +62,23 @@ class ColumnMetadata(private val colsVec: VectorWriter, private val calculateBlo
         var bloom: BloomBuilder? = null
         val presence = mutableListOf<Presence>()
 
-        fun DoubleMinMax?.fold(flavour: Numeric) = (this ?: DoubleMinMax()).also { flavour.minMaxInto(it) }
+        fun DoubleMinMax?.fold(flavour: Numeric) = (this ?: DoubleMinMax()).also { flavour.minMaxInto(it, mask) }
 
         for (flavour in col.metadataFlavours) {
             when (flavour) {
                 is MetadataFlavour.List -> {
-                    val childIdx = writeMetadata(flavour.listElements, false)
+                    val childIdx = writeMetadata(flavour.listElements, false, VectorMask.ALL)
                     childRefWrites += { colsVec.vectorFor("list", I32_TYPE, true).writeInt(childIdx) }
                 }
 
                 is MetadataFlavour.Set -> {
-                    val childIdx = writeMetadata(flavour.listElements, false)
+                    val childIdx = writeMetadata(flavour.listElements, false, VectorMask.ALL)
                     childRefWrites += { colsVec.vectorFor("set", I32_TYPE, true).writeInt(childIdx) }
                 }
 
                 is Struct -> {
-                    val childIdxs = flavour.vectors.map { writeMetadata(it, false) }
+                    val childMask = flavour.childMask(mask)
+                    val childIdxs = flavour.vectors.map { writeMetadata(it, false, childMask) }
                     childRefWrites += {
                         val keysVec = colsVec.vectorFor("struct", LIST_TYPE, true)
                         val keyVec = keysVec.getListElements(I32_TYPE, false)
@@ -92,7 +94,7 @@ class ColumnMetadata(private val colsVec: VectorWriter, private val calculateBlo
 
                 is Bytes -> {
                     bytesSeen = true
-                    if (withBloom) flavour.hashInto(bloom ?: BloomBuilder().also { bloom = it })
+                    if (withBloom) flavour.hashInto(bloom ?: BloomBuilder().also { bloom = it }, mask)
                 }
 
                 is Presence -> presence.add(flavour)
@@ -103,7 +105,7 @@ class ColumnMetadata(private val colsVec: VectorWriter, private val calculateBlo
 
         colNameVec.writeObject(col.name)
         rootColVec.writeBoolean(rootCol)
-        countVec.writeLong((0 until col.valueCount).count { !col.isNull(it) }.toLong())
+        countVec.writeLong((0 until col.valueCount).count { mask.isSet(it) && !col.isNull(it) }.toLong())
 
         writeNumericMetadata(numbers, MetadataFlavour.Number::class)
         writeNumericMetadata(dateTimes, DateTime::class)
@@ -119,5 +121,5 @@ class ColumnMetadata(private val colsVec: VectorWriter, private val calculateBlo
         return colsVec.valueCount - 1
     }
 
-    fun writeMetadata(col: VectorReader) = writeMetadata(col, true)
+    fun writeMetadata(col: VectorReader) = writeMetadata(col, true, VectorMask.ALL)
 }

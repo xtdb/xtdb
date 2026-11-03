@@ -12,12 +12,14 @@ import xtdb.api.query.IKeyFn
 import xtdb.arrow.VectorType.Companion.fromLegs
 import xtdb.arrow.agg.VectorSummer
 import xtdb.arrow.metadata.MetadataFlavour
+import xtdb.arrow.metadata.MetadataFlavour.Companion.translatingMask
 import xtdb.api.error.Unsupported
 import xtdb.kw
 import xtdb.util.Hasher
 import xtdb.util.safeMap
 import xtdb.util.safelyOpening
 import java.nio.ByteBuffer
+import java.util.BitSet
 import org.apache.arrow.vector.complex.DenseUnionVector as ArrowDenseUnionVector
 
 class DenseUnionVector private constructor(
@@ -310,7 +312,22 @@ class DenseUnionVector private constructor(
     }
 
     override val metadataFlavours: Collection<MetadataFlavour>
-        get() = legVectors.flatMap { it.metadataFlavours }
+        get() = legVectors.flatMapIndexed { typeId, leg ->
+            leg.metadataFlavours.map { it.translatingMask { mask -> legMask(typeId, mask) } }
+        }
+
+    private fun legMask(typeId: Int, mask: VectorMask): VectorMask {
+        if (mask === VectorMask.ALL) return VectorMask.ALL
+
+        val legRows = BitSet()
+        repeat(valueCount) { idx ->
+            if (mask.isSet(idx) && getTypeId(idx).toInt() == typeId) legRows.set(getOffset(idx))
+        }
+
+        return object : VectorMask {
+            override fun isSet(idx: Int) = legRows[idx]
+        }
+    }
 
     override fun hashCode(idx: Int, hasher: Hasher) = leg(idx)!!.hashCode(getOffset(idx), hasher)
 
