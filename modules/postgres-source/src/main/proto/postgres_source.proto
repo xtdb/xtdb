@@ -14,6 +14,9 @@ message PostgresSourceConfig {
     // Carried as Any so the proto stays decoupled from specific indexer config shapes —
     // mirrors KafkaConnectSourceConfig.indexer and DatabaseConfig.external_source.
     google.protobuf.Any indexer = 4;
+
+    // dotted `schema.table`, schema always present
+    repeated string ignore_tables = 5;
 }
 
 message DirectMirrorConfig {

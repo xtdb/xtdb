@@ -205,6 +205,8 @@ rule SourceReceivesTransaction {
 }
 
 rule SourceReceivesKeepalive {
+    -- A transaction whose changes are all to tables the source ignores arrives as one.
+    -- Its WAL holds nothing of ours, so it advances received_lsn as a keepalive does.
     when: PgKeepaliveReceived(upstream, source, upstream_lsn)
     requires: upstream_lsn > source.received_lsn
 

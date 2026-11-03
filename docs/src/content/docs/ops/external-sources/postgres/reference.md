@@ -13,7 +13,8 @@ A [role](https://www.postgresql.org/docs/current/user-manag.html) with the follo
 - The [`USAGE`](https://www.postgresql.org/docs/current/ddl-priv.html#DDL-PRIV-USAGE) privilege on all schemas of tables in the publication. Used during snapshotting.
 - The [`SELECT`](https://www.postgresql.org/docs/current/ddl-priv.html#DDL-PRIV-SELECT) privilege on all tables in the publication. Used during snapshotting.
 
-A publication enumerating the tables to sync to XTDB, it's table set is the only filter on what gets synced.
+A publication enumerating the tables to sync to XTDB.
+Its tables are synced, less any named in the source's [`ignoreTables`](#ignored-tables-v2-next).
 
 [`REPLICA IDENTITY FULL`](https://www.postgresql.org/docs/current/sql-altertable.html#SQL-ALTERTABLE-REPLICA-IDENTITY) on any table with a column that can hold a large ([TOASTable](https://www.postgresql.org/docs/current/storage-toast.html)) value — `text`, `bytea`, `jsonb`, and the like.
 Without it, an `UPDATE` that leaves such a column unchanged omits its value from the replication stream, and — since XTDB mirrors the whole row — the source can't reconstruct the row and halts (see [troubleshooting](/ops/external-sources/postgres/troubleshooting)).
@@ -46,8 +47,26 @@ externalSource: !Postgres
 
   # The indexer used to index Postgres transactions.
   indexer: !DirectMirror {}
+
+  # (v2-NEXT+) Tables in the publication to leave out of XTDB (optional, default none).
+  ignoreTables: [legacy.events, audit_log]
 $$
 ```
+
+### Ignored tables (v2-NEXT+)
+
+Each `ignoreTables` entry names a table as `schema.table`, or as `table` for a table in `public`.
+Names are matched exactly against Postgres's own, so case matters: a table created as `CREATE TABLE Audit_Log` is `audit_log`, and one created as `"Audit_Log"` is `Audit_Log`.
+
+An ignored table is never snapshotted, the values in its replicated inserts, updates and deletes are never converted into rows, and nothing from it reaches the indexer.
+So an insert, update or delete that would otherwise stop the source doesn't, such as a row without an `_id`, or an unchanged TOASTed column on a table without `REPLICA IDENTITY FULL`.
+A `TRUNCATE` of an ignored table still stops the source, as a `TRUNCATE` of any published table does (tracked [here](https://github.com/xtdb/xtdb/issues/6346)).
+
+The source's configuration is fixed when the database is attached.
+To change `ignoreTables`, detach the database and attach it again under the same name, with the same `log`, `storage`, `slotName` and `publicationName` and the new list.
+Provided the database had written a block before it was detached, the source resumes from where the database left off, including after a change to a table it couldn't mirror stopped it.
+
+Removing a table from `ignoreTables` doesn't backfill the changes made while it was ignored (tracked [here](https://github.com/xtdb/xtdb/issues/5497)).
 
 ### Remote
 
