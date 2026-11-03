@@ -65,21 +65,18 @@ class GleifPgIndexer : PgIndexer {
     }
 
     private fun writeOp(openTx: OpenTx, op: RowOp) {
-        // GLEIF goes into the `public` schema; mirror the table name into XT.
-        val table = openTx.table(op.schema, op.table)
-
         when (op) {
             is RowOp.Put -> {
                 val id = deriveId(op.table, op.row)
                 val doc = shapeDoc(op.table, op.row) + ("_id" to id)
                 // null valid-from → systemTime (the entity family, current state).
-                table.writePut(doc, validFrom = validFrom(op.table, op.row))
+                openTx.table(op.schema, op.table).writePut(doc, validFrom = validFrom(op.table, op.row))
             }
 
             is RowOp.Delete -> {
                 // The delete row carries only the upstream's REPLICA IDENTITY columns; deriving the id
                 // needs the primary key, which the default (PK) replica identity provides.
-                table.writeDelete(deriveId(op.table, op.row))
+                openTx.table(op.schema, op.table).writeDelete(deriveId(op.table, op.row))
             }
         }
     }

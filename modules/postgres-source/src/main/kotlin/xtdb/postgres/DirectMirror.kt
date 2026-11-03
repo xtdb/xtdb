@@ -31,8 +31,6 @@ class DirectMirror : PgIndexer {
     }
 
     private fun writeOp(openTx: OpenTx, op: RowOp) {
-        val openTxTable = openTx.table(op.schema, op.table)
-
         when (op) {
             is RowOp.Put -> {
                 val docMap = op.row.toMutableMap()
@@ -46,7 +44,7 @@ class DirectMirror : PgIndexer {
                 if (explicitValidTo != null && explicitValidFrom == null)
                     throw Incorrect("'_valid_to' requires '_valid_from'")
 
-                openTxTable.apply {
+                openTx.table(op.schema, op.table).apply {
                     writeId(id)
                     writeValidTimeMicros(
                         explicitValidFrom ?: openTx.systemTimeMicros,
@@ -61,7 +59,7 @@ class DirectMirror : PgIndexer {
                 val id = op.row["_id"]
                     ?: throw Incorrect("Missing '_id' in delete on ${op.schema}.${op.table}")
 
-                openTxTable.apply {
+                openTx.table(op.schema, op.table).apply {
                     writeId(id)
                     writeDefaultValidTime()
                     endDelete()

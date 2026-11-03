@@ -66,16 +66,14 @@ class EdgarPgIndexer : PgIndexer {
     }
 
     private fun writeOp(openTx: OpenTx, op: RowOp) {
-        val table = openTx.table(op.schema, op.table)
-
         when (op) {
             is RowOp.Put -> {
                 val id = deriveId(op.table, op.row)
                 val doc = op.row + ("_id" to id)
-                table.writePut(doc, validFrom = validFrom(op.table, op.row))
+                openTx.table(op.schema, op.table).writePut(doc, validFrom = validFrom(op.table, op.row))
             }
 
-            is RowOp.Delete -> table.writeDelete(deriveId(op.table, op.row))
+            is RowOp.Delete -> openTx.table(op.schema, op.table).writeDelete(deriveId(op.table, op.row))
         }
     }
 
