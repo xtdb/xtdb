@@ -2,8 +2,10 @@ package xtdb.arrow.metadata
 
 import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.arrow.UNION_TYPE
+import xtdb.arrow.VectorMask
 import xtdb.arrow.VectorReader
 import xtdb.arrow.VectorType
+import xtdb.bloom.BloomBuilder
 import xtdb.util.Hasher
 import java.nio.ByteBuffer
 
@@ -15,6 +17,9 @@ sealed interface MetadataFlavour {
 
     sealed interface Numeric : MetadataFlavour {
         fun getMetaDouble(idx: Int): Double
+
+        fun minMaxInto(minMax: DoubleMinMax, mask: VectorMask) =
+            repeat(valueCount) { if (mask.isSet(it) && !isNull(it)) minMax.applyMinMax(getMetaDouble(it)) }
     }
 
     interface Presence : MetadataFlavour
@@ -27,6 +32,9 @@ sealed interface MetadataFlavour {
     interface Bytes : MetadataFlavour {
         fun getBytes(idx: Int): ByteBuffer
         fun hashCode(idx: Int, hasher: Hasher): Int
+
+        fun hashInto(bloom: BloomBuilder, mask: VectorMask) =
+            repeat(valueCount) { if (mask.isSet(it)) bloom.add(this, it) }
     }
 
     interface List : MetadataFlavour {
@@ -39,9 +47,50 @@ sealed interface MetadataFlavour {
 
     interface Struct : MetadataFlavour {
         val vectors: Iterable<VectorReader>
+
+        /**
+         * The mask over the rows of [vectors] that their metadata is taken under, given [mask] over this struct's rows:
+         * the rows [mask] selects where this struct isn't null.
+         */
+        fun childMask(mask: VectorMask): VectorMask =
+            if (!nullable) mask
+            else object : VectorMask {
+                override fun isSet(idx: Int) = mask.isSet(idx) && !isNull(idx)
+            }
     }
 
     companion object {
+        internal fun MetadataFlavour.translatingMask(translate: (VectorMask) -> VectorMask): MetadataFlavour {
+            val f = this
+            return when (f) {
+                is Number -> object : Number by f {
+                    override fun minMaxInto(minMax: DoubleMinMax, mask: VectorMask) = f.minMaxInto(minMax, translate(mask))
+                }
+
+                is DateTime -> object : DateTime by f {
+                    override fun minMaxInto(minMax: DoubleMinMax, mask: VectorMask) = f.minMaxInto(minMax, translate(mask))
+                }
+
+                is Duration -> object : Duration by f {
+                    override fun minMaxInto(minMax: DoubleMinMax, mask: VectorMask) = f.minMaxInto(minMax, translate(mask))
+                }
+
+                is TimeOfDay -> object : TimeOfDay by f {
+                    override fun minMaxInto(minMax: DoubleMinMax, mask: VectorMask) = f.minMaxInto(minMax, translate(mask))
+                }
+
+                is Bytes -> object : Bytes by f {
+                    override fun hashInto(bloom: BloomBuilder, mask: VectorMask) = f.hashInto(bloom, translate(mask))
+                }
+
+                is Struct -> object : Struct by f {
+                    override fun childMask(mask: VectorMask) = f.childMask(translate(mask))
+                }
+
+                is Presence, is List, is Set -> f
+            }
+        }
+
         private fun ArrowType.unsupported(): Nothing =
             throw UnsupportedOperationException(this::class.java.simpleName)
 

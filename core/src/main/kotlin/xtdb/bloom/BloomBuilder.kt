@@ -17,7 +17,6 @@ class BloomBuilder(private val k: Int = BLOOM_K, bits: Int = BLOOM_BITS) {
     fun add(buf: ByteBuffer) = add(xxHasher.hash(buf), murmur3Hasher.hash(buf))
 
     fun add(col: MetadataFlavour.Bytes, idx: Int) = add(col.hashCode(idx, xxHasher), col.hashCode(idx, murmur3Hasher))
-    fun add(col: MetadataFlavour.Bytes) = repeat(col.valueCount) { add(col, it) }
 
     fun add(col: VectorReader, idx: Int) = add(col.hashCode(idx, xxHasher), col.hashCode(idx, murmur3Hasher))
     fun add(col: VectorReader) = repeat(col.valueCount) { add(col, it) }
