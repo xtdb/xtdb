@@ -37,6 +37,5 @@ jobs:
       timeout_minutes: 90
       benchmark_timeout: PT1H
       tpch_query_language: sql
-      queue_entry: tpch-sql
       run_queue: ${{ inputs.run_queue || 'false' }}
     secrets: inherit
