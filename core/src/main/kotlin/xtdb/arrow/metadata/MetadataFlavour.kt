@@ -4,6 +4,7 @@ import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.arrow.UNION_TYPE
 import xtdb.arrow.VectorReader
 import xtdb.arrow.VectorType
+import xtdb.bloom.BloomBuilder
 import xtdb.util.Hasher
 import java.nio.ByteBuffer
 
@@ -15,6 +16,9 @@ sealed interface MetadataFlavour {
 
     sealed interface Numeric : MetadataFlavour {
         fun getMetaDouble(idx: Int): Double
+
+        fun minMaxInto(minMax: DoubleMinMax) =
+            repeat(valueCount) { if (!isNull(it)) minMax.applyMinMax(getMetaDouble(it)) }
     }
 
     interface Presence : MetadataFlavour
@@ -27,6 +31,8 @@ sealed interface MetadataFlavour {
     interface Bytes : MetadataFlavour {
         fun getBytes(idx: Int): ByteBuffer
         fun hashCode(idx: Int, hasher: Hasher): Int
+
+        fun hashInto(bloom: BloomBuilder) = repeat(valueCount) { bloom.add(this, it) }
     }
 
     interface List : MetadataFlavour {
