@@ -5,11 +5,13 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.modules.PolymorphicModuleBuilder
 import kotlinx.serialization.modules.subclass
+import xtdb.InternalApi
 import xtdb.api.error.Incorrect
 import xtdb.api.tx.OpenTx
 import xtdb.postgres.PgIndexer
 import xtdb.postgres.PostgresDriver
 import xtdb.postgres.RowOp
+import xtdb.postgres.deleteAllRows
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -65,6 +67,7 @@ class EdgarPgIndexer : PgIndexer {
         for (op in tx.ops) writeOp(openTx, op)
     }
 
+    @OptIn(InternalApi::class)
     private fun writeOp(openTx: OpenTx, op: RowOp) {
         when (op) {
             is RowOp.Put -> {
@@ -74,6 +77,8 @@ class EdgarPgIndexer : PgIndexer {
             }
 
             is RowOp.Delete -> openTx.table(op.schema, op.table).writeDelete(deriveId(op.table, op.row))
+
+            is RowOp.Truncate -> openTx.deleteAllRows(op.schema, op.table, forAllValidTime = true)
         }
     }
 

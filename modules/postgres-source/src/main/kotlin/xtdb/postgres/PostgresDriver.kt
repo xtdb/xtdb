@@ -17,7 +17,13 @@ data class PgColumn(val name: String, val typeOid: Int)
  */
 data class PgTable(val schema: String, val table: String, val columns: List<PgColumn>)
 
-/** @suppress */
+/**
+ * One change to a published table: a row put or deleted, or the whole table truncated.
+ *
+ * Named for rows, though a [Truncate] names none; to be renamed in the next breaking release.
+ *
+ * @suppress
+ */
 sealed interface RowOp {
     val source: PgTable
     val schema: String get() = source.schema
@@ -25,6 +31,9 @@ sealed interface RowOp {
 
     data class Put(override val source: PgTable, val row: Map<String, Any?>) : RowOp
     data class Delete(override val source: PgTable, val row: Map<String, Any?>) : RowOp
+
+    /** Every row of [source] is deleted, at this op's position in its transaction. */
+    data class Truncate(override val source: PgTable) : RowOp
 }
 
 /**
@@ -52,8 +61,8 @@ interface PostgresDriver : AutoCloseable {
     fun openSnapshot(): SnapshotReader
 
     /**
-     * A committed PostgreSQL transaction, containing the row-level operations
-     * and metadata needed for indexing and acknowledgement.
+     * A committed PostgreSQL transaction, containing its operations in the order they were made,
+     * and the metadata needed for indexing and acknowledgement.
      */
     data class Transaction(val lsn: Long, val commitTime: Instant, val ops: List<RowOp>)
 

@@ -3,6 +3,8 @@ package xtdb.postgres
 import kotlinx.serialization.modules.PolymorphicModuleBuilder
 import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.polymorphic
+import xtdb.InternalApi
+import xtdb.api.error.Incorrect
 import xtdb.api.error.Unsupported
 import xtdb.api.tx.OpenTx
 import java.util.ServiceLoader
@@ -74,4 +76,35 @@ interface PgIndexer : AutoCloseable {
         fun registerSerde(builder: PolymorphicModuleBuilder<Factory>)
         val serializersModule: SerializersModule get() = SerializersModule {}
     }
+}
+
+/**
+ * Deletes every row of the XT table [schema].[table] at this point in the transaction, as an indexer applies a [RowOp.Truncate].
+ *
+ * @param forAllValidTime deletes every valid-time version of each row, for a table whose rows carry their own valid time;
+ *   otherwise each row is deleted from the transaction's system time on, and its earlier history survives.
+ * @throws Incorrect where [schema] or [table] contains `"` or `/`, which an XT SQL identifier can't hold.
+ * @throws Incorrect `Table not found` where XT holds no such table — one it has never been sent a row for.
+ * @suppress
+ */
+// `@InternalApi` rather than `internal` because the datasets module's Edgar and Gleif indexers call it across the
+// module boundary.
+// It can go `internal` once they no longer do — e.g. once `OpenTx.Table` offers a delete-all of its own, which
+// would also lift the identifier restriction.
+@InternalApi
+fun OpenTx.deleteAllRows(schema: String, table: String, forAllValidTime: Boolean) =
+    executeSql(deleteAllRowsSql(schema, table, forAllValidTime))
+
+internal fun deleteAllRowsSql(schema: String, table: String, forAllValidTime: Boolean): String {
+    fun quoted(ident: String): String {
+        if ('"' in ident || '/' in ident)
+            throw Incorrect(
+                "Can't delete from $schema.$table: XT can't name an identifier containing '\"' or '/'",
+                errorCode = "xtdb.postgres/unquotable-identifier",
+                data = mapOf("schema" to schema, "table" to table),
+            )
+        return "\"$ident\""
+    }
+
+    return "DELETE FROM ${quoted(schema)}.${quoted(table)}" + if (forAllValidTime) " FOR ALL VALID_TIME" else ""
 }

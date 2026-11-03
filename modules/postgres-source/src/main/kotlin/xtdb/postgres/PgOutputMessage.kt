@@ -53,6 +53,9 @@ sealed interface PgOutputMessage {
 
     data class Delete(val relationId: Int, val oldValues: List<ColumnValue>) : PgOutputMessage
 
+    /** Every published table one `TRUNCATE` emptied, including those its `CASCADE` reached. */
+    data class Truncate(val relationIds: List<Int>) : PgOutputMessage
+
     /**
      * Column value in a data message.
      * - [Null] for SQL NULL
@@ -75,6 +78,7 @@ sealed interface PgOutputMessage {
                 'I' -> parseInsert(buf)
                 'U' -> parseUpdate(buf)
                 'D' -> parseDelete(buf)
+                'T' -> parseTruncate(buf)
                 else -> throw UnsupportedOperationException(
                     "Unknown pgoutput message type: '$type' (0x${type.code.toString(16)})"
                 )
@@ -152,6 +156,12 @@ sealed interface PgOutputMessage {
             buf.get() // 'K' or 'O'
             val oldValues = parseTupleData(buf)
             return Delete(relationId, oldValues)
+        }
+
+        private fun parseTruncate(buf: ByteBuffer): Truncate {
+            val numRelations = buf.getInt()
+            buf.get() // options
+            return Truncate((0 until numRelations).map { buf.getInt() })
         }
 
         private fun parseTupleData(buf: ByteBuffer): List<ColumnValue> {

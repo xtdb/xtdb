@@ -142,4 +142,17 @@ Additional properties are required from the tables replicated using this indexer
 - If set, the `_valid_from` and `_valid_to` columns must be of type `TIMESTAMPTZ`
   - Like in XTDB, it is incorrect to specify a `_valid_to` without a `_valid_from`
 
+A `TRUNCATE` deletes every row of each table it empties, at its position in the transaction:
+- In a table with a `_valid_from` column, the rows are deleted for all valid time.
+- In any other table, the rows are deleted from the transaction's [system time](#system-time) on, and their history before it remains queryable.
+
+A `TRUNCATE ... CASCADE` empties the tables it reached in the same way.
+
+:::caution
+A `TRUNCATE` of a table XTDB has never received a row for stops ingestion with `Table not found`.
+That happens for a table that was empty at the snapshot, such as on a truncate-then-load job's first run.
+It also happens for a table added to the publication after the source started, where the `TRUNCATE` arrives before any of its rows.
+The source replays the `TRUNCATE` when it restarts, so recovering means resetting the source, by the same steps as [recovering from a failed initial snapshot](/ops/external-sources/postgres/troubleshooting#recovering-from-a-failed-initial-snapshot).
+:::
+
 No configuration properties are provided.

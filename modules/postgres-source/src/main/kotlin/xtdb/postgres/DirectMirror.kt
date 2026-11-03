@@ -4,6 +4,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.modules.PolymorphicModuleBuilder
 import kotlinx.serialization.modules.subclass
+import xtdb.InternalApi
 import xtdb.api.error.Incorrect
 import xtdb.api.tx.OpenTx
 import xtdb.postgres.proto.DirectMirrorConfig
@@ -30,6 +31,7 @@ class DirectMirror : PgIndexer {
         )
     }
 
+    @OptIn(InternalApi::class)
     private fun writeOp(openTx: OpenTx, op: RowOp) {
         when (op) {
             is RowOp.Put -> {
@@ -54,6 +56,9 @@ class DirectMirror : PgIndexer {
                     endPut()
                 }
             }
+
+            is RowOp.Truncate ->
+                openTx.deleteAllRows(op.schema, op.table, forAllValidTime = op.source.columns.any { it.name == "_valid_from" })
 
             is RowOp.Delete -> {
                 val id = op.row["_id"]

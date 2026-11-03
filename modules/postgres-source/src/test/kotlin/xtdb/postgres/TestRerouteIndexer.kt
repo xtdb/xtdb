@@ -30,6 +30,7 @@ class TestRerouteIndexer(
             when (op) {
                 is RowOp.Put -> RowOp.Put(source, op.row - dropColumn)
                 is RowOp.Delete -> RowOp.Delete(source, op.row)
+                is RowOp.Truncate -> RowOp.Truncate(source)
             }
         }
         DirectMirror().indexTx(PostgresDriver.Transaction(tx.lsn, tx.commitTime, rerouted), openTx)

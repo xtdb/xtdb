@@ -5,12 +5,14 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.modules.PolymorphicModuleBuilder
 import kotlinx.serialization.modules.subclass
+import xtdb.InternalApi
 import xtdb.api.error.Incorrect
 import xtdb.api.tx.OpenTx
 import xtdb.kw
 import xtdb.postgres.PgIndexer
 import xtdb.postgres.PostgresDriver
 import xtdb.postgres.RowOp
+import xtdb.postgres.deleteAllRows
 import java.time.Instant
 import java.time.OffsetDateTime
 import java.time.ZonedDateTime
@@ -64,6 +66,7 @@ class GleifPgIndexer : PgIndexer {
         for (op in tx.ops) writeOp(openTx, op)
     }
 
+    @OptIn(InternalApi::class)
     private fun writeOp(openTx: OpenTx, op: RowOp) {
         when (op) {
             is RowOp.Put -> {
@@ -78,6 +81,8 @@ class GleifPgIndexer : PgIndexer {
                 // needs the primary key, which the default (PK) replica identity provides.
                 openTx.table(op.schema, op.table).writeDelete(deriveId(op.table, op.row))
             }
+
+            is RowOp.Truncate -> openTx.deleteAllRows(op.schema, op.table, forAllValidTime = !isEntity(op.table))
         }
     }
 

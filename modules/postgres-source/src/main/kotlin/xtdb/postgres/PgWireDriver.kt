@@ -264,7 +264,7 @@ class PgWireDriver(
 
         private val relations = mutableMapOf<Int, PgOutputMessage.Relation>()
 
-        // A transaction spans Begin..(Insert/Update/Delete)*..Commit across multiple `poll()` calls, so its
+        // A transaction spans Begin..(Insert/Update/Delete/Truncate)*..Commit across multiple `poll()` calls, so its
         // accumulated ops and the idle hot-poll counter live on the stream, not on a single poll.
         private var currentTxOps = mutableListOf<RowOp>()
         private var emptyPolls = 0
@@ -322,6 +322,21 @@ class PgWireDriver(
 
                         LOG.trace { "[$dbName] ${parsed::class.simpleName} on ${relation.schema}.${relation.table}" }
                         currentTxOps.add(toRowOp(relation, parsed))
+                    }
+
+                    is PgOutputMessage.Truncate -> {
+                        for (relationId in parsed.relationIds) {
+                            val relation = relations[relationId]
+                                ?: error("Relation $relationId not found — missing Relation message before truncate")
+
+                            if (TableRef(relation.schema, relation.table) in ignoreTables) {
+                                LOG.trace { "[$dbName] Skipping Truncate on ignored ${relation.schema}.${relation.table}" }
+                                continue
+                            }
+
+                            LOG.trace { "[$dbName] Truncate on ${relation.schema}.${relation.table}" }
+                            currentTxOps.add(RowOp.Truncate(relation.toPgTable()))
+                        }
                     }
 
                     is PgOutputMessage.Commit -> {

@@ -16,7 +16,7 @@ import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * Drives random programs of mutations + lifecycle events (insert/update/delete, batches, block
+ * Drives random programs of mutations + lifecycle events (insert/update/delete/truncate, batches, block
  * flushes, restarts) against a real Postgres container, keeping a reference model and asserting
  * XTDB's CDC pipeline converges to it.
  */
@@ -29,6 +29,7 @@ class PostgresSourceSimulationTest : PostgresSourceTestBase() {
         data class Insert(val id: Int, val name: String) : Op
         data class Update(val id: Int, val name: String) : Op
         data class Delete(val id: Int) : Op
+        data object Truncate : Op
     }
 
     private sealed interface Cmd {
@@ -46,6 +47,7 @@ class PostgresSourceSimulationTest : PostgresSourceTestBase() {
         is Op.Insert -> model + (op.id to op.name)
         is Op.Update -> if (op.id in model) model + (op.id to op.name) else model
         is Op.Delete -> model - op.id
+        Op.Truncate -> emptyMap()
     }
 
     private fun opSql(table: String, op: Op): String = when (op) {
@@ -54,6 +56,7 @@ class PostgresSourceSimulationTest : PostgresSourceTestBase() {
             "ON CONFLICT (_id) DO UPDATE SET name = EXCLUDED.name"
         is Op.Update -> "UPDATE $table SET name = '${op.name}' WHERE _id = ${op.id}"
         is Op.Delete -> "DELETE FROM $table WHERE _id = ${op.id}"
+        Op.Truncate -> "TRUNCATE $table"
     }
 
     private fun cdcIngestionError(node: Xtdb) =
@@ -98,12 +101,16 @@ class PostgresSourceSimulationTest : PostgresSourceTestBase() {
         val table = unique("pg"); val pub = unique("pub"); val slot = unique("slot")
         // log, storage, cdc-log, cdc-storage
         val dirs = List(4) { Files.createTempDirectory("pg-sim") }
+        // the snapshot carries the seed row, so XT holds the table before any truncate:
+        // a truncate of a table XT has never written stops ingestion
+        val seed = 0 to "seed"
         pgExecute(
             "CREATE TABLE $table (_id INT PRIMARY KEY, name TEXT)",
+            "INSERT INTO $table VALUES (${seed.first}, '${seed.second}')",
             "CREATE PUBLICATION $pub FOR TABLE $table",
         )
         var node = openNode(dirs[0], dirs[1])
-        var model = emptyMap<Int, String>()
+        var model = mapOf(seed)
         try {
             attachCdc(node, database = "cdc", cdcLog = dirs[2], cdcStorage = dirs[3], slot = slot, pub = pub)
             awaitStreaming(node)
@@ -150,10 +157,11 @@ class PostgresSourceSimulationTest : PostgresSourceTestBase() {
     private val opGen: Arb<Op> = arbitrary {
         val id = Arb.int(1..8).bind()
         val name = Arb.string(0..8, Codepoint.alphanumeric()).bind()
-        when (Arb.int(0..2).bind()) {
-            0 -> Op.Insert(id, name)
-            1 -> Op.Update(id, name)
-            else -> Op.Delete(id)
+        when (Arb.int(0 until 10).bind()) {
+            in 0..2 -> Op.Insert(id, name)
+            in 3..5 -> Op.Update(id, name)
+            in 6..8 -> Op.Delete(id)
+            else -> Op.Truncate
         }
     }
 
@@ -184,6 +192,8 @@ class PostgresSourceSimulationTest : PostgresSourceTestBase() {
                 Cmd.RestartWith(listOf(Op.Insert(100, "Charlie"))),
                 Cmd.Mutate(Op.Update(1, "AliceUpdated")),
                 Cmd.Mutate(Op.Delete(2)),
+                Cmd.Batch(listOf(Op.Insert(200, "Dora"), Op.Truncate, Op.Insert(201, "Eve"))),
+                Cmd.RestartWith(listOf(Op.Truncate, Op.Insert(300, "Frank"))),
             )
         )
     }

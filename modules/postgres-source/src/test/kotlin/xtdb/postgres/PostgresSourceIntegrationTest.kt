@@ -1200,6 +1200,7 @@ class PostgresSourceIntegrationTest {
                 "COMMIT",
                 "UPDATE pg_ign_no_id SET note = 'touched' WHERE name = 'ignored-snap'",
                 "DELETE FROM pg_ign_no_id WHERE name = 'ignored-stream'",
+                "TRUNCATE pg_ign_no_id",
                 "INSERT INTO pg_ign_kept (_id, name) VALUES (3, 'kept-after')",
             )
 
