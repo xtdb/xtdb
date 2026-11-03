@@ -13,7 +13,17 @@ class BloomBuilder(private val k: Int = BLOOM_K, bits: Int = BLOOM_BITS) {
     private val xxHasher = Hasher.Xx()
     private val murmur3Hasher = Hasher.Murmur3()
 
-    fun add(hash1: Int, hash2: Int) = repeat(k) { n -> buf.add(mask and (hash1 + (hash2 * n))) }
+    private var lastHash1 = 0
+    private var lastHash2 = 0
+
+    fun add(hash1: Int, hash2: Int) {
+        if (!buf.isEmpty && hash1 == lastHash1 && hash2 == lastHash2) return
+
+        lastHash1 = hash1
+        lastHash2 = hash2
+        repeat(k) { n -> buf.add(mask and (hash1 + (hash2 * n))) }
+    }
+
     fun add(buf: ByteBuffer) = add(xxHasher.hash(buf), murmur3Hasher.hash(buf))
 
     fun add(col: MetadataFlavour.Bytes, idx: Int) = add(col.hashCode(idx, xxHasher), col.hashCode(idx, murmur3Hasher))
