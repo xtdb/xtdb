@@ -38,6 +38,7 @@ import xtdb.api.query.IKeyFn.KeyFn.SNAKE_CASE_STRING
 import xtdb.arrow.Relation
 import xtdb.arrow.STRUCT_TYPE
 import xtdb.arrow.VectorType.Companion.I64
+import xtdb.api.error.Fault
 import xtdb.api.error.Incorrect
 import xtdb.trie.Bucketer
 import xtdb.trie.Trie
@@ -354,6 +355,19 @@ class LiveIndexTest {
 
                 assertEquals(1, held.table(table).single().relation.rowCount)
             }
+        }
+    }
+
+    @Test
+    fun `releasing a live snapshot once more than it was held is a fault`() {
+        TestDb().use { db ->
+            db.put(0, Instant.parse("2020-01-01T00:00:00Z"), TableRef("public", "docs"))
+
+            val liveSnap = LiveSnap.open(allocator, db.state.value.value.live, emptyList(), null)
+            liveSnap.release()
+
+            val fault = assertThrows<Fault> { liveSnap.release() }
+            assertEquals(Keyword.intern("xtdb/live-snap-over-released"), fault.data.valAt(errorCodeKey))
         }
     }
 

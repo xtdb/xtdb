@@ -2,6 +2,7 @@ package xtdb.indexer
 
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.TransactionKey
+import xtdb.api.error.Fault
 import xtdb.arrow.MergeTypes.Companion.mergeTypes
 import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorType
@@ -164,7 +165,9 @@ internal class LiveSnap private constructor(
     }
 
     fun release() {
-        if (0 == refCount.decrementAndGet()) (durable.values.map { it.snap } + layered.values).closeAll()
+        val remaining = refCount.decrementAndGet()
+        if (remaining < 0) throw Fault("live snapshot released more times than it was retained", "xtdb/live-snap-over-released")
+        if (remaining == 0) (durable.values.map { it.snap } + layered.values).closeAll()
     }
 
     companion object {
