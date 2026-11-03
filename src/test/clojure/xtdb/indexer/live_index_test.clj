@@ -14,6 +14,7 @@
            [org.apache.arrow.memory BufferAllocator]
            (xtdb.api TransactionResult$Committed)
            (xtdb.arrow Relation)
+           (xtdb.database DatabasePartition)
            (xtdb.indexer ResolvedTx)
            (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf MemoryHashTrie$Leaf)))
 
@@ -36,7 +37,7 @@
     (t/testing "commit"
       (xt/execute-tx tu/*node* (for [iid iids] [:put-docs :docs {:xt/id iid, :some :doc}]))
 
-      (let [live-table (.table live-index #xt/table docs)
+      (let [live-table (.table (.getState live-index) #xt/table docs)
             live-rel (.getRelation live-table)
             iid-vec (.vectorFor live-rel "_iid")
 
@@ -134,13 +135,13 @@
   ;; A tx that CREATEs a table (columns declared, 0 rows) is read behind by a later tx while still staged
   ;; in the same batch. openSnapshot drops the empty relation, so tableInfo has to carry the freshly-created
   ;; table's existence directly — else SQL base-table resolution throws "Table not found" for the later tx.
-  (let [live-index (.getLiveIndex (db/primary-db tu/*node*))
+  (let [partition-state (.getState ^DatabasePartition (first (.getPartitions (db/primary-db tu/*node*))))
         table #xt/table foo
         tx-key #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"}]
     (util/with-open [staged (with-open [create-tx (tu/->open-tx tx-key)]
                               (.executeSql create-tx "CREATE TABLE foo (_id, bar)")
                               (ResolvedTx/stage create-tx 0 (TransactionResult$Committed. tx-key) nil nil))
                      observer-tx (tu/->open-tx #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-01T00:00:01Z"})
-                     snap (.openSnapshot live-index [staged] observer-tx)]
+                     snap (.openSnapshot partition-state [staged] observer-tx)]
       (t/is (.containsKey (.getTableInfo snap) table)
             "a table CREATEd in a still-staged tx is visible to a later tx resolving behind it"))))

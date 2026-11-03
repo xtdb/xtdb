@@ -83,7 +83,7 @@ internal class BlockCutter(
      */
     private class Uploading(val pendingBlock: PendingBlock, val block: Block) : BlockState
 
-    private var blockState: BlockState = Filling(liveIndex.blockRowCount)
+    private var blockState: BlockState = Filling(liveIndex.state.blockRowCount)
 
     /**
      * The block this term has produced and is waiting to read back, holding whatever arrived behind its
@@ -112,7 +112,7 @@ internal class BlockCutter(
     /**
      * Whether the rows resolved into this block have reached the threshold.
      *
-     * Ahead of [LiveIndex.blockRowCount], which moves only as transactions apply: the boundary is injected
+     * Ahead of [LiveIndex.State.blockRowCount], which moves only as transactions apply: the boundary is injected
      * in resolution order, so it is the resolved rows that decide where it falls. Seeded from the rows
      * already applied into the open block, because a leader promoted mid-block must cut where the previous
      * one would have or block sizes drift across restarts (the #5817 stop/start off-by-one).
@@ -127,7 +127,7 @@ internal class BlockCutter(
      * Records that a transaction of [rows] rows resolved into this block.
      *
      * Nothing may resolve between the cut and the block being adopted: a transaction that did would hold a
-     * transient over a relation [LiveIndex.nextBlock] removes, and apply one block's rows into a table
+     * transient over a relation the block's adoption removes, and apply one block's rows into a table
      * re-created at the next block index.
      */
     fun txResolved(rows: Long) {
@@ -151,7 +151,7 @@ internal class BlockCutter(
      */
     suspend fun cut(latestProcessedMsgId: MessageId, extToken: ExternalSourceToken?) {
         val boundary = BlockBoundary(
-            (tableCatalog.currentBlockIndex ?: -1) + 1, latestProcessedMsgId, extToken,
+            (tableCatalog.snap().blockIdx ?: -1) + 1, latestProcessedMsgId, extToken,
             termId = leaderTerm
         )
         replicaAppender.append(ControlItem(boundary))
@@ -180,7 +180,7 @@ internal class BlockCutter(
 
         val timer = meterRegistry?.let { Timer.start(it) }
 
-        val finishedBlocks = liveIndex.finishBlock(bufferPool, blockIdx)
+        val finishedBlocks = liveIndex.finishBlock(bufferPool, blockIdx, tableCatalog.snap()::slug)
 
         // One timestamp for the whole block rather than one per table: it dates the supersession these
         // tries cause, and they all supersede as of the same block.
@@ -205,16 +205,15 @@ internal class BlockCutter(
 
         // The layout these tries imply rather than the one the catalog holds: the block records the
         // partitions as of itself, and the add below is what the catalog will agree with afterwards.
-        val allTables = finishedBlocks.keys + tableCatalog.allTables
+        val allTables = finishedBlocks.keys + tableCatalog.snap().allTables
 
+        val trieCatState = trieCatalog.state
         val tablePartitions = allTables.associateWith { table ->
-            trieCatalog.withPartitions(table, listOfNotNull(addedTriesByTable[table]), triesAsOf)
+            trieCatState.withPartitions(table, listOfNotNull(addedTriesByTable[table]), triesAsOf)
         }
 
         val tableBlocks = tableCatalog.buildTableBlocks(finishedBlocks, tablePartitions)
 
-        // A table new in this block has already written its L0 trie by now, under the slug its LiveTable was
-        // created with — the same one minted here, because both resolve through `State.slug`.
         val entries = tableCatalog.resolveTables(tableBlocks.keys).associateBy { it.table }
 
         coroutineScope {
@@ -232,7 +231,7 @@ internal class BlockCutter(
         val externalSourceToken = boundary.externalSourceToken
 
         val block = tableCatalog.buildBlock(
-            blockIdx, liveIndex.latestCompletedTx, latestProcessedMsgId,
+            blockIdx, liveIndex.state.latestCompletedTx, latestProcessedMsgId,
             boundaryReplicaMsgId, entries.values, secondaryDatabasesForBlock,
             externalSourceToken,
             boundary.termId, // not leaderTerm - #6059
@@ -269,7 +268,7 @@ internal class BlockCutter(
      * Adopt the block [msg] confirms, re-open the one behind it, and hand back what was held meanwhile.
      *
      * The caller applies those held records only after this returns. They belong to the block opening
-     * here, and a tx applied between `finishBlock` and `nextBlock` would land in live tables already
+     * here, and a tx applied between `finishBlock` and the block adoption would land in live tables already
      * snapshotted into L0 and about to be cleared — so the rows would be written nowhere.
      */
     fun closeBlock(msg: BlockUploaded, logTimestamp: LogTimestamp): PendingBlock {

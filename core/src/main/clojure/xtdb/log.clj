@@ -67,10 +67,11 @@
   (throw (err/incorrect :xtdb/unknown-log-type (format "Unknown log type: %s" k)
                         {:log-type k})))
 
-(defmethod ->log-factory ::in-memory [_ {:keys [instant-src epoch]}]
+(defmethod ->log-factory ::in-memory [_ {:keys [instant-src epoch replay-buffer-size]}]
   (cond-> (Log/getInMemoryLog)
     instant-src (.instantSource instant-src)
-    epoch (.epoch epoch)))
+    epoch (.epoch epoch)
+    replay-buffer-size (.replayBufferSize replay-buffer-size)))
 
 (defmethod ->log-factory ::local [_ {:keys [path instant-src epoch instant-source-for-non-tx-msgs?]}]
   (cond-> (Log/localLog (util/->path path))

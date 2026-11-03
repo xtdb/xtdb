@@ -134,6 +134,7 @@ class PostgresSourceIntegrationTest {
         dbName: String = "cdc",
         slotName: String = "test_slot_${UUID.randomUUID().toString().replace("-", "_")}",
         publicationName: String = "test_pub",
+        ignoreTables: List<String> = emptyList(),
     ) {
         node.getConnection().use { conn ->
             conn.createStatement().use { stmt ->
@@ -148,6 +149,7 @@ class PostgresSourceIntegrationTest {
                           slotName: $slotName
                           publicationName: $publicationName
                           indexer: !DirectMirror {}
+                          ignoreTables: ${ignoreTables.joinToString(prefix = "[", postfix = "]")}
                     $$""".trimIndent()
                 )
             }
@@ -163,6 +165,7 @@ class PostgresSourceIntegrationTest {
         logTopic: String = "test-replica-${UUID.randomUUID()}",
         slotName: String = "test_slot_${UUID.randomUUID().toString().replace("-", "_")}",
         publicationName: String = "test_pub",
+        ignoreTables: List<String> = emptyList(),
     ) {
         node.getConnection().use { conn ->
             conn.createStatement().use { stmt ->
@@ -179,6 +182,7 @@ class PostgresSourceIntegrationTest {
                           slotName: $slotName
                           publicationName: $publicationName
                           indexer: !DirectMirror {}
+                          ignoreTables: ${ignoreTables.joinToString(prefix = "[", postfix = "]")}
                     $$""".trimIndent()
                 )
             }
@@ -360,7 +364,7 @@ class PostgresSourceIntegrationTest {
             "cdc",
             PgWireDriver(
                 "cdc", postgres.host, postgres.getMappedPort(5432), postgres.databaseName,
-                postgres.username, postgres.password, slotName, pubName, null,
+                postgres.username, postgres.password, slotName, pubName, emptySet(), null,
             ),
             ReconnectPolicy(initialDelay = 100.milliseconds, maxDelay = 500.milliseconds),
         )
@@ -434,7 +438,7 @@ class PostgresSourceIntegrationTest {
             awaitTxs(node, 2, db = "cdc")
 
             val cdc = (node as XtdbInternal).dbCatalog["cdc"]!!
-            assertNull(cdc.tableCatalog.currentBlockIndex, "test precondition: no block cut")
+            assertNull(cdc.tableCatalog.snap().blockIdx, "test precondition: no block cut")
 
             val atAttach = pgSlotConfirmedFlushLsn(slotName)
 
@@ -471,8 +475,8 @@ class PostgresSourceIntegrationTest {
             val cdc = (node as XtdbInternal).dbCatalog["cdc"]!!
 
             cdc.sendFlushBlockMessage()
-            eventually(30.seconds) { assertTrue(cdc.tableCatalog.currentBlockIndex != null, "first block persisted") }
-            val blockLsn = PostgresSourceToken.parseFrom(cdc.tableCatalog.externalSourceToken!!).latestCommittedLsn
+            eventually(30.seconds) { assertTrue(cdc.tableCatalog.snap().blockIdx != null, "first block persisted") }
+            val blockLsn = PostgresSourceToken.parseFrom(cdc.tableCatalog.snap().externalSourceToken!!).latestCommittedLsn
 
             pgExecute("INSERT INTO pg_confirm (_id, name) VALUES (2, 'streamed-two')")
 
@@ -499,7 +503,7 @@ class PostgresSourceIntegrationTest {
 
             cdc.sendFlushBlockMessage()
             val persisted = eventually(30.seconds) {
-                PostgresSourceToken.parseFrom(cdc.tableCatalog.externalSourceToken!!).latestCommittedLsn
+                PostgresSourceToken.parseFrom(cdc.tableCatalog.snap().externalSourceToken!!).latestCommittedLsn
                     .also { assertTrue(it > blockLsn, "second block's token covers the streamed rows") }
             }
 
@@ -569,8 +573,8 @@ class PostgresSourceIntegrationTest {
                 }
 
                 cdc.sendFlushBlockMessage()
-                eventually(30.seconds) { assertNotNull(cdc.tableCatalog.currentBlockIndex, "block persisted for cdc") }
-                val durableLsn = PostgresSourceToken.parseFrom(cdc.tableCatalog.externalSourceToken!!).latestCommittedLsn
+                eventually(30.seconds) { assertNotNull(cdc.tableCatalog.snap().blockIdx, "block persisted for cdc") }
+                val durableLsn = PostgresSourceToken.parseFrom(cdc.tableCatalog.snap().externalSourceToken!!).latestCommittedLsn
 
                 // Writing inside the poll, not a batch up front: the received position rides on the
                 // walsender's keepalives, which it sends as it works through new WAL, so a single
@@ -595,7 +599,7 @@ class PostgresSourceIntegrationTest {
 
                 assertEquals(
                     durableLsn,
-                    PostgresSourceToken.parseFrom(cdc.tableCatalog.externalSourceToken!!).latestCommittedLsn,
+                    PostgresSourceToken.parseFrom(cdc.tableCatalog.snap().externalSourceToken!!).latestCommittedLsn,
                     "test precondition: no block covers the unflushed row, so the replica log and the live index are its only copies",
                 )
 
@@ -615,7 +619,7 @@ class PostgresSourceIntegrationTest {
                 assertEquals(
                     durableLsn,
                     PostgresSourceToken.parseFrom(
-                        (node as XtdbInternal).dbCatalog["cdc"]!!.tableCatalog.externalSourceToken!!
+                        (node as XtdbInternal).dbCatalog["cdc"]!!.tableCatalog.snap().externalSourceToken!!
                     ).latestCommittedLsn,
                     "resumed from the block cut before the restart — a block flushed on shutdown would make the unflushed row durable and void everything below",
                 )
@@ -781,10 +785,10 @@ class PostgresSourceIntegrationTest {
                 val cdc = (node as XtdbInternal).dbCatalog["cdc"]!!
                 cdc.sendFlushBlockMessage()
                 eventually(30.seconds) {
-                    assertTrue(cdc.tableCatalog.currentBlockIndex != null, "block persisted for cdc")
+                    assertTrue(cdc.tableCatalog.snap().blockIdx != null, "block persisted for cdc")
                 }
 
-                val txId = cdc.tableCatalog.latestCompletedTx!!.txId
+                val txId = cdc.tableCatalog.snap().latestCompletedTx!!.txId
                 val sourceOffset = cdc.sourceLog.latestSubmittedOffset()
                 assertTrue(
                     txId > sourceOffset,
@@ -845,7 +849,7 @@ class PostgresSourceIntegrationTest {
 
                 cdc.sendFlushBlockMessage()
                 eventually(30.seconds) {
-                    assertNotNull(cdc.tableCatalog.currentBlockIndex, "block persisted for cdc")
+                    assertNotNull(cdc.tableCatalog.snap().blockIdx, "block persisted for cdc")
                 }
 
                 // the boundary carries cdc's source-log watermark, which stays low while the CDC
@@ -1249,6 +1253,111 @@ class PostgresSourceIntegrationTest {
             ).map { it["table_name"] as String }
             assertTrue(publicTables.contains("pg_pub_in"), "expected pg_pub_in in $publicTables")
             assertTrue(!publicTables.contains("pg_pub_out"), "pg_pub_out should not be replicated, got $publicTables")
+        }
+    }
+
+    @Test
+    fun `ignored tables are never snapshotted or decoded, and the rest keep streaming`() = runTest(timeout = 120.seconds) {
+        val pubName = "test_pub_${UUID.randomUUID().toString().replace("-", "_")}"
+        val slotName = "test_slot_${UUID.randomUUID().toString().replace("-", "_")}"
+        val sourceTopic = "test-topic-${UUID.randomUUID()}"
+
+        pgExecute(
+            "CREATE TABLE IF NOT EXISTS pg_ign_kept (_id INT PRIMARY KEY, name TEXT)",
+            "CREATE TABLE IF NOT EXISTS pg_ign_no_id (name TEXT PRIMARY KEY, note TEXT, body TEXT)",
+            // uncompressed, so the body is stored out of line and an update leaving it alone omits it from the stream
+            "ALTER TABLE pg_ign_no_id ALTER COLUMN body SET STORAGE EXTERNAL",
+            "INSERT INTO pg_ign_kept (_id, name) VALUES (1, 'kept-snap')",
+            "INSERT INTO pg_ign_no_id (name, body) VALUES ('ignored-snap', repeat('x', 10000))",
+            "CREATE PUBLICATION $pubName FOR TABLE pg_ign_kept, pg_ign_no_id",
+        )
+
+        openNode(sourceTopic).use { node ->
+            attachPostgresSource(node, slotName = slotName, publicationName = pubName, ignoreTables = listOf("pg_ign_no_id"))
+
+            eventually(30.seconds) {
+                assertTrue(xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_ign_kept WHERE _id = 1").isNotEmpty(), "kept table snapshotted")
+            }
+
+            pgExecute(
+                "BEGIN",
+                "INSERT INTO pg_ign_no_id (name, body) VALUES ('ignored-stream', repeat('y', 10000))",
+                "INSERT INTO pg_ign_kept (_id, name) VALUES (2, 'kept-stream')",
+                "COMMIT",
+                "UPDATE pg_ign_no_id SET note = 'touched' WHERE name = 'ignored-snap'",
+                "DELETE FROM pg_ign_no_id WHERE name = 'ignored-stream'",
+                "INSERT INTO pg_ign_kept (_id, name) VALUES (3, 'kept-after')",
+            )
+
+            eventually(30.seconds) {
+                assertEquals(listOf(1, 2, 3), xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_ign_kept ORDER BY _id").map { (it["_id"] as Number).toInt() })
+            }
+
+            assertNull((node as XtdbInternal).dbCatalog["cdc"]!!.ingestionError)
+
+            val publicTables = xtQueryDb(
+                node, "cdc",
+                "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'",
+            ).map { it["table_name"] as String }
+            assertTrue(publicTables.contains("pg_ign_kept"), "expected pg_ign_kept in $publicTables")
+            assertFalse(publicTables.contains("pg_ign_no_id"), "pg_ign_no_id should not be replicated, got $publicTables")
+        }
+    }
+
+    @Test
+    fun `a table that stopped the source can be ignored by re-attaching, which resumes where it stopped`() = runTest(timeout = 180.seconds) {
+        val pubName = "test_pub_${UUID.randomUUID().toString().replace("-", "_")}"
+        val slotName = "test_slot_${UUID.randomUUID().toString().replace("-", "_")}"
+        val sourceTopic = "test-topic-${UUID.randomUUID()}"
+        val logTopic = "test-replica-${UUID.randomUUID()}"
+        val storagePath = Files.createTempDirectory("pg-reattach-storage")
+
+        pgExecute(
+            "CREATE TABLE IF NOT EXISTS pg_rec_kept (_id INT PRIMARY KEY, name TEXT)",
+            "CREATE TABLE IF NOT EXISTS pg_rec_no_id (name TEXT PRIMARY KEY)",
+            "INSERT INTO pg_rec_kept (_id, name) VALUES (1, 'snapshotted')",
+            "CREATE PUBLICATION $pubName FOR TABLE pg_rec_kept, pg_rec_no_id",
+        )
+
+        openNode(sourceTopic).use { node ->
+            val dbCatalog = (node as XtdbInternal).dbCatalog
+
+            attachPostgresSourceWithLocalStorage(node, storagePath, logTopic = logTopic, slotName = slotName, publicationName = pubName)
+            awaitTxs(node, 2, db = "cdc")
+
+            // without a durable block the slot is confirmed past the changes the re-attach has to re-read (#6348)
+            dbCatalog["cdc"]!!.sendFlushBlockMessage()
+            eventually(30.seconds) { assertNotNull(dbCatalog["cdc"]!!.tableCatalog.snap().blockIdx, "first block persisted") }
+
+            pgExecute("INSERT INTO pg_rec_kept (_id, name) VALUES (2, 'streamed')")
+
+            eventually(30.seconds) {
+                assertTrue(xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_rec_kept WHERE _id = 2").isNotEmpty(), "kept table streams")
+            }
+
+            pgExecute(
+                "INSERT INTO pg_rec_no_id (name) VALUES ('no-id')",
+                "INSERT INTO pg_rec_kept (_id, name) VALUES (3, 'after the stop')",
+            )
+
+            eventually(30.seconds) {
+                assertNotNull(dbCatalog["cdc"]?.ingestionError, "a row without an _id stops the source")
+            }
+
+            node.getConnection().use { conn -> conn.createStatement().use { it.execute("DETACH DATABASE cdc") } }
+
+            eventually(30.seconds) {
+                attachPostgresSourceWithLocalStorage(
+                    node, storagePath, logTopic = logTopic, slotName = slotName, publicationName = pubName,
+                    ignoreTables = listOf("pg_rec_no_id"),
+                )
+            }
+
+            eventually(60.seconds) {
+                assertEquals(listOf(1, 2, 3), xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_rec_kept ORDER BY _id").map { (it["_id"] as Number).toInt() })
+            }
+
+            assertNull(dbCatalog["cdc"]!!.ingestionError)
         }
     }
 

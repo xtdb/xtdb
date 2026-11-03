@@ -49,6 +49,15 @@ By default, the log is a transient, in-memory log:
 ## log: !InMemory
 ```
 
+``` yaml
+log: !InMemory
+  # -- optional
+
+  # (v2-NEXT+) The number of most recent records each of the database's logs holds in memory.
+  # Log tables and catching up after a leadership change can only read back this far.
+  replayBufferSize: 4096 # default
+```
+
 If configured as an in-process node, you can also specify an [InstantSource](https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/time/InstantSource.html) implementation - this is used to override the local machine's clock when providing a system-time timestamp for each message.
 
 ## Local disk

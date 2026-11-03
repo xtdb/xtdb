@@ -12,6 +12,7 @@
            (xtdb.antlr SqlVisitor SqlVisitor)
            xtdb.api.query.IKeyFn
            xtdb.database.Database$Catalog
+           xtdb.database.DatabasePartition
            xtdb.node.impl.Node))
 
 (defn- create-table [node {:keys [table-name columns]}]
@@ -41,7 +42,7 @@
   (let [db (.getPrimary db-cat)
         !cache (atom {})
         plan-stmt sql/plan
-        live-idx (.getLiveIndex db)]
+        partition-state (.getState ^DatabasePartition (first (.getPartitions db)))]
 
     ;; we remove _id from non-direct SLT queries because `SELECT *` doesn't expect it to be there
     (with-redefs [sql/plan (fn self
@@ -59,7 +60,7 @@
             ;; we grab the projection afterwards so that xt/q has awaited the tx
             ;; TODO hoping that there'll be a better means of getting hold of this soon
             projection (->> (or (get @!cache sql-statement)
-                                (sql/plan sql-statement {:table-info (scan/tables-with-cols live-idx)}))
+                                (sql/plan sql-statement {:table-info (scan/tables-with-cols partition-state)}))
                             meta :ordered-outer-projection
                             (mapv (comp #(.denormalize ^IKeyFn (identity #xt/key-fn :snake-case-string) %) str)))]
         (vec

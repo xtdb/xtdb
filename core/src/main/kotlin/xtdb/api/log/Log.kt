@@ -64,6 +64,7 @@ interface Log<M> : AutoCloseable {
                 when (config.logCase) {
                     IN_MEMORY_LOG -> config.inMemoryLog.let {
                         inMemoryLog.epoch(it.epoch)
+                            .apply { if (it.hasReplayBufferSize()) replayBufferSize(it.replayBufferSize) }
                     }
 
                     LOCAL_LOG -> config.localLog.let {

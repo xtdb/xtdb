@@ -13,7 +13,7 @@
   (:import (java.nio.file Path)
            (xtdb.api.storage ObjectStore$StoredObject)
            (xtdb.catalog TableCatalog)
-           (xtdb.database Database)
+           (xtdb.database Database DatabasePartition PartitionState)
            (xtdb.storage BufferPool)
            (xtdb.table TableSlug)
            xtdb.api.TableRef))
@@ -34,7 +34,7 @@
 
 (defn- list-l0-entries
   "Enumerate the L0 trie files for a table directly from the object store.
-   The catalog is no longer the authoritative source for L0 — see `trie-cat/reset->l0!`.
+   The catalog is no longer the authoritative source for L0 — see `TrieCatalog$State/withL0Reset`.
    Meta is the completion marker (deleted last by GC), so we list it first; data-file-size
    comes from the paired data file. Skips meta files whose data file is missing — those are
    half-written tries that the GC's data-then-meta deletion order leaves transiently visible.
@@ -52,7 +52,7 @@
 
 (defn- enumerate-l0s [^BufferPool bp ^TableCatalog table-cat tables]
   (into {} (for [^TableRef table tables]
-             [table (vec (list-l0-entries bp (.slug table-cat table)))])))
+             [table (vec (list-l0-entries bp (.slug (.snap table-cat) table)))])))
 
 (defn reset-compactor! [node-opts ^String db-name {:keys [dry-run?]}]
   (let [config (doto (xtn/->config node-opts)
@@ -74,10 +74,12 @@
               trie-cat (.getTrieCatalog db)
               table-cat (.getTableCatalog db)
               live-idx (.getLiveIndex db)
-              tables (.getTables trie-cat)
+              partition-state (.getState ^DatabasePartition (first (.getPartitions db)))
+              trie-cat-state (.getState trie-cat)
+              tables (.getTables trie-cat-state)
               compacted-file-keys (vec (for [^TableRef table tables
-                                             :let [slug (.slug table-cat table)]
-                                             ^String trie-key (trie-cat/compacted-trie-keys (trie-cat/trie-state trie-cat table))
+                                             :let [slug (.slug (.snap table-cat) table)]
+                                             ^String trie-key (trie-cat/compacted-trie-keys (.tableState trie-cat-state table))
 
                                              ;; meta file first, as it's the marker
                                              file-key [(.metaFilePath slug trie-key)
@@ -95,7 +97,7 @@
                         "\nThen, do not upgrade nodes until the reset is complete.")
 
               (letfn [(freeze-state []
-                        (->> (for [[tbl {:keys [tries]}] (:!table-cats trie-cat)]
+                        (->> (for [[tbl {:keys [tries]}] (:table-cats (.getState trie-cat))]
                                [tbl (->> (for [[k tries] tries
                                                :let [{:keys [live garbage]} tries]]
                                            [k {:live (count live)
@@ -103,7 +105,7 @@
                                          (into {}))])
                              (into {})))]
                 (let [state-before (freeze-state)]
-                  (trie-cat/reset->l0! trie-cat table->l0-entries)
+                  (.resetToL0 ^PartitionState partition-state table->l0-entries)
                   (let [state-after (freeze-state)]
                     (log/info "Trie catalog state diff:")
                     (pp/pprint (->> (for [tbl (set/union (set (keys state-before))
@@ -126,14 +128,14 @@
                         (->> (map #(str "  " %) compacted-file-keys)
                              (str/join "\n"))))
 
-            (nil? (.getLatestCompletedTx live-idx))
+            (nil? (.getLatestCompletedTx (.getState live-idx)))
             (log/error "No completed transactions found in the live index. Cannot reset compaction.")
 
             :else
             (do
               (log/info "Resetting compaction...")
 
-              (trie-cat/reset->l0! trie-cat table->l0-entries)
+              (.resetToL0 ^PartitionState partition-state table->l0-entries)
               (xt-log/send-flush-block-msg! db)
               (xt-log/sync-db db #xt/duration "PT5M")
               (log/info "Reset complete. Deleting compacted files...")

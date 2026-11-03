@@ -7,15 +7,6 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.locks.StampedLock
 import kotlin.concurrent.Volatile
 
-internal fun <V> StampedLock.readLock(f: () -> V): V {
-    val stamp = readLock()
-    return try {
-        f()
-    } finally {
-        unlock(stamp)
-    }
-}
-
 class RefCounter {
     private val lock = StampedLock()
     private val refs = AtomicInteger(0)
@@ -24,14 +15,14 @@ class RefCounter {
     private var closingSemaphore: Semaphore? = null
 
     fun acquire() {
-        lock.readLock {
+        lock.withReadLock {
             check(closingSemaphore == null) { "node closing" }
             refs.incrementAndGet()
         }
     }
 
     fun release() {
-        lock.readLock {
+        lock.withReadLock {
             refs.decrementAndGet()
             closingSemaphore?.release()
         }
@@ -44,14 +35,10 @@ class RefCounter {
     fun tryClose(timeout: Duration?): Boolean {
         val openQueries: Int
 
-        val stamp = lock.writeLock()
-
-        val closingSemaphore = try {
+        val closingSemaphore = lock.withWriteLock {
             check(closingSemaphore == null) { "node closing" }
             openQueries = refs.get()
             Semaphore(0).also { this.closingSemaphore = it }
-        } finally {
-            lock.unlock(stamp)
         }
 
         return if (timeout != null)

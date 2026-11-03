@@ -2,7 +2,7 @@
 antlr = "4.13.2"
 arrow = "19.0.0"
 arrow-adbc = "0.24.0"
-aws-sdk = "2.55.11"
+aws-sdk = "2.57.7"
 azure = "1.18.7"
 azure-storage = "12.33.3"
 clojure = "1.12.0"
@@ -18,9 +18,9 @@ kotlin-coroutines = "1.11.0"
 dokka = "2.2.0"
 clojurephant = "0.9.1"
 shadow = "9.6.1"
-freefair-javadoc = "9.7.0"
+freefair-javadoc = "9.8.2"
 junit = "6.1.3"
-netty = "4.2.2.Final"
+netty = "4.2.19.Final"
 protobuf = "4.31.1"
 protobuf-plugin = "0.10.0"
 reitit = "0.10.1"
@@ -28,7 +28,7 @@ muuntaja = "0.6.11"
 testcontainers = "2.0.5"
 micrometer = "1.17.1"
 micrometer-tracing = "1.7.1"
-opentelemetry = "1.66.0"
+opentelemetry = "1.67.0"
 transit = "1.1.357"
 
 slf4j = "2.0.17"
@@ -43,6 +43,7 @@ arrow-adbc = { group = "org.apache.arrow.adbc", name = "adbc-core", version.ref 
 arrow-adbc-driver-manager = { group = "org.apache.arrow.adbc", name = "adbc-driver-manager", version.ref = "arrow-adbc" }
 arrow-adbc-fsql = { group = "org.apache.arrow.adbc", name = "adbc-driver-flight-sql", version.ref = "arrow-adbc" }
 arrow-flight-sql = { group = "org.apache.arrow", name = "flight-sql", version.ref = "arrow" }
+netty-bom = { group = "io.netty", name = "netty-bom", version.ref = "netty" }
 netty-common = { group = "io.netty", name = "netty-common", version.ref = "netty" }
 
 roaring-bitmap = { group = "org.roaringbitmap", name = "RoaringBitmap", version = "1.6.23" }

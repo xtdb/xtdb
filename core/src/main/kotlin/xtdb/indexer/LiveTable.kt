@@ -1,5 +1,7 @@
 package xtdb.indexer
 
+import xtdb.table.FinishedBlock
+import xtdb.table.BlockMetadata
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -15,15 +17,12 @@ import xtdb.table.TableSlug
 import xtdb.api.TableRef
 import xtdb.trie.*
 import xtdb.util.HLL
-import xtdb.util.RowCounter
 import xtdb.util.closeOnCatch
 
 class LiveTable private constructor(
     private val al: BufferAllocator,
     val table: TableRef,
-    val slug: TableSlug,
     val blockIdx: Long,
-    private val rowCounter: RowCounter,
     private val liveTrieFactory: LiveTrieFactory,
     private val state: State,
 ) : AutoCloseable {
@@ -49,7 +48,7 @@ class LiveTable private constructor(
     val trie get() = state.trie
 
     private fun withState(state: State) =
-        LiveTable(al, table, slug, blockIdx, rowCounter, liveTrieFactory, state)
+        LiveTable(al, table, blockIdx, liveTrieFactory, state)
 
     private val opVec = relation["op"]
 
@@ -93,6 +92,15 @@ class LiveTable private constructor(
             state = State(relation, state.trie.addRange(pos, count))
         }
 
+        /** Appends [data]'s rows, which arrive already written — their system-from included — and indexes them. */
+        fun importRows(data: RelationReader) {
+            val pos = relation.rowCount
+
+            relation.append(data)
+
+            state = State(relation, state.trie.addRange(pos, data.rowCount))
+        }
+
         // Set once the value that takes this transient's relation exists, and only then: a constructor
         // that threw would leave the relation this transient's to free.
         private var committed = false
@@ -104,7 +112,7 @@ class LiveTable private constructor(
          * the way a Clojure transient stops being usable once `persistent!` has taken it. Without that,
          * a caller closing both would release the relation twice while the value is still reading it.
          *
-         * The rows reach [LiveIndex.blockRowCount] when that value is installed rather than here: that
+         * The rows reach [LiveIndex.State.blockRowCount] when that value is installed rather than here: that
          * count spans terms, where a transient is committed at resolve and a term ending before its
          * resolved transactions come back discards them.
          */
@@ -129,27 +137,15 @@ class LiveTable private constructor(
         }
 
     /**
-     * This table's next value, with [data]'s rows appended.
+     * This table's next value, with [data]'s rows — those of the transaction at [systemTimeMicros] — appended.
      *
-     * The relation is appended in place and so is shared with the value this is called on, which the
-     * caller therefore replaces rather than keeping: what the next value holds of its own is the trie
-     * over the wider range.
+     * This value is left as it was, and stays the caller's to close; the next value holds references of its own.
      */
-    fun importData(data: RelationReader): LiveTable {
-        val offset = relation.rowCount
-        val count = data.rowCount
-
-        relation.append(data)
-        rowCounter.addRows(count)
-
-        return withState(State(relation, trie.addRange(offset, count)))
-    }
-
-    data class BlockMetadata(
-        val vecTypes: Map<FieldName, VectorType>,
-        val rowCount: Int,
-        val hllDeltas: Map<FieldName, HLL>
-    )
+    fun importData(systemTimeMicros: Long, data: RelationReader): LiveTable =
+        openTx(systemTimeMicros).use { tx ->
+            tx.importRows(data)
+            tx.commit()
+        }
 
     fun blockMetadata(): BlockMetadata {
         val rowCount = relation.rowCount
@@ -160,32 +156,12 @@ class LiveTable private constructor(
         )
     }
 
-    data class FinishedBlock(
-        val vecTypes: Map<FieldName, VectorType>,
-        val rowCount: Int,
-        val hllDeltas: Map<FieldName, HLL>,
-        /**
-         * Null exactly when [rowCount] is zero.
-         *
-         * A table can be staged by a transaction without taking any rows from it — `CREATE TABLE`,
-         * or DML whose predicate matched nothing — and it still has to reach the table catalog so
-         * that its declared columns survive. It has no trie to write, though, and an empty L0 costs
-         * two objects and a trie-catalog entry for nothing.
-         */
-        val writtenTrie: WrittenTrie?
-    ) {
-        data class WrittenTrie(
-            val trieKey: TrieKey,
-            val dataFileSize: FileSize,
-            val trieMetadata: TrieMetadata
-        )
-    }
-
     /** For callers that aren't coroutine-native — see [finishBlock]. */
-    fun finishBlockSync(bp: BufferPool, blockIdx: BlockIndex): FinishedBlock =
-        runBlocking { finishBlock(bp, blockIdx) }
+    fun finishBlockSync(bp: BufferPool, slug: TableSlug, blockIdx: BlockIndex): FinishedBlock =
+        runBlocking { finishBlock(bp, slug, blockIdx) }
 
-    suspend fun finishBlock(bp: BufferPool, blockIdx: BlockIndex): FinishedBlock {
+    /** Writes this table's block, its L0 trie under [slug] — the table catalog's, so it lands where the block records it. */
+    suspend fun finishBlock(bp: BufferPool, slug: TableSlug, blockIdx: BlockIndex): FinishedBlock {
         val rowCount = relation.rowCount
         val vecTypes = relation.logRelTypes.orEmpty()
         val hllDeltas = computeHlls(opVec, 0, rowCount)
@@ -222,12 +198,12 @@ class LiveTable private constructor(
         @JvmStatic
         @JvmOverloads
         fun open(
-            al: BufferAllocator, table: TableRef, slug: TableSlug, blockIdx: Long, rowCounter: RowCounter,
+            al: BufferAllocator, table: TableRef, blockIdx: Long,
             liveTrieFactory: LiveTrieFactory = LiveTrieFactory { MemoryHashTrie.emptyTrie(it) },
         ): LiveTable =
             Trie.openLogDataWriter(al).closeOnCatch { rel ->
                 LiveTable(
-                    al, table, slug, blockIdx, rowCounter, liveTrieFactory,
+                    al, table, blockIdx, liveTrieFactory,
                     State(rel, liveTrieFactory(rel["_iid"]))
                 )
             }
@@ -250,13 +226,13 @@ class LiveTable private constructor(
          * means outside the scheduler whose quiescence the simulation treats as its fixed point.
          */
         suspend fun Map<TableRef, LiveTable>.finishBlock(
-            bp: BufferPool, blockIdx: BlockIndex, ioDispatcher: CoroutineDispatcher
+            bp: BufferPool, blockIdx: BlockIndex, slug: (TableRef) -> TableSlug, ioDispatcher: CoroutineDispatcher
         ): Map<TableRef, FinishedBlock> =
             coroutineScope {
                 this@finishBlock
                     .map { (tableName, liveTable) ->
                         async(ioDispatcher) {
-                            tableName to liveTable.finishBlock(bp, blockIdx)
+                            tableName to liveTable.finishBlock(bp, slug(tableName), blockIdx)
                         }
                     }
                     .awaitAll()

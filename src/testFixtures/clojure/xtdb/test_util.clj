@@ -40,7 +40,6 @@
            xtdb.database.Database$Catalog
            (xtdb.api.tx OpenTx)
            (xtdb.indexer LiveTable)
-           (xtdb.table TableSlug)
            (xtdb.trie Trie)
            (xtdb.log.proto TemporalMetadata TemporalMetadata$Builder)
            (xtdb.api.query PrepareOpts QueryOpts)
@@ -48,7 +47,7 @@
            xtdb.storage.BufferPool
            (xtdb.tx TxOp$PatchDocs TxOp$PutDocs TxOpts TxWriter)
            xtdb.types.ZonedDateTimeRange
-           (xtdb.util RefCounter RowCounter TemporalBounds TemporalDimension)))
+           (xtdb.util RefCounter TemporalBounds TemporalDimension)))
 
 #_{:clj-kondo/ignore [:uninitialized-var]}
 (def ^:dynamic ^org.apache.arrow.memory.BufferAllocator *allocator*)
@@ -394,7 +393,7 @@
      (.build builder))))
 
 (defn open-live-table ^xtdb.indexer.LiveTable [table]
-  (LiveTable/open *allocator* table (TableSlug/of table) 0 (RowCounter.)))
+  (LiveTable/open *allocator* table 0))
 
 (defn serialize-tx-ops ^bytes [^BufferAllocator allocator tx-ops
                                {:keys [^Instant system-time, default-tz user-metadata], {:keys [user]} :authn, :as opts}]
@@ -443,18 +442,6 @@
           (.endStruct put-wtr))
         (.endRow rel))
       rel)))
-
-(defn index-tx! [^LiveTable live-table, ^TransactionKey tx-key, docs]
-  (let [system-time (.getSystemTime tx-key)
-        puts (for [{eid :xt/id, :as doc} docs
-                   :let [{:keys [:xt/valid-from :xt/valid-to],
-                          :or {valid-from system-time, valid-to (time/micros->instant Long/MAX_VALUE)}} (meta doc)]]
-               {:iid (ByteBuffer/wrap (util/->iid eid))
-                :valid-from (time/instant->micros valid-from)
-                :valid-to (time/instant->micros valid-to)
-                :doc doc})]
-    (util/with-open [rel (open-put-log-rel *allocator* (time/instant->micros system-time) puts)]
-      (.importData live-table rel))))
 
 (defn bytes->path [^bytes bs]
   (mapcat (fn [b]

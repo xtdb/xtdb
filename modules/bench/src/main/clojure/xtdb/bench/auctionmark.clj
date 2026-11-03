@@ -445,6 +445,7 @@
    [nil "--only-load" "Runs the load phase, then exits"
     :id :only-load?]
 
+   b/no-load-flag
    ["-h" "--help"]])
 
 (defn ->initial-state []

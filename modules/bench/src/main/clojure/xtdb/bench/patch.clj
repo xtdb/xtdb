@@ -64,6 +64,7 @@
     :parse-fn parse-long
     :default 10]
 
+   b/no-load-flag
    ["-h" "--help"]])
 
 (defmethod b/->benchmark :patch [_ {:keys [doc-count patch-count seed no-load?]
@@ -101,7 +102,8 @@
                              :tasks [{:t :call :f (fn [{:keys [node]}] (b/flush-block! node))}]}
                             {:t :do
                              :stage :compact
-                             :tasks [{:t :call :f (fn [{:keys [node]}] (b/compact! node))}]}])}
+                             :tasks [{:t :call :f (fn [{:keys [node]}] (b/compact! node))}]}
+                            (b/settle-stage)])}
 
            (patch-existing-docs-stage opts)
            (patch-multiple-existing-docs-stage opts)

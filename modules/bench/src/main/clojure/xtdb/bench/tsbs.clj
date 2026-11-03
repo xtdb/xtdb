@@ -417,7 +417,9 @@
 
                     {:t :call
                      :stage :compact
-                     :f (fn [{:keys [node]}] (b/compact! node))}]}
+                     :f (fn [{:keys [node]}] (b/compact! node))}
+
+                    (b/settle-stage)]}
 
            ;; Query setup - discover data characteristics for parameterized queries
            {:t :call

@@ -26,6 +26,7 @@ class InMemoryLog<M> @JvmOverloads constructor(
     private val instantSource: InstantSource,
     override val epoch: Int,
     val partitions: Int = 1,
+    private val replayBufferSize: Int = DEFAULT_REPLAY_BUFFER_SIZE,
 ) : Log<M> {
 
     @SerialName("!InMemory")
@@ -33,18 +34,20 @@ class InMemoryLog<M> @JvmOverloads constructor(
     data class Factory(
         @Transient var instantSource: InstantSource = InstantSource.system(),
         var epoch: Int = 0,
+        var replayBufferSize: Int = DEFAULT_REPLAY_BUFFER_SIZE,
     ) : Log.Factory {
         fun instantSource(instantSource: InstantSource) = apply { this.instantSource = instantSource }
         fun epoch(epoch: Int) = apply { this.epoch = epoch }
+        fun replayBufferSize(replayBufferSize: Int) = apply { this.replayBufferSize = replayBufferSize }
 
         override fun openSourceLog(remotes: Map<RemoteAlias, Remote>, partitions: Int) =
-            InMemoryLog<SourceMessage>(instantSource, epoch, partitions)
+            InMemoryLog<SourceMessage>(instantSource, epoch, partitions, replayBufferSize)
 
         override fun openReadOnlySourceLog(remotes: Map<RemoteAlias, Remote>, partitions: Int) =
             ReadOnlyLog(openSourceLog(remotes, partitions))
 
         override fun openReplicaLog(remotes: Map<RemoteAlias, Remote>, partitions: Int) =
-            InMemoryLog<ReplicaMessage>(instantSource, epoch, partitions)
+            InMemoryLog<ReplicaMessage>(instantSource, epoch, partitions, replayBufferSize)
 
         override fun openReadOnlyReplicaLog(remotes: Map<RemoteAlias, Remote>, partitions: Int) =
             ReadOnlyLog(openReplicaLog(remotes, partitions))
@@ -52,18 +55,19 @@ class InMemoryLog<M> @JvmOverloads constructor(
         override fun writeTo(dbConfig: DatabaseConfig.Builder) {
             dbConfig.inMemoryLog = inMemoryLog {
                 this.epoch = this@Factory.epoch
+                this.replayBufferSize = this@Factory.replayBufferSize
             }
         }
     }
 
     companion object {
-        private const val REPLAY_BUFFER_SIZE = 4096
+        const val DEFAULT_REPLAY_BUFFER_SIZE = 4096
     }
 
     // A msgId embeds the epoch but not the partition — partition is implicit in *which partition it
     // came from*.
     private inner class PartitionState {
-        val committedCh = MutableSharedFlow<Record<M>>(replay = REPLAY_BUFFER_SIZE)
+        val committedCh = MutableSharedFlow<Record<M>>(replay = replayBufferSize)
         val mutex = Mutex()
 
         @Volatile

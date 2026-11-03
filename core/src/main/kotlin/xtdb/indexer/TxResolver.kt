@@ -111,7 +111,7 @@ internal class TxResolver(
 
     private val sourceLogTxIndexer = SourceLogTxIndexer(this.allocator, nodeBase, partitionState, dbName, crashLogger)
 
-    var latestCompletedTx: TransactionKey? = partitionState.liveIndex.latestCompletedTx
+    var latestCompletedTx: TransactionKey? = partitionState.liveIndex.state.latestCompletedTx
         private set
 
     var resolvedSrcMsgId: MessageId = resolvedSrcMsgId

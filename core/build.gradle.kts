@@ -41,6 +41,7 @@ dependencies {
     api(libs.arrow.compression)
     api(libs.arrow.vector)
     api(libs.arrow.memory.netty)
+    api(platform(libs.netty.bom))
     api(libs.netty.common)
     api(libs.arrow.adbc)
     api(libs.arrow.adbc.driver.manager)

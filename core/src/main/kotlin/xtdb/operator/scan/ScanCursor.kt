@@ -11,6 +11,7 @@ import xtdb.segment.MergeTask
 import xtdb.segment.Segment
 import xtdb.trie.ColumnName
 import xtdb.trie.EventRowPointer
+import xtdb.trie.LeafPointer
 import xtdb.util.TemporalBounds
 import xtdb.util.closeAll
 import xtdb.util.safeMap

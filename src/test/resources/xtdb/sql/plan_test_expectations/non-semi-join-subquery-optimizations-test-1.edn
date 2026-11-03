@@ -3,12 +3,12 @@
  [:select
   {:predicate (or _sq_2 (== f.1/b 42))}
   [:mark-join
-   {:mark-spec {_sq_2 [{f.1/a xt.values.3/_column_1}]}}
+   {:mark-spec {_sq_2 [{f.1/a x}]}}
    [:rename
     {:prefix f.1}
     [:scan {:db-name "xtdb", :table #xt/table foo, :columns [a b]}]]
-   [:rename
-    {:prefix xt.values.3}
-    [:table
-     {:output-cols [_column_1],
-      :rows [{:_column_1 1} {:_column_1 2}]}]]]]]
+   [:project
+    {:projections [{x b.3/x}]}
+    [:rename
+     {:prefix b.3}
+     [:scan {:db-name "xtdb", :table #xt/table bar, :columns [x]}]]]]]]

@@ -46,6 +46,8 @@ When either changes, bump the tag and rebuild (from the repo root):
 Drop `--push` to build locally without publishing.
 Multi-arch push needs a buildx builder with both `linux/amd64` and `linux/arm64` — `docker buildx create --use --bootstrap` (with QEMU installed) is enough.
 
+Alternatively, run the `Builder image` GitHub Action (`.github/workflows/builder.yml`, manually triggered) to build and push from CI instead of locally — it carries the same `ghcr.io` login and QEMU/buildx setup as `docker.yml`, so it needs no local multi-arch builder or elevated `gh` token scopes.
+
 === One-time setup: ghcr.io auth via `gh`
 
 The simplest way to authenticate is to reuse the OAuth token from the GitHub CLI rather than minting a separate PAT.

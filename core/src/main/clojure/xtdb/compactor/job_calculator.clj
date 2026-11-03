@@ -93,7 +93,7 @@
 
 (defrecord JobCalculator []
   Compactor$JobCalculator
-  (availableJobs [_ trie-catalog]
-    (->> (.getTables trie-catalog)
+  (availableJobs [_ trie-cat-state]
+    (->> (.getTables trie-cat-state)
          (into [] (mapcat (fn [table]
-                            (compaction-jobs table (cat/trie-state trie-catalog table) trie-catalog)))))))
+                            (compaction-jobs table (.tableState trie-cat-state table) trie-cat-state)))))))

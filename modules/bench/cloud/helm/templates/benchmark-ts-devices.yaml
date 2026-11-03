@@ -121,7 +121,7 @@ spec:
             - name: metrics
               containerPort: 8080
         - name: dump-uploader
-          image: mcr.microsoft.com/azure-cli:latest
+          image: {{ .Values.dumpUpload.image | quote }}
           command: ["/bin/bash", "/scripts/upload-dumps.sh"]
           volumeMounts:
             - name: dumps

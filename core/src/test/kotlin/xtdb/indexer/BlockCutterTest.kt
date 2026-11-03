@@ -78,11 +78,8 @@ internal class BlockCutterTest {
             indexerConfig = IndexerConfig().rowsPerBlock(blockThreshold), ioDispatcher = ioDispatcher
         )
 
-        val tableCatalog get() = partition.tableCatalog
-        val trieCatalog get() = partition.trieCatalog
-        val liveIndex get() = partition.liveIndex
-
         private val partitionState get() = partition.state
+        val value get() = partitionState.value.value
         private val partitionStorage get() = partition.storage
 
         private val driver = RecordingLogsDriver()
@@ -106,7 +103,7 @@ internal class BlockCutterTest {
                 }
                 tx.writeTxRow(null, null)
                 tx.sealTables().associateTo(mutableMapOf()) { it.ref to it.liveTable }
-                    .closeAllOnCatch { liveIndex.applyTx(tx.txKey, it) }
+                    .closeAllOnCatch { partition.state.applyTx(tx.txKey, it) }
             }
         }
 
@@ -199,27 +196,29 @@ internal class BlockCutterTest {
         val cutter = term.cutter(backgroundScope)
 
         term.applyRows(txId = 0, rows = 1)
-        assertEquals(2, term.liveIndex.blockRowCount, "the put, and the tx's own row in the txs table")
+        assertEquals(2, term.value.live.blockRowCount, "the put, and the tx's own row in the txs table")
 
         cutter.cut(latestProcessedMsgId = 0, extToken = null)
         runCurrent()
         cutter.upload(PendingBlock(0, term.appended.single() as BlockBoundary))
         runCurrent()
 
+        val uploaded = term.value
         assertNull(
-            term.tableCatalog.currentBlockIndex,
+            uploaded.tableCat.blockIdx,
             "the block file has landed, but this node hasn't adopted it — so the block stays re-producible"
         )
-        assertNull(term.tableCatalog.rowCount(table), "nothing folded into the table catalog either")
-        assertEquals(emptySet<TableRef>(), term.trieCatalog.tables, "nor the block's L0 tries registered")
-        assertEquals(2, term.liveIndex.blockRowCount, "and the rows are still the open block's")
+        assertNull(uploaded.tableCat.rowCount(table), "nothing folded into the table catalog either")
+        assertEquals(emptySet<TableRef>(), uploaded.trieCat.tables, "nor the block's L0 tries registered")
+        assertEquals(2, uploaded.live.blockRowCount, "and the rows are still the open block's")
 
         val held = cutter.closeBlock(term.appended.last() as BlockUploaded, Instant.EPOCH)
 
-        assertEquals(0, term.tableCatalog.currentBlockIndex)
-        assertEquals(1, term.tableCatalog.rowCount(table))
-        assertEquals(listOf("l00-rc-b00"), term.trieCatalog.listAllTrieKeys(table))
-        assertEquals(0, term.liveIndex.blockRowCount)
+        val adopted = term.value
+        assertEquals(0, adopted.tableCat.blockIdx)
+        assertEquals(1, adopted.tableCat.rowCount(table))
+        assertEquals(listOf("l00-rc-b00"), adopted.trieCat.listAllTrieKeys(table))
+        assertEquals(0, adopted.live.blockRowCount)
         assertTrue(held.bufferedRecords.isEmpty(), "a block this term cut itself holds nothing back")
     }
 
@@ -243,7 +242,7 @@ internal class BlockCutterTest {
 
         nextTerm.closeBlock(term.appended.last { it is BlockUploaded } as BlockUploaded, Instant.EPOCH)
 
-        assertEquals(1, term.tableCatalog.rowCount(table))
+        assertEquals(1, term.value.tableCat.rowCount(table))
     }
 
     @Test
@@ -263,7 +262,7 @@ internal class BlockCutterTest {
         // The rows a previous leader had already applied into the open block, which replay leaves behind.
         // Eight puts, because the tx's own row in `xt$txs` counts towards the block like any other.
         term.applyRows(txId = 0, rows = 8)
-        assertEquals(9, term.liveIndex.blockRowCount, "one short of the threshold")
+        assertEquals(9, term.value.live.blockRowCount, "one short of the threshold")
 
         val cutter = term.cutter(backgroundScope)
         assertFalse(cutter.isFull)

@@ -7,6 +7,7 @@
             [clojure.tools.logging :as log]
             [xtdb.api :as xt]
             [xtdb.compactor :as c]
+            [xtdb.db-catalog :as db]
             [xtdb.error :as err]
             [xtdb.log :as xt-log]
             [xtdb.logging :as logging]
@@ -475,6 +476,21 @@
 (defn compact! [node]
   (c/compact-all! node (Duration/ofMinutes 10)))
 
+(defn gc! [node]
+  (let [db-cat (db/<-node node)]
+    (doseq [^String db-name (.getDatabaseNames db-cat)]
+      (some-> (.databaseOrNull db-cat db-name) .gcAll))))
+
+(defn settle-stage
+  "A stage to run after a load's compaction, before anything the bench times.
+   It flushes a block, so the latest block lists the compacted tries a later `--no-load` run starts from.
+   It returns once the garbage-collection cycle that flush starts has finished, so none is running when the timed stages begin."
+  []
+  {:t :call, :stage :settle, :setup? true
+   :f (fn [{:keys [node]}]
+        (flush-block! node)
+        (gc! node))})
+
 (defn generate
   ([worker table f n]
    (let [doc-seq (remove nil? (repeatedly (long n) (partial f worker)))
@@ -543,13 +559,14 @@
 (defn- parse-duration-arg [s]
   (Duration/parse s))
 
+(def no-load-flag
+  [nil "--no-load" "skip loading data; run against the existing `--node-dir`"
+   :id :no-load?])
+
 (def ^:private default-cli-flags
   [[nil "--node-dir NODE_DIR"
     "Directory to run the node in - will clear before running the benchmark unless `--no-load` is provided."
     :parse-fn util/->path]
-
-   [nil "--no-load" "don't run any load phases (use with an existing directory)"
-    :id :no-load?]
 
    ["-f" "--config-file CONFIG_FILE" "Config file to load XTDB options from - EDN, YAML"
     :id :config-file

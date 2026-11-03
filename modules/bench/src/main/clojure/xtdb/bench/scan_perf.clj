@@ -222,6 +222,7 @@
    ["-t" "--id-type ID_TYPE" "ID type: uuid, string, keyword"
     :parse-fn keyword
     :default :uuid]
+   b/no-load-flag
    ["-h" "--help"]])
 
 (defmethod b/->benchmark :scan-perf [_ {:keys [n-items id-type seed no-load?]
@@ -246,11 +247,11 @@
                        :f (fn [{:keys [node]}] (b/sync-node node (Duration/ofMinutes 5)))}
                       {:t :call
                        :stage :flush-block
-                       :f (fn [{:keys [node]}] (tu/flush-block! node))}]})
-
-           {:t :call
-            :stage :compact
-            :f (fn [{:keys [node]}] (c/compact-all! node nil))}
+                       :f (fn [{:keys [node]}] (tu/flush-block! node))}
+                      {:t :call
+                       :stage :compact
+                       :f (fn [{:keys [node]}] (c/compact-all! node nil))}
+                      (b/settle-stage)]})
 
            {:t :call
             :stage :get-query-data

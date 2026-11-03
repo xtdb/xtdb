@@ -137,7 +137,7 @@ class BlockGarbageCollector(
     suspend fun garbageCollectBlocks() {
         LOGGER.debug("Garbage collecting blocks, keeping $blocksToKeep blocks")
 
-        val latestBlockIndex = tableCatalog.currentBlockIndex ?: return
+        val latestBlockIndex = tableCatalog.snap().blockIdx ?: return
 
         fun Long.isGarbage(): Boolean = this != latestBlockIndex && this <= latestBlockIndex - blocksToKeep
 

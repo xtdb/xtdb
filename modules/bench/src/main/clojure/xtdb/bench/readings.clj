@@ -91,7 +91,9 @@
     {:t :call, :stage :compact
      :f (fn [{:keys [node]}]
           (b/flush-block! node)
-          (b/compact! node))}]))
+          (b/compact! node))}
+
+    (b/settle-stage)]))
 
 (defmethod b/cli-flags :readings [_]
   [[nil "--devices devices" "device count"
@@ -101,6 +103,7 @@
     :parse-fn parse-long
     :default 10000]
 
+   b/no-load-flag
    ["-h" "--help"]])
 
 (defmethod b/->benchmark :readings [_ {:keys [readings devices seed no-load?] :or {seed 0}}]
