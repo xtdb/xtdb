@@ -38,7 +38,7 @@ jobs:
             21
           distribution: 'temurin'
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
 
       - name: Test
         run: ./gradlew test
@@ -76,7 +76,7 @@ jobs:
             21
           distribution: 'temurin'
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
 
       # this job reports, it never gates - so a JVM that dies on its way to the report
       # (OOM, timeout, a namespace that won't load) must not turn a push red either
@@ -112,7 +112,7 @@ jobs:
             21
           distribution: 'temurin'
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
 
       - name: Build XTDB shadowJar
         run: ./gradlew :docker:standalone:shadowJar
@@ -187,7 +187,7 @@ jobs:
           distribution: 'temurin'
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
 
       - name: Integration Test
         run: ./gradlew integration-test
@@ -223,7 +223,7 @@ jobs:
             21
           distribution: 'temurin'
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
 
       - name: SLT 1
         run: ./gradlew slt-test
@@ -243,7 +243,7 @@ jobs:
             21
           distribution: 'temurin'
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
 
       - name: SLT 2
         run: ./gradlew slt-test-2
