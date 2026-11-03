@@ -80,4 +80,25 @@ describe("COPY with transit-json format", function() {
       await conn.release()
     }
   })
+
+  it("leaves the connection usable for a second COPY", async () => {
+    const conn = await sql.reserve()
+    const writer = tjs.writer('json')
+
+    try {
+      for (const batch of [1, 2]) {
+        const query = await conn`COPY copy_twice FROM STDIN WITH (FORMAT 'transit-json')`.writable()
+
+        assert.ok(!Array.isArray(query),
+                  `COPY ${batch} resolved to a result instead of a stream`)
+
+        await pipeline(Readable.from([writer.write({"_id": `item-${batch}`})]), query)
+      }
+
+      assert.deepStrictEqual([...await conn`SELECT _id FROM copy_twice ORDER BY _id`],
+                             [{"_id": "item-1"}, {"_id": "item-2"}])
+    } finally {
+      await conn.release()
+    }
+  })
 })
