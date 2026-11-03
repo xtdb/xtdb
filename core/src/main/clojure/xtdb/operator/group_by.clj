@@ -19,7 +19,6 @@
            (xtdb.api ICursor)
            (xtdb.arrow MonoVector RelationReader Vector VectorMask VectorMask$Builder VectorReader VectorType VectorWriter)
            (xtdb.arrow.agg AggregateSpec AggregateSpec$Factory Average Count GroupMapper GroupMapper$Mapper GroupMapper$Null RowCount StdDevPop StdDevSamp Sum VarWidthMinMax VariancePop VarianceSamp)
-           (xtdb.expression.map RelationMapBuilder)
            xtdb.operator.MaskSpec
            xtdb.operator.distinct.DistinctRelationMap
            xtdb.types.LeastUpperBound))
@@ -235,31 +234,21 @@
 
     (build [_ al args]
       (let [agg-spec (.build agg-factory al args)
-            rel-maps (ArrayList.)]
+            group-col-name (symbol "xt$group")
+            ^DistinctRelationMap rel-map (distinct/->relation-map al {:build-vec-types {group-col-name #xt/type :i32
+                                                                                         from-name from-type}
+                                                                       :build-key-col-names [group-col-name from-name]})]
         (reify
           AggregateSpec
           (aggregate [_ in-rel group-mapping mask]
             (let [in-vec (.vectorForOrNull in-rel (str from-name))
                   row-count (.getValueCount in-vec)
-                  builders (ArrayList. (.size rel-maps))]
+                  builder (.buildFromRelation rel-map (vr/rel-reader [(.withName group-mapping (str group-col-name)) in-vec]))]
               (util/with-open [^VectorMask$Builder mask-builder (VectorMask/openBuilder al row-count)]
                 (dotimes [idx row-count]
-                  (when (.isSet mask idx)
-                    (let [group-idx (.getInt group-mapping idx)]
-                      (while (<= (.size rel-maps) group-idx)
-                        (.add rel-maps (distinct/->relation-map al {:build-vec-types {from-name from-type}
-                                                                    :build-key-col-names [from-name]})))
-                      (let [^DistinctRelationMap rel-map (nth rel-maps group-idx)]
-                        (while (<= (.size builders) group-idx)
-                          (.add builders nil))
-
-                        (let [^RelationMapBuilder
-                              builder (or (nth builders group-idx)
-                                          (let [builder (.buildFromRelation rel-map (vr/rel-reader [in-vec]))]
-                                            (.set builders group-idx builder)
-                                            builder))]
-                          (when (neg? (.addIfNotPresent builder idx))
-                            (.set mask-builder idx)))))))
+                  (when (and (.isSet mask idx)
+                             (neg? (.addIfNotPresent builder idx)))
+                    (.set mask-builder idx)))
 
                 (util/with-open [distinct-mask (.build mask-builder)]
                   (.aggregate agg-spec in-rel group-mapping distinct-mask)))))
@@ -269,7 +258,7 @@
           Closeable
           (close [_]
             (util/close agg-spec)
-            (util/close rel-maps)))))))
+            (util/close rel-map)))))))
 
 (defmethod ->aggregate-factory :count_distinct [{:keys [from-name from-type] :as agg-opts}]
   (-> (->aggregate-factory (assoc agg-opts :f :count))
