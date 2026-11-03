@@ -6,8 +6,13 @@ import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Tag
 import kotlinx.coroutines.*
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.descriptors.PrimitiveKind
+import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.modules.PolymorphicModuleBuilder
 import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.subclass
@@ -16,6 +21,7 @@ import org.postgresql.util.PSQLException
 import xtdb.api.tx.TxIndexer
 import xtdb.api.Remote
 import xtdb.api.RemoteAlias
+import xtdb.api.TableRef
 import xtdb.api.TransactionResult
 import xtdb.api.tx.ExternalSource
 import xtdb.api.tx.TxIndexer.TxResult
@@ -37,6 +43,14 @@ import com.google.protobuf.Any as ProtoAny
 private val LOG = PostgresSource::class.logger
 
 private const val PROTO_TAG_PREFIX = "proto.xtdb.com"
+
+private val TableRef.dotted get() = "$schemaName.$tableName"
+
+private object DottedTableRefSerde : KSerializer<TableRef> {
+    override val descriptor = PrimitiveSerialDescriptor("xtdb.postgres.DottedTableRef", PrimitiveKind.STRING)
+    override fun serialize(encoder: Encoder, value: TableRef) = encoder.encodeString(value.dotted)
+    override fun deserialize(decoder: Decoder) = TableRef.parse(decoder.decodeString())
+}
 
 class PostgresSource(
     private val dbName: String,
@@ -143,6 +157,7 @@ class PostgresSource(
         val slotName: String,
         val publicationName: String,
         val indexer: PgIndexer.Factory,
+        val ignoreTables: Set<@Serializable(with = DottedTableRefSerde::class) TableRef> = emptySet(),
     ) : ExternalSource.Factory {
 
         override fun open(
@@ -170,7 +185,7 @@ class PostgresSource(
                 dbName,
                 PgWireDriver(
                     dbName, pg.hostname, pg.port, pg.database, pg.username, pg.password,
-                    slotName, publicationName, pg.statusInterval,
+                    slotName, publicationName, ignoreTables, pg.statusInterval,
                 ),
             )
 
@@ -188,6 +203,7 @@ class PostgresSource(
                     slotName = factory.slotName
                     publicationName = factory.publicationName
                     indexer = PgIndexer.Factory.toProto(factory.indexer)
+                    ignoreTables.addAll(factory.ignoreTables.map { it.dotted })
                 }, PROTO_TAG_PREFIX)
 
             override fun fromProto(msg: ProtoAny): Factory {
@@ -201,6 +217,7 @@ class PostgresSource(
                     indexer =
                         if (config.hasIndexer()) PgIndexer.Factory.fromProto(config.indexer)
                         else DirectMirror.Factory(),
+                    ignoreTables = config.ignoreTablesList.mapTo(LinkedHashSet()) { TableRef.parse(it) },
                 )
             }
 

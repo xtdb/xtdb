@@ -2,8 +2,12 @@ package xtdb.postgres
 
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
+import xtdb.api.TableRef
 import xtdb.api.nodeConfig
 import xtdb.database.Database
+import xtdb.postgres.proto.directMirrorConfig
+import xtdb.postgres.proto.postgresSourceConfig
+import com.google.protobuf.Any as ProtoAny
 
 class PostgresSourceFactoryTest {
 
@@ -72,6 +76,37 @@ class PostgresSourceFactoryTest {
         assertEquals("my_slot", factory.slotName)
         assertEquals("my_pub", factory.publicationName)
         assertTrue(factory.indexer is DirectMirror.Factory)
+        assertEquals(emptySet<TableRef>(), factory.ignoreTables)
+    }
+
+    @Test
+    fun `ignoreTables round-trips YAML and proto, unqualified names meaning public`() {
+        val yaml = """
+            externalSource: !Postgres
+              remote: pg
+              slotName: my_slot
+              publicationName: my_pub
+              indexer: !DirectMirror {}
+              ignoreTables: [legacy.events, audit_log]
+        """.trimIndent()
+
+        val expected = setOf(TableRef("legacy", "events"), TableRef("public", "audit_log"))
+
+        val fromYaml = Database.Config.fromYaml(yaml).externalSource as PostgresSource.Factory
+        assertEquals(expected, fromYaml.ignoreTables)
+        assertEquals(fromYaml, protoRoundTrip(fromYaml))
+    }
+
+    @Test
+    fun `config stored before ignoreTables existed ignores nothing`() {
+        val config = postgresSourceConfig {
+            remote = "pg"; slotName = "s"; publicationName = "p"
+            indexer = ProtoAny.pack(directMirrorConfig { }, "proto.xtdb.com")
+        }
+
+        val factory = PostgresSource.Factory.Registration().fromProto(ProtoAny.pack(config, "proto.xtdb.com"))
+
+        assertEquals(emptySet<TableRef>(), factory.ignoreTables)
     }
 
     @Test

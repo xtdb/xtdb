@@ -10,6 +10,7 @@ import org.postgresql.PGProperty
 import org.postgresql.replication.LogSequenceNumber
 import org.postgresql.replication.PGReplicationStream
 import org.postgresql.util.PSQLException
+import xtdb.api.TableRef
 import xtdb.api.error.Conflict
 import xtdb.api.error.Fault
 import xtdb.api.error.Incorrect
@@ -101,6 +102,7 @@ class PgWireDriver(
     private val password: String,
     private val slotName: String,
     private val publicationName: String,
+    private val ignoreTables: Set<TableRef>,
     private val statusInterval: Duration?,
 ) : PostgresDriver {
 
@@ -167,8 +169,14 @@ class PgWireDriver(
                     LOG.info("[$dbName] Discovered ${tables.size} tables in publication '$publicationName': ${tables.joinToString { "${it.first}.${it.second}" }}")
 
                     for ((schema, table) in tables) {
-                        val columns = handle.discoverColumns(schema, table)
                         val fullTableName = "$schema.$table"
+
+                        if (TableRef(schema, table) in ignoreTables) {
+                            LOG.info("[$dbName] Not snapshotting $fullTableName: it's in ignoreTables")
+                            continue
+                        }
+
+                        val columns = handle.discoverColumns(schema, table)
 
                         LOG.info("[$dbName] Snapshotting $fullTableName (${columns.size} columns: ${columns.joinToString { it.name }})")
 
@@ -307,6 +315,11 @@ class PgWireDriver(
                         }
                         val relation = relations[relationId]
                             ?: error("Relation $relationId not found — missing Relation message before data message")
+
+                        if (TableRef(relation.schema, relation.table) in ignoreTables) {
+                            LOG.trace { "[$dbName] Skipping ${parsed::class.simpleName} on ignored ${relation.schema}.${relation.table}" }
+                            continue
+                        }
 
                         LOG.trace { "[$dbName] ${parsed::class.simpleName} on ${relation.schema}.${relation.table}" }
                         currentTxOps.add(toRowOp(relation, parsed))
