@@ -1,9 +1,5 @@
 package xtdb.metadata
 
-import com.carrotsearch.hppc.ObjectIntHashMap
-import com.carrotsearch.hppc.ObjectIntMap
-import com.github.benmanes.caffeine.cache.Cache
-import com.github.benmanes.caffeine.cache.Caffeine
 import kotlinx.coroutines.runBlocking
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.storage.BufferPool
@@ -22,8 +18,6 @@ import kotlin.math.floor
 import kotlin.Long.Companion.MAX_VALUE as MAX_LONG
 import kotlin.Long.Companion.MIN_VALUE as MIN_LONG
 
-private typealias PageIdxsMap = ObjectIntMap<PageMetadata.PageIndexKey>
-
 internal val UNBOUND_TEMPORAL_METADATA =
     TemporalMetadata.newBuilder()
         .setMinValidFrom(MIN_LONG)
@@ -34,13 +28,22 @@ internal val UNBOUND_TEMPORAL_METADATA =
         .setMaxSystemFrom(MAX_LONG)
         .build()
 
-class PageMetadata private constructor(private val rel: Relation, private val pageIdxs: PageIdxsMap) : AutoCloseable {
+class PageMetadata private constructor(private val rel: Relation, private val pageIdxs: PageIdxs) : AutoCloseable {
 
     val trie = ArrowHashTrie(rel["nodes"])
 
+    internal class PageIdxs(private val colsStartIdxs: IntArray, private val colOffsets: Map<ColumnName, Int>) {
+        operator fun get(columnName: ColumnName, pageIdx: Int): Int {
+            val colOffset = colOffsets[columnName] ?: return -1
+            if (pageIdx !in colsStartIdxs.indices) return -1
+            val colsStartIdx = colsStartIdxs[pageIdx]
+            return if (colsStartIdx < 0) -1 else colsStartIdx + colOffset
+        }
+    }
+
     companion object {
         @JvmStatic
-        fun factory(al: BufferAllocator, bp: BufferPool, cacheSize: Long = 128) = Factory(al, bp, cacheSize)
+        fun factory(al: BufferAllocator, bp: BufferPool) = Factory(al, bp)
 
         @JvmStatic
         fun open(al: BufferAllocator, metaFilePath: Path): PageMetadata =
@@ -50,36 +53,33 @@ class PageMetadata private constructor(private val rel: Relation, private val pa
                 }
             }
 
-        private fun readPageIdxs(rel: RelationReader): PageIdxsMap {
+        private fun readPageIdxs(rel: RelationReader): PageIdxs {
             val metadataReader = rel["nodes"]["leaf"]
-
-            val pageIdxs: PageIdxsMap = ObjectIntHashMap()
             val dataPageIdxReader = metadataReader["data-page-idx"]
-
             val columnsReader = metadataReader["columns"]
-            val columnReader = columnsReader.listElements
-            val colNameReader = columnReader["col-name"]
-            val rootColReader = columnReader["root-col?"]
 
-            val colNames = HashSet<ColumnName>()
+            val leafIdxs = (0 until metadataReader.valueCount)
+                .filterNot { metadataReader.isNull(it) || columnsReader.isNull(it) }
 
-            for (idx in 0 until metadataReader.valueCount) {
-                if (metadataReader.isNull(idx) || columnsReader.isNull(idx)) continue
+            val colsStartIdxs = IntArray(metadataReader.valueCount) { -1 }
+            for (leafIdx in leafIdxs)
+                colsStartIdxs[dataPageIdxReader.getInt(leafIdx)] = columnsReader.getListStartIndex(leafIdx)
 
-                val colsStartIdx = columnsReader.getListStartIndex(idx)
-                val dataPageIdx = dataPageIdxReader.takeUnless { it.isNull(idx) }?.getInt(idx) ?: -1
+            // every leaf of a metadata file lists its column entries in the same order (asserted in MetadataFileWriter),
+            // so a column's position within the first leaf's entries is its position within every leaf's
+            val colOffsets = HashMap<ColumnName, Int>()
+            leafIdxs.firstOrNull()?.let { leafIdx ->
+                val columnReader = columnsReader.listElements
+                val colNameReader = columnReader["col-name"]
+                val rootColReader = columnReader["root-col?"]
+                val colsStartIdx = columnsReader.getListStartIndex(leafIdx)
 
-                for (colsDataIdx in colsStartIdx until colsStartIdx + columnsReader.getListCount(idx)) {
-                    val colName = colNameReader.getObject(colsDataIdx) as String
-                    colNames.add(colName)
-
-                    if (rootColReader.getBoolean(colsDataIdx)) {
-                        pageIdxs.put(PageIndexKey(colName, dataPageIdx), colsDataIdx)
-                    }
-                }
+                for (colOffset in 0 until columnsReader.getListCount(leafIdx))
+                    if (rootColReader.getBoolean(colsStartIdx + colOffset))
+                        colOffsets[colNameReader.getObject(colsStartIdx + colOffset) as String] = colOffset
             }
 
-            return pageIdxs
+            return PageIdxs(colsStartIdxs, colOffsets)
         }
     }
 
@@ -101,19 +101,16 @@ class PageMetadata private constructor(private val rel: Relation, private val pa
         maxReader = temporalColTypesReader?.vectorForOrNull("max")
     }
 
-    internal data class PageIndexKey(val columnName: String, val pageIdx: Int)
-
-    fun rowIndex(columnName: String, pageIdx: Int) =
-        pageIdxs.getOrDefault(PageIndexKey(columnName, pageIdx), -1)
+    fun rowIndex(columnName: String, pageIdx: Int) = pageIdxs[columnName, pageIdx]
 
     fun temporalMetadata(pageIdx: Int): TemporalMetadata {
         // it seems in some tests we have files without any temporal values in...?
         val minReader = requireNotNull(minReader)
         val maxReader = requireNotNull(maxReader)
 
-        val systemFromIdx = pageIdxs[PageIndexKey("_system_from", pageIdx)]
-        val validFromIdx = pageIdxs[PageIndexKey("_valid_from", pageIdx)]
-        val validToIdx = pageIdxs[PageIndexKey("_valid_to", pageIdx)]
+        val systemFromIdx = pageIdxs["_system_from", pageIdx]
+        val validFromIdx = pageIdxs["_valid_from", pageIdx]
+        val validToIdx = pageIdxs["_valid_to", pageIdx]
 
         // a 0-row page (e.g. an empty table) writes its temporal columns' metadata but no min/max,
         // so the bounds are absent. Report the empty-set (proto defaults, min > max): the page then
@@ -133,10 +130,7 @@ class PageMetadata private constructor(private val rel: Relation, private val pa
     override fun close() = rel.close()
 
     // TODO inline this into BP
-    class Factory(al: BufferAllocator, private val bp: BufferPool, cacheSize: Long) : AutoCloseable {
-        private val pageIdxCache: Cache<Path, PageIdxsMap> =
-            Caffeine.newBuilder().maximumSize(cacheSize).build()
-
+    class Factory(al: BufferAllocator, private val bp: BufferPool) : AutoCloseable {
         private val al = al.openChildAllocator("metadata-mgr")
 
         fun openPageMetadataSync(metaFilePath: Path): PageMetadata = runBlocking { openPageMetadata(metaFilePath) }
@@ -145,7 +139,7 @@ class PageMetadata private constructor(private val rel: Relation, private val pa
             bp.getRecordBatch(metaFilePath, 0).use { rb ->
                 val footer = bp.getFooter(metaFilePath)
                 Relation.fromRecordBatch(al, footer.schema, rb).closeOnCatch { rel ->
-                    PageMetadata(rel, pageIdxCache.get(metaFilePath) { readPageIdxs(rel) })
+                    PageMetadata(rel, readPageIdxs(rel))
                 }
             }
 
