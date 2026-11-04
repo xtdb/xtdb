@@ -158,7 +158,7 @@ See the [ADBC reference](/adbc/reference#authentication).
 
 This rule requires the `admin` user to provide a password when connecting from `localhost`.
 
-## In-process connections (v2.3+)
+## In-process connections (v2.2.1+)
 
 An application embedding XTDB opens connections with `node.connect()`, which applies no authentication rules: the caller already holds the node.
 Those connections have no user, so their writes carry none in the audit trail and they can't run superuser-only statements such as `GRANT`.

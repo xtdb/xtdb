@@ -4,9 +4,9 @@ description: The ADBC surface XTDB supports, in-process and over FlightSQL, with
 ---
 
 <details>
-<summary>Changelog (last updated v2-NEXT)</summary>
+<summary>Changelog (last updated v2.2.1)</summary>
 
-v2-NEXT: FlightSQL clients authenticate per the node's authentication rules
+v2.2.1: FlightSQL clients authenticate per the node's authentication rules
 
 : The FlightSQL listener applies the same [authentication](/ops/config/authentication) rules as pgwire, and a session's writes run as the user it authenticated as — see [Authentication](#authentication).
 
@@ -15,7 +15,7 @@ v2-NEXT: FlightSQL clients authenticate per the node's authentication rules
   Where the rules ask for a password, give FlightSQL clients the driver's `username` and `password` options.
   Under the default rules nothing changes for a client sending no credentials; one sending a username runs as that user.
 
-v2-NEXT: a FlightSQL transaction or prepared statement belongs to the session that created it
+v2.2.1: a FlightSQL transaction or prepared statement belongs to the session that created it
 
 : Another session presenting its handle is told it doesn't exist — see [Session options](#session-options).
 

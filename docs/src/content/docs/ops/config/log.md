@@ -53,7 +53,7 @@ By default, the log is a transient, in-memory log:
 log: !InMemory
   # -- optional
 
-  # (v2-NEXT+) The number of most recent records each of the database's logs holds in memory.
+  # (v2.2.1+) The number of most recent records each of the database's logs holds in memory.
   # Log tables and catching up after a leadership change can only read back this far.
   replayBufferSize: 4096 # default
 ```

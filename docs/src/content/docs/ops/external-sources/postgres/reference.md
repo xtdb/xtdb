@@ -48,12 +48,12 @@ externalSource: !Postgres
   # The indexer used to index Postgres transactions.
   indexer: !DirectMirror {}
 
-  # (v2-NEXT+) Tables in the publication to leave out of XTDB (optional, default none).
+  # (v2.2.1+) Tables in the publication to leave out of XTDB (optional, default none).
   ignoreTables: [legacy.events, audit_log]
 $$
 ```
 
-### Ignored tables (v2-NEXT+)
+### Ignored tables (v2.2.1+)
 
 Each `ignoreTables` entry names a table as `schema.table`, or as `table` for a table in `public`.
 Names are matched exactly against Postgres's own, so case matters: a table created as `CREATE TABLE Audit_Log` is `audit_log`, and one created as `"Audit_Log"` is `Audit_Log`.
