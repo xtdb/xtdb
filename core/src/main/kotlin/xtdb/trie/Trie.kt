@@ -5,6 +5,7 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import org.apache.arrow.vector.types.pojo.Schema
+import xtdb.arrow.Encoding
 import xtdb.arrow.Relation
 import xtdb.arrow.UNION_TYPE
 import xtdb.arrow.VectorType.*
@@ -79,9 +80,10 @@ object Trie {
     }
 
     @JvmStatic
-    fun dataRelSchema(putDocField: Field?): Schema =
+    @JvmOverloads
+    fun dataRelSchema(putDocField: Field?, iidEncoding: Encoding = Encoding.Plain): Schema =
         schema(
-            "_iid" ofType IID,
+            "_iid" ofType IID.withEncoding(iidEncoding),
             "_system_from" ofType INSTANT,
             "_valid_from" ofType INSTANT,
             "_valid_to" ofType INSTANT,

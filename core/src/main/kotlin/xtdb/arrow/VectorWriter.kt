@@ -37,6 +37,7 @@ interface VectorWriter : VectorReader, AutoCloseable {
     fun writeDouble(v: Double): Unit = unsupported("writeDouble")
     fun writeBytes(v: ByteBuffer): Unit = unsupported("writeBytes")
     fun writeBytes(v: ByteArray) = writeBytes(ByteBuffer.wrap(v))
+    fun writeLongLong(high: Long, low: Long): Unit = unsupported("writeLongLong")
     fun writeObject(obj: Any?)
 
     fun writeValue(v: ValueReader) = if (v.isNull) writeNull() else writeValue0(v)
@@ -44,7 +45,7 @@ interface VectorWriter : VectorReader, AutoCloseable {
 
     override fun vectorForOrNull(name: String): VectorWriter? = unsupported("vectorFor")
 
-    override fun vectorFor(name: String) = vectorForOrNull(name) ?: error("missing vector: $name")
+    override fun vectorFor(name: String): VectorWriter = vectorForOrNull(name) ?: error("missing vector: $name")
     override fun get(name: String) = vectorFor(name)
 
     /**

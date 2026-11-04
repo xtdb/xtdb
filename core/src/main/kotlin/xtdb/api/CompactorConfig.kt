@@ -11,7 +11,9 @@ private val DEFAULT_THREADS = (getRuntime().availableProcessors() / 2).coerceAtL
 
 @Serializable
 data class CompactorConfig(
-    var threads: Int = System.getenv("XTDB_COMPACTOR_THREADS")?.toIntOrNull() ?: DEFAULT_THREADS
+    var threads: Int = System.getenv("XTDB_COMPACTOR_THREADS")?.toIntOrNull() ?: DEFAULT_THREADS,
+    var reeIids: Boolean = System.getenv("XTDB_REE_IIDS").toBoolean(),
 ) {
     fun threads(threads: Int) = apply { this.threads = threads }
+    fun reeIids(reeIids: Boolean) = apply { this.reeIids = reeIids }
 }
