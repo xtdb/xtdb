@@ -10,7 +10,7 @@ The chalk skills are generic — they come from the `juxt/claude-plugins` market
 
 Interpret MUST, MUST NOT, SHOULD, SHOULD NOT, MAY per RFC 2119.
 
-XTDB 2.x work is tracked on the [xtdb org "2.x" project board](https://github.com/orgs/xtdb/projects/13), with each release cut against a milestone named `2-NEXT` (which gets renamed to the release version when it ships — so the milestone *name* is stable but its number/ID changes).
+XTDB 2.x work is tracked on the [xtdb org "2.x" project board](https://github.com/orgs/xtdb/projects/13), with each release cut against a milestone named for its version (see [Milestones](#milestones)).
 
 The 2.x board is not the org's only project, and some work is deliberately tracked on another one.
 "Not on the 2.x board" therefore does not mean "untracked".
@@ -56,7 +56,7 @@ The recipes under [Using chalk](#using-chalk) are written against the 2.x board.
 On this one, you MUST swap in project `42` and its IDs from [Cached IDs](#cached-ids), and with chalk in use its moves go through the `github` agent like any other board edit.
 
 - **A card goes on it for anything end-user-visible that will reach the client in a deploy** — not only work they raised, hit, or are waiting on.
-  Apply the same test [Milestones](#milestones) uses for `2-NEXT`: internal refactors, SPI tightening, and test/build/dev-infra changes stay off both boards; everything else that closes on `main` gets a card here too.
+  Apply the same end-user-visible test [Milestones](#milestones) uses: internal refactors, SPI tightening, and test/build/dev-infra changes stay off both boards; everything else that closes on `main` gets a card here too.
   It's on top of the 2.x board, not instead of it, and what goes on as the card is the same: the issue, or the standalone PR.
   Where you can't tell whether a change is end-user-visible, you MUST ask; a parent on the client board makes a sub-issue a candidate, not a given.
 - **`Status` tracks the client's deployments, not our development.**
@@ -120,7 +120,7 @@ A milestone means two different things depending on the card's state, and both r
 So a milestone set **when you create a card** MUST pass two tests, not one:
 
 - **End-user-visible.**
-  Internal refactors, module-author-facing SPI tightening, test-infra and infrastructure cleanup go on the board with an appropriate `Stream` but MUST NOT go on `2-NEXT` or any other milestone, however large they are — not at creation, and not at close either.
+  Internal refactors, module-author-facing SPI tightening, test-infra and infrastructure cleanup go on the board with an appropriate `Stream` but MUST NOT go on a milestone, however large they are — not at creation, and not at close either.
   End users don't read about interface tightening; putting it on the milestone clutters the release notes with internal noise.
 - **Blocking the next release** — would we hold the release for this?
   If not, leave the milestone off at creation and set it when you close the card.
@@ -144,14 +144,17 @@ Reaching for the milestone by reflex is how the open list fills up with work nob
 **Where you can't tell, you MUST ask rather than default.**
 Defaulting *on* is the more expensive mistake: an absent milestone is caught when the card closes, whereas a wrong one quietly misrepresents the release scope until someone audits it.
 
-The open milestone is always named `2-NEXT`.
-You MUST look up its current REST number by name+state rather than caching it:
+There is exactly one open milestone, named for the release it's cut against (e.g. `2.2.1`).
+You MUST look it up rather than caching its title or number:
 
 ```bash
-gh api '/repos/xtdb/xtdb/milestones?state=open' --jq '.[] | select(.title=="2-NEXT") | .number'
+gh api '/repos/xtdb/xtdb/milestones?state=open' --jq '.[] | "\(.number)\t\(.title)"'
 ```
 
-Set it on an issue or PR with `gh issue edit N --milestone 2-NEXT` / `gh pr edit N --milestone 2-NEXT`, and take it off with `gh issue edit N --remove-milestone` / `gh pr edit N --remove-milestone`.
+- **More than one open** → you MUST ask the user which one is meant, not pick.
+- **None open** → you MUST ask the user, not create one.
+
+Set it on an issue or PR with `gh issue edit N --milestone <title>` / `gh pr edit N --milestone <title>`, and take it off with `gh issue edit N --remove-milestone` / `gh pr edit N --remove-milestone`.
 Removing a milestone leaves the board card and its fields untouched, so it is the right move for a card that turned out not to be blocking — it drops out of the release scope and stays tracked.
 
 ## Labels
@@ -225,7 +228,7 @@ The chalk skills do both of these for you — see [Using chalk](#using-chalk).
 ## Cached IDs
 
 The boards' IDs are stable — cached here to avoid re-fetching each session.
-The `2-NEXT` milestone number is *not* cached because it changes on release (see the `gh api` lookup above).
+The open milestone is *not* cached because it changes with each release (see the `gh api` lookup in [Milestones](#milestones)).
 
 - Project (number): `13`, owner `xtdb`
 - Project (node ID): `PVT_kwDOBNKmUs4AJUwS`
