@@ -156,6 +156,9 @@ config {
 --     This recurses until each leaf fits within the page size limit.
 --   If a branch has fewer rows than the page size: coalesce all descendant leaves into a single page.
 --
+-- A file whose data carries `_recency` is laid out as RecencyCellLayout sets out instead.
+-- More than a page of versions of one entity can't split on IID: in a file without `_recency` they stay one page.
+--
 -- This ensures output pages are consistently sized (~1024 rows), regardless of input distribution.
 --
 -- == IID layout ==
@@ -183,8 +186,8 @@ config {
 ------------------------------------------------------------
 
 contract OutputSegmentLayout {
-    -- What a compaction job's output data and meta files hold.
-    -- See: compactor/OutWriter.kt, compactor/SegmentMerge.kt
+    -- What a compaction job's output data and meta files hold, and how the meta file's trie branches.
+    -- See: compactor/OutWriter.kt, compactor/SegmentMerge.kt, trie/PageTrieWriter.kt, trie/RecencyCells.kt, trie/StreamingIidTrie.kt, trie/MetadataFileWriter.kt
 
     @invariant HistoricalRowsCarryComputedRecency
         -- With `within_file_recency_branching` on, a job that partitions by recency (L0 → L1C + L1H) writes, for every row of each historical (L1H) output, the recency the merge computes for that row into a `_recency` column.
@@ -202,12 +205,35 @@ contract OutputSegmentLayout {
     @invariant FilesReadableWhateverTheSetting
         -- Every node reads files with and without `_recency`, whatever its `within_file_recency_branching` setting.
 
+    @invariant RecencyCellLayout
+        -- A file whose data carries `_recency` branches on recency once, at the IID path its part fixes, into time cells of one width.
+        -- A cell of width w holds the rows whose recency r has ceil(r / w) * w as its boundary, and is keyed by that boundary, an inclusive upper bound.
+        -- Its buckets ascend by key, and only cells holding rows appear.
+        -- Above the branch, the trie has one IID branch per level of the part, each with the part's child alone.
+        -- Each cell, and the whole file where it has no cells, is an IID trie in which a node branches only when it holds more than a page of rows.
+
+    @invariant CellWidth
+        -- Widths come from the ladder 1, 6 and 24 hours.
+        -- With N the file's rows, P the page size and c(w) the number of cells of width w that the file's `_recency` range touches, the file takes the narrowest rung with N / c(w) at least 4P.
+        -- A file has no cells where no rung reaches that.
+
+    @invariant OneEntityStreamsByRecency
+        -- A node holding more than a page of versions of one entity can't branch on IID, so it branches on recency into pages of a page each but the last, in the order the merge writes them.
+        -- Each page is keyed by the most recent row in it, and two pages may share a key.
+
+    @invariant WriterHoldsAPagePerCell
+        -- Writing a file with `_recency` buffers at most a page of rows, plus one, per cell, and one spare page of rows, whatever the file's row count.
+
+    @invariant RecencyBranchNodeOnlyWithRecency
+        -- The meta file's trie schema includes the `branch-recency` node type only when the data carries `_recency`.
+        -- A file without `_recency` keeps the earlier meta schema.
+
     @invariant PageMetadataRecordsRecency
         -- In a file whose data carries `_recency`, each page's metadata records the minimum and maximum `_recency` of its rows, alongside the other columns' metadata.
         -- A file whose data carries no `_recency` records none.
 
     @invariant OutputDeterministic
-        -- Every output file, including its recency column, is a deterministic function of the job and the `within_file_recency_branching` setting.
+        -- Every output file, including its recency column and its trie, is a deterministic function of the job and the `within_file_recency_branching` setting.
         -- Every node compacting a database has the same setting, so every node that runs the job writes identical files.
 }
 

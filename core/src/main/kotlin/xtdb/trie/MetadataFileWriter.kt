@@ -7,6 +7,7 @@ import xtdb.arrow.VectorType
 import xtdb.arrow.VectorType.Companion.BOOL
 import xtdb.arrow.VectorType.Companion.I32
 import xtdb.arrow.VectorType.Companion.I64
+import xtdb.arrow.VectorType.Companion.INSTANT
 import xtdb.arrow.VectorType.Companion.UTF8
 import xtdb.arrow.VectorType.Companion.asListOf
 import xtdb.arrow.VectorType.Companion.asStructOf
@@ -30,15 +31,22 @@ class MetadataFileWriter(
 ) : AutoCloseable {
     companion object {
 
-        @JvmField
-        val metaRelSchema = schema(
+        /**
+         * @param recencyBranches whether the trie may branch on recency - true only for data carrying [Trie.RECENCY_COL],
+         *   so that files without it keep the schema earlier releases read.
+         */
+        @JvmStatic
+        fun metaRelSchema(recencyBranches: Boolean) = schema(
             "nodes".asUnionFieldOf(
-                "nil" to VectorType.Null,
-                "branch-iid" asListOf maybe(I32),
-                "leaf".asStructOf(
-                    "data-page-idx" to I32,
-                    "columns" to listTypeOf(
-                        structOf("col-name" to UTF8, "root-col?" to BOOL, "count" to I64),
+                listOfNotNull(
+                    "nil" to VectorType.Null,
+                    "branch-iid" asListOf maybe(I32),
+                    if (recencyBranches) "branch-recency" asListOf structOf("max-recency" to INSTANT, "idx" to I32) else null,
+                    "leaf".asStructOf(
+                        "data-page-idx" to I32,
+                        "columns" to listTypeOf(
+                            structOf("col-name" to UTF8, "root-col?" to BOOL, "count" to I64),
+                        )
                     )
                 )
             )
@@ -54,13 +62,15 @@ class MetadataFileWriter(
     private val opReader = dataRel["op"]
     private val putReader = opReader.vectorForOrNull("put")
 
-    private val metaRel = Relation(al, metaRelSchema)
+    private val metaRel = Relation(al, metaRelSchema(recencyBranches = recencyVec != null))
 
     private val nodeWtr = metaRel["nodes"]
     private val nullBranchWtr = nodeWtr["nil"]
 
     private val iidBranchWtr = nodeWtr["branch-iid"]
     private val iidBranchElWtr = iidBranchWtr.listElements
+
+    private val recencyBranchWtr = nodeWtr.vectorForOrNull("branch-recency")
 
     private val leafWtr = nodeWtr["leaf"]
     private val pageIdxWtr = leafWtr["data-page-idx"]
@@ -86,6 +96,26 @@ class MetadataFileWriter(
             if (idx < 0) iidBranchElWtr.writeNull() else iidBranchElWtr.writeInt(idx)
 
         iidBranchWtr.endList()
+        metaRel.endRow()
+
+        return rowIdx
+    }
+
+    /**
+     * @param buckets each bucket's inclusive recency upper bound, ascending, with its subtree's [RowIndex]
+     */
+    fun writeRecencyBranch(buckets: List<Pair<RecencyMicros, RowIndex>>): RowIndex {
+        val recencyBranchWtr = checkNotNull(recencyBranchWtr) { "data without ${Trie.RECENCY_COL} can't branch on recency" }
+        val bucketWtr = recencyBranchWtr.listElements
+        val rowIdx = nodeWtr.valueCount
+
+        for ((maxRecency, idx) in buckets) {
+            bucketWtr["max-recency"].writeLong(maxRecency)
+            bucketWtr["idx"].writeInt(idx)
+            bucketWtr.endStruct()
+        }
+
+        recencyBranchWtr.endList()
         metaRel.endRow()
 
         return rowIdx

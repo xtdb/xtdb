@@ -3,6 +3,8 @@
               [:union
                {"nil" [:? :null],
                 "branch-iid" [:list [:? :i32]],
+                "branch-recency"
+                [:list [:struct {"max-recency" :instant, "idx" :i32}]],
                 "leaf"
                 [:struct
                  {"data-page-idx" :i32,
@@ -177,37 +179,86 @@
                  :columns
                  [{:col-name "_iid",
                    :root-col? true,
-                   :count 11,
+                   :count 8,
                    :bytes
                    {:bloom
                     #bytes "3a300000050000000e0000002000000025000000370000003b0000003000000032000000340000003600000038000000df5e6bcc1928a59553f1"}}
                   {:col-name "_valid_from",
                    :root-col? true,
-                   :count 11,
-                   :date-times {:min 1.57794504E9, :max 1.57794744E9}}
+                   :count 8,
+                   :date-times {:min 1.57794576E9, :max 1.57794744E9}}
                   {:col-name "_valid_to",
                    :root-col? true,
-                   :count 11,
+                   :count 8,
                    :date-times
                    {:min 9.223372036854775E12,
                     :max 9.223372036854775E12}}
                   {:col-name "_system_from",
                    :root-col? true,
-                   :count 11,
-                   :date-times {:min 1.57794504E9, :max 1.57794744E9}}
+                   :count 8,
+                   :date-times {:min 1.57794576E9, :max 1.57794744E9}}
                   {:col-name "_recency",
                    :root-col? true,
-                   :count 11,
-                   :date-times {:min 1.57794528E9, :max 1.57794768E9}}
+                   :count 8,
+                   :date-times {:min 1.577946E9, :max 1.57794768E9}}
                   {:col-name "_id",
                    :root-col? true,
-                   :count 11,
+                   :count 8,
                    :bytes
                    {:bloom
                     #bytes "3a300000050000001200000018000000250000002b0000003f000000300000003200000034000000360000003800000031a3bf9d57fae5f40b4c"},
                    :numbers {}}
                   {:col-name "reading",
                    :root-col? true,
-                   :count 11,
-                   :numbers {:min 1.0, :max 11.0}}]}]}
-   {:nodes #xt/tagged [:branch-iid [nil 3 6 7]]}])}
+                   :count 8,
+                   :numbers {:min 4.0, :max 11.0}}]}]}
+   {:nodes
+    #xt/tagged [:leaf
+                {:data-page-idx 5,
+                 :columns
+                 [{:col-name "_iid",
+                   :root-col? true,
+                   :count 3,
+                   :bytes
+                   {:bloom
+                    #bytes "3a300000050000000e0000002000000025000000370000003b0000003000000032000000340000003600000038000000df5e6bcc1928a59553f1"}}
+                  {:col-name "_valid_from",
+                   :root-col? true,
+                   :count 3,
+                   :date-times {:min 1.57794504E9, :max 1.57794552E9}}
+                  {:col-name "_valid_to",
+                   :root-col? true,
+                   :count 3,
+                   :date-times
+                   {:min 9.223372036854775E12,
+                    :max 9.223372036854775E12}}
+                  {:col-name "_system_from",
+                   :root-col? true,
+                   :count 3,
+                   :date-times {:min 1.57794504E9, :max 1.57794552E9}}
+                  {:col-name "_recency",
+                   :root-col? true,
+                   :count 3,
+                   :date-times {:min 1.57794528E9, :max 1.57794576E9}}
+                  {:col-name "_id",
+                   :root-col? true,
+                   :count 3,
+                   :bytes
+                   {:bloom
+                    #bytes "3a300000050000001200000018000000250000002b0000003f000000300000003200000034000000360000003800000031a3bf9d57fae5f40b4c"},
+                   :numbers {}}
+                  {:col-name "reading",
+                   :root-col? true,
+                   :count 3,
+                   :numbers {:min 1.0, :max 3.0}}]}]}
+   {:nodes
+    #xt/tagged [:branch-recency
+                [{:max-recency #xt/zdt "2020-01-02T06:16Z[UTC]",
+                  :idx 8}
+                 {:max-recency #xt/zdt "2020-01-02T06:48Z[UTC]",
+                  :idx 7}]]}
+   {:nodes #xt/tagged [:branch-iid [nil 3 6 9]]}
+   {:nodes
+    #xt/tagged [:branch-recency
+                [{:max-recency #xt/zdt "2020-01-03T00:00Z[UTC]",
+                  :idx 10}]]}])}

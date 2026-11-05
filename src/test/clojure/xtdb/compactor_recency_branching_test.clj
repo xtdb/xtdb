@@ -12,7 +12,7 @@
            (xtdb.arrow Relation Relation$Loader RunEndEncodedVector)
            (xtdb.metadata PageMetadata)
            (xtdb.storage LocalStorage)
-           (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf)))
+           (xtdb.trie ArrowHashTrie ArrowHashTrie$IidBranch ArrowHashTrie$Leaf ArrowHashTrie$RecencyBranch HashTrie$RecencyBranch$Bucket)))
 
 (defn- table-path ^Path [node table-name]
   (let [db (db/primary-db node)]
@@ -40,6 +40,19 @@
          sort
          vec)))
 
+(defn- leaf-bounds
+  "each leaf's data page index, with the tightest recency-branch key above it"
+  [^ArrowHashTrie trie]
+  (letfn [(walk [node bound]
+            (cond
+              (nil? node) []
+              (instance? ArrowHashTrie$Leaf node) [[(.getDataPageIndex ^ArrowHashTrie$Leaf node) bound]]
+              (instance? ArrowHashTrie$IidBranch node) (mapcat #(walk % bound) (.getHashChildren ^ArrowHashTrie$IidBranch node))
+              (instance? ArrowHashTrie$RecencyBranch node) (mapcat (fn [^HashTrie$RecencyBranch$Bucket bucket]
+                                                                     (walk (.getNode bucket) (min bound (.getMaxRecency bucket))))
+                                                                   (.getBuckets ^ArrowHashTrie$RecencyBranch node))))]
+    (walk (.getRootNode trie) Long/MAX_VALUE)))
+
 (defn- trie-summary
   [node trie-key]
   (let [tp (table-path node "public/docs")
@@ -51,17 +64,19 @@
                 ^Relation$Loader data-ldr (Relation/loader al (.resolve (.resolve tp "data") ^String trie-key))
                 data-rel (Relation. al (.getSchema data-ldr))]
       (.loadNextPage meta-ldr meta-rel)
-      (let [carries-recency? (some? (.vectorForOrNull data-rel "_recency"))
-            pages (when carries-recency?
-                    (vec (for [^ArrowHashTrie$Leaf leaf (.getLeaves (ArrowHashTrie. (.vectorFor meta-rel "nodes")))
-                               :let [page-idx (.getDataPageIndex leaf)
-                                     _ (.loadPage data-ldr page-idx data-rel)
-                                     recency-vec (.vectorFor data-rel "_recency")]]
-                           {:page-idx page-idx
-                            :max-recency (.maxRecency page-meta page-idx)
-                            :newest (reduce max Long/MIN_VALUE
-                                            (map #(.getLong recency-vec %) (range (.getRowCount data-rel))))})))]
-        {:carries-recency? carries-recency?
+      (let [nodes (.vectorFor meta-rel "nodes")
+            pages (vec (for [[page-idx bound] (leaf-bounds (ArrowHashTrie. nodes))
+                             :let [_ (.loadPage data-ldr page-idx data-rel)
+                                   recency-vec (.vectorFor data-rel "_recency")]]
+                         {:page-idx page-idx
+                          :bound bound
+                          :max-recency (.maxRecency page-meta page-idx)
+                          :newest (reduce max Long/MIN_VALUE
+                                          (map #(.getLong recency-vec %) (range (.getRowCount data-rel))))}))]
+        {:recency-branched? (contains? (set (.getLegNames nodes)) "branch-recency")
+         :bound-violations (vec (for [{:keys [page-idx ^long newest ^long bound]} pages
+                                      :when (> newest bound)]
+                                  [trie-key page-idx newest bound]))
          :max-recency-mismatches (vec (for [{:keys [page-idx ^long newest max-recency]} pages
                                             :when (not (and max-recency (<= newest (long max-recency) (inc newest))))]
                                         [trie-key page-idx newest max-recency]))}))))
@@ -73,13 +88,18 @@
 (def ^:private all-sql
   "SELECT _id, v, _system_from, _system_to FROM docs FOR ALL SYSTEM_TIME FOR ALL VALID_TIME")
 
+(defn- rows-read [node sql]
+  (->> (xt/q node (str "EXPLAIN ANALYZE " sql))
+       (filter #(= :scan (:op %)))
+       first :attributes :scan-rows-read))
+
 (defn- query-results [node]
   {:window (set (xt/q node window-sql))
    :all (set (xt/q node all-sql))
    :solo (xt/q node ["SELECT v, _system_from FROM docs FOR ALL SYSTEM_TIME WHERE _id = ? ORDER BY _system_from" :solo])
    :row-count (:row-count (first (xt/q node "SELECT COUNT(*) AS row_count FROM docs FOR ALL SYSTEM_TIME FOR ALL VALID_TIME")))})
 
-(t/deftest historical-files-carry-recency-and-read-back-identically
+(t/deftest historical-files-branch-by-recency-and-a-recent-window-reads-a-fraction-of-them
   (tu/with-tmp-dir* "compactor-recency-branching"
     (fn [node-dir]
       (binding [c/*page-size* 8
@@ -98,10 +118,14 @@
             (let [trie-keys (historical-trie-keys node)
                   summaries (map #(trie-summary node %) trie-keys)]
               (t/is (some #(re-find #"^l0[2-9a-f]-" %) trie-keys) "rows have compacted past L1H")
-              (t/is (every? :carries-recency? summaries) "every historical file carries its rows' recency")
+              (t/is (some :recency-branched? summaries) "historical files branch on recency")
+              (t/is (empty? (mapcat :bound-violations summaries)) "no page holds a row newer than its bucket's bound")
               (t/is (empty? (mapcat :max-recency-mismatches summaries)) "each page's metadata records its newest recency"))
 
             (t/is (= before (query-results node)) "compaction leaves query results unchanged")
+
+            (t/is (< (* 4 (rows-read node window-sql)) (rows-read node all-sql))
+                  "a 12h window reads a fraction of five days' history")
 
             (t/is (not-any? #(re-find #"recency" (str %))
                             (concat (mapcat keys (xt/q node "SELECT * FROM docs FOR ALL SYSTEM_TIME"))
@@ -123,7 +147,7 @@
             (recur (conj counts [(.getRunCount iid-vec) (count (partition-by identity iids))])))
           counts)))))
 
-(t/deftest pages-carrying-recency-keep-each-entitys-iid-in-one-run
+(t/deftest recency-branched-pages-keep-each-entitys-iid-in-one-run
   (tu/with-tmp-dir* "compactor-recency-branching-ree"
     (fn [node-dir]
       (binding [c/*page-size* 8
@@ -137,10 +161,42 @@
           (c/compact-all! node #xt/duration "PT30S")
 
           (let [trie-keys (historical-trie-keys node)]
-            (t/is (every? #(:carries-recency? (trie-summary node %)) trie-keys) "every historical file carries its rows' recency")
+            (t/is (some #(:recency-branched? (trie-summary node %)) trie-keys) "historical files branch on recency")
 
             (t/is (empty? (for [trie-key trie-keys
                                 [runs entities] (iid-run-counts node trie-key)
                                 :when (not= runs entities)]
                             [trie-key runs entities]))
                   "every page stores each entity's iid in one run")))))))
+
+(t/deftest deleted-and-erased-entities-compact-through-recency-cells
+  (tu/with-tmp-dir* "compactor-recency-branching-erase"
+    (fn [node-dir]
+      (binding [c/*page-size* 8
+                cat/*file-size-target* (* 1024 16)
+                c/*ignore-signal-block?* true]
+        ;; TODO(#6263): the opt-in goes with withinFileRecencyBranching
+        (with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-block 400, :within-file-recency-branching? true})]
+          (load-history! node)
+          (xt/execute-tx node [(into [:delete-docs :docs] (range 0 5))]
+                         {:system-time (.plusHours start 140)})
+          (xt/execute-tx node [(into [:erase-docs :docs] (cons :solo (range 5 10)))]
+                         {:system-time (.plusHours start 141)})
+          (tu/flush-block! node)
+
+          (let [before (query-results node)]
+            (t/is (empty? (:solo before)))
+            (t/is (not-any? (comp #{5 6 7 8 9 :solo} :xt/id) (:window before))
+                  "a window before the erase holds none of the erased entities")
+
+            (c/compact-all! node #xt/duration "PT30S")
+
+            (t/is (some #(:recency-branched? (trie-summary node %)) (historical-trie-keys node)) "historical files branch on recency")
+
+            (t/is (= before (query-results node)) "compaction leaves query results unchanged")
+
+            (t/is (= [{:row-count 0}]
+                     (xt/q node "SELECT COUNT(*) AS row_count FROM docs FOR ALL SYSTEM_TIME FOR ALL VALID_TIME WHERE _id IN (5, 6, 7, 8, 9)"))
+                  "erased entities leave no rows")
+
+            (t/is (= 120 (count (xt/q node "SELECT v FROM docs FOR ALL SYSTEM_TIME WHERE _id = 0"))))))))))

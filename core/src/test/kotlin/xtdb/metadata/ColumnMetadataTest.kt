@@ -24,7 +24,7 @@ class ColumnMetadataTest {
         StructVector(al, "struct", true).use { structVec ->
             docs.forEach { structVec.writeObject(it) }
 
-            Relation(al, MetadataFileWriter.metaRelSchema).use { metaRel ->
+            Relation(al, MetadataFileWriter.metaRelSchema(recencyBranches = false)).use { metaRel ->
                 val colsVec = metaRel["nodes"]["leaf"]["columns"].listElements
                 ColumnMetadata(colsVec, calculateBlooms).writeMetadata(structVec)
 

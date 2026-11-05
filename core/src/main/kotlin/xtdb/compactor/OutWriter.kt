@@ -11,6 +11,7 @@ import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.compactor.RecencyPartition.*
 import xtdb.compactor.SegmentMerge.Results
 import xtdb.time.microsAsInstant
+import xtdb.trie.RecencyRange
 import xtdb.trie.Trie
 import xtdb.trie.rowCopierWithReeIid
 import xtdb.util.closeAll
@@ -106,9 +107,16 @@ internal interface OutWriter : AutoCloseable {
                 .getOrThrow()
 
             private var pageIdx = 0
+            private var pageMinRecency = RecencyRange.EMPTY.min
+            private var pageMaxRecency = RecencyRange.EMPTY.max
             private val leaves0 = mutableListOf<PageTree.Leaf>()
 
             val leaves: List<PageTree.Leaf> get() = leaves0
+
+            private fun observeRecency(recency: RecencyMicros) {
+                if (recency < pageMinRecency) pageMinRecency = recency
+                if (recency > pageMaxRecency) pageMaxRecency = recency
+            }
 
             override fun rowCopier(reader: RelationReader): RecencyRowCopier =
                 when (recencyColumn) {
@@ -117,8 +125,13 @@ internal interface OutWriter : AutoCloseable {
                     }
 
                     RecencyColumn.CARRIED -> {
+                        val sourceRecency = reader[Trie.RECENCY_COL]
                         val copier = reader.rowCopierWithReeIid(outRel)
-                        RecencyRowCopier { _, sourceIndex -> copier.copyRow(sourceIndex) }
+
+                        RecencyRowCopier { _, sourceIndex ->
+                            observeRecency(sourceRecency.getLong(sourceIndex))
+                            copier.copyRow(sourceIndex)
+                        }
                     }
 
                     RecencyColumn.COMPUTED -> {
@@ -134,6 +147,7 @@ internal interface OutWriter : AutoCloseable {
                         val copier = reader.withoutRecency().rowCopierWithReeIid(contentRel)
 
                         RecencyRowCopier { recency, sourceIndex ->
+                            observeRecency(recency)
                             recencyVec.writeLong(recency)
                             copier.copyRow(sourceIndex)
                         }
@@ -145,8 +159,10 @@ internal interface OutWriter : AutoCloseable {
 
                 unloader.writePage()
 
-                leaves0 += PageTree.Leaf(pageIdx++, path, outRel.rowCount)
+                leaves0 += PageTree.Leaf(pageIdx++, path, outRel.rowCount, RecencyRange(pageMinRecency, pageMaxRecency))
                 outRel.clear()
+                pageMinRecency = RecencyRange.EMPTY.min
+                pageMaxRecency = RecencyRange.EMPTY.max
             }
 
             override fun end(): Results {

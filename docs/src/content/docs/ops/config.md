@@ -24,9 +24,9 @@ v2.2.1: the compactor can run-end encode `_iid`, behind `reeIids`
   Turning it off takes the same two rolls, with `reeIids: false` (and `XTDB_REE_IIDS` unset) in the second; v2.2.1 keeps reading the files it has already written.
   Earlier releases can't process those files, so rolling back to v2.2 is supported only on a database where `reeIids` has never been on.
 
-v2.2.1: the compactor can record each superseded row's recency in historical files, behind `withinFileRecencyBranching`
+v2.2.1: the compactor can branch historical files by recency, behind `withinFileRecencyBranching`
 
-: With `compactor.withinFileRecencyBranching` on, every row of a historical file carries the time it was superseded — see [Compactor](#compactor).
+: With `compactor.withinFileRecencyBranching` on, a historical file branches on recency within its week, so a query over a recent window reads that window's superseded rows rather than the whole week's — see [Compactor](#compactor).
 
   It's off by default, and with it off the compactor writes the same files as v2.2, so upgrading from v2.2 needs no extra steps.
   Every v2.2.1 node reads files written either way.
@@ -282,7 +282,7 @@ compactor:
   # Defaults to !Env XTDB_REE_IIDS # or if that's not specified false.
   reeIids: false
 
-  # (v2.2.1+) Record each superseded row's recency in historical files.
+  # (v2.2.1+) Branch historical files by recency within the file.
   # Every node compacting a database must agree - see the v2.2.1 changelog entry above before turning it on for an existing cluster.
   # Defaults to !Env XTDB_WITHIN_FILE_RECENCY_BRANCHING # or if that's not specified false.
   withinFileRecencyBranching: false

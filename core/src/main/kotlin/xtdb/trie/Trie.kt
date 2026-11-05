@@ -80,7 +80,7 @@ object Trie {
     }
 
     /**
-     * Each row's recency, in a historical data file written with `withinFileRecencyBranching` on.
+     * Each row's recency, in a historical data file that branches on recency within the file.
      * Fixed as the row reaches L1H, and carried rather than recomputed above that.
      */
     const val RECENCY_COL = "_recency"

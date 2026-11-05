@@ -15,7 +15,6 @@ import xtdb.api.query.IKeyFn.KeyFn.SNAKE_CASE_STRING
 import xtdb.arrow.Relation
 import xtdb.arrow.RunEndEncodedVector
 import xtdb.arrow.STRUCT_TYPE
-import xtdb.compactor.PageTree.Companion.asTree
 import xtdb.arrow.VectorType.Companion.INSTANT
 import xtdb.arrow.VectorType.Companion.ofType
 import org.apache.arrow.vector.types.pojo.Schema
@@ -27,6 +26,7 @@ import xtdb.table.TableSlug
 import xtdb.time.InstantUtil.asMicros
 import xtdb.time.microsAsInstant
 import xtdb.trie.PageTrieWriter
+import xtdb.trie.RecencyRange
 import xtdb.trie.Trie
 import xtdb.util.asIid
 import xtdb.util.safeMap
@@ -245,7 +245,7 @@ class SegmentMergeTest {
                         segMerge.mergeSegmentsSync(segments, null, historical).use { results ->
                             val result = results.single()
                             Relation.loader(al, result.openForRead()).use { loader ->
-                                runBlocking { trieWriter.writePageTree(slug, trieKey, loader, result.leaves.asTree, pageSize) }
+                                runBlocking { trieWriter.writePageTree(slug, trieKey, loader, result.leaves, pageSize, part = null) }
                             }
                         }
                     }
@@ -338,6 +338,12 @@ class SegmentMergeTest {
                             )
                         ),
                         results.map { segMerge.rowsOf(it) }
+                    )
+
+                    assertEquals(
+                        RecencyRange(year(2024).toInstant().asMicros, year(2025).toInstant().asMicros),
+                        results.flatMap { it.leaves }.map { it.recency }.reduce(RecencyRange::plus),
+                        "the pages' recency range is that of the recency they carry"
                     )
                 }
             }

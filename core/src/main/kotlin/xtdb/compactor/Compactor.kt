@@ -15,7 +15,6 @@ import xtdb.api.log.SourceMessage.TriesAdded
 import xtdb.api.log.Watchers
 import xtdb.api.storage.Storage
 import xtdb.arrow.Relation
-import xtdb.compactor.PageTree.Companion.asTree
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
@@ -127,8 +126,8 @@ interface Compactor : AutoCloseable {
                                                             val (dataFileSize, trieMetadata) =
                                                                 trieWriter.writePageTree(
                                                                     slug, trieKey,
-                                                                    loader, it.leaves.asTree,
-                                                                    pageSize
+                                                                    loader, it.leaves,
+                                                                    pageSize, job.part
                                                                 )
 
                                                             job.trieDetails(trieKey, dataFileSize, trieMetadata)

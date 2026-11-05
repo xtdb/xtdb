@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 import xtdb.compactor.PageTree.Companion.asTree
 import xtdb.compactor.PageTree.Node
+import xtdb.trie.RecencyRange
 
 class PageTreeTest {
 
@@ -16,26 +17,26 @@ class PageTreeTest {
     fun `test batch tree construction`() {
         assertNull(emptyList<PageTree.Leaf>().asTree)
 
-        PageTree.Leaf(0, ByteArrayList(), 12).let {
+        PageTree.Leaf(0, ByteArrayList(), 12, RecencyRange.EMPTY).let {
             assertEquals(it, listOf(it).asTree)
         }
 
-        PageTree.Leaf(0, ByteArrayList.from(1), 12).let {
+        PageTree.Leaf(0, ByteArrayList.from(1), 12, RecencyRange.EMPTY).let {
             assertEquals(node(null, it, null, null), listOf(it).asTree)
         }
 
-        val leaf01 = PageTree.Leaf(0, ByteArrayList.from(0, 1), 8)
-        val leaf03 = PageTree.Leaf(1, ByteArrayList.from(0, 3), 12)
-        val leaf1 = PageTree.Leaf(2, ByteArrayList.from(1), 24)
+        val leaf01 = PageTree.Leaf(0, ByteArrayList.from(0, 1), 8, RecencyRange.EMPTY)
+        val leaf03 = PageTree.Leaf(1, ByteArrayList.from(0, 3), 12, RecencyRange.EMPTY)
+        val leaf1 = PageTree.Leaf(2, ByteArrayList.from(1), 24, RecencyRange.EMPTY)
 
         assertEquals(
             node(node(null, leaf01, null, leaf03), leaf1, null, null),
             listOf(leaf01, leaf03, leaf1).asTree
         )
 
-        val leaf22 = PageTree.Leaf(3, ByteArrayList.from(2, 2), 2)
-        val leaf232 = PageTree.Leaf(4, ByteArrayList.from(2, 3, 2), 10)
-        val leaf233 = PageTree.Leaf(5, ByteArrayList.from(2, 3, 3), 11)
+        val leaf22 = PageTree.Leaf(3, ByteArrayList.from(2, 2), 2, RecencyRange.EMPTY)
+        val leaf232 = PageTree.Leaf(4, ByteArrayList.from(2, 3, 2), 10, RecencyRange.EMPTY)
+        val leaf233 = PageTree.Leaf(5, ByteArrayList.from(2, 3, 3), 11, RecencyRange.EMPTY)
 
         assertEquals(
             node(

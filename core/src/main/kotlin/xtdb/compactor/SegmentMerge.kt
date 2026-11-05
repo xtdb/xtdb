@@ -122,7 +122,7 @@ fun resolveSameSystemTimeEvents(
 private val IID_RUNS = Encoding.RunEnd(RunEndWidth.I32)
 
 /**
- * @param writesRecency whether historical outputs carry `_recency`:
+ * @param writesRecency whether historical outputs carry `_recency`, so that they branch on it:
  *   computed as rows leave the current tier, and copied through a historical merge whose inputs all carry it.
  *   Off, every output drops the column.
  */
