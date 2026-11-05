@@ -14,6 +14,7 @@ import org.apache.kafka.connect.data.Timestamp as ConnectTimestamp
 import org.apache.kafka.connect.sink.SinkRecord
 import xtdb.api.error.Anomaly.Companion.toAnomaly
 import xtdb.api.error.Incorrect
+import xtdb.api.tx.ExternalSourceToken
 import xtdb.api.tx.OpenTx
 import xtdb.api.tx.TxIndexer
 import xtdb.api.tx.TxIndexer.TxResult
@@ -38,7 +39,7 @@ class DocsIndexer(internal val table: TableRef) : RecordIndexer {
         val table: String,
     ) : RecordIndexer.Factory {
 
-        override fun open(): RecordIndexer =
+        override fun open(partition: Int, afterToken: ExternalSourceToken?): RecordIndexer =
             DocsIndexer(TableRef.parse(table))
 
         class Registration : RecordIndexer.Registration<Factory> {
