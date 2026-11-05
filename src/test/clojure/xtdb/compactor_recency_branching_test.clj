@@ -10,7 +10,9 @@
   (:import (java.nio.file Files Path)
            (org.apache.arrow.memory RootAllocator)
            (xtdb.arrow Relation Relation$Loader RunEndEncodedVector)
-           (xtdb.storage LocalStorage)))
+           (xtdb.metadata PageMetadata)
+           (xtdb.storage LocalStorage)
+           (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf)))
 
 (defn- table-path ^Path [node table-name]
   (let [db (db/primary-db node)]
@@ -40,11 +42,29 @@
 
 (defn- trie-summary
   [node trie-key]
-  (let [tp (table-path node "public/docs")]
+  (let [tp (table-path node "public/docs")
+        meta-path (.resolve (.resolve tp "meta") ^String trie-key)]
     (with-open [al (RootAllocator.)
+                meta-ldr (Relation/loader al meta-path)
+                meta-rel (Relation. al (.getSchema meta-ldr))
+                page-meta (PageMetadata/open al meta-path)
                 ^Relation$Loader data-ldr (Relation/loader al (.resolve (.resolve tp "data") ^String trie-key))
                 data-rel (Relation. al (.getSchema data-ldr))]
-      {:carries-recency? (some? (.vectorForOrNull data-rel "_recency"))})))
+      (.loadNextPage meta-ldr meta-rel)
+      (let [carries-recency? (some? (.vectorForOrNull data-rel "_recency"))
+            pages (when carries-recency?
+                    (vec (for [^ArrowHashTrie$Leaf leaf (.getLeaves (ArrowHashTrie. (.vectorFor meta-rel "nodes")))
+                               :let [page-idx (.getDataPageIndex leaf)
+                                     _ (.loadPage data-ldr page-idx data-rel)
+                                     recency-vec (.vectorFor data-rel "_recency")]]
+                           {:page-idx page-idx
+                            :max-recency (.maxRecency page-meta page-idx)
+                            :newest (reduce max Long/MIN_VALUE
+                                            (map #(.getLong recency-vec %) (range (.getRowCount data-rel))))})))]
+        {:carries-recency? carries-recency?
+         :max-recency-mismatches (vec (for [{:keys [page-idx ^long newest max-recency]} pages
+                                            :when (not (and max-recency (<= newest (long max-recency) (inc newest))))]
+                                        [trie-key page-idx newest max-recency]))}))))
 
 (def ^:private window-sql
   "SELECT _id, v, _system_from FROM docs
@@ -78,7 +98,8 @@
             (let [trie-keys (historical-trie-keys node)
                   summaries (map #(trie-summary node %) trie-keys)]
               (t/is (some #(re-find #"^l0[2-9a-f]-" %) trie-keys) "rows have compacted past L1H")
-              (t/is (every? :carries-recency? summaries) "every historical file carries its rows' recency"))
+              (t/is (every? :carries-recency? summaries) "every historical file carries its rows' recency")
+              (t/is (empty? (mapcat :max-recency-mismatches summaries)) "each page's metadata records its newest recency"))
 
             (t/is (= before (query-results node)) "compaction leaves query results unchanged")
 

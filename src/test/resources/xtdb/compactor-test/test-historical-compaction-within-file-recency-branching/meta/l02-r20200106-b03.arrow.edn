@@ -44,6 +44,10 @@
                    :root-col? true,
                    :count 23,
                    :date-times {:min 1.57788E9, :max 1.5779592E9}}
+                  {:col-name "_recency",
+                   :root-col? true,
+                   :count 23,
+                   :date-times {:min 1.5778836E9, :max 1.5779628E9}}
                   {:col-name "_id",
                    :root-col? true,
                    :count 23,
@@ -77,6 +81,10 @@
                    :root-col? true,
                    :count 23,
                    :date-times {:min 1.57788E9, :max 1.5779592E9}}
+                  {:col-name "_recency",
+                   :root-col? true,
+                   :count 23,
+                   :date-times {:min 1.5778836E9, :max 1.5779628E9}}
                   {:col-name "_id",
                    :root-col? true,
                    :count 23,
@@ -112,6 +120,10 @@
                    :root-col? true,
                    :count 23,
                    :date-times {:min 1.57788E9, :max 1.5779592E9}}
+                  {:col-name "_recency",
+                   :root-col? true,
+                   :count 23,
+                   :date-times {:min 1.5778836E9, :max 1.5779628E9}}
                   {:col-name "_id",
                    :root-col? true,
                    :count 23,
@@ -145,6 +157,10 @@
                    :root-col? true,
                    :count 23,
                    :date-times {:min 1.57788E9, :max 1.5779592E9}}
+                  {:col-name "_recency",
+                   :root-col? true,
+                   :count 23,
+                   :date-times {:min 1.5778836E9, :max 1.5779628E9}}
                   {:col-name "_id",
                    :root-col? true,
                    :count 23,
@@ -179,6 +195,10 @@
                    :root-col? true,
                    :count 11,
                    :date-times {:min 1.57794504E9, :max 1.57794744E9}}
+                  {:col-name "_recency",
+                   :root-col? true,
+                   :count 11,
+                   :date-times {:min 1.57794528E9, :max 1.57794768E9}}
                   {:col-name "_id",
                    :root-col? true,
                    :count 11,

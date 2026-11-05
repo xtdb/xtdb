@@ -42,6 +42,10 @@
                    :root-col? true,
                    :count 5,
                    :date-times {:min 1.57788E9, :max 1.5778944E9}}
+                  {:col-name "_recency",
+                   :root-col? true,
+                   :count 5,
+                   :date-times {:min 1.5778836E9, :max 1.577898E9}}
                   {:col-name "_id",
                    :root-col? true,
                    :count 5,
@@ -74,6 +78,10 @@
                    :root-col? true,
                    :count 5,
                    :date-times {:min 1.57788E9, :max 1.5778944E9}}
+                  {:col-name "_recency",
+                   :root-col? true,
+                   :count 5,
+                   :date-times {:min 1.5778836E9, :max 1.577898E9}}
                   {:col-name "_id",
                    :root-col? true,
                    :count 5,
@@ -108,6 +116,10 @@
                    :root-col? true,
                    :count 5,
                    :date-times {:min 1.57788E9, :max 1.5778944E9}}
+                  {:col-name "_recency",
+                   :root-col? true,
+                   :count 5,
+                   :date-times {:min 1.5778836E9, :max 1.577898E9}}
                   {:col-name "_id",
                    :root-col? true,
                    :count 5,
@@ -140,6 +152,10 @@
                    :root-col? true,
                    :count 5,
                    :date-times {:min 1.57788E9, :max 1.5778944E9}}
+                  {:col-name "_recency",
+                   :root-col? true,
+                   :count 5,
+                   :date-times {:min 1.5778836E9, :max 1.577898E9}}
                   {:col-name "_id",
                    :root-col? true,
                    :count 5,

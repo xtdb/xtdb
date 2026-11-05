@@ -69,7 +69,7 @@ class BufferPoolSegment(
                 ?: pageMeta(
                     dataPages[dataPageIndex], this, leaf,
                     pageMetadata.temporalMetadata(dataPageIndex),
-                    recency
+                    minOf(recency, pageMetadata.maxRecency(dataPageIndex) ?: Long.MAX_VALUE)
                 ).also { pages[dataPageIndex] = it }
         }
 
