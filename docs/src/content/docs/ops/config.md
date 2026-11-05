@@ -24,6 +24,24 @@ v2.2.1: the compactor can run-end encode `_iid`, behind `reeIids`
   Turning it off takes the same two rolls, with `reeIids: false` (and `XTDB_REE_IIDS` unset) in the second; v2.2.1 keeps reading the files it has already written.
   Earlier releases can't process those files, so rolling back to v2.2 is supported only on a database where `reeIids` has never been on.
 
+v2.2.1: the compactor can record each superseded row's recency in historical files, behind `withinFileRecencyBranching`
+
+: With `compactor.withinFileRecencyBranching` on, every row of a historical file carries the time it was superseded — see [Compactor](#compactor).
+
+  It's off by default, and with it off the compactor writes the same files as v2.2, so upgrading from v2.2 needs no extra steps.
+  Every v2.2.1 node reads files written either way.
+
+  Every node that compacts a database must write the same format, so turning it on takes two rolls:
+
+  1. Roll with the compactor off (`compactor.threads: 0`).
+     Where several clusters write to the same database, every one of them finishes this roll before the next step starts anywhere.
+  2. Roll again with the compactor on and `withinFileRecencyBranching: true` (or `XTDB_WITHIN_FILE_RECENCY_BRANCHING=true`).
+
+  A new cluster can set it from the start.
+
+  Turning it off takes the same two rolls, with `withinFileRecencyBranching: false` (and `XTDB_WITHIN_FILE_RECENCY_BRANCHING` unset) in the second; v2.2.1 keeps reading the files it has already written.
+  Earlier releases can't process those files, so rolling back to v2.2 is supported only on a database where `withinFileRecencyBranching` has never been on.
+
 v2.2: blocks are flushed every 15 minutes
 
 : A database too quiet to fill a block still writes one within 15 minutes — see [Indexer](#indexer).
@@ -263,6 +281,11 @@ compactor:
   # Every node compacting a database must agree - see the v2.2.1 changelog entry above before turning it on for an existing cluster.
   # Defaults to !Env XTDB_REE_IIDS # or if that's not specified false.
   reeIids: false
+
+  # (v2.2.1+) Record each superseded row's recency in historical files.
+  # Every node compacting a database must agree - see the v2.2.1 changelog entry above before turning it on for an existing cluster.
+  # Defaults to !Env XTDB_WITHIN_FILE_RECENCY_BRANCHING # or if that's not specified false.
+  withinFileRecencyBranching: false
 ```
 
 ### Indexer

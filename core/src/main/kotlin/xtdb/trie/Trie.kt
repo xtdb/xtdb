@@ -79,6 +79,12 @@ object Trie {
         )
     }
 
+    /**
+     * Each row's recency, in a historical data file written with `withinFileRecencyBranching` on.
+     * Fixed as the row reaches L1H, and carried rather than recomputed above that.
+     */
+    const val RECENCY_COL = "_recency"
+
     @JvmStatic
     @JvmOverloads
     fun dataRelSchema(putDocField: Field?, iidEncoding: Encoding = Encoding.Plain): Schema =

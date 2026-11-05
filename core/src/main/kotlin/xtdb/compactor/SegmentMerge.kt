@@ -13,6 +13,7 @@ import xtdb.arrow.RelationReader
 import xtdb.arrow.RunEndWidth
 import xtdb.bitemporal.PolygonCalculator
 import xtdb.compactor.OutWriter.OutWriters
+import xtdb.compactor.OutWriter.OutWriters.RecencyColumn
 import xtdb.compactor.RecencyPartition.WEEK
 import xtdb.metadata.PageMetadata
 import xtdb.metadata.UNBOUND_TEMPORAL_METADATA
@@ -65,6 +66,7 @@ fun resolveSameSystemTimeEvents(
     val validFromVec = relWriter["_valid_from"]
     val validToVec = relWriter["_valid_to"]
     val opCopier = dataReader["op"].rowCopier(relWriter["op"])
+    val recencyCopier = dataReader.vectorForOrNull(Trie.RECENCY_COL)?.let { it.rowCopier(relWriter[Trie.RECENCY_COL]) }
 
     val evPtr = EventRowPointer(dataReader, path)
     val polygonCalculator = PolygonCalculator()
@@ -89,6 +91,7 @@ fun resolveSameSystemTimeEvents(
                         validFromVec.writeLong(MIN_LONG)
                         validToVec.writeLong(MAX_LONG)
                         opCopier.copyRow(evPtr.index)
+                        recencyCopier?.copyRow(evPtr.index)
                         relWriter.endRow()
                     }
                     seenErase = true
@@ -102,6 +105,7 @@ fun resolveSameSystemTimeEvents(
                             validFromVec.writeLong(polygon.getValidFrom(i))
                             validToVec.writeLong(polygon.getValidTo(i))
                             opCopier.copyRow(evPtr.index)
+                            recencyCopier?.copyRow(evPtr.index)
                             relWriter.endRow()
                         }
                     }
@@ -117,9 +121,16 @@ fun resolveSameSystemTimeEvents(
 
 private val IID_RUNS = Encoding.RunEnd(RunEndWidth.I32)
 
+/**
+ * @param writesRecency whether historical outputs carry `_recency`:
+ *   computed as rows leave the current tier, and copied through a historical merge whose inputs all carry it.
+ *   Off, every output drops the column.
+ */
 internal class SegmentMerge(
     private val al: BufferAllocator,
-    private val reeIids: Boolean = false
+    private val reeIids: Boolean = false,
+    // TODO(#6263): goes with withinFileRecencyBranching
+    private val writesRecency: Boolean = false
 ) : AutoCloseable {
 
     class Result(internal val path: Path, val recency: LocalDate?, val leaves: List<PageTree.Leaf>) : AutoCloseable {
@@ -228,8 +239,21 @@ internal class SegmentMerge(
             dataRelSchema(putDocField, if (reeIids && recency != null) IID_RUNS else Encoding.Plain)
 
         val outWriter = when (recencyPartitioning) {
-            RecencyPartitioning.Partition -> outWriters.PartitionedOutWriter(::schemaFor, recencyPartition)
-            is RecencyPartitioning.Preserve -> outWriters.OutRel(schemaFor(recencyPartitioning.recency), recency = recencyPartitioning.recency)
+            RecencyPartitioning.Partition ->
+                outWriters.PartitionedOutWriter(
+                    ::schemaFor, recencyPartition,
+                    // TODO(#6263): goes with withinFileRecencyBranching
+                    historicalRecency = if (writesRecency) RecencyColumn.COMPUTED else RecencyColumn.ABSENT
+                )
+            is RecencyPartitioning.Preserve -> {
+                // TODO(#6263): `writesRecency` goes with withinFileRecencyBranching
+                val recencyColumn =
+                    if (writesRecency && recencyPartitioning.recency != null && segments.all { it.schema.fields.any { f -> f.name == Trie.RECENCY_COL } })
+                        RecencyColumn.CARRIED
+                    else RecencyColumn.ABSENT
+
+                outWriters.OutRel(schemaFor(recencyPartitioning.recency), recency = recencyPartitioning.recency, recencyColumn = recencyColumn)
+            }
         }
 
         return outWriter.use {
@@ -296,7 +320,7 @@ internal fun main() {
 
     try {
         RootAllocator().use { al ->
-            SegmentMerge(al).use { segMerge ->
+            SegmentMerge(al, writesRecency = false).use { segMerge ->
                 trieKeys
                     .safeMap { trieKey -> LocalSegment(al, slug, dir, trieKey) }
                     .useAll { segments ->

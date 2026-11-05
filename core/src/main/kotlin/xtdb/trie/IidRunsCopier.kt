@@ -1,8 +1,8 @@
 package xtdb.trie
 
 import xtdb.arrow.LongLongVectorReader
-import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
+import xtdb.arrow.RelationWriter
 import xtdb.arrow.RowCopier
 import xtdb.arrow.RunEndEncodedVector
 import xtdb.arrow.VectorType
@@ -21,7 +21,7 @@ private class IidRunsCopier(private val src: LongLongVectorReader, private val d
     override fun copyRow(srcIdx: Int) = dest.writeLongLong(src.getLongLongHigh(srcIdx), src.getLongLongLow(srcIdx))
 }
 
-internal fun RelationReader.rowCopierWithReeIid(dest: Relation): RowCopier {
+internal fun RelationReader.rowCopierWithReeIid(dest: RelationWriter): RowCopier {
     val destIid = dest[IID] as? RunEndEncodedVector ?: return rowCopier(dest)
     require(destIid.type == RUN_ENCODED_IID) { "can't write iids as runs into ${destIid.type}" }
 

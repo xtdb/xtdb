@@ -79,9 +79,10 @@ interface Compactor : AutoCloseable {
         }
 
         companion object {
+            // TODO(#6263): `writesRecency` goes with withinFileRecencyBranching
             @JvmStatic
             @JvmOverloads
-            fun real(pageSize: Int, recencyPartition: RecencyPartition?, reeIids: Boolean = false) =
+            fun real(pageSize: Int, recencyPartition: RecencyPartition?, reeIids: Boolean = false, writesRecency: Boolean = false) =
                 object : Factory {
                     override fun create(allocator: BufferAllocator, partitionStorage: PartitionStorage, partitionState: PartitionState, watchers: Watchers) = object : Driver {
                         private val al = allocator.openChildAllocator("compactor")
@@ -91,7 +92,7 @@ interface Compactor : AutoCloseable {
                         private val tableCat = partitionState.tableCatalog
 
                         private val trieWriter = PageTrieWriter(al, bp, calculateBlooms = true)
-                        private val segMerge = SegmentMerge(al, reeIids)
+                        private val segMerge = SegmentMerge(al, reeIids, writesRecency)
 
                         private fun Job.trieDetails(
                             trieKey: TrieKey,
