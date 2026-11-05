@@ -6,7 +6,7 @@
            (java.nio.file Path)
            (java.time LocalDate)
            (java.util ArrayList)
-           (xtdb.log.proto TrieDetails TrieMetadata TrieState)
+           (xtdb.log.proto TemporalMetadata TrieDetails TrieMetadata TrieState)
            (xtdb.segment Segment$PageMeta)
            (xtdb.trie MemoryHashTrie MemoryHashTrie$Branch MemoryHashTrie$Leaf MemoryHashTrie$Node Trie Trie$Key)
            (xtdb.util Temporal TemporalBounds TemporalDimension)))
@@ -109,13 +109,18 @@
   ;;   Temporal bounds disjoint from the query but overlapping the emit envelope.
   ;;   We exclude these if the caller doesn't observe their contribution: either the query doesn't
   ;;   project temporal columns, or it projects them clamped to the query bounds.
+  ;; - **erase** — may hold an erase, which removes an emit row whatever the query's system-time bounds (#6358).
+  ;;   Erases span all valid time, so only a page spanning all valid time can hold one.
 
   (let [leaves (ArrayList.)
         min-query-recency (long (min (.getLower (.getValidTime query-bounds))
                                      (.getLower (.getSystemTime query-bounds))))
         temporal-intersects? (fn [^Segment$PageMeta page]
                                (and (Temporal/intersects (.getTemporalMetadata page) query-bounds)
-                                    (< min-query-recency (.getRecency page))))]
+                                    (< min-query-recency (.getRecency page))))
+        may-hold-erase? (fn [^TemporalMetadata tm]
+                          (and (<= (.getMinValidFrom tm) Long/MIN_VALUE)
+                               (>= (.getMaxValidTo tm) Long/MAX_VALUE)))]
 
     (loop [[^Segment$PageMeta page & more-pages] pages
            smallest-valid-from Long/MAX_VALUE
@@ -137,7 +142,8 @@
             (recur more-pages
                    smallest-valid-from largest-valid-to smallest-system-from
                    (cond-> non-emit-candidates
-                     (Temporal/intersectsSystemTime temporal-metadata query-bounds)
+                     (or (Temporal/intersectsSystemTime temporal-metadata query-bounds)
+                         (may-hold-erase? temporal-metadata))
                      (conj page)))))
 
         (when (seq leaves)
@@ -151,18 +157,21 @@
                             ;; none of the rows in that file can affect the rows in the emit set.
                             (<= smallest-system-from (.getMaxSystemFrom tm))
 
-                            (if (and projects-temporal-cols? (not clamp-valid-time?))
-                              ;; keep candidates whose vt overlaps the emit envelope
-                              ;; (covers both supersede and constrain — the latter feed `_valid_from` etc.).
-                              (and (.intersects (TemporalDimension. (.getMinValidFrom tm) (.getMaxValidTo tm))
-                                                envelope-vt)
-                                   (or (>= page-recency smallest-valid-from)
-                                       (>= page-recency smallest-system-from)))
+                            (or
+                             (may-hold-erase? tm)
 
-                              ;; keep only candidates that vt-intersect the query itself
-                              ;; (supersede only; constrain-only contribution is wasted I/O —
-                              ;; either nobody reads vt cols, or their contribution would be clamped away)
-                              (temporal-intersects? page)))]
+                             (if (and projects-temporal-cols? (not clamp-valid-time?))
+                               ;; keep candidates whose vt overlaps the emit envelope
+                               ;; (covers both supersede and constrain — the latter feed `_valid_from` etc.).
+                               (and (.intersects (TemporalDimension. (.getMinValidFrom tm) (.getMaxValidTo tm))
+                                                 envelope-vt)
+                                    (or (>= page-recency smallest-valid-from)
+                                        (>= page-recency smallest-system-from)))
+
+                               ;; keep only candidates that vt-intersect the query itself
+                               ;; (supersede only; constrain-only contribution is wasted I/O —
+                               ;; either nobody reads vt cols, or their contribution would be clamped away)
+                               (temporal-intersects? page))))]
 
               (.add leaves page)))
 

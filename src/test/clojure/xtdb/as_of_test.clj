@@ -104,3 +104,25 @@
 
     (t/is (= {:other-doc 1} (all-time-docs))
           "documents removed after erase")))
+
+(t/deftest erased-entity-absent-from-system-time-window-before-erase-6358
+  (letfn [(q-ids [sql] (->> (xt/q tu/*node* sql) (map :xt/id) set))
+          (check! [when-str]
+            (t/is (= #{:other-doc}
+                     (q-ids "SELECT _id FROM docs FOR SYSTEM_TIME AS OF TIMESTAMP '2020-01-01T12:00:00Z'"))
+                  (str "as-of before the erase, " when-str))
+
+            (t/is (= #{:other-doc}
+                     (q-ids "SELECT _id FROM docs FOR SYSTEM_TIME FROM TIMESTAMP '2020-01-01Z' TO TIMESTAMP '2020-01-01T12:00:00Z'"))
+                  (str "window ending before the erase, " when-str)))]
+
+    (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id :doc} {:xt/id :other-doc}]]
+                   {:system-time #inst "2020-01-01"})
+    (tu/flush-block! tu/*node*)
+
+    (xt/execute-tx tu/*node* [[:erase-docs :docs :doc]]
+                   {:system-time #inst "2020-01-03"})
+    (check! "erase in the live index")
+
+    (tu/flush-block! tu/*node*)
+    (check! "erase in a later block")))

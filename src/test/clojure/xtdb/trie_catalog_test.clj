@@ -96,6 +96,15 @@
                            opts))
           "earlier pages that contain data with later system time need to be taken")))
 
+(t/deftest later-tries-that-may-hold-an-erase-are-taken-6358
+  (let [opts {:query-bounds (tu/->temporal-bounds 20200101 20200102 20200101 20200102)}]
+    (t/is (= #{"l0-current-block-01" "l0-current-block-02"}
+             (filter-tries [["l0-current-block-01" nil [20200101 Long/MAX_VALUE]]
+                            ["l0-current-block-02" nil [Long/MIN_VALUE Long/MAX_VALUE 20200103]]
+                            ["l0-current-block-03" nil [20200103 Long/MAX_VALUE]]]
+                           opts))
+          "a later trie spanning all valid time is taken; one that doesn't isn't")))
+
 (t/deftest test-filter-tries
   (let [current-time 20200101]
     (t/testing "recency filtering (temporal metadata always overlaps the query)"
