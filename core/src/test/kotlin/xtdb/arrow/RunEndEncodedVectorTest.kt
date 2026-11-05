@@ -23,6 +23,7 @@ import xtdb.api.error.Unsupported
 import xtdb.arrow.Relation.Companion.loader
 import xtdb.arrow.Vector.Companion.openVector
 import xtdb.arrow.VectorType.Companion.asType
+import xtdb.arrow.metadata.DoubleMinMax
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.bloom.BloomBuilder
 import java.io.ByteArrayOutputStream
@@ -501,11 +502,53 @@ class RunEndEncodedVectorTest {
             LongVector(allocator, "vals", true).use { plain ->
                 expand(*runs).forEach { plain.writeObject(it) }
 
-                assertEquals(bloomOf(plain), bloomOf(vec))
-
                 val flavours = vec.metadataFlavours.filterIsInstance<MetadataFlavour.Number>()
                 assertEquals(10.0, flavours.minOf { f -> (0..<f.valueCount).minOf { f.getMetaDouble(it) } })
                 assertEquals(30.0, flavours.maxOf { f -> (0..<f.valueCount).maxOf { f.getMetaDouble(it) } })
+            }
+        }
+    }
+
+    private val fromRowTwo = object : VectorMask {
+        override fun isSet(idx: Int) = idx >= 2
+    }
+
+    @Test
+    fun `min and max under a mask cover the rows it selects`() {
+        val runs = arrayOf(0L to 2, 7L to 1, 9L to 3)
+
+        fun minMaxOf(vec: VectorReader) = DoubleMinMax().also { minMax ->
+            vec.metadataFlavours.filterIsInstance<MetadataFlavour.Numeric>().forEach { it.minMaxInto(minMax, fromRowTwo) }
+        }
+
+        openI64Runs(*runs).use { vec ->
+            LongVector(allocator, "vals", true).use { plain ->
+                expand(*runs).forEach { plain.writeObject(it) }
+
+                val expected = minMaxOf(plain)
+                val actual = minMaxOf(vec)
+                assertEquals(expected.min to expected.max, actual.min to actual.max)
+            }
+        }
+    }
+
+    @Test
+    fun `a bloom holds the rows its mask selects`() {
+        val iids = listOf(1L, 1L, 2L, 3L, 3L, 3L).map { it * 0x0101010101010101L }
+
+        fun bloomOf(vec: VectorReader, mask: VectorMask) = BloomBuilder().also { builder ->
+            vec.metadataFlavours.filterIsInstance<MetadataFlavour.Bytes>().forEach { it.hashInto(builder, mask) }
+        }.build()
+
+        RunEndEncodedVector(allocator, "_iid", FixedSizeBinaryVector(allocator, REE_VALUES_NAME, false, 16)).use { vec ->
+            FixedSizeBinaryVector(allocator, "_iid", false, 16).use { plain ->
+                iids.forEach { iid ->
+                    vec.writeLongLong(iid, iid)
+                    plain.writeLongLong(iid, iid)
+                }
+
+                assertEquals(bloomOf(plain, VectorMask.ALL), bloomOf(vec, VectorMask.ALL))
+                assertEquals(bloomOf(plain, fromRowTwo), bloomOf(vec, fromRowTwo))
             }
         }
     }
@@ -779,11 +822,4 @@ class RunEndEncodedVectorTest {
 
     private fun openIidPlain(vararg iids: ByteArray) =
         FixedSizeBinaryVector(allocator, "_iid", false, 16).also { vec -> iids.forEach { vec.writeObject(it) } }
-
-    private fun bloomOf(vec: VectorReader) =
-        BloomBuilder().also { builder ->
-            vec.metadataFlavours.forEach { flavour ->
-                repeat(flavour.valueCount) { builder.add(flavour as VectorReader, it) }
-            }
-        }.build()
 }

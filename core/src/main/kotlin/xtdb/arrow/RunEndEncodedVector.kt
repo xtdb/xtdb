@@ -10,6 +10,7 @@ import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.InternalApi
 import xtdb.api.query.IKeyFn
+import xtdb.arrow.metadata.MetadataFlavour.Companion.translatingMask
 import xtdb.util.Hasher
 import xtdb.util.safelyOpening
 import java.nio.ByteBuffer
@@ -135,8 +136,15 @@ class RunEndEncodedVector private constructor(
             "run-encoded columns don't expose their children - their values are indexed by run, not by row"
         )
 
-    /** Runs cover the same distinct values as the rows they encode, so metadata is the same either way. */
-    override val metadataFlavours get() = valuesVector.metadataFlavours
+    /**
+     * Runs cover the same distinct values as the rows they encode, so metadata is the same either way.
+     * A mask over the rows selects every run holding a row it selects.
+     */
+    override val metadataFlavours get() = valuesVector.metadataFlavours.map { it.translatingMask(::runMask) }
+
+    private fun runMask(rowMask: VectorMask) = object : VectorMask {
+        override fun isSet(idx: Int) = (runStart(idx)..<runEnd(idx)).any(rowMask::isSet)
+    }
 
     override fun valueReader(): ValueReader {
         val inner = valuesVector.valueReader()
