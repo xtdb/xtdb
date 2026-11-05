@@ -258,12 +258,12 @@
   ;; - emit page (vt-intersects-query, content matches): kept under both flag values.
   ;; - supersede page (vt-intersects-query, content fails): kept under both flag values
   ;;   (still affects multiplicity).
-  ;; - constrain-only page (vt-disjoint from query, vt-overlaps emit envelope): kept when
+  ;; - constrain-only page (vt-disjoint from query, vt-overlaps the emit page): kept when
   ;;   flag is true; dropped when flag is false (its only contribution is to a temporal
   ;;   column the consumer doesn't write).
   (let [pages [(->mock-page 0 true 0 30 0 0)         ; emit
                (->mock-page 1 false 0 30 0 0)        ; supersede — vt-intersects, content fails
-               (->mock-page 2 true 15 25 0 0)]       ; constrain-only — vt 15→25, disjoint from query 0→10, overlaps envelope 0→30
+               (->mock-page 2 true 15 25 0 0)]       ; constrain-only — vt 15→25, disjoint from query 0→10, overlaps emit page 0→30
         query-bounds (tu/->temporal-bounds 0 10)]
 
     (t/is (= #{0 1 2}
@@ -282,3 +282,26 @@
                                             :clamp-valid-time? true})
                   (into #{} (map :page))))
           "with :clamp-valid-time? true: constrain-only dropped even though temporal cols are projected — its only contribution would be clamped away")))
+
+(t/deftest candidates-are-kept-only-for-an-emit-page-they-can-affect
+  (let [kept (->> (trie/filter-pages [(->mock-page 0 true 0 10 0 0)
+                                      (->mock-page 1 true 20 30 10 10)
+                                      (->mock-page 2 false 10 20 5 5)
+                                      (->mock-page 3 false 25 40 15 15)
+                                      (->mock-page 4 false 22 24 5 5)
+                                      (->mock-page 5 false Long/MIN_VALUE Long/MAX_VALUE 25 25)]
+                                     {:query-bounds (tu/->temporal-bounds 0 30 0 20)
+                                      :projects-temporal-cols? true})
+                  (into #{} (map :page)))]
+
+    (t/is (not (contains? kept 2))
+          "page 2 lies within the emit pages' envelope, but only touches each emit page")
+
+    (t/is (contains? kept 3)
+          "page 3 overlaps emit page 1 and is newer")
+
+    (t/is (not (contains? kept 4))
+          "page 4 overlaps emit page 1 but is older than it")
+
+    (t/is (contains? kept 5)
+          "page 5 may hold an erase, after the query's system-time window")))

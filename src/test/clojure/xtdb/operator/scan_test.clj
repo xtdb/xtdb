@@ -968,3 +968,25 @@
                                   {:scan-emitter (:scan-emitter (.getQuerySource (util/node-base tu/*node*)))
                                    :dbs {}}))
         "the plan names a database the resolved set lacks"))
+
+(t/deftest a-page-overlapping-no-emitted-page-in-valid-time-is-pruned
+  (with-open [node (xtn/start-node {:compactor {:threads 0}})]
+    (doseq [[system-time v valid-from valid-to] [[#inst "2020-01-01" 1 #inst "2020-01-01" #inst "2020-01-02"]
+                                                 [#inst "2020-01-02" 2 #inst "2020-01-03" #inst "2020-01-04"]
+                                                 [#inst "2020-01-03" 1 #inst "2020-01-05" #inst "2020-01-07"]
+                                                 [#inst "2020-01-04" 3 #inst "2020-01-06" #inst "2020-01-08"]]]
+      (xt/execute-tx node [[:put-docs {:into :docs, :valid-from valid-from, :valid-to valid-to}
+                            {:xt/id :reading, :v v}]]
+                     {:system-time system-time})
+      (tu/flush-block! node))
+
+    (let [sql "SELECT _valid_from, _valid_to FROM docs FOR ALL VALID_TIME WHERE v = 1 ORDER BY _valid_from"]
+      (t/is (= [{:xt/valid-from (time/->zdt #inst "2020-01-01"), :xt/valid-to (time/->zdt #inst "2020-01-02")}
+                {:xt/valid-from (time/->zdt #inst "2020-01-05"), :xt/valid-to (time/->zdt #inst "2020-01-06")}]
+               (xt/q node sql))
+            "the v = 3 version, newer and overlapping, cuts the second v = 1 version short")
+
+      (t/is (= 1 (->> (xt/q node (str "EXPLAIN ANALYZE " sql))
+                      (filter #(= :scan (:op %)))
+                      first :attributes :scan-pages-pruned))
+            "the v = 2 version lies between the v = 1 versions, overlapping neither"))))

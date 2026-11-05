@@ -106,7 +106,7 @@
   ;; - **supersede** — rows here can affect an emit row's multiplicity - whether it's duplicated (U-shaped) or filtered out.
   ;;   Temporal bounds match the query; content predicate need not.
   ;; - **constrain** — rows here can affect the bounds of the resulting polygons.
-  ;;   Temporal bounds disjoint from the query but overlapping the emit envelope.
+  ;;   Temporal bounds disjoint from the query, but overlapping a single emit page in valid time and no older than it in system time.
   ;;   We exclude these if the caller doesn't observe their contribution: either the query doesn't
   ;;   project temporal columns, or it projects them clamped to the query bounds.
   ;; - **erase** — may hold an erase, which removes an emit row whatever the query's system-time bounds (#6358).
@@ -124,7 +124,6 @@
 
     (loop [[^Segment$PageMeta page & more-pages] pages
            smallest-valid-from Long/MAX_VALUE
-           largest-valid-to Long/MIN_VALUE
            smallest-system-from Long/MAX_VALUE
            non-emit-candidates []]
       (if page
@@ -135,12 +134,11 @@
               (.add leaves page)
               (recur more-pages
                      (min smallest-valid-from (.getMinValidFrom temporal-metadata))
-                     (max largest-valid-to (.getMaxValidTo temporal-metadata))
                      (min smallest-system-from (.getMinSystemFrom temporal-metadata))
                      non-emit-candidates))
 
             (recur more-pages
-                   smallest-valid-from largest-valid-to smallest-system-from
+                   smallest-valid-from smallest-system-from
                    (cond-> non-emit-candidates
                      (or (Temporal/intersectsSystemTime temporal-metadata query-bounds)
                          (may-hold-erase? temporal-metadata))
@@ -148,7 +146,14 @@
 
         (when (seq leaves)
           ;; Phase 2 - include all of the pages that may affect the rows in phase 1.
-          (let [envelope-vt (TemporalDimension. smallest-valid-from largest-valid-to)]
+          (let [emit-pages (vec leaves)
+                may-affect-an-emit-page? (fn [^TemporalMetadata tm]
+                                           (let [page-vt (TemporalDimension. (.getMinValidFrom tm) (.getMaxValidTo tm))]
+                                             (some (fn [^Segment$PageMeta emit-page]
+                                                     (let [emit-tm (.getTemporalMetadata emit-page)]
+                                                       (and (<= (.getMinSystemFrom emit-tm) (.getMaxSystemFrom tm))
+                                                            (.intersects page-vt (.getMinValidFrom emit-tm) (.getMaxValidTo emit-tm)))))
+                                                   emit-pages)))]
             (doseq [^Segment$PageMeta page non-emit-candidates
                     :let [tm (.getTemporalMetadata page)
                           page-recency (.getRecency page)]
@@ -161,12 +166,10 @@
                              (may-hold-erase? tm)
 
                              (if (and projects-temporal-cols? (not clamp-valid-time?))
-                               ;; keep candidates whose vt overlaps the emit envelope
-                               ;; (covers both supersede and constrain — the latter feed `_valid_from` etc.).
-                               (and (.intersects (TemporalDimension. (.getMinValidFrom tm) (.getMaxValidTo tm))
-                                                 envelope-vt)
-                                    (or (>= page-recency smallest-valid-from)
-                                        (>= page-recency smallest-system-from)))
+                               ;; covers both supersede and constrain — the latter feed `_valid_from` etc.
+                               (and (or (>= page-recency smallest-valid-from)
+                                        (>= page-recency smallest-system-from))
+                                    (may-affect-an-emit-page? tm))
 
                                ;; keep only candidates that vt-intersect the query itself
                                ;; (supersede only; constrain-only contribution is wasted I/O —
