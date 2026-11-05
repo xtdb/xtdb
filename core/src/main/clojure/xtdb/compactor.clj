@@ -13,7 +13,9 @@
     (create [_ meter-registry config]
       (let [threads (.getThreads config)]
         (if (pos? threads)
-          (Compactor$Impl. (Compactor$Driver/real *page-size* *recency-partition* (.getReeIids config))
+          (Compactor$Impl. (Compactor$Driver/real *page-size* *recency-partition* (.getReeIids config)
+                                                  ;; TODO(#6263): goes with withinFileRecencyBranching
+                                                  (.getWithinFileRecencyBranching config))
                            meter-registry
                            (jc/->JobCalculator)
                            *ignore-signal-block?* threads)

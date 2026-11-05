@@ -6,8 +6,11 @@ import xtdb.storage.BufferPool
 import xtdb.arrow.Relation
 import xtdb.arrow.VectorReader
 import xtdb.compactor.PageTree
+import xtdb.compactor.PageTree.Companion.asTree
 import xtdb.log.proto.TrieMetadata
 import xtdb.table.TableSlug
+import xtdb.util.useAll
+import java.util.TreeMap
 
 private typealias Selection = IntArray
 
@@ -49,10 +52,62 @@ class PageTrieWriter(
         }
     }
 
+    private fun writeRecencyCells(
+        loader: Relation.Loader, inputPages: List<PageTree.Leaf>, part: ByteArray,
+        inRel: Relation, dataFileWriter: DataFileWriter, metaFileWriter: MetadataFileWriter, pageSize: Int
+    ): RowIndex {
+        if (inputPages.isEmpty()) return metaFileWriter.writeNull()
+
+        val recency = inputPages.fold(RecencyRange.EMPTY) { acc, page -> acc + page.recency }
+        val width = RecencyCells.width(inputPages.sumOf { it.rowCount.toLong() }, recency, pageSize)
+
+        val iids = inRel["_iid"]
+        val recencies = inRel[Trie.RECENCY_COL]
+
+        fun forEachRow(f: (Int) -> Unit) {
+            for (page in inputPages) {
+                if (Thread.interrupted()) throw InterruptedException()
+                loader.loadPage(page.pageIdx, inRel)
+                repeat(inRel.rowCount, f)
+            }
+        }
+
+        return RowBuffers(al, loader.schema, inRel, dataFileWriter.dataRel).use { buffers ->
+            fun openTrie(startDepth: Int) = StreamingIidTrie(buffers, metaFileWriter, dataFileWriter, startDepth, pageSize)
+
+            if (width == null) {
+                openTrie(0).use { trie ->
+                    forEachRow { trie.add(iids, it) }
+                    trie.end()
+                }
+            } else {
+                val cellsBranch = TreeMap<RecencyMicros, StreamingIidTrie>().useAll { cells ->
+                    forEachRow { idx ->
+                        cells.getOrPut(RecencyCells.boundary(recencies.getLong(idx), width)) { openTrie(part.size) }
+                            .add(iids, idx)
+                    }
+
+                    metaFileWriter.writeRecencyBranch(cells.map { (boundary, trie) -> boundary to trie.end() })
+                }
+
+                part.indices.reversed().fold(cellsBranch) { child, depth ->
+                    metaFileWriter.writeIidBranch(IntArray(DEFAULT_LEVEL_WIDTH) { if (it == part[depth].toInt()) child else -1 })
+                }
+            }
+        }
+    }
+
+    /**
+     * Data carrying [Trie.RECENCY_COL] branches once on recency, below the IID levels [part] pins, into [RecencyCells];
+     * each cell, or the whole file where it has none, is an IID trie that splits any node of more than [pageSize] rows.
+     *
+     * @param inputPages the input's pages, in IID order
+     * @param part the IID levels every row in the input shares; null where it pins none
+     */
     suspend fun writePageTree(
         table: TableSlug, trieKey: TrieKey,
-        loader: Relation.Loader, pageTree: PageTree?,
-        pageSize: Int
+        loader: Relation.Loader, inputPages: List<PageTree.Leaf>,
+        pageSize: Int, part: ByteArray?
     ): Pair<FileSize, TrieMetadata> =
         DataFileWriter(al, bp, table, trieKey, loader.schema).use { dataFileWriter ->
             val dataRel = dataFileWriter.dataRel
@@ -125,7 +180,13 @@ class PageTrieWriter(
                             }
                         }
 
-                        pageTree.writeSubtree(0)
+                        if (inRel.vectorForOrNull(Trie.RECENCY_COL) == null)
+                            inputPages.asTree.writeSubtree(0)
+                        else
+                            writeRecencyCells(
+                                loader, inputPages, part ?: byteArrayOf(),
+                                inRel, dataFileWriter, metaFileWriter, pageSize
+                            )
 
                         Pair(dataFileWriter.end(), metaFileWriter.end())
                     }

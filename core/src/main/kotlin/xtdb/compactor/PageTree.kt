@@ -1,6 +1,7 @@
 package xtdb.compactor
 
 import com.carrotsearch.hppc.ByteArrayList
+import xtdb.trie.RecencyRange
 
 private const val BRANCH_FACTOR = 4
 
@@ -16,7 +17,12 @@ sealed interface PageTree {
         override val leaves: List<Leaf> get() = children.flatMap { it?.leaves.orEmpty() }
     }
 
-    data class Leaf(val pageIdx: Int, val part: ByteArrayList, override val rowCount: Int) : PageTree {
+    /**
+     * @param recency the range of the page's `_recency`; [RecencyRange.EMPTY] when the data carries none
+     */
+    data class Leaf(
+        val pageIdx: Int, val part: ByteArrayList, override val rowCount: Int, val recency: RecencyRange
+    ) : PageTree {
         override fun toString() = "(Leaf #$pageIdx, $rowCount)"
 
         override val leaves: List<Leaf> get() = listOf(this)

@@ -14,6 +14,8 @@ import xtdb.log.proto.TemporalMetadata
 import xtdb.time.MICRO_HZ
 import xtdb.trie.ArrowHashTrie
 import xtdb.trie.ColumnName
+import xtdb.trie.RecencyMicros
+import xtdb.trie.Trie
 import xtdb.util.closeOnCatch
 import xtdb.util.openChildAllocator
 import java.nio.file.Path
@@ -128,6 +130,17 @@ class PageMetadata private constructor(private val rel: Relation, private val pa
             .setMinSystemFrom(floor(minReader.getDouble(systemFromIdx) * MICRO_HZ).toLong())
             .setMaxSystemFrom(ceil(maxReader.getDouble(systemFromIdx) * MICRO_HZ).toLong())
             .build()
+    }
+
+    /**
+     * The newest `_recency` on the page, rounded up to the microsecond so that it stays an upper bound;
+     * null when the data carries no `_recency`.
+     */
+    fun maxRecency(pageIdx: Int): RecencyMicros? {
+        val maxReader = maxReader ?: return null
+        val idx = rowIndex(Trie.RECENCY_COL, pageIdx)
+        if (idx < 0 || maxReader.isNull(idx)) return null
+        return ceil(maxReader.getDouble(idx) * MICRO_HZ).toLong()
     }
 
     override fun close() = rel.close()

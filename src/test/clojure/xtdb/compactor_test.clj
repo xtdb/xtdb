@@ -205,6 +205,37 @@
                                  (table-path node "public/prices")
                                  #"l(?!00|01)(.+)\.arrow")))))
 
+(t/deftest test-historical-compaction-within-file-recency-branching
+  (let [node-dir (util/->path "target/compactor/test-historical-compaction-within-file-recency-branching")
+        start (time/->zdt #inst "2020-01-01T12:00")]
+    (util/delete-dir node-dir)
+
+    (binding [c/*page-size* 8
+              cat/*file-size-target* (* 1024 16)
+              c/*ignore-signal-block?* true]
+      ;; TODO(#6263): the opt-in goes with withinFileRecencyBranching
+      (util/with-open [node (tu/->local-node {:node-dir node-dir, :within-file-recency-branching? true})]
+        (doseq [block (partition-all 6 (range 24))]
+          (doseq [tick block
+                  :let [tick-at (.plusHours start tick)]]
+            (xt/execute-tx node [(into [:put-docs :readings]
+                                       (for [x (range 4)]
+                                         {:xt/id x, :reading tick}))]
+                           {:system-time tick-at})
+
+            (when (= 18 tick)
+              (doseq [n (range 1 13)]
+                (xt/execute-tx node [[:put-docs :readings {:xt/id :solo, :reading n}]]
+                               {:system-time (.plusMinutes tick-at (* n 4))}))))
+
+          (tu/flush-block! node))
+
+        (c/compact-all! node #xt/duration "PT60S")
+
+        (aet/check-arrow-edn-dir (.toPath (io/as-file (io/resource "xtdb/compactor-test/test-historical-compaction-within-file-recency-branching")))
+                                 (table-path node "public/readings")
+                                 #"l\d\d-r\d{8}-(.+)\.arrow")))))
+
 (defn bad-uuid-seq
   ([n] (bad-uuid-seq 0 n))
   ([start end]
