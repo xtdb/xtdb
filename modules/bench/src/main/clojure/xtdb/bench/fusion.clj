@@ -8,7 +8,7 @@
             [xtdb.bench.random :as random]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
-  (:import (java.time Duration Instant)
+  (:import (java.time Duration Instant ZonedDateTime)
            (java.util.concurrent.atomic AtomicLong)))
 
 ;; See fusion.md for benchmark documentation
@@ -431,14 +431,18 @@
   {:t :call
    :stage (keyword (str "query-" (name query-type)))
    :f (fn [{:keys [node !state]}]
-        (let [{:keys [latest-completed-tx max-valid-time min-valid-time system-ids]} @!state
+        (let [{:keys [latest-completed-tx ^ZonedDateTime max-valid-time min-valid-time system-ids]} @!state
               opts {:current-time (:system-time latest-completed-tx)}
               sample-system-id (first system-ids)]
           (case query-type
             :system-settings (exec-system-settings node sample-system-id opts)
             :readings-for-system (exec-readings-for-system node sample-system-id min-valid-time max-valid-time opts)
+            :readings-for-system-last-day (exec-readings-for-system node sample-system-id (.minus max-valid-time (Duration/ofDays 1)) max-valid-time opts)
+            :readings-for-system-last-hour (exec-readings-for-system node sample-system-id (.minus max-valid-time (Duration/ofHours 1)) max-valid-time opts)
             :system-count-over-time (exec-system-count-over-time node min-valid-time max-valid-time opts)
             :readings-range-bins (exec-readings-range-bins node min-valid-time max-valid-time opts)
+            :readings-range-bins-last-day (exec-readings-range-bins node (.minus max-valid-time (Duration/ofDays 1)) max-valid-time opts)
+            :readings-range-bins-last-hour (exec-readings-range-bins node (.minus max-valid-time (Duration/ofHours 1)) max-valid-time opts)
             :cumulative-registration (exec-cumulative-registration node min-valid-time max-valid-time opts))))})
 
 (defmethod b/cli-flags :fusion [_]
@@ -451,11 +455,12 @@
    ["-t" "--threads THREADS" "OLTP thread count" :parse-fn parse-long :default 4]
    [nil "--staged-only" "Run staged workload only, skip OLTP" :id :staged-only?]
    b/no-load-flag
+   b/reps-flag
    ["-h" "--help"]])
 
 (defmethod b/->benchmark :fusion [_ {:keys [devices readings batch-size update-batch-size
-                                            updates-per-system seed no-load? duration threads staged-only?]
-                                     :or {seed 0 batch-size 1000 update-batch-size 30
+                                            updates-per-system seed no-load? duration threads staged-only? reps]
+                                     :or {seed 0 batch-size 1000 update-batch-size 30 reps 1
                                           updates-per-system 10 duration (Duration/parse "PT30S") threads 4}}]
   (let [^Duration duration (cond-> duration (string? duration) Duration/parse)
         setup-rng (java.util.Random. seed)
@@ -470,13 +475,13 @@
         test-case-ids (generate-ids setup-rng "TC" 5)] ; 5 test cases per suite
     (log/info {:devices devices :readings readings :batch-size batch-size
                :update-batch-size update-batch-size :updates-per-system updates-per-system
-               :duration duration :threads threads :staged-only? staged-only?})
+               :duration duration :threads threads :staged-only? staged-only? :reps reps})
     {:title "Fusion benchmark"
      :benchmark-type :fusion
      :seed seed
      :parameters {:devices devices :readings readings :batch-size batch-size
                   :update-batch-size update-batch-size :updates-per-system updates-per-system
-                  :duration duration :threads threads :staged-only? staged-only?}
+                  :duration duration :threads threads :staged-only? staged-only? :reps reps}
      :->state #(do {:!state (atom {:system-ids system-ids
                                    :base-time base-time
                                    :!reading-idx (AtomicLong. readings)})})
@@ -502,12 +507,13 @@
                                           :min-valid-time min-vt})))}]
 
              (when staged-only?
-               [;; Staged queries (sequential, non-interleaved)
-                (->query-stage :system-settings)
-                (->query-stage :readings-for-system)
-                (->query-stage :system-count-over-time)
-                (->query-stage :readings-range-bins)
-                (->query-stage :cumulative-registration)])
+               (apply concat
+                      (repeat reps
+                              (map ->query-stage [:system-settings
+                                                  :readings-for-system :readings-for-system-last-day :readings-for-system-last-hour
+                                                  :system-count-over-time
+                                                  :readings-range-bins :readings-range-bins-last-day :readings-range-bins-last-hour
+                                                  :cumulative-registration]))))
 
              (when-not staged-only?
                [;; OLTP mixed workload - interleaved reads and writes

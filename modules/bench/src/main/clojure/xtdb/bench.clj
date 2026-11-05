@@ -563,6 +563,13 @@
   [nil "--no-load" "skip loading data; run against the existing `--node-dir`"
    :id :no-load?])
 
+(def reps-flag
+  [nil "--reps REPS" "times to repeat the timed query stages"
+   :id :reps
+   :parse-fn parse-long
+   :default 1
+   :validate [pos? "Must be positive"]])
+
 (def ^:private default-cli-flags
   [[nil "--node-dir NODE_DIR"
     "Directory to run the node in - will clear before running the benchmark unless `--no-load` is provided."

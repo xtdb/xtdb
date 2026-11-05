@@ -18,6 +18,8 @@ AuctionMark::
 
 Readings::
 `./gradlew readings -PdeviceCount=10000 -PreadingCount=10000`
++
+`-Pdir=<path>` keeps the node, `-PnoLoad` re-queries it, and `-Preps=<n>` runs the query stages `n` times.
 
 Products::
 `./gradlew products`

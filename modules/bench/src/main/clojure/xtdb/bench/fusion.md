@@ -16,8 +16,9 @@ Transaction weights:
 
 ### Staged Mode (`--staged-only`)
 
-Runs each phase sequentially: load data, then run each query type once.
+Runs each phase sequentially: load data, then run each query type once (`--reps N` runs them N times).
 Useful for isolated query performance measurement.
+The readings-for-system and readings-range-bins queries also run over the last day and the last hour of valid time.
 
 ## Data Model (11 tables)
 
@@ -79,6 +80,11 @@ Custom OLTP settings:
 Staged mode (sequential, no interleaving):
 ```bash
 ./gradlew fusion -PstagedOnly
+```
+
+Staged mode, re-querying a node loaded by an earlier run:
+```bash
+./gradlew fusion -PstagedOnly -Pdir=<path> -PnoLoad -Preps=5
 ```
 
 Custom scale:

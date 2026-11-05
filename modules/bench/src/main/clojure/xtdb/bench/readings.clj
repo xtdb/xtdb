@@ -45,6 +45,14 @@
                 GROUP BY _id" start end]
          opts)))
 
+(defn entity-history-query
+  ([node id start end] (entity-history-query node id start end {}))
+  ([node id start end opts]
+   (xt/q node ["SELECT COUNT(*) AS n, AVG(value) AS avg
+                FROM readings FOR VALID_TIME BETWEEN ? AND ?
+                WHERE _id = ?" start end id]
+         opts)))
+
 (defn check-query
   "A query that returns the number 5 min intervals in the range. Good for sanity checking."
   ([node start end] (aggregate-query node start end {}))
@@ -68,6 +76,14 @@
                                                   offset (subtract-period offset len))]
                              (aggregate-query node (subtract-period max-valid-time interval) max-valid-time
                                               {:current-time (:system-time latest-completed-tx)})))}]}))
+
+(def entity-history-stage
+  {:t :call
+   :stage :query-entity-recent-interval-week
+   :f (fn [{:keys [node !state]}]
+        (let [{:keys [latest-completed-tx max-valid-time]} @!state]
+          (entity-history-query node 0 (subtract-period max-valid-time :week) max-valid-time
+                                {:current-time (:system-time latest-completed-tx)})))})
 
 (defn ->ingestion-stage
   ([devices readings] (->ingestion-stage devices readings {}))
@@ -104,14 +120,15 @@
     :default 10000]
 
    b/no-load-flag
+   b/reps-flag
    ["-h" "--help"]])
 
-(defmethod b/->benchmark :readings [_ {:keys [readings devices seed no-load?] :or {seed 0}}]
-  (log/info {:readings readings :devices devices :seed seed :no-load? no-load?})
+(defmethod b/->benchmark :readings [_ {:keys [readings devices seed no-load? reps] :or {seed 0, reps 1}}]
+  (log/info {:readings readings :devices devices :seed seed :no-load? no-load? :reps reps})
   {:title "Readings benchmarks"
    :benchmark-type :readings
    :seed seed
-   :parameters {:readings readings :devices devices :seed seed :no-load? no-load?}
+   :parameters {:readings readings :devices devices :seed seed :no-load? no-load? :reps reps}
    :->state #(do {:!state (atom {})})
    :tasks (concat (when-not no-load?
                     (->ingestion-stage devices readings))
@@ -126,16 +143,20 @@
                            (swap! !state into {:latest-completed-tx latest-completed-tx
                                                :max-valid-time max-valid-time})))}]
 
-                  ;; this accumulates over the most recent interval
-                  (for [interval [:now :hour :day :week :month :quarter :year]]
-                    (->query-stage interval))
+                  (apply concat
+                         (repeat reps
+                                 (concat
+                                  (for [interval [:now :hour :day :week :month :quarter :year]]
+                                    (->query-stage interval))
 
-                  ;; running the same queries but a month (valid-time) in the past
-                  (for [interval [:now :hour :day :week :month :quarter :year]]
-                    (->query-stage interval :month))
+                                  [entity-history-stage]
 
-                  (for [interval [:now :hour :day :week :month :quarter :year]]
-                    (->query-stage interval :quarter)))})
+                                  ;; running the same queries but a month (valid-time) in the past
+                                  (for [interval [:now :hour :day :week :month :quarter :year]]
+                                    (->query-stage interval :month))
+
+                                  (for [interval [:now :hour :day :week :month :quarter :year]]
+                                    (->query-stage interval :quarter))))))})
 
 (comment
   (let [path (util/->path "/home/james/tmp/readings-bench")
