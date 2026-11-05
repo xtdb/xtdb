@@ -20,11 +20,9 @@ v2.2.1: the compactor can run-end encode `_iid`, behind `reeIids`
   2. Roll again with the compactor on and `reeIids: true` (or `XTDB_REE_IIDS=true`).
 
   A new cluster can set it from the start.
-  Earlier releases can't process the files it writes, so going back to one once it's on takes three steps:
 
-  1. Stop every node, and turn `reeIids` off (unset `XTDB_REE_IIDS` too) - a compactor left with it on re-encodes everything `reset-compactor` puts back.
-  2. Run `reset-compactor`.
-  3. Start the earlier release.
+  Turning it off takes the same two rolls, with `reeIids: false` (and `XTDB_REE_IIDS` unset) in the second; v2.2.1 keeps reading the files it has already written.
+  Earlier releases can't process those files, so rolling back to v2.2 is supported only on a database where `reeIids` has never been on.
 
 v2.2: blocks are flushed every 15 minutes
 
