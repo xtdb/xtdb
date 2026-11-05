@@ -123,6 +123,14 @@
            (st/render-field (VectorType/.toField (.runEndEncoded VectorType/IID RunEndWidth/I32) "_iid")))
         "the field a compacted page carries its iids in"))
 
+(t/deftest a-bare-run-end-encoded-field-is-named-for-its-values-and-stays-encoded
+  (t/are [bare named] (= (st/->field named) (st/->field bare))
+    [:ree :i64] {"i64" [:ree :i64]}
+    [:ree-i16 [:? :utf8]] {"utf8" [:ree-i16 [:? :utf8]]})
+
+  (t/is (= (st/->field [:union :i64]) (st/->field [:union [:ree :i64]]))
+        "a union's legs stay unencoded"))
+
 (t/deftest the-lattice-bottom-round-trips-through-the-reader
   (t/are [type-spec] (= type-spec (st/render-type (st/->type type-spec)))
     :nothing

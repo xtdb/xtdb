@@ -351,6 +351,9 @@
 
 (declare ->field ->field* ->type)
 
+(defn- run-end-encoded-spec? [type-spec]
+  (and (vector? type-spec) (contains? #{:ree :ree-i16 :ree-i64} (first type-spec))))
+
 (defn- ->child-fields
   "Converts child specs to fields
    Accepts: bare types (use leg name), singleton maps, or multi-entry maps."
@@ -379,7 +382,7 @@
       (VectorType/.toField type-spec field-name)
       (VectorType/.getAsLegField type-spec))
 
-    (and (vector? type-spec) (contains? #{:ree :ree-i16 :ree-i64} (first type-spec)))
+    (run-end-encoded-spec? type-spec)
     (->field* field-name (->type type-spec))
 
     :else
@@ -417,7 +420,10 @@
 
     :else (let [[nm type-spec] (if (and (map? field-spec) (= 1 (count field-spec)))
                                  (first field-spec)
-                                 [nil field-spec])]
+                                 [nil field-spec])
+                nm (or nm
+                       (when (run-end-encoded-spec? type-spec)
+                         (ArrowTypes/toLeg (.getArrowType ^VectorType (->type type-spec)))))]
             (->field* nm type-spec))))
 
 (defmethod print-dup Schema [^Schema s, ^Writer w]
