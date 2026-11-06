@@ -15,7 +15,7 @@
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
   (:import (com.google.common.collect MinMaxPriorityQueue)
-           (io.micrometer.core.instrument Meter Timer)
+           (io.micrometer.core.instrument Meter MeterRegistry Timer)
            (java.io File Writer)
            (java.lang.management ManagementFactory)
            (java.time Clock Duration InstantSource)
@@ -185,7 +185,7 @@
         (println log-record)
         (.flush bench-log-wrt)))))
 
-(def ^:dynamic *registry* nil)
+(def ^:dynamic ^MeterRegistry *registry* nil)
 
 (def percentiles [0.75 0.85 0.95 0.98 0.99 0.999])
 

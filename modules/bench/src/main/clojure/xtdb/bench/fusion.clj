@@ -9,6 +9,7 @@
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
   (:import (java.time Duration Instant ZonedDateTime)
+           (java.util Random)
            (java.util.concurrent.atomic AtomicLong)))
 
 ;; See fusion.md for benchmark documentation
@@ -19,7 +20,7 @@
 (def series-names ["Series-A" "Series-B" "Series-C" "Series-D" "Series-E"])
 (def model-names ["Model-1" "Model-2"])
 
-(defn random-float [rng min max]
+(defn random-float [^Random rng min max]
   (+ min (* (.nextDouble rng) (- max min))))
 
 (defn random-int [rng min max]
@@ -131,7 +132,7 @@
    :name (str "Test Case " case-num)
    :description (str "Registration check " case-num)})
 
-(defn generate-test-suite-run [rng run-id system-id suite-id base-time]
+(defn generate-test-suite-run [rng run-id system-id suite-id ^Instant base-time]
   (let [passed? (random/chance? rng 0.8)
         test-start (.plusSeconds base-time 43200)] ; 12 hours after system creation
     {:xt/id run-id
@@ -142,7 +143,7 @@
      :started-at test-start
      :completed-at (.plusSeconds test-start 300)}))
 
-(defn generate-test-case-run [rng run-id suite-run-id case-id suite-passed? base-time]
+(defn generate-test-case-run [rng run-id suite-run-id case-id suite-passed? ^Instant base-time]
   (let [case-passed? (or suite-passed? (random/chance? rng 0.7))
         test-start (.plusSeconds base-time 43200)] ; Same as suite run start
     {:xt/id run-id
@@ -236,7 +237,7 @@
 (defn generate-reading-system-times
   "Generate system-times for readings with bimodal lag distribution.
   Returns vector of [idx system-time] pairs."
-  [random interval-count base-system-time]
+  [random interval-count ^Instant base-system-time]
   (loop [idx 0
          last-time base-system-time
          result []]
@@ -561,7 +562,7 @@
         long-ratio (/ (count long-lags) (double (count lags)))]
 
     ;; All times should be monotonically increasing
-    (t/is (every? (fn [[[_ t1] [_ t2]]] (or (.isBefore t1 t2) (.equals t1 t2)))
+    (t/is (every? (fn [[[_ ^Instant t1] [_ t2]]] (or (.isBefore t1 t2) (.equals t1 t2)))
                   (partition 2 1 times))
           "System times must be monotonically increasing")
 
