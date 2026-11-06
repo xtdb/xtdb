@@ -24,6 +24,8 @@ class PrefixedObjectStore(
     private val prefix: Path, private val delegate: InMemoryBucket,
 ) : SupportsMultipart<ByteBuffer> {
 
+    override val location = "memory://${delegate.id}/$prefix"
+
     private fun StoredObject.relativized() = StoredObject(prefix.relativize(key), size)
 
     override suspend fun getObject(k: Path): ByteBuffer = delegate.getObject(prefix.resolve(k))

@@ -68,6 +68,9 @@ class DiskCache internal constructor(val rootPath: Path, val maxSizeBytes: Long)
     init {
         LOGGER.debug("Creating disk cache with maxSizeBytes=$maxSizeBytes")
         val syncInnerCache = pinningCache.cache.synchronous()
+
+        rootPath.resolve(TMP_DIR).toFile().deleteRecursively()
+
         Files.walk(rootPath)
             .filter { Files.isRegularFile(it) }
             .sorted(comparingLong { path ->
@@ -83,16 +86,34 @@ class DiskCache internal constructor(val rootPath: Path, val maxSizeBytes: Long)
         LOGGER.debug("disk cache started, existing size: ${pinningCache.stats0.evictableBytes} bytes")
     }
 
-    fun createTempPath(): Path =
-        Files.createTempFile(rootPath.resolve(".tmp").createDirectories(), "upload", ".arrow")
+    internal fun createTempPath(): Path =
+        Files.createTempFile(rootPath.resolve(TMP_DIR).createDirectories(), "upload", ".arrow")
 
     @FunctionalInterface
     fun interface Fetch {
         operator fun invoke(k: Path, tmpFile: Path): CompletableFuture<Path>
     }
 
+    /**
+     * A view of this cache whose keys are namespaced under [prefix].
+     *
+     * The cache is shared by every buffer pool on the node; each pool reads and writes through its own scope,
+     * passing keys relative to its store — [get]'s [Fetch] is handed the same relative key.
+     */
+    inner class Scope internal constructor(private val prefix: Path) {
+        fun get(k: Path, fetch: Fetch): CompletableFuture<Entry> =
+            this@DiskCache.get(prefix.resolve(k)) { cacheKey, tmpFile -> fetch(prefix.relativize(cacheKey), tmpFile) }
+
+        /** Adopts [tmpFile] as the entry for [k], unless an entry for [k] already exists. */
+        fun put(k: Path, tmpFile: Path) = this@DiskCache.put(prefix.resolve(k), tmpFile)
+
+        fun createTempPath(): Path = this@DiskCache.createTempPath()
+    }
+
+    fun scope(prefix: Path) = Scope(prefix)
+
     @Suppress("NAME_SHADOWING")
-    fun get(k: Path, fetch: Fetch) =
+    internal fun get(k: Path, fetch: Fetch) =
         pinningCache.get(k) { k ->
             val diskCachePath = rootPath.resolve(k)
 
@@ -112,7 +133,7 @@ class DiskCache internal constructor(val rootPath: Path, val maxSizeBytes: Long)
         }
 
     @Suppress("NAME_SHADOWING")
-    fun put(k: Path, tmpFile: Path) {
+    internal fun put(k: Path, tmpFile: Path) {
         pinningCache.cache.asMap()
             .computeIfAbsent(k) { k ->
                 val diskCachePath = rootPath.resolve(k)
@@ -122,6 +143,8 @@ class DiskCache internal constructor(val rootPath: Path, val maxSizeBytes: Long)
     }
 
     companion object {
+        private const val TMP_DIR = ".tmp"
+
         @JvmStatic
         fun factory(path: Path) = Factory(path)
 

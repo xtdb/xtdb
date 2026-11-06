@@ -9,7 +9,10 @@ import xtdb.api.RemoteAlias
 import xtdb.api.error.Incorrect
 import xtdb.api.nodeConfig
 import xtdb.aws.S3.Companion.s3
+import software.amazon.awssdk.services.s3.S3AsyncClientBuilder
 import xtdb.aws.proto.S3ObjectStoreConfig
+import xtdb.aws.s3.S3Configurator
+import java.net.URI
 import xtdb.util.asPath
 import kotlin.io.path.Path
 
@@ -53,6 +56,27 @@ class S3FactoryTest {
         val restored = S3.Registration().fromProto(original.configProto)
         assertEquals("aws", restored.remote)
         assertNull(restored.credentials)
+    }
+
+    @Test
+    fun `location names the bucket, prefix and storage root, and the endpoint where one is set`() {
+        s3("test-bucket") { region("us-east-1"); prefix("db/a".asPath) }
+            .openObjectStore(Path("v06"), emptyMap())
+            .use { assertEquals("s3://test-bucket/db/a/v06", it.location) }
+
+        s3("test-bucket") { region("us-east-1"); endpoint("http://minio:9000/") }
+            .openObjectStore(Path("v06_e01"), emptyMap())
+            .use { assertEquals("http://minio:9000/test-bucket/v06_e01", it.location) }
+
+        val configuredEndpoint = object : S3Configurator {
+            override fun configureClient(builder: S3AsyncClientBuilder) {
+                builder.endpointOverride(URI("http://other-s3:9000"))
+            }
+        }
+
+        s3("test-bucket") { region("us-east-1"); s3Configurator(configuredEndpoint) }
+            .openObjectStore(Path("v06"), emptyMap())
+            .use { assertEquals("http://other-s3:9000/test-bucket/v06", it.location) }
     }
 
     @Test

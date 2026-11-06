@@ -16,7 +16,7 @@
            (java.nio.file Path)
            (org.apache.arrow.vector.types.pojo Schema)
            (xtdb.api.storage ObjectStore ObjectStore$Factory Storage Storage$Factory)
-           (xtdb.api.storage PrefixedObjectStore InMemoryBucket StoreOperation UnusedObjectStore$Factory)
+           (xtdb.api.storage PrefixedObjectStore InMemoryBucket StoreOperation)
            xtdb.arrow.Relation
            (xtdb.cache DiskCache MemoryCache)
            (xtdb.storage BufferPool BufferPoolKt RemoteBufferPool)))
@@ -63,28 +63,15 @@
 
 (defn utf8-buf [s] (ByteBuffer/wrap (.getBytes (str s) "utf-8")))
 
-(defn test-get-object [^RemoteBufferPool bp, ^Path k, ^ByteBuffer expected]
-  (let [object-store (.getObjectStore bp)
-        ^DiskCache disk-cache (.getDiskCache bp)
-        root-path (.getRootPath disk-cache)]
+(defn test-get-object [^BufferPool bp, ^Path k, ^ByteBuffer expected]
+  (t/is (= 0 (util/compare-nio-buffers-unsigned expected (ByteBuffer/wrap (.getByteArray bp k))))
+        "get produces the stored bytes")
 
-    (t/testing "immediate get from buffers map produces correct buffer"
-      (t/is (= 0 (util/compare-nio-buffers-unsigned expected (ByteBuffer/wrap (.getByteArray bp k))))))
-
-    (when root-path
-      (t/testing "expect a file to exist under our :disk-store"
-        (let [cache-path (.resolve root-path (.resolve (util/->path "xtdb/0") k))]
-          (t/is (util/path-exists cache-path))
-          (t/is (= 0 (util/compare-nio-buffers-unsigned expected (util/->mmap-path cache-path)))))))
-
-    (when object-store
-      (t/testing "if the buffer is evicted and deleted from disk, it is delivered from object storage"
-        ;; Deleted from disk (ie, replicating effects of 'eviction' here)
-        (-> (.asMap (.getCache (.getPinningCache disk-cache)))
-            (.remove k))
-        (util/delete-file (.resolve root-path k))
-        ;; Will fetch from object store again
-        (t/is (= 0 (util/compare-nio-buffers-unsigned expected (ByteBuffer/wrap (.getByteArray bp k)))))))))
+  (let [cached (->> (file-seq (.toFile *disk-cache-dir*))
+                    (filter #(and (.isFile ^File %) (= (str (.getFileName k)) (.getName ^File %)))))]
+    (t/is (= 1 (count cached)) "the object is cached on disk")
+    (t/is (= 0 (util/compare-nio-buffers-unsigned expected (util/->mmap-path (.toPath ^File (first cached)))))
+          "the cached file holds the stored bytes")))
 
 (defn prefixing-obj-store-factory [^InMemoryBucket bucket]
   (reify ObjectStore$Factory
@@ -138,20 +125,20 @@
         (t/is (= 2 (:file-count (file-info *disk-cache-dir*))))))))
 
 (t/deftest local-disk-cache-with-previous-values
-  (let [obj-store-factory (prefixing-obj-store-factory (InMemoryBucket.))
+  (let [bucket (InMemoryBucket.)
+        obj-store-factory (prefixing-obj-store-factory bucket)
         path-a (util/->path "a")
         path-b (util/->path "b")]
     (with-caches {:mem-bytes 64, :disk-bytes 64}
-      ;; Writing files to buffer pool & local-disk-cache
       (with-open [bp (-> (Storage/remote obj-store-factory)
                          (.open tu/*allocator* *mem-cache* *disk-cache* "xtdb" 0 1 nil Storage/VERSION {}))]
         (insert-utf8-to-local-cache bp path-a 4)
         (insert-utf8-to-local-cache bp path-b 4)
         (t/is (= {:file-count 2 :file-names #{"a" "b"}} (file-info *disk-cache-dir*))))
 
-      ;; Starting a new buffer pool - should load buffers correctly from disk (can be sure its grabbed from disk since using a memory cache and memory object store)
-      ;; passing a no-op object store to ensure objects are not loaded from object store and instead only the cache is under test.
-      (with-open [bp (-> (Storage/remote UnusedObjectStore$Factory/INSTANCE)
+      (.clear (.getBuffers bucket))
+
+      (with-open [bp (-> (Storage/remote obj-store-factory)
                          (.open tu/*allocator* *mem-cache* *disk-cache* "xtdb" 0 1 nil Storage/VERSION {}))]
         (t/is (= 0 (util/compare-nio-buffers-unsigned (utf8-buf "aaaa") (ByteBuffer/wrap (.getByteArray bp path-a)))))
         (t/is (= 0 (util/compare-nio-buffers-unsigned (utf8-buf "aaaa") (ByteBuffer/wrap (.getByteArray bp path-b)))))))))

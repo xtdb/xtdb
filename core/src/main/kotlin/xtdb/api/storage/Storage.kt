@@ -30,6 +30,9 @@ import xtdb.util.StringUtil.asLexHex
 import xtdb.util.asPath
 import xtdb.util.closeOnCatch
 import java.nio.file.Path
+import java.security.MessageDigest
+import java.util.HexFormat
+import java.util.UUID
 import kotlin.io.path.createDirectories
 
 typealias StorageVersion = Int
@@ -122,6 +125,16 @@ object Storage {
         }
     }
 
+    // bump whenever the caches' keying or on-disk layout changes, so entries written under one layout are never read under another
+    private const val CACHE_LAYOUT = "c1"
+
+    private fun cacheScope(location: String?): Path =
+        if (location == null) Path.of(CACHE_LAYOUT, "open", UUID.randomUUID().toString())
+        else Path.of(CACHE_LAYOUT, sha256Hex(location).take(32))
+
+    private fun sha256Hex(s: String): String =
+        HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(s.toByteArray()))
+
     internal fun arrowFooterCache(maxEntries: Long = 1024): Cache<Path, ArrowFooter> =
         Caffeine.newBuilder().maximumSize(maxEntries).build()
 
@@ -174,7 +187,8 @@ object Storage {
             val rootPath = path.resolve(storageRoot(storageVersion, epoch, partition, totalPartitions))
                 .also { it.createDirectories() }
 
-            return LocalStorage(allocator, memoryCache, meterRegistry, epoch, dbName, partition, rootPath)
+            val scope = cacheScope(rootPath.toAbsolutePath().normalize().toString())
+            return LocalStorage(allocator, memoryCache.scope(scope), meterRegistry, epoch, rootPath)
         }
     }
 
@@ -205,7 +219,8 @@ object Storage {
 
             val objStoreRoot = storageRoot(storageVersion, epoch, partition, totalPartitions)
             return objectStore.openObjectStore(objStoreRoot, remotes).closeOnCatch { objectStore ->
-                RemoteBufferPool(allocator, objectStore, memoryCache, diskCache, meterRegistry, epoch, dbName, partition)
+                val scope = cacheScope(objectStore.location)
+                RemoteBufferPool(allocator, objectStore, memoryCache.scope(scope), diskCache.scope(scope), meterRegistry, epoch)
             }
         }
     }

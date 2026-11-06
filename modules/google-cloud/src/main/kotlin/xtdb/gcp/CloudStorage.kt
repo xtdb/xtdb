@@ -65,6 +65,8 @@ class CloudStorage(
 
     private val client = StorageOptions.newBuilder().run { setProjectId(projectId); build() }.service
 
+    override val location: String = "gs://$bucket/$prefix"
+
     override suspend fun getObject(k: Path): ByteBuffer =
         runInterruptible(ioContext) {
             val prefixedKey = prefix.resolve(k).toString()

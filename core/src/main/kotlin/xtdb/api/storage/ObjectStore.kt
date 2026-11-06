@@ -49,6 +49,15 @@ interface ObjectStore : AutoCloseable {
     data class StoredObject(val key: Path, val size: Long)
 
     /**
+     * Where this store's objects live, including the storage root it was opened with — e.g. `gs://bucket/prefix/v06`.
+     *
+     * The node's caches key entries by it, so it MUST be stable across restarts, MUST differ between stores that can hold
+     * different objects under the same key, and MUST NOT include credentials.
+     * Null when the store can't provide one; its cache entries are then only ever read by the buffer pool that wrote them.
+     */
+    val location: String? get() = null
+
+    /**
      * Returns the given object in a ByteBuffer.
      *
      * If the object doesn't exist, throws an IllegalStateException.
