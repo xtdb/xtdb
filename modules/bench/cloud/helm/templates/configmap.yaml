@@ -8,6 +8,7 @@ data:
   XTDB_LOG_TOPIC: {{ .Values.xtdbConfig.logTopic | quote }}
   JDK_JAVA_OPTIONS: {{ .Values.xtdbConfig.jdkOptions | quote }}
   XTDB_LOGGING_LEVEL: {{ .Values.xtdbConfig.loggingLevel | quote }}
+  XTDB_REE_IIDS: {{ .Values.xtdbConfig.reeIids | quote }}
   {{- with .Values.providerConfig.env }}
   {{- range $key, $val := . }}
   {{ $key }}: {{ $val | quote }}
