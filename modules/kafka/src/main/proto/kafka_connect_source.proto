@@ -18,6 +18,7 @@ message KafkaConnectSourceConfig {
 
 message KafkaConnectSourceToken {
     int64 offset = 1;
+    bytes user_token = 2;
 }
 
 message DocsIndexerConfig {

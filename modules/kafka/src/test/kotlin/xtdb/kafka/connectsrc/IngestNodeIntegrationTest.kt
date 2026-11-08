@@ -23,6 +23,7 @@ import xtdb.api.Xtdb
 import xtdb.api.log.KafkaCluster
 import xtdb.api.storage.Storage
 import xtdb.database.Database
+import xtdb.api.tx.ExternalSourceToken
 import xtdb.api.tx.TxIndexer
 import xtdb.api.tx.TxIndexer.TxResult
 import java.nio.file.Path
@@ -81,7 +82,7 @@ class IngestNodeIntegrationTest {
     /** A user-supplied indexer that records the keys it sees rather than writing them anywhere. */
     private class CapturingIndexer(val seenKeys: ConcurrentLinkedQueue<String>) : RecordIndexer {
         class Factory(val seenKeys: ConcurrentLinkedQueue<String>) : RecordIndexer.Factory {
-            override fun open(): RecordIndexer = CapturingIndexer(seenKeys)
+            override fun open(partition: Int, afterToken: ExternalSourceToken?): RecordIndexer = CapturingIndexer(seenKeys)
         }
 
         override suspend fun indexRecords(records: List<SinkRecord>, txIndexer: TxIndexer) {
