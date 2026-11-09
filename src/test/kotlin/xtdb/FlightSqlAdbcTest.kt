@@ -33,6 +33,9 @@ import org.apache.arrow.flight.SetSessionOptionsResult
 import org.apache.arrow.flight.client.ClientCookieMiddleware
 import org.apache.arrow.flight.sql.FlightSqlClient
 import org.apache.arrow.flight.sql.FlightSqlClient.ExecuteIngestOptions
+import org.apache.arrow.flight.sql.FlightSqlUtils
+import org.apache.arrow.flight.sql.impl.FlightSql.ActionCreatePreparedStatementRequest
+import org.apache.arrow.flight.sql.impl.FlightSql.ActionCreatePreparedStatementResult
 import org.apache.arrow.flight.sql.impl.FlightSql.CommandPreparedStatementQuery
 import org.apache.arrow.flight.sql.impl.FlightSql.CommandStatementIngest
 import org.apache.arrow.flight.sql.impl.FlightSql.SqlInfo
@@ -1211,6 +1214,25 @@ class FlightSqlAdbcTest {
             ex.message?.contains("only supports queries") == true,
             "expected message containing 'only supports queries', got: ${ex.message}"
         )
+    }
+
+    private fun createPreparedStatementRaw(sql: String): ActionCreatePreparedStatementResult {
+        val req = ActionCreatePreparedStatementRequest.newBuilder().setQuery(sql).build()
+        val action = Action(FlightSqlUtils.FLIGHT_SQL_CREATE_PREPARED_STATEMENT.type, ProtoAny.pack(req).toByteArray())
+        val res = flightClient.doAction(action, *emptyCallOpts).asSequence().single()
+        return FlightSqlUtils.unpackAndParseOrThrow(res.body, ActionCreatePreparedStatementResult::class.java)
+    }
+
+    @Test
+    fun `a prepared DML statement tells the client to execute it as an update, and a query doesn't`() {
+        val isUpdateField = 4
+
+        assertEquals(
+            listOf(1L),
+            createPreparedStatementRaw("INSERT INTO foo RECORDS {_id: 1}").unknownFields.getField(isUpdateField).varintList
+        )
+
+        assertFalse(createPreparedStatementRaw("SELECT 1 AS x").unknownFields.hasField(isUpdateField))
     }
 
     @Test

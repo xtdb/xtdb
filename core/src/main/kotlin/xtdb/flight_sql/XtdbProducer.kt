@@ -7,6 +7,7 @@ import clojure.lang.Keyword
 import com.google.protobuf.Any as ProtoAny
 import com.google.protobuf.ByteString
 import com.google.protobuf.Message
+import com.google.protobuf.UnknownFieldSet
 import org.apache.arrow.flight.*
 import org.apache.arrow.flight.FlightProducer.*
 import org.apache.arrow.flight.sql.FlightSqlProducer
@@ -61,6 +62,13 @@ private val DO_PUT_UPDATE_MSG =
         .setRecordCount(-1)
         .build()
         .toByteArray()
+
+// `is_update` (field 4 of ActionCreatePreparedStatementResult) postdates Arrow Java 19.0.0's generated builder;
+// becomes `setIsUpdate(true)` once an Arrow Java release carries it (apache/arrow-java#1064).
+private val IS_UPDATE =
+    UnknownFieldSet.newBuilder()
+        .addField(4, UnknownFieldSet.Field.newBuilder().addVarint(1).build())
+        .build()
 
 private fun StreamListener<PutResult>.sendDoPutUpdateRes(allocator: BufferAllocator) {
     PutResult.metadata(
@@ -514,7 +522,9 @@ class XtdbProducer(
                     ByteString.copyFrom(xtdbStmt.parameterSchema.serializeAsMessageInterruptibly())
                 )
 
-            if (!xtdbStmt.isDml) {
+            if (xtdbStmt.isDml) {
+                resultBuilder.setUnknownFields(IS_UPDATE)
+            } else {
                 resultBuilder.setDatasetSchema(
                     ByteString.copyFrom(xtdbStmt.executeSchema().serializeAsMessageInterruptibly())
                 )
