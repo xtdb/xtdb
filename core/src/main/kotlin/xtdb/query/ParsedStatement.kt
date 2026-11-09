@@ -75,15 +75,17 @@ sealed interface ParsedStatement {
     data class Commit(override val ast: Sql.DirectlyExecutableStatementContext, val mode: CommitMode? = null) : ParsedStatement
     data class Rollback(override val ast: Sql.DirectlyExecutableStatementContext) : ParsedStatement
 
-    data class SetTransaction(override val ast: Sql.DirectlyExecutableStatementContext, val txOptions: TxOptions) :
-        ParsedStatement
+    /** Changes the connection's session or transaction settings, and has no result set. */
+    sealed interface SetStatement : ParsedStatement
 
-    data class SetSessionCharacteristics(override val ast: Sql.DirectlyExecutableStatementContext, val accessMode: AccessMode?) : ParsedStatement
+    data class SetTransaction(override val ast: Sql.DirectlyExecutableStatementContext, val txOptions: TxOptions) : SetStatement
 
-    data class SetTimeZone(override val ast: Sql.DirectlyExecutableStatementContext, val zone: Sql.ExprContext) : ParsedStatement
-    data class SetAwaitToken(override val ast: Sql.DirectlyExecutableStatementContext, val token: Sql.ExprContext) : ParsedStatement
-    data class SetSessionParameter(override val ast: Sql.DirectlyExecutableStatementContext, val name: String, val value: Sql.LiteralContext) : ParsedStatement
-    data class SetRole(override val ast: Sql.DirectlyExecutableStatementContext) : ParsedStatement
+    data class SetSessionCharacteristics(override val ast: Sql.DirectlyExecutableStatementContext, val accessMode: AccessMode?) : SetStatement
+
+    data class SetTimeZone(override val ast: Sql.DirectlyExecutableStatementContext, val zone: Sql.ExprContext) : SetStatement
+    data class SetAwaitToken(override val ast: Sql.DirectlyExecutableStatementContext, val token: Sql.ExprContext) : SetStatement
+    data class SetSessionParameter(override val ast: Sql.DirectlyExecutableStatementContext, val name: String, val value: Sql.LiteralContext) : SetStatement
+    data class SetRole(override val ast: Sql.DirectlyExecutableStatementContext) : SetStatement
 
     data class Discard(override val ast: Sql.DirectlyExecutableStatementContext, val target: DiscardTarget) : ParsedStatement
 
