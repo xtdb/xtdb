@@ -646,19 +646,23 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                     when (stmt) {
                         is ParsedStatement.Dml -> executeTxOp(TxOp.Sql(stmt.originalSql, openQueryArgs()))
 
-                        is ParsedStatement.SetStatement -> when (stmt) {
-                            is ParsedStatement.SetSessionParameter ->
-                                setSessionParameter(stmt.name, sqlPlanner.evalLiteral(stmt.value, null)?.toString())
+                        is ParsedStatement.SetStatement -> {
+                            val params = args?.withPositionalParamNames()
 
-                            is ParsedStatement.SetTimeZone ->
-                                setTimeZone(coerceZoneId(sqlPlanner.evalLiteral(stmt.zone, args)))
+                            when (stmt) {
+                                is ParsedStatement.SetSessionParameter ->
+                                    setSessionParameter(stmt.name, sqlPlanner.evalLiteral(stmt.value, null)?.toString())
 
-                            is ParsedStatement.SetAwaitToken -> awaitToken =
-                                coerceAwaitToken(sqlPlanner.evalLiteral(stmt.token, args))
+                                is ParsedStatement.SetTimeZone ->
+                                    setTimeZone(coerceZoneId(sqlPlanner.evalLiteral(stmt.zone, params)))
 
-                            is ParsedStatement.SetSessionCharacteristics -> defaultAccessMode = stmt.accessMode
-                            is ParsedStatement.SetTransaction -> setTransaction(stmt.txOptions, args)
-                            is ParsedStatement.SetRole -> {} // accepted, no-op (as pgwire)
+                                is ParsedStatement.SetAwaitToken -> awaitToken =
+                                    coerceAwaitToken(sqlPlanner.evalLiteral(stmt.token, params))
+
+                                is ParsedStatement.SetSessionCharacteristics -> defaultAccessMode = stmt.accessMode
+                                is ParsedStatement.SetTransaction -> setTransaction(stmt.txOptions, params)
+                                is ParsedStatement.SetRole -> {} // accepted, no-op (as pgwire)
+                            }
                         }
 
                         else -> throw Incorrect("not an update", "xtdb.adbc/not-an-update")

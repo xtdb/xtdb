@@ -553,6 +553,32 @@ class InProcessAdbcTest {
         }
     }
 
+    private fun Xtdb.Connection.update(sql: String, param: String) =
+        createStatement().use { stmt ->
+            stmt.setSqlQuery(sql)
+            Relation(al, "" ofType UTF8).use { rel ->
+                rel.writeRow(mapOf("" to param))
+                rel.openAsRoot(al).use { stmt.bind(it) }
+            }
+            stmt.executeUpdate()
+        }
+
+    @Test
+    fun `a SET statement takes its bound parameters`() {
+        xtdb.connect().use { conn ->
+            conn.update("SET TIME ZONE ?", "America/New_York")
+            assertEquals(listOf(mapOf("timezone" to "America/New_York")), conn.select("SHOW timezone"))
+
+            conn.begin()
+            conn.update("SET TRANSACTION TIMEZONE = ?", "Asia/Tokyo")
+            assertEquals(listOf(mapOf("timezone" to "Asia/Tokyo")), conn.select("SHOW timezone"))
+            conn.rollbackTx()
+
+            conn.update("SET AWAIT_TOKEN = ?", "abc")
+            assertEquals(listOf(mapOf("await_token" to "abc")), conn.select("SHOW AWAIT_TOKEN"))
+        }
+    }
+
     @Test
     fun `SET TRANSACTION and SET ROLE are accepted no-ops`() {
         xtdb.connect().use { conn ->
