@@ -30,6 +30,7 @@ import java.nio.ByteBuffer
 import java.nio.channels.Channels
 import java.nio.channels.ClosedByInterruptException
 import java.nio.channels.FileChannel
+import java.nio.channels.WritableByteChannel
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption.*
 import java.time.Instant
@@ -41,6 +42,15 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlin.Int.Companion.SIZE_BYTES as INT_BYTES
 import kotlin.Long.Companion.SIZE_BYTES as LONG_BYTES
+
+/**
+ * `write` may return having written only part of the buffer - on a regular file, typically when the disk
+ * fills mid-write - and only throws on a later call. Loop until the buffer is drained, so that a partial
+ * record surfaces as the IOException it is (and gets rolled back) rather than being acknowledged.
+ */
+internal fun WritableByteChannel.writeFully(buf: ByteBuffer) {
+    while (buf.hasRemaining()) write(buf)
+}
 
 class LocalLog<M> @JvmOverloads constructor(
     private val rootPath: Path,
@@ -151,7 +161,7 @@ class LocalLog<M> @JvmOverloads constructor(
                 val size = payload.size
                 val offset = logFileChannel.position()
 
-                logFileChannel.write(
+                logFileChannel.writeFully(
                     ByteBuffer
                         .allocateDirect(messageSizeBytes(size))
                         .run {
