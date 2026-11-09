@@ -483,8 +483,6 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                 else -> parsed
             }
 
-        // for a frontend that has already classified the statement (pgwire) — creates without preparing, so a
-        // non-preparable control statement (SET TRANSACTION, SET TIME ZONE) executes through the same Statement path.
         /** @suppress */
         @InternalApi
         fun createStatement(parsed: ParsedStatement): Statement = openStatement(parsed)
@@ -501,8 +499,9 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                 override val warnings get() = preparedQuery?.warnings.orEmpty()
 
                 override val columnNames
-                    get() = (preparedQuery ?: throw Incorrect("call prepare() first", "xtdb.adbc/not-prepared"))
-                        .columnNames
+                    get() =
+                        if (parsedStatement is ParsedStatement.SetStatement) emptyList()
+                        else (preparedQuery ?: throw Incorrect("call prepare() first", "xtdb.adbc/not-prepared")).columnNames
 
                 private var args: RelationReader? = null
 
@@ -544,10 +543,12 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                 }
 
                 override fun prepare() {
-                    doPrepare()
+                    if (parsedStatement !is ParsedStatement.SetStatement) doPrepare()
                 }
 
                 override fun getParameterSchema(): Schema {
+                    // empty even for `SET TIME ZONE ?`: a SET isn't planned, so nothing counts its parameters
+                    if (parsedStatement is ParsedStatement.SetStatement) return Schema(emptyList())
                     val pq = preparedQuery ?: throw Incorrect("call prepare() first", "xtdb.adbc/not-prepared")
                     // Positional `?` placeholders → empty field names, per ADBC AdbcStatementGetParameterSchema:
                     // "If the parameter does not have a name … the name of the corresponding field in the schema
@@ -558,11 +559,13 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                 }
 
                 override fun executeSchema(): Schema {
+                    if (parsedStatement is ParsedStatement.SetStatement) return Schema(emptyList())
                     val pq = preparedQuery ?: throw Incorrect("call prepare() first", "xtdb.adbc/not-prepared")
                     return executeSchema((0 until pq.paramCount).map { idx -> "?_$idx" ofType VectorType.fromLegs() })
                 }
 
                 override fun executeSchema(paramFields: List<Field>): Schema {
+                    if (parsedStatement is ParsedStatement.SetStatement) return Schema(emptyList())
                     val pq = preparedQuery ?: throw Incorrect("call prepare() first", "xtdb.adbc/not-prepared")
                     return Schema(pq.getColumnFields(paramFields).map { it.withUnionTypeIds() })
                 }
@@ -646,18 +649,24 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                     when (stmt) {
                         is ParsedStatement.Dml -> executeTxOp(TxOp.Sql(stmt.originalSql, openQueryArgs()))
 
-                        is ParsedStatement.SetSessionParameter ->
-                            setSessionParameter(stmt.name, sqlPlanner.evalLiteral(stmt.value, null)?.toString())
+                        is ParsedStatement.SetStatement -> {
+                            val params = args?.withPositionalParamNames()
 
-                        is ParsedStatement.SetTimeZone ->
-                            setTimeZone(coerceZoneId(sqlPlanner.evalLiteral(stmt.zone, args)))
+                            when (stmt) {
+                                is ParsedStatement.SetSessionParameter ->
+                                    setSessionParameter(stmt.name, sqlPlanner.evalLiteral(stmt.value, null)?.toString())
 
-                        is ParsedStatement.SetAwaitToken -> awaitToken =
-                            coerceAwaitToken(sqlPlanner.evalLiteral(stmt.token, args))
+                                is ParsedStatement.SetTimeZone ->
+                                    setTimeZone(coerceZoneId(sqlPlanner.evalLiteral(stmt.zone, params)))
 
-                        is ParsedStatement.SetSessionCharacteristics -> defaultAccessMode = stmt.accessMode
-                        is ParsedStatement.SetTransaction -> setTransaction(stmt.txOptions, args)
-                        is ParsedStatement.SetRole -> {} // accepted, no-op (as pgwire)
+                                is ParsedStatement.SetAwaitToken -> awaitToken =
+                                    coerceAwaitToken(sqlPlanner.evalLiteral(stmt.token, params))
+
+                                is ParsedStatement.SetSessionCharacteristics -> defaultAccessMode = stmt.accessMode
+                                is ParsedStatement.SetTransaction -> setTransaction(stmt.txOptions, params)
+                                is ParsedStatement.SetRole -> {} // accepted, no-op (as pgwire)
+                            }
+                        }
 
                         else -> throw Incorrect("not an update", "xtdb.adbc/not-an-update")
                     }

@@ -55,3 +55,30 @@ fn test_ingest_creates_a_table_on_a_fresh_database() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_an_ad_hoc_insert_sent_as_a_query_lands() -> Result<()> {
+    let mut conn = connect(&Uuid::new_v4().to_string())?;
+
+    let mut insert = conn.new_statement()?;
+    insert.set_sql_query("INSERT INTO foo (_id, v) VALUES (1, 'a')")?;
+    let batches = insert.execute()?.collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(batches.iter().map(RecordBatch::num_rows).sum::<usize>(), 0);
+
+    let mut query = conn.new_statement()?;
+    query.set_sql_query("SELECT _id, v FROM foo")?;
+
+    let mut rows = Vec::new();
+    for batch in query.execute()? {
+        let batch = batch?;
+        let ids = batch.column_by_name("_id").unwrap().as_primitive::<Int64Type>();
+        let vs = batch.column_by_name("v").unwrap().as_string::<i32>();
+        for i in 0..batch.num_rows() {
+            rows.push((ids.value(i), vs.value(i).to_string()));
+        }
+    }
+
+    assert_eq!(rows, vec![(1, "a".to_string())]);
+
+    Ok(())
+}

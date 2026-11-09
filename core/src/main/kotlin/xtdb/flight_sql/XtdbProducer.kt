@@ -3,10 +3,10 @@ package xtdb.flight_sql
 import xtdb.InternalApi
 import xtdb.encodeToBytes
 import xtdb.query.ParsedStatement
-import clojure.lang.Keyword
 import com.google.protobuf.Any as ProtoAny
 import com.google.protobuf.ByteString
 import com.google.protobuf.Message
+import com.google.protobuf.UnknownFieldSet
 import org.apache.arrow.flight.*
 import org.apache.arrow.flight.FlightProducer.*
 import org.apache.arrow.flight.sql.FlightSqlProducer
@@ -62,6 +62,13 @@ private val DO_PUT_UPDATE_MSG =
         .build()
         .toByteArray()
 
+// `is_update` (field 4 of ActionCreatePreparedStatementResult) postdates Arrow Java 19.0.0's generated builder;
+// becomes `setIsUpdate(true)` once an Arrow Java release carries it (apache/arrow-java#1064).
+private val IS_UPDATE =
+    UnknownFieldSet.newBuilder()
+        .addField(4, UnknownFieldSet.Field.newBuilder().addVarint(1).build())
+        .build()
+
 private fun StreamListener<PutResult>.sendDoPutUpdateRes(allocator: BufferAllocator) {
     PutResult.metadata(
         allocator
@@ -74,31 +81,18 @@ private fun StreamListener<PutResult>.sendDoPutUpdateRes(allocator: BufferAlloca
     onCompleted()
 }
 
-/**
- * Whether this statement is DML, as the connection classified it when the SQL was set.
- *
- * Asked of the statement rather than re-parsed here, so the producer's routing decisions and the
- * connection's dispatch can't disagree about what a statement is.
- */
 @OptIn(InternalApi::class)
-private val Xtdb.Statement.isDml get() = parsedStatement is ParsedStatement.Dml
+private val Xtdb.Statement.isUpdate
+    get() = parsedStatement.let { it is ParsedStatement.Dml || it is ParsedStatement.SetStatement }
 
 /**
  * Translate a throwable into a [FlightRuntimeException] carrying the XTDB anomaly's
  * message and a status code mapped from its category, so the client sees the real
  * error rather than gRPC's generic "error servicing your request".
  *
- * A throwable we've already shaped into a Flight status (e.g. the DML-via-query
- * guard) passes through untouched. Mirrors the pgwire `ex->pgw-err` mapping.
+ * Mirrors the pgwire `ex->pgw-err` mapping.
  */
-private val ERROR_CODE: Keyword = Keyword.intern("xtdb.error", "code")
-private val NOT_A_QUERY: Keyword = Keyword.intern("xtdb", "not-a-query")
 private const val MAX_ANOMALY_METADATA_BYTES = 4096
-
-private fun Anomaly.flightDescription(): String {
-    val msg = message ?: toString()
-    return if (data.valAt(ERROR_CODE) == NOT_A_QUERY) "$msg - see https://github.com/xtdb/xtdb/issues/5861" else msg
-}
 
 private fun Throwable.asFlightException(): FlightRuntimeException =
     this as? FlightRuntimeException ?: toAnomaly().let { anom ->
@@ -114,7 +108,7 @@ private fun Throwable.asFlightException(): FlightRuntimeException =
         }
         val anomBytes = encodeToBytes(anom)
 
-        status.withDescription(anom.flightDescription()).withCause(anom)
+        status.withDescription(anom.message ?: anom.toString()).withCause(anom)
             .run {
                 // grpc-java refuses inbound metadata over 8 KiB by default, failing the whole call
                 if (anomBytes.size <= MAX_ANOMALY_METADATA_BYTES)
@@ -145,17 +139,34 @@ private inline fun StreamListener<*>.reportingErrors(block: () -> Unit) =
 private inline fun ServerStreamListener.reportingErrors(block: () -> Unit) =
     try { block() } catch (t: Throwable) { error(t.asFlightException()) }
 
-private fun FlightStream.toRelation(allocator: BufferAllocator): Relation =
-    Relation(allocator, root.schema).closeOnCatch { acc ->
-        Relation(allocator, root.schema).use { batch ->
+/**
+ * A client binding nothing sends a zero-row batch with no columns, and the statement runs once, unbound, rather than
+ * zero times.
+ * A batch with columns but no rows still runs it zero times, as an empty `executemany`.
+ */
+private val FlightStream.bindsNoParameters get() = root.schema.fields.isEmpty()
+
+/**
+ * The client's parameter batches as one relation, a row per execution, its columns renamed `$1..$N`:
+ * Flight SQL binds by position, and clients name the columns freely (the Go driver `0..N-1`, ADBC all-empty).
+ */
+private fun FlightStream.readParams(allocator: BufferAllocator): Relation? {
+    if (bindsNoParameters) return null
+
+    val fields = root.schema.fields.mapIndexed { idx, f -> Field("\$${idx + 1}", f.fieldType, f.children) }
+
+    return Relation(allocator, fields).closeOnCatch { acc ->
+        Relation(allocator, fields).use { batch ->
             val copier = batch.rowCopier(acc)
             while (next()) {
-                batch.loadFromArrow(root)
+                batch.vectors.zip(root.fieldVectors).forEach { (vec, arrowVec) -> vec.loadFromArrow(arrowVec) }
+                batch.rowCount = root.rowCount
                 copier.copyRange(0, batch.rowCount)
             }
         }
         acc
     }
+}
 
 private sealed interface PreparedScope {
     data class Session(val dbName: DatabaseName) : PreparedScope
@@ -169,13 +180,6 @@ private class PreparedStatement(
     var params: QueryParams? = null
 
     override fun close() = Unit
-}
-
-private fun Xtdb.Statement.requireQuery() {
-    // see #5082 — Python ADBC's cursor.execute() routes DML through the query path
-    if (isDml) throw CallStatus.INVALID_ARGUMENT
-        .withDescription("DML statements should be submitted via executeUpdate, not executeQuery (in Python ADBC, use cursor.executescript())")
-        .toRuntimeException()
 }
 
 internal fun FlightServer.Builder.withErrorLoggingMiddleware(): FlightServer.Builder =
@@ -403,7 +407,7 @@ class XtdbProducer(
         ackStream.reportingErrors {
             val ps = preparedStatement(ctx, cmd.preparedStatementHandle)
             flightStream.next()
-            ps.params = QueryParams.of(flightStream.root)
+            ps.params = if (flightStream.bindsNoParameters) null else QueryParams.of(flightStream.root)
             ackStream.onCompleted()
         }
     }
@@ -416,9 +420,9 @@ class XtdbProducer(
     ): Runnable = Runnable {
         ackStream.reportingErrors {
             val ps = preparedStatement(ctx, cmd.preparedStatementHandle)
-            flightStream.toRelation(node.allocator).use { acc ->
+            flightStream.readParams(node.allocator).use { params ->
                 ps.withStatement(ctx) { _, stmt ->
-                    stmt.bind(acc)
+                    params?.let(stmt::bind)
                     stmt.executeUpdate()
                 }
             }
@@ -426,11 +430,24 @@ class XtdbProducer(
         }
     }
 
+    private fun flightInfo(ticket: QueryTicket, schema: Schema, descriptor: FlightDescriptor): FlightInfo {
+        val flightTicket = Ticket(
+            ProtoAny.pack(TicketStatementQuery.newBuilder().setStatementHandle(ticket.encode()).build()).toByteArray()
+        )
+
+        return FlightInfo(schema, descriptor, listOf(FlightEndpoint(flightTicket)), /* bytes = */ -1, /* records = */ -1)
+    }
+
+    private fun runUpdate(stmt: Xtdb.Statement, descriptor: FlightDescriptor): FlightInfo {
+        stmt.executeUpdate()
+        return flightInfo(QueryTicket.Empty, Schema(emptyList()), descriptor)
+    }
+
     @OptIn(InternalApi::class)
-    private fun queryFlightInfo(
+    private fun issueQueryTicket(
         stmt: Xtdb.Statement, dbName: DatabaseName, sql: String, params: QueryParams?, descriptor: FlightDescriptor
     ): FlightInfo {
-        val ticket = QueryTicket(dbName, sql, params, stmt.queryBasis())
+        val ticket = QueryTicket.Run(dbName, sql, params, stmt.queryBasis())
 
         val schema =
             if (params == null) stmt.executeSchema()
@@ -438,11 +455,7 @@ class XtdbProducer(
                 root.schema.fields.mapIndexed { idx, f -> Field("?_$idx", f.fieldType, f.children) }
             })
 
-        val flightTicket = Ticket(
-            ProtoAny.pack(TicketStatementQuery.newBuilder().setStatementHandle(ticket.encode()).build()).toByteArray()
-        )
-
-        return FlightInfo(schema, descriptor, listOf(FlightEndpoint(flightTicket)), /* bytes = */ -1, /* records = */ -1)
+        return flightInfo(ticket, schema, descriptor)
     }
 
     override fun getFlightInfoStatement(
@@ -455,8 +468,8 @@ class XtdbProducer(
 
         conn.createStatement().use { stmt ->
             stmt.setSqlQuery(sql)
-            stmt.requireQuery()
-            queryFlightInfo(stmt, conn.dbName, sql, null, descriptor)
+            if (stmt.isUpdate) runUpdate(stmt, descriptor)
+            else issueQueryTicket(stmt, conn.dbName, sql, null, descriptor)
         }
     }
 
@@ -464,14 +477,21 @@ class XtdbProducer(
     override fun getStreamStatement(
         ticket: TicketStatementQuery, ctx: CallContext?, listener: ServerStreamListener
     ) = listener.reportingErrors {
-        val t = QueryTicket.decode(ticket.statementHandle)
+        when (val t = QueryTicket.decode(ticket.statementHandle)) {
+            is QueryTicket.Run ->
+                connectionFor(ctx, t.dbName).createStatement().use { stmt ->
+                    stmt.setSqlQuery(t.sql)
+                    if (stmt.isUpdate) throw Incorrect("invalid ticket", "xtdb.flight-sql/invalid-ticket")
+                    stmt.prepare()
+                    t.params?.read(allocator) { stmt.bind(it) }
+                    streamArrowReader(stmt.executeQueryAt(t.basis).reader, listener)
+                }
 
-        connectionFor(ctx, t.dbName).createStatement().use { stmt ->
-            stmt.setSqlQuery(t.sql)
-            stmt.requireQuery()
-            stmt.prepare()
-            t.params?.read(allocator) { stmt.bind(it) }
-            streamArrowReader(stmt.executeQueryAt(t.basis).reader, listener)
+            QueryTicket.Empty ->
+                VectorSchemaRoot.create(Schema(emptyList()), allocator).use { root ->
+                    listener.start(root)
+                    listener.completed()
+                }
         }
     }
 
@@ -479,7 +499,13 @@ class XtdbProducer(
         cmd: CommandPreparedStatementQuery, ctx: CallContext?, descriptor: FlightDescriptor
     ): FlightInfo = flightCall {
         val ps = preparedStatement(ctx, cmd.preparedStatementHandle)
-        ps.withStatement(ctx) { conn, stmt -> queryFlightInfo(stmt, conn.dbName, ps.sql, ps.params, descriptor) }
+        val params = ps.params
+        ps.withStatement(ctx) { conn, stmt ->
+            if (stmt.isUpdate) {
+                params?.read(allocator) { stmt.bind(it) }
+                runUpdate(stmt, descriptor)
+            } else issueQueryTicket(stmt, conn.dbName, ps.sql, params, descriptor)
+        }
     }
 
     override fun createPreparedStatement(
@@ -501,7 +527,9 @@ class XtdbProducer(
                     ByteString.copyFrom(xtdbStmt.parameterSchema.serializeAsMessageInterruptibly())
                 )
 
-            if (!xtdbStmt.isDml) {
+            if (xtdbStmt.isUpdate) {
+                resultBuilder.setUnknownFields(IS_UPDATE)
+            } else {
                 resultBuilder.setDatasetSchema(
                     ByteString.copyFrom(xtdbStmt.executeSchema().serializeAsMessageInterruptibly())
                 )
@@ -532,8 +560,8 @@ class XtdbProducer(
         connectionFor(ctx, dbName).createStatement().use { stmt ->
             stmt.setSqlQuery(sql)
 
-            if (stmt.isDml) throw CallStatus.INVALID_ARGUMENT
-                .withDescription("executeSchema only supports queries (DML returns a row count, not a schema)")
+            if (stmt.isUpdate) throw CallStatus.INVALID_ARGUMENT
+                .withDescription("executeSchema only supports queries (DML and SET return no result set)")
                 .toRuntimeException()
 
             stmt.prepare()

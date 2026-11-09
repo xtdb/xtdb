@@ -6,6 +6,15 @@ description: The ADBC surface XTDB supports, in-process and over FlightSQL, with
 <details>
 <summary>Changelog (last updated v2.2.1)</summary>
 
+v2.2.1: DML and `SET` run when a FlightSQL client sends them as a query
+
+: The Python dbapi's `cursor.execute` and an ad-hoc `execute` from any ADBC driver run them, answering an empty result — see [Statements](#statements).
+
+  Previously the query route rejected DML, naming `executeUpdate`, and rejected `SET` as not a preparable query; a prepared DML statement executed as a query could report success and write nothing.
+  Clients that run every statement as a query, such as Databow, had no way to write.
+
+  No upgrade steps: a client already sending these as updates is unaffected.
+
 v2.2.1: FlightSQL clients authenticate per the node's authentication rules
 
 : The FlightSQL listener applies the same [authentication](/ops/config/authentication) rules as pgwire, and a session's writes run as the user it authenticated as — see [Authentication](#authentication).
@@ -105,7 +114,11 @@ val result = stmt.executeQuery()
 ```
 
 `executeUpdate()`
-: runs DML. Returns `-1` (XTDB does not pre-count affected rows). Effects are visible to the next query on the same connection (see [Transactions](#transactions) for multi-statement semantics).
+: runs DML, or a `SET` statement. Returns `-1` (XTDB does not pre-count affected rows). Effects are visible to the next query on the same connection (see [Transactions](#transactions) for multi-statement semantics).
+
+    Over FlightSQL, `executeQuery()` runs these too, answering an empty result, so a client that sends every statement as a query - the Python dbapi's `cursor.execute`, Databow - can write and set session state.
+    It runs once, when the client executes it; reading the empty result runs nothing.
+    A prepared DML or `SET` statement tells the driver it's an update, and drivers that read that hint (ADBC 25+) run it through `executeUpdate()` instead.
 
 `executeSchema()`
 : returns the Arrow schema of a query's result set without running it, for tooling that needs the result columns up front. Works on prepared statements (read from `getResultSetSchema`) and ad-hoc queries (the wire path opens a transient `PreparedQuery`).
@@ -169,7 +182,7 @@ XTDB buffers a transaction's DML and applies it atomically on `COMMIT`, so reads
 **Committed-write visibility.**
 Once a write is committed (in autocommit mode, or after `commit()`), subsequent reads on the same connection see it with no manual `await`: the connection tracks its own write tokens and threads them through the planner. Cross-connection visibility follows the usual transactional semantics; another connection sees the write once it commits and its read snapshot advances.
 
-See [Prepared statements and transactions](/adbc/guides/prepared-statements-and-transactions) for the full lifecycle, including the `execute` vs `executemany` DML routing on the Python dbapi.
+See [Prepared statements and transactions](/adbc/guides/prepared-statements-and-transactions) for the full lifecycle.
 
 ## Metadata
 

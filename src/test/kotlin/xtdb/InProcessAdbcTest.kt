@@ -512,6 +512,23 @@ class InProcessAdbcTest {
     }
 
     @Test
+    fun `a SET prepares and describes as having no parameters and no result, without running`() {
+        xtdb.connect().use { conn ->
+            conn.createStatement().use { stmt ->
+                stmt.setSqlQuery("SET TIME ZONE 'America/New_York'")
+                stmt.prepare()
+                assertEquals(0, stmt.parameterSchema.fields.size)
+                assertEquals(0, stmt.executeSchema().fields.size)
+                assertEquals(emptyList<String>(), stmt.columnNames)
+                assertEquals(listOf(mapOf("timezone" to "Z")), conn.select("SHOW timezone"))
+
+                stmt.executeUpdate()
+                assertEquals(listOf(mapOf("timezone" to "America/New_York")), conn.select("SHOW timezone"))
+            }
+        }
+    }
+
+    @Test
     fun `SET TIME ZONE is reflected by SHOW timezone`() {
         xtdb.connect().use { conn ->
             conn.update("SET TIME ZONE 'America/New_York'")
@@ -550,6 +567,32 @@ class InProcessAdbcTest {
             conn.update("INSERT INTO foo RECORDS {_id: 1}")
             assertThrows(Incorrect::class.java) { conn.update("SET TIME ZONE 'UTC'") }
             conn.rollbackTx()
+        }
+    }
+
+    private fun Xtdb.Connection.update(sql: String, param: String) =
+        createStatement().use { stmt ->
+            stmt.setSqlQuery(sql)
+            Relation(al, "" ofType UTF8).use { rel ->
+                rel.writeRow(mapOf("" to param))
+                rel.openAsRoot(al).use { stmt.bind(it) }
+            }
+            stmt.executeUpdate()
+        }
+
+    @Test
+    fun `a SET statement takes its bound parameters`() {
+        xtdb.connect().use { conn ->
+            conn.update("SET TIME ZONE ?", "America/New_York")
+            assertEquals(listOf(mapOf("timezone" to "America/New_York")), conn.select("SHOW timezone"))
+
+            conn.begin()
+            conn.update("SET TRANSACTION TIMEZONE = ?", "Asia/Tokyo")
+            assertEquals(listOf(mapOf("timezone" to "Asia/Tokyo")), conn.select("SHOW timezone"))
+            conn.rollbackTx()
+
+            conn.update("SET AWAIT_TOKEN = ?", "abc")
+            assertEquals(listOf(mapOf("await_token" to "abc")), conn.select("SHOW AWAIT_TOKEN"))
         }
     }
 

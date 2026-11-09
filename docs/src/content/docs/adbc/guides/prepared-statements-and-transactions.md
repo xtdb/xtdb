@@ -273,23 +273,18 @@ with flight_sql.connect("grpc://localhost:3000") as conn:
 
 Cross-connection reads follow normal transactional semantics: another connection sees the write once it commits and its read snapshot advances.
 
-## DML via `executemany`, not `execute`
+## DML and `SET` through `cursor.execute`
 
-A subtle point: the Python dbapi's `cursor.execute()` routes all SQL, including INSERT, UPDATE, DELETE, through the FlightSQL query path (`GetFlightInfo` → `DoGet`).
-XTDB's query path does not persist DML.
-
-Use `cursor.executemany()` for DML.
-`executemany()` routes through `DoPut` (the update path), which calls `executeUpdate()` on the server and actually commits the write.
+The Python dbapi's `cursor.execute()` runs DML and `SET` statements as well as queries, with or without parameters:
 
 ```python
-# ✗ Does not persist on nightly / stable images:
 cur.execute("INSERT INTO t (_id, v) VALUES (?, ?)", parameters=["x", 1])
-
-# ✓ Correct, persists:
-cur.executemany("INSERT INTO t (_id, v) VALUES (?, ?)", [["x", 1]])
+cur.execute("SET TIME ZONE 'Europe/London'")
 ```
 
-This is a known mismatch between the Python dbapi specification (where `execute` handles DML) and the ADBC FlightSQL wire protocol (where DML goes through `DoPut`, not `GetFlightInfo`).
+`executemany()` runs one statement over a batch of parameter rows, as above.
+
+A `SET` outside a transaction lasts beyond its call only when the client returns the session cookie - see [Session options](../reference#session-options).
 
 ## What's not covered here
 

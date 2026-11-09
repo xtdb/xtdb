@@ -33,6 +33,9 @@ import org.apache.arrow.flight.SetSessionOptionsResult
 import org.apache.arrow.flight.client.ClientCookieMiddleware
 import org.apache.arrow.flight.sql.FlightSqlClient
 import org.apache.arrow.flight.sql.FlightSqlClient.ExecuteIngestOptions
+import org.apache.arrow.flight.sql.FlightSqlUtils
+import org.apache.arrow.flight.sql.impl.FlightSql.ActionCreatePreparedStatementRequest
+import org.apache.arrow.flight.sql.impl.FlightSql.ActionCreatePreparedStatementResult
 import org.apache.arrow.flight.sql.impl.FlightSql.CommandPreparedStatementQuery
 import org.apache.arrow.flight.sql.impl.FlightSql.CommandStatementIngest
 import org.apache.arrow.flight.sql.impl.FlightSql.SqlInfo
@@ -45,6 +48,7 @@ import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.vector.BigIntVector
 import org.apache.arrow.vector.UInt4Vector
 import org.apache.arrow.vector.VarBinaryVector
+import org.apache.arrow.vector.VarCharVector
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.complex.DenseUnionVector
 import org.apache.arrow.vector.complex.ListVector
@@ -1143,18 +1147,61 @@ class FlightSqlAdbcTest {
     }
 
     @Test
-    fun `a statement with no result set sent as a query is rejected, pointing to the issue tracking it`() {
-        val prepared = assertThrows(FlightRuntimeException::class.java) {
-            fsqlClient.prepare("SET TIME ZONE 'Europe/London'", *emptyCallOpts).close()
-        }
-        assertEquals(FlightStatusCode.INVALID_ARGUMENT, prepared.status().code())
-        assertTrue(prepared.message!!.contains("https://github.com/xtdb/xtdb/issues/5861"), prepared.message)
+    fun `a SET sent as a query, ad-hoc or prepared, takes effect and answers an empty result`() {
+        sessionClient().use { client ->
+            val adHoc = client.execute("SET TIME ZONE 'Europe/London'", *emptyCallOpts)
+            assertEquals(0, adHoc.schemaOptional.get().fields.size)
+            assertEquals(emptyList<Map<*, *>>(), adHoc.readRows(client))
+            assertEquals("Europe/London", client.timeZone())
 
-        val adHoc = assertThrows(FlightRuntimeException::class.java) {
-            fsqlClient.execute("SET TIME ZONE 'Europe/London'", *emptyCallOpts)
+            client.prepare("SET TIME ZONE 'America/New_York'", *emptyCallOpts).use { ps ->
+                assertEquals(emptyList<Map<*, *>>(), ps.execute(*emptyCallOpts).readRows(client))
+            }
+            assertEquals("America/New_York", client.timeZone())
         }
-        assertEquals(FlightStatusCode.INVALID_ARGUMENT, adHoc.status().code())
-        assertTrue(adHoc.message!!.contains("https://github.com/xtdb/xtdb/issues/5861"), adHoc.message)
+    }
+
+    private fun <R> withZoneParam(zone: String, f: (VectorSchemaRoot) -> R): R =
+        VectorSchemaRoot.create(Schema(listOf(Field.nullable("0", ArrowType.Utf8()))), al).use { root ->
+            (root.getVector(0) as VarCharVector).setSafe(0, Text(zone))
+            root.rowCount = 1
+            f(root)
+        }
+
+    @Test
+    fun `a prepared SET takes its bound parameter over the query and the update routes`() {
+        sessionClient().use { client ->
+            client.prepare("SET TIME ZONE ?", *emptyCallOpts).use { ps ->
+                assertEquals(0, ps.parameterSchema.fields.size)
+
+                withZoneParam("Europe/London") { params ->
+                    ps.setParameters(params)
+                    ps.execute(*emptyCallOpts)
+                }
+                assertEquals("Europe/London", client.timeZone())
+
+                withZoneParam("America/New_York") { params ->
+                    ps.setParameters(params)
+                    ps.executeUpdate(*emptyCallOpts)
+                }
+                assertEquals("America/New_York", client.timeZone())
+            }
+        }
+    }
+
+    @Test
+    fun `a statement with no result set sent as a query runs in the Flight SQL transaction it names`() {
+        sessionClient().use { client ->
+            val txn = client.beginTransaction(*emptyCallOpts)
+            client.execute("SET TRANSACTION READ WRITE, SYSTEM_TIME = TIMESTAMP '2021-08-03T00:00:00Z'", txn, *emptyCallOpts)
+            client.execute("INSERT INTO docs RECORDS {_id: 1}", txn, *emptyCallOpts)
+            client.commit(txn, *emptyCallOpts)
+        }
+
+        assertEquals(
+            listOf(mapOf("_id" to 1L, "_system_from" to ZonedDateTime.parse("2021-08-03T00:00Z[UTC]"))),
+            fsqlClient.execute("SELECT _id, _system_from FROM docs", *emptyCallOpts).readRows()
+        )
     }
 
     @Test
@@ -1211,6 +1258,24 @@ class FlightSqlAdbcTest {
             ex.message?.contains("only supports queries") == true,
             "expected message containing 'only supports queries', got: ${ex.message}"
         )
+    }
+
+    private fun createPreparedStatementRaw(sql: String): ActionCreatePreparedStatementResult {
+        val req = ActionCreatePreparedStatementRequest.newBuilder().setQuery(sql).build()
+        val action = Action(FlightSqlUtils.FLIGHT_SQL_CREATE_PREPARED_STATEMENT.type, ProtoAny.pack(req).toByteArray())
+        val res = flightClient.doAction(action, *emptyCallOpts).asSequence().single()
+        return FlightSqlUtils.unpackAndParseOrThrow(res.body, ActionCreatePreparedStatementResult::class.java)
+    }
+
+    @Test
+    fun `a prepared statement with no result set tells the client to execute it as an update, and a query doesn't`() {
+        val isUpdateField = 4
+
+        for (sql in listOf("INSERT INTO foo RECORDS {_id: 1}", "SET TIME ZONE ?")) {
+            assertEquals(listOf(1L), createPreparedStatementRaw(sql).unknownFields.getField(isUpdateField).varintList, sql)
+        }
+
+        assertFalse(createPreparedStatementRaw("SELECT 1 AS x").unknownFields.hasField(isUpdateField))
     }
 
     @Test
@@ -1520,6 +1585,30 @@ class FlightSqlAdbcTest {
     }
 
     @Test
+    fun `a prepared update with no parameters bound runs once`() {
+        fsqlClient.prepare("INSERT INTO foo RECORDS {_id: 1}", *emptyCallOpts).use { ps ->
+            ps.executeUpdate(*emptyCallOpts)
+        }
+
+        assertEquals(listOf(mapOf("_id" to 1L)), fsqlClient.execute("SELECT _id FROM foo", *emptyCallOpts).readRows())
+    }
+
+    @Test
+    fun `a prepared update takes its parameters by position, whatever the client named them`() {
+        fsqlClient.prepare("INSERT INTO foo (_id, n) VALUES (?, ?)", *emptyCallOpts).use { ps ->
+            withParams(1, 2) { params ->
+                ps.setParameters(params)
+                ps.executeUpdate(*emptyCallOpts)
+            }
+        }
+
+        assertEquals(
+            listOf(mapOf("_id" to 1L, "n" to 2L)),
+            fsqlClient.execute("SELECT _id, n FROM foo", *emptyCallOpts).readRows()
+        )
+    }
+
+    @Test
     fun `the schema a FlightInfo reports is the schema its ticket streams`() {
         insertData("INSERT INTO foo RECORDS {_id: 1, a: 'x'}, {_id: 2, a: 3}")
 
@@ -1631,14 +1720,85 @@ class FlightSqlAdbcTest {
     private fun ByteArray.deserialiseArrowSchema(): Schema =
         MessageSerializer.deserializeSchema(ReadChannel(Channels.newChannel(ByteArrayInputStream(this))))
 
-    // -- Error handling --
+    @Test
+    fun `an INSERT sent as an ad-hoc query writes its row once, however often its ticket is redeemed`() {
+        val info = fsqlClient.execute("INSERT INTO users (_id, name) VALUES ('jms', 'James')", *emptyCallOpts)
+        assertEquals(0, info.schemaOptional.get().fields.size)
+        assertEquals(emptyList<Map<*, *>>(), info.readRows())
+        assertEquals(emptyList<Map<*, *>>(), info.readRows())
+
+        assertEquals(
+            listOf(mapOf("_id" to "jms", "name" to "James")),
+            fsqlClient.execute("SELECT _id, name FROM users FOR ALL SYSTEM_TIME", *emptyCallOpts).readRows()
+        )
+    }
 
     @Test
-    fun `test DML via query path returns INVALID_ARGUMENT`() {
-        val ex = assertThrows(org.apache.arrow.flight.FlightRuntimeException::class.java) {
-            fsqlClient.execute("INSERT INTO users (_id, name) VALUES ('jms', 'James')", *emptyCallOpts)
+    fun `a prepared INSERT executed as a query, with no is_update hint followed, writes its row`() {
+        fsqlClient.prepare("INSERT INTO users (_id, name) VALUES ('jms', 'James')", *emptyCallOpts).use { ps ->
+            assertEquals(emptyList<Map<*, *>>(), ps.execute(*emptyCallOpts).readRows())
         }
-        assertEquals(org.apache.arrow.flight.FlightStatusCode.INVALID_ARGUMENT, ex.status().code())
-        assertTrue(ex.message!!.contains("executeUpdate"), "Error should mention executeUpdate: ${ex.message}")
+
+        assertEquals(
+            listOf(mapOf("_id" to "jms", "name" to "James")),
+            fsqlClient.execute("SELECT _id, name FROM users", *emptyCallOpts).readRows()
+        )
+    }
+
+    @Test
+    fun `a prepared INSERT executed as a query takes its bound parameters`() {
+        fsqlClient.prepare("INSERT INTO users (_id, name) VALUES (?, ?)", *emptyCallOpts).use { ps ->
+            val paramSchema = Schema(listOf(Field.nullable("0", ArrowType.Utf8()), Field.nullable("1", ArrowType.Utf8())))
+            VectorSchemaRoot.create(paramSchema, al).use { params ->
+                (params.getVector(0) as VarCharVector).setSafe(0, Text("jms"))
+                (params.getVector(1) as VarCharVector).setSafe(0, Text("James"))
+                params.rowCount = 1
+                ps.setParameters(params)
+                assertEquals(emptyList<Map<*, *>>(), ps.execute(*emptyCallOpts).readRows())
+            }
+        }
+
+        assertEquals(
+            listOf(mapOf("_id" to "jms", "name" to "James")),
+            fsqlClient.execute("SELECT _id, name FROM users", *emptyCallOpts).readRows()
+        )
+    }
+
+    @Test
+    fun `a prepared INSERT executed as a query with a parameter batch of no columns runs once`() {
+        // FlightSqlClient doesn't send a zero-row parameter batch, so the DoPut goes out by hand
+        val handle = createPreparedStatementRaw("INSERT INTO users (_id, name) VALUES ('jms', 'James')")
+            .preparedStatementHandle
+        val descriptor = FlightDescriptor.command(
+            ProtoAny.pack(CommandPreparedStatementQuery.newBuilder().setPreparedStatementHandle(handle).build())
+                .toByteArray()
+        )
+
+        VectorSchemaRoot.create(Schema(emptyList()), al).use { params ->
+            val listener = flightClient.startPut(descriptor, params, AsyncPutListener(), *emptyCallOpts)
+            listener.putNext()
+            listener.completed()
+            listener.getResult()
+        }
+
+        assertEquals(emptyList<Map<*, *>>(), flightClient.getInfo(descriptor, *emptyCallOpts).readRows())
+
+        assertEquals(
+            listOf(mapOf("_id" to "jms", "name" to "James")),
+            fsqlClient.execute("SELECT _id, name FROM users", *emptyCallOpts).readRows()
+        )
+    }
+
+    @Test
+    fun `an INSERT through the ADBC driver's query route reads as empty and writes its row`() {
+        conn.createStatement().use { stmt ->
+            stmt.setSqlQuery("INSERT INTO users (_id, name) VALUES ('jms', 'James')")
+            stmt.executeQuery().use { r -> assertFalse(r.reader.loadNextBatch()) }
+        }
+
+        assertEquals(
+            listOf(mapOf("_id" to "jms", "name" to "James")),
+            fsqlClient.execute("SELECT _id, name FROM users", *emptyCallOpts).readRows()
+        )
     }
 }

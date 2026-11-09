@@ -165,8 +165,10 @@
 
 (deftest a-flight-status-without-an-anomaly-maps-from-its-status
   (with-open [conn (open-conn)]
-    (t/is (anomalous? [:incorrect nil #"DML statements should be submitted via executeUpdate"]
-                      (xt/q conn "INSERT INTO docs (_id) VALUES (1)")))))
+    (let [oversized-sql (str "SELECT DATE '" (apply str (repeat 8192 \x)) "'")]
+      (t/is (anomalous? [:incorrect nil #"Cannot parse date"] (xt/q conn oversized-sql)))
+      (t/is (not (contains? (try (xt/q conn oversized-sql) (catch Exception e (ex-data e))) :xtdb.error/code))
+            "an anomaly too large for the status metadata reaches the client as its status alone, without its code"))))
 
 (deftest a-committed-write-is-visible-to-another-connection
   (with-open [conn1 (open-conn)
