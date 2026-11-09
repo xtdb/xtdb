@@ -1944,14 +1944,14 @@
 (defmethod ig/halt-key! ::server [_ srv]
   (util/close srv))
 
-(defrecord Playground [^Server pgwire ^FlightSql flight-sql]
+(defrecord Playground [^Xtdb node ^Server pgwire ^FlightSql flight-sql]
   DataSource
   (createConnectionBuilder [_]
     (.createConnectionBuilder pgwire))
 
   Closeable
   (close [_]
-    (util/close [flight-sql pgwire])))
+    (util/close [flight-sql pgwire node])))
 
 (defn open-playground
   "Opens an in-memory node serving pgwire and Flight SQL, each creating a database on first use.
@@ -1973,7 +1973,7 @@
      (let [{:keys [^InetAddress host, port]} pgwire]
        (log/infof "Playground started at postgres://%s:%d, with Flight SQL on port %d"
                   (.getHostAddress host) port (.getPort flight-sql))
-       (->Playground pgwire flight-sql)))))
+       (->Playground node pgwire flight-sql)))))
 
 (comment
   (user/set-log-level! 'xtdb.pgwire :debug))
