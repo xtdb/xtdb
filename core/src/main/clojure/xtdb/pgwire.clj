@@ -382,10 +382,8 @@
   (let [{:keys [^Xtdb node playground?]} server
         ^String db-name (get startup-opts "database")
         db-cat (db/<-node node)
-        db (or (.databaseOrNull db-cat db-name)
-               (when playground?
-                 (log/debug "creating playground database" (pr-str db-name))
-                 (.attach db-cat db-name nil)
+        db (or (if playground?
+                 (.databaseOrAttach db-cat db-name)
                  (.databaseOrNull db-cat db-name))
                (throw (err-invalid-catalog db-name)))
         user (get startup-opts "user")
