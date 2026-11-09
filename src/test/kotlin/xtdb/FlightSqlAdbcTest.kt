@@ -1520,6 +1520,30 @@ class FlightSqlAdbcTest {
     }
 
     @Test
+    fun `a prepared update with no parameters bound runs once`() {
+        fsqlClient.prepare("INSERT INTO foo RECORDS {_id: 1}", *emptyCallOpts).use { ps ->
+            ps.executeUpdate(*emptyCallOpts)
+        }
+
+        assertEquals(listOf(mapOf("_id" to 1L)), fsqlClient.execute("SELECT _id FROM foo", *emptyCallOpts).readRows())
+    }
+
+    @Test
+    fun `a prepared update takes its parameters by position, whatever the client named them`() {
+        fsqlClient.prepare("INSERT INTO foo (_id, n) VALUES (?, ?)", *emptyCallOpts).use { ps ->
+            withParams(1, 2) { params ->
+                ps.setParameters(params)
+                ps.executeUpdate(*emptyCallOpts)
+            }
+        }
+
+        assertEquals(
+            listOf(mapOf("_id" to 1L, "n" to 2L)),
+            fsqlClient.execute("SELECT _id, n FROM foo", *emptyCallOpts).readRows()
+        )
+    }
+
+    @Test
     fun `the schema a FlightInfo reports is the schema its ticket streams`() {
         insertData("INSERT INTO foo RECORDS {_id: 1, a: 'x'}, {_id: 2, a: 3}")
 

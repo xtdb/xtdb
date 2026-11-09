@@ -21,3 +21,12 @@ def test_ingest_creates_a_table_on_a_fresh_database():
 
         cur.execute('SELECT _id, v FROM foo ORDER BY _id')
         assert cur.fetch_arrow_table().to_pylist() == [{'_id': 1, 'v': 'a'}, {'_id': 2, 'v': 'b'}]
+
+
+def test_executemany_of_a_parameterised_insert_lands():
+    with connect(str(uuid.uuid4())) as conn, conn.cursor() as cur:
+        cur.executemany('INSERT INTO foo (_id, v) VALUES (?, ?)', [(1, 'a'), (2, 'b')])
+        conn.commit()
+
+        cur.execute('SELECT _id, v FROM foo ORDER BY _id')
+        assert cur.fetch_arrow_table().to_pylist() == [{'_id': 1, 'v': 'a'}, {'_id': 2, 'v': 'b'}]

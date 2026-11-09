@@ -145,17 +145,30 @@ private inline fun StreamListener<*>.reportingErrors(block: () -> Unit) =
 private inline fun ServerStreamListener.reportingErrors(block: () -> Unit) =
     try { block() } catch (t: Throwable) { error(t.asFlightException()) }
 
-private fun FlightStream.toRelation(allocator: BufferAllocator): Relation =
-    Relation(allocator, root.schema).closeOnCatch { acc ->
-        Relation(allocator, root.schema).use { batch ->
+/**
+ * The client's parameter batches as one relation, a row per execution, its columns renamed `$1..$N`:
+ * Flight SQL binds by position, and clients name the columns freely (the Go driver `0..N-1`, ADBC all-empty).
+ *
+ * Null when the client binds no parameter columns — the statement then runs once, unbound,
+ * where binding the zero-row batch the clients send would run it zero times.
+ */
+private fun FlightStream.readParams(allocator: BufferAllocator): Relation? {
+    if (root.schema.fields.isEmpty()) return null
+
+    val fields = root.schema.fields.mapIndexed { idx, f -> Field("\$${idx + 1}", f.fieldType, f.children) }
+
+    return Relation(allocator, fields).closeOnCatch { acc ->
+        Relation(allocator, fields).use { batch ->
             val copier = batch.rowCopier(acc)
             while (next()) {
-                batch.loadFromArrow(root)
+                batch.vectors.zip(root.fieldVectors).forEach { (vec, arrowVec) -> vec.loadFromArrow(arrowVec) }
+                batch.rowCount = root.rowCount
                 copier.copyRange(0, batch.rowCount)
             }
         }
         acc
     }
+}
 
 private sealed interface PreparedScope {
     data class Session(val dbName: DatabaseName) : PreparedScope
@@ -416,9 +429,9 @@ class XtdbProducer(
     ): Runnable = Runnable {
         ackStream.reportingErrors {
             val ps = preparedStatement(ctx, cmd.preparedStatementHandle)
-            flightStream.toRelation(node.allocator).use { acc ->
+            flightStream.readParams(node.allocator).use { params ->
                 ps.withStatement(ctx) { _, stmt ->
-                    stmt.bind(acc)
+                    params?.let(stmt::bind)
                     stmt.executeUpdate()
                 }
             }
