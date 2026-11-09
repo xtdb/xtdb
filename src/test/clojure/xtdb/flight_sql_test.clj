@@ -167,12 +167,13 @@
       (-> (.execute ps empty-call-opts) flight-info->rows)
       (.close ps))))
 
-(t/deftest test-dml-via-query-path-returns-helpful-error
-  ;; #5082 - DML sent through executeQuery path should give a clear error
-  (let [ex (t/is (thrown? org.apache.arrow.flight.FlightRuntimeException
-                          (.execute *client* "INSERT INTO users (_id, name) VALUES ('jms', 'James')" empty-call-opts)))]
-    (t/is (= org.apache.arrow.flight.FlightStatusCode/INVALID_ARGUMENT (.code (.status ex))))
-    (t/is (re-find #"executeUpdate" (.getMessage ex)))))
+(t/deftest test-dml-via-query-path-writes-its-row-5082
+  (t/is (= [] (-> (.execute *client* "INSERT INTO users (_id, name) VALUES ('jms', 'James')" empty-call-opts)
+                  (flight-info->rows))))
+
+  (t/is (= [{:xt/id "jms", :name "James"}]
+           (-> (.execute *client* "SELECT _id, name FROM users" empty-call-opts)
+               (flight-info->rows)))))
 
 (t/deftest test-anomaly-propagates-through-query-5812
   (let [ex (t/is (thrown? org.apache.arrow.flight.FlightRuntimeException
