@@ -80,6 +80,7 @@ xtdbConfig:
   jdkOptions: "-Xmx3000m -Xms3000m -XX:MaxDirectMemorySize=5000m -XX:MaxMetaspaceSize=500m --enable-native-access=ALL-UNNAMED -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/dumps -XX:+ExitOnOutOfMemoryError"
   loggingLevel: info
   reeIids: true
+  withinFileRecencyBranching: true
   localDiskCache:
     sizeLimit: "150Gi"
 

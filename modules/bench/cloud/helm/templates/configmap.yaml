@@ -9,6 +9,7 @@ data:
   JDK_JAVA_OPTIONS: {{ .Values.xtdbConfig.jdkOptions | quote }}
   XTDB_LOGGING_LEVEL: {{ .Values.xtdbConfig.loggingLevel | quote }}
   XTDB_REE_IIDS: {{ .Values.xtdbConfig.reeIids | quote }}
+  XTDB_WITHIN_FILE_RECENCY_BRANCHING: {{ .Values.xtdbConfig.withinFileRecencyBranching | quote }}
   {{- with .Values.providerConfig.env }}
   {{- range $key, $val := . }}
   {{ $key }}: {{ $val | quote }}
