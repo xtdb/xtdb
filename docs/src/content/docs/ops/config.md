@@ -444,7 +444,10 @@ You can run various tools by passing arguments - either directly to the CLI or v
 `playground`
 
 : Starts a playground - an in-memory server that will accept any database name, creating it if required.
-  - `-p <port>`, `--port <port>` (default 5432): specifies the port to run the playground server on.
+  It serves both the Postgres wire protocol and [Flight SQL](#flight-sql-server), on every interface.
+  Over Flight SQL, the database is named by the `x-xtdb-database` header or the session's `catalog` option.
+  - `-p <port>`, `--port <port>` (default 5432): specifies the port to run the Postgres wire server on.
+  - `--flight-sql-port <port>` (v2.2.1+, default 3000): specifies the port to run the Flight SQL server on.
 
 `compactor`
 

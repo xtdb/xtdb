@@ -149,13 +149,18 @@
     :parse-fn parse-long
     :default 5432]
 
+   [nil "--flight-sql-port PORT"
+    :id :flight-sql-port
+    :parse-fn parse-long
+    :default 3000]
+
    ["-h" "--help"]])
 
 (defn- start-playground [args]
-  (let [{{:keys [port]} :options} (-> (parse-args args playground-cli-spec)
-                                      (handling-arg-errors-or-help))]
+  (let [{{:keys [port flight-sql-port]} :options} (-> (parse-args args playground-cli-spec)
+                                                      (handling-arg-errors-or-help))]
     (log/info "Starting in playground mode...")
-    (util/with-open [_node ((requiring-resolve 'xtdb.pgwire/open-playground) {:port port})]
+    (util/with-open [_node ((requiring-resolve 'xtdb.pgwire/open-playground) {:port port, :flight-sql-port flight-sql-port})]
       (log/info "Playground started")
       @(shutdown-hook-promise))))
 

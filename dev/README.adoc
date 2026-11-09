@@ -75,8 +75,8 @@ Gradle detects JDKs in the usual install locations, and additionally from `JAVA_
 
 XTDB nodes can be started in 'playground' mode - either through `./gradlew :run`, `clj -m xtdb.main playground` or the standalone Docker image, or by running the `playground-config` `ir/set-prep` in the `dev` namespace.
 
-In playground mode, to begin with, we only start the pgwire server, without an associated XTDB node.
-Then, whenever a new connection is initiated, we create a new isolated in-memory node for every distinct 'database' specified in the connection parameters.
+In playground mode, we start an in-memory node with a pgwire server and a Flight SQL server.
+Then, whenever a connection or a Flight SQL call names a 'database' the node doesn't have, we attach it as a new in-memory database on that node - for Flight SQL, named by the `x-xtdb-database` header or the session's `catalog` option.
 
 This is particularly useful for non-JVM testing - see the `/lang` README for more details.
 

@@ -16,6 +16,7 @@ transit-python2 = "^0.8"
 pytest = "^9.0.3"
 mypy = "^1.9.0"
 pyarrow = "^26.0"
+adbc-driver-flightsql = "^1.13"
 
 [tool.pytest_ini.options]
 testpaths = ["test/"]

@@ -32,7 +32,7 @@
            [javax.net.ssl KeyManagerFactory SSLContext]
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector.types.pojo ArrowType$List ArrowType$Null Field)
-           (xtdb.api Authenticator$Method DataSource DataSource$ConnectionBuilder ServerConfig Xtdb Xtdb$Config Xtdb$Connection Xtdb$Statement Xtdb$ExecutedTx Xtdb$SubmittedTx)
+           (xtdb.api Authenticator$Method DataSource DataSource$ConnectionBuilder FlightSql FlightSqlConfig ServerConfig Xtdb Xtdb$Config Xtdb$Connection Xtdb$Statement Xtdb$ExecutedTx Xtdb$SubmittedTx)
            xtdb.api.module.XtdbModule
            (xtdb.arrow Relation Relation$ILoader VectorType)
            xtdb.arrow.RelationReader
@@ -382,10 +382,8 @@
   (let [{:keys [^Xtdb node playground?]} server
         ^String db-name (get startup-opts "database")
         db-cat (db/<-node node)
-        db (or (.databaseOrNull db-cat db-name)
-               (when playground?
-                 (log/debug "creating playground database" (pr-str db-name))
-                 (.attach db-cat db-name nil)
+        db (or (if playground?
+                 (.databaseOrAttach db-cat db-name)
                  (.databaseOrNull db-cat db-name))
                (throw (err-invalid-catalog db-name)))
         user (get startup-opts "user")
@@ -1946,17 +1944,36 @@
 (defmethod ig/halt-key! ::server [_ srv]
   (util/close srv))
 
-(defn open-playground
-  (^xtdb.pgwire.Server [] (open-playground nil))
+(defrecord Playground [^Xtdb node ^Server pgwire ^FlightSql flight-sql]
+  DataSource
+  (createConnectionBuilder [_]
+    (.createConnectionBuilder pgwire))
 
-  (^xtdb.pgwire.Server [opts]
-   (util/with-close-on-catch [node (xtn/start-node)]
-     (let [{:keys [^InetAddress host, port] :as srv} (serve node (merge {:host nil}
-                                                                        opts
-                                                                        {:allocator (util/->child-allocator (:allocator node) "playground")
-                                                                         :playground? true}))]
-       (log/infof "Playground started at postgres://%s:%d" (.getHostAddress host) port)
-       srv))))
+  Closeable
+  (close [_]
+    (util/close [flight-sql pgwire node])))
+
+(defn open-playground
+  "Opens an in-memory node serving pgwire and Flight SQL, each creating a database on first use.
+
+  Options, besides `serve`'s:
+
+  :flight-sql-port (default 0, opening the Flight SQL server on an unused port)."
+  (^xtdb.pgwire.Playground [] (open-playground nil))
+
+  (^xtdb.pgwire.Playground [{:keys [flight-sql-port], :or {flight-sql-port 0}, :as opts}]
+   (util/with-close-on-catch [node (xtn/start-node (doto (Xtdb$Config.) (.setFlightSql nil)))
+                              flight-sql (FlightSql/openPlayground node (-> (FlightSqlConfig.)
+                                                                            (.host "*")
+                                                                            (.port (int flight-sql-port))))
+                              pgwire (serve node (merge {:host nil}
+                                                        opts
+                                                        {:allocator (util/->child-allocator (:allocator node) "playground")
+                                                         :playground? true}))]
+     (let [{:keys [^InetAddress host, port]} pgwire]
+       (log/infof "Playground started at postgres://%s:%d, with Flight SQL on port %d"
+                  (.getHostAddress host) port (.getPort flight-sql))
+       (->Playground node pgwire flight-sql)))))
 
 (comment
   (user/set-log-level! 'xtdb.pgwire :debug))

@@ -1,0 +1,23 @@
+import os
+import uuid
+
+import adbc_driver_flightsql.dbapi as flightsql
+import pyarrow as pa
+
+
+def connect(db_name):
+    host = os.getenv('FLIGHT_SQL_HOST') or 'localhost'
+    port = os.getenv('FLIGHT_SQL_PORT') or 3000
+    return flightsql.connect(
+        f'grpc://{host}:{port}',
+        db_kwargs={'adbc.flight.sql.rpc.call_header.x-xtdb-database': db_name},
+    )
+
+
+def test_ingest_creates_a_table_on_a_fresh_database():
+    with connect(str(uuid.uuid4())) as conn, conn.cursor() as cur:
+        cur.adbc_ingest('foo', pa.table({'_id': [1, 2], 'v': ['a', 'b']}), mode='create_append')
+        conn.commit()
+
+        cur.execute('SELECT _id, v FROM foo ORDER BY _id')
+        assert cur.fetch_arrow_table().to_pylist() == [{'_id': 1, 'v': 'a'}, {'_id': 2, 'v': 'b'}]

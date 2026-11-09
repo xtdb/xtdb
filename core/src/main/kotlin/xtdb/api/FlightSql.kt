@@ -2,6 +2,9 @@ package xtdb.api
 
 import org.apache.arrow.flight.FlightServer.builder
 import org.apache.arrow.flight.Location.forGrpcInsecure
+import xtdb.InternalApi
+import xtdb.XtdbInternal
+import xtdb.flight_sql.UnknownDatabases
 import xtdb.flight_sql.XtdbProducer
 import xtdb.flight_sql.withDatabaseMiddleware
 import xtdb.flight_sql.withErrorLoggingMiddleware
@@ -31,6 +34,24 @@ interface FlightSql : AutoCloseable {
             config: FlightSqlConfig,
             clock: InstantSource = InstantSource.system(),
             sweepInterval: Duration = Duration.ofSeconds(10),
+        ): FlightSql = open(xtdb, config, clock, sweepInterval, UnknownDatabases.Reject(xtdb))
+
+        // `@InternalApi` rather than `internal` because the playground (Clojure) opens it.
+        /**
+         * Opens a Flight SQL server that attaches a database the first time a call names it.
+         * @suppress
+         */
+        @InternalApi
+        @JvmStatic
+        fun openPlayground(node: XtdbInternal, config: FlightSqlConfig): FlightSql =
+            open(node, config, InstantSource.system(), Duration.ofSeconds(10), UnknownDatabases.AttachOnFirstUse(node.dbCatalog))
+
+        private fun open(
+            xtdb: Xtdb,
+            config: FlightSqlConfig,
+            clock: InstantSource,
+            sweepInterval: Duration,
+            unknownDbs: UnknownDatabases,
         ): FlightSql {
             for ((key, timeout) in listOf(
                 "transactionIdleTimeout" to config.transactionIdleTimeout,
@@ -47,7 +68,7 @@ interface FlightSql : AutoCloseable {
 
             require(sweepInterval > Duration.ZERO) { "sweepInterval must be positive, got $sweepInterval" }
 
-            XtdbProducer(xtdb, config, clock).closeOnCatch { producer ->
+            XtdbProducer(xtdb, config, clock, unknownDbs).closeOnCatch { producer ->
                 val host = if (config.host == "*") "0.0.0.0" else config.host
                 val server = builder(xtdb.allocator, forGrpcInsecure(host, config.port), producer)
                     .also { it.withPeerAddrTracer() }

@@ -3,6 +3,7 @@ package xtdb.database
 import clojure.lang.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.time.withTimeout
+import xtdb.util.debug
 import xtdb.util.logger
 import xtdb.util.warn
 import kotlinx.serialization.SerialName
@@ -572,6 +573,19 @@ class Database(
         override fun databaseOrThrow(dbName: DatabaseName): Database =
             databaseOrNull(dbName)
                 ?: throw Incorrect("Unknown database: $dbName", "xtdb/unknown-db", mapOf("db-name" to dbName))
+
+        /**
+         * Attaches [dbName] to this node alone, with the default config, unless it's already attached.
+         * Unlike `ATTACH DATABASE`, nothing goes through the primary's log.
+         *
+         * @return the database, or null where it's attached dormant under `XTDB_SKIP_DBS`.
+         */
+        fun databaseOrAttach(dbName: DatabaseName): Database? =
+            databaseOrNull(dbName) ?: run {
+                LOG.debug { "attaching database on first use: $dbName" }
+                attach(dbName, null)
+                databaseOrNull(dbName)
+            }
 
         operator fun get(dbName: DatabaseName) = databaseOrNull(dbName)
 

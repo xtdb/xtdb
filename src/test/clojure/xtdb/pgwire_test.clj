@@ -32,6 +32,7 @@
            (xtdb.pgwire PgType)
            (xtdb JsonSerde JsonLdSerde)
            (xtdb.api DataSource$ConnectionBuilder PasswordHash Xtdb$Connection)
+           xtdb.api.error.Fault
            xtdb.api.log.SourceMessage$FlushBlock
            xtdb.pgwire.Server))
 
@@ -139,9 +140,9 @@
        (.build))))
 
 (defn with-playground [f]
-  (util/with-open [server (pgw/open-playground)]
-    (binding [*port* (:port server)
-              *server* server]
+  (util/with-open [{:keys [pgwire]} (pgw/open-playground)]
+    (binding [*port* (:port pgwire)
+              *server* pgwire]
       (f))))
 
 (defn- exec [^Connection conn ^String sql]
@@ -2255,7 +2256,7 @@ ORDER BY t.oid DESC LIMIT 1"
 
 (deftest test-playground
   (with-open [srv (pgw/open-playground)]
-    (let [{:keys [port]} srv]
+    (let [{:keys [port]} (:pgwire srv)]
       (letfn [(pg-conn [db]
                 {:jdbcUrl (format "jdbc:xtdb://localhost:%d/%s" port db)
                  :options "-c fallback_output_format=transit"})]
@@ -2270,6 +2271,12 @@ ORDER BY t.oid DESC LIMIT 1"
           (t/is (= [{:xt/id 1}] (q conn1a ["SELECT * FROM bar"])))
           (t/is (= [{:xt/id 1}] (q conn1b ["SELECT * FROM foo"])))
           (t/is (= [{:xt/id 2}] (q conn2 ["SELECT * FROM foo"]))))))))
+
+(deftest closing-the-playground-closes-its-node
+  (let [node (with-open [playground (pgw/open-playground)]
+               (:node playground))]
+    (t/is (thrown-with-msg? Fault #"allocator is closed"
+                            (xt/q node "SELECT 1")))))
 
 (deftest test-closes-connection-to-unknown-db-3863
   (with-open [xtdb-conn (jdbc/get-connection (format "jdbc:xtdb://localhost:%d/xtdb" *port*))]
