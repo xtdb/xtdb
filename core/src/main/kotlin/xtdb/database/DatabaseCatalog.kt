@@ -76,19 +76,19 @@ class DatabaseCatalog @JvmOverloads constructor(
 
     private val skipDbs: Set<String> get() = base.config.skipDbs
 
+    private fun Entry.attachConflict(dbName: DatabaseName) = when (this) {
+        is Entry.Detaching -> Conflict(
+            "Database is still being detached — retry once the previous detach has completed",
+            "xtdb/db-being-detached",
+            mapOf("db-name" to dbName)
+        )
+
+        is Entry.Open, is Entry.Skipped ->
+            Conflict("Database already exists", "xtdb/db-exists", mapOf("db-name" to dbName))
+    }
+
     override fun checkCanAttach(dbName: DatabaseName, config: Database.Config) {
-        when (entries[dbName]) {
-            is Entry.Detaching -> throw Conflict(
-                "Database is still being detached — retry once the previous detach has completed",
-                "xtdb/db-being-detached",
-                mapOf("db-name" to dbName)
-            )
-
-            is Entry.Open, is Entry.Skipped ->
-                throw Conflict("Database already exists", "xtdb/db-exists", mapOf("db-name" to dbName))
-
-            null -> {}
-        }
+        entries[dbName]?.let { throw it.attachConflict(dbName) }
 
         config.checkValid(dbName)
     }
@@ -105,17 +105,21 @@ class DatabaseCatalog @JvmOverloads constructor(
         }
     }
 
-    override fun attach(dbName: DatabaseName, config: Database.Config?) {
-        val dbConfig = config ?: Database.Config()
-        checkCanAttach(dbName, dbConfig)
+    /**
+     * @return null where this call claimed the name; otherwise the entry already holding it.
+     */
+    private fun attachOrExisting(dbName: DatabaseName, config: Database.Config): Entry? {
+        entries[dbName]?.let { return it }
+        config.checkValid(dbName)
 
         if (dbName in skipDbs) {
-            LOG.warn { "Skipping database '$dbName' (XTDB_SKIP_DBS) — database is dormant. Remove from XTDB_SKIP_DBS and restart to re-enable, or DETACH DATABASE to remove permanently." }
-            entries[dbName] = Entry.Skipped(dbConfig)
-            return
+            return entries.putIfAbsent(dbName, Entry.Skipped(config)) ?: run {
+                LOG.warn { "Skipping database '$dbName' (XTDB_SKIP_DBS) — database is dormant. Remove from XTDB_SKIP_DBS and restart to re-enable, or DETACH DATABASE to remove permanently." }
+                null
+            }
         }
 
-        val readOnlyConfig = if (base.config.readOnlyDatabases) dbConfig.mode(Database.Mode.READ_ONLY) else dbConfig
+        val readOnlyConfig = if (base.config.readOnlyDatabases) config.mode(Database.Mode.READ_ONLY) else config
 
         val db = try {
             Database.open(base, dbName, readOnlyConfig, compactor, dbScope, this.takeIf { dbName == "xtdb" })
@@ -126,10 +130,36 @@ class DatabaseCatalog @JvmOverloads constructor(
             throw Incorrect("Failed to open database", "xtdb.db-catalog/invalid-db-config", mapOf("db-name" to dbName), t)
         }
 
-        db.closeOnCatch {
-            entries[dbName] = Entry.Open(db)
+        val existing = db.closeOnCatch { entries.putIfAbsent(dbName, Entry.Open(db)) } ?: return null
+
+        closerScope.launch {
+            withContext(NonCancellable) {
+                try {
+                    db.cancelAndJoin()
+                    db.close()
+                } catch (t: Throwable) {
+                    LOG.error(t) { "Failed to close database '$dbName' opened by an attach that lost the race for its name" }
+                }
+            }
         }
+
+        return existing
     }
+
+    override fun attach(dbName: DatabaseName, config: Database.Config?) {
+        attachOrExisting(dbName, config ?: Database.Config())?.let { throw it.attachConflict(dbName) }
+    }
+
+    override fun databaseOrAttach(dbName: DatabaseName): Database? =
+        databaseOrNull(dbName) ?: run {
+            LOG.debug { "attaching database on first use: $dbName" }
+
+            when (val existing = attachOrExisting(dbName, Database.Config())) {
+                null -> databaseOrNull(dbName)
+                is Entry.Open -> existing.db
+                is Entry.Skipped, is Entry.Detaching -> throw existing.attachConflict(dbName)
+            }
+        }
 
     override fun detach(dbName: DatabaseName) {
         checkCanDetach(dbName)
