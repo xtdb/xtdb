@@ -139,9 +139,9 @@
        (.build))))
 
 (defn with-playground [f]
-  (util/with-open [server (pgw/open-playground)]
-    (binding [*port* (:port server)
-              *server* server]
+  (util/with-open [{:keys [pgwire]} (pgw/open-playground)]
+    (binding [*port* (:port pgwire)
+              *server* pgwire]
       (f))))
 
 (defn- exec [^Connection conn ^String sql]
@@ -2255,7 +2255,7 @@ ORDER BY t.oid DESC LIMIT 1"
 
 (deftest test-playground
   (with-open [srv (pgw/open-playground)]
-    (let [{:keys [port]} srv]
+    (let [{:keys [port]} (:pgwire srv)]
       (letfn [(pg-conn [db]
                 {:jdbcUrl (format "jdbc:xtdb://localhost:%d/%s" port db)
                  :options "-c fallback_output_format=transit"})]

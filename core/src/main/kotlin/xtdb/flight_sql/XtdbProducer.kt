@@ -219,6 +219,7 @@ class XtdbProducer(
     private val node: Xtdb,
     private val config: FlightSqlConfig,
     private val clock: InstantSource,
+    private val unknownDbs: UnknownDatabases,
 ) : NoOpFlightSqlProducer(), AutoCloseable {
     private val allocator = node.allocator.newChildAllocator("flight-sql", 0, Long.MAX_VALUE)
 
@@ -237,7 +238,10 @@ class XtdbProducer(
             UUID.randomUUID().toString(),
             Lease(clock, config.sessionIdleTimeout, firstLimit = config.sessionUnclaimedTimeout),
             caller,
-        ) { dbName -> caller.connect(node, dbName) }
+        ) { dbName ->
+            unknownDbs.beforeConnect(dbName)
+            caller.connect(node, dbName)
+        }
     }
 
     private fun sessionMiddleware(ctx: CallContext?): SessionMiddleware =
@@ -574,7 +578,6 @@ class XtdbProducer(
         try {
             val session = session(ctx)
 
-            val knownDbs = node.databaseNames
             val errors = mutableMapOf<String, SetSessionOptionsResult.Error>()
 
             for ((name, value) in request.sessionOptions) {
@@ -587,7 +590,7 @@ class XtdbProducer(
 
                             catalog.isEmpty() -> session.catalog = null
 
-                            catalog !in knownDbs ->
+                            !unknownDbs.admitCatalog(catalog) ->
                                 errors[name] = SetSessionOptionsResult.Error(SetSessionOptionsResult.ErrorValue.INVALID_VALUE)
 
                             else -> session.catalog = catalog

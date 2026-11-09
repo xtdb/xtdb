@@ -7,6 +7,7 @@
 -- Excludes: everything that happens INSIDE a running database.
 -- Transaction processing, block flushing and query execution are db.allium's; leader election is log-processor-lifecycle.allium's.
 -- Here a running database is opaque: it either resolves by name or it does not.
+-- Excludes, too: a playground admitting a database on its first use, which that node does alone and through no instruction.
 --
 -- Three words recur, and they nest.
 --
