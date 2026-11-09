@@ -32,6 +32,16 @@
     (flush [_] (CompletableResultCode/ofSuccess))
     (shutdown [_] (CompletableResultCode/ofSuccess))))
 
+(defn- bool-ify-peak-memory-bytes
+  "query.peak_memory_bytes varies with Arrow's allocation strategy, so these span-shape
+   assertions check only that it's present, the same way api_test.clj's exact-match
+   assertions treat it."
+  [span]
+  (cond-> span
+    (contains? (:attributes span) "query.peak_memory_bytes")
+    (update-in [:attributes "query.peak_memory_bytes"] some?)
+    (seq (:children span)) (update :children #(mapv bool-ify-peak-memory-bytes %))))
+
 (defn build-span-tree [spans]
   ;; Group spans by parent span ID
   (let [spans-by-parent (group-by :parent-id spans)]
@@ -62,7 +72,8 @@
         (Thread/sleep 100)
 
         (t/is (= [{:name "xtdb.query"
-                   :attributes {"query.text" "SELECT 1"}
+                   :attributes {"query.text" "SELECT 1"
+                                "query.peak_memory_bytes" true}
                    :children
                    [{:name "query.cursor.project"
                      :attributes {"cursor.page_count" "1"
@@ -74,7 +85,7 @@
                                   "cursor.row_count" "1"
                                   "cursor.type" "table"}
                      :children []}]}]
-                 (build-span-tree @!spans)))))))
+                 (mapv bool-ify-peak-memory-bytes (build-span-tree @!spans))))))))
 
 (t/deftest ensure-pgwire-simple-query-behaves-with-traces
   (let [!spans (atom [])
@@ -94,7 +105,8 @@
           (Thread/sleep 100)
 
           (t/is (= [{:name "xtdb.query"
-                     :attributes {"query.text" "SELECT 1"}
+                     :attributes {"query.text" "SELECT 1"
+                                  "query.peak_memory_bytes" true}
                      :children
                      [{:name "query.cursor.project"
                        :attributes {"cursor.page_count" "1"
@@ -106,7 +118,7 @@
                                     "cursor.row_count" "1"
                                     "cursor.type" "table"}
                        :children []}]}]
-                   (build-span-tree @!spans))))))))
+                   (mapv bool-ify-peak-memory-bytes (build-span-tree @!spans)))))))))
 
 (t/deftest EXPLAIN_works_with_tracer_enabled__issue-5091
   (let [!spans (atom [])
@@ -198,7 +210,8 @@
                         :attributes {"query.text" "UPDATE users SET foo='bar' WHERE name='alice'"},
                         :children
                         [{:name "xtdb.query"
-                          :attributes {"query.text" "UPDATE users SET foo='bar' WHERE name='alice'"},
+                          :attributes {"query.text" "UPDATE users SET foo='bar' WHERE name='alice'"
+                                       "query.peak_memory_bytes" true},
                           :children
                           [{:name "query.cursor.project"
                             :attributes {"cursor.page_count" "0" "cursor.row_count" "0" "cursor.type" "project"},
@@ -217,7 +230,7 @@
                              "scan_db" "xtdb",
                              "scan_source" "public.users"},
                             :children []}]}]}]}
-                     (without-scan-metrics update-tx)))))))))
+                     (bool-ify-peak-memory-bytes (without-scan-metrics update-tx))))))))))
 
 (t/deftest test-transaction-multiple-ops-tracing
   (t/testing "multiple SQL operations in one transaction create separate spans"

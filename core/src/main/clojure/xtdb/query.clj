@@ -465,7 +465,10 @@
                                    (metrics/start-span tracer "xtdb.query" {:attributes {:query.text query-text}}))
                       closeable-query-span (when query-span
                                              (reify AutoCloseable
-                                               (close [_] (.end query-span))))]
+                                               (close [_]
+                                                 (.tag query-span "query.peak_memory_bytes"
+                                                       (.getPeakMemoryAllocation allocator))
+                                                 (.end query-span))))]
 
                   (when (seq (:warnings planned-query))
                     (.increment query-warning-counter))
