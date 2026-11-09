@@ -3,11 +3,12 @@
 This project provides two things:
 
 * A test suite for each of the supported languages that demonstrates connectivity with XTDB, and enumerates pgwire-specific nuances of the individual drivers.
+  The Python and Rust suites also connect over Flight SQL, through ADBC.
 * (Eventually) XTDB utility libraries where required - i.e. if a particular language needs a lot of shoe-horning to work with the standard PostgreSQL drivers.
 
 == Usage
 
-All of the test suites here depend on a running XTDB playground.
+All of the test suites here depend on a running XTDB playground, serving pgwire on port 5439 and Flight SQL on port 3000.
 
 You can either:
 

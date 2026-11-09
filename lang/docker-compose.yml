@@ -5,7 +5,7 @@ services:
       dockerfile: docker/Dockerfile
       args:
         VARIANT: standalone
-    command: ["playground", "--port", "5439"]
+    command: ["playground", "--port", "5439", "--flight-sql-port", "3000"]
     healthcheck:
       test: ["CMD", "nc", "-z", "localhost", "5439"]
       interval: 5s
@@ -26,6 +26,8 @@ services:
     environment:
       PG_HOST: xtdb
       PG_PORT: 5439
+      FLIGHT_SQL_HOST: xtdb
+      FLIGHT_SQL_PORT: 3000
 
   elixir:
     build:
@@ -40,6 +42,8 @@ services:
     environment:
       PG_HOST: xtdb
       PG_PORT: 5439
+      FLIGHT_SQL_HOST: xtdb
+      FLIGHT_SQL_PORT: 3000
 
   dotnet:
     build:

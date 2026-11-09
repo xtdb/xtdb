@@ -65,10 +65,10 @@
     (go)))
 
 (def playground-config
-  {::playground {:port 5439}})
+  {::playground {:port 5439, :flight-sql-port 3000}})
 
-(defmethod i/init-key ::playground [_ {:keys [port]}]
-  (pgw/open-playground {:port port}))
+(defmethod i/init-key ::playground [_ opts]
+  (pgw/open-playground opts))
 
 (defmethod i/halt-key! ::playground [_ srv]
   (util/close srv))
