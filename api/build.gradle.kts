@@ -1,5 +1,4 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmDefaultMode
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     `java-library`
@@ -50,26 +49,14 @@ dependencies {
     testImplementation(libs.next.jdbc)
 }
 
-java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))
+java.toolchain.languageVersion.set(JavaLanguageVersion.of(25))
 
 tasks.javadoc {
     exclude("xtdb/util/*")
 }
 
-tasks.compileJava {
-    sourceCompatibility = "21"
-    targetCompatibility = "21"
-}
-
-tasks.compileTestJava {
-    sourceCompatibility = "21"
-    targetCompatibility = "21"
-}
-
 kotlin {
     compilerOptions {
-        jvmTarget.set(JvmTarget.JVM_21)
-
         jvmDefault.set(JvmDefaultMode.NO_COMPATIBILITY)
     }
 }

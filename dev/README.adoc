@@ -67,9 +67,12 @@ If you hit missing-module errors (e.g. `ClassNotFoundException` for something in
 
 == Running on another JDK
 
+Gradle itself, and everything it compiles or runs, uses JDK 25 (`gradle/gradle-daemon-jvm.properties` pins the daemon).
+Compilation targets JDK 21's API (`--release 21`, and `-Xjdk-release=21` for Kotlin), the minimum the published jars support.
+
 `Test`, `JavaExec` and `clojureRepl` tasks run on JDK 25 by default; `-PtestJavaVersion=21` runs them on 21 instead — linking the custom JRE from it, or launching it directly under `-PfullJdk`.
-Compilation targets 21 either way, so this is how to check that nothing has crept in that 21 can't run.
-Gradle detects JDKs in the usual install locations, and additionally from `JAVA_HOME_21_X64` / `JAVA_HOME_25_X64` (see `gradle.properties`), which is how CI's `setup-java` hands them over.
+This is how to check that nothing has crept in that 21 can't run.
+Gradle detects JDKs in the usual install locations, and additionally from `JAVA_HOME_25_X64` (see `gradle.properties`), which is how CI's `setup-java` hands it over.
 
 == XTDB 'playground'
 

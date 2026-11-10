@@ -1,5 +1,4 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmDefaultMode
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     `java-library`
@@ -102,14 +101,12 @@ dependencies {
     testImplementation(project(":modules:xtdb-azure"))
 }
 
-java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))
+java.toolchain.languageVersion.set(JavaLanguageVersion.of(25))
 
 tasks.javadoc.get().enabled = false
 
 kotlin {
     compilerOptions {
-        jvmTarget.set(JvmTarget.JVM_21)
-
         jvmDefault.set(JvmDefaultMode.NO_COMPATIBILITY)
     }
 }

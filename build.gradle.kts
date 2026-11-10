@@ -4,6 +4,7 @@ import dev.clojurephant.plugin.clojure.tasks.ClojureCompile
 import org.gradle.jvm.toolchain.JavaInstallationMetadata
 import org.gradle.jvm.toolchain.JavaLauncher
 import org.gradle.jvm.toolchain.JavaToolchainService
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.dsl.KotlinJvmProjectExtension
 import org.jreleaser.gradle.plugin.dsl.deploy.maven.MavenDeployer
 import org.jreleaser.gradle.plugin.tasks.JReleaserDeployTask
@@ -64,7 +65,8 @@ val twelveGBJvmArgs = listOf(
     "-XX:MaxMetaspaceSize=1g"
 )
 
-java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))
+
+java.toolchain.languageVersion.set(JavaLanguageVersion.of(25))
 
 application {
     applicationName = "xtdb"
@@ -127,12 +129,18 @@ allprojects {
 
     version = System.getenv("XTDB_VERSION") ?: "2.x-SNAPSHOT"
 
-    // Kotlin 2.4 defaults the JVM module name to `{group}:{name}`, and that name is mangled into the JVM
-    // symbol of every `internal` declaration - at the default, `getPath$xtdb_core` becomes
-    // `getPath$com_xtdb_xtdb_core`, out of reach of the Clojure interop that names those symbols literally.
+    // Gradle compiles and runs on JDK 25; the published jars stay on JDK 21's API, the minimum we support.
+    tasks.withType<JavaCompile>().configureEach { options.release.set(21) }
+
     plugins.withId("org.jetbrains.kotlin.jvm") {
-        extensions.getByType(KotlinJvmProjectExtension::class.java)
-            .compilerOptions.moduleName.set(proj.name)
+        extensions.getByType(KotlinJvmProjectExtension::class.java).compilerOptions {
+            // Kotlin 2.4 defaults the JVM module name to `{group}:{name}`, and that name is mangled into the JVM
+            // symbol of every `internal` declaration - at the default, `getPath$xtdb_core` becomes
+            // `getPath$com_xtdb_xtdb_core`, out of reach of the Clojure interop that names those symbols literally.
+            moduleName.set(proj.name)
+            jvmTarget.set(JvmTarget.JVM_21)
+            freeCompilerArgs.add("-Xjdk-release=21")
+        }
     }
 
     repositories {
@@ -301,6 +309,8 @@ allprojects {
                 if (name !in jreExcludedTasks) {
                     dependsOn(buildCustomJre)
                     javaLauncher.set(customLauncher)
+                } else {
+                    javaLauncher.set(proj.testJavaLauncher())
                 }
             }
         } else {

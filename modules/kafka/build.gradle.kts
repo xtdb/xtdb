@@ -21,7 +21,7 @@ publishing {
     }
 }
 
-java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))
+java.toolchain.languageVersion.set(JavaLanguageVersion.of(25))
 
 dependencies {
     api(project(":xtdb-api"))

@@ -33,6 +33,6 @@ dependencies {
     testImplementation(testFixtures(project(":")))
 }
 
-java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))
+java.toolchain.languageVersion.set(JavaLanguageVersion.of(25))
 
 tasks.javadoc.get().enabled = false

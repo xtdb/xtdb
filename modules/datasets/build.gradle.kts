@@ -12,7 +12,7 @@ plugins {
     alias(libs.plugins.dokka)
 }
 
-java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))
+java.toolchain.languageVersion.set(JavaLanguageVersion.of(25))
 
 dependencies {
     api(project(":"))

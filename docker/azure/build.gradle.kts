@@ -13,7 +13,7 @@ dependencies {
     implementation(project(":modules:xtdb-postgres-source"))
 }
 
-java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))
+java.toolchain.languageVersion.set(JavaLanguageVersion.of(25))
 
 application {
     mainClass.set("clojure.main")
