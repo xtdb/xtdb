@@ -22,6 +22,7 @@ ENTRYPOINT [ \
     "--add-opens=java.base/java.nio=ALL-UNNAMED", \
     "--enable-native-access=ALL-UNNAMED", \
     "-Dio.netty.noUnsafe=false", \
+    "--sun-misc-unsafe-memory-access=allow", \
     "-Darrow.memory.debug.allocator=false", \
     "clojure.main", "-m", "xtdb.bench"]
 

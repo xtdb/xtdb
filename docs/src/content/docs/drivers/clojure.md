@@ -5,6 +5,15 @@ title: Using XTDB from Clojure
 <details>
 <summary>Changelog (last updated v2.2.1)</summary>
 
+v2.2.1: XTDB's JVM arguments allow `sun.misc.Unsafe` memory access
+
+: The XTDB Docker images set `--sun-misc-unsafe-memory-access=allow`, and an in-process node on JDK 24+ can too — see [In process](#in-process).
+
+  Previously, JDK 24+ printed a deprecation warning on the first use of `sun.misc.Unsafe` memory access; the flag silences it.
+  Arrow's allocator can't start without that access, so the flag also keeps a node starting on a JDK that denies it by default.
+
+  There are no upgrade steps.
+
 v2.2.1: XTDB no longer needs `-Dio.netty.tryReflectionSetAccessible=true`
 
 : An in-process node needs the JVM arguments listed under [In process](#in-process), and the XTDB Docker images no longer set this one.
@@ -100,6 +109,8 @@ In-process XTDB is particularly useful for testing and interactive development -
    - `--add-opens=java.base/java.nio=ALL-UNNAMED`
    - `--enable-native-access=ALL-UNNAMED`
    - `-Dio.netty.noUnsafe=false` — required on JDK 25+, where Netty otherwise turns off the `sun.misc.Unsafe` access Arrow's allocator depends on.
+   - `--sun-misc-unsafe-memory-access=allow` — on JDK 24+, where the JDK otherwise warns on the first use of `sun.misc.Unsafe` memory access, which Netty and protobuf both make.
+     JDK 21 and 22 don't recognise it, and won't start with it.
 3. Once you have a REPL (started with `clj -A:xtdb` this time), you can create an in-memory XTDB node with:
 
 ``` clojure
