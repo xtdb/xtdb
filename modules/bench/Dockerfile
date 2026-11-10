@@ -21,7 +21,6 @@ ENTRYPOINT [ \
     "-Dclojure.main.report=stderr", \
     "--add-opens=java.base/java.nio=ALL-UNNAMED", \
     "--enable-native-access=ALL-UNNAMED", \
-    "-Dio.netty.tryReflectionSetAccessible=true", \
     "-Dio.netty.noUnsafe=false", \
     "-Darrow.memory.debug.allocator=false", \
     "clojure.main", "-m", "xtdb.bench"]

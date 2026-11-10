@@ -2,6 +2,21 @@
 title: Using XTDB from Clojure
 ---
 
+<details>
+<summary>Changelog (last updated v2.2.1)</summary>
+
+v2.2.1: XTDB no longer needs `-Dio.netty.tryReflectionSetAccessible=true`
+
+: An in-process node needs the JVM arguments listed under [In process](#in-process), and the XTDB Docker images no longer set this one.
+
+  With it set, Netty counted its direct memory, Arrow's included, against a limit of its own the size of `-XX:MaxDirectMemorySize`, separately from the JDK's count, so a node could use up to twice `-XX:MaxDirectMemorySize` in direct memory.
+  Without it, all of the node's direct memory counts against the one `-XX:MaxDirectMemorySize`.
+
+  To upgrade, remove the flag from your JVM arguments, and check that `-XX:MaxDirectMemorySize` covers all of the node's direct memory rather than Arrow's alone.
+  Leaving the flag set keeps the previous behaviour.
+
+</details>
+
 Clojure users can execute SQL queries using standard JDBC tooling, via XTDB's PostgreSQL wire-compatible server.
 Additionally, there is an [XTDB Clojure API](#clojure-api) for both SQL and XTQL queries.
 
@@ -68,7 +83,6 @@ You can run XTDB nodes either in-process, or connect to a remote XTDB server via
  ;; JVM options required for in-process node
  :aliases {:xtdb {:jvm-opts ["--add-opens=java.base/java.nio=ALL-UNNAMED"
                              "--enable-native-access=ALL-UNNAMED"
-                             "-Dio.netty.tryReflectionSetAccessible=true"
                              "-Dio.netty.noUnsafe=false"]}}}
 ```
 
@@ -85,7 +99,6 @@ In-process XTDB is particularly useful for testing and interactive development -
 2. You'll also need to add the following JVM arguments to run Apache Arrow (included in the `:xtdb` deps.edn alias above):
    - `--add-opens=java.base/java.nio=ALL-UNNAMED`
    - `--enable-native-access=ALL-UNNAMED`
-   - `-Dio.netty.tryReflectionSetAccessible=true`
    - `-Dio.netty.noUnsafe=false` — required on JDK 25+, where Netty otherwise turns off the `sun.misc.Unsafe` access Arrow's allocator depends on.
 3. Once you have a REPL (started with `clj -A:xtdb` this time), you can create an in-memory XTDB node with:
 

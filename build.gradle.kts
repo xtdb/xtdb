@@ -40,7 +40,6 @@ plugins {
 val defaultJvmArgs = listOf(
     "--add-opens=java.base/java.nio=ALL-UNNAMED",
     "--enable-native-access=ALL-UNNAMED",
-    "-Dio.netty.tryReflectionSetAccessible=true",
     // Netty turns Unsafe off by default from JDK 25, and Arrow's allocator can't start without it.
     "-Dio.netty.noUnsafe=false",
     "-Djdk.attach.allowAttachSelf",
