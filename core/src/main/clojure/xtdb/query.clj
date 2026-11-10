@@ -243,7 +243,8 @@
                                   "time_to_first_page" #xt/type [:? :duration :micro]
                                   "page_count" #xt/type :i64
                                   "row_count" #xt/type :i64
-                                  "pushdowns" #xt/type [:? :transit]})))
+                                  "pushdowns" #xt/type [:? :transit]
+                                  "peak_memory_bytes" #xt/type :i64})))
 
 (def ^:private ^Schema explain-analyze-schema
   (Schema. (for [[col-name ^VectorType vec-type] explain-analyze-types]
@@ -264,7 +265,7 @@
                (map (fn [[k v]] [k (truncate-pushdown-val k v)]))
                col-pushdowns))))
 
-(defn- explain-analyze-results [^ResultCursor cursor]
+(defn- explain-analyze-results [^ResultCursor cursor, peak-memory-bytes]
   (letfn [(->results [^ICursor cursor, depth]
             (if-let [ea (.getExplainAnalyze cursor)]
               (let [child-results (mapv #(->results % (inc depth)) (.getChildCursors cursor))
@@ -281,7 +282,8 @@
                         :time-to-first-page (.getTimeToFirstPage ea)
                         :page-count (long (.getPageCount ea))
                         :row-count (.getRowCount ea)
-                        :pushdowns (not-empty (truncate-pushdowns (.getPushdowns ea)))}]
+                        :pushdowns (not-empty (truncate-pushdowns (.getPushdowns ea)))
+                        :peak-memory-bytes peak-memory-bytes}]
                       cat
                       child-results))
               (->results (first (.getChildCursors cursor)) depth)))]
@@ -463,7 +465,10 @@
                                    (metrics/start-span tracer "xtdb.query" {:attributes {:query.text query-text}}))
                       closeable-query-span (when query-span
                                              (reify AutoCloseable
-                                               (close [_] (.end query-span))))]
+                                               (close [_]
+                                                 (.tag query-span "query.peak_memory_bytes"
+                                                       (.getPeakMemoryAllocation allocator))
+                                                 (.end query-span))))]
 
                   (when (seq (:warnings planned-query))
                     (.increment query-warning-counter))
@@ -501,7 +506,8 @@
                           (if (:explain-analyze? planned-query)
                             (try
                               (.forEachRemaining cursor (fn [_]))
-                              (-> (PagesCursor. allocator explain-analyze-schema [(explain-analyze-results cursor)])
+                              (-> (PagesCursor. allocator explain-analyze-schema
+                                                [(explain-analyze-results cursor (.getPeakMemoryAllocation allocator))])
                                   (wrap-result-types explain-analyze-types)
                                   (wrap-closeables ref-ctr [closeable-query-span args snaps allocator]))
                               (finally

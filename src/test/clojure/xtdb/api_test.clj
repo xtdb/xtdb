@@ -522,17 +522,19 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
                 (update :total-time class)
                 (update :self-time class)
                 (update :time-to-first-page class)
+                ;; non-deterministic — asserted separately below
+                (update :peak-memory-bytes some?)
                 ;; the scan's runtime metrics vary with storage layout — asserted separately below
                 (cond-> (contains? row :attributes)
                   (update :attributes select-keys [:scan-db :scan-source]))))]
 
     (t/is (= [{:depth "->", :op :project,
                :page-count 1, :row-count 1
-               :total-time Duration, :self-time Duration, :time-to-first-page Duration}
+               :total-time Duration, :self-time Duration, :time-to-first-page Duration, :peak-memory-bytes true}
               {:depth "  ->", :op :scan,
                :attributes {:scan-db "xtdb", :scan-source "public.people"}
                :page-count 1, :row-count 1
-               :total-time Duration, :self-time Duration, :time-to-first-page Duration}]
+               :total-time Duration, :self-time Duration, :time-to-first-page Duration, :peak-memory-bytes true}]
              (->> (xt/q *conn*
                      [(format "EXPLAIN ANALYZE XTQL ($$ %s $$, ?)"
                               (pr-str '#(from :people [{:xt/id %} name age xt/valid-from xt/valid-to])))
@@ -541,14 +543,14 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
 
     (t/is (= [{:depth "->", :op :project,
                :page-count 1, :row-count 1
-               :total-time Duration, :self-time Duration, :time-to-first-page Duration}
+               :total-time Duration, :self-time Duration, :time-to-first-page Duration, :peak-memory-bytes true}
               {:depth "  ->", :op :rename,
                :page-count 1, :row-count 1
-               :total-time Duration, :self-time Duration, :time-to-first-page Duration}
+               :total-time Duration, :self-time Duration, :time-to-first-page Duration, :peak-memory-bytes true}
               {:depth "    ->", :op :scan,
                :attributes {:scan-db "xtdb", :scan-source "public.people"}
                :page-count 1, :row-count 1
-               :total-time Duration, :self-time Duration, :time-to-first-page Duration}]
+               :total-time Duration, :self-time Duration, :time-to-first-page Duration, :peak-memory-bytes true}]
              (->> (xt/q *conn*
                      ["EXPLAIN ANALYZE SELECT name, age, _valid_from, _valid_to FROM people WHERE _id = ?" 1])
                   (mapv elide))))
@@ -565,6 +567,18 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
         ;; rows read off the pages is the throughput denominator — never fewer than the rows emitted
         (t/is (>= scan-rows-read (:row-count scan-row)))
         (t/is (pos? scan-rows-read) "read at least the row we emitted")))))
+
+(t/deftest test-explain-analyze-reports-peak-memory-bytes-6373
+  (xt/submit-tx *conn* (for [i (range 2000)]
+                        [:put-docs :docs {:xt/id i, :s (apply str (repeat 500 (char (+ (int \A) (mod i 26)))))}]))
+
+  (letfn [(peak-memory-bytes [q]
+            (-> (xt/q *conn* (str "EXPLAIN ANALYZE " q)) first :peak-memory-bytes))]
+    (let [small (peak-memory-bytes "SELECT _id FROM docs WHERE _id = 1 ORDER BY s")
+          large (peak-memory-bytes "SELECT _id FROM docs ORDER BY s")]
+      (t/is (some? small) "peak_memory_bytes is reported")
+      (t/is (some? large) "peak_memory_bytes is reported")
+      (t/is (> large small) "sorting more rows allocates more, so peak_memory_bytes is higher"))))
 
 (t/deftest test-explain-analyze-self-time-is-total-time-less-the-children
   (xt/submit-tx *conn* [[:put-docs :docs {:xt/id 7 :name "seven"}]
