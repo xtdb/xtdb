@@ -23,6 +23,7 @@ ENTRYPOINT [ \
     "--enable-native-access=ALL-UNNAMED", \
     "-Dio.netty.tryReflectionSetAccessible=true", \
     "-Dio.netty.noUnsafe=false", \
+    "--sun-misc-unsafe-memory-access=allow", \
     "-Darrow.memory.debug.allocator=false", \
     "clojure.main", "-m", "xtdb.bench"]
 
