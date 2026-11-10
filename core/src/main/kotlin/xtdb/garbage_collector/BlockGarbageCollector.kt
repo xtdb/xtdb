@@ -7,6 +7,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.Channel.Factory.CONFLATED
 import kotlinx.coroutines.channels.Channel.Factory.UNLIMITED
 import kotlinx.coroutines.selects.select
+import kotlinx.coroutines.sync.Semaphore
 import xtdb.catalog.TableCatalog
 import xtdb.catalog.TableCatalog.Companion.allBlockFiles
 import xtdb.catalog.TableCatalog.Companion.tableBlocks
@@ -59,6 +60,8 @@ class BlockGarbageCollector(
 
     private val tableDispatcher = dispatcher.limitedParallelism(tableParallelism)
     private val deleteDispatcher = dispatcher.limitedParallelism(deleteParallelism)
+    // The permit, not the dispatcher, bounds DELETEs in flight: a delete suspended on the store frees its dispatcher slot.
+    private val deletePermits = Semaphore(deleteParallelism)
 
     private val blockDeleteTimer: Timer? = meterRegistry?.let {
         Timer.builder("xtdb.gc.block_files.delete.timer")
@@ -146,10 +149,15 @@ class BlockGarbageCollector(
         ) {
             coroutineScope {
                 paths.filter { blockIndexOf(it)?.isGarbage() ?: false }.forEach { path ->
+                    deletePermits.acquire()
                     launch(deleteDispatcher) {
-                        val timer = meterRegistry?.let { Timer.start(it) }
-                        bufferPool.deleteIfExists(path)
-                        gcTimer?.let { timer?.stop(it) }
+                        try {
+                            val timer = meterRegistry?.let { Timer.start(it) }
+                            bufferPool.deleteIfExists(path)
+                            gcTimer?.let { timer?.stop(it) }
+                        } finally {
+                            deletePermits.release()
+                        }
                     }
                 }
             }
