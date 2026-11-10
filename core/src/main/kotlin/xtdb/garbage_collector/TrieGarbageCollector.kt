@@ -7,6 +7,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.Channel.Factory.CONFLATED
 import kotlinx.coroutines.channels.Channel.Factory.UNLIMITED
 import kotlinx.coroutines.selects.select
+import kotlinx.coroutines.sync.Semaphore
 import xtdb.catalog.TableCatalog.Companion.blockFromLatest
 import xtdb.api.DatabaseName
 import xtdb.database.PartitionState
@@ -78,6 +79,8 @@ class TrieGarbageCollector(
 
     private val tableDispatcher = dispatcher.limitedParallelism(tableParallelism)
     private val deleteDispatcher = dispatcher.limitedParallelism(deleteParallelism)
+    // The permit, not the dispatcher, bounds DELETEs in flight: a delete suspended on the store frees its dispatcher slot.
+    private val deletePermits = Semaphore(deleteParallelism)
 
     private val deleteTimer: Timer? = meterRegistry?.let {
         Timer.builder("xtdb.gc.tries.delete.timer")
@@ -173,11 +176,16 @@ class TrieGarbageCollector(
                     check(Trie.parseKey(trieKey).level != 0L) {
                         "L0 trie keys must never reach GC deletion: $trieKey"
                     }
+                    deletePermits.acquire()
                     launch(deleteDispatcher) {
-                        val timer = meterRegistry?.let { Timer.start(it) }
-                        bufferPool.deleteIfExists(entry.slug.dataFilePath(trieKey))
-                        bufferPool.deleteIfExists(entry.slug.metaFilePath(trieKey))
-                        deleteTimer?.let { timer?.stop(it) }
+                        try {
+                            val timer = meterRegistry?.let { Timer.start(it) }
+                            bufferPool.deleteIfExists(entry.slug.dataFilePath(trieKey))
+                            bufferPool.deleteIfExists(entry.slug.metaFilePath(trieKey))
+                            deleteTimer?.let { timer?.stop(it) }
+                        } finally {
+                            deletePermits.release()
+                        }
                     }
                 }
             }
