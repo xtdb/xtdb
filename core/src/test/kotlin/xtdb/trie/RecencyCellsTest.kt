@@ -21,27 +21,28 @@ class RecencyCellsTest {
     }
 
     @Test
-    fun `a file takes the narrowest of 1h, 6h and 24h whose cells average four pages of its rows`() {
+    fun `a file takes the narrowest of 6h and 24h whose cells average four pages of its rows`() {
         assertEquals(
-            hour,
+            6 * hour,
             RecencyCells.width(9375L * 168, week, pageSize = 1024),
             "600k rows an hour across 64 shards"
         )
 
-        assertEquals(6 * hour, RecencyCells.width(1_000L * 168, week, pageSize = 1024))
-        assertEquals(day, RecencyCells.width(400L * 168, week, pageSize = 1024))
+        assertEquals(6 * hour, RecencyCells.width(683L * 168, week, pageSize = 1024))
+        assertEquals(day, RecencyCells.width(682L * 168, week, pageSize = 1024))
+        assertEquals(day, RecencyCells.width(171L * 168, week, pageSize = 1024))
     }
 
     @Test
     fun `cells average over those the file's recency covers, not over its week`() {
-        assertEquals(hour, RecencyCells.width(4096, RecencyRange(weekStart, weekStart), pageSize = 1024), "one instant, one cell")
+        assertEquals(6 * hour, RecencyCells.width(4096, RecencyRange(weekStart, weekStart), pageSize = 1024), "one instant, one cell")
 
-        assertEquals(hour, RecencyCells.width(8192, RecencyRange(weekStart + 1, weekStart + 2 * hour), pageSize = 1024))
+        assertEquals(6 * hour, RecencyCells.width(4096, RecencyRange(weekStart + 1, weekStart + 6 * hour), pageSize = 1024))
 
         assertEquals(
-            6 * hour,
-            RecencyCells.width(8192, RecencyRange(weekStart, weekStart + 2 * hour), pageSize = 1024),
-            "two hours that touch three 1h cells"
+            day,
+            RecencyCells.width(4096, RecencyRange(weekStart + 5 * hour, weekStart + 7 * hour), pageSize = 1024),
+            "two hours that touch two 6h cells"
         )
     }
 

@@ -213,7 +213,7 @@ contract OutputSegmentLayout {
         -- Each cell, and the whole file where it has no cells, is an IID trie in which a node branches only when it holds more than a page of rows.
 
     @invariant CellWidth
-        -- Widths come from the ladder 1, 6 and 24 hours.
+        -- Widths come from the ladder 6 and 24 hours.
         -- With N the file's rows, P the page size and c(w) the number of cells of width w that the file's `_recency` range touches, the file takes the narrowest rung with N / c(w) at least 4P.
         -- A file has no cells where no rung reaches that.
 

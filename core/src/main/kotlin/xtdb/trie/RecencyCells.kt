@@ -10,7 +10,7 @@ package xtdb.trie
 object RecencyCells {
     private const val HOUR = 3_600_000_000L
 
-    private val LADDER = longArrayOf(HOUR, 6 * HOUR, 24 * HOUR)
+    private val LADDER = longArrayOf(6 * HOUR, 24 * HOUR)
 
     private const val MIN_PAGES_PER_CELL = 4
 
