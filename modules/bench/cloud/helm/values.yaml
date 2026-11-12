@@ -27,10 +27,6 @@ job:
 # If set, the benchmark will gracefully abort after this duration
 timeout: ""
 
-readings:
-  devices: 10000
-  readings: 10000
-
 yakbench:
   scaleFactor: 1.0
 
@@ -59,10 +55,6 @@ patch:
 
 products:
   limit: ""
-  awsSecretName: "xtdb-aws-datasets-secret"
-
-ts-devices:
-  size: small
   awsSecretName: "xtdb-aws-datasets-secret"
 
 tsbs-iot:

@@ -40,10 +40,6 @@
                      (throw (ex-info "No profile data found in log file"
                                      {:benchmark-type "yakbench"
                                       :log-file log-file-path})))
-        "readings" (when (empty? (:query-stages parsed-summary))
-                     (throw (ex-info "No query stages found in log file"
-                                     {:benchmark-type "readings"
-                                      :log-file log-file-path})))
         "tsbs-iot" (when (empty? (:ingest-stages parsed-summary))
                      (throw (ex-info "No ingest stages found in log file"
                                      {:benchmark-type "tsbs-iot"
@@ -61,7 +57,6 @@
                                   {:benchmark-type "patch"
                                    :log-file log-file-path})))
         "products" nil
-        "ts-devices" nil
         "fusion" nil
         "scan-perf" (when (or (nil? (:profiles parsed-summary))
                               (empty? (:profiles parsed-summary)))
@@ -172,7 +167,7 @@
   (println "  plot-benchmark-timeseries [options] <benchmark-type>")
   (println "      Plot a benchmark timeseries chart from Azure Log Analytics.")
   (println "      Options: --scale-factor SF, --repo owner/repo, --branch branch")
-  (println "      Supported: tpch, yakbench, auctionmark, readings, clickbench, tsbs-iot, ingest-tx-overhead, kafka-source, patch, products, ts-devices, fusion, scan-perf")
+  (println "      Supported: tpch, yakbench, auctionmark, clickbench, tsbs-iot, ingest-tx-overhead, kafka-source, patch, products, fusion, scan-perf")
   (println)
   (println "Kubernetes Commands (output JSON):")
   (println "  inspect-deployment [--namespace NS]")

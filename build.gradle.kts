@@ -911,14 +911,6 @@ createBench(
 
 createBench("products", mapOf("limit" to "--limit"))
 
-// can't seem to have an arg with the same name as a task
-createBench("readings", mapOf(
-    "readingCount" to "--readings",
-    "deviceCount" to "--devices",
-    "noLoad" to "--no-load",
-    "reps" to "--reps"
-))
-
 createBench("tsbs-iot", mapOf(
     "file" to "--file",
     "deviceCount" to "--devices",
@@ -969,8 +961,6 @@ createBench(
     // the source's `remote: kafka` needs a remote registered on the node, which only config files support
     defaultArgs = mapOf("--config-file" to "modules/bench/config/kafka-source.yaml")
 )
-
-createBench("ts-devices", mapOf("size" to "--size"))
 
 createBench("food-prices", mapOf("size" to "--size", "dropout" to "--dropout"))
 

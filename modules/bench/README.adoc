@@ -16,11 +16,6 @@ The check picks its pins by `-PscaleFactor`, so a `-PnoLoad` run has to pass the
 AuctionMark::
 `./gradlew auctionmark -Pduration=PT30S -Pthreads=8 -PscaleFactor=0.1`
 
-Readings::
-`./gradlew readings -PdeviceCount=10000 -PreadingCount=10000`
-+
-`-Pdir=<path>` keeps the node, `-PnoLoad` re-queries it, and `-Preps=<n>` runs the query stages `n` times.
-
 Products::
 `./gradlew products`
 
@@ -104,13 +99,6 @@ docker run --rm ghcr.io/xtdb/xtdb-bench:nightly auctionmark \
   --duration PT30S \
   --scale-factor 0.1 \
   --threads 8
-----
-Readings::
-[source,bash]
-----
-docker run --rm ghcr.io/xtdb/xtdb-bench:nightly readings \
-  --devices 10000
-  --readings 10000
 ----
 Food Prices::
 [source,bash]
@@ -234,14 +222,6 @@ TPC-H::
 ----
 ./cloud/run-bench.sh azure tpch \
   --set tpch.scaleFactor=0.01
-----
-
-Readings::
-[source,bash]
-----
-./cloud/run-bench.sh azure readings \
-  --set readings.devices=10000 \
-  --set readings.readings=10000
 ----
 
 ==== Common Configuration Options
@@ -377,7 +357,7 @@ Use the "Build xtdb-bench Docker Image" GitHub Actions workflow if you've pushed
 ==== 3. GitHub workflows (`.github/workflows/`)
 
 Create `nightly-benchmark-<name>.yml`::
-Copy from an existing benchmark workflow (e.g. `nightly-benchmark-readings.yml`).
+Copy from an existing benchmark workflow (e.g. `nightly-benchmark-tsbs-iot.yml`).
 Set `bench_type: <name>` (must match CLI arg name).
 Add `workflow_dispatch` inputs for benchmark parameters.
 Set appropriate `timeout_minutes` (deploy wait) and `benchmark_timeout` (runtime limit).

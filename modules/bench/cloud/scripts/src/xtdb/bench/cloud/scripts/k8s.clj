@@ -314,7 +314,7 @@
   "Extract benchmark parameters EDN from log content."
   [log-content]
   (when log-content
-    (let [pattern #"INFO\s+xtdb\.bench\.(tpch|auctionmark|yakbench|readings|clickbench)\s+-\s+(\{.*\})"
+    (let [pattern #"INFO\s+xtdb\.bench\.(tpch|auctionmark|yakbench|clickbench)\s+-\s+(\{.*\})"
           match (re-find pattern log-content)]
       (when match
         (nth match 2)))))

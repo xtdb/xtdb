@@ -14,11 +14,10 @@ NO_CLEANUP=false
 error() { echo "Error: $*" >&2; exit 1; }
 
 usage() {
-  echo "Usage: $0 <aws|azure|google-cloud> <tpch|readings|auctionmark> [helm args...] [--no-cleanup]"
+  echo "Usage: $0 <aws|azure|google-cloud> <tpch|auctionmark> [helm args...] [--no-cleanup]"
   echo
   echo "Examples:"
   echo "  $0 azure tpch --set tpch.scaleFactor=0.01"
-  echo "  $0 aws readings --set readings.devices=1000 --set readings.readings=5000"
   echo "  $0 google-cloud auctionmark --set auctionmark.scaleFactor=0.1 --set auctionmark.onlyLoad=true"
   echo "  $0 azure auctionmark --set auctionmark.threads=8 --set auctionmark.duration=PT10M --no-cleanup"
   exit 1
@@ -26,7 +25,7 @@ usage() {
 
 validate_inputs() {
   [[ "$CLOUD" =~ ^(aws|azure|google-cloud)$ ]] || error "Invalid cloud: $CLOUD"
-  [[ "$BENCH_TYPE" =~ ^(tpch|readings|auctionmark|yakbench|kafka-source)$ ]] || error "Invalid bench type: $BENCH_TYPE"
+  [[ "$BENCH_TYPE" =~ ^(tpch|auctionmark|yakbench|kafka-source)$ ]] || error "Invalid bench type: $BENCH_TYPE"
 }
 
 get_cloud_config() {

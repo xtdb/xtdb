@@ -31,11 +31,6 @@ yakbench_anomaly_logic_app_name = "xtdb-benchmark-yakbench-anomaly"
 yakbench_anomaly_alert_enabled  = true
 yakbench_anomaly_scale_factor   = 1.0
 
-# Readings anomaly detection
-readings_anomaly_logic_app_name = "xtdb-benchmark-readings-anomaly"
-readings_anomaly_alert_enabled  = true
-readings_anomaly_devices        = 10000
-
 # AuctionMark anomaly detection (disabled - throughput metric not yet in data)
 auctionmark_anomaly_logic_app_name = "xtdb-benchmark-auctionmark-anomaly"
 auctionmark_anomaly_alert_enabled  = false

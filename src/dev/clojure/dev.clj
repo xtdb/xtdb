@@ -187,9 +187,6 @@
                                 :trie-meta (some-> (.getTrieMetadata td)
                                                    (trie-cat/<-trie-metadata))}))))))))
 
-(comment
-  (read-table-block-file "/home/james/tmp/readings-bench/objects/v06" "public/readings" 0x213))
-
 (defn byte-array->txs [^bytes ba]
   (with-open [al (RootAllocator.)
               r (Relation/openFromArrowStream al (.getPayload (SourceMessage/parse ba)))]

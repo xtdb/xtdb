@@ -105,11 +105,6 @@
                   :filter-is-string true
                   :metric "throughput"
                   :y-label "Throughput (tx/s)"}
-   "readings"   {:benchmark-name "Readings benchmarks"
-                 :title "Readings Benchmark Performance"
-                 :filter-param "devices"
-                 :filter-value 10000
-                 :filter-is-string false}
    "clickbench" {:benchmark-name "Clickbench Hits"
                  :title "Clickbench Benchmark Performance"
                  :filter-param nil
@@ -147,11 +142,6 @@
                :filter-param nil
                :filter-value nil
                :filter-is-string false}
-   "ts-devices" {:benchmark-name "TS Devices Ingest"
-                 :title "TS Devices Benchmark Performance"
-                 :filter-param "size"
-                 :filter-value "small"
-                 :filter-is-string true}
    "scan-perf" {:benchmark-name "Scan Perf"
                 :title "Scan Perf Benchmark Performance"
                 :filter-param "n-items"
@@ -161,7 +151,7 @@
 (defn plot-benchmark-timeseries
   "Plot a benchmark timeseries chart from Azure Log Analytics.
 
-  benchmark-type: benchmark type (e.g., \"tpch\", \"yakbench\", \"auctionmark\", \"readings\")
+  benchmark-type: benchmark type (e.g., \"tpch\", \"yakbench\", \"auctionmark\")
   opts: {:filter-value <val>   ; override the default filter value for this benchmark
          :repo \"owner/repo\"   ; override github repo (default: xtdb/xtdb)
          :branch \"branch\"}    ; override git branch (default: main)
