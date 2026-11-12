@@ -88,19 +88,6 @@ locals {
       metric_name     = "duration_minutes"
       dashboard_idx   = 1
     }
-    readings = {
-      name            = "Readings benchmarks"
-      display_name    = "Readings"
-      logic_app_name  = var.readings_anomaly_logic_app_name
-      enabled         = var.readings_anomaly_alert_enabled
-      param_name      = "devices"
-      param_path      = "parameters['devices']"
-      param_value     = var.readings_anomaly_devices
-      param_is_string = false
-      metric_path     = "'time-taken-ms'"
-      metric_name     = "duration_minutes"
-      dashboard_idx   = 2
-    }
     auctionmark = {
       name            = "Auction Mark OLTP"
       display_name    = "AuctionMark"
@@ -112,7 +99,7 @@ locals {
       param_is_string = true
       metric_path     = "'throughput'"
       metric_name     = "throughput"
-      dashboard_idx   = 3
+      dashboard_idx   = 2
     }
     clickbench = {
       name            = "Clickbench Hits"
@@ -125,7 +112,7 @@ locals {
       param_is_string = true
       metric_path     = "'time-taken-ms'"
       metric_name     = "duration_minutes"
-      dashboard_idx   = 4
+      dashboard_idx   = 3
     }
     tsbs-iot = {
       name            = "TSBS IoT"
@@ -138,7 +125,7 @@ locals {
       param_is_string = false
       metric_path     = "'time-taken-ms'"
       metric_name     = "duration_minutes"
-      dashboard_idx   = 5
+      dashboard_idx   = 4
     }
     ingest-tx-overhead = {
       name            = "Ingest batch vs individual"
@@ -151,7 +138,7 @@ locals {
       param_is_string = false
       metric_path     = "'time-taken-ms'"
       metric_name     = "duration_minutes"
-      dashboard_idx   = 6
+      dashboard_idx   = 5
     }
     patch = {
       name            = "PATCH Performance Benchmark"
@@ -164,7 +151,7 @@ locals {
       param_is_string = false
       metric_path     = "'time-taken-ms'"
       metric_name     = "duration_minutes"
-      dashboard_idx   = 7
+      dashboard_idx   = 6
     }
     products = {
       name            = "Products"
@@ -177,33 +164,7 @@ locals {
       param_is_string = true
       metric_path     = "'time-taken-ms'"
       metric_name     = "duration_minutes"
-      dashboard_idx   = 8
-    }
-    ts-devices = {
-      name            = "TS Devices Ingest"
-      display_name    = "TS Devices"
-      logic_app_name  = var.ts_devices_anomaly_logic_app_name
-      enabled         = var.ts_devices_anomaly_alert_enabled
-      param_name      = "size"
-      param_path      = "parameters['size']"
-      param_value     = var.ts_devices_anomaly_size
-      param_is_string = true
-      metric_path     = "'time-taken-ms'"
-      metric_name     = "duration_minutes"
-      dashboard_idx   = 9
-    }
-    fusion = {
-      name            = "Fusion benchmark"
-      display_name    = "Fusion"
-      logic_app_name  = var.fusion_anomaly_logic_app_name
-      enabled         = var.fusion_anomaly_alert_enabled
-      param_name      = "devices"
-      param_path      = "parameters['devices']"
-      param_value     = var.fusion_anomaly_devices
-      param_is_string = false
-      metric_path     = "'throughput'"
-      metric_name     = "throughput"
-      dashboard_idx   = 10
+      dashboard_idx   = 7
     }
     scan-perf = {
       name            = "Scan Perf"
@@ -216,7 +177,7 @@ locals {
       param_is_string = false
       metric_path     = "'time-taken-ms'"
       metric_name     = "duration_minutes"
-      dashboard_idx   = 11
+      dashboard_idx   = 8
     }
   }
 
@@ -232,9 +193,6 @@ locals {
     6 = { x = 10, y = 4 }
     7 = { x = 15, y = 4 }
     8 = { x = 0, y = 8 }
-    9  = { x = 5, y = 8 }
-    10 = { x = 10, y = 8 }
-    11 = { x = 15, y = 8 }
   }
 
   # Filter expressions per benchmark (string params quoted, numeric params use todouble)

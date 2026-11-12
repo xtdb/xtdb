@@ -368,109 +368,7 @@
                               #"No profile data found"
                               (tasks/summarize-log ["yakbench" (.getPath temp-file)])))
         (finally
-          (.delete temp-file)))))
-
-  (testing "summarize-log with empty readings query stages throws error"
-    (let [temp-file (java.io.File/createTempFile "test" ".log")]
-      (try
-        (spit temp-file "{\"stage\":\"ingest\",\"time-taken-ms\":1000}")
-        (is (thrown-with-msg? clojure.lang.ExceptionInfo
-                              #"No query stages found"
-                              (tasks/summarize-log ["readings" (.getPath temp-file)])))
-        (finally
           (.delete temp-file))))))
-
-(deftest parse-readings-log-test
-  (testing "parsing a valid readings log"
-    (let [temp-file (java.io.File/createTempFile "readings-test" ".log")]
-      (try
-        (spit temp-file
-              (str/join "\n"
-                        ["{\"stage\":\"ingest\",\"time-taken-ms\":100}"
-                         "{\"stage\":\"sync\",\"time-taken-ms\":50}"
-                         "{\"stage\":\"compact\",\"time-taken-ms\":25}"
-                         "{\"stage\":\"query-recent-interval-day\",\"time-taken-ms\":1500}"
-                         "{\"stage\":\"query-recent-interval-week\",\"time-taken-ms\":2000}"
-                         "{\"stage\":\"query-offset-1-year-interval-day\",\"time-taken-ms\":1800}"
-                         "{\"stage\":\"summary\",\"time-taken-ms\":10000}"]))
-        (let [result (log-parsing/parse-log "readings" (.getPath temp-file))]
-          (is (= 7 (count (:all-stages result))))
-          (is (= 3 (count (:query-stages result))))
-          (is (= 2 (count (:ingest-stages result))))
-          (is (= 10000 (:benchmark-total-time-ms result)))
-          (is (= "query-recent-interval-day" (name (:stage (first (:query-stages result)))))))
-        (finally
-          (.delete temp-file))))))
-
-(deftest readings-stage->query-row-test
-  (testing "recent interval query stage"
-    (let [stage {:stage :query-recent-interval-day :time-taken-ms 1500}
-          result (summary/readings-stage->query-row 0 stage)]
-      (is (= "Recent Day" (:query result)))
-      (is (= 1500 (:time-taken-ms result)))
-      (is (= "query-recent-interval-day" (:stage result)))))
-
-  (testing "offset query stage"
-    (let [stage {:stage :query-offset-1-year-interval-week :time-taken-ms 2000}
-          result (summary/readings-stage->query-row 1 stage)]
-      (is (= "Offset 1 Year Week" (:query result)))
-      (is (= 2000 (:time-taken-ms result))))))
-
-(deftest readings-summary->query-rows-test
-  (testing "calculating query rows with percentages"
-    (let [test-summary {:query-stages [{:stage :query-recent-interval-day :time-taken-ms 1000}
-                                       {:stage :query-recent-interval-week :time-taken-ms 3000}]}
-          result (summary/readings-summary->query-rows test-summary)
-          rows (:rows result)
-          total (:total-ms result)]
-      (is (= 4000 total))
-      (is (= 2 (count rows)))
-      (is (= "25.00%" (:percent-of-total (first rows))))
-      (is (= "75.00%" (:percent-of-total (second rows))))))
-
-  (testing "empty query stages"
-    (let [test-summary {:query-stages []}
-          result (summary/readings-summary->query-rows test-summary)]
-      (is (= 0 (:total-ms result)))
-      (is (empty? (:rows result))))))
-
-(deftest summary->table-readings-test
-  (testing "readings table format"
-    (let [test-summary {:benchmark-type "readings"
-                        :query-stages [{:stage :query-recent-interval-day :time-taken-ms 1000}
-                                       {:stage :query-offset-1-year-interval-month :time-taken-ms 2000}]
-                        :benchmark-total-time-ms 5000}
-          result (summary/summary->table test-summary)]
-      (is (string? result))
-      (is (str/includes? result "Recent Day"))
-      (is (str/includes? result "Offset 1 Year Month"))
-      (is (str/includes? result "Total query time"))
-      (is (str/includes? result "Total benchmark time")))))
-
-(deftest summary->slack-readings-test
-  (testing "readings slack format wrapped in code blocks"
-    (let [test-summary {:benchmark-type "readings"
-                        :query-stages [{:stage :query-recent-interval-day :time-taken-ms 1000}]
-                        :benchmark-total-time-ms 5000}
-          result (summary/summary->slack test-summary)]
-      (is (str/includes? result "```"))
-      (is (str/ends-with? result "```"))
-      (is (str/includes? result "Recent Day"))
-      (is (str/includes? result "Total query time"))
-      (is (str/includes? result "Total benchmark time")))))
-
-(deftest summary->github-markdown-readings-test
-  (testing "readings github markdown format"
-    (let [test-summary {:benchmark-type "readings"
-                        :query-stages [{:stage :query-recent-interval-day :time-taken-ms 1000}
-                                       {:stage :query-recent-interval-week :time-taken-ms 2000}]
-                        :benchmark-total-time-ms 5000}
-          result (summary/summary->github-markdown test-summary)]
-      (is (str/includes? result "| Query | Time (ms) |"))
-      (is (str/includes? result "|"))
-      (is (str/includes? result "| Recent Day |"))
-      (is (str/includes? result "Total query time"))
-      (is (str/includes? result "Total benchmark time")))))
 
 (deftest parse-auctionmark-log-test
   (testing "parsing a valid auctionmark log"
@@ -865,11 +763,6 @@
           result (#'k8s/extract-params-edn log)]
       (is (= "{:scale-factor 1.0 :threads 4}" result))))
 
-  (testing "extracts readings params"
-    (let [log "12:00:00.000 INFO xtdb.bench.readings - {:scale-factor 0.1 :device-count 100}"
-          result (#'k8s/extract-params-edn log)]
-      (is (= "{:scale-factor 0.1 :device-count 100}" result))))
-
   (testing "returns nil when no match"
     (let [log "some random log line without params"]
       (is (nil? (#'k8s/extract-params-edn log))))))
@@ -1060,15 +953,6 @@
         (charts/plot-benchmark-timeseries "auctionmark" {:filter-value 0.1})
         (is (= "PT30M" (:filter-value @captured-opts))))))
 
-  (testing "scale-factor override does NOT apply to fusion (filter-param = devices)"
-    (let [captured-opts (atom nil)]
-      (with-redefs [azure/fetch-azure-benchmark-timeseries (fn [opts]
-                                                             (reset! captured-opts opts)
-                                                             [{:timestamp "2024-01-01" :value 30.0}])
-                    charts/plot-timeseries-vega (fn [& _] nil)]
-        (charts/plot-benchmark-timeseries "fusion" {:filter-value 0.1})
-        (is (= 10000 (:filter-value @captured-opts))))))
-
   (testing "no override uses default filter-value"
     (let [captured-opts (atom nil)]
       (with-redefs [azure/fetch-azure-benchmark-timeseries (fn [opts]
@@ -1079,7 +963,7 @@
         (is (= 1.0 (:filter-value @captured-opts)))))))
 
 (deftest plot-benchmark-timeseries-direction-test
-  (doseq [[bench-type better] [["tpch" :lower] ["fusion" :higher] ["auctionmark" :higher]]]
+  (doseq [[bench-type better] [["tpch" :lower] ["auctionmark" :higher]]]
     (let [captured-opts (atom nil)]
       (with-redefs [azure/fetch-azure-benchmark-timeseries (constantly [{:timestamp "2024-01-01" :value 1000}])
                     charts/plot-timeseries-vega (fn [_ opts] (reset! captured-opts opts))]

@@ -911,14 +911,6 @@ createBench(
 
 createBench("products", mapOf("limit" to "--limit"))
 
-// can't seem to have an arg with the same name as a task
-createBench("readings", mapOf(
-    "readingCount" to "--readings",
-    "deviceCount" to "--devices",
-    "noLoad" to "--no-load",
-    "reps" to "--reps"
-))
-
 createBench("tsbs-iot", mapOf(
     "file" to "--file",
     "deviceCount" to "--devices",
@@ -926,20 +918,9 @@ createBench("tsbs-iot", mapOf(
     "timestampEnd" to "--timestamp-end",
     "queryIterations" to "--query-iterations",
     "workers" to "--workers",
-    "burnIn" to "--burn-in"
-))
-
-createBench("fusion", mapOf(
-    "deviceCount" to "--devices",
-    "readingCount" to "--readings",
-    "batchSize" to "--batch-size",
-    "updateBatchSize" to "--update-batch-size",
-    "updatesPerSystem" to "--updates-per-system",
-    "duration" to "--duration",
-    "threads" to "--threads",
-    "stagedOnly" to "--staged-only",
-    "noLoad" to "--no-load",
-    "reps" to "--reps"
+    "burnIn" to "--burn-in",
+    "seed" to "--seed",
+    "noLoad" to "--no-load"
 ))
 
 createBench("patch", mapOf("docCount" to "--doc-count", "patchCount" to "--patch-count"))
@@ -967,8 +948,6 @@ createBench(
     // the source's `remote: kafka` needs a remote registered on the node, which only config files support
     defaultArgs = mapOf("--config-file" to "modules/bench/config/kafka-source.yaml")
 )
-
-createBench("ts-devices", mapOf("size" to "--size"))
 
 createBench("food-prices", mapOf("size" to "--size", "dropout" to "--dropout"))
 

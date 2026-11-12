@@ -3,12 +3,12 @@
 # Usage: ./query.sh <command> <query-type> <benchmark> [terraform.tfvars]
 #   command:    render | run
 #   query-type: anomaly | dashboard
-#   benchmark:  tpch | yakbench | readings | auctionmark | clickbench | tsbs-iot | ...
+#   benchmark:  tpch | yakbench | auctionmark | clickbench | tsbs-iot | ...
 #
 # Examples:
 #   ./query.sh render anomaly tpch
 #   ./query.sh render dashboard yakbench
-#   ./query.sh run anomaly readings
+#   ./query.sh run anomaly tsbs-iot
 
 set -euo pipefail
 
@@ -24,13 +24,12 @@ usage() {
   echo "  command:    render | run" >&2
   echo "  query-type: anomaly | dashboard | queries-cold | queries-hot |" >&2
   echo "              profile-global | profile-max-user | profile-mean-user" >&2
-  echo "  benchmark:  tpch | yakbench | readings | auctionmark | clickbench |" >&2
-  echo "              tsbs-iot | ingest-tx-overhead | patch | products | ts-devices | fusion" >&2
+  echo "  benchmark:  tpch | yakbench | auctionmark | clickbench |" >&2
+  echo "              tsbs-iot | ingest-tx-overhead | patch | products" >&2
   echo "" >&2
   echo "Examples:" >&2
   echo "  $0 render anomaly tpch          # Output the KQL query" >&2
   echo "  $0 run dashboard yakbench       # Run query against Azure" >&2
-  echo "  $0 run anomaly readings         # Run query against Azure" >&2
   echo "  $0 run anomaly tsbs-iot         # Run query against Azure" >&2
   echo "  $0 run queries-cold tpch        # TPC-H individual cold query times" >&2
   echo "  $0 run queries-hot tpch         # TPC-H individual hot query times" >&2
@@ -70,7 +69,7 @@ if [[ "$QUERY_TYPE" == "profile-global" || "$QUERY_TYPE" == "profile-max-user" |
   usage
 fi
 
-VALID_BENCHMARKS="tpch yakbench readings auctionmark clickbench tsbs-iot ingest-tx-overhead patch products ts-devices fusion"
+VALID_BENCHMARKS="tpch yakbench auctionmark clickbench tsbs-iot ingest-tx-overhead patch products"
 if ! echo "$VALID_BENCHMARKS" | grep -qw "$BENCHMARK"; then
   echo "Error: benchmark must be one of: $VALID_BENCHMARKS" >&2
   usage
@@ -132,16 +131,6 @@ case "$BENCHMARK" in
     METRIC_PATH="'time-taken-ms'"
     METRIC_NAME="duration_minutes"
     ;;
-  readings)
-    BENCH_NAME="Readings benchmarks"
-    PARAM_NAME="devices"
-    PARAM_PATH="parameters['devices']"
-    PARAM_VALUE=$(get_var "readings_anomaly_devices" "10000")
-    PARAM_VAR="readings_anomaly_devices"
-    PARAM_IS_STRING=false
-    METRIC_PATH="'time-taken-ms'"
-    METRIC_NAME="duration_minutes"
-    ;;
   auctionmark)
     BENCH_NAME="Auction Mark OLTP"
     PARAM_NAME="duration"
@@ -166,7 +155,7 @@ case "$BENCHMARK" in
     BENCH_NAME="TSBS IoT"
     PARAM_NAME="devices"
     PARAM_PATH="parameters['devices']"
-    PARAM_VALUE=$(get_var "tsbs_iot_anomaly_devices" "2000")
+    PARAM_VALUE=$(get_var "tsbs_iot_anomaly_devices" "2500")
     PARAM_VAR="tsbs_iot_anomaly_devices"
     PARAM_IS_STRING=false
     METRIC_PATH="'time-taken-ms'"
@@ -201,26 +190,6 @@ case "$BENCHMARK" in
     PARAM_IS_STRING=true
     METRIC_PATH="'time-taken-ms'"
     METRIC_NAME="duration_minutes"
-    ;;
-  ts-devices)
-    BENCH_NAME="TS Devices Ingest"
-    PARAM_NAME="size"
-    PARAM_PATH="parameters['size']"
-    PARAM_VALUE=$(get_var "ts_devices_anomaly_size" "small")
-    PARAM_VAR="ts_devices_anomaly_size"
-    PARAM_IS_STRING=true
-    METRIC_PATH="'time-taken-ms'"
-    METRIC_NAME="duration_minutes"
-    ;;
-  fusion)
-    BENCH_NAME="Fusion benchmark"
-    PARAM_NAME="devices"
-    PARAM_PATH="parameters['devices']"
-    PARAM_VALUE=$(get_var "fusion_anomaly_devices" "10000")
-    PARAM_VAR="fusion_anomaly_devices"
-    PARAM_IS_STRING=false
-    METRIC_PATH="'throughput'"
-    METRIC_NAME="throughput"
     ;;
 esac
 

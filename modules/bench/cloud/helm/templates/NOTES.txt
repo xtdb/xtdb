@@ -2,10 +2,7 @@
 
 You are now running the {{ .Values.benchType }} benchmark with the following settings:
 
-{{- if eq .Values.benchType "readings" }}
-readings:
-{{ toYaml .Values.readings | indent 2 }}
-{{- else if eq .Values.benchType "tpch" }}
+{{- if eq .Values.benchType "tpch" }}
 tpch:
 {{ toYaml .Values.tpch | indent 2 }}
 {{- else if eq .Values.benchType "auctionmark" }}

@@ -51,16 +51,6 @@ on:
         required: false
         default: ''
         type: string
-      readings_device_count:
-        description: 'Device count for readings benchmark'
-        required: false
-        default: ''
-        type: string
-      reading_count:
-        description: 'Reading count for readings benchmark'
-        required: false
-        default: ''
-        type: string
       clickbench_size:
         description: 'Dataset size for clickbench (tiny, small, medium, full)'
         required: false
@@ -88,6 +78,11 @@ on:
         type: string
       tsbs_burn_in:
         description: 'Burn-in queries (discarded from stats) for TSBS IoT benchmark'
+        required: false
+        default: ''
+        type: string
+      tsbs_seed:
+        description: 'Seed for TSBS IoT data and queries (empty draws a fresh one)'
         required: false
         default: ''
         type: string
@@ -121,33 +116,8 @@ on:
         required: false
         default: ''
         type: string
-      ts_devices_size:
-        description: 'Dataset size for ts-devices benchmark (small, med, big)'
-        required: false
-        default: ''
-        type: string
       tpch_query_language:
         description: 'Query form for the tpch benchmark (ra, sql)'
-        required: false
-        default: ''
-        type: string
-      fusion_device_count:
-        description: 'Device count for fusion benchmark'
-        required: false
-        default: ''
-        type: string
-      fusion_reading_count:
-        description: 'Reading count for fusion benchmark'
-        required: false
-        default: ''
-        type: string
-      fusion_duration:
-        description: 'OLTP phase duration for fusion benchmark'
-        required: false
-        default: ''
-        type: string
-      fusion_threads:
-        description: 'OLTP thread count for fusion benchmark'
         required: false
         default: ''
         type: string
@@ -337,7 +307,7 @@ jobs:
             --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Create AWS Datasets Secret (for S3 dataset benchmarks)
-        if: (steps.gate.outputs.should_proceed == 'true') && (inputs.bench_type == 'clickbench' || inputs.bench_type == 'products' || inputs.bench_type == 'ts-devices')
+        if: (steps.gate.outputs.should_proceed == 'true') && (inputs.bench_type == 'clickbench' || inputs.bench_type == 'products')
         run: |
           set -euo pipefail
           kubectl -n cloud-benchmark create secret generic xtdb-aws-datasets-secret \
@@ -364,8 +334,6 @@ jobs:
           DURATION: ${{ inputs.duration }}
           THREADS: ${{ inputs.threads }}
           NODE_COUNT: ${{ inputs.node_count }}
-          READINGS_DEVICE_COUNT: ${{ inputs.readings_device_count }}
-          READING_COUNT: ${{ inputs.reading_count }}
           BENCHMARK_TIMEOUT: ${{ inputs.benchmark_timeout }}
           CLICKBENCH_SIZE: ${{ inputs.clickbench_size }}
           CLICKBENCH_LIMIT: ${{ inputs.clickbench_limit }}
@@ -373,18 +341,14 @@ jobs:
           TSBS_QUERY_ITERATIONS: ${{ inputs.tsbs_query_iterations }}
           TSBS_WORKERS: ${{ inputs.tsbs_workers }}
           TSBS_BURN_IN: ${{ inputs.tsbs_burn_in }}
+          TSBS_SEED: ${{ inputs.tsbs_seed }}
           INGEST_TX_OVERHEAD_DOC_COUNT: ${{ inputs.ingest_tx_overhead_doc_count }}
           INGEST_TX_OVERHEAD_BATCH_SIZES: ${{ inputs.ingest_tx_overhead_batch_sizes }}
           KAFKA_SOURCE_MESSAGE_COUNT: ${{ inputs.kafka_source_message_count }}
           PATCH_DOC_COUNT: ${{ inputs.patch_doc_count }}
           PATCH_PATCH_COUNT: ${{ inputs.patch_patch_count }}
           PRODUCTS_LIMIT: ${{ inputs.products_limit }}
-          TS_DEVICES_SIZE: ${{ inputs.ts_devices_size }}
           TPCH_QUERY_LANGUAGE: ${{ inputs.tpch_query_language }}
-          FUSION_DEVICE_COUNT: ${{ inputs.fusion_device_count }}
-          FUSION_READING_COUNT: ${{ inputs.fusion_reading_count }}
-          FUSION_DURATION: ${{ inputs.fusion_duration }}
-          FUSION_THREADS: ${{ inputs.fusion_threads }}
           RUN_QUEUE: ${{ inputs.run_queue }}
           QUEUE_ENTRY: ${{ inputs.queue_entry }}
         run: |
@@ -417,12 +381,6 @@ jobs:
           fi
           if [ -n "$NODE_COUNT" ]; then
             HELM_ARGS+=(--set "${BENCH_TYPE}.nodeCount=${NODE_COUNT}")
-          fi
-          if [ -n "$READINGS_DEVICE_COUNT" ]; then
-            HELM_ARGS+=(--set "${BENCH_TYPE}.devices=${READINGS_DEVICE_COUNT}")
-          fi
-          if [ -n "$READING_COUNT" ]; then
-            HELM_ARGS+=(--set "${BENCH_TYPE}.readings=${READING_COUNT}")
           fi
           if [ -n "$BENCHMARK_TIMEOUT" ]; then
             HELM_ARGS+=(--set "timeout=${BENCHMARK_TIMEOUT}")
@@ -461,6 +419,9 @@ jobs:
           if [ -n "$TSBS_BURN_IN" ]; then
             HELM_ARGS+=(--set "tsbs-iot.burnIn=${TSBS_BURN_IN}")
           fi
+          if [ -n "$TSBS_SEED" ]; then
+            HELM_ARGS+=(--set "tsbs-iot.seed=${TSBS_SEED}")
+          fi
           if [ -n "$INGEST_TX_OVERHEAD_DOC_COUNT" ]; then
             HELM_ARGS+=(--set "ingestTxOverhead.docCount=${INGEST_TX_OVERHEAD_DOC_COUNT}")
           fi
@@ -481,23 +442,8 @@ jobs:
           if [ -n "$PRODUCTS_LIMIT" ]; then
             HELM_ARGS+=(--set "products.limit=${PRODUCTS_LIMIT}")
           fi
-          if [ -n "$TS_DEVICES_SIZE" ]; then
-            HELM_ARGS+=(--set "ts-devices.size=${TS_DEVICES_SIZE}")
-          fi
           if [ -n "$TPCH_QUERY_LANGUAGE" ]; then
             HELM_ARGS+=(--set "tpch.queryLanguage=${TPCH_QUERY_LANGUAGE}")
-          fi
-          if [ -n "$FUSION_DEVICE_COUNT" ]; then
-            HELM_ARGS+=(--set "fusion.devices=${FUSION_DEVICE_COUNT}")
-          fi
-          if [ -n "$FUSION_READING_COUNT" ]; then
-            HELM_ARGS+=(--set "fusion.readings=${FUSION_READING_COUNT}")
-          fi
-          if [ -n "$FUSION_DURATION" ]; then
-            HELM_ARGS+=(--set "fusion.duration=${FUSION_DURATION}")
-          fi
-          if [ -n "$FUSION_THREADS" ]; then
-            HELM_ARGS+=(--set "fusion.threads=${FUSION_THREADS}")
           fi
           if [ "$RUN_QUEUE" = "true" ]; then
             HELM_ARGS+=(--set "providerConfig.env.RUN_QUEUE=true")
@@ -620,15 +566,12 @@ jobs:
           DURATION: ${{ inputs.duration }}
           THREADS: ${{ inputs.threads }}
           NODE_COUNT: ${{ inputs.node_count }}
-          READINGS_DEVICE_COUNT: ${{ inputs.readings_device_count }}
-          READING_COUNT: ${{ inputs.reading_count }}
           INGEST_TX_OVERHEAD_DOC_COUNT: ${{ inputs.ingest_tx_overhead_doc_count }}
           INGEST_TX_OVERHEAD_BATCH_SIZES: ${{ inputs.ingest_tx_overhead_batch_sizes }}
           KAFKA_SOURCE_MESSAGE_COUNT: ${{ inputs.kafka_source_message_count }}
           PATCH_DOC_COUNT: ${{ inputs.patch_doc_count }}
           PATCH_PATCH_COUNT: ${{ inputs.patch_patch_count }}
           PRODUCTS_LIMIT: ${{ inputs.products_limit }}
-          TS_DEVICES_SIZE: ${{ inputs.ts_devices_size }}
           TPCH_QUERY_LANGUAGE: ${{ inputs.tpch_query_language }}
           CLICKBENCH_SIZE: ${{ inputs.clickbench_size }}
           CLICKBENCH_LIMIT: ${{ inputs.clickbench_limit }}
@@ -636,10 +579,7 @@ jobs:
           TSBS_QUERY_ITERATIONS: ${{ inputs.tsbs_query_iterations }}
           TSBS_WORKERS: ${{ inputs.tsbs_workers }}
           TSBS_BURN_IN: ${{ inputs.tsbs_burn_in }}
-          FUSION_DEVICE_COUNT: ${{ inputs.fusion_device_count }}
-          FUSION_READING_COUNT: ${{ inputs.fusion_reading_count }}
-          FUSION_DURATION: ${{ inputs.fusion_duration }}
-          FUSION_THREADS: ${{ inputs.fusion_threads }}
+          TSBS_SEED: ${{ inputs.tsbs_seed }}
           GIT_SHA: ${{ github.sha }}
           GIT_BRANCH: ${{ inputs.branch }}
           REPO_URL: ${{ github.server_url }}/${{ github.repository }}
@@ -661,8 +601,6 @@ jobs:
           [ -n "$DURATION" ] && CONFIG_PARTS+=("Duration: ${DURATION}")
           [ -n "$THREADS" ] && CONFIG_PARTS+=("Threads: ${THREADS}")
           [ -n "$NODE_COUNT" ] && CONFIG_PARTS+=("Nodes: ${NODE_COUNT}")
-          [ -n "$READINGS_DEVICE_COUNT" ] && CONFIG_PARTS+=("Devices: ${READINGS_DEVICE_COUNT}")
-          [ -n "$READING_COUNT" ] && CONFIG_PARTS+=("Readings: ${READING_COUNT}")
           [ -n "$INGEST_TX_OVERHEAD_DOC_COUNT" ] && CONFIG_PARTS+=("Docs: ${INGEST_TX_OVERHEAD_DOC_COUNT}")
           [ -n "$INGEST_TX_OVERHEAD_BATCH_SIZES" ] && CONFIG_PARTS+=("Batch Sizes: ${INGEST_TX_OVERHEAD_BATCH_SIZES}")
           [ -n "$KAFKA_SOURCE_MESSAGE_COUNT" ] && CONFIG_PARTS+=("Messages: ${KAFKA_SOURCE_MESSAGE_COUNT}")
@@ -674,13 +612,9 @@ jobs:
           [ -n "$TSBS_QUERY_ITERATIONS" ] && CONFIG_PARTS+=("Query Iterations: ${TSBS_QUERY_ITERATIONS}")
           [ -n "$TSBS_WORKERS" ] && CONFIG_PARTS+=("Workers: ${TSBS_WORKERS}")
           [ -n "$TSBS_BURN_IN" ] && CONFIG_PARTS+=("Burn-In: ${TSBS_BURN_IN}")
+          [ -n "$TSBS_SEED" ] && CONFIG_PARTS+=("Seed: ${TSBS_SEED}")
           [ -n "$PRODUCTS_LIMIT" ] && CONFIG_PARTS+=("Limit: ${PRODUCTS_LIMIT}")
-          [ -n "$TS_DEVICES_SIZE" ] && CONFIG_PARTS+=("Size: ${TS_DEVICES_SIZE}")
           [ -n "$TPCH_QUERY_LANGUAGE" ] && CONFIG_PARTS+=("Query language: ${TPCH_QUERY_LANGUAGE}")
-          [ -n "$FUSION_DEVICE_COUNT" ] && CONFIG_PARTS+=("Devices: ${FUSION_DEVICE_COUNT}")
-          [ -n "$FUSION_READING_COUNT" ] && CONFIG_PARTS+=("Readings: ${FUSION_READING_COUNT}")
-          [ -n "$FUSION_DURATION" ] && CONFIG_PARTS+=("Duration: ${FUSION_DURATION}")
-          [ -n "$FUSION_THREADS" ] && CONFIG_PARTS+=("Threads: ${FUSION_THREADS}")
           # Join with " | "
           if [ ${#CONFIG_PARTS[@]} -gt 0 ]; then
             CONFIG_INFO=$(printf " | %s" "${CONFIG_PARTS[@]}")

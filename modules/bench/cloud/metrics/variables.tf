@@ -156,25 +156,6 @@ variable "yakbench_anomaly_scale_factor" {
   default     = 1.0
 }
 
-# Readings anomaly detection configuration
-variable "readings_anomaly_logic_app_name" {
-  description = "Logic App name for scheduled Readings anomaly detection"
-  type        = string
-  default     = "xtdb-bench-readings-anomaly-schedule"
-}
-
-variable "readings_anomaly_alert_enabled" {
-  description = "Whether the Readings anomaly detection Logic App is enabled"
-  type        = bool
-  default     = true
-}
-
-variable "readings_anomaly_devices" {
-  description = "Readings devices count to scope anomaly detection to"
-  type        = number
-  default     = 10000
-}
-
 # AuctionMark anomaly detection configuration
 variable "auctionmark_anomaly_logic_app_name" {
   description = "Logic App name for scheduled AuctionMark anomaly detection"
@@ -223,7 +204,7 @@ variable "tsbs_iot_anomaly_alert_enabled" {
 variable "tsbs_iot_anomaly_devices" {
   description = "TSBS IoT devices count to scope anomaly detection to"
   type        = number
-  default     = 2000
+  default     = 2500
 }
 
 # Ingest TX Overhead anomaly detection configuration
@@ -275,43 +256,6 @@ variable "products_anomaly_alert_enabled" {
   description = "Whether the Products anomaly detection Logic App is enabled"
   type        = bool
   default     = true
-}
-
-# TS Devices anomaly detection configuration
-variable "ts_devices_anomaly_logic_app_name" {
-  description = "Logic App name for scheduled TS Devices anomaly detection"
-  type        = string
-  default     = "xtdb-bench-ts-devices-anomaly-schedule"
-}
-
-variable "ts_devices_anomaly_alert_enabled" {
-  description = "Whether the TS Devices anomaly detection Logic App is enabled"
-  type        = bool
-  default     = true
-}
-
-variable "ts_devices_anomaly_size" {
-  description = "TS Devices size to scope anomaly detection to (small, med, big)"
-  type        = string
-  default     = "small"
-}
-
-variable "fusion_anomaly_logic_app_name" {
-  description = "Logic App name for scheduled Fusion anomaly detection"
-  type        = string
-  default     = "xtdb-bench-fusion-anomaly-schedule"
-}
-
-variable "fusion_anomaly_alert_enabled" {
-  description = "Whether the Fusion anomaly detection Logic App is enabled"
-  type        = bool
-  default     = true
-}
-
-variable "fusion_anomaly_devices" {
-  description = "Fusion device count to scope anomaly detection to"
-  type        = number
-  default     = 10000
 }
 
 # Scan Perf anomaly detection configuration

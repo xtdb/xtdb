@@ -1,28 +1,19 @@
 -- :name query-last-loc-by-truck :? :*
 SELECT t.name, t.driver, r.longitude, r.latitude
 FROM trucks t
-CROSS JOIN LATERAL (
-  SELECT longitude, latitude FROM readings FOR ALL VALID_TIME
-  WHERE _id = t._id ORDER BY _valid_from DESC LIMIT 1
-) AS r
+JOIN readings FOR VALID_TIME AS OF :as-of AS r ON r._id = t._id
 WHERE t.name IN (:v*:truck-names)
 
 -- :name query-last-loc-per-truck :? :*
 SELECT t.name, t.driver, r.longitude, r.latitude
 FROM trucks t
-CROSS JOIN LATERAL (
-  SELECT longitude, latitude FROM readings FOR ALL VALID_TIME
-  WHERE _id = t._id ORDER BY _valid_from DESC LIMIT 1
-) AS r
+JOIN readings FOR VALID_TIME AS OF :as-of AS r ON r._id = t._id
 WHERE t.name IS NOT NULL AND t.fleet = :fleet
 
 -- :name query-low-fuel :? :*
 SELECT t.name, t.driver, d.fuel_state
 FROM trucks t
-CROSS JOIN LATERAL (
-  SELECT fuel_state FROM diagnostics FOR ALL VALID_TIME
-  WHERE _id = t._id ORDER BY _valid_from DESC LIMIT 1
-) AS d
+JOIN diagnostics FOR VALID_TIME AS OF :as-of AS d ON d._id = t._id
 WHERE t.name IS NOT NULL
   AND t.fleet = :fleet
   AND d.fuel_state < 0.1
@@ -30,10 +21,7 @@ WHERE t.name IS NOT NULL
 -- :name query-high-load :? :*
 SELECT t.name, t.driver, d.current_load
 FROM trucks t
-CROSS JOIN LATERAL (
-  SELECT current_load FROM diagnostics FOR ALL VALID_TIME
-  WHERE _id = t._id ORDER BY _valid_from DESC LIMIT 1
-) AS d
+JOIN diagnostics FOR VALID_TIME AS OF :as-of AS d ON d._id = t._id
 WHERE t.name IS NOT NULL
   AND t.fleet = :fleet
   AND d.current_load / CAST(t.load_capacity AS DOUBLE PRECISION) > 0.9
@@ -203,3 +191,76 @@ SELECT model, COUNT(*) AS breakdown_count
 FROM breakdown_events
 GROUP BY model
 HAVING COUNT(*) > 0
+
+-- :name query-truck-history :? :*
+SELECT COUNT(*) AS reading_count, AVG(velocity) AS avg_velocity
+FROM readings FOR VALID_TIME BETWEEN :window-start AND :window-end
+WHERE _id = :truck-id
+
+-- :name query-truck-history-all :? :*
+SELECT COUNT(*) AS reading_count, AVG(velocity) AS avg_velocity
+FROM readings FOR ALL VALID_TIME
+WHERE _id = :truck-id
+
+-- :name query-last-known-loc-per-truck :? :*
+SELECT t.name, t.driver, r.longitude, r.latitude, r._valid_from AS reading_time,
+       r._valid_to <= :as-of AS expired
+FROM trucks t
+JOIN (SELECT _id, longitude, latitude, _valid_from, _valid_to,
+             ROW_NUMBER() OVER (PARTITION BY _id ORDER BY _valid_from DESC) AS rn
+      FROM readings FOR ALL VALID_TIME) r ON r._id = t._id
+WHERE r.rn = 1 AND t.name IS NOT NULL AND t.fleet = :fleet
+
+-- :name query-velocity-per-truck :? :*
+SELECT _id, AVG(velocity) AS avg_velocity, MIN(velocity) AS min_velocity, MAX(velocity) AS max_velocity
+FROM readings FOR VALID_TIME BETWEEN :window-start AND :window-end
+GROUP BY _id
+
+-- :name query-truck-location-as-of :? :*
+SELECT longitude, latitude
+FROM readings FOR VALID_TIME AS OF :as-of
+WHERE _id = :truck-id
+
+-- :name query-avg-load-as-of :? :*
+SELECT COUNT(*) AS truck_count, AVG(current_load) AS avg_load
+FROM diagnostics FOR VALID_TIME AS OF :as-of
+
+-- :name query-velocity-per-hour :? :*
+WITH binned AS (
+  SELECT (bin)._from AS hour, (bin)._weight AS weight, r.velocity * (bin)._weight AS weighted_velocity
+  FROM readings FOR VALID_TIME BETWEEN :window-start AND :window-end AS r,
+       UNNEST(range_bins(INTERVAL 'PT1H', r._valid_time)) AS b(bin)
+)
+SELECT hour, SUM(weighted_velocity) / SUM(weight) AS avg_velocity
+FROM binned
+GROUP BY hour
+ORDER BY hour
+
+-- :name query-velocity-per-hour-all :? :*
+WITH binned AS (
+  SELECT (bin)._from AS hour, (bin)._weight AS weight, r.velocity * (bin)._weight AS weighted_velocity
+  FROM readings FOR ALL VALID_TIME AS r,
+       UNNEST(range_bins(INTERVAL 'PT1H', r._valid_time)) AS b(bin)
+)
+SELECT hour, SUM(weighted_velocity) / SUM(weight) AS avg_velocity
+FROM binned
+GROUP BY hour
+ORDER BY hour
+
+-- :name query-trucks-reporting-per-hour :? :*
+WITH hours AS (
+  SELECT h::timestamptz AS hour
+  FROM generate_series(:window-start::timestamptz, :window-end::timestamptz, INTERVAL 'PT1H') AS x(h)
+)
+SELECT hours.hour, COUNT(DISTINCT d._id) AS truck_count
+FROM hours
+LEFT OUTER JOIN diagnostics FOR VALID_TIME BETWEEN :window-start AND :window-end AS d ON d._valid_time CONTAINS hours.hour
+GROUP BY hours.hour
+ORDER BY hours.hour
+
+-- :name query-newest-diagnostic-per-truck :? :*
+SELECT _id, current_load, fuel_state, _system_from
+FROM (SELECT _id, current_load, fuel_state, _system_from,
+             ROW_NUMBER() OVER (PARTITION BY _id ORDER BY _system_from DESC) AS rn
+      FROM diagnostics FOR ALL VALID_TIME) d
+WHERE d.rn = 1

@@ -71,44 +71,6 @@
     {:rows rows-with-percent
      :total-ms (* total-nanos 1e-6)}))
 
-(defn readings-stage->query-row
-  [idx {:keys [stage time-taken-ms]}]
-  (let [stage-name (name stage)
-        friendly-name (cond
-                        (str/starts-with? stage-name "query-recent-interval-")
-                        (str "Recent " (util/title-case (subs stage-name (count "query-recent-interval-"))))
-
-                        (str/starts-with? stage-name "query-offset-")
-                        (let [[_ offset-len period interval] (re-find #"^query-offset-(\d+)-(.*?)-interval-(.*)$" stage-name)]
-                          (str "Offset " offset-len " " (util/title-case period) " " (util/title-case interval)))
-
-                        :else (util/title-case stage-name))
-        duration-pt (util/format-duration :millis time-taken-ms)]
-    {:query-order idx
-     :query friendly-name
-     :stage stage-name
-     :time-taken-ms time-taken-ms
-     :duration duration-pt}))
-
-(defn readings-summary->query-rows
-  [summary]
-  (let [rows (->> (:query-stages summary)
-                  (map-indexed readings-stage->query-row)
-                  (sort-by :query-order)
-                  vec)
-        total-ms (reduce + (map :time-taken-ms rows))
-        rows-with-percent (mapv (fn [row]
-                                  (let [ms (:time-taken-ms row)
-                                        pct (if (pos? total-ms)
-                                              (* 100.0 (/ ms total-ms))
-                                              0.0)]
-                                    (-> row
-                                        (assoc :percent-of-total (format "%.2f%%" pct))
-                                        (dissoc :query-order))))
-                                rows)]
-    {:rows rows-with-percent
-     :total-ms total-ms}))
-
 (defn clickbench-stage->row
   [idx {:keys [stage time-taken-ms]}]
   {:stage-order idx
@@ -274,32 +236,6 @@
               (util/format-duration :millis drain-ms)
               (/ (* 1000.0 message-count) drain-ms)))))
 
-(defn fusion-stage->row
-  [idx {:keys [stage time-taken-ms]}]
-  {:stage-order idx
-   :stage (name stage)
-   :time-taken-ms time-taken-ms
-   :duration (util/format-duration :millis time-taken-ms)})
-
-(defn fusion-summary->stage-rows
-  [summary]
-  (let [rows (->> (:load-stages summary)
-                  (map-indexed fusion-stage->row)
-                  (sort-by :stage-order)
-                  vec)
-        total-ms (reduce + 0 (map :time-taken-ms rows))
-        rows-with-percent (mapv (fn [row]
-                                  (let [ms (:time-taken-ms row)
-                                        pct (if (pos? total-ms)
-                                              (* 100.0 (/ ms total-ms))
-                                              0.0)]
-                                    (-> row
-                                        (assoc :percent-of-total (format "%.2f%%" pct))
-                                        (dissoc :stage-order))))
-                                rows)]
-    {:rows rows-with-percent
-     :total-ms total-ms}))
-
 (defn rows->string [columns rows]
   (-> (with-out-str
         (pprint/print-table columns rows))
@@ -320,12 +256,6 @@
     (str (util/totals->string total-ms (:benchmark-total-time-ms summary))
          "\n\n"
          (rows->string [:query :n :p50 :p90 :p99 :mean :percent-of-total] rows))))
-
-(defmethod summary->table "readings" [summary]
-  (let [{:keys [rows total-ms]} (readings-summary->query-rows summary)]
-    (str (util/totals->string total-ms (:benchmark-total-time-ms summary))
-         "\n\n"
-         (rows->string [:query :time-taken-ms :duration :percent-of-total] rows))))
 
 (defmethod summary->table "auctionmark" [summary]
   (let [{:keys [benchmark-total-time-ms]} summary]
@@ -371,18 +301,6 @@
          "\n\n"
          (rows->string [:stage :time-taken-ms :duration :percent-of-total] rows))))
 
-(defmethod summary->table "ts-devices" [summary]
-  (let [{:keys [rows total-ms]} (clickbench-summary->stage-rows summary)]
-    (str (util/totals->string total-ms (:benchmark-total-time-ms summary) "ingest")
-         "\n\n"
-         (rows->string [:stage :time-taken-ms :duration :percent-of-total] rows))))
-
-(defmethod summary->table "fusion" [summary]
-  (let [{:keys [rows total-ms]} (fusion-summary->stage-rows summary)]
-    (str (util/totals->string total-ms (:benchmark-total-time-ms summary))
-         "\n\n"
-         (rows->string [:stage :time-taken-ms :duration :percent-of-total] rows))))
-
 (defmethod summary->table "scan-perf" [summary]
   (let [{:keys [rows total-ms]} (yakbench-summary->query-rows summary)]
     (str (util/totals->string total-ms (:benchmark-total-time-ms summary))
@@ -419,14 +337,6 @@
        "\n\n"
        (util/wrap-slack-code
         (rows->string [:query :p50 :p99 :mean] rows))))))
-
-(defmethod summary->slack "readings" [summary]
-  (let [{:keys [rows total-ms]} (readings-summary->query-rows summary)]
-    (str
-     (util/totals->string total-ms (:benchmark-total-time-ms summary))
-     "\n\n"
-     (util/wrap-slack-code
-      (rows->string [:query :duration] rows)))))
 
 (defmethod summary->slack "auctionmark" [summary]
   (let [{:keys [benchmark-total-time-ms]} summary]
@@ -484,22 +394,6 @@
      (util/wrap-slack-code
       (rows->string [:stage :duration] rows)))))
 
-(defmethod summary->slack "ts-devices" [summary]
-  (let [{:keys [rows total-ms]} (clickbench-summary->stage-rows summary)]
-    (str
-     (util/totals->string total-ms (:benchmark-total-time-ms summary) "ingest")
-     "\n\n"
-     (util/wrap-slack-code
-      (rows->string [:stage :duration] rows)))))
-
-(defmethod summary->slack "fusion" [summary]
-  (let [{:keys [rows total-ms]} (fusion-summary->stage-rows summary)]
-    (str
-     (util/totals->string total-ms (:benchmark-total-time-ms summary))
-     "\n\n"
-     (util/wrap-slack-code
-      (rows->string [:stage :duration] rows)))))
-
 (defmethod summary->slack "scan-perf" [summary]
   (let [{:keys [rows total-ms]} (yakbench-summary->query-rows summary)
         columns [:query :rows :p50 :p99 :mean]
@@ -544,16 +438,6 @@
                  {:key :p90 :header "P90"}
                  {:key :p99 :header "P99"}
                  {:key :mean :header "Mean"}
-                 {:key :percent-of-total :header "% of total"}]]
-    (str (util/github-table columns rows)
-         "\n\n"
-         (util/totals->string total-ms (:benchmark-total-time-ms summary)))))
-
-(defmethod summary->github-markdown "readings" [summary]
-  (let [{:keys [rows total-ms]} (readings-summary->query-rows summary)
-        columns [{:key :query :header "Query"}
-                 {:key :time-taken-ms :header "Time (ms)"}
-                 {:key :duration :header "Duration"}
                  {:key :percent-of-total :header "% of total"}]]
     (str (util/github-table columns rows)
          "\n\n"
@@ -617,26 +501,6 @@
     (str (util/github-table columns rows)
          "\n\n"
          (util/totals->string total-ms (:benchmark-total-time-ms summary) "ingest"))))
-
-(defmethod summary->github-markdown "ts-devices" [summary]
-  (let [{:keys [rows total-ms]} (clickbench-summary->stage-rows summary)
-        columns [{:key :stage :header "Stage"}
-                 {:key :time-taken-ms :header "Time (ms)"}
-                 {:key :duration :header "Duration"}
-                 {:key :percent-of-total :header "% of total"}]]
-    (str (util/github-table columns rows)
-         "\n\n"
-         (util/totals->string total-ms (:benchmark-total-time-ms summary) "ingest"))))
-
-(defmethod summary->github-markdown "fusion" [summary]
-  (let [{:keys [rows total-ms]} (fusion-summary->stage-rows summary)
-        columns [{:key :stage :header "Stage"}
-                 {:key :time-taken-ms :header "Time (ms)"}
-                 {:key :duration :header "Duration"}
-                 {:key :percent-of-total :header "% of total"}]]
-    (str (util/github-table columns rows)
-         "\n\n"
-         (util/totals->string total-ms (:benchmark-total-time-ms summary)))))
 
 (defmethod summary->github-markdown "scan-perf" [summary]
   (let [{:keys [rows total-ms]} (yakbench-summary->query-rows summary)
