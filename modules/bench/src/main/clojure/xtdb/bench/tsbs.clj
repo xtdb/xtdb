@@ -148,7 +148,94 @@
   {:query-type :breakdown-frequency
    :sqlvec (query-breakdown-frequency-sqlvec {})})
 
-;; All query generators in TSBS order
+(def ^:private trucks-per-history-read 100)
+
+(defn- random-truck-ids [^Random rng truck-ids]
+  (vec (repeatedly trucks-per-history-read #(nth truck-ids (.nextInt rng (count truck-ids))))))
+
+(defn- trailing-window
+  [^Instant min-time ^Instant max-time ^Duration lag ^Duration window-duration]
+  (let [window-end (.minus max-time lag)
+        window-start (.minus window-end window-duration)]
+    (when-not (.isBefore window-start min-time)
+      [window-start window-end])))
+
+(defn- gen-truck-history [query-type lag window-duration]
+  (fn [{:keys [rng truck-ids min-time max-time]}]
+    (when-let [[window-start window-end] (trailing-window min-time max-time lag window-duration)]
+      {:query-type query-type
+       :sqlvecs (mapv #(query-truck-history-sqlvec {:truck-id %
+                                                    :window-start window-start
+                                                    :window-end window-end})
+                      (random-truck-ids rng truck-ids))})))
+
+(def ^:private gen-truck-history-last-hour
+  (gen-truck-history :truck-history-last-hour Duration/ZERO (Duration/ofHours 1)))
+
+(def ^:private gen-truck-history-last-day
+  (gen-truck-history :truck-history-last-day Duration/ZERO (Duration/ofDays 1)))
+
+(defn- gen-truck-history-all
+  [{:keys [rng truck-ids]}]
+  {:query-type :truck-history-all
+   :sqlvecs (mapv #(query-truck-history-all-sqlvec {:truck-id %})
+                  (random-truck-ids rng truck-ids))})
+
+(def ^:private gen-truck-history-three-days-back
+  (gen-truck-history :truck-history-three-days-back (Duration/ofDays 3) (Duration/ofHours 1)))
+
+(defn- gen-last-known-loc-per-truck
+  [{:keys [rng max-time]}]
+  (let [fleet (random-fleet rng)]
+    {:query-type :last-known-loc-per-truck
+     :sqlvec (query-last-known-loc-per-truck-sqlvec {:fleet fleet, :as-of max-time})}))
+
+(defn- gen-velocity-per-truck [query-type lag window-duration]
+  (fn [{:keys [min-time max-time]}]
+    (when-let [[window-start window-end] (trailing-window min-time max-time lag window-duration)]
+      {:query-type query-type
+       :sqlvec (query-velocity-per-truck-sqlvec {:window-start window-start
+                                                 :window-end window-end})})))
+
+(def ^:private gen-velocity-per-truck-last-hour
+  (gen-velocity-per-truck :velocity-per-truck-last-hour Duration/ZERO (Duration/ofHours 1)))
+
+(def ^:private gen-velocity-per-truck-last-day
+  (gen-velocity-per-truck :velocity-per-truck-last-day Duration/ZERO (Duration/ofDays 1)))
+
+(def ^:private gen-velocity-per-truck-three-days-back
+  (gen-velocity-per-truck :velocity-per-truck-three-days-back (Duration/ofDays 3) (Duration/ofHours 1)))
+
+(defn- past-instant [^Instant min-time ^Instant max-time ^Duration lag]
+  (let [as-of (.minus max-time lag)]
+    (when-not (.isBefore as-of min-time)
+      as-of)))
+
+(defn- gen-truck-location-as-of [query-type lag]
+  (fn [{:keys [rng truck-ids min-time max-time]}]
+    (when-let [as-of (past-instant min-time max-time lag)]
+      {:query-type query-type
+       :sqlvecs (mapv #(query-truck-location-as-of-sqlvec {:truck-id %, :as-of as-of})
+                      (random-truck-ids rng truck-ids))})))
+
+(def ^:private gen-truck-location-as-of-hour-back
+  (gen-truck-location-as-of :truck-location-as-of-hour-back (Duration/ofHours 1)))
+
+(def ^:private gen-truck-location-as-of-three-days-back
+  (gen-truck-location-as-of :truck-location-as-of-three-days-back (Duration/ofDays 3)))
+
+(defn- gen-avg-load-as-of [query-type lag]
+  (fn [{:keys [min-time max-time]}]
+    (when-let [as-of (past-instant min-time max-time lag)]
+      {:query-type query-type
+       :sqlvec (query-avg-load-as-of-sqlvec {:as-of as-of})})))
+
+(def ^:private gen-avg-load-as-of-hour-back
+  (gen-avg-load-as-of :avg-load-as-of-hour-back (Duration/ofHours 1)))
+
+(def ^:private gen-avg-load-as-of-three-days-back
+  (gen-avg-load-as-of :avg-load-as-of-three-days-back (Duration/ofDays 3)))
+
 (def query-generators
   [gen-last-loc-by-truck
    gen-last-loc-per-truck
@@ -162,14 +249,31 @@
    gen-avg-daily-driving-session
    gen-avg-load
    gen-daily-activity
-   gen-breakdown-frequency])
+   gen-breakdown-frequency
+   gen-truck-history-last-hour
+   gen-truck-history-last-day
+   gen-truck-history-all
+   gen-truck-history-three-days-back
+   gen-last-known-loc-per-truck
+   gen-velocity-per-truck-last-hour
+   gen-velocity-per-truck-last-day
+   gen-velocity-per-truck-three-days-back
+   gen-truck-location-as-of-hour-back
+   gen-truck-location-as-of-three-days-back
+   gen-avg-load-as-of-hour-back
+   gen-avg-load-as-of-three-days-back])
 
 ;; All possible query types (for detecting skipped queries)
 (def ^:private all-query-types
   #{:last-loc-by-truck :last-loc-per-truck :low-fuel :high-load
     :stationary-trucks :long-driving-sessions :long-daily-sessions
     :avg-vs-projected-fuel-consumption :avg-daily-driving-duration :avg-daily-driving-session
-    :avg-load :daily-activity :breakdown-frequency})
+    :avg-load :daily-activity :breakdown-frequency
+    :truck-history-last-hour :truck-history-last-day :truck-history-all
+    :truck-history-three-days-back :last-known-loc-per-truck
+    :velocity-per-truck-last-hour :velocity-per-truck-last-day :velocity-per-truck-three-days-back
+    :truck-location-as-of-hour-back :truck-location-as-of-three-days-back
+    :avg-load-as-of-hour-back :avg-load-as-of-three-days-back})
 
 (defn- generate-queries
   "Generate n query instances for each query type.
@@ -199,7 +303,8 @@
      (when (Thread/interrupted) (throw (InterruptedException.)))
      (let [query-type (:query-type query)
            start-ns (System/nanoTime)
-           _ (xt/q node (:sqlvec query))
+           _ (doseq [sqlvec (:sqlvecs query [(:sqlvec query)])]
+               (xt/q node sqlvec))
            timing-ns (- (System/nanoTime) start-ns)]
        (when progress-atom (swap! progress-atom inc))
        (update acc query-type (fnil conj []) timing-ns)))
@@ -437,6 +542,7 @@
             :f (fn [{:keys [node !state]}]
                  (let [;; Get all truck names for random selection
                        truck-names (mapv :name (xt/q node "SELECT name FROM trucks ORDER BY name"))
+                       truck-ids (mapv :xt/id (xt/q node "SELECT _id FROM trucks ORDER BY _id"))
                        ;; Debug: check a sample row
                        sample-row (first (xt/q node "SELECT * FROM readings FOR ALL VALID_TIME LIMIT 1"))
                        _ (log/info (format "Sample readings row: %s" (pr-str sample-row)))
@@ -469,6 +575,7 @@
                                       :sample-row sample-row})))
                    (swap! !state assoc
                           :truck-names truck-names
+                          :truck-ids truck-ids
                           :min-time min-time
                           :max-time max-time)
                    {:truck-count (count truck-names)

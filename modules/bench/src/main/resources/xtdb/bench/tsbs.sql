@@ -191,3 +191,36 @@ SELECT model, COUNT(*) AS breakdown_count
 FROM breakdown_events
 GROUP BY model
 HAVING COUNT(*) > 0
+
+-- :name query-truck-history :? :*
+SELECT COUNT(*) AS reading_count, AVG(velocity) AS avg_velocity
+FROM readings FOR VALID_TIME BETWEEN :window-start AND :window-end
+WHERE _id = :truck-id
+
+-- :name query-truck-history-all :? :*
+SELECT COUNT(*) AS reading_count, AVG(velocity) AS avg_velocity
+FROM readings FOR ALL VALID_TIME
+WHERE _id = :truck-id
+
+-- :name query-last-known-loc-per-truck :? :*
+SELECT t.name, t.driver, r.longitude, r.latitude, r._valid_from AS reading_time,
+       r._valid_to <= :as-of AS expired
+FROM trucks t
+JOIN (SELECT _id, longitude, latitude, _valid_from, _valid_to,
+             ROW_NUMBER() OVER (PARTITION BY _id ORDER BY _valid_from DESC) AS rn
+      FROM readings FOR ALL VALID_TIME) r ON r._id = t._id
+WHERE r.rn = 1 AND t.name IS NOT NULL AND t.fleet = :fleet
+
+-- :name query-velocity-per-truck :? :*
+SELECT _id, AVG(velocity) AS avg_velocity, MIN(velocity) AS min_velocity, MAX(velocity) AS max_velocity
+FROM readings FOR VALID_TIME BETWEEN :window-start AND :window-end
+GROUP BY _id
+
+-- :name query-truck-location-as-of :? :*
+SELECT longitude, latitude
+FROM readings FOR VALID_TIME AS OF :as-of
+WHERE _id = :truck-id
+
+-- :name query-avg-load-as-of :? :*
+SELECT COUNT(*) AS truck_count, AVG(current_load) AS avg_load
+FROM diagnostics FOR VALID_TIME AS OF :as-of
