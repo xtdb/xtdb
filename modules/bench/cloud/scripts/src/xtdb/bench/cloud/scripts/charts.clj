@@ -110,13 +110,6 @@
                  :filter-param nil
                  :filter-value nil
                  :filter-is-string false}
-   "fusion"     {:benchmark-name "Fusion benchmark"
-                 :title "Fusion Throughput"
-                 :filter-param "devices"
-                 :filter-value 10000
-                 :filter-is-string false
-                 :metric "throughput"
-                 :y-label "Throughput (tx/s)"}
    "tsbs-iot"   {:benchmark-name "TSBS IoT"
                  :title "TSBS IoT Benchmark Performance"
                  :filter-param "devices"

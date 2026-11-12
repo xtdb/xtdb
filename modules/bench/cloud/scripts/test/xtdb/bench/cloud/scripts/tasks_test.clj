@@ -953,15 +953,6 @@
         (charts/plot-benchmark-timeseries "auctionmark" {:filter-value 0.1})
         (is (= "PT30M" (:filter-value @captured-opts))))))
 
-  (testing "scale-factor override does NOT apply to fusion (filter-param = devices)"
-    (let [captured-opts (atom nil)]
-      (with-redefs [azure/fetch-azure-benchmark-timeseries (fn [opts]
-                                                             (reset! captured-opts opts)
-                                                             [{:timestamp "2024-01-01" :value 30.0}])
-                    charts/plot-timeseries-vega (fn [& _] nil)]
-        (charts/plot-benchmark-timeseries "fusion" {:filter-value 0.1})
-        (is (= 10000 (:filter-value @captured-opts))))))
-
   (testing "no override uses default filter-value"
     (let [captured-opts (atom nil)]
       (with-redefs [azure/fetch-azure-benchmark-timeseries (fn [opts]
@@ -972,7 +963,7 @@
         (is (= 1.0 (:filter-value @captured-opts)))))))
 
 (deftest plot-benchmark-timeseries-direction-test
-  (doseq [[bench-type better] [["tpch" :lower] ["fusion" :higher] ["auctionmark" :higher]]]
+  (doseq [[bench-type better] [["tpch" :lower] ["auctionmark" :higher]]]
     (let [captured-opts (atom nil)]
       (with-redefs [azure/fetch-azure-benchmark-timeseries (constantly [{:timestamp "2024-01-01" :value 1000}])
                     charts/plot-timeseries-vega (fn [_ opts] (reset! captured-opts opts))]

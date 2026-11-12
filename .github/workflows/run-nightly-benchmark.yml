@@ -121,26 +121,6 @@ on:
         required: false
         default: ''
         type: string
-      fusion_device_count:
-        description: 'Device count for fusion benchmark'
-        required: false
-        default: ''
-        type: string
-      fusion_reading_count:
-        description: 'Reading count for fusion benchmark'
-        required: false
-        default: ''
-        type: string
-      fusion_duration:
-        description: 'OLTP phase duration for fusion benchmark'
-        required: false
-        default: ''
-        type: string
-      fusion_threads:
-        description: 'OLTP thread count for fusion benchmark'
-        required: false
-        default: ''
-        type: string
       queue_entry:
         description: 'The nightly queue entry this run is, when it differs from bench_type (e.g. tpch-sql); the cleanup dispatches its successor and charts its series'
         required: false
@@ -369,10 +349,6 @@ jobs:
           PATCH_PATCH_COUNT: ${{ inputs.patch_patch_count }}
           PRODUCTS_LIMIT: ${{ inputs.products_limit }}
           TPCH_QUERY_LANGUAGE: ${{ inputs.tpch_query_language }}
-          FUSION_DEVICE_COUNT: ${{ inputs.fusion_device_count }}
-          FUSION_READING_COUNT: ${{ inputs.fusion_reading_count }}
-          FUSION_DURATION: ${{ inputs.fusion_duration }}
-          FUSION_THREADS: ${{ inputs.fusion_threads }}
           RUN_QUEUE: ${{ inputs.run_queue }}
           QUEUE_ENTRY: ${{ inputs.queue_entry }}
         run: |
@@ -468,18 +444,6 @@ jobs:
           fi
           if [ -n "$TPCH_QUERY_LANGUAGE" ]; then
             HELM_ARGS+=(--set "tpch.queryLanguage=${TPCH_QUERY_LANGUAGE}")
-          fi
-          if [ -n "$FUSION_DEVICE_COUNT" ]; then
-            HELM_ARGS+=(--set "fusion.devices=${FUSION_DEVICE_COUNT}")
-          fi
-          if [ -n "$FUSION_READING_COUNT" ]; then
-            HELM_ARGS+=(--set "fusion.readings=${FUSION_READING_COUNT}")
-          fi
-          if [ -n "$FUSION_DURATION" ]; then
-            HELM_ARGS+=(--set "fusion.duration=${FUSION_DURATION}")
-          fi
-          if [ -n "$FUSION_THREADS" ]; then
-            HELM_ARGS+=(--set "fusion.threads=${FUSION_THREADS}")
           fi
           if [ "$RUN_QUEUE" = "true" ]; then
             HELM_ARGS+=(--set "providerConfig.env.RUN_QUEUE=true")
@@ -616,10 +580,6 @@ jobs:
           TSBS_WORKERS: ${{ inputs.tsbs_workers }}
           TSBS_BURN_IN: ${{ inputs.tsbs_burn_in }}
           TSBS_SEED: ${{ inputs.tsbs_seed }}
-          FUSION_DEVICE_COUNT: ${{ inputs.fusion_device_count }}
-          FUSION_READING_COUNT: ${{ inputs.fusion_reading_count }}
-          FUSION_DURATION: ${{ inputs.fusion_duration }}
-          FUSION_THREADS: ${{ inputs.fusion_threads }}
           GIT_SHA: ${{ github.sha }}
           GIT_BRANCH: ${{ inputs.branch }}
           REPO_URL: ${{ github.server_url }}/${{ github.repository }}
@@ -655,10 +615,6 @@ jobs:
           [ -n "$TSBS_SEED" ] && CONFIG_PARTS+=("Seed: ${TSBS_SEED}")
           [ -n "$PRODUCTS_LIMIT" ] && CONFIG_PARTS+=("Limit: ${PRODUCTS_LIMIT}")
           [ -n "$TPCH_QUERY_LANGUAGE" ] && CONFIG_PARTS+=("Query language: ${TPCH_QUERY_LANGUAGE}")
-          [ -n "$FUSION_DEVICE_COUNT" ] && CONFIG_PARTS+=("Devices: ${FUSION_DEVICE_COUNT}")
-          [ -n "$FUSION_READING_COUNT" ] && CONFIG_PARTS+=("Readings: ${FUSION_READING_COUNT}")
-          [ -n "$FUSION_DURATION" ] && CONFIG_PARTS+=("Duration: ${FUSION_DURATION}")
-          [ -n "$FUSION_THREADS" ] && CONFIG_PARTS+=("Threads: ${FUSION_THREADS}")
           # Join with " | "
           if [ ${#CONFIG_PARTS[@]} -gt 0 ]; then
             CONFIG_INFO=$(printf " | %s" "${CONFIG_PARTS[@]}")

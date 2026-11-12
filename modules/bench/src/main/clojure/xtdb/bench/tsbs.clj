@@ -245,6 +245,34 @@
 (def ^:private gen-velocity-per-truck-week-back
   (gen-velocity-per-truck :velocity-per-truck-week-back (Duration/ofDays 7) (Duration/ofHours 1)))
 
+(defn- gen-velocity-per-hour [query-type window-duration]
+  (fn [{:keys [min-time max-time]}]
+    (when-let [[window-start window-end] (trailing-window min-time max-time Duration/ZERO window-duration)]
+      {:query-type query-type
+       :sqlvec (query-velocity-per-hour-sqlvec {:window-start window-start
+                                                :window-end window-end})})))
+
+(def ^:private gen-velocity-per-hour-last-hour
+  (gen-velocity-per-hour :velocity-per-hour-last-hour (Duration/ofHours 1)))
+
+(def ^:private gen-velocity-per-hour-last-day
+  (gen-velocity-per-hour :velocity-per-hour-last-day (Duration/ofDays 1)))
+
+(defn- gen-velocity-per-hour-all [_state]
+  {:query-type :velocity-per-hour-all
+   :sqlvec (query-velocity-per-hour-all-sqlvec {})})
+
+(defn- gen-trucks-reporting-per-hour-last-day
+  [{:keys [min-time max-time]}]
+  (when-let [[window-start window-end] (trailing-window min-time max-time Duration/ZERO (Duration/ofDays 1))]
+    {:query-type :trucks-reporting-per-hour-last-day
+     :sqlvec (query-trucks-reporting-per-hour-sqlvec {:window-start window-start
+                                                      :window-end window-end})}))
+
+(defn- gen-newest-diagnostic-per-truck [_state]
+  {:query-type :newest-diagnostic-per-truck
+   :sqlvec (query-newest-diagnostic-per-truck-sqlvec {})})
+
 (def query-generators
   [gen-last-loc-by-truck
    gen-last-loc-per-truck
@@ -273,7 +301,12 @@
    gen-avg-load-as-of-three-days-back
    gen-truck-location-as-of-week-back
    gen-avg-load-as-of-week-back
-   gen-velocity-per-truck-week-back])
+   gen-velocity-per-truck-week-back
+   gen-velocity-per-hour-last-hour
+   gen-velocity-per-hour-last-day
+   gen-velocity-per-hour-all
+   gen-trucks-reporting-per-hour-last-day
+   gen-newest-diagnostic-per-truck])
 
 ;; All possible query types (for detecting skipped queries)
 (def ^:private all-query-types
@@ -286,7 +319,9 @@
     :velocity-per-truck-last-hour :velocity-per-truck-last-day :velocity-per-truck-three-days-back
     :truck-location-as-of-hour-back :truck-location-as-of-three-days-back
     :avg-load-as-of-hour-back :avg-load-as-of-three-days-back
-    :truck-location-as-of-week-back :avg-load-as-of-week-back :velocity-per-truck-week-back})
+    :truck-location-as-of-week-back :avg-load-as-of-week-back :velocity-per-truck-week-back
+    :velocity-per-hour-last-hour :velocity-per-hour-last-day :velocity-per-hour-all
+    :trucks-reporting-per-hour-last-day :newest-diagnostic-per-truck})
 
 (defn- generate-queries
   "Generate n query instances for each query type.

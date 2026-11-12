@@ -25,7 +25,7 @@ usage() {
   echo "  query-type: anomaly | dashboard | queries-cold | queries-hot |" >&2
   echo "              profile-global | profile-max-user | profile-mean-user" >&2
   echo "  benchmark:  tpch | yakbench | auctionmark | clickbench |" >&2
-  echo "              tsbs-iot | ingest-tx-overhead | patch | products | fusion" >&2
+  echo "              tsbs-iot | ingest-tx-overhead | patch | products" >&2
   echo "" >&2
   echo "Examples:" >&2
   echo "  $0 render anomaly tpch          # Output the KQL query" >&2
@@ -69,7 +69,7 @@ if [[ "$QUERY_TYPE" == "profile-global" || "$QUERY_TYPE" == "profile-max-user" |
   usage
 fi
 
-VALID_BENCHMARKS="tpch yakbench auctionmark clickbench tsbs-iot ingest-tx-overhead patch products fusion"
+VALID_BENCHMARKS="tpch yakbench auctionmark clickbench tsbs-iot ingest-tx-overhead patch products"
 if ! echo "$VALID_BENCHMARKS" | grep -qw "$BENCHMARK"; then
   echo "Error: benchmark must be one of: $VALID_BENCHMARKS" >&2
   usage
@@ -190,16 +190,6 @@ case "$BENCHMARK" in
     PARAM_IS_STRING=true
     METRIC_PATH="'time-taken-ms'"
     METRIC_NAME="duration_minutes"
-    ;;
-  fusion)
-    BENCH_NAME="Fusion benchmark"
-    PARAM_NAME="devices"
-    PARAM_PATH="parameters['devices']"
-    PARAM_VALUE=$(get_var "fusion_anomaly_devices" "10000")
-    PARAM_VAR="fusion_anomaly_devices"
-    PARAM_IS_STRING=false
-    METRIC_PATH="'throughput'"
-    METRIC_NAME="throughput"
     ;;
 esac
 

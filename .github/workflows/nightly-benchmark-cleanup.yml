@@ -1,6 +1,6 @@
 name: Nightly Benchmark Cleanup
 run-name: >-
-  Benchmark Cleanup: ${{ inputs.queueEntry == 'tpch-sql' && 'TPC-H (SQL)' || inputs.benchType == 'tpch' && 'TPC-H' || inputs.benchType == 'auctionmark' && 'AuctionMark' || inputs.benchType == 'yakbench' && 'Yakbench' || inputs.benchType == 'clickbench' && 'ClickBench' || inputs.benchType == 'tsbs-iot' && 'TSBS IoT' || inputs.benchType == 'ingest-tx-overhead' && 'Ingest TX Overhead' || inputs.benchType == 'kafka-source' && 'Kafka Source' || inputs.benchType == 'patch' && 'Patch' || inputs.benchType == 'products' && 'Products' || inputs.benchType == 'fusion' && 'Fusion' || inputs.benchType }}
+  Benchmark Cleanup: ${{ inputs.queueEntry == 'tpch-sql' && 'TPC-H (SQL)' || inputs.benchType == 'tpch' && 'TPC-H' || inputs.benchType == 'auctionmark' && 'AuctionMark' || inputs.benchType == 'yakbench' && 'Yakbench' || inputs.benchType == 'clickbench' && 'ClickBench' || inputs.benchType == 'tsbs-iot' && 'TSBS IoT' || inputs.benchType == 'ingest-tx-overhead' && 'Ingest TX Overhead' || inputs.benchType == 'kafka-source' && 'Kafka Source' || inputs.benchType == 'patch' && 'Patch' || inputs.benchType == 'products' && 'Products' || inputs.benchType }}
 
 on:
   workflow_dispatch:
@@ -19,7 +19,6 @@ on:
           - kafka-source
           - patch
           - products
-          - fusion
       status:
         description: 'Status of the benchmark'
         required: true
@@ -556,7 +555,6 @@ jobs:
             kafka-source) bench_friendly="Kafka Source" ;;
             patch) bench_friendly="Patch" ;;
             products) bench_friendly="Products" ;;
-            fusion) bench_friendly="Fusion" ;;
             *) bench_friendly="$bench" ;;
           esac
 
@@ -626,7 +624,6 @@ jobs:
           [ "$type" = "yakbench" ] && type="Yakbench"
           [ "$type" = "patch" ] && type="Patch"
           [ "$type" = "products" ] && type="Products"
-          [ "$type" = "fusion" ] && type="Fusion"
 
           status="${{ steps.derive.outputs.bench_status || inputs.status }}"
           if [ "$status" = "success" ]; then
@@ -788,7 +785,6 @@ jobs:
             yakbench) FRIENDLY_NAME="Yakbench" ;;
             patch) FRIENDLY_NAME="Patch" ;;
             products) FRIENDLY_NAME="Products" ;;
-            fusion) FRIENDLY_NAME="Fusion" ;;
             *) FRIENDLY_NAME="$BENCH_TYPE" ;;
           esac
 
@@ -837,7 +833,7 @@ jobs:
             const queue = [
               'tpch', 'tpch-sql', 'yakbench', 'auctionmark',
               'clickbench', 'tsbs-iot', 'ingest-tx-overhead',
-              'patch', 'products', 'fusion',
+              'patch', 'products',
               'kafka-source'
             ];
             const current = process.env.QUEUE_ENTRY;

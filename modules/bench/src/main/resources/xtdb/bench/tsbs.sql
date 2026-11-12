@@ -224,3 +224,43 @@ WHERE _id = :truck-id
 -- :name query-avg-load-as-of :? :*
 SELECT COUNT(*) AS truck_count, AVG(current_load) AS avg_load
 FROM diagnostics FOR VALID_TIME AS OF :as-of
+
+-- :name query-velocity-per-hour :? :*
+WITH binned AS (
+  SELECT (bin)._from AS hour, (bin)._weight AS weight, r.velocity * (bin)._weight AS weighted_velocity
+  FROM readings FOR VALID_TIME BETWEEN :window-start AND :window-end AS r,
+       UNNEST(range_bins(INTERVAL 'PT1H', r._valid_time)) AS b(bin)
+)
+SELECT hour, SUM(weighted_velocity) / SUM(weight) AS avg_velocity
+FROM binned
+GROUP BY hour
+ORDER BY hour
+
+-- :name query-velocity-per-hour-all :? :*
+WITH binned AS (
+  SELECT (bin)._from AS hour, (bin)._weight AS weight, r.velocity * (bin)._weight AS weighted_velocity
+  FROM readings FOR ALL VALID_TIME AS r,
+       UNNEST(range_bins(INTERVAL 'PT1H', r._valid_time)) AS b(bin)
+)
+SELECT hour, SUM(weighted_velocity) / SUM(weight) AS avg_velocity
+FROM binned
+GROUP BY hour
+ORDER BY hour
+
+-- :name query-trucks-reporting-per-hour :? :*
+WITH hours AS (
+  SELECT h::timestamptz AS hour
+  FROM generate_series(:window-start::timestamptz, :window-end::timestamptz, INTERVAL 'PT1H') AS x(h)
+)
+SELECT hours.hour, COUNT(DISTINCT d._id) AS truck_count
+FROM hours
+LEFT OUTER JOIN diagnostics FOR VALID_TIME BETWEEN :window-start AND :window-end AS d ON d._valid_time CONTAINS hours.hour
+GROUP BY hours.hour
+ORDER BY hours.hour
+
+-- :name query-newest-diagnostic-per-truck :? :*
+SELECT _id, current_load, fuel_state, _system_from
+FROM (SELECT _id, current_load, fuel_state, _system_from,
+             ROW_NUMBER() OVER (PARTITION BY _id ORDER BY _system_from DESC) AS rn
+      FROM diagnostics FOR ALL VALID_TIME) d
+WHERE d.rn = 1

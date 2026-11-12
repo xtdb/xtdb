@@ -166,19 +166,6 @@ locals {
       metric_name     = "duration_minutes"
       dashboard_idx   = 7
     }
-    fusion = {
-      name            = "Fusion benchmark"
-      display_name    = "Fusion"
-      logic_app_name  = var.fusion_anomaly_logic_app_name
-      enabled         = var.fusion_anomaly_alert_enabled
-      param_name      = "devices"
-      param_path      = "parameters['devices']"
-      param_value     = var.fusion_anomaly_devices
-      param_is_string = false
-      metric_path     = "'throughput'"
-      metric_name     = "throughput"
-      dashboard_idx   = 8
-    }
     scan-perf = {
       name            = "Scan Perf"
       display_name    = "Scan Perf"
@@ -190,7 +177,7 @@ locals {
       param_is_string = false
       metric_path     = "'time-taken-ms'"
       metric_name     = "duration_minutes"
-      dashboard_idx   = 9
+      dashboard_idx   = 8
     }
   }
 
@@ -206,7 +193,6 @@ locals {
     6 = { x = 10, y = 4 }
     7 = { x = 15, y = 4 }
     8 = { x = 0, y = 8 }
-    9  = { x = 5, y = 8 }
   }
 
   # Filter expressions per benchmark (string params quoted, numeric params use todouble)
