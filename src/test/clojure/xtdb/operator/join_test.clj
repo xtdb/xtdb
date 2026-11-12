@@ -829,6 +829,17 @@
              (->> (tu/query-ra [:anti-join '{:conditions [{a c} false]} left right])
                   (frequencies))))))
 
+(t/deftest test-anti-join-drops-a-row-only-for-a-passing-candidate
+  (let [plan [:anti-join '{:conditions [{a c} (> b d)]}
+              [::tu/pages [[{:a 1, :b 1} {:a 1, :b 2}]]]
+              [::tu/pages [[{:c 1, :d 5} {:c 1, :d 1}]
+                           [{:c 3, :d 3}]]]]
+        expected [{:a 1, :b 1}]]
+    (t/is (= expected (tu/query-ra plan)))
+
+    (binding [join/*disk-join-threshold-rows* 1]
+      (t/is (= expected (tu/query-ra plan)) "spilled"))))
+
 (t/deftest test-join-on-true
   (letfn [(run-join [left? right? theta-expr]
             (->> (tu/query-ra [:join {:conditions [theta-expr]}
