@@ -829,6 +829,19 @@
              (->> (tu/query-ra [:anti-join '{:conditions [{a c} false]} left right])
                   (frequencies))))))
 
+(t/deftest test-anti-join-drops-a-row-only-for-a-passing-candidate
+  (let [plan [:anti-join '{:conditions [{a c} (not (== b d))]}
+              [::tu/pages [[{:a 1, :b 1} {:a 1, :b 2} {:a 2, :b 1} {:a nil, :b 1}]]]
+              [::tu/pages [[{:c 1, :d 1} {:c nil, :d 1}]
+                           [{:c 3, :d 3}]]]]
+        expected {{:a 1, :b 1} 1, {:a 2, :b 1} 1, {:b 1} 1}]
+    (t/is (= expected (frequencies (tu/query-ra plan)))
+          "a key match failing the theta keeps the row, as does a NULL key on both sides")
+
+    (binding [join/*disk-join-threshold-rows* 1]
+      (t/is (= expected (frequencies (tu/query-ra plan)))
+            "spilled, the same rows"))))
+
 (t/deftest test-join-on-true
   (letfn [(run-join [left? right? theta-expr]
             (->> (tu/query-ra [:join {:conditions [theta-expr]}

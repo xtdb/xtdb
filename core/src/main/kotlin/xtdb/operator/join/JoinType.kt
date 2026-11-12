@@ -224,7 +224,12 @@ interface JoinType {
 
         internal fun ProbeSide.antiJoinSelection() =
             IntArrayList().let { sel ->
-                repeat(rowCount) { if (matches(it) != 1) sel.add(it) }
+                val keyCols = keyColNames.map { probeRel[it] }
+
+                repeat(rowCount) { probeIdx ->
+                    // a NULL key never matches: its bucket holds every NULL-keyed build row, unwalked
+                    if (keyCols.any { it.isNull(probeIdx) } || indexOf(probeIdx, false) < 0) sel.add(probeIdx)
+                }
 
                 sel.toArray()
             }

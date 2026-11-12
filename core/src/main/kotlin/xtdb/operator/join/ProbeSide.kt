@@ -17,16 +17,18 @@ class ProbeSide(
 
     private val hasher = probeRel.hasher(keyColNames)
 
+    fun indexOf(probeIdx: Int, removeOnMatch: Boolean): Int {
+        val buildIdx = buildSide.indexOf(
+            hasher.hashCode(probeIdx),
+            { buildIdx -> comparator.applyAsInt(buildIdx, probeIdx) },
+            removeOnMatch
+        )
+        if (buildIdx >= 0) buildSide.addMatch(buildIdx)
+        return buildIdx
+    }
+
     fun forEachIndexOf(c: BiConsumer<Int, Int>, removeOnMatch: Boolean) =
-        repeat(rowCount) { probeIdx ->
-            val buildIdx = buildSide.indexOf(
-                hasher.hashCode(probeIdx),
-                { buildIdx -> comparator.applyAsInt(buildIdx, probeIdx) },
-                removeOnMatch
-            )
-            c.accept(probeIdx, buildIdx)
-            if (buildIdx >= 0) buildSide.addMatch(buildIdx)
-        }
+        repeat(rowCount) { probeIdx -> c.accept(probeIdx, indexOf(probeIdx, removeOnMatch)) }
 
     fun iterator(probeIdx: Int): IntIterator {
         val iter = candidates(probeIdx)
@@ -63,16 +65,4 @@ class ProbeSide(
 
     /** Whether the build and probe rows satisfy the join's conditions: an unknown result doesn't. */
     fun passes(buildIdx: Int, probeIdx: Int): Boolean = comparator.applyAsInt(buildIdx, probeIdx) == 1
-
-    fun matches(probeIdx: Int): Int {
-        // TODO: This doesn't use the hashTries, still a nested loop join
-        var acc = -1
-        val buildRowCount = buildRel.rowCount
-        for (buildIdx in 0 until buildRowCount) {
-            val res = comparator.applyAsInt(buildIdx, probeIdx)
-            if (res == 1) return 1
-            acc = maxOf(acc, res)
-        }
-        return acc
-    }
 }
