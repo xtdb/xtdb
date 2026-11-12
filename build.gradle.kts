@@ -926,7 +926,9 @@ createBench("tsbs-iot", mapOf(
     "timestampEnd" to "--timestamp-end",
     "queryIterations" to "--query-iterations",
     "workers" to "--workers",
-    "burnIn" to "--burn-in"
+    "burnIn" to "--burn-in",
+    "seed" to "--seed",
+    "noLoad" to "--no-load"
 ))
 
 createBench("fusion", mapOf(

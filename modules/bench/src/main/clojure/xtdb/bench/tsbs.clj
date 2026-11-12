@@ -10,7 +10,7 @@
             [xtdb.tsbs :as tsbs]
             [xtdb.util :as util])
   (:import (java.time Duration Instant LocalTime)
-           (java.util Random)
+           (java.util ArrayList Collection Collections Random)
            (java.util.concurrent Executors ExecutorService TimeUnit)))
 
 (hugsql/def-sqlvec-fns "xtdb/bench/tsbs.sql")
@@ -175,18 +175,19 @@
   "Generate n query instances for each query type.
    Returns {:queries [...] :skipped #{...}} where skipped contains query types
    that couldn't be generated (e.g. window duration > data range)."
-  [state n]
+  [{:keys [^Random rng] :as state} n]
   (let [all-results (for [gen query-generators
                           _ (range n)]
                       (gen state))
-        queries (filterv some? all-results)
+        queries (doto (ArrayList. ^Collection (filterv some? all-results))
+                  (Collections/shuffle rng))
         ;; Determine which types were skipped by comparing with what we got
         generated-types (into #{} (map :query-type) queries)
         skipped-types (set/difference all-query-types generated-types)]
     (when (seq skipped-types)
       (log/warn (format "Skipping query types (insufficient data range): %s"
                         (str/join ", " (map name skipped-types)))))
-    {:queries queries
+    {:queries (vec queries)
      :skipped skipped-types}))
 
 (defn- run-query-batch
@@ -308,6 +309,13 @@
     :id :txs-file
     :parse-fn util/->path]
 
+   [nil "--seed SEED" "seeds the generated data and the queries' parameters"
+    :id :seed
+    :parse-fn parse-long
+    :validate [(complement zero?) "Must be non-zero: tsbs_generate_data replaces a zero seed with a time-based one"]]
+
+   b/no-load-flag
+
    ;; Query execution options (TSBS-style)
    [nil "--query-iterations ITERATIONS"
     :id :query-iterations
@@ -349,13 +357,13 @@
        :total-rows total-rows})))
 
 (defmethod b/->benchmark :tsbs-iot [_ {:keys [seed txs-file devices timestamp-start timestamp-end
-                                              query-iterations workers burn-in]
-                                       :or {seed 0
+                                              query-iterations workers burn-in no-load?]
+                                       :or {seed 42
                                             query-iterations 100
                                             workers 1
                                             burn-in 0}
                                        :as opts}]
-  (when-let [est (and (not txs-file) (estimate-row-count devices timestamp-start timestamp-end))]
+  (when-let [est (and (not no-load?) (not txs-file) (estimate-row-count devices timestamp-start timestamp-end))]
     (log/info (format "TSBS-IoT scale: %d devices × %.1f days = %,d total rows (%,d readings + %,d diagnostics)"
                       (:devices est) (:days est) (:total-rows est) (:total-readings est) (:total-diagnostics est))))
 
@@ -367,6 +375,7 @@
    :benchmark-type :tsbs-iot
    :seed seed
    :parameters {:seed seed
+                :no-load? no-load?
                 :txs-file txs-file
                 :devices devices
                 :timestamp-start timestamp-start
@@ -375,51 +384,52 @@
                 :workers workers
                 :burn-in burn-in}
    :->state (fn [] {:!state (atom {:rng (Random. seed)})})
-   :tasks [{:t :do
-            :stage :ingest
-            :tasks [(letfn [(submit-txs [node txs]
-                              (doseq [{:keys [ops system-time]} txs]
-                                (when (Thread/interrupted) (throw (InterruptedException.)))
+   :tasks [(when-not no-load?
+             {:t :do
+              :stage :ingest
+              :tasks [(letfn [(submit-txs [node txs]
+                                (doseq [{:keys [ops system-time]} txs]
+                                  (when (Thread/interrupted) (throw (InterruptedException.)))
 
-                                (when (= LocalTime/MIDNIGHT (.toLocalTime (time/->zdt system-time)))
-                                  (log/debug "submitting" system-time))
+                                  (when (= LocalTime/MIDNIGHT (.toLocalTime (time/->zdt system-time)))
+                                    (log/debug "submitting" system-time))
 
-                                (xt/submit-tx node ops {:system-time system-time})))]
+                                  (xt/submit-tx node ops {:system-time system-time})))]
 
-                      (if txs-file
-                        {:t :call
-                         :stage :submit-docs
-                         :f (fn [{:keys [node]}]
-                              (tsbs/with-file-txs txs-file
-                                (partial submit-txs node)))}
+                        (if txs-file
+                          {:t :call
+                           :stage :submit-docs
+                           :f (fn [{:keys [node]}]
+                                (tsbs/with-file-txs txs-file
+                                  (partial submit-txs node)))}
 
-                        {:t :call
-                         :stage :gen+submit-docs
-                         :f (fn [{:keys [node]}]
-                              (tsbs/make-gen)
+                          {:t :call
+                           :stage :gen+submit-docs
+                           :f (fn [{:keys [node]}]
+                                (tsbs/make-gen)
 
-                              (tsbs/with-generated-data (into {:seed seed
-                                                               :use-case :iot,
-                                                               :log-interval #xt/duration "PT5M"}
-                                                              (if devices
-                                                                ;; We pass devices as scale here to not confuse with scale-factor elsewhere
-                                                                (assoc opts :scale devices)
-                                                                opts))
-                                (partial submit-txs node)))}))
+                                (tsbs/with-generated-data (into {:seed seed
+                                                                 :use-case :iot,
+                                                                 :log-interval #xt/duration "PT5M"}
+                                                                (if devices
+                                                                  ;; We pass devices as scale here to not confuse with scale-factor elsewhere
+                                                                  (assoc opts :scale devices)
+                                                                  opts))
+                                  (partial submit-txs node)))}))
 
-                    {:t :call
-                     :stage :sync
-                     :f (fn [{:keys [node]}] (b/sync-node node (Duration/ofHours 5)))}
+                      {:t :call
+                       :stage :sync
+                       :f (fn [{:keys [node]}] (b/sync-node node (Duration/ofHours 5)))}
 
-                    {:t :call
-                     :stage :finish-block
-                     :f (fn [{:keys [node]}] (b/flush-block! node))}
+                      {:t :call
+                       :stage :finish-block
+                       :f (fn [{:keys [node]}] (b/flush-block! node))}
 
-                    {:t :call
-                     :stage :compact
-                     :f (fn [{:keys [node]}] (b/compact! node))}
+                      {:t :call
+                       :stage :compact
+                       :f (fn [{:keys [node]}] (b/compact! node))}
 
-                    (b/settle-stage)]}
+                      (b/settle-stage)]})
 
            ;; Query setup - discover data characteristics for parameterized queries
            {:t :call

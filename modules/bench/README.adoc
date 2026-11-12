@@ -50,6 +50,8 @@ TSBS IoT::
 +
 For any reasonable scale you'll want to create a txs file beforehand - they take quite a while to generate in XT format.
 See datasets -> `xtdb.tsbs`.
+`-Pseed` seeds the generated data and the queries' parameters, and defaults to 42 so that two runs see the same data and the same queries.
+`-Pdir=<path>` keeps the node in that directory, and `-PnoLoad` on a later run queries it without re-ingesting.
 
 Add a YourKit snapshot with `-Pyourkit` - you should see a snapshot appear in your snapshot directory (default `~/Snapshots`) when the application shuts down.
 For a Java Flight Recorder profile, use `-Pjfr` - the recording is dumped to `~/Snapshots/xtdb-<bench>-<timestamp>.jfr` on shutdown.
