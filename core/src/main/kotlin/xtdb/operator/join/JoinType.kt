@@ -1,6 +1,7 @@
 package xtdb.operator.join
 
 import com.carrotsearch.hppc.IntArrayList
+import org.apache.arrow.memory.BufferAllocator
 import xtdb.arrow.BitVector
 import xtdb.arrow.RelationReader
 import xtdb.api.error.Incorrect
@@ -57,6 +58,84 @@ interface JoinType {
 
     }
 
+    /**
+     * Every probe row, plus its three-valued mark: TRUE where some build row passes `:conditions` and the mark,
+     * NULL where none does but the mark is unknown for one, FALSE otherwise.
+     *
+     * The returned relation's mark column is reused by the next call, and freed by [close].
+     */
+    class Mark(al: BufferAllocator, markColName: String, private val spec: Spec) : AutoCloseable {
+
+        /** What decides a probe row's mark, over the build rows that pass `:conditions`. */
+        sealed interface Spec {
+            /** EXISTS: any such row marks TRUE. */
+            data object Exists : Spec
+
+            /** The three-valued OR of a comparator over those rows, built by [cmpFactory] over the loaded build rows and a probe relation. */
+            class Compare(val cmpFactory: BiFunction<RelationReader, RelationReader, IntBinaryOperator>) : Spec
+        }
+
+        private val markCol = BitVector(al, markColName, true)
+
+        private inline fun withMarkCol(probeRel: RelationReader, mark: (Int) -> Int): RelationReader {
+            markCol.clear()
+            markCol.ensureCapacity(probeRel.rowCount)
+
+            repeat(probeRel.rowCount) { probeIdx ->
+                when (mark(probeIdx)) {
+                    1 -> markCol.setBoolean(probeIdx, true)
+                    0 -> markCol.setNull(probeIdx)
+                    else -> markCol.setBoolean(probeIdx, false)
+                }
+            }
+
+            return RelationReader.from(probeRel.vectors + markCol, probeRel.rowCount)
+        }
+
+        private fun ProbeSide.markOver(buildIdxs: IntIterator, probeIdx: Int, markCmp: IntBinaryOperator?): Int {
+            var acc = -1
+            while (buildIdxs.hasNext()) {
+                val buildIdx = buildIdxs.nextInt()
+                val res = if (!passes(buildIdx, probeIdx)) -1 else markCmp?.applyAsInt(buildIdx, probeIdx) ?: 1
+                if (res == 1) return 1
+                acc = maxOf(acc, res)
+            }
+            return acc
+        }
+
+        /**
+         * Marks [probeRel] against every build row, in every partition when spilled.
+         */
+        fun probeEveryRow(
+            buildSide: BuildSide, probeRel: RelationReader, probeKeyColNames: List<FieldName>,
+            cmpFactory: ComparatorFactory,
+        ): RelationReader {
+            val markCmpFactory = when (spec) {
+                Spec.Exists -> null
+                is Spec.Compare -> spec.cmpFactory
+            }
+
+            val res = IntArray(probeRel.rowCount) { -1 }
+
+            fun markAgainstLoadedRows() {
+                val probeSide = ProbeSide(buildSide, probeRel, probeKeyColNames, cmpFactory.build(buildSide, probeRel, probeKeyColNames))
+                val markCmp = markCmpFactory?.apply(buildSide.dataRel, probeRel)
+                val buildRowCount = buildSide.dataRel.rowCount
+                repeat(probeSide.rowCount) { probeIdx ->
+                    if (res[probeIdx] != 1)
+                        res[probeIdx] = maxOf(res[probeIdx], probeSide.markOver((0 until buildRowCount).iterator(), probeIdx, markCmp))
+                }
+            }
+
+            if (buildSide.shuffle == null) markAgainstLoadedRows()
+            else repeat(buildSide.partCount) { partIdx -> buildSide.loadPart(partIdx); markAgainstLoadedRows() }
+
+            return withMarkCol(probeRel) { res[it] }
+        }
+
+        override fun close() = markCol.close()
+    }
+
     companion object {
         @JvmField
         val INNER = object : JoinType {
@@ -88,47 +167,6 @@ interface JoinType {
 
         @JvmField
         val FULL_OUTER = Outer(FULL)
-
-        /**
-         * @param markCmpFactory builds the `:mark-spec` comparator over the loaded build rows and [probeRel];
-         *   null where the mark is constant `true` (EXISTS), so a row is marked TRUE wherever `:conditions` match.
-         */
-        @JvmStatic
-        fun BuildSide.mark(
-            probeRel: RelationReader, probeKeyColNames: List<FieldName>,
-            cmpFactory: ComparatorFactory,
-            markCmpFactory: BiFunction<RelationReader, RelationReader, IntBinaryOperator>?,
-            markCol: BitVector
-        ) {
-            val res = IntArray(probeRel.rowCount) { -1 }
-
-            fun markAgainstLoadedRows() {
-                val conditionsCmp = cmpFactory.build(this, probeRel, probeKeyColNames)
-                val markCmp = markCmpFactory?.apply(dataRel, probeRel)
-                val cmp = IntBinaryOperator { buildIdx, probeIdx ->
-                    when {
-                        conditionsCmp.applyAsInt(buildIdx, probeIdx) != 1 -> -1
-                        markCmp == null -> 1
-                        else -> markCmp.applyAsInt(buildIdx, probeIdx)
-                    }
-                }
-                val probeSide = ProbeSide(this, probeRel, probeKeyColNames, cmp)
-                repeat(probeSide.rowCount) { probeIdx ->
-                    if (res[probeIdx] != 1) res[probeIdx] = maxOf(res[probeIdx], probeSide.matches(probeIdx))
-                }
-            }
-
-            if (shuffle == null) markAgainstLoadedRows()
-            else repeat(partCount) { partIdx -> loadPart(partIdx); markAgainstLoadedRows() }
-
-            res.forEachIndexed { probeIdx, r ->
-                when (r) {
-                    0 -> markCol.setNull(probeIdx)
-                    1 -> markCol.setBoolean(probeIdx, true)
-                    -1 -> markCol.setBoolean(probeIdx, false)
-                }
-            }
-        }
 
         internal fun ProbeSide.semiJoinSelection() =
             IntArrayList().let { sel ->

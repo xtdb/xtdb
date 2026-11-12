@@ -8,17 +8,16 @@
             [xtdb.logical-plan :as lp]
             [xtdb.operator.project :as project]
             [xtdb.types :as types]
-            [xtdb.util :as util]
-            [xtdb.vector.reader :as vr])
+            [xtdb.util :as util])
   (:import (java.util ArrayList Iterator List Set SortedSet TreeSet)
            (org.apache.arrow.memory BufferAllocator)
            (org.roaringbitmap.buffer MutableRoaringBitmap)
            (xtdb Bytes)
            (xtdb.api ICursor)
-           (xtdb.arrow BitVector RelationReader VectorType)
+           (xtdb.arrow RelationReader VectorType)
            (xtdb.bloom BloomUtils)
            (xtdb.operator ProjectionSpec)
-           (xtdb.operator.join BuildSide ComparatorFactory DiskHashJoin JoinType MemoryHashJoin)))
+           (xtdb.operator.join BuildSide ComparatorFactory DiskHashJoin EveryRowMarkJoin JoinType JoinType$Mark JoinType$Mark$Spec$Compare JoinType$Mark$Spec$Exists MemoryHashJoin)))
 
 (defmethod lp/ra-expr :cross-join [_]
   (s/cat :op #{:⨯ :cross-join}
@@ -237,47 +236,31 @@
 
 (deftype MarkJoinCursor [^BufferAllocator allocator,
                          ^BuildSide build-side, ^ICursor build-cursor, build-plan-side
-                         ->probe-cursor, probe-key-col-names, ^ComparatorFactory cmp-factory, ->mark-cmp,
-                         ^:unsynchronized-mutable ^ICursor probe-cursor
-                         mark-col-name
-                         pushdown-blooms]
+                         probe-key-col-names ->probe-cursor
+                         ^:unsynchronized-mutable ^ICursor mark-join-cursor
+                         ^ComparatorFactory cmp-factory, ^JoinType$Mark mark]
   ICursor
   (getCursorType [_] "mark-join")
   (getChildCursors [_]
     (->child-cursors build-plan-side build-cursor
-                     (when probe-cursor [probe-cursor])))
+                     (when mark-join-cursor (.getChildCursors mark-join-cursor))))
 
   (tryAdvance [this c]
-    (when-not probe-cursor
+    (when-not mark-join-cursor
       (build-phase build-side build-cursor)
-      (build-pushdowns build-side pushdown-blooms nil)
 
-      (set! (.probe-cursor this)
-            (->probe-cursor (zipmap (map symbol (.getKeyColNames build-side))
-                                    pushdown-blooms)
-                            nil)))
+      ;; no bloom or IID pushdown: a probe row the scan drops never gets its FALSE mark
+      (util/with-close-on-catch [probe-cursor (->probe-cursor nil nil)]
+        (set! (.mark-join-cursor this)
+              (EveryRowMarkJoin. build-side probe-cursor (map str probe-key-col-names) mark cmp-factory))))
 
-    (boolean
-     (let [advanced? (boolean-array 1)]
-       (while (and (not (aget advanced? 0))
-                   (.tryAdvance ^ICursor (.probe-cursor this)
-                                (fn [^RelationReader probe-rel]
-                                  (let [row-count (.getRowCount probe-rel)]
-                                    (when (pos? row-count)
-                                      (aset advanced? 0 true)
-
-                                      (with-open [mark-col (doto (BitVector. allocator (name mark-col-name) true)
-                                                             (.ensureCapacity row-count))]
-                                        (JoinType/mark build-side probe-rel probe-key-col-names cmp-factory ->mark-cmp mark-col)
-                                        (let [out-cols (conj (seq probe-rel) mark-col)]
-                                          (.accept c (vr/rel-reader out-cols row-count))))))))))
-       (aget advanced? 0))))
+    (.tryAdvance mark-join-cursor c))
 
   (close [_]
-    (run! #(.clear ^MutableRoaringBitmap %) pushdown-blooms)
+    (util/try-close mark-join-cursor)
+    (util/try-close mark)
     (util/try-close build-side)
-    (util/try-close build-cursor)
-    (util/try-close probe-cursor)))
+    (util/try-close build-cursor)))
 
 (defn- equi-spec [idx condition left-vec-types right-vec-types param-types]
   (let [[left-expr right-expr] (first condition)]
@@ -405,7 +388,17 @@
                                             build-side (->build-side allocator {:vec-types build-vec-types
                                                                                 :key-col-names build-key-col-names
                                                                                 :with-nil-row? with-nil-row?
-                                                                                :track-unmatched-build-idxs? track-unmatched-build-idxs?})]
+                                                                                :track-unmatched-build-idxs? track-unmatched-build-idxs?})
+                                            mark (when (= join-type ::mark-join)
+                                                   (JoinType$Mark. allocator (name mark-col-name)
+                                                                   (if (every? true? (rest mark-condition))
+                                                                     JoinType$Mark$Spec$Exists/INSTANCE
+                                                                     (JoinType$Mark$Spec$Compare.
+                                                                      (fn [build-rel probe-rel]
+                                                                        (emap/->theta-comparator build-rel probe-rel mark-condition args
+                                                                                                 {:build-vec-types build-vec-types
+                                                                                                  :probe-vec-types probe-vec-types
+                                                                                                  :param-types param-types}))))))]
                    (letfn [(->probe-cursor-with-pushdowns [our-pushdown-blooms our-pushdown-iids]
                              (->probe-cursor (cond-> opts
                                                our-pushdown-blooms (update :pushdown-blooms (fnil into {}) our-pushdown-blooms)
@@ -426,15 +419,8 @@
                        (project/->project-cursor opts
                                                  (cond-> (if (= join-type ::mark-join)
                                                            (MarkJoinCursor. allocator build-side build-cursor build-plan-side
-                                                                            ->probe-cursor-with-pushdowns (map str probe-key-col-names) cmp-factory
-                                                                            (when-not (every? true? (rest mark-condition))
-                                                                              (fn [build-rel probe-rel]
-                                                                                (emap/->theta-comparator build-rel probe-rel mark-condition args
-                                                                                                         {:build-vec-types build-vec-types
-                                                                                                          :probe-vec-types probe-vec-types
-                                                                                                          :param-types param-types})))
-                                                                            nil
-                                                                            mark-col-name pushdown-blooms)
+                                                                            probe-key-col-names ->probe-cursor-with-pushdowns
+                                                                            nil cmp-factory mark)
                                                            (JoinCursor. allocator build-side build-cursor build-plan-side
                                                                         probe-vec-types probe-key-col-names
                                                                         ->probe-cursor-with-pushdowns nil

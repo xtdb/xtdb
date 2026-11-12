@@ -59,6 +59,9 @@ class ProbeSide(
         }
     }
 
+    /** Whether the build and probe rows satisfy the join's conditions: an unknown result doesn't. */
+    fun passes(buildIdx: Int, probeIdx: Int): Boolean = comparator.applyAsInt(buildIdx, probeIdx) == 1
+
     fun matches(probeIdx: Int): Int {
         // TODO: This doesn't use the hashTries, still a nested loop join
         var acc = -1
