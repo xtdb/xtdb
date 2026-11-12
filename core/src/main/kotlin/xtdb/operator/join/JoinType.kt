@@ -73,11 +73,28 @@ interface JoinType {
 
             /** The three-valued OR of a comparator over those rows, built by [cmpFactory] over the loaded build rows and a probe relation. */
             class Compare(val cmpFactory: BiFunction<RelationReader, RelationReader, IntBinaryOperator>) : Spec
+
+            /**
+             * An uncorrelated `IN`, its build side keyed on the compared column: a key match is TRUE, and [facts] decide every other row.
+             * [cmpFactory] builds the three-valued `(== x y)`, which the every-row fallback compares with instead.
+             */
+            class KeyedIn(
+                val cmpFactory: BiFunction<RelationReader, RelationReader, IntBinaryOperator>,
+                val facts: BuildKeyFacts,
+            ) : Spec
         }
 
         override val joinTypeName = "mark-join"
 
         private val markCol = BitVector(al, markColName, true)
+
+        /** Gathers what [Spec.KeyedIn] needs from each relation the build phase appends. */
+        fun addBuildRel(buildRel: RelationReader) {
+            if (spec is Spec.KeyedIn) spec.facts.add(buildRel)
+        }
+
+        /** True where the build side is keyed on a column that could hold a list or a struct, so only [probeEveryRow] marks correctly. */
+        val comparesEveryRow get() = spec is Spec.KeyedIn && spec.facts.hasNestedKey
 
         private inline fun withMarkCol(probeRel: RelationReader, mark: (Int) -> Int): RelationReader {
             markCol.clear()
@@ -112,13 +129,20 @@ interface JoinType {
             return withMarkCol(probeSide.probeRel) { probeIdx ->
                 // the keys are two-valued, so a NULL one can't pass: its bucket holds every NULL-keyed build row, unwalked
                 val keyIsNull = keyCols.any { it.isNull(probeIdx) }
-                if (keyIsNull) -1 else probeSide.markOver(probeSide.candidates(probeIdx), probeIdx, markCmp)
+                val res = if (keyIsNull) -1 else probeSide.markOver(probeSide.candidates(probeIdx), probeIdx, markCmp)
+
+                when (spec) {
+                    Spec.Exists, is Spec.Compare -> res
+                    is Spec.KeyedIn -> if (res == 1) 1 else spec.facts.unmatchedMark(keyIsNull)
+                }
             }
         }
 
         /**
          * Marks [probeRel] against every build row, partition by partition when spilled.
-         * Used where hashing can't narrow the walk: a build side with no keys hashes every row alike.
+         * Used where hashing can't narrow the walk:
+         * - a build side with no keys, which hashes every row alike;
+         * - a build side that [comparesEveryRow], called with no [probeKeyColNames], so that `(== x y)` decides each row rather than [Spec.KeyedIn]'s facts.
          */
         fun probeEveryRow(
             buildSide: BuildSide, probeRel: RelationReader, probeKeyColNames: List<FieldName>,
@@ -127,6 +151,7 @@ interface JoinType {
             val markCmpFactory = when (spec) {
                 Spec.Exists -> null
                 is Spec.Compare -> spec.cmpFactory
+                is Spec.KeyedIn -> spec.cmpFactory
             }
 
             val res = IntArray(probeRel.rowCount) { -1 }

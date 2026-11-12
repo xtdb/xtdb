@@ -308,14 +308,23 @@
                                          (->> (range 20) (map #(hash-map :b %)) (partition-all 10) (mapv vec))]])))
           "every build key is probed, so an unread partition loses a match")
 
-    (t/is (= [{:a 12, :m true}, {:a 14}, {}]
-             (tu/query-ra [:mark-join '{:conditions [], :mark-spec {m [(== a b)]}}
-                           [::tu/pages
-                            [[{:a 12}, {:a 14}, {:a nil}]]]
-                           [::tu/pages
-                            [[{:b 12}, {:b 13}]
-                             [{:b nil}]]]]))
-          "a NULL `b`, in whichever partition, makes every unmatched mark NULL")))
+    (t/is (= (frequencies [{:a 12, :m true}, {:a 14}, {}])
+             (frequencies (tu/query-ra [:mark-join '{:conditions [], :mark-spec {m [(== a b)]}}
+                                        [::tu/pages
+                                         [[{:a 12}, {:a 14}, {:a nil}]]]
+                                        [::tu/pages
+                                         [[{:b 12}, {:b 13}]
+                                          [{:b nil}]]]])))
+          "a NULL `b`, in whichever partition, makes every unmatched mark NULL")
+
+    (t/is (= (frequencies [{:a 5, :m true}, {:a 0}, {}])
+             (frequencies (tu/query-ra [:mark-join '{:conditions [], :mark-spec {m [(> a b)]}}
+                                        [::tu/pages
+                                         [[{:a 5}, {:a 0}, {:a nil}]]]
+                                        [::tu/pages
+                                         [[{:b 1}, {:b 2}]
+                                          [{:b nil}]]]])))
+          "a keyless mark join reads every spilled build row, a NULL `b` in a later page included")))
 
 (t/deftest test-keyed-mark-join-marks-over-hash-candidates
   (let [plan [:mark-join '{:conditions [{a b}], :mark-spec {m [(> c d)]}}
@@ -334,6 +343,52 @@
     (binding [join/*disk-join-threshold-rows* 1]
       (t/is (= (frequencies expected) (frequencies (tu/query-ra plan)))
             "spilled, every probe row comes out once, with the same mark"))))
+
+(t/deftest test-uncorrelated-in-marks-from-the-whole-build-side
+  (let [in-b (fn [probe-pages build-pages]
+               (let [plan [:mark-join '{:conditions [], :mark-spec {m [(== a b)]}}
+                           [::tu/pages probe-pages]
+                           build-pages]
+                     res (tu/query-ra plan)]
+                 (t/is (= (frequencies res)
+                          (binding [join/*disk-join-threshold-rows* 1]
+                            (frequencies (tu/query-ra plan))))
+                       "spilling the build side changes no mark")
+                 res))]
+    (t/is (= [{:a 1, :m true} {:a 2, :m false} {}]
+             (in-b [[{:a 1} {:a 2} {:a nil}]] [::tu/pages [[{:b 1} {:b 3}]]]))
+          "a NULL probe key against a non-empty build side is NULL")
+
+    (t/is (= [{:a 1, :m true} {:a 2}]
+             (in-b [[{:a 1} {:a 2}]] [::tu/pages [[{:b 1} {:b nil}]]]))
+          "a NULL build key makes every unmatched mark NULL")
+
+    (t/is (= [{:a 1, :m false} {:m false}]
+             (in-b [[{:a 1} {:a nil}]] [::tu/pages '{b #xt/type :i64} []]))
+          "against an empty build side every mark is FALSE, a NULL probe key's included")
+
+    (t/is (= [{:a [1 nil]} {:a [2 nil], :m false}]
+             (in-b [[{:a [1 nil]} {:a [2 nil]}]] [::tu/pages [[{:b [1 2]} {:b [3 3]}]]]))
+          "a list key with an inner NULL is unknown against a list that agrees elsewhere, FALSE against one that doesn't")
+
+    (t/is (= [{:a [1 nil]} {:a [100 nil], :m false}]
+             (in-b [[{:a [1 nil]} {:a [100 nil]}]]
+                   [::tu/pages [(mapv #(hash-map :b [% %]) (range 2 12))
+                                (mapv #(hash-map :b [% %]) (range 12 22))
+                                [{:b [1 2]}]]]))
+          "a list key's partial match in a later page makes its mark NULL")
+
+    (t/is (= [{:a [1 2], :m false} {:a 1, :m true}]
+             (in-b [[{:a [1 2]} {:a 1}]] [::tu/pages [[{:b 1}]]]))
+          "a list probe value against scalar build keys is FALSE")
+
+    (t/is (= (frequencies (concat (for [a (range 20)] {:a a, :m true})
+                                  (for [a (range 20 25)] {:a a})))
+             (frequencies (in-b [(mapv #(hash-map :a %) (range 25))]
+                                [::tu/pages [(mapv #(hash-map :b %) (range 10))
+                                             (mapv #(hash-map :b %) (range 10 20))
+                                             [{:b nil}]]])))
+          "a NULL build key arriving in a later page makes every unmatched mark NULL")))
 
 (t/deftest test-mark-spec-takes-expressions-not-equi-maps
   (t/is (s/valid? ::lp/logical-plan '[:mark-join {:conditions [], :mark-spec {m [(== a b)]}} [:table {:rows [{:a 1}]}] [:table {:rows [{:b 1}]}]]))

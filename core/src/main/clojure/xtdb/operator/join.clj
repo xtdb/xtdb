@@ -17,7 +17,7 @@
            (xtdb.arrow RelationReader VectorType)
            (xtdb.bloom BloomUtils)
            (xtdb.operator ProjectionSpec)
-           (xtdb.operator.join BuildSide ComparatorFactory DiskHashJoin EveryRowMarkJoin JoinType JoinType$Mark JoinType$Mark$Spec$Compare JoinType$Mark$Spec$Exists MemoryHashJoin)))
+           (xtdb.operator.join BuildSide BuildKeyFacts ComparatorFactory DiskHashJoin EveryRowMarkJoin JoinType JoinType$Mark JoinType$Mark$Spec$Compare JoinType$Mark$Spec$Exists JoinType$Mark$Spec$KeyedIn MemoryHashJoin)))
 
 (defmethod lp/ra-expr :cross-join [_]
   (s/cat :op #{:⨯ :cross-join}
@@ -165,11 +165,15 @@
 (defmethod lp/emit-expr :cross-join [join-expr args]
   (emit-cross-join (emit-join-children join-expr args)))
 
-(defn- build-phase [^BuildSide build-side, ^ICursor build-cursor]
-  (.forEachRemaining build-cursor
-                     (fn [build-rel]
-                       (.append build-side build-rel)))
-  (.end build-side))
+(defn- build-phase
+  ([build-side build-cursor] (build-phase build-side build-cursor nil))
+
+  ([^BuildSide build-side, ^ICursor build-cursor, on-build-rel]
+   (.forEachRemaining build-cursor
+                      (fn [build-rel]
+                        (.append build-side build-rel)
+                        (when on-build-rel (on-build-rel build-rel))))
+   (.end build-side)))
 
 (defn- build-pushdowns [^BuildSide build-side, pushdown-blooms, pushdown-iids]
   (when pushdown-blooms
@@ -247,7 +251,7 @@
 
   (tryAdvance [this c]
     (when-not mark-join-cursor
-      (build-phase build-side build-cursor)
+      (build-phase build-side build-cursor #(.addBuildRel mark %))
 
       ;; no bloom or IID pushdown: a probe row the scan drops never gets its FALSE mark
       (util/with-close-on-catch [probe-cursor (->probe-cursor nil nil)]
@@ -256,6 +260,9 @@
                 (cond
                   (empty? (.getKeyColNames build-side))
                   (EveryRowMarkJoin. build-side probe-cursor probe-key-col-names mark cmp-factory)
+
+                  (.getComparesEveryRow mark)
+                  (EveryRowMarkJoin. build-side probe-cursor [] mark cmp-factory)
 
                   (.getShuffle build-side)
                   (DiskHashJoin/open allocator build-side probe-cursor
@@ -327,14 +334,15 @@
                                   :param-types param-types})))))
 
 (defn- emit-join-expr {:style/indent 2}
-  [{:keys [condition mark-condition left right]}
+  [{:keys [condition mark-condition mark-key left right]}
    {:keys [param-types]}
    {build-plan-side :build-side
     :keys [merge-vec-types-fn join-type
            with-nil-row? pushdown-blooms? track-unmatched-build-idxs? mark-col-name]}]
   (let [{left-vec-types :vec-types, ->left-cursor :->cursor} left
         {right-vec-types :vec-types, ->right-cursor :->cursor} right
-        {equis :equi-condition, thetas :pred-expr} (group-by first condition)
+        {equis :equi-condition, thetas :pred-expr} (group-by first (cond-> condition
+                                                                     mark-key (conj [:equi-condition mark-key])))
 
         theta-expr (when-let [theta-exprs (seq (map second thetas))]
                      (list* 'and theta-exprs))
@@ -403,15 +411,16 @@
                                                                                 :with-nil-row? with-nil-row?
                                                                                 :track-unmatched-build-idxs? track-unmatched-build-idxs?})
                                             mark (when (= join-type ::mark-join)
-                                                   (JoinType$Mark. allocator (name mark-col-name)
-                                                                   (if (every? true? (rest mark-condition))
-                                                                     JoinType$Mark$Spec$Exists/INSTANCE
-                                                                     (JoinType$Mark$Spec$Compare.
-                                                                      (fn [build-rel probe-rel]
-                                                                        (emap/->theta-comparator build-rel probe-rel mark-condition args
-                                                                                                 {:build-vec-types build-vec-types
-                                                                                                  :probe-vec-types probe-vec-types
-                                                                                                  :param-types param-types}))))))]
+                                                   (let [->mark-cmp (fn [build-rel probe-rel]
+                                                                      (emap/->theta-comparator build-rel probe-rel mark-condition args
+                                                                                               {:build-vec-types build-vec-types
+                                                                                                :probe-vec-types probe-vec-types
+                                                                                                :param-types param-types}))]
+                                                     (JoinType$Mark. allocator (name mark-col-name)
+                                                                     (cond
+                                                                       mark-key (JoinType$Mark$Spec$KeyedIn. ->mark-cmp (BuildKeyFacts. (str (first build-key-col-names))))
+                                                                       (every? true? (rest mark-condition)) JoinType$Mark$Spec$Exists/INSTANCE
+                                                                       :else (JoinType$Mark$Spec$Compare. ->mark-cmp)))))]
                    (letfn [(->probe-cursor-with-pushdowns [our-pushdown-blooms our-pushdown-iids]
                              (->probe-cursor (cond-> opts
                                                our-pushdown-blooms (update :pushdown-blooms (fnil into {}) our-pushdown-blooms)
@@ -518,12 +527,25 @@
                      :merge-vec-types-fn (fn [left-vec-types _] left-vec-types)
                      :join-type ::anti-semi-join})))
 
+(defn- uncorrelated-in-key
+  [conditions mark-exprs {left-vec-types :vec-types} {right-vec-types :vec-types}]
+  (let [mark-expr (first mark-exprs)
+        left-col? #(contains? left-vec-types %)
+        right-col? #(contains? right-vec-types %)]
+    (when (and (empty? conditions) (= 1 (count mark-exprs)) (lp/equals-predicate? mark-expr))
+      (let [[_ a b] mark-expr]
+        (cond
+          (and (left-col? a) (right-col? b)) {a b}
+          (and (left-col? b) (right-col? a)) {b a})))))
+
 (defmethod lp/emit-expr :mark-join [{:keys [opts] :as join-expr} args]
   (let [{:keys [conditions mark-spec]} opts
-        [mark-col-name mark-exprs] (first mark-spec)]
-    (emit-join-expr (-> (emit-join-children join-expr args)
-                        (assoc :condition conditions
-                               :mark-condition (list* 'and mark-exprs)))
+        [mark-col-name mark-exprs] (first mark-spec)
+        {:keys [left right] :as children} (emit-join-children join-expr args)]
+    (emit-join-expr (assoc children
+                           :condition conditions
+                           :mark-condition (list* 'and mark-exprs)
+                           :mark-key (uncorrelated-in-key conditions mark-exprs left right))
                     args
                     {:build-side :right
                      :merge-vec-types-fn (fn [left-vec-types _] (assoc left-vec-types mark-col-name #xt/type [:? :bool]))
