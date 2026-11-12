@@ -1,28 +1,19 @@
 -- :name query-last-loc-by-truck :? :*
 SELECT t.name, t.driver, r.longitude, r.latitude
 FROM trucks t
-CROSS JOIN LATERAL (
-  SELECT longitude, latitude FROM readings FOR ALL VALID_TIME
-  WHERE _id = t._id ORDER BY _valid_from DESC LIMIT 1
-) AS r
+JOIN readings FOR VALID_TIME AS OF :as-of AS r ON r._id = t._id
 WHERE t.name IN (:v*:truck-names)
 
 -- :name query-last-loc-per-truck :? :*
 SELECT t.name, t.driver, r.longitude, r.latitude
 FROM trucks t
-CROSS JOIN LATERAL (
-  SELECT longitude, latitude FROM readings FOR ALL VALID_TIME
-  WHERE _id = t._id ORDER BY _valid_from DESC LIMIT 1
-) AS r
+JOIN readings FOR VALID_TIME AS OF :as-of AS r ON r._id = t._id
 WHERE t.name IS NOT NULL AND t.fleet = :fleet
 
 -- :name query-low-fuel :? :*
 SELECT t.name, t.driver, d.fuel_state
 FROM trucks t
-CROSS JOIN LATERAL (
-  SELECT fuel_state FROM diagnostics FOR ALL VALID_TIME
-  WHERE _id = t._id ORDER BY _valid_from DESC LIMIT 1
-) AS d
+JOIN diagnostics FOR VALID_TIME AS OF :as-of AS d ON d._id = t._id
 WHERE t.name IS NOT NULL
   AND t.fleet = :fleet
   AND d.fuel_state < 0.1
@@ -30,10 +21,7 @@ WHERE t.name IS NOT NULL
 -- :name query-high-load :? :*
 SELECT t.name, t.driver, d.current_load
 FROM trucks t
-CROSS JOIN LATERAL (
-  SELECT current_load FROM diagnostics FOR ALL VALID_TIME
-  WHERE _id = t._id ORDER BY _valid_from DESC LIMIT 1
-) AS d
+JOIN diagnostics FOR VALID_TIME AS OF :as-of AS d ON d._id = t._id
 WHERE t.name IS NOT NULL
   AND t.fleet = :fleet
   AND d.current_load / CAST(t.load_capacity AS DOUBLE PRECISION) > 0.9

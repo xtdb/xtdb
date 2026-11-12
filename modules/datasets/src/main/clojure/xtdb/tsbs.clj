@@ -108,6 +108,8 @@
                 (cons {:ops ops, :system-time sys-time}
                       (with-increasing-sys-time sys-time more-txs))))))))))
 
+(def ^:private ^Duration reading-ttl #xt/duration "PT10M")
+
 (defn with-generated-data [{:keys [use-case seed ^Duration log-interval, scale, timestamp-start, timestamp-end],
                             :or {seed 123, log-interval #xt/duration "PT1M", scale 1}
                             :as opts}
@@ -142,7 +144,7 @@
                    :doc (-> (zipmap (get tables table) (map (some-fn parse-long parse-double) cells))
                             (assoc :xt/id (get tags pk)
                                    :xt/valid-from timestamp
-                                   :xt/valid-to (.plus ^Instant timestamp log-interval)))})
+                                   :xt/valid-to (.plus ^Instant timestamp reading-ttl)))})
 
                 (split-by-ts)
                 (without-unchanged-tags)
