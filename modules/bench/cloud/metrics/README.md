@@ -20,7 +20,7 @@ The module supports anomaly detection and dashboard visualization for:
 | `yakbench` | `scale-factor` | `time-taken-ms` | 1.0 |
 | `readings` | `devices` | `time-taken-ms` | 10000 |
 | `auctionmark` | `duration` | `throughput` | PT30M (disabled) |
-| `tsbs-iot` | `devices` | `time-taken-ms` | 2000 |
+| `tsbs-iot` | `devices` | `time-taken-ms` | 2500 |
 
 ## Configuration
 

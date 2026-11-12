@@ -236,6 +236,15 @@
 (def ^:private gen-avg-load-as-of-three-days-back
   (gen-avg-load-as-of :avg-load-as-of-three-days-back (Duration/ofDays 3)))
 
+(def ^:private gen-truck-location-as-of-week-back
+  (gen-truck-location-as-of :truck-location-as-of-week-back (Duration/ofDays 7)))
+
+(def ^:private gen-avg-load-as-of-week-back
+  (gen-avg-load-as-of :avg-load-as-of-week-back (Duration/ofDays 7)))
+
+(def ^:private gen-velocity-per-truck-week-back
+  (gen-velocity-per-truck :velocity-per-truck-week-back (Duration/ofDays 7) (Duration/ofHours 1)))
+
 (def query-generators
   [gen-last-loc-by-truck
    gen-last-loc-per-truck
@@ -261,7 +270,10 @@
    gen-truck-location-as-of-hour-back
    gen-truck-location-as-of-three-days-back
    gen-avg-load-as-of-hour-back
-   gen-avg-load-as-of-three-days-back])
+   gen-avg-load-as-of-three-days-back
+   gen-truck-location-as-of-week-back
+   gen-avg-load-as-of-week-back
+   gen-velocity-per-truck-week-back])
 
 ;; All possible query types (for detecting skipped queries)
 (def ^:private all-query-types
@@ -273,7 +285,8 @@
     :truck-history-three-days-back :last-known-loc-per-truck
     :velocity-per-truck-last-hour :velocity-per-truck-last-day :velocity-per-truck-three-days-back
     :truck-location-as-of-hour-back :truck-location-as-of-three-days-back
-    :avg-load-as-of-hour-back :avg-load-as-of-three-days-back})
+    :avg-load-as-of-hour-back :avg-load-as-of-three-days-back
+    :truck-location-as-of-week-back :avg-load-as-of-week-back :velocity-per-truck-week-back})
 
 (defn- generate-queries
   "Generate n query instances for each query type.

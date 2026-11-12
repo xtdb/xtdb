@@ -91,6 +91,11 @@ on:
         required: false
         default: ''
         type: string
+      tsbs_seed:
+        description: 'Seed for TSBS IoT data and queries (empty draws a fresh one)'
+        required: false
+        default: ''
+        type: string
       ingest_tx_overhead_doc_count:
         description: 'Document count for ingest-tx-overhead benchmark'
         required: false
@@ -373,6 +378,7 @@ jobs:
           TSBS_QUERY_ITERATIONS: ${{ inputs.tsbs_query_iterations }}
           TSBS_WORKERS: ${{ inputs.tsbs_workers }}
           TSBS_BURN_IN: ${{ inputs.tsbs_burn_in }}
+          TSBS_SEED: ${{ inputs.tsbs_seed }}
           INGEST_TX_OVERHEAD_DOC_COUNT: ${{ inputs.ingest_tx_overhead_doc_count }}
           INGEST_TX_OVERHEAD_BATCH_SIZES: ${{ inputs.ingest_tx_overhead_batch_sizes }}
           KAFKA_SOURCE_MESSAGE_COUNT: ${{ inputs.kafka_source_message_count }}
@@ -460,6 +466,9 @@ jobs:
           fi
           if [ -n "$TSBS_BURN_IN" ]; then
             HELM_ARGS+=(--set "tsbs-iot.burnIn=${TSBS_BURN_IN}")
+          fi
+          if [ -n "$TSBS_SEED" ]; then
+            HELM_ARGS+=(--set "tsbs-iot.seed=${TSBS_SEED}")
           fi
           if [ -n "$INGEST_TX_OVERHEAD_DOC_COUNT" ]; then
             HELM_ARGS+=(--set "ingestTxOverhead.docCount=${INGEST_TX_OVERHEAD_DOC_COUNT}")
@@ -636,6 +645,7 @@ jobs:
           TSBS_QUERY_ITERATIONS: ${{ inputs.tsbs_query_iterations }}
           TSBS_WORKERS: ${{ inputs.tsbs_workers }}
           TSBS_BURN_IN: ${{ inputs.tsbs_burn_in }}
+          TSBS_SEED: ${{ inputs.tsbs_seed }}
           FUSION_DEVICE_COUNT: ${{ inputs.fusion_device_count }}
           FUSION_READING_COUNT: ${{ inputs.fusion_reading_count }}
           FUSION_DURATION: ${{ inputs.fusion_duration }}
@@ -674,6 +684,7 @@ jobs:
           [ -n "$TSBS_QUERY_ITERATIONS" ] && CONFIG_PARTS+=("Query Iterations: ${TSBS_QUERY_ITERATIONS}")
           [ -n "$TSBS_WORKERS" ] && CONFIG_PARTS+=("Workers: ${TSBS_WORKERS}")
           [ -n "$TSBS_BURN_IN" ] && CONFIG_PARTS+=("Burn-In: ${TSBS_BURN_IN}")
+          [ -n "$TSBS_SEED" ] && CONFIG_PARTS+=("Seed: ${TSBS_SEED}")
           [ -n "$PRODUCTS_LIMIT" ] && CONFIG_PARTS+=("Limit: ${PRODUCTS_LIMIT}")
           [ -n "$TS_DEVICES_SIZE" ] && CONFIG_PARTS+=("Size: ${TS_DEVICES_SIZE}")
           [ -n "$TPCH_QUERY_LANGUAGE" ] && CONFIG_PARTS+=("Query language: ${TPCH_QUERY_LANGUAGE}")

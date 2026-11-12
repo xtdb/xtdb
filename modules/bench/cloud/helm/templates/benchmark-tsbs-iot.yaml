@@ -119,6 +119,8 @@ spec:
             - {{ index .Values "tsbs-iot" "workers" | default 1 | quote }}
             - --burn-in
             - {{ index .Values "tsbs-iot" "burnIn" | default 0 | quote }}
+            - --seed
+            - {{ index .Values "tsbs-iot" "seed" | default (randInt 1 2147483647) | quote }}
             {{- if .Values.timeout }}
             - --timeout
             - {{ .Values.timeout | quote }}
