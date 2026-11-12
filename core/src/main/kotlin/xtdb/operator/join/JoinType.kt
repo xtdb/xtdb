@@ -64,7 +64,7 @@ interface JoinType {
      *
      * The returned relation's mark column is reused by the next call, and freed by [close].
      */
-    class Mark(al: BufferAllocator, markColName: String, private val spec: Spec) : AutoCloseable {
+    class Mark(al: BufferAllocator, markColName: String, private val spec: Spec) : JoinType, AutoCloseable {
 
         /** What decides a probe row's mark, over the build rows that pass `:conditions`. */
         sealed interface Spec {
@@ -74,6 +74,8 @@ interface JoinType {
             /** The three-valued OR of a comparator over those rows, built by [cmpFactory] over the loaded build rows and a probe relation. */
             class Compare(val cmpFactory: BiFunction<RelationReader, RelationReader, IntBinaryOperator>) : Spec
         }
+
+        override val joinTypeName = "mark-join"
 
         private val markCol = BitVector(al, markColName, true)
 
@@ -103,8 +105,20 @@ interface JoinType {
             return acc
         }
 
+        override fun probe(probeSide: ProbeSide): RelationReader {
+            val markCmp = (spec as? Spec.Compare)?.cmpFactory?.apply(probeSide.buildRel, probeSide.probeRel)
+            val keyCols = probeSide.keyColNames.map { probeSide.probeRel[it] }
+
+            return withMarkCol(probeSide.probeRel) { probeIdx ->
+                // the keys are two-valued, so a NULL one can't pass: its bucket holds every NULL-keyed build row, unwalked
+                val keyIsNull = keyCols.any { it.isNull(probeIdx) }
+                if (keyIsNull) -1 else probeSide.markOver(probeSide.candidates(probeIdx), probeIdx, markCmp)
+            }
+        }
+
         /**
-         * Marks [probeRel] against every build row, in every partition when spilled.
+         * Marks [probeRel] against every build row, partition by partition when spilled.
+         * Used where hashing can't narrow the walk: a build side with no keys hashes every row alike.
          */
         fun probeEveryRow(
             buildSide: BuildSide, probeRel: RelationReader, probeKeyColNames: List<FieldName>,

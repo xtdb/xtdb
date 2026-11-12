@@ -29,8 +29,7 @@ class ProbeSide(
         }
 
     fun iterator(probeIdx: Int): IntIterator {
-        val hashCode = hasher.hashCode(probeIdx)
-        val iter = buildSide.iterator(hashCode)
+        val iter = candidates(probeIdx)
 
         return object : IntIterator() {
             private var nextValue = -1
@@ -58,6 +57,9 @@ class ProbeSide(
             }
         }
     }
+
+    /** The build rows sharing this probe row's hash, unfiltered: [iterator] keeps only the rows that [passes]. */
+    fun candidates(probeIdx: Int): IntIterator = buildSide.iterator(hasher.hashCode(probeIdx))
 
     /** Whether the build and probe rows satisfy the join's conditions: an unknown result doesn't. */
     fun passes(buildIdx: Int, probeIdx: Int): Boolean = comparator.applyAsInt(buildIdx, probeIdx) == 1

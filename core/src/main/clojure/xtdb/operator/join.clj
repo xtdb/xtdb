@@ -236,7 +236,7 @@
 
 (deftype MarkJoinCursor [^BufferAllocator allocator,
                          ^BuildSide build-side, ^ICursor build-cursor, build-plan-side
-                         probe-key-col-names ->probe-cursor
+                         probe-vec-types probe-key-col-names ->probe-cursor
                          ^:unsynchronized-mutable ^ICursor mark-join-cursor
                          ^ComparatorFactory cmp-factory, ^JoinType$Mark mark]
   ICursor
@@ -252,7 +252,20 @@
       ;; no bloom or IID pushdown: a probe row the scan drops never gets its FALSE mark
       (util/with-close-on-catch [probe-cursor (->probe-cursor nil nil)]
         (set! (.mark-join-cursor this)
-              (EveryRowMarkJoin. build-side probe-cursor (map str probe-key-col-names) mark cmp-factory))))
+              (let [probe-key-col-names (map str probe-key-col-names)]
+                (cond
+                  (empty? (.getKeyColNames build-side))
+                  (EveryRowMarkJoin. build-side probe-cursor probe-key-col-names mark cmp-factory)
+
+                  (.getShuffle build-side)
+                  (DiskHashJoin/open allocator build-side probe-cursor
+                                     (update-keys probe-vec-types str) probe-key-col-names
+                                     mark cmp-factory)
+
+                  :else
+                  (MemoryHashJoin. build-side probe-cursor
+                                   (map str (keys probe-vec-types)) probe-key-col-names
+                                   mark cmp-factory))))))
 
     (.tryAdvance mark-join-cursor c))
 
@@ -419,7 +432,7 @@
                        (project/->project-cursor opts
                                                  (cond-> (if (= join-type ::mark-join)
                                                            (MarkJoinCursor. allocator build-side build-cursor build-plan-side
-                                                                            probe-key-col-names ->probe-cursor-with-pushdowns
+                                                                            probe-vec-types probe-key-col-names ->probe-cursor-with-pushdowns
                                                                             nil cmp-factory mark)
                                                            (JoinCursor. allocator build-side build-cursor build-plan-side
                                                                         probe-vec-types probe-key-col-names
@@ -515,8 +528,7 @@
                     {:build-side :right
                      :merge-vec-types-fn (fn [left-vec-types _] (assoc left-vec-types mark-col-name #xt/type [:? :bool]))
                      :mark-col-name mark-col-name
-                     :join-type ::mark-join
-                     :track-unmatched-build-idxs? true})))
+                     :join-type ::mark-join})))
 
 (defmethod lp/emit-expr :single-join [{:keys [opts] :as join-expr} args]
   (let [{:keys [conditions]} opts]

@@ -299,13 +299,13 @@
 
 (t/deftest test-mark-join-spilled-build-side
   (binding [join/*disk-join-threshold-rows* 1]
-    (t/is (= (concat (for [a (range 20)] {:a a, :m true})
-                     [{:a 20, :m false}, {:m false}])
-             (tu/query-ra [:mark-join '{:conditions [{a b}], :mark-spec {m [true]}}
-                           [::tu/pages
-                            [(conj (mapv #(hash-map :a %) (range 21)) {:a nil})]]
-                           [::tu/pages
-                            (->> (range 20) (map #(hash-map :b %)) (partition-all 10) (mapv vec))]]))
+    (t/is (= (frequencies (concat (for [a (range 20)] {:a a, :m true})
+                                  [{:a 20, :m false}, {:m false}]))
+             (frequencies (tu/query-ra [:mark-join '{:conditions [{a b}], :mark-spec {m [true]}}
+                                        [::tu/pages
+                                         [(conj (mapv #(hash-map :a %) (range 21)) {:a nil})]]
+                                        [::tu/pages
+                                         (->> (range 20) (map #(hash-map :b %)) (partition-all 10) (mapv vec))]])))
           "every build key is probed, so an unread partition loses a match")
 
     (t/is (= [{:a 12, :m true}, {:a 14}, {}]
@@ -316,6 +316,24 @@
                             [[{:b 12}, {:b 13}]
                              [{:b nil}]]]]))
           "a NULL `b`, in whichever partition, makes every unmatched mark NULL")))
+
+(t/deftest test-keyed-mark-join-marks-over-hash-candidates
+  (let [plan [:mark-join '{:conditions [{a b}], :mark-spec {m [(> c d)]}}
+              [::tu/pages
+               [[{:a 1, :c 5} {:a 2, :c 5} {:a 3, :c 5} {:a nil, :c 5}]]]
+              [::tu/pages
+               [[{:b 1, :d 3} {:b 2, :d 9}]
+                [{:b 2, :d nil} {:b 4, :d 1}]]]]
+        expected [{:a 1, :c 5, :m true}
+                  {:a 2, :c 5}
+                  {:a 3, :c 5, :m false}
+                  {:c 5, :m false}]]
+    (t/is (= expected (tu/query-ra plan))
+          "TRUE from a matching candidate, NULL from an unknown one, FALSE for an empty group and for a NULL :conditions key")
+
+    (binding [join/*disk-join-threshold-rows* 1]
+      (t/is (= (frequencies expected) (frequencies (tu/query-ra plan)))
+            "spilled, every probe row comes out once, with the same mark"))))
 
 (t/deftest test-mark-spec-takes-expressions-not-equi-maps
   (t/is (s/valid? ::lp/logical-plan '[:mark-join {:conditions [], :mark-spec {m [(== a b)]}} [:table {:rows [{:a 1}]}] [:table {:rows [{:b 1}]}]]))
