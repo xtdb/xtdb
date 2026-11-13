@@ -155,7 +155,7 @@ case "$BENCHMARK" in
     BENCH_NAME="TSBS IoT"
     PARAM_NAME="devices"
     PARAM_PATH="parameters['devices']"
-    PARAM_VALUE=$(get_var "tsbs_iot_anomaly_devices" "2500")
+    PARAM_VALUE=$(get_var "tsbs_iot_anomaly_devices" "2000")
     PARAM_VAR="tsbs_iot_anomaly_devices"
     PARAM_IS_STRING=false
     METRIC_PATH="'time-taken-ms'"

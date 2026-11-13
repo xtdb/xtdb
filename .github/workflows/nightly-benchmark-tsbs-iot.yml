@@ -1,5 +1,5 @@
 name: Nightly Benchmark TSBS IoT
-run-name: "TSBS IoT (devices: ${{ inputs.devices || '2500' }})"
+run-name: "TSBS IoT (devices: ${{ inputs.devices || '2000' }})"
 
 on:
   workflow_dispatch:
@@ -7,7 +7,7 @@ on:
       devices:
         description: 'Number of devices'
         required: false
-        default: '2500'
+        default: '2000'
         type: string
       query_iterations:
         description: 'Query iterations per type'
@@ -52,7 +52,7 @@ jobs:
     with:
       bench_type: tsbs-iot
       job_display_name: TSBS IoT
-      tsbs_device_count: ${{ inputs.devices || '2500' }}
+      tsbs_device_count: ${{ inputs.devices || '2000' }}
       tsbs_query_iterations: ${{ inputs.query_iterations || '20' }}
       tsbs_workers: ${{ inputs.workers || '4' }}
       tsbs_burn_in: ${{ inputs.burn_in || '5' }}

@@ -113,7 +113,7 @@
    "tsbs-iot"   {:benchmark-name "TSBS IoT"
                  :title "TSBS IoT Benchmark Performance"
                  :filter-param "devices"
-                 :filter-value 2500
+                 :filter-value 2000
                  :filter-is-string false}
    "ingest-tx-overhead" {:benchmark-name "Ingest batch vs individual"
                          :title "Ingest TX Overhead Benchmark Performance"

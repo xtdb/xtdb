@@ -204,7 +204,7 @@ variable "tsbs_iot_anomaly_alert_enabled" {
 variable "tsbs_iot_anomaly_devices" {
   description = "TSBS IoT devices count to scope anomaly detection to"
   type        = number
-  default     = 2500
+  default     = 2000
 }
 
 # Ingest TX Overhead anomaly detection configuration

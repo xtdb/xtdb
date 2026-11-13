@@ -39,6 +39,6 @@ auctionmark_anomaly_duration       = "PT30M"
 # TSBS IoT anomaly detection
 tsbs_iot_anomaly_logic_app_name = "xtdb-benchmark-tsbs-iot-anomaly"
 tsbs_iot_anomaly_alert_enabled  = true
-tsbs_iot_anomaly_devices        = 2500
+tsbs_iot_anomaly_devices        = 2000
 
 dashboard_name = "xtdb-benchmark-dashboard"
