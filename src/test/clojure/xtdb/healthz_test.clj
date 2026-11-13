@@ -251,3 +251,38 @@
             (let [resp (clj-http/get (->healthz-url port "alive") {:throw-exceptions false})]
               (t/is (= 503 (:status resp)))
               (t/is (re-find #"xtdb.*Primary error" (:body resp))))))))))
+
+(defn- await-started
+  [port timeout-ms]
+  (let [timeout-at-ms (+ (System/currentTimeMillis) timeout-ms)]
+    (loop []
+      (let [resp (clj-http/get (->healthz-url port "started") {:throw-exceptions false})]
+        (if (or (= 200 (:status resp))
+                (< timeout-at-ms (System/currentTimeMillis)))
+          resp
+          (do
+            (Thread/sleep 100)
+            (recur)))))))
+
+(t/deftest test-started-ignores-unresolved-source-messages-6398
+  (util/with-tmp-dirs #{node-dir}
+    (let [cfg {:log [:local {:path (.resolve node-dir "log")}]
+               :storage [:local {:path (.resolve node-dir "objects")}]
+               :healthz {:port 0}}]
+      (with-open [rw-node (xtn/start-node cfg)]
+        (xt/execute-tx rw-node [[:put-docs :docs {:xt/id 1}]]))
+
+      (with-open [submit-only-node (xtn/start-node (assoc cfg :indexer {:enabled? false}))]
+        (xt/submit-tx submit-only-node [[:put-docs :docs {:xt/id 2}]])
+
+        (t/is (= 200 (:status (await-started (.getHealthzPort submit-only-node) 5000)))
+              "a node with no log processor has no replica position to wait on")
+
+        (with-open [ro-node (-> (xtn/->config cfg)
+                                (.readOnlyDatabases true)
+                                (.open))]
+          (t/is (= 200 (:status (await-started (.getHealthzPort ro-node) 5000)))
+                "with no node able to lead, the second tx stays unresolved - started waits only for the replica log")
+
+          (t/is (= [{:xt/id 1}] (xt/q ro-node "SELECT _id FROM docs"))
+                "the second tx is in the source log but not resolved"))))))

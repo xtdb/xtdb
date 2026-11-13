@@ -10,6 +10,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import org.apache.arrow.memory.BufferAllocator
+import xtdb.InternalApi
 import xtdb.NodeBase
 import xtdb.api.TransactionKey
 import xtdb.api.TransactionResult
@@ -119,6 +120,17 @@ class Database(
     val compactor: Compactor.ForDatabase get() = partition0.compactor
 
     val latestProcessedMsgId: MessageId get() = watchers.latestSourceMsgId
+
+    /**
+     * Per partition, in partition-index order: the last replica-log message this node has read, whether it applied it or discarded it.
+     * Null for a partition with no log processor, i.e. on a node whose indexer is disabled.
+     *
+     * @suppress
+     */
+    // public only because healthz reads it from Clojure
+    @InternalApi
+    val latestReplicaMsgIds: List<MessageId?> get() = partitions.map { it.logProcessor?.latestReplicaMsgId }
+
     val ingestionError: IngestionStoppedException? get() = watchers.exception
 
     /** Whether an ingestion error here should take the whole node out of service. */

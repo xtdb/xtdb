@@ -27,6 +27,7 @@ The XTDB container images and Helm charts set it to 8080.
 The following routes are exposed by the Healthz Server and can be used to monitor the node's status:
 
 - `/healthz/started`: Indicates whether the node has completed startup and has caught up on indexing.
+    - Caught up means that, for each critical database, the node has read everything its replica log held when the node started — transactions submitted but not yet indexed by the cluster's leader don't hold it back.
     - Recommended for [**startup probes**](https://kubernetes.io/docs/concepts/configuration/liveness-readiness-startup-probes/#startup-probe).
     - We recommend configuring a generous initial timeout, as it waits for indexing to stabilize.
 - `/healthz/alive`: Confirms the application is running without critical errors.

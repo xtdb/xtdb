@@ -64,16 +64,18 @@
                                             (let [catching-up (for [[^String db-name, target-msg-ids] initial-target-message-ids
                                                                     :let [^Database db (.databaseOrNull db-cat db-name)]
                                                                     :when (and db (.isCritical db))
-                                                                    :let [lpm-id (.getLatestProcessedMsgId db)]
-                                                                    :when (some #(< lpm-id (long %)) target-msg-ids)]
-                                                                {:db db-name, :current lpm-id, :targets target-msg-ids})]
+                                                                    :let [current-msg-ids (.getLatestReplicaMsgIds db)]
+                                                                    :when (some true? (map (fn [current target]
+                                                                                             (and current (< (long current) (long target))))
+                                                                                           current-msg-ids target-msg-ids))]
+                                                                {:db db-name, :current current-msg-ids, :targets target-msg-ids})]
                                               (if (seq catching-up)
                                                 {:status 503,
                                                  :headers {"X-XTDB-Databases-Catching-Up" (str (count catching-up))}
                                                  :body (str "Catching up: "
                                                             (->> catching-up
                                                                  (map (fn [{:keys [db current targets]}]
-                                                                        (format "%s (at: %d, targets: %s)" db current targets)))
+                                                                        (format "%s (at: %s, targets: %s)" db current targets)))
                                                                  (str/join ", ")))}
 
                                                 {:status 200,
@@ -177,7 +179,12 @@
                                           (for [^String db-name (.getDatabaseNames db-cat)
                                                 :let [^Database db (.databaseOrNull db-cat db-name)]
                                                 :when db]
-                                            [db-name [(.latestSubmittedMsgId (.getSourceLog db) 0)]]))
+                                            [db-name (let [replica-log (.getReplicaLog db)]
+                                                       (vec (for [partition (range (count (.getPartitions db)))]
+                                                              ;; an empty log in a later epoch reports `(epoch << 48) - 1`, which no read position reaches
+                                                              (if (neg? (.latestSubmittedOffset replica-log partition))
+                                                                -1
+                                                                (.latestSubmittedMsgId replica-log partition)))))]))
 
          ^Server server (-> (handler (merge {:meter-registry (.getMeterRegistry base)
                                              :db-cat db-cat
