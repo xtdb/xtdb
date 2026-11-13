@@ -226,6 +226,23 @@ class RelationTest {
     }
 
     @Test
+    fun `fromRecordBatch releases the buffers it loaded when the load throws`() {
+        val bytes = Relation(allocator, "i32" ofType VectorType.I32, "i64" ofType VectorType.I64).use { rel ->
+            rel.writeRows(mapOf("i32" to 1, "i64" to 2L))
+            rel.asArrowFile
+        }
+
+        ArrowFileLoader.openFromChannel(allocator, bytes.asChannel).use { loader ->
+            loader.openPage(0).use { rb ->
+                val i32Only = schema("i32" ofType VectorType.I32)
+                assertThrows<IllegalArgumentException> { Relation.fromRecordBatch(allocator, i32Only, rb) }
+            }
+        }
+
+        assertEquals(0, allocator.allocatedMemory)
+    }
+
+    @Test
     fun testStreamRoundTrip() {
         val row1 = mapOf("i32" to 4)
         val row2 = mapOf("i32" to 8)

@@ -258,12 +258,12 @@ class Relation(
             Relation(al, vsr.fieldVectors.map(Vector::fromArrow), vsr.rowCount)
 
         @JvmStatic
-        fun fromRecordBatch(allocator: BufferAllocator, schema: Schema, recordBatch: ArrowRecordBatch): Relation {
-            val rel = Relation(allocator, schema)
-            // this load retains the buffers
-            rel.load(recordBatch)
-            return rel
-        }
+        fun fromRecordBatch(allocator: BufferAllocator, schema: Schema, recordBatch: ArrowRecordBatch): Relation =
+            Relation(allocator, schema).closeOnCatch { rel ->
+                // this load retains the buffers
+                rel.load(recordBatch)
+                rel
+            }
 
         @JvmStatic
         fun openFromRows(al: BufferAllocator, rows: List<Map<*, *>>): Relation =
