@@ -177,9 +177,10 @@ internal class ExtensibleBuffer private constructor(private val allocator: Buffe
         buffers.add(buf.readerIndex(0))
 
     internal fun loadBuffer(arrowBuf: ArrowBuf, writerIndex: Long = arrowBuf.writerIndex()) {
-        buf.close()
+        val oldBuf = buf
         buf = arrowBuf.writerIndex(writerIndex)
             .let { it.referenceManager.transferOwnership(it, allocator).transferredBuffer }
+        oldBuf.close()
     }
 
     fun openSlice(al: BufferAllocator) =

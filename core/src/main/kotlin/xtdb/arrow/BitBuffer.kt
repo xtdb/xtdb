@@ -213,18 +213,20 @@ internal class BitBuffer private constructor(
     }
 
     internal fun loadBuffer(arrowBuf: ArrowBuf, bitCount: Int) {
-        buf.close()
+        val oldBuf = buf
 
         if (arrowBuf.capacity() == 0L) {
             // vectors with no nulls are allowed to specify a zero-length validity buffer
             // at the moment, we allocate one and fill it with ones,
             // but we could optimise this away - i.e. only allocate when we need to write a zero
-            writerBitIndex = 0
             buf = allocator.buffer(bufferSize(bitCount))
+            oldBuf.close()
+            writerBitIndex = 0
             writeOnes(bitCount)
         } else {
             buf = arrowBuf.writerIndex(bufferSize(bitCount))
                 .let { it.referenceManager.transferOwnership(it, allocator).transferredBuffer }
+            oldBuf.close()
 
             writerBitIndex = bitCount
         }

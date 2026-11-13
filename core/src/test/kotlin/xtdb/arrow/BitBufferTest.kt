@@ -1,14 +1,18 @@
 package xtdb.arrow
 
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.tuple
 import io.kotest.matchers.should
 import io.kotest.matchers.shouldBe
 import io.kotest.property.Arb
 import io.kotest.property.arbitrary.*
 import io.kotest.property.checkAll
+import io.mockk.every
+import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
+import org.apache.arrow.memory.ReferenceManager
 import org.apache.arrow.vector.util.DataSizeRoundingUtil.divideBy8Ceil
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
@@ -105,6 +109,36 @@ class BitBufferTest {
                 actual.take(prefixBits.size) shouldBe prefixBits
                 actual.drop(prefixBits.size).should { l -> l.all { it } }
             }
+        }
+    }
+
+    @Test
+    fun `a buffer whose load fails keeps the buffer it held`(al: BufferAllocator) {
+        val refMgr = mockk<ReferenceManager>(relaxed = true)
+        every { refMgr.transferOwnership(any(), any()) } throws OutOfMemoryError("Java heap space")
+
+        BitBuffer(al).use { buf ->
+            listOf(true, false, true).forEach { buf.writeBoolean(it) }
+
+            shouldThrow<OutOfMemoryError> { buf.loadBuffer(ArrowBuf(refMgr, null, 8, 0), 8) }
+
+            buf.asBooleans shouldBe booleanArrayOf(true, false, true)
+        }
+    }
+
+    @Test
+    fun `a zero-capacity load that fails while filling releases the buffer it replaced`(al: BufferAllocator) {
+        val heldBuf = al.buffer(1)
+        val loadedBuf = al.buffer(1)
+        val fillingAl = mockk<BufferAllocator> {
+            every { buffer(any()) } returns heldBuf andThen loadedBuf andThenThrows OutOfMemoryError("Java heap space")
+        }
+
+        BitBuffer(fillingAl, 8).use { buf ->
+            shouldThrow<OutOfMemoryError> { buf.loadBuffer(al.empty, 64) }
+
+            heldBuf.refCnt() shouldBe 0
+            buf.buf.refCnt() shouldBe 1
         }
     }
 }
