@@ -474,7 +474,7 @@
   (tu/flush-block! node (Duration/ofMinutes 5)))
 
 (defn compact! [node]
-  (c/compact-all! node (Duration/ofMinutes 10)))
+  (c/compact-all! node (Duration/ofMinutes 30)))
 
 (defn gc! [node]
   (let [db-cat (db/<-node node)]
