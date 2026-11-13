@@ -6,7 +6,6 @@ import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.channels.ClosedSendChannelException
 import kotlinx.serialization.Serializable
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
@@ -96,16 +95,15 @@ class MemoryCache @JvmOverloads internal constructor(
 
     private sealed interface FetchChEvent {
         suspend fun handle(fetchReqs: FetchReqs)
+
+        fun fail(cause: Throwable)
     }
 
     private inner class FetchReq(
         val pathSlice: PathSlice, val fetch: Fetch, val res: CompletableDeferred<ArrowBuf>
     ) : FetchChEvent {
         override suspend fun handle(fetchReqs: FetchReqs) {
-            val openSlice =
-                runCatching { getOpenSlice(pathSlice) }
-                    .onFailure { res.completeExceptionally(it) }
-                    .getOrThrow()
+            val openSlice = getOpenSlice(pathSlice)
 
             if (openSlice != null) {
                 LOGGER.trace("FetchReq: Fast path cache hit for $pathSlice")
@@ -121,29 +119,28 @@ class MemoryCache @JvmOverloads internal constructor(
                         LOGGER.trace("FetchReq: Starting new fetch for $pathSlice")
                         val res = mutableSetOf(res)
                         scope.launch(CoroutineName("MemoryCache-Fetch-$pathSlice")) {
-                            val (localPath, onEvict) = try {
-                                fetch(path)
-                            } catch (t: Throwable) {
-                                withContext(NonCancellable) {
-                                    try {
-                                        fetchCh.send(FetchFailed(pathSlice, t))
-                                    } catch (_: ClosedSendChannelException) {
-                                    }
-                                }
-                                return@launch
-                            }
-                            try {
+                            val ev = try {
+                                val (localPath, onEvict) = fetch(path)
                                 LOGGER.trace("FetchReq: Fetched $pathSlice to $localPath, sending FetchDone message...")
-                                fetchCh.send(FetchDone(pathSlice, localPath, onEvict))
+                                FetchDone(pathSlice, localPath, onEvict)
                             } catch (t: Throwable) {
-                                onEvict?.close()
-                                throw t
+                                FetchFailed(pathSlice, t)
+                            }
+
+                            try {
+                                withContext(NonCancellable) { fetchCh.send(ev) }
+                            } catch (t: Throwable) {
+                                ev.fail(t)
                             }
                         }
                         res
                     }
                 }
             }
+        }
+
+        override fun fail(cause: Throwable) {
+            res.completeExceptionally(cause)
         }
     }
 
@@ -153,6 +150,8 @@ class MemoryCache @JvmOverloads internal constructor(
         override suspend fun handle(fetchReqs: FetchReqs) {
             fetchReqs.remove(pathSlice).orEmpty().forEach { it.completeExceptionally(cause) }
         }
+
+        override fun fail(cause: Throwable) = Unit
     }
 
     private inner class FetchDone(
@@ -209,6 +208,10 @@ class MemoryCache @JvmOverloads internal constructor(
                 reqs.forEach { it.completeExceptionally(t) }
             }
         }
+
+        override fun fail(cause: Throwable) {
+            onEvict?.close()
+        }
     }
 
     private val fetchCh = Channel<FetchChEvent>()
@@ -217,13 +220,31 @@ class MemoryCache @JvmOverloads internal constructor(
         CoroutineScope(fetchParentJob + dispatcher + CoroutineName("MemoryCache FetchLoop")).launch {
             val fetchReqs: FetchReqs = mutableMapOf()
 
-            try {
-                for (req in fetchCh)
-                    req.handle(fetchReqs)
+            val cause = try {
+                for (ev in fetchCh) {
+                    try {
+                        ev.handle(fetchReqs)
+                    } catch (t: Throwable) {
+                        ev.fail(t)
+                        throw t
+                    }
+                }
+                null
             } catch (t: Throwable) {
-                fetchReqs.values.flatten().forEach { it.cancel() }
-                throw t
+                t
             }
+
+            val failure = cause ?: CancellationException("MemoryCache closed")
+            fetchCh.close(cause)
+            withContext(NonCancellable) {
+                while (true) {
+                    val ev = fetchCh.receiveCatching().getOrNull() ?: break
+                    ev.fail(failure)
+                }
+            }
+            fetchReqs.values.flatten().forEach { it.completeExceptionally(failure) }
+
+            if (cause != null) throw cause
         }
     }
 

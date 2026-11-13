@@ -4,16 +4,21 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.assertions.withClue
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.OutOfMemoryException
@@ -23,6 +28,8 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.Timeout
+import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
 import xtdb.cache.MemoryCache.Slice
@@ -32,6 +39,7 @@ import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout.JAVA_BYTE
 import java.nio.file.Path
 import java.util.concurrent.ExecutionException
+import kotlin.coroutines.CoroutineContext
 import kotlin.time.Duration.Companion.seconds
 
 class MemoryCacheTest {
@@ -262,4 +270,106 @@ class MemoryCacheTest {
         }
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    @Timeout(10)
+    fun `a fetch loop that dies fails its callers rather than hanging them`() {
+        val oom = OutOfMemoryError("fetch loop OOM")
+
+        val uncaught = assertThrows<OutOfMemoryError> {
+            runTest {
+                val testDispatcher = StandardTestDispatcher(testScheduler)
+
+                val dispatcher = object : CoroutineDispatcher() {
+                    override fun dispatch(context: CoroutineContext, block: Runnable) {
+                        if (context[CoroutineName]?.name?.contains("oom") == true) throw oom
+                        testDispatcher.dispatch(context, block)
+                    }
+                }
+
+                MemoryCache(allocator, 250, PathLoader(), dispatcher).use { cache ->
+                    withTimeout(5.seconds) {
+                        val slice = Slice(0, 50)
+
+                        cache.get(Path.of("open"), slice) { it to null }.use {
+                            val started = CompletableDeferred<Unit>()
+                            val inFlight = async {
+                                runCatching {
+                                    cache.get(Path.of("in-flight"), slice) {
+                                        started.complete(Unit)
+                                        awaitCancellation()
+                                    }
+                                }
+                            }
+                            started.await()
+
+                            val dying = async { runCatching { cache.get(Path.of("oom"), slice) { it to null } } }
+                            val queued = async { runCatching { cache.get(Path.of("queued"), slice) { it to null } } }
+
+                            assertTrue(dying.await().exceptionOrNull().isOrCausedBy(oom))
+                            assertTrue(queued.await().exceptionOrNull().isOrCausedBy(oom))
+                            assertTrue(inFlight.await().exceptionOrNull().isOrCausedBy(oom))
+                            assertTrue(runCatching { cache.get(Path.of("later"), slice) { it to null } }.exceptionOrNull().isOrCausedBy(oom))
+
+                            cache.get(Path.of("open"), slice) { error("open slice re-fetched") }.use { buf ->
+                                assertEquals(1, buf.getByte(0))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        assertTrue(uncaught.isOrCausedBy(oom))
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    @Timeout(10)
+    fun `a fetch that completes after the fetch loop dies closes its onEvict once`() {
+        val oom = OutOfMemoryError("fetch loop OOM")
+
+        val uncaught = assertThrows<OutOfMemoryError> {
+            runTest {
+                val testDispatcher = StandardTestDispatcher(testScheduler)
+
+                val dispatcher = object : CoroutineDispatcher() {
+                    override fun dispatch(context: CoroutineContext, block: Runnable) {
+                        if (context[CoroutineName]?.name?.contains("oom") == true) throw oom
+                        testDispatcher.dispatch(context, block)
+                    }
+                }
+
+                MemoryCache(allocator, 250, PathLoader(), dispatcher).use { cache ->
+                    withTimeout(5.seconds) {
+                        val slice = Slice(0, 50)
+                        val started = CompletableDeferred<Unit>()
+                        val release = CompletableDeferred<Unit>()
+                        var evictions = 0
+
+                        val inFlight = async {
+                            runCatching {
+                                cache.get(Path.of("in-flight"), slice) {
+                                    started.complete(Unit)
+                                    withContext(NonCancellable) { release.await() }
+                                    it to AutoCloseable { evictions++ }
+                                }
+                            }
+                        }
+                        started.await()
+
+                        assertTrue(runCatching { cache.get(Path.of("oom"), slice) { it to null } }.exceptionOrNull().isOrCausedBy(oom))
+                        assertTrue(inFlight.await().exceptionOrNull().isOrCausedBy(oom))
+
+                        release.complete(Unit)
+                        runCurrent()
+
+                        assertEquals(1, evictions)
+                    }
+                }
+            }
+        }
+
+        assertTrue(uncaught.isOrCausedBy(oom))
+    }
 }
