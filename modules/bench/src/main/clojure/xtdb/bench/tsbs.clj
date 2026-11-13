@@ -11,7 +11,7 @@
             [xtdb.util :as util])
   (:import (java.time Duration Instant LocalTime)
            (java.util ArrayList Collection Collections Random)
-           (java.util.concurrent Executors ExecutorService TimeUnit)))
+           (java.util.concurrent Executors ExecutorService Future TimeUnit)))
 
 (hugsql/def-sqlvec-fns "xtdb/bench/tsbs.sql")
 
@@ -362,7 +362,7 @@
 (defn- progress-logger
   "Start a background thread that logs progress every interval-ms.
    Returns a function to stop the logger."
-  [progress-atom total interval-ms]
+  [progress-atom total ^long interval-ms]
   (let [running (atom true)
         thread (Thread.
                 (fn []
@@ -393,7 +393,7 @@
     (try
       ;; Collect results from all workers
       (reduce
-       (fn [acc fut]
+       (fn [acc ^Future fut]
          (let [batch-result (.get fut)]
            (merge-with into acc batch-result)))
        {}
