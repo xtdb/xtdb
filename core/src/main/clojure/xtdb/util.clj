@@ -331,8 +331,8 @@
 
 (def ^Thread$UncaughtExceptionHandler uncaught-exception-handler
   (reify Thread$UncaughtExceptionHandler
-    (uncaughtException [_ _thread throwable]
-      (log/error throwable "Uncaught exception:"))))
+    (uncaughtException [_ thread throwable]
+      (log/error throwable "Uncaught exception on thread" (.getName thread)))))
 
 (defn install-uncaught-exception-handler! []
   (when-not (Thread/getDefaultUncaughtExceptionHandler)
