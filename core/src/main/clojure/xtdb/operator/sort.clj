@@ -6,7 +6,6 @@
             [xtdb.operator.top])
   (:import (xtdb.api ICursor)
            xtdb.arrow.RelationReader
-           xtdb.operator.order_by.OrderByCursor
            xtdb.operator.top.TopCursor))
 
 (s/def ::skip (s/nilable (s/or :literal nat-int?, :param ::lp/param)))
@@ -60,8 +59,7 @@
                      (cond-> (SortCursor. in-cursor
                                           (as-> in-cursor cursor
                                             (if (seq order-specs)
-                                              (OrderByCursor. allocator cursor vec-types order-specs (row-limit skip-n limit-n)
-                                                              false nil nil nil nil)
+                                              (order-by/->order-by-cursor allocator cursor vec-types order-specs (row-limit skip-n limit-n))
                                               cursor)
                                             (if (or skip limit)
                                               (TopCursor. cursor skip-n limit-n 0)
