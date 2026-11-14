@@ -2,6 +2,20 @@
 title: Aggregate functions
 ---
 
+<details>
+<summary>Changelog (last updated v2.2.1)</summary>
+
+v2.2.1: percentiles spill to disk, and reject an out-of-range fraction
+
+: [`PERCENTILE_CONT` and `PERCENTILE_DISC`](#ordered-set-aggregate-functions) spill their input to disk past an internal threshold, and reject a fraction outside `[0, 1]`.
+
+  Previously both held every input row in memory, so a large enough input could exhaust the heap.
+  An out-of-range fraction's outcome depended on the data: PERCENTILE_CONT threw an internal error on groups of two or more rows but returned a value on a one-row group, and PERCENTILE_DISC returned the first or last value.
+
+  Upgrade step: a query that passes a fraction outside `[0, 1]` needs one within it.
+
+</details>
+
 Aggregate functions can be used within `SELECT` clause.
 
 In line with the SQL spec:
@@ -85,3 +99,7 @@ Note: In keeping with Postgres, we rename `ALL` and `ANY` to `BOOL_AND` and `BOO
 
 Both functions accept `ORDER BY col DESC`, which measures `fraction` from the largest value down.
 `NULLS FIRST` and `NULLS LAST` are accepted but have no effect, since nulls are excluded before ranking.
+
+A `fraction` outside `[0, 1]`, NaN included, is an error.
+
+Past an internal threshold, both functions spill their input to disk under the JVM's temporary directory (`java.io.tmpdir`), as ORDER BY and joins do, rather than hold it in memory, so a query needs temp space in proportion to its input.
