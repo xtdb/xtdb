@@ -30,6 +30,8 @@ class MetadataFileWriter(
     calculateBlooms: Boolean
 ) : AutoCloseable {
     companion object {
+        // Kotlin's assert evaluates its argument even without -ea, and this one reads back every column name
+        private val ASSERTIONS_ENABLED = MetadataFileWriter::class.java.desiredAssertionStatus()
 
         /**
          * @param recencyBranches whether the trie may branch on recency - true only for data carrying [Trie.RECENCY_COL],
@@ -79,6 +81,7 @@ class MetadataFileWriter(
     private val colMetaWriter = ColumnMetadata(colsVec.listElements, calculateBlooms)
 
     private var pageIdx = 0
+    private var firstLeafCols: List<Pair<String, Boolean>>? = null
 
     private var rowCount = 0
     private val temporalMetaBuilder = TemporalMetadata.newBuilder()
@@ -123,6 +126,7 @@ class MetadataFileWriter(
 
     fun writeLeaf(): RowIndex {
         val metaPos = nodeWtr.valueCount
+        val colsStartIdx = colsVec.listElements.valueCount
 
         colMetaWriter.writeMetadata(iidVec)
         colMetaWriter.writeMetadata(validFromVec)
@@ -138,6 +142,16 @@ class MetadataFileWriter(
         }
 
         colsVec.endList()
+
+        if (ASSERTIONS_ENABLED) {
+            val leafCols = colsVec.listElements.let { cols ->
+                val colNames = cols["col-name"]
+                val rootCols = cols["root-col?"]
+                (colsStartIdx until cols.valueCount).map { colNames.getObject(it) as String to rootCols.getBoolean(it) }
+            }
+            val firstLeafCols = this.firstLeafCols ?: leafCols.also { this.firstLeafCols = it }
+            assert(leafCols == firstLeafCols) { "leaf $pageIdx lists $leafCols, the file's first leaf $firstLeafCols" }
+        }
 
         pageIdxWtr.writeInt(pageIdx++)
         leafWtr.endStruct()
