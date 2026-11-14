@@ -119,6 +119,21 @@
       (finally
         (util/delete-dir parent)))))
 
+(t/deftest test-sorter-closed-before-finish-deletes-its-spill
+  (let [parent (Files/createTempDirectory "test-spill-" (make-array FileAttribute 0))]
+    (try
+      (with-redefs [util/tmp-dir (fn [prefix] (Files/createTempDirectory parent prefix (make-array FileAttribute 0)))]
+        (binding [order-by/*block-size* 10]
+          (with-open [rel (tu/open-rel {"a" (vec (range 25))})]
+            (with-open [sorter (order-by/->external-sorter tu/*allocator* '{a #xt/type :i64} '[[a]] Long/MAX_VALUE)]
+              (.append sorter rel)
+              (t/is (seq (.list (.toFile parent))) "spilled a run"))
+
+            (t/is (empty? (.list (.toFile parent)))
+                  "spill dir cleaned up on close"))))
+      (finally
+        (util/delete-dir parent)))))
+
 (t/deftest test-order-by-temporal-range-5269
   ;; #5269 — IOOBE in ORDER BY DESC with external sort.
   ;; .reversed() on the k-way merge comparator swapped index arguments between

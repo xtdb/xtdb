@@ -72,22 +72,11 @@
       (Arrays/copyOf idxs (int row-limit))
       idxs)))
 
-(defn- write-out-rels [allocator ^ICursor in-cursor, order-specs, row-limit, tmp-dir first-filename]
-  (loop [filenames [first-filename]
-         ;; file-idx 1 as first-filename contains 0
-         file-idx 1]
-    (if-let [filename (with-open [out-rel (Relation. allocator)]
-                        (while (and (<= (.getRowCount out-rel) ^int *block-size*)
-                                    (.tryAdvance in-cursor
-                                                 (fn [^RelationReader src-rel]
-                                                   (.append out-rel src-rel)))))
-                        (when (pos? (.getRowCount out-rel))
-                          (let [out-filename (->file tmp-dir 0 file-idx)]
-                            (with-open [os (io/output-stream out-filename)]
-                              (write-rel allocator (.select out-rel (top-idxs out-rel order-specs row-limit)) os)
-                              out-filename))))]
-      (recur (conj filenames filename) (inc file-idx))
-      (mapv io/file filenames))))
+(defn- write-run ^File [^BufferAllocator allocator, ^Relation acc-rel, order-specs, row-limit, ^Path sort-dir, run-idx]
+  (let [run (->file (.toFile sort-dir) 0 run-idx)]
+    (with-open [os (io/output-stream run)]
+      (write-rel allocator (.select acc-rel (top-idxs acc-rel order-specs row-limit)) os))
+    run))
 
 (defn mk-rel-comparator [^Relation rel1, ^Relation rel2, order-specs]
   (reduce (fn [^Comparator acc, [column {:keys [direction null-ordering]
@@ -173,102 +162,134 @@
 
 (def ^:private k-way-constant 4)
 
-(defn- external-sort [allocator in-cursor order-specs row-limit vec-types tmp-dir first-filename]
-  (let [batches (write-out-rels allocator in-cursor order-specs row-limit tmp-dir first-filename)]
-    (loop [batches batches
-           batch-idx 1]
-      (if-not (< 1 (count batches))
-        (first batches)
-        (recur
-         (loop [batches batches new-batches [] file-idx 0]
-           (if-let [files (seq (take k-way-constant batches))]
-             (let [new-batch (try
-                               (k-way-merge allocator files order-specs row-limit vec-types tmp-dir batch-idx file-idx)
-                               (finally
-                                 (run! io/delete-file files)))]
+(defn- merge-runs ^File [allocator runs order-specs row-limit vec-types tmp-dir]
+  (loop [runs runs
+         batch-idx 1]
+    (if-not (< 1 (count runs))
+      (first runs)
+      (recur
+       (loop [runs runs new-runs [] file-idx 0]
+         (if-let [files (seq (take k-way-constant runs))]
+           (let [new-run (try
+                           (k-way-merge allocator files order-specs row-limit vec-types tmp-dir batch-idx file-idx)
+                           (finally
+                             (run! io/delete-file files)))]
 
-               (recur (drop k-way-constant batches)
-                      (conj new-batches new-batch)
-                      (inc file-idx)))
-             new-batches))
-         (inc batch-idx))))))
+             (recur (drop k-way-constant runs)
+                    (conj new-runs new-run)
+                    (inc file-idx)))
+           new-runs))
+       (inc batch-idx)))))
 
-(deftype OrderByCursor [^BufferAllocator allocator
-                        ^ICursor in-cursor
-                        static-vec-types
-                        order-specs
-                        ^long row-limit
-                        ^:unsynchronized-mutable ^boolean consumed?
-                        ^:unsynchronized-mutable ^Path sort-dir
-                        ^:unsynchronized-mutable ^Relation$Loader loader
-                        ^:unsynchronized-mutable ^Relation read-rel
-                        ^:unsynchronized-mutable ^File sorted-file]
+;; `append` copies each page in; call `finish` once, after the last `append`.
+;; The cursor `finish` returns is valid until the sorter is closed; each page it hands out only until its next `tryAdvance`.
+;; Closing the sorter deletes any spill files, whether or not `finish` was reached.
+(gen-interface
+ :name xtdb.operator.order_by.IExternalSorter
+ :extends [java.lang.AutoCloseable]
+ :methods [[append [xtdb.arrow.RelationReader] void]
+           [finish [] xtdb.api.ICursor]])
+
+(import xtdb.operator.order_by.IExternalSorter)
+
+(deftype SpilledCursor [^Relation$Loader loader, ^Relation rel]
+  ICursor
+  (getCursorType [_] "spilled-sort")
+  (getChildCursors [_] [])
+
+  (tryAdvance [_ c]
+    (if (.loadNextPage loader rel)
+      (do
+        (.accept c rel)
+        true)
+      false))
+
+  (close [_]
+    (util/try-close rel)
+    (util/try-close loader)))
+
+(deftype InMemoryCursor [^:unsynchronized-mutable ^RelationReader rel]
+  ICursor
+  (getCursorType [_] "in-memory-sort")
+  (getChildCursors [_] [])
+
+  (tryAdvance [_ c]
+    (if-let [out-rel rel]
+      (do
+        (set! rel nil)
+        (.accept c out-rel)
+        true)
+      false)))
+
+(deftype ExternalSorter [^BufferAllocator allocator
+                         vec-types
+                         order-specs
+                         ^long row-limit
+                         ^Relation acc-rel
+                         ^:unsynchronized-mutable ^Path sort-dir
+                         ^:unsynchronized-mutable runs
+                         ^:unsynchronized-mutable ^ICursor out]
+  IExternalSorter
+  (append [_ rel]
+    (.append acc-rel rel)
+
+    (when (and (<= row-limit (quot ^int *block-size* 2))
+               (< ^int *block-size* (.getRowCount acc-rel)))
+      (util/with-open [top-rel (.openDirectSlice (.select acc-rel (top-idxs acc-rel order-specs row-limit)) allocator)]
+        (.clear acc-rel)
+        (.append acc-rel top-rel)))
+
+    (when (< ^int *block-size* (.getRowCount acc-rel))
+      (when-not sort-dir
+        (set! sort-dir (util/tmp-dir "external-sort")))
+      (set! runs (conj runs (write-run allocator acc-rel order-specs row-limit sort-dir (count runs))))
+      (.clear acc-rel)))
+
+  (finish [_]
+    (set! out
+          (if (empty? runs)
+            (InMemoryCursor. (when (pos? (.getRowCount acc-rel))
+                               (.select acc-rel (top-idxs acc-rel order-specs row-limit))))
+
+            (let [runs (cond-> runs
+                         (pos? (.getRowCount acc-rel))
+                         (conj (write-run allocator acc-rel order-specs row-limit sort-dir (count runs))))
+                  sorted-file (merge-runs allocator runs order-specs row-limit vec-types (.toFile sort-dir))]
+              (util/with-close-on-catch [loader (Relation/loader allocator (util/->file-channel (util/->path sorted-file)))]
+                (SpilledCursor. loader (Relation. allocator (.getSchema loader)))))))
+    out)
+
+  (close [_]
+    (util/try-close out)
+    (util/try-close acc-rel)
+    (when sort-dir (util/delete-dir sort-dir))))
+
+(defn ->external-sorter
+  "Sorts pages with the columns in `vec-types` by `order-specs`, keeping only the first `row-limit` rows.
+  Spills a sorted run to a temp dir whenever it holds more than `*block-size*` rows."
+  ^IExternalSorter [^BufferAllocator allocator, vec-types, order-specs, ^long row-limit]
+  (util/with-close-on-catch [acc-rel (Relation. allocator
+                                                ^List (vec (for [[col-name vec-type] vec-types]
+                                                             (Vector/open allocator (str col-name) vec-type)))
+                                                0)]
+    (ExternalSorter. allocator vec-types order-specs row-limit acc-rel nil [] nil)))
+
+(deftype OrderByCursor [^ICursor in-cursor
+                        ^IExternalSorter sorter
+                        ^:unsynchronized-mutable ^ICursor sorted]
   ICursor
   (getCursorType [_] "order-by")
   (getChildCursors [_] [in-cursor])
 
-  (tryAdvance [this c]
-    (if-not consumed?
-      (letfn [(load-next-batch []
-                (if (.loadNextPage ^Relation$Loader (.loader this) (.read-rel this))
-                  (do
-                    (.accept c (.read-rel this))
-                    true)
-                  (do
-                    (io/delete-file (.sorted-file this))
-                    (set! (.consumed? this) true)
-                    false)))]
-
-        (if-not (nil? loader)
-          (load-next-batch)
-
-          (util/with-open [acc-rel (Relation. allocator
-                                              ^List (vec (for [[col-name vec-type] static-vec-types]
-                                                           (Vector/open allocator (str col-name) vec-type)))
-                                              0)]
-            (while (and (<= (.getRowCount acc-rel) ^int *block-size*)
-                        (.tryAdvance in-cursor
-                                     (fn [^RelationReader src-rel]
-                                       (.append acc-rel src-rel))))
-              (when (and (<= row-limit (quot ^int *block-size* 2))
-                         (< ^int *block-size* (.getRowCount acc-rel)))
-                (util/with-open [top-rel (.openDirectSlice (.select acc-rel (top-idxs acc-rel order-specs row-limit)) allocator)]
-                  (.clear acc-rel)
-                  (.append acc-rel top-rel))))
-
-            (let [pos (.getRowCount acc-rel)]
-              (if (<= pos ^int *block-size*)
-                ;; in memory case
-                (if (zero? pos)
-                  (do
-                    (set! (.consumed? this) true)
-                    false)
-
-                  (do
-                    (.accept c (.select acc-rel (top-idxs acc-rel order-specs row-limit)))
-                    (set! (.consumed? this) true)
-                    true))
-
-                ;; first batch from external sort
-                (let [sort-dir (util/tmp-dir "external-sort")
-                      tmp-dir (io/file (.getPath (.toUri sort-dir)))
-                      first-filename (->file tmp-dir 0 0)]
-                  (set! (.sort-dir this) sort-dir)
-                  (.mkdirs tmp-dir)
-                  (let [out-rel (.select acc-rel (top-idxs acc-rel order-specs row-limit))]
-                    (with-open [os (io/output-stream first-filename)]
-                      (write-rel allocator out-rel os)))
-
-                  (let [sorted-file (external-sort allocator in-cursor order-specs row-limit static-vec-types tmp-dir first-filename)]
-                    (set! (.sorted-file this) sorted-file)
-                    (let [loader (Relation/loader allocator (util/->file-channel (util/->path sorted-file)))]
-                      (set! (.loader this) loader)
-                      (set! (.read-rel this) (Relation. allocator (.getSchema loader))))
-                    (load-next-batch))))))))
-      false))
+  (tryAdvance [_ c]
+    (when-not sorted
+      (.forEachRemaining in-cursor (fn [^RelationReader rel] (.append sorter rel)))
+      (set! sorted (.finish sorter)))
+    (.tryAdvance sorted c))
 
   (close [_]
-    (util/try-close read-rel)
-    (util/try-close loader)
-    (util/try-close in-cursor)
-    (when sort-dir (util/delete-dir sort-dir))))
+    (util/try-close sorter)
+    (util/try-close in-cursor)))
+
+(defn ->order-by-cursor ^ICursor [allocator in-cursor vec-types order-specs row-limit]
+  (OrderByCursor. in-cursor (->external-sorter allocator vec-types order-specs row-limit) nil))
