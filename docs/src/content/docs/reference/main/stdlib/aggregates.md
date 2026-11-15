@@ -71,3 +71,17 @@ Note: In keeping with Postgres, we rename `ALL` and `ANY` to `BOOL_AND` and `BOO
   SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY amount) AS median_amount
   FROM sales
   ```
+
+`PERCENTILE_DISC(fraction) WITHIN GROUP (ORDER BY col)` (v2.2+)
+: discrete percentile — the first of the sorted values whose cumulative distribution reaches `fraction` (in `[0, 1]`); always one of the input values, never interpolated.
+
+  - `col` can be of any orderable type — strings and timestamps as well as numbers.
+  - PostgreSQL-compatible.
+
+  ```sql
+  SELECT PERCENTILE_DISC(0.5) WITHIN GROUP (ORDER BY region) AS middle_region
+  FROM sales
+  ```
+
+Both functions accept `ORDER BY col DESC`, which measures `fraction` from the largest value down.
+`NULLS FIRST` and `NULLS LAST` are accepted but have no effect, since nulls are excluded before ranking.
