@@ -2,6 +2,7 @@
 
 package xtdb.azure
 
+import java.net.URI
 import com.azure.core.util.BinaryData
 import com.azure.identity.DefaultAzureCredential
 import com.azure.identity.DefaultAzureCredentialBuilder
@@ -104,6 +105,10 @@ class BlobStorage(
 
             buildClient()
         }.getBlobContainerClient(factory.container).also { it.createIfNotExists() }
+
+    // the client's URL, not the configured endpoint: a remote's connection string can point the client elsewhere
+    override val location: URI =
+        URI(client.blobContainerUrl).let { URI(it.scheme, it.authority, "${it.path.trimEnd('/')}/$prefix", null, null) }
 
     override suspend fun getObject(k: Path): ByteBuffer =
         try {

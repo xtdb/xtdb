@@ -181,7 +181,7 @@ object Storage {
             val rootPath = path.resolve(storageRoot(storageVersion, epoch, partition, totalPartitions))
                 .also { it.createDirectories() }
 
-            return LocalStorage(allocator, memoryCache, meterRegistry, epoch, dbName, partition, rootPath)
+            return LocalStorage(allocator, memoryCache.openForDatabase(rootPath.toAbsolutePath().normalize().toUri()), meterRegistry, epoch, rootPath)
         }
     }
 
@@ -212,7 +212,8 @@ object Storage {
 
             val objStoreRoot = storageRoot(storageVersion, epoch, partition, totalPartitions)
             return objectStore.openObjectStore(objStoreRoot, remotes).closeOnCatch { objectStore ->
-                RemoteBufferPool(allocator, objectStore, memoryCache, diskCache, meterRegistry, epoch, dbName, partition)
+                val storageUri = objectStore.location
+                RemoteBufferPool(allocator, objectStore, memoryCache.openForDatabase(storageUri), diskCache.openForDatabase(storageUri), meterRegistry, epoch)
             }
         }
     }
