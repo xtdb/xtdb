@@ -15,7 +15,7 @@ dependencies {
     implementation("org.apache.ant:ant:1.10.18") // eugh. _all_ of Ant for the DataReaderTransformer?
 
     // this one because jreleaser depends on Jackson 2.15+
-    implementation("com.fasterxml.jackson.core:jackson-annotations:2.20")
+    implementation("com.fasterxml.jackson.core:jackson-annotations:2.23")
 }
 
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(25))
