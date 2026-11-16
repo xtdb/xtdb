@@ -7,6 +7,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.asExecutor
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.future.asDeferred
 import kotlinx.coroutines.future.await
@@ -41,7 +42,6 @@ import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption.*
-import java.util.concurrent.CompletableFuture.completedFuture
 import kotlin.io.path.deleteIfExists
 import kotlin.io.path.fileSize
 
@@ -54,7 +54,7 @@ internal class RemoteBufferPool(
     override val epoch: StorageEpoch,
     dbName: DatabaseName,
     partition: Int,
-    ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val arrowFooterCache: AsyncCache<Path, ArrowFooter> = arrowFooterCache(),
 ) : BufferPool, IEvictBufferTest, Closeable {
 
@@ -142,14 +142,20 @@ internal class RemoteBufferPool(
         }.use { it.toByteArray() }
     }
 
+    // awaited outside the cache's bin lock: a loader that waits on the disk cache can deadlock the cache's own eviction.
+    // Not a bare `await()`: on the caller's cancellation that cancels the future, which every caller for the key shares,
+    // and a cancelled future never runs the `use` that unpins the disk-cache entry.
     override suspend fun getFooter(key: Path): ArrowFooter =
         arrowFooterCache.get(key) { _, _ ->
             diskCache
                 .get(cacheRootPath.resolve(key)) { k, tmpFile ->
                     diskCacheMisses?.increment()
                     getObject(cacheRootPath.relativize(k), tmpFile)
-                }.get()
-                .use { entry -> completedFuture(entry.path.openReadableChannel().readArrowFooter()) }
+                }
+                .thenApplyAsync(
+                    { entry -> entry.use { it.path.openReadableChannel().readArrowFooter() } },
+                    ioDispatcher.asExecutor()
+                )
         }.asDeferred().await()
 
     override suspend fun getRecordBatch(key: Path, idx: Int): ArrowRecordBatch {
