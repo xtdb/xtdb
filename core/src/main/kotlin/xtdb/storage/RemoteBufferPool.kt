@@ -2,6 +2,7 @@ package xtdb.storage
 
 import io.micrometer.core.instrument.Counter
 import io.micrometer.core.instrument.MeterRegistry
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -50,11 +51,12 @@ internal class RemoteBufferPool(
     override val epoch: StorageEpoch,
     dbName: DatabaseName,
     partition: Int,
+    ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : BufferPool, IEvictBufferTest, Closeable {
 
     private val allocator = allocator.openChildAllocator("buffer-pool")
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
 
     private val arrowFooterCache = arrowFooterCache()
 
