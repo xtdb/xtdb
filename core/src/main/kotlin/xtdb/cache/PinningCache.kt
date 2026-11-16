@@ -9,8 +9,6 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asExecutor
 import java.util.concurrent.CompletableFuture
-import java.util.concurrent.ForkJoinPool
-import java.util.concurrent.TimeUnit.MILLISECONDS
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.locks.Lock
 import java.util.concurrent.locks.ReentrantLock
@@ -68,6 +66,7 @@ class PinningCache<K : Any, V : PinningCache.IEntry<K>>(
 
     val cache: AsyncCache<K, V> = Caffeine.newBuilder()
         .maximumWeight(maxSizeBytes)
+        .executor(Runnable::run)
         .evictionListener<K, V> { key, value, cause -> value!!.onEvict(key!!, cause) }
         .removalListener<K, V> { key, value, cause -> if (!cause.wasEvicted()) value!!.onEvict(key!!, cause) }
         .weigher<K, V> { _, value -> if (value.refCount.get() > 0) 0 else value.weight.toInt() }
@@ -104,7 +103,6 @@ class PinningCache<K : Any, V : PinningCache.IEntry<K>>(
     override fun close() {
         cache.asMap().clear()
         cache.synchronous().cleanUp()
-        ForkJoinPool.commonPool().awaitQuiescence(100, MILLISECONDS)
     }
 
     fun releaseEntry(k: K) {
