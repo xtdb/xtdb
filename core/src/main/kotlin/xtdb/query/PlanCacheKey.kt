@@ -1,7 +1,9 @@
 package xtdb.query
 
 import org.apache.arrow.vector.types.pojo.Field
+import xtdb.api.TableRef
 import xtdb.database.DatabaseName
+import xtdb.trie.ColumnName
 
 /**
  * Everything a plan can depend on, and so everything the plan cache keys on.
@@ -20,7 +22,7 @@ data class PlanCacheKey(
     val decorrelate: Boolean,
     val explain: Explain?,
     val argFields: List<Field>?,
-    val tableInfo: Any?,
+    val tableInfo: Map<DatabaseName, Map<TableRef, Set<ColumnName>>>,
 ) {
     enum class Explain { PLAN, ANALYZE }
 }
