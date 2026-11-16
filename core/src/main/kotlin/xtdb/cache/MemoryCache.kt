@@ -11,6 +11,7 @@ import kotlinx.serialization.Serializable
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.ForeignAllocation
+import xtdb.api.error.Fault
 import xtdb.cache.MemoryCache.PathSlice
 import xtdb.util.*
 import java.lang.foreign.Arena
@@ -19,17 +20,24 @@ import java.nio.channels.ClosedByInterruptException
 import java.nio.channels.FileChannel
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
-import kotlin.io.path.fileSize
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
-private typealias FetchReqs = MutableMap<PathSlice, MutableSet<CompletableDeferred<ArrowBuf>>>
+private class Awaiter(val pathSlice: PathSlice, val res: CompletableDeferred<ArrowBuf>)
+
+private typealias FetchReqs = MutableMap<Path, MutableList<Awaiter>>
 
 private val LOGGER = MemoryCache::class.logger
+
+// each mapped file is a VMA, and vm.max_map_count defaults to 65530
+internal const val MAX_IDLE_FILES = 4096
 
 /**
  * NOTE: the allocation count metrics in the provided `allocator` WILL NOT be accurate
  *   - we allocate a buffer in here for every _usage_, and don't take shared memory into account.
  *
- * This isn't *caching* much now (see #4831) - it's more to keep track of/limit how much we've mmap'd in.
+ * Each file is mapped once, and its pages are handed out as buffers over that mapping.
+ * The allocator's limit bounds the bytes of pages in use; a file with none in use stays mapped while it fits in what's left of that limit.
  */
 class MemoryCache @JvmOverloads internal constructor(
     al: BufferAllocator,
@@ -46,11 +54,7 @@ class MemoryCache @JvmOverloads internal constructor(
         if (dispatcher != Dispatchers.IO) yield()
     }
 
-    data class Slice(val offset: Long, val length: Long) {
-        companion object {
-            fun from(path: Path) = Slice(0, path.fileSize())
-        }
-    }
+    data class Slice(val offset: Long, val length: Long)
 
     internal data class PathSlice(val path: Path, val slice: Slice? = null) {
         constructor(path: Path, offset: Long, length: Long) : this(path, Slice(offset, length))
@@ -65,19 +69,114 @@ class MemoryCache @JvmOverloads internal constructor(
     }
 
     interface PathLoader {
-        fun load(path: Path, slice: Slice, arena: Arena): MemorySegment
+        /**
+         * Maps the whole of the file at [path], read-only, into [arena].
+         */
+        fun load(path: Path, arena: Arena): MemorySegment
 
         companion object {
             operator fun invoke() = object : PathLoader {
-                override fun load(path: Path, slice: Slice, arena: Arena): MemorySegment =
+                override fun load(path: Path, arena: Arena): MemorySegment =
                     try {
                         path.openReadableChannel().use { ch ->
-                            ch.map(FileChannel.MapMode.READ_ONLY, slice.offset, slice.length, arena)
+                            ch.map(FileChannel.MapMode.READ_ONLY, 0, ch.size(), arena)
                         }
                     } catch (e: ClosedByInterruptException) {
                         throw InterruptedException(e.message)
                     }
             }
+        }
+    }
+
+    private class MappedFile(val path: Path, val arena: Arena, val segment: MemorySegment, val onEvict: AutoCloseable?) {
+        // incremented only on the fetch actor, decremented by `release0` on any thread:
+        // so the actor, reading zero, knows no slice can come back to life, and may unmap.
+        val liveSlices = AtomicInteger()
+
+        val isIdle get() = liveSlices.get() == 0
+
+        fun unmap() {
+            try {
+                try {
+                    arena.close()
+                } finally {
+                    onEvict?.close()
+                }
+            } catch (t: Throwable) {
+                LOGGER.warn(t, "error unmapping $path")
+            }
+        }
+    }
+
+    // owned by the fetch actor, and by close() once the actor is joined; iterates least-recently-used first
+    private val mappedFiles = LinkedHashMap<Path, MappedFile>(16, 0.75f, true)
+
+    private fun wrapSlice(file: MappedFile, pathSlice: PathSlice): ArrowBuf {
+        val fileSize = file.segment.byteSize()
+        val slice = pathSlice.slice ?: Slice(0, fileSize)
+        if (slice.offset < 0 || slice.length < 0 || slice.offset > fileSize || slice.length > fileSize - slice.offset)
+            throw Fault(
+                "Slice out of bounds for ${file.path}: $slice, file is $fileSize bytes",
+                "xtdb.memory-cache/slice-out-of-bounds",
+                mapOf("path" to file.path.toString(), "offset" to slice.offset, "length" to slice.length, "file-size" to fileSize)
+            )
+
+        val allocation = object : ForeignAllocation(slice.length, file.segment.address() + slice.offset) {
+            // Arrow 19's `wrapForeignAllocation` calls `release0` itself when it fails after reserving the bytes, but not when it fails before.
+            private val released = AtomicBoolean()
+
+            public override fun release0() {
+                if (!released.compareAndSet(false, true)) return
+                openSlices.computeIfPresent(pathSlice) { _, buf ->
+                    buf.takeIf { it.referenceManager.refCount > 0 }
+                }
+                file.liveSlices.decrementAndGet()
+            }
+        }
+
+        file.liveSlices.incrementAndGet()
+        return try {
+            cacheAl.wrapForeignAllocation(allocation)
+        } catch (t: Throwable) {
+            allocation.release0()
+            throw t
+        }
+    }
+
+    private suspend fun serve(file: MappedFile, pathSlice: PathSlice, reqs: List<CompletableDeferred<ArrowBuf>>) {
+        try {
+            val buf = wrapSlice(file, pathSlice)
+
+            try {
+                openSlices[pathSlice] = buf
+                yieldIfSimulation() // interleave between put and completing awaiters
+                // (size - 1) because we already have refCount 1 from allocation
+                (reqs.size - 1).takeIf { it > 0 }?.let { buf.referenceManager.retain(it) }
+                reqs.forEach {
+                    if (!it.complete(buf)) buf.referenceManager.release()
+                }
+            } catch (t: Throwable) {
+                buf.close()
+                throw t
+            }
+        } catch (t: Throwable) {
+            reqs.forEach { it.completeExceptionally(t) }
+        }
+    }
+
+    private fun evictIdleFiles() {
+        val idleFiles = mappedFiles.values.filter { it.isIdle }
+        var idleBytes = idleFiles.sumOf { it.segment.byteSize() }
+        var idleCount = idleFiles.size
+        val byteBudget = cacheAl.limit - cacheAl.allocatedMemory
+
+        for (file in idleFiles) {
+            if (idleBytes <= byteBudget && idleCount <= MAX_IDLE_FILES) break
+            LOGGER.trace("evicting idle file ${file.path}")
+            mappedFiles.remove(file.path)
+            idleBytes -= file.segment.byteSize()
+            idleCount--
+            file.unmap()
         }
     }
 
@@ -109,33 +208,42 @@ class MemoryCache @JvmOverloads internal constructor(
             if (openSlice != null) {
                 LOGGER.trace("FetchReq: Fast path cache hit for $pathSlice")
                 if (!res.complete(openSlice)) openSlice.referenceManager.release()
-            } else {
-                yieldIfSimulation() // interleave between openSlice check and compute
-                val path = pathSlice.path
-                fetchReqs.compute(pathSlice) { _, awaiters ->
-                    if (awaiters != null) {
-                        LOGGER.trace("FetchReq: Fetch in progress for $pathSlice - adding to ${awaiters.size} awaiter(s)")
-                        awaiters.also { it.add(res) }
-                    } else {
-                        LOGGER.trace("FetchReq: Starting new fetch for $pathSlice")
-                        val res = mutableSetOf(res)
-                        scope.launch(CoroutineName("MemoryCache-Fetch-$pathSlice")) {
-                            val ev = try {
-                                val (localPath, onEvict) = fetch(path)
-                                LOGGER.trace("FetchReq: Fetched $pathSlice to $localPath, sending FetchDone message...")
-                                FetchDone(pathSlice, localPath, onEvict)
-                            } catch (t: Throwable) {
-                                FetchFailed(pathSlice, t)
-                            }
+                return
+            }
 
-                            try {
-                                withContext(NonCancellable) { fetchCh.send(ev) }
-                            } catch (t: Throwable) {
-                                ev.fail(t)
-                            }
+            yieldIfSimulation() // interleave between openSlice check and compute
+            val path = pathSlice.path
+
+            val file = mappedFiles[path]
+            if (file != null) {
+                LOGGER.trace("FetchReq: $path already mapped - serving $pathSlice")
+                serve(file, pathSlice, listOf(res))
+                evictIdleFiles()
+                return
+            }
+
+            fetchReqs.compute(path) { _, awaiters ->
+                if (awaiters != null) {
+                    LOGGER.trace("FetchReq: Fetch in progress for $path - adding to ${awaiters.size} awaiter(s)")
+                    awaiters.also { it.add(Awaiter(pathSlice, res)) }
+                } else {
+                    LOGGER.trace("FetchReq: Starting new fetch for $path")
+                    scope.launch(CoroutineName("MemoryCache-Fetch-$path")) {
+                        val ev = try {
+                            val (localPath, onEvict) = fetch(path)
+                            LOGGER.trace("FetchReq: Fetched $path to $localPath, sending FetchDone message...")
+                            FetchDone(path, localPath, onEvict)
+                        } catch (t: Throwable) {
+                            FetchFailed(path, t)
                         }
-                        res
+
+                        try {
+                            withContext(NonCancellable) { fetchCh.send(ev) }
+                        } catch (t: Throwable) {
+                            ev.fail(t)
+                        }
                     }
+                    mutableListOf(Awaiter(pathSlice, res))
                 }
             }
         }
@@ -146,67 +254,40 @@ class MemoryCache @JvmOverloads internal constructor(
     }
 
     private inner class FetchFailed(
-        val pathSlice: PathSlice, val cause: Throwable
+        val path: Path, val cause: Throwable
     ) : FetchChEvent {
         override suspend fun handle(fetchReqs: FetchReqs) {
-            fetchReqs.remove(pathSlice).orEmpty().forEach { it.completeExceptionally(cause) }
+            fetchReqs.remove(path).orEmpty().forEach { it.res.completeExceptionally(cause) }
         }
 
         override fun fail(cause: Throwable) = Unit
     }
 
     private inner class FetchDone(
-        val pathSlice: PathSlice, val localPath: Path, val onEvict: AutoCloseable?
+        val path: Path, val localPath: Path, val onEvict: AutoCloseable?
     ) : FetchChEvent {
         override suspend fun handle(fetchReqs: FetchReqs) {
-            val reqs = fetchReqs.remove(pathSlice).orEmpty()
-            LOGGER.trace("FetchDone: Completing $pathSlice for ${reqs.size} awaiter(s)")
+            val awaiters = fetchReqs.remove(path).orEmpty()
+            LOGGER.trace("FetchDone: Completing $path for ${awaiters.size} awaiter(s)")
 
             try {
-                val buf = try {
-                    // we open up a fine-grained arena here so that we can release the memory
-                    // as soon as we're done with the ArrowBuf.
+                val file = try {
                     Arena.ofShared().closeOnCatch { arena ->
-                        val slice = pathSlice.slice ?: Slice.from(localPath)
-                        val memSeg = pathLoader.load(localPath, slice, arena)
-
-                        cacheAl.wrapForeignAllocation(
-                            object : ForeignAllocation(memSeg.byteSize(), memSeg.address()) {
-                                override fun release0() {
-                                    arena.close()
-                                    onEvict?.close()
-                                    openSlices.computeIfPresent(pathSlice) { _, buf ->
-                                        buf.takeIf { it.referenceManager.refCount > 0 }
-                                    }
-                                }
-                            })
+                        MappedFile(path, arena, pathLoader.load(localPath, arena), onEvict)
                     }
                 } catch (t: Throwable) {
                     onEvict?.close()
                     throw t
                 }
 
-                try {
-                    if (reqs.isEmpty()) {
-                        LOGGER.trace("FetchDone: No awaiters for $pathSlice")
-                        buf.referenceManager.release()
-                    } else {
-                        LOGGER.trace("FetchDone: Loaded $pathSlice into memory for ${reqs.size} awaiter(s)")
-                        openSlices[pathSlice] = buf
-                        yieldIfSimulation() // interleave between put and completing awaiters
-                        // (size - 1) because we already have refCount 1 from allocation
-                        (reqs.size - 1).takeIf { it > 0 }?.let { buf.referenceManager.retain(it) }
-                        reqs.forEach {
-                            if (!it.complete(buf)) buf.referenceManager.release()
-                        }
-                    }
+                mappedFiles[path] = file
 
-                } catch (t: Throwable) {
-                    buf.close()
-                    throw t
-                }
+                awaiters.groupBy({ it.pathSlice }, { it.res })
+                    .forEach { (pathSlice, reqs) -> serve(file, pathSlice, reqs) }
+
+                evictIdleFiles()
             } catch (t: Throwable) {
-                reqs.forEach { it.completeExceptionally(t) }
+                awaiters.forEach { it.res.completeExceptionally(t) }
             }
         }
 
@@ -243,7 +324,7 @@ class MemoryCache @JvmOverloads internal constructor(
                     ev.fail(failure)
                 }
             }
-            fetchReqs.values.flatten().forEach { it.completeExceptionally(failure) }
+            fetchReqs.values.flatten().forEach { it.res.completeExceptionally(failure) }
 
             if (cause != null) throw cause
         }
@@ -298,6 +379,12 @@ class MemoryCache @JvmOverloads internal constructor(
     override fun close() {
         fetchCh.close()
         runBlocking { fetchParentJob.cancelAndJoin() }
+
+        for (file in mappedFiles.values) {
+            if (file.isIdle) file.unmap() else LOGGER.warn("closing with live slices over ${file.path}")
+        }
+        mappedFiles.clear()
+
         cacheAl.close()
     }
 

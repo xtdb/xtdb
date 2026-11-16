@@ -20,6 +20,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import org.apache.arrow.memory.AllocationListener
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.OutOfMemoryException
 import org.apache.arrow.memory.RootAllocator
@@ -32,6 +33,7 @@ import org.junit.jupiter.api.Timeout
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
+import xtdb.api.error.Fault
 import xtdb.cache.MemoryCache.Slice
 import java.io.IOException
 import java.lang.foreign.Arena
@@ -59,66 +61,127 @@ class MemoryCacheTest {
     class PathLoader : MemoryCache.PathLoader {
         private var idx = 0
 
-        override fun load(path: Path, slice: Slice, arena: Arena): MemorySegment =
-            arena.allocate(slice.length)
+        // a file named for a number is that many bytes long
+        override fun load(path: Path, arena: Arena): MemorySegment =
+            arena.allocate(path.fileName.toString().toLongOrNull() ?: 1000)
                 .also { it.set(JAVA_BYTE, 0, (++idx).toByte()) }
     }
 
     @Test
-    fun `test memory cache`() = runTest {
-        // just a starter-for-ten here, intent is that we go further down the property/deterministic testing route
-        // significantly exercised E2E by the rest of the test-suite and benchmarks.
+    fun `an idle file stays mapped and is served without re-fetching`() = runTest {
+        MemoryCache(allocator, 250, PathLoader()).use { cache ->
+            var fetches = 0
+            var evictions = 0
+            val fetch = MemoryCache.Fetch { fetches++; it to AutoCloseable { evictions++ } }
+            val path = Path.of("t1/100")
 
-        // this used to be more of a test when the memory cache actually cached entries.
-        // now, it's mostly a stats test.
+            cache.get(path, Slice(0, 100), fetch).use { buf ->
+                assertEquals(1, buf.getByte(0))
+                assertEquals(MemoryCache.Stats(100, 150), cache.stats0)
+            }
+
+            assertEquals(MemoryCache.Stats(0, 250), cache.stats0)
+
+            cache.get(path, Slice(0, 100), fetch).use { buf ->
+                assertEquals(1, buf.getByte(0), "served from the same mapping")
+            }
+
+            assertEquals(1, fetches)
+            assertEquals(0, evictions)
+        }
+    }
+
+    @Test
+    fun `a second slice of a mapped file doesn't re-fetch`() = runTest {
+        MemoryCache(allocator, 250, PathLoader()).use { cache ->
+            var fetches = 0
+            val fetch = MemoryCache.Fetch { fetches++; it to null }
+            val path = Path.of("t1/200")
+
+            cache.get(path, Slice(0, 50), fetch).use { b1 ->
+                cache.get(path, Slice(100, 50), fetch).use { b2 ->
+                    assertEquals(1, b1.getByte(0))
+                    assertEquals(0, b2.getByte(0), "the second slice starts 100 bytes into the same mapping")
+                    assertEquals(MemoryCache.Stats(100, 150), cache.stats0)
+                }
+            }
+
+            assertEquals(1, fetches)
+        }
+    }
+
+    @Test
+    fun `a slice past the end of its file fails`() = runTest {
+        MemoryCache(allocator, 250, PathLoader()).use { cache ->
+            shouldThrow<Fault> {
+                cache.get(Path.of("t1/100"), Slice(50, 100)) { it to null }
+            }
+
+            shouldThrow<Fault> {
+                cache.get(Path.of("t1/100"), Slice(Long.MAX_VALUE, 10)) { it to null }
+            }
+
+            shouldThrow<Fault> {
+                cache.get(Path.of("t1/100"), Slice(50, Long.MAX_VALUE)) { it to null }
+            }
+
+            assertEquals(MemoryCache.Stats(0, 250), cache.stats0)
+        }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `evicts the least recently used idle file past the byte bound`() = runTest {
+        MemoryCache(allocator, 250, PathLoader(), UnconfinedTestDispatcher(testScheduler)).use { cache ->
+            val evicted = mutableListOf<String>()
+
+            suspend fun get(p: String, inUse: suspend () -> Unit = {}) {
+                cache.get(Path.of(p), Slice(0, 100)) { it to AutoCloseable { evicted.add(p) } }.use { inUse() }
+                runCurrent()
+            }
+
+            get("a/100")
+            get("b/100")
+            assertEquals(emptyList<String>(), evicted)
+
+            // with c in use, a and b (200 bytes idle) outgrow the 150 left
+            get("c/100")
+            assertEquals(listOf("a/100"), evicted)
+
+            // with c and d in use, b outgrows the 50 left
+            get("c/100") { get("d/100") }
+            assertEquals(listOf("a/100", "b/100"), evicted)
+        }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `evicts the least recently used idle file past the file-count bound`() = runTest {
+        MemoryCache(allocator, Long.MAX_VALUE, PathLoader(), UnconfinedTestDispatcher(testScheduler)).use { cache ->
+            val evicted = mutableListOf<String>()
+
+            repeat(MAX_IDLE_FILES + 2) { i ->
+                val p = "f$i/1"
+                cache.get(Path.of(p), Slice(0, 1)) { it to AutoCloseable { evicted.add(p) } }.use { }
+                runCurrent()
+            }
+
+            assertEquals(listOf("f0/1"), evicted)
+        }
+    }
+
+    @Test
+    fun `close unmaps every idle file and releases its pin`() = runTest {
+        val evicted = mutableListOf<String>()
 
         MemoryCache(allocator, 250, PathLoader()).use { cache ->
-
-            var t1Evicted = 0
-
-            withClue("get t1") {
-                val onEvict = AutoCloseable { t1Evicted++ }
-
-                cache.get(Path.of("t1/100"), Slice(0, 100)) { it to onEvict }.use { b1 ->
-                    assertEquals(1, b1.getByte(0))
-
-                    assertEquals(MemoryCache.Stats(100L, 150L), cache.stats0)
-
-                    cache.get(Path.of("t1/100"), Slice(0, 100)) { it to onEvict }.use { b1 ->
-                        assertEquals(1, b1.getByte(0))
-
-                        assertEquals(MemoryCache.Stats(100L, 150L), cache.stats0)
-                    }
-                }
-
-                assertEquals(1, t1Evicted)
-
-                cache.get(Path.of("t1/100"), Slice(0, 100)) { it to onEvict }.use { b1 ->
-                    assertEquals(2, b1.getByte(0))
-                }
-
-                assertEquals(MemoryCache.Stats(0, 250), cache.stats0)
-                assertEquals(2, t1Evicted)
+            for (p in listOf("a/50", "b/50")) {
+                cache.get(Path.of(p), Slice(0, 50)) { it to AutoCloseable { evicted.add(p) } }.use { }
             }
-
-            var t2Evicted = false
-
-            withClue("t2") {
-                val onEvict = AutoCloseable {
-                    t2Evicted = true
-                }
-
-                val path = Path.of("t2/50")
-                cache.get(path, Slice(0, 50)) { it to onEvict }.use { b1 ->
-                    assertEquals(3, b1.getByte(0))
-                    assertEquals(MemoryCache.Stats(50, 200), cache.stats0)
-                }
-
-                assertTrue(t2Evicted)
-                assertEquals(2, t1Evicted)
-                assertEquals(MemoryCache.Stats(0L, 250L), cache.stats0)
-            }
+            assertEquals(emptyList<String>(), evicted)
         }
+
+        assertEquals(listOf("a/50", "b/50"), evicted)
     }
 
     private inline fun <R> unwrapCause(f: () -> R) =
@@ -145,7 +208,7 @@ class MemoryCacheTest {
 
             withClue("but too many slices OOMs too") {
                 cache.get(Path.of("t1/200"), Slice(0, 75)) { k -> k to null }.use { b1 ->
-                    assertEquals(3, b1.getByte(0))
+                    assertEquals(2, b1.getByte(0), "the second get's mapping, still idle")
 
                     shouldThrow<OutOfMemoryException> {
                         unwrapCause {
@@ -155,6 +218,26 @@ class MemoryCacheTest {
                 }
             }
         }
+    }
+
+    @Test
+    fun `a slice whose wrap fails after reserving its bytes leaves its file idle`() = runTest {
+        val evicted = mutableListOf<String>()
+        val failingListener = object : AllocationListener {
+            override fun onAllocation(size: Long) = throw IllegalStateException("onAllocation failed")
+        }
+
+        RootAllocator(failingListener, Long.MAX_VALUE).use { al ->
+            MemoryCache(al, 250, PathLoader()).use { cache ->
+                shouldThrow<IllegalStateException> {
+                    cache.get(Path.of("t1/100"), Slice(0, 50)) { it to AutoCloseable { evicted.add("t1/100") } }
+                }
+
+                assertEquals(MemoryCache.Stats(0, 250), cache.stats0)
+            }
+        }
+
+        assertEquals(listOf("t1/100"), evicted, "close unmaps the file as idle")
     }
 
     @Test
