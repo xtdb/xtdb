@@ -2,7 +2,7 @@
 
 package xtdb.api.storage
 
-import com.github.benmanes.caffeine.cache.Cache
+import com.github.benmanes.caffeine.cache.AsyncCache
 import com.github.benmanes.caffeine.cache.Caffeine
 import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.coroutines.CoroutineDispatcher
@@ -125,11 +125,12 @@ object Storage {
         }
     }
 
+    // load with `get(key, BiFunction)`: `get(key, Function)` runs the loader via `supplyAsync` on this executor, not the caller's thread.
     internal fun arrowFooterCache(
         maxEntries: Long = 1024,
         dispatcher: CoroutineDispatcher = Dispatchers.Default,
-    ): Cache<Path, ArrowFooter> =
-        Caffeine.newBuilder().maximumSize(maxEntries).executor(dispatcher.asExecutor()).build()
+    ): AsyncCache<Path, ArrowFooter> =
+        Caffeine.newBuilder().maximumSize(maxEntries).executor(dispatcher.asExecutor()).buildAsync()
 
     /**
      * Default implementation for the storage module when configuring an XTDB node.

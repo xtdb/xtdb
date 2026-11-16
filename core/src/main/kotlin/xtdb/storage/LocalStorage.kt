@@ -1,8 +1,9 @@
 package xtdb.storage
 
-import com.github.benmanes.caffeine.cache.Cache
+import com.github.benmanes.caffeine.cache.AsyncCache
 import io.micrometer.core.instrument.Counter
 import io.micrometer.core.instrument.MeterRegistry
+import kotlinx.coroutines.future.asDeferred
 import kotlinx.coroutines.runBlocking
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ipc.message.ArrowFooter
@@ -27,6 +28,7 @@ import java.nio.file.Files.newByteChannel
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption.*
+import java.util.concurrent.CompletableFuture.completedFuture
 import kotlin.io.path.*
 
 internal class LocalStorage(
@@ -41,7 +43,7 @@ internal class LocalStorage(
 
     private val allocator = allocator.openChildAllocator("buffer-pool")
 
-    private val arrowFooterCache: Cache<Path, ArrowFooter> = arrowFooterCache()
+    private val arrowFooterCache: AsyncCache<Path, ArrowFooter> = arrowFooterCache()
     private val recordBatchRequests: Counter? = meterRegistry?.counter("record-batch-requests")
     private val memCacheMisses: Counter? = meterRegistry?.counter("memory-cache-misses")
 
@@ -74,17 +76,19 @@ internal class LocalStorage(
         }
 
     override suspend fun getFooter(key: Path): ArrowFooter =
-        arrowFooterCache.get(key) {
+        arrowFooterCache.get(key) { _, _ ->
             val path = rootPath.resolve(key).orThrowIfMissing(key)
 
-            path.openReadableChannel().readArrowFooter()
-        }
+            completedFuture(path.openReadableChannel().readArrowFooter())
+        }.asDeferred().await()
 
     override suspend fun getRecordBatch(key: Path, idx: Int): ArrowRecordBatch {
         recordBatchRequests?.increment()
         val path = rootPath.resolve(key).orThrowIfMissing(key)
 
-        val footer = arrowFooterCache.get(key) { path.openReadableChannel().readArrowFooter() }
+        val footer = arrowFooterCache.get(key) { _, _ ->
+            completedFuture(path.openReadableChannel().readArrowFooter())
+        }.asDeferred().await()
 
         val arrowBlock = footer.recordBatches.getOrNull(idx)
             ?: throw IndexOutOfBoundsException("Record batch index out of bounds of arrow file")

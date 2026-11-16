@@ -1,5 +1,6 @@
 package xtdb.storage
 
+import com.github.benmanes.caffeine.cache.AsyncCache
 import io.micrometer.core.instrument.Counter
 import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.coroutines.CoroutineDispatcher
@@ -7,6 +8,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.future.asDeferred
 import kotlinx.coroutines.future.await
 import kotlinx.coroutines.future.future
 import kotlinx.coroutines.job
@@ -39,6 +41,7 @@ import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption.*
+import java.util.concurrent.CompletableFuture.completedFuture
 import kotlin.io.path.deleteIfExists
 import kotlin.io.path.fileSize
 
@@ -52,13 +55,12 @@ internal class RemoteBufferPool(
     dbName: DatabaseName,
     partition: Int,
     ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val arrowFooterCache: AsyncCache<Path, ArrowFooter> = arrowFooterCache(),
 ) : BufferPool, IEvictBufferTest, Closeable {
 
     private val allocator = allocator.openChildAllocator("buffer-pool")
 
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
-
-    private val arrowFooterCache = arrowFooterCache()
 
     private val recordBatchRequests: Counter? = meterRegistry?.counter("record-batch-requests")
     private val memCacheMisses: Counter? = meterRegistry?.counter("memory-cache-misses")
@@ -140,14 +142,15 @@ internal class RemoteBufferPool(
         }.use { it.toByteArray() }
     }
 
-    override suspend fun getFooter(key: Path): ArrowFooter = arrowFooterCache.get(key) {
-        diskCache
-            .get(cacheRootPath.resolve(key)) { k, tmpFile ->
-                diskCacheMisses?.increment()
-                getObject(cacheRootPath.relativize(k), tmpFile)
-            }.get()
-            .use { entry -> entry.path.openReadableChannel().readArrowFooter() }
-    }
+    override suspend fun getFooter(key: Path): ArrowFooter =
+        arrowFooterCache.get(key) { _, _ ->
+            diskCache
+                .get(cacheRootPath.resolve(key)) { k, tmpFile ->
+                    diskCacheMisses?.increment()
+                    getObject(cacheRootPath.relativize(k), tmpFile)
+                }.get()
+                .use { entry -> completedFuture(entry.path.openReadableChannel().readArrowFooter()) }
+        }.asDeferred().await()
 
     override suspend fun getRecordBatch(key: Path, idx: Int): ArrowRecordBatch {
         recordBatchRequests?.increment()
