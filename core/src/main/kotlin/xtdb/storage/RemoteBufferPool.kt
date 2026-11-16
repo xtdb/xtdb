@@ -1,11 +1,15 @@
 package xtdb.storage
 
+import com.github.benmanes.caffeine.cache.AsyncCache
 import io.micrometer.core.instrument.Counter
 import io.micrometer.core.instrument.MeterRegistry
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.asExecutor
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.future.asDeferred
 import kotlinx.coroutines.future.await
 import kotlinx.coroutines.future.future
 import kotlinx.coroutines.job
@@ -50,13 +54,13 @@ internal class RemoteBufferPool(
     override val epoch: StorageEpoch,
     dbName: DatabaseName,
     partition: Int,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val arrowFooterCache: AsyncCache<Path, ArrowFooter> = arrowFooterCache(),
 ) : BufferPool, IEvictBufferTest, Closeable {
 
     private val allocator = allocator.openChildAllocator("buffer-pool")
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-
-    private val arrowFooterCache = arrowFooterCache()
+    private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
 
     private val recordBatchRequests: Counter? = meterRegistry?.counter("record-batch-requests")
     private val memCacheMisses: Counter? = meterRegistry?.counter("memory-cache-misses")
@@ -138,14 +142,21 @@ internal class RemoteBufferPool(
         }.use { it.toByteArray() }
     }
 
-    override suspend fun getFooter(key: Path): ArrowFooter = arrowFooterCache.get(key) {
-        diskCache
-            .get(cacheRootPath.resolve(key)) { k, tmpFile ->
-                diskCacheMisses?.increment()
-                getObject(cacheRootPath.relativize(k), tmpFile)
-            }.get()
-            .use { entry -> entry.path.openReadableChannel().readArrowFooter() }
-    }
+    // awaited outside the cache's bin lock: a loader that waits on the disk cache can deadlock the cache's own eviction.
+    // Not a bare `await()`: on the caller's cancellation that cancels the future, which every caller for the key shares,
+    // and a cancelled future never runs the `use` that unpins the disk-cache entry.
+    override suspend fun getFooter(key: Path): ArrowFooter =
+        arrowFooterCache.get(key) { _, _ ->
+            diskCache
+                .get(cacheRootPath.resolve(key)) { k, tmpFile ->
+                    diskCacheMisses?.increment()
+                    getObject(cacheRootPath.relativize(k), tmpFile)
+                }
+                .thenApplyAsync(
+                    { entry -> entry.use { it.path.openReadableChannel().readArrowFooter() } },
+                    ioDispatcher.asExecutor()
+                )
+        }.asDeferred().await()
 
     override suspend fun getRecordBatch(key: Path, idx: Int): ArrowRecordBatch {
         recordBatchRequests?.increment()

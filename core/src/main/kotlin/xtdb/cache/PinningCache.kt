@@ -5,6 +5,9 @@ import com.github.benmanes.caffeine.cache.Caffeine
 import com.github.benmanes.caffeine.cache.RemovalCause
 import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.asExecutor
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ForkJoinPool
 import java.util.concurrent.TimeUnit.MILLISECONDS
@@ -17,7 +20,8 @@ import kotlin.time.toJavaDuration
 
 class PinningCache<K : Any, V : PinningCache.IEntry<K>>(
     @Suppress("MemberVisibilityCanBePrivate")
-    val maxSizeBytes: Long
+    val maxSizeBytes: Long,
+    continuationDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : AutoCloseable {
 
     @Volatile
@@ -73,6 +77,8 @@ class PinningCache<K : Any, V : PinningCache.IEntry<K>>(
 
     private val lock: Lock = ReentrantLock()
 
+    private val continuationExecutor = continuationDispatcher.asExecutor()
+
     private fun updatePinnedBytes(delta: Long) {
         lock.withLock {
             pinnedBytes += delta
@@ -89,10 +95,10 @@ class PinningCache<K : Any, V : PinningCache.IEntry<K>>(
             // but tl;dr: the entry is not pinned before the setMaximum eviction runs
 
             (fut ?: f(k))
-                .thenApplyAsync { entry ->
+                .thenApplyAsync({ entry ->
                     if (0 == entry.refCount.getAndIncrement()) updatePinnedBytes(entry.weight)
                     entry
-                }
+                }, continuationExecutor)
         }!!
 
     override fun close() {
@@ -103,10 +109,10 @@ class PinningCache<K : Any, V : PinningCache.IEntry<K>>(
 
     fun releaseEntry(k: K) {
         cache.asMap().compute(k) { _, fut ->
-            fut!!.thenApplyAsync { entry ->
+            fut!!.thenApplyAsync({ entry ->
                 if (0 == entry.refCount.decrementAndGet().also { check(it >= 0) }) updatePinnedBytes(-entry.weight)
                 entry
-            }
+            }, continuationExecutor)
         }
     }
 

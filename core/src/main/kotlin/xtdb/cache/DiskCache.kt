@@ -4,6 +4,8 @@ package xtdb.cache
 import com.github.benmanes.caffeine.cache.RemovalCause
 import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
 import xtdb.api.PathSerde
@@ -23,7 +25,11 @@ import xtdb.util.debug
 
 private val LOGGER = DiskCache::class.logger
 
-class DiskCache internal constructor(val rootPath: Path, val maxSizeBytes: Long) {
+class DiskCache internal constructor(
+    val rootPath: Path,
+    val maxSizeBytes: Long,
+    continuationDispatcher: CoroutineDispatcher = Dispatchers.IO,
+) {
 
     @Serializable
     data class Factory
@@ -42,7 +48,7 @@ class DiskCache internal constructor(val rootPath: Path, val maxSizeBytes: Long)
             ).also { meterRegistry?.registerDiskCache(it) }
     }
 
-    val pinningCache = PinningCache<Path, Entry>(maxSizeBytes)
+    val pinningCache = PinningCache<Path, Entry>(maxSizeBytes, continuationDispatcher)
 
     val stats get() = pinningCache.stats
 
