@@ -73,7 +73,7 @@ internal class LocalStorage(
             }.use { it.toByteArray() }
         }
 
-    override fun getFooter(key: Path): ArrowFooter =
+    override suspend fun getFooter(key: Path): ArrowFooter =
         arrowFooterCache.get(key) {
             val path = rootPath.resolve(key).orThrowIfMissing(key)
 

@@ -225,7 +225,7 @@
 
         (let [slug (.slug snapshot table)]
           (doseq [{:keys [^String trie-key]} filtered-tries]
-            (.add !segments (BufferPoolSegment. allocator buffer-pool metadata-mgr slug trie-key metadata-pred))))
+            (.add !segments (BufferPoolSegment/openSync allocator buffer-pool metadata-mgr slug trie-key metadata-pred))))
 
         (let [live-segments (for [^TableSnapshot live-table-snap (.table snapshot table)]
                               (.getSegment live-table-snap))

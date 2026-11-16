@@ -270,7 +270,7 @@
 
               #_ ; TODO discarded — enabling it needs the doseq's assertions checked over
               (doseq [{:keys [^String trie-key]} (map trie/parse-trie-file-path meta-files)]
-                (util/with-open [seg (BufferPoolSegment. tu/*allocator* bp meta-mgr slug trie-key nil)
+                (util/with-open [seg (BufferPoolSegment/openSync tu/*allocator* bp meta-mgr slug trie-key nil)
                                  seg-meta (.openMetadataSync seg)]
                   (doseq [leaf (.getLeaves (.getTrie seg-meta))
                           :let [page (.page seg-meta leaf)

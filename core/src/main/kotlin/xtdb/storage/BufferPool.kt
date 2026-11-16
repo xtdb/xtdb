@@ -36,7 +36,7 @@ interface BufferPool : AutoCloseable {
      *
      * Throws if not an arrow file.
      */
-    fun getFooter(key: Path): ArrowFooter
+    suspend fun getFooter(key: Path): ArrowFooter
 
     /**
      * Returns a record batch of the given arrow file.
@@ -94,7 +94,7 @@ interface BufferPool : AutoCloseable {
         object UnusedBufferPool : BufferPool {
             override val epoch: StorageEpoch get() = unsupported("epoch")
             override fun getByteArray(key: Path) = unsupported("getByteArray")
-            override fun getFooter(key: Path) = unsupported("getFooter")
+            override suspend fun getFooter(key: Path) = unsupported("getFooter")
             override suspend fun getRecordBatch(key: Path, idx: Int) = unsupported("getRecordBatch")
             override suspend fun putObject(key: Path, buffer: ByteBuffer) = unsupported("putObject")
             override fun listAllObjects() = unsupported("listAllObjects")
@@ -149,7 +149,7 @@ class ReadOnlyBufferPool(private val delegate: BufferPool) : BufferPool {
 
     override fun getByteArray(key: Path): ByteArray = delegate.getByteArray(key)
 
-    override fun getFooter(key: Path): ArrowFooter = delegate.getFooter(key)
+    override suspend fun getFooter(key: Path): ArrowFooter = delegate.getFooter(key)
 
     override suspend fun getRecordBatch(key: Path, idx: Int): ArrowRecordBatch = delegate.getRecordBatch(key, idx)
 

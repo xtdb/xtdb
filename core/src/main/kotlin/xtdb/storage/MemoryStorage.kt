@@ -40,7 +40,7 @@ internal class MemoryStorage(
     override fun getByteArray(key: Path): ByteArray =
         (memoryStore.lockAndGet(key) ?: throw objectMissingException(key)).toByteArray()
 
-    override fun getFooter(key: Path): ArrowFooter =
+    override suspend fun getFooter(key: Path): ArrowFooter =
         (memoryStore.lockAndGet(key) ?: throw objectMissingException(key)).readArrowFooter()
 
     override suspend fun getRecordBatch(key: Path, idx: Int): ArrowRecordBatch {

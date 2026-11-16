@@ -109,7 +109,7 @@ interface Compactor : AutoCloseable {
                             try {
                                 val slug = tableCat.snap().slug(job.table)
 
-                                job.trieKeys.map { BufferPoolSegment(al, bp, mm, slug, it) }.useAll { segs ->
+                                job.trieKeys.map { BufferPoolSegment.open(al, bp, mm, slug, it) }.useAll { segs ->
                                     val recencyPartitioning =
                                         if (job.partitionedByRecency) SegmentMerge.RecencyPartitioning.Partition
                                         else SegmentMerge.RecencyPartitioning.Preserve(job.outputTrieKey.recency)

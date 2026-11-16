@@ -145,7 +145,7 @@ class RemoteStorageTest : PartitionedStorageTest() {
     }
 
     @Test
-    fun `openArrowWriter seeds the disk cache under the pool-scoped key`(al: BufferAllocator) {
+    fun `openArrowWriter seeds the disk cache under the pool-scoped key`(al: BufferAllocator) = runTest {
         val key = Path.of("aw")
         Relation(al, "a" ofType I32).use { relation ->
             remoteBufferPool.openArrowWriter(key, relation).use { writer ->
@@ -155,7 +155,7 @@ class RemoteStorageTest : PartitionedStorageTest() {
                     relation.endRow()
                 }
                 writer.writePage()
-                writer.endSync()
+                writer.end()
             }
         }
 

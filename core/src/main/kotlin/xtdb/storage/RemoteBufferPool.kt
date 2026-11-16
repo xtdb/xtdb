@@ -138,7 +138,7 @@ internal class RemoteBufferPool(
         }.use { it.toByteArray() }
     }
 
-    override fun getFooter(key: Path): ArrowFooter = arrowFooterCache.get(key) {
+    override suspend fun getFooter(key: Path): ArrowFooter = arrowFooterCache.get(key) {
         diskCache
             .get(cacheRootPath.resolve(key)) { k, tmpFile ->
                 diskCacheMisses?.increment()

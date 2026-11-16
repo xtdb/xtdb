@@ -1,6 +1,8 @@
 package xtdb.segment
 
+import kotlinx.coroutines.runBlocking
 import org.apache.arrow.memory.BufferAllocator
+import org.apache.arrow.vector.ipc.message.ArrowFooter
 import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
@@ -18,9 +20,10 @@ import xtdb.time.LocalDateTimeUtil.asMicros
 import xtdb.util.closeAll
 import xtdb.util.closeOnCatch
 
-class BufferPoolSegment(
+class BufferPoolSegment private constructor(
     private val al: BufferAllocator, private val bp: BufferPool, private val mm: PageMetadata.Factory,
-    val slug: TableSlug, val trieKey: TrieKey, val metadataPredicate: MetadataPredicate? = null,
+    val slug: TableSlug, val trieKey: TrieKey, val metadataPredicate: MetadataPredicate?,
+    private val footer: ArrowFooter,
 ) : Segment<ArrowHashTrie.Leaf> {
     val dataFilePath = slug.dataFilePath(trieKey)
     private val parsedTrieKey = Trie.parseKey(trieKey)
@@ -30,8 +33,6 @@ class BufferPoolSegment(
         get() = parsedTrieKey.part?.toArray()
 
     override val sameSystemTimeResolved = parsedTrieKey.level != 0L
-
-    private val footer = bp.getFooter(dataFilePath)
 
     override val schema: Schema = footer.schema
 
@@ -82,5 +83,18 @@ class BufferPoolSegment(
 
     override fun close() {
         dataPages.closeAll()
+    }
+
+    companion object {
+        suspend fun open(
+            al: BufferAllocator, bp: BufferPool, mm: PageMetadata.Factory,
+            slug: TableSlug, trieKey: TrieKey, metadataPredicate: MetadataPredicate? = null,
+        ) = BufferPoolSegment(al, bp, mm, slug, trieKey, metadataPredicate, bp.getFooter(slug.dataFilePath(trieKey)))
+
+        @JvmStatic
+        fun openSync(
+            al: BufferAllocator, bp: BufferPool, mm: PageMetadata.Factory,
+            slug: TableSlug, trieKey: TrieKey, metadataPredicate: MetadataPredicate?,
+        ) = runBlocking { open(al, bp, mm, slug, trieKey, metadataPredicate) }
     }
 }
