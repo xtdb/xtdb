@@ -17,7 +17,6 @@ import xtdb.util.requiringResolve
 import xtdb.util.trace
 import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
-import java.lang.foreign.ValueLayout.JAVA_BYTE
 import java.nio.file.Path
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.TimeUnit
@@ -35,10 +34,9 @@ class CacheSimulationTest : SimulationTestBase() {
     class TestPathLoader : MemoryCache.PathLoader {
         private val loadCounts = mutableMapOf<Path, Int>()
 
-        override fun load(path: Path, slice: Slice, arena: Arena): MemorySegment {
-            val count = loadCounts.compute(path) { _, c -> (c ?: 0) + 1 }!!
-            return arena.allocate(slice.length)
-                .also { it.set(JAVA_BYTE, 0, 1.toByte()) }
+        override fun load(path: Path, arena: Arena): MemorySegment {
+            loadCounts.compute(path) { _, c -> (c ?: 0) + 1 }
+            return arena.allocate(1000).also { it.fill(1.toByte()) }
         }
 
         fun getLoadCount(path: Path) = loadCounts[path] ?: 0
@@ -59,11 +57,12 @@ class CacheSimulationTest : SimulationTestBase() {
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
     fun `deterministic single fetch and evict`() = runTest {
         val loader = TestPathLoader()
+        var evicted = false
+
         MemoryCache(allocator, 250, loader, dispatcher).use { cache ->
             val sliceSize = rand.nextLong(1L, 250L)
             val path = Path.of("test/$sliceSize")
 
-            var evicted = false
             val onEvict = AutoCloseable { evicted = true }
 
             cache.get(path, Slice(0, sliceSize)) { it to onEvict }.use { buf ->
@@ -72,10 +71,12 @@ class CacheSimulationTest : SimulationTestBase() {
                 assertEquals(MemoryCache.Stats(sliceSize, 250L - sliceSize), cache.stats0)
             }
 
-            Assertions.assertTrue(evicted)
+            Assertions.assertFalse(evicted, "an idle file stays mapped until evicted or closed")
             assertEquals(MemoryCache.Stats(0L, 250L), cache.stats0)
             assertEquals(1, loader.getLoadCount(path))
         }
+
+        Assertions.assertTrue(evicted)
     }
 
     @RepeatableSimulationTest
