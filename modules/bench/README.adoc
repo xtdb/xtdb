@@ -12,6 +12,14 @@ By default it runs hand-written logical plans for the 22 queries (`xtdb.datasets
 `-Pdir=<path>` keeps the node in that directory, and `-PnoLoad` on a later run queries it without re-ingesting - e.g. to compare two versions on the same data.
 At scale factors 0.001, 0.01 and 1, each query's result is checked against the pinned results in `xtdb/datasets/tpch/results-sf<scale-factor>.edn`, and a mismatch fails the run.
 The check picks its pins by `-PscaleFactor`, so a `-PnoLoad` run has to pass the scale factor the node was loaded at.
++
+`-Pqueries=1,6` runs only those queries, and `-PhotIterations=20` repeats the hot pass that many times, as stages `hot-queries`, `hot-2-queries`, ….
+Together with `-Pdir`/`-PnoLoad` and `-Pjfr`, that gives a recording of a few queries running hot, with no ingest in it:
++
+----
+./gradlew tpch -PscaleFactor=1 -PtwelveGBJvm -Pdir=/tmp/tpch-sf1             # once, to load
+./gradlew tpch -PscaleFactor=1 -PtwelveGBJvm -Pdir=/tmp/tpch-sf1 -PnoLoad -Pqueries=1 -PhotIterations=30 -Pjfr
+----
 
 AuctionMark::
 `./gradlew auctionmark -Pduration=PT30S -Pthreads=8 -PscaleFactor=0.1`
@@ -50,6 +58,7 @@ See datasets -> `xtdb.tsbs`.
 
 Add a YourKit snapshot with `-Pyourkit` - you should see a snapshot appear in your snapshot directory (default `~/Snapshots`) when the application shuts down.
 For a Java Flight Recorder profile, use `-Pjfr` - the recording is dumped to `~/Snapshots/xtdb-<bench>-<timestamp>.jfr` on shutdown.
+On top of JFR's `profile` settings it turns on `jdk.CPUTimeSample` (CPU-time sampling, Linux only), and records thread parks and monitor waits from 1ms, so time spent off-CPU shows up too.
 
 Each stage's report carries `time-taken-ms` (wall clock), `thread-cpu-time-ms` (the CPU time of the thread that ran it) and `process-cpu-time-ms` (all threads, GC and JIT included).
 

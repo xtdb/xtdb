@@ -875,7 +875,12 @@ fun createBench(benchName: String, properties: Map<String, String>, defaultArgs:
             jvmArgs("-agentpath:/opt/yourkit/bin/linux-x86-64/libyjpagent.so=on_exit=snapshot,async_sampling_cpu,app_name=xtdb-$benchName")
 
         if (project.hasProperty("jfr"))
-            jvmArgs("-XX:StartFlightRecording=settings=profile,dumponexit=true,filename=${System.getProperty("user.home")}/Snapshots/xtdb-$benchName-%t.jfr")
+            jvmArgs(
+                "-XX:StartFlightRecording=settings=profile," +
+                    "jdk.CPUTimeSample#enabled=true,jdk.CPUTimeSample#throttle=5ms," +
+                    "jdk.ThreadPark#threshold=1ms,jdk.JavaMonitorEnter#threshold=1ms,jdk.JavaMonitorWait#threshold=1ms," +
+                    "dumponexit=true,filename=${System.getProperty("user.home")}/Snapshots/xtdb-$benchName-%t.jfr"
+            )
 
         this.args = args
     }
@@ -884,6 +889,8 @@ fun createBench(benchName: String, properties: Map<String, String>, defaultArgs:
 createBench("tpch", mapOf(
     "scaleFactor" to "--scale-factor",
     "queryLanguage" to "--query-language",
+    "queries" to "--queries",
+    "hotIterations" to "--hot-iterations",
     "noLoad" to "--no-load"
 ))
 

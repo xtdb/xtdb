@@ -1,5 +1,6 @@
 (ns xtdb.bench.tpch
-  (:require [clojure.tools.logging :as log]
+  (:require [clojure.string :as str]
+            [clojure.tools.logging :as log]
             [xtdb.api :as xt]
             [xtdb.bench :as b]
             [xtdb.datasets.tpch :as tpch]
@@ -33,11 +34,11 @@
                                 (when-let [mismatch (tpch/result-mismatch expected rows)]
                                   (throw (err/fault ::wrong-result (format "Q%02d doesn't match its pinned result: %s" (inc i) (pr-str mismatch)) mismatch))))))))
 
-(defn queries-stage [stage-name query-language scale-factor]
+(defn queries-stage [stage-name query-language scale-factor qs]
   (let [results (tpch/results scale-factor)]
     {:t :do, :stage stage-name
      :tasks (vec (for [i (range (count tpch-ra/queries))
-                       :when (contains? *qs* (inc i))]
+                       :when (contains? qs (inc i))]
                    (query-tpch stage-name query-language scale-factor (get results i) i)))}))
 
 (defmethod b/cli-flags :tpch [_]
@@ -50,19 +51,29 @@
     :default :ra
     :validate [#{:ra :sql} "query language must be one of ra, sql"]]
 
+   [nil "--queries QUERIES" "comma-separated TPC-H query numbers to run, e.g. 1,6 (default: all bar Q21)"
+    :parse-fn #(into #{} (map parse-long) (str/split % #","))]
+
+   [nil "--hot-iterations N" "how many times to run the hot queries"
+    :parse-fn parse-long
+    :default 1
+    :validate [pos? "must be positive"]]
+
    b/no-load-flag
    ["-h" "--help"]])
 
-(defmethod b/->benchmark :tpch [_ {:keys [scale-factor query-language seed no-load?],
-                                   :or {scale-factor 0.01, query-language :ra, seed 0}}]
-  (log/info {:scale-factor scale-factor :query-language query-language :seed seed :no-load? no-load?})
+(defmethod b/->benchmark :tpch [_ {:keys [scale-factor query-language seed no-load? queries hot-iterations],
+                                   :or {scale-factor 0.01, query-language :ra, seed 0, hot-iterations 1}}]
+  (log/info {:scale-factor scale-factor :query-language query-language :seed seed :no-load? no-load?
+             :queries queries :hot-iterations hot-iterations})
 
   {:title (case query-language
             :ra "TPC-H (OLAP)"
             :sql "TPC-H (OLAP, SQL)")
    :benchmark-type :tpch
    :seed seed
-   :parameters {:scale-factor scale-factor :query-language query-language :seed seed :no-load? no-load?}
+   :parameters {:scale-factor scale-factor :query-language query-language :seed seed :no-load? no-load?
+                :queries queries :hot-iterations hot-iterations}
    :->state #(do {:!state (atom {})})
    :tasks [(when-not no-load?
              {:t :do
@@ -81,9 +92,14 @@
 
                       (b/settle-stage)]})
 
-           (queries-stage :cold-queries query-language scale-factor)
+           (queries-stage :cold-queries query-language scale-factor (or queries *qs*))
 
-           (queries-stage :hot-queries query-language scale-factor)]})
+           (queries-stage :hot-queries query-language scale-factor (or queries *qs*))
+
+           (when (> hot-iterations 1)
+             {:t :do
+              :tasks (vec (for [n (range 2 (inc hot-iterations))]
+                            (queries-stage (keyword (str "hot-" n "-queries")) query-language scale-factor (or queries *qs*))))})]})
 
 (comment
   (binding [*qs* #{1}]
