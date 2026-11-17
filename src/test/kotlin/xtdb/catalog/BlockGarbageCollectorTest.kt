@@ -1,5 +1,6 @@
 package xtdb.catalog
 
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
 import org.apache.arrow.memory.BufferAllocator
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -25,8 +26,10 @@ import xtdb.util.asPath
 import java.nio.ByteBuffer
 import java.nio.file.Path
 import java.time.Instant
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 @ExtendWith(AllocatorResolver::class)
 class BlockGarbageCollectorTest {
@@ -164,6 +167,49 @@ class BlockGarbageCollectorTest {
                     assertBlockCount(p1, blocksPath, 10)
                     assertBlockCount(p1, tableBlockPath, 10)
                 }
+            }
+        }
+    }
+
+    @Test
+    fun `garbageCollectBlocks keeps at most deleteParallelism DELETEs in flight`(
+        @TempDir tempDir: Path, al: BufferAllocator,
+    ) = runTest {
+        MemoryCache.Factory().open(al).use { memoryCache ->
+            Storage.local(tempDir).open(al, memoryCache, null, "xtdb").use { bufferPool ->
+                val blocksPath = "blocks".asPath
+                val tableBlockPath = TableSlug.of(TableRef("public", "foo")).tablePath.resolve(blocksPath)
+
+                (1L..40L).forEach { index ->
+                    writeBlock(bufferPool, index, listOf("public/foo"), listOf(blocksPath, tableBlockPath))
+                }
+
+                // deletes that suspend, as an object store's do
+                val inFlight = AtomicInteger()
+                val peak = AtomicInteger()
+                val slowDeletes = object : BufferPool by bufferPool {
+                    override suspend fun deleteIfExists(key: Path) {
+                        peak.accumulateAndGet(inFlight.incrementAndGet(), ::maxOf)
+                        try {
+                            delay(20)
+                            bufferPool.deleteIfExists(key)
+                        } finally {
+                            inFlight.decrementAndGet()
+                        }
+                    }
+                }
+
+                BlockGarbageCollector(
+                    slowDeletes, tableCatalogAt(bufferPool.latestBlock),
+                    blocksToKeep = 3,
+                    enabled = false,
+                    deleteParallelism = 4,
+                    dbName = "xtdb",
+                ).garbageCollectBlocks()
+
+                assertBlockCount(bufferPool, blocksPath, 3)
+                assertBlockCount(bufferPool, tableBlockPath, 3)
+                assertTrue(peak.get() <= 4, "expected at most 4 DELETEs in flight, saw ${peak.get()}")
             }
         }
     }
