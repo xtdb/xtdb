@@ -29,6 +29,7 @@ class Shuffle private constructor(
     val schema get() = inDataRel.schema
 
     val partCount: Int = (expectedBlockCount.takeHighestOneBit() shl 1).coerceAtLeast(minParts)
+    val partBits: Int = partCount.countTrailingZeroBits()
     private val hashMask: Int = partCount - 1
     private val approxRowsPerPart =
         (expectedRowCount / expectedBlockCount.coerceAtLeast(1) / partCount.coerceAtLeast(1)).toInt()

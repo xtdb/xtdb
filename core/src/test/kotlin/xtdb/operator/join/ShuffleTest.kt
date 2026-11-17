@@ -64,6 +64,7 @@ class ShuffleTest {
                     shuffle.end()
 
                     assertEquals(4, shuffle.partCount)
+                    assertEquals(2, shuffle.partBits)
 
                     assertEquals(
                         listOf(
@@ -113,6 +114,7 @@ class ShuffleTest {
                     shuffle.end()
 
                     assertEquals(8, shuffle.partCount)
+                    assertEquals(3, shuffle.partBits)
 
                     assertEquals((0..<10000).toSet(), shuffle.toIds(rel).flatten().toSet())
 
@@ -134,6 +136,7 @@ class ShuffleTest {
                     shuffle.end()
 
                     assertEquals(8, shuffle.partCount)
+                    assertEquals(3, shuffle.partBits)
 
                     assertEquals(List(8) { emptyList<Any>() }, shuffle.toIds(rel))
 
@@ -152,6 +155,7 @@ class ShuffleTest {
                     shuffle.end()
 
                     assertEquals(2, shuffle.partCount)
+                    assertEquals(1, shuffle.partBits)
 
                     assertEquals(
                         listOf(
@@ -175,6 +179,7 @@ class ShuffleTest {
                     shuffle.end()
 
                     assertEquals(4, shuffle.partCount)
+                    assertEquals(2, shuffle.partBits)
 
                     assertEquals(
                         listOf(

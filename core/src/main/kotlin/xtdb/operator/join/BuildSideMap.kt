@@ -9,16 +9,19 @@ import java.util.function.IntUnaryOperator
 
 private const val DEFAULT_LOAD_FACTOR = 0.6
 
+private fun homeIdx(hash: Int, hashShift: Int, hashMask: Int) = (hash ushr hashShift) and hashMask
+
 class BuildSideMap private constructor(
     private val srcIdxs: IntVector,
     private val srcHashes: IntVector,
+    private val hashShift: Int,
     private val hashMask: Int,
 ) : AutoCloseable {
 
     var tombstones: RoaringBitmap? = null
 
     fun findValue(hash: Int, cmp: IntUnaryOperator, removeOnMatch: Boolean): Int {
-        var lookupIdx = hash and hashMask
+        var lookupIdx = homeIdx(hash, hashShift, hashMask)
 
         while (true) {
             if (srcIdxs.isNull(lookupIdx)) return -1
@@ -38,7 +41,7 @@ class BuildSideMap private constructor(
         private val srcIdxsReader = srcIdxs.valueReader()
         private val srcHashesReader = srcHashes.valueReader()
 
-        private var lookupIdx = hash and hashMask
+        private var lookupIdx = homeIdx(hash, hashShift, hashMask)
             set(value) {
                 field = value
                 srcIdxsReader.pos = value
@@ -100,7 +103,9 @@ class BuildSideMap private constructor(
 
         @JvmStatic
         @JvmOverloads
-        fun from(al: BufferAllocator, hashCol: VectorReader, loadFactor: Double = DEFAULT_LOAD_FACTOR): BuildSideMap {
+        fun from(
+            al: BufferAllocator, hashCol: VectorReader, hashShift: Int, loadFactor: Double = DEFAULT_LOAD_FACTOR
+        ): BuildSideMap {
 
             val rowCount = hashCol.valueCount
 
@@ -113,12 +118,12 @@ class BuildSideMap private constructor(
                 IntVector.open(al, "src-hashes", true, mapSize).closeOnCatch { srcHashes ->
                     repeat(rowCount) { idx ->
                         val hash = hashCol.getInt(idx)
-                        val insertionIdx = srcIdxs.insertionIdx(hash and hashMask , hashMask, skipIndex)
+                        val insertionIdx = srcIdxs.insertionIdx(homeIdx(hash, hashShift, hashMask), hashMask, skipIndex)
 
                         srcIdxs[insertionIdx] = idx
                         srcHashes[insertionIdx] = hash
                     }
-                    BuildSideMap(srcIdxs, srcHashes, hashMask)
+                    BuildSideMap(srcIdxs, srcHashes, hashShift, hashMask)
                 }
             }
         }

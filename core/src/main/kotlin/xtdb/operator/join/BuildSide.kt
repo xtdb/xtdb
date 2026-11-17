@@ -40,7 +40,7 @@ class BuildSide(
 
     var shuffle: Shuffle? = null; private set
 
-    private fun buildRel(dataRel: Relation, hashCol: VectorReader) {
+    private fun buildRel(dataRel: Relation, hashCol: VectorReader, hashShift: Int) {
         unmatchedBuildIdxs?.let {
             it.clear()
             it.add(0L, dataRel.rowCount.toLong())
@@ -49,7 +49,7 @@ class BuildSide(
         if (withNilRow) dataRel.endRow()
 
         buildMap?.close()
-        buildMap = BuildSideMap.from(al, hashCol)
+        buildMap = BuildSideMap.from(al, hashCol, hashShift)
     }
 
     fun end() {
@@ -72,7 +72,7 @@ class BuildSide(
             dataRel.clear()
         } else {
             dataRel.hasher(keyColNames).writeAllHashes(hashCol)
-            buildRel(dataRel, hashCol)
+            buildRel(dataRel, hashCol, 0)
         }
     }
 
@@ -85,7 +85,7 @@ class BuildSide(
         shuffle.loadDataPart(dataRel, partIdx)
         shuffle.loadHashPart(hashCol, partIdx)
 
-        buildRel(dataRel, hashCol)
+        buildRel(dataRel, hashCol, shuffle.partBits)
     }
 
 
