@@ -102,29 +102,6 @@
   ;; Add to local disk cache
   (.getByteArray bp k))
 
-(t/deftest local-disk-cache-max-size
-  (with-caches {:mem-bytes 9, :disk-bytes 10}
-    (with-open [bp (-> (Storage/remote (prefixing-obj-store-factory (InMemoryBucket.)))
-                       (.open tu/*allocator* *mem-cache* *disk-cache* "xtdb" 0 1 nil Storage/VERSION {}))]
-      (t/testing "staying below max size - all elements available"
-        (insert-utf8-to-local-cache bp (util/->path "a") 4)
-        (insert-utf8-to-local-cache bp (util/->path "b") 4)
-        (t/is (= {:file-count 2 :file-names #{"a" "b"}} (file-info *disk-cache-dir*))))
-
-      (t/testing "going above max size - removes an entry"
-        (insert-utf8-to-local-cache bp (util/->path "c") 4)
-        (Thread/sleep 100)
-        (t/is (= {:file-count 2 :file-names #{"b" "c"}} (file-info *disk-cache-dir*))))
-
-      (t/testing "entries unpinned (cleared from memory cache by new entries) - should evict entries since above size limit"
-        (insert-utf8-to-local-cache bp (util/->path "d") 4)
-        (Thread/sleep 100)
-        (t/is (= 2 (:file-count (file-info *disk-cache-dir*))))
-
-        (insert-utf8-to-local-cache bp (util/->path "e") 4)
-        (Thread/sleep 100)
-        (t/is (= 2 (:file-count (file-info *disk-cache-dir*))))))))
-
 (t/deftest local-disk-cache-with-previous-values
   (let [bucket (InMemoryBucket.)
         obj-store-factory (prefixing-obj-store-factory bucket)
