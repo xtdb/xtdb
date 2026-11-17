@@ -54,6 +54,20 @@ class FixedWidthVectorTest {
     }
 
     @Test
+    fun `reserving capacity leaves the value count alone, setting past the end extends it with nulls`(al: BufferAllocator) {
+        IntVector.open(al, "foo", true).use { vector ->
+            vector.ensureCapacity(8)
+            vector.valueCount shouldBe 0
+
+            vector.setInt(2, 42)
+            vector.asList shouldBe listOf(null, null, 42)
+
+            vector.setNull(4)
+            vector.asList shouldBe listOf(null, null, 42, null, null)
+        }
+    }
+
+    @Test
     fun `from null into Int vector`() {
         NullVector("v1" ).use { nullVector ->
             nullVector.writeNull()

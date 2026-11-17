@@ -35,7 +35,6 @@ class BitVector private constructor(
     override val vectors: Iterable<Vector> = emptyList()
 
     override fun ensureCapacity(valueCount: Int) {
-        this.valueCount = this.valueCount.coerceAtLeast(valueCount)
         validityBuffer?.ensureCapacity(valueCount)
         dataBuffer.ensureCapacity(valueCount)
     }
@@ -50,6 +49,7 @@ class BitVector private constructor(
     override fun setNull(idx: Int) {
         ensureCapacity(idx + 1)
         validityBuffer?.setBit(idx, 0)
+        valueCount = maxOf(valueCount, idx + 1)
     }
 
     override fun writeNull() {
@@ -65,6 +65,7 @@ class BitVector private constructor(
 
         validityBuffer?.setBit(idx, 1)
         dataBuffer.setBit(idx, if (v) 1 else 0)
+        valueCount = maxOf(valueCount, idx + 1)
     }
 
     override fun writeBoolean(v: Boolean) {

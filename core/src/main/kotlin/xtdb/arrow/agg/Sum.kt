@@ -29,8 +29,7 @@ class Sum(
 
             repeat(inRel.rowCount) { idx ->
                 val groupIdx = groupMapping.getInt(idx)
-                // a group entirely excluded by the filter never reaches `summer.sumRow`, whose own
-                // `ensureCapacity` is otherwise this loop's only padding
+                // a group entirely excluded by the filter never reaches `summer.sumRow`
                 while (outVec.valueCount <= groupIdx) outVec.writeNull()
 
                 if (mask.isSet(idx)) summer.sumRow(idx, groupIdx)

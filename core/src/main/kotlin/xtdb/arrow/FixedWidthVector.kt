@@ -84,40 +84,42 @@ sealed class FixedWidthVector : MonoVector() {
         else dataBuffer.getInt(idx)
 
     override fun ensureCapacity(valueCount: Int) {
-        if (valueCount > this.valueCount) {
-            this.valueCount = valueCount
-            validityBuffer?.ensureCapacity(valueCount)
-            dataBuffer.ensureCapacity((valueCount * byteWidth).toLong())
-        }
+        validityBuffer?.ensureCapacity(valueCount)
+        dataBuffer.ensureCapacity((valueCount * byteWidth).toLong())
     }
 
     override fun setNull(idx: Int) {
         ensureCapacity(idx + 1)
         validityBuffer?.setBit(idx, 0)
+        valueCount = maxOf(valueCount, idx + 1)
     }
 
     override fun setInt(idx: Int, v: Int) {
         ensureCapacity(idx + 1)
         setNotNull(idx)
         dataBuffer[idx] = v
+        valueCount = maxOf(valueCount, idx + 1)
     }
 
     override fun setLong(idx: Int, v: Long) {
         ensureCapacity(idx + 1)
         setNotNull(idx)
         dataBuffer[idx] = v
+        valueCount = maxOf(valueCount, idx + 1)
     }
 
     override fun setFloat(idx: Int, v: Float) {
         ensureCapacity(idx + 1)
         setNotNull(idx)
         dataBuffer[idx] = v
+        valueCount = maxOf(valueCount, idx + 1)
     }
 
     override fun setDouble(idx: Int, v: Double) {
         ensureCapacity(idx + 1)
         setNotNull(idx)
         dataBuffer[idx] = v
+        valueCount = maxOf(valueCount, idx + 1)
     }
 
     operator fun set(idx: Int, v: Int) = setInt(idx, v)

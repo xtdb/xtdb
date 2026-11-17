@@ -127,7 +127,8 @@
                             (let [~@(expr/batch-bindings emitted-expr)]
                               (dotimes [~expr/idx-sym (.getRowCount ~expr/rel-sym)]
                                 (let [~group-idx-sym (.getInt ~group-mapping-sym ~expr/idx-sym)]
-                                  (.ensureCapacity ~acc-sym (inc ~group-idx-sym))
+                                  (when (>= ~group-idx-sym (.getValueCount ~acc-sym))
+                                    (.setNull ~acc-sym ~group-idx-sym))
 
                                   (when (.isSet ~mask-sym ~expr/idx-sym)
                                     ~(continue (fn [acc-type acc-code]

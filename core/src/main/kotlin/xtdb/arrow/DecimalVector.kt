@@ -49,6 +49,7 @@ class DecimalVector private constructor(
         setNotNull(idx)
         val result = if (isNull(idx)) v else getDecimal(idx).add(v)
         dataBuffer.setBigDecimal(idx, result, byteWidth)
+        valueCount = maxOf(valueCount, idx + 1)
     }
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>): BigDecimal = getDecimal(idx)
@@ -75,7 +76,6 @@ class DecimalVector private constructor(
         if (outVec !is DecimalVector) return super.sumInto(outVec)
 
         return VectorSummer { idx, groupIdx ->
-            outVec.ensureCapacity(groupIdx + 1)
             outVec.increment(groupIdx, if (isNull(idx)) BigDecimal.ZERO else getDecimal(idx))
         }
     }

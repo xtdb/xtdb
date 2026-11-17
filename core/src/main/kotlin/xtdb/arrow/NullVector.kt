@@ -37,9 +37,7 @@ class NullVector(
         valueCount++
     }
 
-    override fun ensureCapacity(valueCount: Int) {
-        this.valueCount = this.valueCount.coerceAtLeast(valueCount)
-    }
+    override fun ensureCapacity(valueCount: Int) = Unit
 
     override fun setNull(idx: Int) {
         valueCount = valueCount.coerceAtLeast(idx + 1)
@@ -63,9 +61,7 @@ class NullVector(
     override fun sumInto(outVec: Vector): VectorSummer {
         check(outVec is MonoVector)
 
-        return VectorSummer { _, groupIdx ->
-            outVec.ensureCapacity(groupIdx + 1)
-        }
+        return VectorSummer { _, _ -> }
     }
 
     override fun maybePromote(al: BufferAllocator, targetType: ArrowType, targetNullable: Boolean): Vector =

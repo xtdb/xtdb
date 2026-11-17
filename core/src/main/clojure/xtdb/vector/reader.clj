@@ -1,10 +1,9 @@
 (ns xtdb.vector.reader
   (:require [clojure.set :as set]
-            [xtdb.types :as types]
-            [xtdb.serde.types :as st])
+            [xtdb.types :as types])
   (:import java.util.List
            (org.apache.arrow.memory BufferAllocator)
-           (xtdb.arrow RelationReader VectorReader Vector)))
+           (xtdb.arrow NullVector RelationReader VectorReader)))
 
 (defn rel-reader
   (^xtdb.arrow.RelationReader [^List cols]
@@ -15,19 +14,18 @@
   (^xtdb.arrow.RelationReader [cols ^long row-count]
    (RelationReader/from cols row-count)))
 
-(defn- ->absent-col [col-name allocator row-count]
-  (doto (Vector/open allocator (str col-name) (st/->type [:? :null]))
-    (.ensureCapacity row-count)))
+(defn- ->absent-col [col-name row-count]
+  (NullVector. (str col-name) true row-count))
 
 (defn- available-col-names [^xtdb.arrow.RelationReader rel]
   (into #{} (map #(.getName ^VectorReader %)) (.getVectors rel)))
 
 ;; we don't allocate anything here, but we need it because BaseValueVector
 ;; (a distant supertype of NullVector) thinks it needs one.
-(defn with-absent-cols ^xtdb.arrow.RelationReader [^RelationReader rel, ^BufferAllocator allocator, col-names]
+(defn with-absent-cols ^xtdb.arrow.RelationReader [^RelationReader rel, ^BufferAllocator _allocator, col-names]
   (let [row-count (.getRowCount rel)
         available-col-names (available-col-names rel)]
     (rel-reader (concat rel
                         (->> (set/difference col-names available-col-names)
-                             (map #(->absent-col % allocator row-count))))
+                             (map #(->absent-col % row-count))))
                 (.getRowCount rel))))
