@@ -8,7 +8,6 @@ import org.roaringbitmap.buffer.ImmutableRoaringBitmap
 import xtdb.arrow.ArrowUtil.toByteBuffer
 import xtdb.arrow.VectorReader
 import xtdb.util.Hasher
-import java.nio.ByteBuffer
 import java.nio.ByteOrder.LITTLE_ENDIAN
 
 const val BLOOM_BITS = 22
@@ -38,9 +37,3 @@ fun bloomHashes(col: VectorReader, idx: Int, k: Int = BLOOM_K, bits: Int = BLOOM
     val hash2 = col.hashCode(idx, Hasher.Murmur3())
     return IntArray(k) { n -> (mask and (hash1 + hash2 * n)) }
 }
-
-fun BloomFilter.toByteBuffer(): ByteBuffer =
-    ByteBuffer.allocate(this.serializedSizeInBytes()).also {
-        this.serialize(it)
-        it.clear()
-    }

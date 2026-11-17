@@ -27,6 +27,8 @@ class BloomBuilderTest {
 
     private fun iid(b: Int) = ByteArray(16) { b.toByte() }
 
+    private fun BloomBuilder.bitmap() = RoaringBitmap().also { it.deserialize(serialize()) }
+
     @Test
     fun `a column with repeated neighbours blooms as if every row were added`() {
         FixedSizeBinaryVector(al, "_iid", false, 16).use { vec ->
@@ -34,10 +36,10 @@ class BloomBuilderTest {
             val col: MetadataFlavour.Bytes = vec
 
             val everyRow = RoaringBitmap.or(
-                *Array(col.valueCount) { idx -> BloomBuilder().also { it.add(col, idx) }.build() }
+                *Array(col.valueCount) { idx -> BloomBuilder().also { it.add(col, idx) }.bitmap() }
             )
 
-            assertEquals(everyRow, BloomBuilder().also { col.hashInto(it, VectorMask.ALL) }.build())
+            assertEquals(everyRow, BloomBuilder().also { col.hashInto(it, VectorMask.ALL) }.bitmap())
         }
     }
 }

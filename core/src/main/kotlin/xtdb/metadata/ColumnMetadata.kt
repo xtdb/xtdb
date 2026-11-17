@@ -20,7 +20,6 @@ import xtdb.arrow.metadata.MetadataFlavour.*
 import xtdb.arrow.metadata.MetadataFlavour.Companion.metaColName
 import xtdb.arrow.toLeg
 import xtdb.bloom.BloomBuilder
-import xtdb.bloom.toByteBuffer
 import xtdb.trie.RowIndex
 import kotlin.reflect.KClass
 
@@ -45,7 +44,7 @@ class ColumnMetadata(private val colsVec: VectorWriter, private val calculateBlo
         val typeVec = colsVec.vectorFor(Bytes::class.java.metaColName, STRUCT_TYPE, false)
         val bloomVec = typeVec.vectorFor("bloom", VAR_BINARY_TYPE, true)
 
-        if (bloom != null) bloomVec.writeBytes(bloom.build().toByteBuffer())
+        if (bloom != null) bloomVec.writeBytes(bloom.serialize())
 
         typeVec.endStruct()
     }

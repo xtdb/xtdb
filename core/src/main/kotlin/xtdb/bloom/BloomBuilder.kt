@@ -1,7 +1,6 @@
 package xtdb.bloom
 
 import com.carrotsearch.hppc.IntArrayList
-import org.roaringbitmap.RoaringBitmap
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.util.Hasher
 import java.nio.ByteBuffer
@@ -27,5 +26,5 @@ class BloomBuilder(private val k: Int = BLOOM_K, bits: Int = BLOOM_BITS) {
 
     fun add(col: MetadataFlavour.Bytes, idx: Int) = add(col.hashCode(idx, xxHasher), col.hashCode(idx, murmur3Hasher))
 
-    fun build(): RoaringBitmap = RoaringBitmap.bitmapOfUnordered(*buf.toArray())
+    fun serialize(): ByteBuffer = RoaringSerializer.serialize(buf.buffer, buf.size())
 }

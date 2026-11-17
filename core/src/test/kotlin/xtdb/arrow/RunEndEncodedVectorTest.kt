@@ -538,7 +538,7 @@ class RunEndEncodedVectorTest {
 
         fun bloomOf(vec: VectorReader, mask: VectorMask) = BloomBuilder().also { builder ->
             vec.metadataFlavours.filterIsInstance<MetadataFlavour.Bytes>().forEach { it.hashInto(builder, mask) }
-        }.build()
+        }.serialize()
 
         RunEndEncodedVector(allocator, "_iid", FixedSizeBinaryVector(allocator, REE_VALUES_NAME, false, 16)).use { vec ->
             FixedSizeBinaryVector(allocator, "_iid", false, 16).use { plain ->
