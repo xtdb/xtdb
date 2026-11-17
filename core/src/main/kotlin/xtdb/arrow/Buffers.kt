@@ -124,11 +124,11 @@ internal class ExtensibleBuffer private constructor(private val allocator: Buffe
     }
 
     fun writeBytes(bytes: ByteBuffer) {
-        val bytesDup = bytes.duplicate()
-        ensureWritable(bytesDup.remaining().toLong())
-        val byteArray = ByteArray(bytesDup.remaining())
-        bytesDup.get(byteArray)
-        buf.writeBytes(byteArray)
+        val len = bytes.remaining().toLong()
+        ensureWritable(len)
+        val writerIndex = buf.writerIndex()
+        buf.setBytes(writerIndex, bytes.duplicate())
+        buf.writerIndex(writerIndex + len)
     }
 
     fun unsafeWriteBytes(src: ExtensibleBuffer, start: Long, len: Long) {
