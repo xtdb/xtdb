@@ -7,7 +7,6 @@ import org.roaringbitmap.ImmutableBitmapDataProvider
 import org.roaringbitmap.buffer.ImmutableRoaringBitmap
 import xtdb.arrow.ArrowUtil.toByteBuffer
 import xtdb.arrow.VectorReader
-import xtdb.arrow.VectorWriter
 import xtdb.util.Hasher
 import java.nio.ByteBuffer
 import java.nio.ByteOrder.LITTLE_ENDIAN
@@ -45,15 +44,3 @@ fun BloomFilter.toByteBuffer(): ByteBuffer =
         this.serialize(it)
         it.clear()
     }
-
-fun writeBloom(bloomWtr: VectorWriter, col: VectorReader) {
-    val bloomBuilder = BloomBuilder()
-    for (idx in 0 until col.valueCount) {
-        if (!col.isNull(idx)) {
-            bloomBuilder.add(col, idx)
-        }
-    }
-
-    val bloom = bloomBuilder.build()
-    bloomWtr.writeBytes(bloom.toByteBuffer())
-}
