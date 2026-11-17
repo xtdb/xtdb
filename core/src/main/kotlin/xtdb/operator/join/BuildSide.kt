@@ -2,14 +2,13 @@ package xtdb.operator.join
 
 import org.apache.arrow.memory.BufferAllocator
 import org.roaringbitmap.RoaringBitmap
+import xtdb.arrow.IntVector
 import xtdb.arrow.NullVector
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
-import xtdb.arrow.Vector.Companion.openVector
 import xtdb.arrow.VectorReader
 import xtdb.expression.map.IndexHasher.Companion.hasher
 import xtdb.arrow.FieldName
-import xtdb.arrow.VectorType.Companion.I32
 import xtdb.arrow.VectorTypes
 import java.util.function.IntUnaryOperator
 
@@ -22,7 +21,8 @@ class BuildSide(
     val inMemoryThreshold: Long = 100_000,
 ) : AutoCloseable {
     val dataRel = Relation(al, vecTypes)
-    private val hashCol = al.openVector("hashes", I32)
+    private val hashCol = IntVector.open(al, "hashes", false)
+    private val hashScratch = IntVector.open(al, "hash-scratch", false)
 
     var buildMap: BuildSideMap? = null; private set
 
@@ -71,7 +71,7 @@ class BuildSide(
 
             dataRel.clear()
         } else {
-            dataRel.hasher(keyColNames).writeAllHashes(hashCol)
+            dataRel.hasher(keyColNames).hashTo(hashCol, hashScratch)
             buildRel(dataRel, hashCol, 0)
         }
     }
@@ -127,6 +127,7 @@ class BuildSide(
         shuffle?.close()
         spill?.close()
 
+        hashScratch.close()
         hashCol.close()
         dataRel.close()
     }

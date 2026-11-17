@@ -1,6 +1,7 @@
 package xtdb.hash
 
 import org.apache.arrow.memory.BufferAllocator
+import org.apache.arrow.memory.util.hash.MurmurHasher.combineHashCode
 import org.apache.arrow.vector.types.DateUnit
 import org.apache.arrow.vector.types.IntervalUnit
 import org.apache.arrow.vector.types.TimeUnit
@@ -12,6 +13,7 @@ import xtdb.arrow.IndirectVector
 import xtdb.arrow.IntVector
 import xtdb.arrow.LongVector
 import xtdb.arrow.REE_VALUES_NAME
+import xtdb.arrow.Relation
 import xtdb.arrow.RunEndEncodedVector
 import xtdb.arrow.Vector
 import xtdb.arrow.VectorIndirection.Companion.selection
@@ -41,6 +43,7 @@ import xtdb.arrow.VectorType.Companion.maybe
 import xtdb.arrow.VectorType.Companion.setTypeOf
 import xtdb.arrow.VectorType.Null
 import xtdb.arrow.VectorType.Scalar
+import xtdb.expression.map.IndexHasher.Companion.hasher
 import xtdb.test.AllocatorResolver
 import xtdb.time.Interval
 import xtdb.types.Oid
@@ -184,6 +187,26 @@ class VectorHashesTest {
                     assertMatchesPerRow(IndirectVector(vec, selection(IntArray(n + 1) { (n - it).coerceAtMost(n - 1) })), al, "$label selection")
                     assertMatchesPerRow(IndirectVector(vec, slice(1, n - 1)), al, "$label slice")
                     assertMatchesPerRow(vec.withName("renamed"), al, "$label renamed")
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `IndexHasher's bulk key hashes fold each key column's per-row hashes`(al: BufferAllocator) {
+        val rows = List(7) { mapOf("a" to (it % 3).toLong(), "b" to if (it % 2 == 0) "s$it" else null, "c" to it * 0.5) }
+        val xx = Hasher.Xx()
+
+        Relation.openFromRows(al, rows).use { rel ->
+            IntVector.open(al, "scratch", false).use { scratch ->
+                for (cols in listOf(emptyList(), listOf("a"), listOf("a", "b"), listOf("b", "c", "a"), listOf("c", "b"))) {
+                    val expected = List(rel.rowCount) { idx -> cols.fold(0) { acc, col -> combineHashCode(acc, rel[col].hashCode(idx, xx)) } }
+
+                    IntVector.open(al, "out", false).use { out ->
+                        out.writeInt(42)
+                        rel.hasher(cols).hashTo(out, scratch)
+                        assertEquals(expected, List(out.valueCount) { out.getInt(it) }, "$cols")
+                    }
                 }
             }
         }

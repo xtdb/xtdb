@@ -1,6 +1,7 @@
 package xtdb.operator.join
 
 import org.apache.arrow.memory.BufferAllocator
+import org.apache.arrow.memory.util.hash.MurmurHasher.combineHashCode
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertNotNull
@@ -8,11 +9,12 @@ import org.junit.jupiter.api.assertNull
 import org.junit.jupiter.api.extension.ExtendWith
 import xtdb.api.query.IKeyFn.KeyFn.SNAKE_CASE_STRING
 import xtdb.arrow.Relation
-import xtdb.expression.map.IndexHasher.Companion.hasher
+import xtdb.arrow.RelationReader
 import xtdb.test.AllocatorResolver
 import xtdb.arrow.VectorType
 import xtdb.arrow.VectorType.Companion.I32
 import xtdb.arrow.VectorType.Companion.maybe
+import xtdb.util.Hasher
 
 @ExtendWith(AllocatorResolver::class)
 class BuildSideTest {
@@ -24,6 +26,8 @@ class BuildSideTest {
         }
         return matches
     }
+
+    private fun RelationReader.idHash(idx: Int) = combineHashCode(0, this["id"].hashCode(idx, Hasher.Xx()))
 
     @Test
     fun testBuildSideWithDiskSpill(al: BufferAllocator) {
@@ -64,8 +68,7 @@ class BuildSideTest {
                     assertEquals(3, rel.rowCount)
                     assertEquals(partOneRows, rel.toMaps(SNAKE_CASE_STRING))
 
-                    val hasher = rel.hasher(listOf("id"))
-                    val bobHash = hasher.hashCode(0)
+                    val bobHash = rel.idHash(0)
                     assertEquals(listOf(0, 1, 2), buildSide.getMatches(bobHash).sorted())
                 }
 
@@ -74,8 +77,7 @@ class BuildSideTest {
                     assertEquals(6, rel.rowCount)
                     assertEquals(partTwoRows, rel.toMaps(SNAKE_CASE_STRING))
 
-                    val hasher = rel.hasher(listOf("id"))
-                    val johnHash = hasher.hashCode(0)
+                    val johnHash = rel.idHash(0)
                     assertEquals(listOf(0, 2, 4), buildSide.getMatches(johnHash).sorted())
                 }
 

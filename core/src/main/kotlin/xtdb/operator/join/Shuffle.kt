@@ -2,10 +2,10 @@ package xtdb.operator.join
 
 import com.carrotsearch.hppc.IntArrayList
 import org.apache.arrow.memory.BufferAllocator
+import xtdb.arrow.IntVector
 import xtdb.arrow.Relation
 import xtdb.arrow.Relation.RelationUnloader
 import xtdb.arrow.RelationReader
-import xtdb.arrow.Vector.Companion.openVector
 import xtdb.arrow.VectorWriter
 import xtdb.expression.map.IndexHasher.Companion.hasher
 import xtdb.trie.ColumnName
@@ -36,30 +36,26 @@ class Shuffle private constructor(
 
     private val dataRowCopier = inDataRel.rowCopier(outDataRel)
     private val hasher = inDataRel.hasher(hashColNames)
+    private val hashes = IntVector.open(al, HASH_COL_NAME, false)
+    private val hashScratch = IntVector.open(al, "hash-scratch", false)
+    private val hashCopier = RelationReader.from(listOf(hashes)).rowCopier(hashRel)
 
     fun shuffle() {
         val selections = Array(partCount) { IntArrayList(approxRowsPerPart) }
 
-        al.openVector(HASH_COL_NAME, I32).use { tmpHashCol ->
-            repeat(inDataRel.rowCount) { inIdx ->
-                val hashCode = hasher.hashCode(inIdx)
-                tmpHashCol.writeInt(hashCode)
-                selections[hashCode and hashMask].add(inIdx)
-            }
+        hasher.hashTo(hashes, hashScratch)
+        repeat(inDataRel.rowCount) { inIdx -> selections[hashes.getInt(inIdx) and hashMask].add(inIdx) }
 
-            val hashCopier = RelationReader.from(listOf(tmpHashCol)).rowCopier(hashRel)
+        for (selection in selections) {
+            outDataRel.clear()
+            hashRel.clear()
 
-            for (selection in selections) {
-                outDataRel.clear()
-                hashRel.clear()
+            val selArray = selection.toArray()
+            dataRowCopier.copyRows(selArray)
+            hashCopier.copyRows(selArray)
 
-                val selArray = selection.toArray()
-                dataRowCopier.copyRows(selArray)
-                hashCopier.copyRows(selArray)
-
-                dataUnloader.writePage()
-                hashUnloader.writePage()
-            }
+            dataUnloader.writePage()
+            hashUnloader.writePage()
         }
     }
 
@@ -108,6 +104,9 @@ class Shuffle private constructor(
 
         hashUnloader.close()
         hashRel.close()
+
+        hashScratch.close()
+        hashes.close()
 
         hashFile.deleteIfExists()
         dataFile.deleteIfExists()

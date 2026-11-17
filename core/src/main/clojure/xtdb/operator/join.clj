@@ -226,7 +226,7 @@
                                        probe-vec-types (map str probe-key-cols)
                                        join-type cmp-factory)
 
-                    (MemoryHashJoin. build-side probe-cursor
+                    (MemoryHashJoin. allocator build-side probe-cursor
                                      (vec (keys probe-vec-types)) (map str probe-key-cols)
                                      join-type cmp-factory)))))))
 
@@ -270,7 +270,7 @@
                                      mark cmp-factory)
 
                   :else
-                  (MemoryHashJoin. build-side probe-cursor
+                  (MemoryHashJoin. allocator build-side probe-cursor
                                    (map str (keys probe-vec-types)) probe-key-col-names
                                    mark cmp-factory))))))
 

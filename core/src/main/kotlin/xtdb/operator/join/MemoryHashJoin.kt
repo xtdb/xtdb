@@ -1,16 +1,18 @@
 package xtdb.operator.join
 
+import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.ICursor
 import xtdb.arrow.RelationReader
-import xtdb.operator.join.ComparatorFactory.Companion.build
 import xtdb.arrow.FieldName
 import java.util.function.Consumer
 
 class MemoryHashJoin(
-    private val buildSide: BuildSide, private val probeCursor: ICursor,
-    private val probeColNames: List<FieldName>, private val probeKeyColNames: List<FieldName>,
-    private val joinType: JoinType, private val comparatorFactory: ComparatorFactory,
+    al: BufferAllocator, private val buildSide: BuildSide, private val probeCursor: ICursor,
+    private val probeColNames: List<FieldName>, probeKeyColNames: List<FieldName>,
+    private val joinType: JoinType, comparatorFactory: ComparatorFactory,
 ) : ICursor {
+
+    private val probeSide = ProbeSide(al, buildSide, probeKeyColNames, comparatorFactory)
 
     override val cursorType: String get() = "memory-hash-join"
     override val childCursors: List<ICursor> = listOf(probeCursor)
@@ -20,9 +22,7 @@ class MemoryHashJoin(
 
         while (!advanced) {
             probeCursor.tryAdvance { probeRel ->
-                val comparator = comparatorFactory.build(buildSide, probeRel, probeKeyColNames)
-                val probeSide = ProbeSide(buildSide, probeRel, probeKeyColNames, comparator)
-                val outRel = joinType.probe(probeSide)
+                val outRel = joinType.probe(probeSide.forBatch(probeRel))
                 if (outRel.rowCount > 0) {
                     c.accept(outRel)
                     advanced = true
@@ -41,6 +41,7 @@ class MemoryHashJoin(
     }
 
     override fun close() {
+        probeSide.close()
         probeCursor.close()
         // we don't own buildSide
     }

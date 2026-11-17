@@ -28,6 +28,9 @@ class DistinctRelationMap(
     private val keyCols = keyColumnNames.map { accRel[it] }
 
     private val hashColumn = IntVector.open(allocator, "xt/join-hash", false)
+    private val batchHashes = IntVector.open(allocator, "xt/batch-hashes", false)
+    private val batchHashScratch = IntVector.open(allocator, "xt/batch-hash-scratch", false)
+
     private var buildHashTrie =
         MutableMemoryHashTrie.builder(hashColumn)
             .setPageLimit(pageLimit).setLevelBits(levelBits)
@@ -47,8 +50,16 @@ class DistinctRelationMap(
         fun insertedIdx(returnedIdx: Int): Int = if (returnedIdx < 0) -returnedIdx - 1 else returnedIdx
     }
 
+    /**
+     * The hashes of [inRel]'s key columns, one per row, for [buildFromRelation].
+     * They're held in a vector this map owns, valid until the next call.
+     */
+    fun hashesFor(inRel: RelationReader): IntVector =
+        batchHashes.also { inRel.hasher(keyColumnNames).hashTo(it, batchHashScratch) }
+
+    /** [hashes] holds [inRel]'s key-column hashes, row for row - from [hashesFor], or `IndexHasher.hashTo` over the same key columns. */
     @Suppress("NAME_SHADOWING")
-    fun buildFromRelation(inRel: RelationReader): RelationMapBuilder {
+    fun buildFromRelation(inRel: RelationReader, hashes: IntVector): RelationMapBuilder {
         val inKeyCols = keyColumnNames.map { inRel[it] }
         val inRel = if (storeFullBuildRel) inRel else RelationReader.from(inKeyCols)
 
@@ -57,12 +68,11 @@ class DistinctRelationMap(
             .reduceOrNull(::andIBO)
             ?: IntBinaryOperator { _, _ -> 1 }
 
-        val hasher = inRel.hasher(inKeyCols.map { it.name })
         val rowCopier = inRel.rowCopier(accRel)
 
         return object : RelationMapBuilder {
             override fun addIfNotPresent(inIdx: Int): Int {
-                val hashCode = hasher.hashCode(inIdx)
+                val hashCode = hashes.getInt(inIdx)
 
                 val outIdxHashColumn = hashColumn.valueCount
 
@@ -91,5 +101,7 @@ class DistinctRelationMap(
     override fun close() {
         accRel.close()
         hashColumn.close()
+        batchHashes.close()
+        batchHashScratch.close()
     }
 }
