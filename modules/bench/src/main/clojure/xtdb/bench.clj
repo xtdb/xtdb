@@ -15,9 +15,10 @@
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
   (:import (com.google.common.collect MinMaxPriorityQueue)
+           (com.sun.management OperatingSystemMXBean)
            (io.micrometer.core.instrument Meter MeterRegistry Timer)
            (java.io File Writer)
-           (java.lang.management ManagementFactory)
+           (java.lang.management ManagementFactory ThreadMXBean)
            (java.time Clock Duration InstantSource)
            java.time.Duration
            (java.util Comparator Random)
@@ -208,6 +209,9 @@
                             :max-ms (/ (.max timer TimeUnit/MILLISECONDS) 1.0)}]))))
          (into {}))))
 
+(def ^:private ^OperatingSystemMXBean os-mx-bean (ManagementFactory/getOperatingSystemMXBean))
+(def ^:private ^ThreadMXBean thread-mx-bean (ManagementFactory/getThreadMXBean))
+
 (defn wrap-stage
   "Times the stage `f` and logs its report.
    A task's `:verify`, when given, receives `f`'s return value once the clock has stopped, so the stage's time excludes it; if it throws, the stage doesn't report."
@@ -217,14 +221,20 @@
       (log/info "Starting stage:" stage "(setup)")
       (log/info "Starting stage:" stage))
     (let [start-ms (System/currentTimeMillis)
+          start-process-cpu-ns (.getProcessCpuTime os-mx-bean)
+          start-thread-cpu-ns (.getCurrentThreadCpuTime thread-mx-bean)
           result (f worker)
-          elapsed-ms (- (System/currentTimeMillis) start-ms)]
+          elapsed-ms (- (System/currentTimeMillis) start-ms)
+          process-cpu-ms (quot (- (.getProcessCpuTime os-mx-bean) start-process-cpu-ns) 1000000)
+          thread-cpu-ms (quot (- (.getCurrentThreadCpuTime thread-mx-bean) start-thread-cpu-ns) 1000000)]
       (when verify
         (verify result))
       (when setup?
         (swap! (:setup-time-ms worker) + elapsed-ms))
       (log-report worker {:stage stage
                           :time-taken-ms elapsed-ms
+                          :process-cpu-time-ms process-cpu-ms
+                          :thread-cpu-time-ms thread-cpu-ms
                           :setup setup?}))
     (log/info "Done stage:" stage)))
 

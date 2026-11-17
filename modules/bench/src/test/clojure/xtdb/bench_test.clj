@@ -49,3 +49,18 @@
     (t/is (thrown-with-msg? Incorrect #"needs a `:stage` and `:t :call`"
                             (b/compile-benchmark {:title "test", :benchmark-type :test, :tasks [task]}))
           (pr-str task))))
+
+(deftest a-stage-reports-the-cpu-time-it-burned-beside-its-wall-clock-time
+  (let [log-file (temp-log-file)]
+    (run-benchmark! log-file [{:t :call, :stage :spin
+                               :f (fn [_]
+                                    (let [until (+ (System/nanoTime) 200000000)]
+                                      (while (< (System/nanoTime) until))))}
+                              {:t :call, :stage :sleep
+                               :f (fn [_] (Thread/sleep 200))}])
+
+    (let [{:strs [spin sleep]} (stage-reports log-file)]
+      (t/is (<= 150 (:thread-cpu-time-ms spin)))
+      (t/is (<= (:thread-cpu-time-ms spin) (:process-cpu-time-ms spin)))
+      (t/is (<= 200 (:time-taken-ms sleep)))
+      (t/is (< (:thread-cpu-time-ms sleep) 50) "sleeping is wall-clock time, not CPU time"))))
