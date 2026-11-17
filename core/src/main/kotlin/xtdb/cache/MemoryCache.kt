@@ -2,333 +2,121 @@
 
 package xtdb.cache
 
-import java.net.URI
+import com.sun.nio.file.ExtendedOpenOption
 import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
-import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
-import org.apache.arrow.memory.ForeignAllocation
-import xtdb.api.error.Fault
-import xtdb.cache.MemoryCache.PathSlice
-import xtdb.util.*
+import org.apache.arrow.memory.BufferLedger
+import org.apache.arrow.memory.OutOfMemoryException
+import xtdb.util.ReclaimingAllocationListener
+import xtdb.util.closeOnCatch
+import xtdb.util.maxDirectMemory
+import java.io.IOException
 import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
+import java.net.URI
 import java.nio.channels.ClosedByInterruptException
 import java.nio.channels.FileChannel
+import java.nio.file.Files
+import java.nio.file.NoSuchFileException
 import java.nio.file.Path
+import java.nio.file.StandardOpenOption.READ
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicInteger
-
-private class Awaiter(val pathSlice: PathSlice, val res: CompletableDeferred<ArrowBuf>)
-
-private typealias FetchReqs = MutableMap<Path, MutableList<Awaiter>>
-
-private val LOGGER = MemoryCache::class.logger
-
-// each mapped file is a VMA, and vm.max_map_count defaults to 65530
-internal const val MAX_IDLE_FILES = 4096
+import java.util.concurrent.ConcurrentLinkedQueue
+import kotlin.io.path.fileSize
 
 /**
- * NOTE: the allocation count metrics in the provided `allocator` WILL NOT be accurate
- *   - we allocate a buffer in here for every _usage_, and don't take shared memory into account.
+ * Holds data pages in memory of its own, up to `maxSizeBytes`.
  *
- * Each file is mapped once, and its pages are handed out as buffers over that mapping.
- * The allocator's limit bounds the bytes of pages in use; a file with none in use stays mapped while it fits in what's left of that limit.
+ * A [get] that finds its page resident pins it on the caller's thread.
+ * A miss reads the page from the local file its [Fetch] returns — past the OS page cache, where the filesystem supports
+ * `O_DIRECT` — and keeps it until it's evicted.
+ * Pages are evicted (S3-FIFO) only while no buffer [get] returned for them is open; if every page is held, [get]
+ * throws [OutOfMemoryException].
  */
 class MemoryCache @JvmOverloads internal constructor(
     al: BufferAllocator,
     maxSizeBytes: Long,
-    private val pathLoader: PathLoader = PathLoader(),
-    private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO.limitedParallelism(IO_PARALLELISM, "memory-cache-io"),
+    private val directIO: Boolean = true,
 ) : AutoCloseable {
-    private val cacheAl = al.newChildAllocator("memory-cache", 0, maxSizeBytes)
 
-    private val openSlices = ConcurrentHashMap<PathSlice, ArrowBuf>()
+    private val al = al.newChildAllocator("memory-cache", 0, maxSizeBytes)
 
-    // For testing
-    private suspend fun yieldIfSimulation() {
-        if (dispatcher != Dispatchers.IO) yield()
+    data class Slice(val offset: Long, val length: Long) {
+        companion object {
+            fun from(path: Path) = Slice(0, path.fileSize())
+        }
     }
 
-    data class Slice(val offset: Long, val length: Long)
-
-    internal data class PathSlice(val path: Path, val slice: Slice? = null) {
-        constructor(path: Path, offset: Long, length: Long) : this(path, Slice(offset, length))
-    }
+    internal data class PathSlice(val path: Path, val slice: Slice? = null)
 
     @FunctionalInterface
     fun interface Fetch {
         /**
-         * @return a pair containing the on-disk path and an optional cleanup action
+         * @return the on-disk path, and an optional action to run once the page has been read from it
          */
         suspend operator fun invoke(k: Path): Pair<Path, AutoCloseable?>
     }
 
-    interface PathLoader {
+    private sealed interface Entry
+
+    private class Loading : Entry {
+        val done = CompletableDeferred<Unit>()
+    }
+
+    private class Page(val pathSlice: PathSlice, val frame: ArrowBuf, val length: Long) : Entry {
+        // hits increment this without the lock: a lost increment only blurs the eviction priority
+        @Volatile
+        var freq = 0
+
+        val bytes get() = frame.capacity()
+
+        // the cache's own reference is the one the frame was allocated with;
+        // a reader that has transferred the page into its own allocator owns it, leaving that reference the only one here
+        val isHeld get() = frame.refCnt() > 1 || (frame.referenceManager as? BufferLedger)?.isOwningLedger == false
+
         /**
-         * Maps the whole of the file at [path], read-only, into [arena].
+         * @return a buffer over the page that the caller closes, or null if the page was evicted and freed since it was found
          */
-        fun load(path: Path, arena: Arena): MemorySegment
-
-        companion object {
-            operator fun invoke() = object : PathLoader {
-                override fun load(path: Path, arena: Arena): MemorySegment =
-                    try {
-                        path.openReadableChannel().use { ch ->
-                            ch.map(FileChannel.MapMode.READ_ONLY, 0, ch.size(), arena)
-                        }
-                    } catch (e: ClosedByInterruptException) {
-                        throw InterruptedException(e.message)
-                    }
-            }
-        }
-    }
-
-    private class MappedFile(val path: Path, val arena: Arena, val segment: MemorySegment, val onEvict: AutoCloseable?) {
-        // incremented only on the fetch actor, decremented by `release0` on any thread:
-        // so the actor, reading zero, knows no slice can come back to life, and may unmap.
-        val liveSlices = AtomicInteger()
-
-        val isIdle get() = liveSlices.get() == 0
-
-        fun unmap() {
+        fun retainSlice(): ArrowBuf? =
             try {
-                try {
-                    arena.close()
-                } finally {
-                    onEvict?.close()
-                }
-            } catch (t: Throwable) {
-                LOGGER.warn(t, "error unmapping $path")
-            }
-        }
-    }
-
-    // owned by the fetch actor, and by close() once the actor is joined; iterates least-recently-used first
-    private val mappedFiles = LinkedHashMap<Path, MappedFile>(16, 0.75f, true)
-
-    private fun wrapSlice(file: MappedFile, pathSlice: PathSlice): ArrowBuf {
-        val fileSize = file.segment.byteSize()
-        val slice = pathSlice.slice ?: Slice(0, fileSize)
-        if (slice.offset < 0 || slice.length < 0 || slice.offset > fileSize || slice.length > fileSize - slice.offset)
-            throw Fault(
-                "Slice out of bounds for ${file.path}: $slice, file is $fileSize bytes",
-                "xtdb.memory-cache/slice-out-of-bounds",
-                mapOf("path" to file.path.toString(), "offset" to slice.offset, "length" to slice.length, "file-size" to fileSize)
-            )
-
-        val allocation = object : ForeignAllocation(slice.length, file.segment.address() + slice.offset) {
-            // Arrow 19's `wrapForeignAllocation` calls `release0` itself when it fails after reserving the bytes, but not when it fails before.
-            private val released = AtomicBoolean()
-
-            public override fun release0() {
-                if (!released.compareAndSet(false, true)) return
-                openSlices.computeIfPresent(pathSlice) { _, buf ->
-                    buf.takeIf { it.referenceManager.refCount > 0 }
-                }
-                file.liveSlices.decrementAndGet()
-            }
-        }
-
-        file.liveSlices.incrementAndGet()
-        return try {
-            cacheAl.wrapForeignAllocation(allocation)
-        } catch (t: Throwable) {
-            allocation.release0()
-            throw t
-        }
-    }
-
-    private suspend fun serve(file: MappedFile, pathSlice: PathSlice, reqs: List<CompletableDeferred<ArrowBuf>>) {
-        try {
-            val buf = wrapSlice(file, pathSlice)
-
-            try {
-                openSlices[pathSlice] = buf
-                yieldIfSimulation() // interleave between put and completing awaiters
-                // (size - 1) because we already have refCount 1 from allocation
-                (reqs.size - 1).takeIf { it > 0 }?.let { buf.referenceManager.retain(it) }
-                reqs.forEach {
-                    if (!it.complete(buf)) buf.referenceManager.release()
-                }
-            } catch (t: Throwable) {
-                buf.close()
-                throw t
-            }
-        } catch (t: Throwable) {
-            reqs.forEach { it.completeExceptionally(t) }
-        }
-    }
-
-    private fun evictIdleFiles() {
-        val idleFiles = mappedFiles.values.filter { it.isIdle }
-        var idleBytes = idleFiles.sumOf { it.segment.byteSize() }
-        var idleCount = idleFiles.size
-        val byteBudget = cacheAl.limit - cacheAl.allocatedMemory
-
-        for (file in idleFiles) {
-            if (idleBytes <= byteBudget && idleCount <= MAX_IDLE_FILES) break
-            LOGGER.trace("evicting idle file ${file.path}")
-            mappedFiles.remove(file.path)
-            idleBytes -= file.segment.byteSize()
-            idleCount--
-            file.unmap()
-        }
-    }
-
-    private suspend fun getOpenSlice(pathSlice: PathSlice) =
-        openSlices[pathSlice]?.let { buf ->
-            try {
-                yieldIfSimulation() // interleave between lookup and retain
-                buf.also { it.referenceManager.retain() }
+                frame.referenceManager.retain()
+                frame.slice(0, length)
             } catch (_: IllegalArgumentException) {
                 null
             }
-        }
-
-    private val fetchParentJob = Job()
-    private val scope = CoroutineScope(SupervisorJob(fetchParentJob) + dispatcher)
-
-    private sealed interface FetchChEvent {
-        suspend fun handle(fetchReqs: FetchReqs)
-
-        fun fail(cause: Throwable)
     }
 
-    private inner class FetchReq(
-        val pathSlice: PathSlice, val fetch: Fetch, val res: CompletableDeferred<ArrowBuf>
-    ) : FetchChEvent {
-        override suspend fun handle(fetchReqs: FetchReqs) {
-            val openSlice = getOpenSlice(pathSlice)
+    private val entries = ConcurrentHashMap<PathSlice, Entry>()
 
-            if (openSlice != null) {
-                LOGGER.trace("FetchReq: Fast path cache hit for $pathSlice")
-                if (!res.complete(openSlice)) openSlice.referenceManager.release()
-                return
-            }
+    private val bounceArena = Arena.ofShared()
+    private val bounces = ConcurrentLinkedQueue<MemorySegment>()
 
-            yieldIfSimulation() // interleave between openSlice check and compute
-            val path = pathSlice.path
-
-            val file = mappedFiles[path]
-            if (file != null) {
-                LOGGER.trace("FetchReq: $path already mapped - serving $pathSlice")
-                serve(file, pathSlice, listOf(res))
-                evictIdleFiles()
-                return
-            }
-
-            fetchReqs.compute(path) { _, awaiters ->
-                if (awaiters != null) {
-                    LOGGER.trace("FetchReq: Fetch in progress for $path - adding to ${awaiters.size} awaiter(s)")
-                    awaiters.also { it.add(Awaiter(pathSlice, res)) }
-                } else {
-                    LOGGER.trace("FetchReq: Starting new fetch for $path")
-                    scope.launch(CoroutineName("MemoryCache-Fetch-$path")) {
-                        val ev = try {
-                            val (localPath, onEvict) = fetch(path)
-                            LOGGER.trace("FetchReq: Fetched $path to $localPath, sending FetchDone message...")
-                            FetchDone(path, localPath, onEvict)
-                        } catch (t: Throwable) {
-                            FetchFailed(path, t)
-                        }
-
-                        try {
-                            withContext(NonCancellable) { fetchCh.send(ev) }
-                        } catch (t: Throwable) {
-                            ev.fail(t)
-                        }
-                    }
-                    mutableListOf(Awaiter(pathSlice, res))
-                }
-            }
-        }
-
-        override fun fail(cause: Throwable) {
-            res.completeExceptionally(cause)
-        }
+    // S3-FIFO: a page read once passes through `small`; one read again while there moves to `main`, which is a CLOCK;
+    // `ghost` remembers recent evictions from `small`, so a page re-read soon after goes straight to `main`
+    private val lock = Any()
+    private val small = ArrayDeque<Page>()
+    private val main = ArrayDeque<Page>()
+    private var smallBytes = 0L
+    private var mainBytes = 0L
+    private val smallTargetBytes = maxSizeBytes / SMALL_QUEUE_RATIO
+    private val ghost = object : LinkedHashMap<PathSlice, Unit>() {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<PathSlice, Unit>) =
+            size > maxOf(MIN_GHOST_CAPACITY, small.size + main.size)
     }
 
-    private inner class FetchFailed(
-        val path: Path, val cause: Throwable
-    ) : FetchChEvent {
-        override suspend fun handle(fetchReqs: FetchReqs) {
-            fetchReqs.remove(path).orEmpty().forEach { it.res.completeExceptionally(cause) }
-        }
-
-        override fun fail(cause: Throwable) = Unit
-    }
-
-    private inner class FetchDone(
-        val path: Path, val localPath: Path, val onEvict: AutoCloseable?
-    ) : FetchChEvent {
-        override suspend fun handle(fetchReqs: FetchReqs) {
-            val awaiters = fetchReqs.remove(path).orEmpty()
-            LOGGER.trace("FetchDone: Completing $path for ${awaiters.size} awaiter(s)")
-
-            try {
-                val file = try {
-                    Arena.ofShared().closeOnCatch { arena ->
-                        MappedFile(path, arena, pathLoader.load(localPath, arena), onEvict)
-                    }
-                } catch (t: Throwable) {
-                    onEvict?.close()
-                    throw t
-                }
-
-                mappedFiles[path] = file
-
-                awaiters.groupBy({ it.pathSlice }, { it.res })
-                    .forEach { (pathSlice, reqs) -> serve(file, pathSlice, reqs) }
-
-                evictIdleFiles()
-            } catch (t: Throwable) {
-                awaiters.forEach { it.res.completeExceptionally(t) }
-            }
-        }
-
-        override fun fail(cause: Throwable) {
-            onEvict?.close()
-        }
-    }
-
-    private val fetchCh = Channel<FetchChEvent>()
-
-    init {
-        CoroutineScope(fetchParentJob + dispatcher + CoroutineName("MemoryCache FetchLoop")).launch {
-            val fetchReqs: FetchReqs = mutableMapOf()
-
-            val cause = try {
-                for (ev in fetchCh) {
-                    try {
-                        ev.handle(fetchReqs)
-                    } catch (t: Throwable) {
-                        ev.fail(t)
-                        throw t
-                    }
-                }
-                null
-            } catch (t: Throwable) {
-                t
-            }
-
-            val failure = cause ?: CancellationException("MemoryCache closed")
-            fetchCh.close(cause)
-            withContext(NonCancellable) {
-                while (true) {
-                    val ev = fetchCh.receiveCatching().getOrNull() ?: break
-                    ev.fail(failure)
-                }
-            }
-            fetchReqs.values.flatten().forEach { it.res.completeExceptionally(failure) }
-
-            if (cause != null) throw cause
-        }
-    }
+    // by directory; 0 where the filesystem doesn't support O_DIRECT
+    private val directBlockSizes = ConcurrentHashMap<Path, Long>()
 
     /**
      * A view of this cache whose keys are namespaced under [prefix].
@@ -347,45 +135,257 @@ class MemoryCache @JvmOverloads internal constructor(
      */
     fun openForDatabase(storageUri: URI?) = ForDatabase(cachePrefix(storageUri))
 
-    @OptIn(ExperimentalCoroutinesApi::class)
-    @Suppress("NAME_SHADOWING")
     internal suspend fun get(key: Path, slice: Slice? = null, fetch: Fetch): ArrowBuf {
-        LOGGER.debug("Sending get for $key / $slice...")
         val pathSlice = PathSlice(key, slice)
 
-        getOpenSlice(pathSlice)?.let {
-            LOGGER.trace("get: Fast path cache hit for $pathSlice")
-            return it
-        }
+        while (true) {
+            when (val entry = entries[pathSlice]) {
+                is Page -> entry.retainSlice()?.let { buf ->
+                    if (entry.freq < MAX_FREQ) entry.freq++
+                    return buf
+                }
 
-        yieldIfSimulation() // interleave between cache check and fetch request
+                is Loading -> try {
+                    entry.done.await()
+                } catch (_: CancellationException) {
+                    // either we were cancelled, or whoever was loading it was - in which case we load it ourselves
+                    currentCoroutineContext().ensureActive()
+                }
 
-        val res = CompletableDeferred<ArrowBuf>()
-
-        return try {
-            fetchCh.send(FetchReq(pathSlice, fetch, res))
-            res.await()
-        } catch (e: Throwable) {
-            res.cancel()
-            if (res.isCompleted && !res.isCancelled) {
-                val completedBuf = res.getCompleted()
-                LOGGER.trace("get: Buffer was completed before cancel, releasing (refCnt=${completedBuf.refCnt()})")
-                completedBuf.referenceManager.release()
+                null -> {
+                    val loading = Loading()
+                    if (entries.putIfAbsent(pathSlice, loading) == null) return load(pathSlice, loading, fetch)
+                }
             }
-            throw e
         }
     }
 
-    override fun close() {
-        fetchCh.close()
-        runBlocking { fetchParentJob.cancelAndJoin() }
+    private suspend fun load(pathSlice: PathSlice, loading: Loading, fetch: Fetch): ArrowBuf =
+        try {
+            val (localPath, onRead) = fetch(pathSlice.path)
 
-        for (file in mappedFiles.values) {
-            if (file.isIdle) file.unmap() else LOGGER.warn("closing with live slices over ${file.path}")
+            val page = onRead.closeOnCatch { readPage(pathSlice, localPath, pathSlice.slice ?: Slice.from(localPath)) }
+            try {
+                onRead?.close()
+            } catch (t: Throwable) {
+                page.frame.close()
+                throw t
+            }
+
+            val buf = page.retainSlice()!!
+
+            synchronized(lock) {
+                if (ghost.remove(pathSlice) != null) {
+                    main.addLast(page); mainBytes += page.bytes
+                } else {
+                    small.addLast(page); smallBytes += page.bytes
+                }
+            }
+
+            entries.replace(pathSlice, loading, page)
+            loading.done.complete(Unit)
+            buf
+        } catch (t: Throwable) {
+            entries.remove(pathSlice, loading)
+            loading.done.completeExceptionally(t)
+            throw t
         }
-        mappedFiles.clear()
 
-        cacheAl.close()
+    private suspend fun readPage(pathSlice: PathSlice, path: Path, slice: Slice): Page =
+        // allocated outside `withContext`, which discards the block's result if we're cancelled meanwhile
+        allocate(slice.length).closeOnCatch { frame ->
+            val dest = MemorySegment.ofAddress(frame.memoryAddress()).reinterpret(slice.length)
+
+            withContext(ioDispatcher) {
+                try {
+                    openDirect(path)
+                        ?.let { (ch, blockSize) -> ch.use { it.readDirect(path, slice, dest, blockSize) } }
+                        ?: FileChannel.open(path, READ).use { ch -> ch.readFully(path, dest, slice.offset) }
+                } catch (e: ClosedByInterruptException) {
+                    throw InterruptedException(e.message)
+                }
+            }
+
+            Page(pathSlice, frame, slice.length)
+        }
+
+    private fun FileChannel.readFully(path: Path, dest: MemorySegment, position: Long) {
+        var done = 0L
+        while (done < dest.byteSize()) {
+            val bb = dest.asSlice(done, minOf(dest.byteSize() - done, MAX_BUFFERED_READ_BYTES)).asByteBuffer()
+            while (bb.hasRemaining()) {
+                if (read(bb, position + done + bb.position()) <= 0)
+                    throw IOException("short read of $path at $position: ${done + bb.position()} of ${dest.byteSize()} bytes")
+            }
+            done += bb.limit()
+        }
+    }
+
+    // O_DIRECT needs file positions, lengths and memory aligned to the filesystem's block size, which a page's slice and
+    // its exactly-sized frame aren't - so we read aligned chunks into a bounce buffer and copy out the page's bytes
+    private fun FileChannel.readDirect(path: Path, slice: Slice, dest: MemorySegment, blockSize: Long) {
+        fun Long.alignDown() = this and (blockSize - 1).inv()
+        fun Long.alignUp() = (this + blockSize - 1).alignDown()
+
+        val bounce = bounces.poll() ?: bounceArena.allocate(BOUNCE_BYTES, BOUNCE_BYTES)
+        try {
+            val end = slice.offset + slice.length
+            var filePos = slice.offset.alignDown()
+            var copied = 0L
+
+            while (copied < slice.length) {
+                val bb = bounce.asSlice(0, minOf(BOUNCE_BYTES, (end - filePos).alignUp())).asByteBuffer()
+                while (bb.hasRemaining()) {
+                    if (read(bb, filePos + bb.position()) <= 0) break
+                    // an O_DIRECT read only comes up short at the end of the file, where the next position isn't aligned
+                    if (bb.position().toLong() != bb.position().toLong().alignDown()) break
+                }
+
+                val skip = slice.offset + copied - filePos
+                val n = minOf(bb.position() - skip, slice.length - copied)
+                if (n <= 0) throw IOException("short read of $path at ${slice.offset}: $copied of ${slice.length} bytes")
+
+                MemorySegment.copy(bounce, skip, dest, copied, n)
+                copied += n
+                filePos += bb.position()
+            }
+        } finally {
+            bounces.offer(bounce)
+        }
+    }
+
+    /**
+     * @return the channel and the block size its reads have to be aligned to,
+     *   or null where the file's filesystem doesn't support O_DIRECT (e.g. tmpfs) or its blocks don't fit the bounce buffer
+     */
+    private fun openDirect(path: Path): Pair<FileChannel, Long>? {
+        if (!directIO) return null
+
+        val dir = path.toAbsolutePath().parent
+        val blockSize = directBlockSizes.computeIfAbsent(dir) {
+            try {
+                Files.getFileStore(dir).blockSize.takeIf { it in 1..BOUNCE_BYTES && it.countOneBits() == 1 } ?: 0
+            } catch (_: IOException) {
+                0
+            }
+        }
+        if (blockSize == 0L) return null
+
+        return try {
+            FileChannel.open(path, READ, ExtendedOpenOption.DIRECT) to blockSize
+        } catch (_: NoSuchFileException) {
+            // the buffered open says so
+            null
+        } catch (_: UnsupportedOperationException) {
+            directBlockSizes[dir] = 0
+            null
+        } catch (_: IOException) {
+            // e.g. tmpfs, which rejects O_DIRECT at open
+            directBlockSizes[dir] = 0
+            null
+        }
+    }
+
+    private fun allocate(bytes: Long): ArrowBuf {
+        if (al.roundingPolicy.getRoundedSize(bytes) > al.limit)
+            throw OutOfMemoryException("page of $bytes bytes is larger than the memory cache (${al.limit} bytes)")
+
+        synchronized(lock) {
+            while (true) {
+                try {
+                    return al.buffer(bytes)
+                } catch (e: OutOfMemoryException) {
+                    if (evictOne() == 0L) throw e
+                }
+            }
+        }
+    }
+
+    private fun reclaim(bytes: Long): Boolean =
+        synchronized(lock) {
+            var freed = 0L
+            while (freed < bytes) freed += evictOne().takeIf { it > 0 } ?: break
+            freed > 0
+        }
+
+    /**
+     * @return the bytes it freed - 0 if every resident page is held
+     */
+    private fun evictOne(): Long {
+        // held pages each queue has rotated past since it last made progress - once one has been all the way round, use the other
+        var smallSkips = 0
+        var mainSkips = 0
+
+        // hits raise `freq` without the lock, so this bounds the scan even if they keep pace with it
+        var visits = (MAX_FREQ + 2) * (small.size + main.size) + 1
+
+        while (visits-- > 0) {
+            val smallLive = small.isNotEmpty() && smallSkips < small.size
+            val mainLive = main.isNotEmpty() && mainSkips < main.size
+
+            if (smallLive && (smallBytes >= smallTargetBytes || !mainLive)) {
+                val page = small.removeFirst().also { smallBytes -= it.bytes }
+                when {
+                    page.freq > 0 -> {
+                        smallSkips = 0
+                        page.freq = 0
+                        main.addLast(page); mainBytes += page.bytes
+                    }
+
+                    !page.isHeld -> {
+                        evict(page)
+                        ghost[page.pathSlice] = Unit
+                        return page.bytes
+                    }
+
+                    else -> {
+                        smallSkips++
+                        small.addLast(page); smallBytes += page.bytes
+                    }
+                }
+            } else if (mainLive) {
+                val page = main.removeFirst()
+                when {
+                    // a held page keeps its frequency: it can't be evicted, so ageing it would only count against it later
+                    page.isHeld -> mainSkips++
+
+                    page.freq > 0 -> {
+                        mainSkips = 0
+                        page.freq--
+                    }
+
+                    else -> {
+                        mainBytes -= page.bytes
+                        evict(page)
+                        return page.bytes
+                    }
+                }
+                main.addLast(page)
+            } else return 0
+        }
+
+        return 0
+    }
+
+    private fun evict(page: Page) {
+        entries.remove(page.pathSlice, page)
+        page.frame.close()
+    }
+
+    // registered last, because another thread's failed allocation can call `reclaim` as soon as it is
+    private val reclaimRegistration = (al.listener as? ReclaimingAllocationListener)?.register(::reclaim)
+
+    override fun close() {
+        reclaimRegistration?.close()
+
+        synchronized(lock) {
+            entries.clear()
+            (small + main).forEach { it.frame.close() }
+            small.clear(); main.clear(); smallBytes = 0; mainBytes = 0
+        }
+
+        bounceArena.close()
+        al.close()
     }
 
     /**
@@ -405,9 +405,19 @@ class MemoryCache @JvmOverloads internal constructor(
 
     internal data class Stats(val usedBytes: Long, val freeBytes: Long)
 
-    internal val stats0 get() = cacheAl.let { Stats(it.allocatedMemory, it.limit - it.allocatedMemory) }
+    internal val stats0 get() = al.let { Stats(it.allocatedMemory, it.limit - it.allocatedMemory) }
+
+    private fun residentBytes(held: Boolean) =
+        synchronized(lock) { small.sumOf { if (it.isHeld == held) it.bytes else 0 } + main.sumOf { if (it.isHeld == held) it.bytes else 0 } }
 
     companion object {
+        private const val IO_PARALLELISM = 8
+        private const val BOUNCE_BYTES = 1L shl 20
+        private const val MAX_FREQ = 3
+        private const val SMALL_QUEUE_RATIO = 10
+        private const val MAX_BUFFERED_READ_BYTES = 1L shl 30
+        private const val MIN_GHOST_CAPACITY = 16
+
         @JvmStatic
         fun factory() = Factory()
 
@@ -417,9 +427,9 @@ class MemoryCache @JvmOverloads internal constructor(
                     .baseUnit("bytes").register(this@registerMemoryCache)
             }
 
-            registerGauge("memory-cache.pinnedBytes") { cache.cacheAl.allocatedMemory }
-            registerGauge("memory-cache.evictableBytes") { 0 }
-            registerGauge("memory-cache.freeBytes") { cache.cacheAl.let { it.limit - it.allocatedMemory } }
+            registerGauge("memory-cache.pinnedBytes") { residentBytes(held = true) }
+            registerGauge("memory-cache.evictableBytes") { residentBytes(held = false) }
+            registerGauge("memory-cache.freeBytes") { al.limit - al.allocatedMemory }
         }
     }
 }

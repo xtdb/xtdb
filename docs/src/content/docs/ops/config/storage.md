@@ -5,15 +5,6 @@ title: Storage
 <details>
 <summary>Changelog (last updated v2.3)</summary>
 
-v2.3: size the memory cache smaller than the disk cache
-
-: With remote storage, the memory cache keeps files mapped between queries, and each file it holds keeps its disk-cache copy from being evicted — see [Remote](#remote).
-
-  Previously a page was unmapped as soon as its last reader released it, so the memory cache's size didn't bear on the disk cache's.
-  A memory cache configured larger than the disk cache now holds the disk cache over its `maxSizeBytes`.
-
-  If your `memoryCache` is configured larger than your `diskCache`, make it smaller; at the defaults the disk cache is usually the larger.
-
 v2.3: disk-cache entries are keyed by the store they came from
 
 : The disk cache keys its entries by the object store they were read from or written to — see [Disk cache](#disk-cache).
@@ -152,9 +143,6 @@ memoryCache:
   # The maximum number of bytes to store in the in-memory cache (unset by default).
   # maxSizeBytes: 536870912
 ```
-
-Size the memory cache smaller than the disk cache.
-Each file the memory cache holds keeps its disk-cache copy from being evicted, so a memory cache larger than the disk cache holds the disk cache over its `maxSizeBytes`.
 
 ### Disk cache
 

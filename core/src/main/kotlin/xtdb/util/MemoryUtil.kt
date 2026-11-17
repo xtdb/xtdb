@@ -39,12 +39,14 @@ internal fun nettySizeClass(size: Long): Long = when {
 }
 
 /**
- * A root allocator that accounts each buffer at the size Netty allocates for it.
+ * A root allocator that accounts each buffer at the size Netty allocates for it,
+ * and that has its [ReclaimingAllocationListener]'s reclaimers - the memory cache - free memory when an allocation under it fails.
+ *
  * Arrow's default rounds requests under 16 MiB up to a power of two, which would waste ~30% of the memory cache's pages.
  */
 @JvmOverloads
 fun openRootAllocator(limit: Long = Long.MAX_VALUE, listener: AllocationListener = AllocationListener.NOOP) =
-    RootAllocator(listener, limit, RoundingPolicy(::nettySizeClass))
+    RootAllocator(ReclaimingAllocationListener(listener), limit, RoundingPolicy(::nettySizeClass))
 
 fun toMmapPath(path: Path): MappedByteBuffer =
     try {

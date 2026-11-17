@@ -65,6 +65,21 @@ class LocalStorageTest : PartitionedStorageTest() {
     }
 
     @Test
+    fun `a database attached again under the same name isn't served the previous one's pages`(@TempDir a: Path, @TempDir b: Path) {
+        val key = "blocks/b00.binpb".asPath
+
+        Storage.local(a).open(allocator, memoryCache, null, "foo").use { bp ->
+            bp.putObjectSync(key, ByteBuffer.wrap(ByteArray(3)))
+            assertEquals(3, bp.getByteArray(key).size)
+        }
+
+        Storage.local(b).open(allocator, memoryCache, null, "foo").use { bp ->
+            bp.putObjectSync(key, ByteBuffer.wrap(ByteArray(7)))
+            assertEquals(7, bp.getByteArray(key).size)
+        }
+    }
+
+    @Test
     fun `single-partition pool keeps the unmarked on-disk layout`() {
         openPartitionedStorage(0, 1).use { bp ->
             bp.putObjectSync("blocks/b00.binpb".asPath, ByteBuffer.wrap(ByteArray(10)))
