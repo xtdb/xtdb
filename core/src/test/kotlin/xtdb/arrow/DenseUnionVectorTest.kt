@@ -12,6 +12,8 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import xtdb.arrow.metadata.MetadataFlavour
+import xtdb.util.Hasher
 
 class DenseUnionVectorTest {
     private lateinit var allocator: BufferAllocator
@@ -51,6 +53,39 @@ class DenseUnionVectorTest {
 
             assertEquals(listOf(0, 1, 1, 0, 1).map { it.toByte() }, duv.typeIds())
             assertEquals(listOf(0, 0, 1, 1, 2), duv.offsets())
+        }
+    }
+
+    @Test
+    fun `a bytes leg's metadata hashes the union rows a selection picks from that leg, in selection order`() {
+        DenseUnionVector(
+            allocator, "duv",
+            listOf(
+                IntVector.open(allocator, "i32", false),
+                Utf8Vector(allocator, "utf8", true)
+            )
+        ).use { duv ->
+            val i32Leg = duv.vectorFor("i32")
+            val utf8Leg = duv.vectorFor("utf8")
+
+            i32Leg.writeInt(12)
+            utf8Leg.writeObject("hello")
+            utf8Leg.writeObject("world!")
+            i32Leg.writeInt(34)
+            utf8Leg.writeNull()
+
+            val bytes = duv.metadataFlavours.filterIsInstance<MetadataFlavour.Bytes>().single()
+
+            fun hashes(hasher: Hasher, sel: IntArray?) =
+                IntVector.open(allocator, "out", false).use { out ->
+                    bytes.hashTo(out, hasher, sel)
+                    out.asList
+                }
+
+            for (hasher in listOf(Hasher.Xx(), Hasher.Murmur3())) {
+                assertEquals(listOf(4, 2).map { duv.hashCode(it, hasher) }, hashes(hasher, intArrayOf(4, 0, 2, 3)))
+                assertEquals(listOf(1, 2, 4).map { duv.hashCode(it, hasher) }, hashes(hasher, null))
+            }
         }
     }
 

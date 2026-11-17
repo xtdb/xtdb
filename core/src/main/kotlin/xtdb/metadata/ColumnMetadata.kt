@@ -1,8 +1,10 @@
 package xtdb.metadata
 
+import org.apache.arrow.memory.BufferAllocator
 import xtdb.arrow.BOOL_TYPE
 import xtdb.arrow.F64_TYPE
 import xtdb.arrow.I32_TYPE
+import xtdb.arrow.IntVector
 import xtdb.arrow.LIST_TYPE
 import xtdb.arrow.STRUCT_TYPE
 import xtdb.arrow.VAR_BINARY_TYPE
@@ -19,11 +21,16 @@ import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.arrow.metadata.MetadataFlavour.*
 import xtdb.arrow.metadata.MetadataFlavour.Companion.metaColName
 import xtdb.arrow.toLeg
-import xtdb.bloom.BloomBuilder
+import xtdb.bloom.RoaringSerializer
+import xtdb.bloom.bloomPositions
 import xtdb.trie.RowIndex
+import xtdb.util.Hasher
+import java.nio.ByteBuffer
 import kotlin.reflect.KClass
 
-class ColumnMetadata(private val colsVec: VectorWriter, private val calculateBlooms: Boolean) {
+class ColumnMetadata(
+    private val al: BufferAllocator, private val colsVec: VectorWriter, private val calculateBlooms: Boolean
+) {
     private val colNameVec = colsVec["col-name"]
     private val rootColVec = colsVec["root-col?"]
     private val countVec = colsVec["count"]
@@ -40,11 +47,24 @@ class ColumnMetadata(private val colsVec: VectorWriter, private val calculateBlo
         }
     }
 
-    private fun writeBytesMetadata(bloom: BloomBuilder?) {
+    private fun bloomOf(flavours: List<Bytes>, sel: IntArray?): ByteBuffer =
+        IntVector.open(al, "xx-hashes", false).use { xxHashes ->
+            IntVector.open(al, "murmur3-hashes", false).use { murmur3Hashes ->
+                for (flavour in flavours) {
+                    flavour.hashTo(xxHashes, Hasher.Xx(), sel)
+                    flavour.hashTo(murmur3Hashes, Hasher.Murmur3(), sel)
+                }
+
+                val positions = bloomPositions(xxHashes, murmur3Hashes)
+                RoaringSerializer.serialize(positions, positions.size)
+            }
+        }
+
+    private fun writeBytesMetadata(bloom: ByteBuffer?) {
         val typeVec = colsVec.vectorFor(Bytes::class.java.metaColName, STRUCT_TYPE, false)
         val bloomVec = typeVec.vectorFor("bloom", VAR_BINARY_TYPE, true)
 
-        if (bloom != null) bloomVec.writeBytes(bloom.serialize())
+        if (bloom != null) bloomVec.writeBytes(bloom)
 
         typeVec.endStruct()
     }
@@ -57,8 +77,7 @@ class ColumnMetadata(private val colsVec: VectorWriter, private val calculateBlo
         var dateTimes: DoubleMinMax? = null
         var times: DoubleMinMax? = null
         var durations: DoubleMinMax? = null
-        var bytesSeen = false
-        var bloom: BloomBuilder? = null
+        val bytesFlavours = mutableListOf<Bytes>()
         val presence = mutableListOf<Presence>()
 
         fun DoubleMinMax?.fold(flavour: Numeric) = (this ?: DoubleMinMax()).also { flavour.minMaxInto(it, mask) }
@@ -91,10 +110,7 @@ class ColumnMetadata(private val colsVec: VectorWriter, private val calculateBlo
                 is TimeOfDay -> times = times.fold(flavour)
                 is Duration -> durations = durations.fold(flavour)
 
-                is Bytes -> {
-                    bytesSeen = true
-                    if (withBloom) flavour.hashInto(bloom ?: BloomBuilder().also { bloom = it }, mask)
-                }
+                is Bytes -> bytesFlavours += flavour
 
                 is Presence -> presence.add(flavour)
             }
@@ -111,7 +127,8 @@ class ColumnMetadata(private val colsVec: VectorWriter, private val calculateBlo
         writeNumericMetadata(times, TimeOfDay::class)
         writeNumericMetadata(durations, Duration::class)
 
-        if (bytesSeen) writeBytesMetadata(bloom)
+        if (bytesFlavours.isNotEmpty())
+            writeBytesMetadata(if (withBloom) bloomOf(bytesFlavours, mask.selection(col.valueCount)) else null)
 
         presence.forEach { colsVec.vectorFor(it.arrowType.toLeg(), BOOL_TYPE, true).writeBoolean(true) }
 
@@ -121,4 +138,13 @@ class ColumnMetadata(private val colsVec: VectorWriter, private val calculateBlo
     }
 
     fun writeMetadata(col: VectorReader) = writeMetadata(col, true, VectorMask.ALL)
+}
+
+private fun VectorMask.selection(rowCount: Int): IntArray? {
+    if (this === VectorMask.ALL) return null
+
+    val rows = IntArray(rowCount)
+    var n = 0
+    repeat(rowCount) { if (isSet(it)) rows[n++] = it }
+    return rows.copyOf(n)
 }

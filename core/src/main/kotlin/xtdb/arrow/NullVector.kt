@@ -10,6 +10,7 @@ import xtdb.api.query.IKeyFn
 import xtdb.arrow.VectorType.*
 import xtdb.arrow.agg.VectorSummer
 import xtdb.arrow.metadata.MetadataFlavour
+import xtdb.hash.perRowHashes
 import xtdb.util.Hasher
 import org.apache.arrow.vector.NullVector as ArrowNullVector
 
@@ -109,4 +110,6 @@ class NullVector(
     }
 
     override fun openSlice(al: BufferAllocator) = NullVector(name, nullable, valueCount)
+
+    override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = perRowHashes(this, out, sel, hasher)
 }

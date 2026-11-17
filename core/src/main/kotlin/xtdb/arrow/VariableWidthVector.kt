@@ -13,7 +13,7 @@ import xtdb.arrow.VectorType.Scalar
 import xtdb.util.Hasher
 import java.nio.ByteBuffer
 
-abstract class VariableWidthVector : MonoVector() {
+sealed class VariableWidthVector : MonoVector() {
 
     override val vectors: Iterable<Vector> = emptyList()
     override val monoType get() = Scalar(arrowType)

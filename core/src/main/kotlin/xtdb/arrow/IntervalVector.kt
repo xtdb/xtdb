@@ -6,6 +6,8 @@ import org.apache.arrow.vector.types.Types.MinorType
 import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.metadata.MetadataFlavour
+import xtdb.hash.perRowHashes
+import xtdb.hash.rawBytesHashes
 import xtdb.time.Interval
 import xtdb.time.MILLI_HZ
 import xtdb.time.NANO_HZ
@@ -58,6 +60,8 @@ class IntervalYearMonthVector private constructor(
 
     override fun openSlice(al: BufferAllocator) =
         IntervalYearMonthVector(al, name, valueCount, validityBuffer?.openSlice(al), dataBuffer.openSlice(al))
+
+    override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = rawBytesHashes(this, out, sel, hasher)
 }
 
 private const val NANOS_PER_MILLI = NANO_HZ / MILLI_HZ
@@ -116,6 +120,8 @@ class IntervalDayTimeVector private constructor(
 
     override fun openSlice(al: BufferAllocator) =
         IntervalDayTimeVector(al, name, valueCount, validityBuffer?.openSlice(al), dataBuffer.openSlice(al))
+
+    override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = rawBytesHashes(this, out, sel, hasher)
 }
 
 class IntervalMonthDayNanoVector private constructor(
@@ -183,6 +189,8 @@ class IntervalMonthDayNanoVector private constructor(
 
     override fun openSlice(al: BufferAllocator) =
         IntervalMonthDayNanoVector(al, name, valueCount, validityBuffer?.openSlice(al), dataBuffer.openSlice(al))
+
+    override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = rawBytesHashes(this, out, sel, hasher)
 }
 
 class IntervalMonthDayMicroVector(
@@ -200,4 +208,6 @@ class IntervalMonthDayMicroVector(
     override fun hashCode0(idx: Int, hasher: Hasher) = inner.hashCode0(idx, hasher)
 
     override fun openSlice(al: BufferAllocator) = IntervalMonthDayMicroVector(inner.openSlice(al))
+
+    override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = perRowHashes(this, out, sel, hasher)
 }

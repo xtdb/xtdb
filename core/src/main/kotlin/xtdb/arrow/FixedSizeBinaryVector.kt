@@ -4,6 +4,8 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.metadata.MetadataFlavour
+import xtdb.hash.rawBytesHashes
+import xtdb.util.Hasher
 import java.lang.Long.reverseBytes
 import java.nio.ByteBuffer
 
@@ -44,4 +46,6 @@ class FixedSizeBinaryVector private constructor(
 
     override fun openSlice(al: BufferAllocator) =
         FixedSizeBinaryVector(al, name, valueCount, byteWidth, validityBuffer?.openSlice(al), dataBuffer.openSlice(al))
+
+    override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = rawBytesHashes(this, out, sel, hasher)
 }

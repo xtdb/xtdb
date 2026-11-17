@@ -5,6 +5,7 @@ import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.VectorType.Listy
 import xtdb.arrow.metadata.MetadataFlavour
+import xtdb.hash.perRowHashes
 import xtdb.util.Hasher
 import xtdb.arrow.extensions.SetType
 
@@ -34,4 +35,6 @@ class SetVector(override val inner: ListVector) : ExtensionVector(), MetadataFla
     override val metadataFlavours get() = listOf(this)
 
     override fun openSlice(al: BufferAllocator) = SetVector(inner.openSlice(al))
+
+    override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = perRowHashes(this, out, sel, hasher)
 }

@@ -30,6 +30,7 @@ import xtdb.arrow.extensions.TsTzRangeType
 import xtdb.arrow.extensions.UriType
 import xtdb.arrow.extensions.UuidType
 import xtdb.trie.ColumnName
+import xtdb.util.Hasher
 import xtdb.util.closeAllOnCatch
 import xtdb.util.closeOnCatch
 import xtdb.util.safeMap
@@ -55,6 +56,8 @@ sealed class Vector : VectorReader, VectorWriter {
     override val childFields get() = vectors.map { it.field }
 
     abstract override var valueCount: Int; internal set
+
+    abstract override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?)
 
     override fun writeNull() {
         if (!nullable) nullable = true

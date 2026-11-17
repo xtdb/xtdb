@@ -4,8 +4,10 @@ import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.VectorType.Scalar
 import xtdb.arrow.metadata.MetadataFlavour
+import xtdb.hash.perRowHashes
 import xtdb.types.RegProc
 import xtdb.arrow.extensions.RegProcType
+import xtdb.util.Hasher
 
 class RegProcVector(override val inner: IntVector) : ExtensionVector(), MetadataFlavour.Presence {
     override val arrowType = RegProcType
@@ -24,4 +26,6 @@ class RegProcVector(override val inner: IntVector) : ExtensionVector(), Metadata
     override val metadataFlavours get() = listOf(this)
 
     override fun openSlice(al: BufferAllocator) = RegProcVector(inner.openSlice(al))
+
+    override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = perRowHashes(this, out, sel, hasher)
 }

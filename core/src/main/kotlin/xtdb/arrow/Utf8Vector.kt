@@ -5,6 +5,8 @@ import org.apache.arrow.vector.types.Types.MinorType
 import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.metadata.MetadataFlavour
+import xtdb.hash.variableWidthHashes
+import xtdb.util.Hasher
 import java.nio.ByteBuffer
 
 class Utf8Vector private constructor(
@@ -36,4 +38,6 @@ class Utf8Vector private constructor(
             al, name, valueCount,
             validityBuffer?.openSlice(al), offsetBuffer.openSlice(al), dataBuffer.openSlice(al)
         )
+
+    override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = variableWidthHashes(this, out, sel, hasher)
 }

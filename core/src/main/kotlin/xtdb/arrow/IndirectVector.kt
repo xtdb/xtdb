@@ -6,6 +6,7 @@ import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import xtdb.InternalApi
 import xtdb.api.query.IKeyFn
+import xtdb.arrow.VectorIndirection.Companion.Selection
 import xtdb.arrow.VectorIndirection.Companion.Slice
 import xtdb.arrow.VectorIndirection.Companion.selection
 import xtdb.arrow.agg.VectorSummer
@@ -51,6 +52,16 @@ class IndirectVector(private val inner: VectorReader, private val sel: VectorInd
     override val mapValues: VectorReader get() = inner.mapValues
 
     override fun hashCode(idx: Int, hasher: Hasher) = inner.hashCode(sel[idx], hasher)
+
+    override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) =
+        inner.hashTo(
+            out, hasher,
+            when {
+                sel != null -> this.sel.select(sel)
+                this.sel is Selection -> this.sel.idxs
+                else -> this.sel.select(0, valueCount)
+            }
+        )
 
     @InternalApi
     override fun write(out: PageOutput, startIdx: Int, len: Int) {

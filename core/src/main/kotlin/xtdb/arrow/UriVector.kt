@@ -5,6 +5,8 @@ import xtdb.api.query.IKeyFn
 import xtdb.arrow.VectorType.Scalar
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.arrow.extensions.UriType
+import xtdb.hash.perRowHashes
+import xtdb.util.Hasher
 import java.net.URI
 
 class UriVector(override val inner: Utf8Vector) : ExtensionVector(), MetadataFlavour.Bytes {
@@ -31,4 +33,6 @@ class UriVector(override val inner: Utf8Vector) : ExtensionVector(), MetadataFla
     }
 
     override fun openSlice(al: BufferAllocator) = UriVector(inner.openSlice(al))
+
+    override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = perRowHashes(this, out, sel, hasher)
 }

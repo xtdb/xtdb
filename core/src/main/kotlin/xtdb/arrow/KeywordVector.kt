@@ -6,6 +6,8 @@ import xtdb.api.query.IKeyFn
 import xtdb.arrow.VectorType.Scalar
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.arrow.extensions.KeywordType
+import xtdb.hash.perRowHashes
+import xtdb.util.Hasher
 
 class KeywordVector(override val inner: Utf8Vector): ExtensionVector(), MetadataFlavour.Bytes {
 
@@ -22,4 +24,6 @@ class KeywordVector(override val inner: Utf8Vector): ExtensionVector(), Metadata
     override val metadataFlavours get() = listOf(this)
 
     override fun openSlice(al: BufferAllocator) = KeywordVector(inner.openSlice(al))
+
+    override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = perRowHashes(this, out, sel, hasher)
 }

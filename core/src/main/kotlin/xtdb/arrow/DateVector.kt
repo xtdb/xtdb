@@ -6,6 +6,8 @@ import org.apache.arrow.vector.types.DateUnit.MILLISECOND
 import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.metadata.MetadataFlavour
+import xtdb.hash.addDoubles
+import xtdb.hash.doubleHashes
 import xtdb.util.Hasher
 import java.time.Duration
 import java.time.LocalDate
@@ -43,6 +45,9 @@ class DateDayVector private constructor(
 
     override fun openSlice(al: BufferAllocator) =
         DateDayVector(al, name, valueCount, validityBuffer?.openSlice(al), dataBuffer.openSlice(al))
+
+    override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) =
+        doubleHashes(this, out, sel, hasher) { it.addDoubles(valueCount, sel) { idx -> if (isNull(idx)) 0.0 else getMetaDouble(idx) } }
 }
 
 class DateMilliVector internal constructor(
@@ -76,4 +81,7 @@ class DateMilliVector internal constructor(
 
     override fun openSlice(al: BufferAllocator) =
         DateMilliVector(al, name, valueCount, validityBuffer?.openSlice(al), dataBuffer.openSlice(al))
+
+    override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) =
+        doubleHashes(this, out, sel, hasher) { it.addDoubles(valueCount, sel) { idx -> if (isNull(idx)) 0.0 else getMetaDouble(idx) } }
 }
