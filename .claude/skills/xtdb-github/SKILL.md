@@ -1,11 +1,11 @@
 ---
 name: xtdb-github
-description: XTDB-specific conventions for issues, PRs, the 2.x project board and the client project board — what goes on each board, sub-issue parenting, the two tests a milestone has to pass, what to read and which edits to make when picking up a card, the cached project and field IDs, and driving all of it through chalk. Read this before opening an issue or PR, adding a card, setting a milestone or label, or picking up a card in this repo — invoke it whenever you pick a card up, alongside `chalk:chalk`, whose plan takes its tracker edits from here.
+description: XTDB-specific conventions for issues, PRs, the 2.x project board and the client project board — what goes on each board, sub-issue parenting, the two tests a milestone has to pass, what to read and which edits to make when picking up a card, the checklist to run over a card once its work has landed, the cached project and field IDs, and driving all of it through chalk. Read this before opening an issue or PR, adding a card, setting a milestone or label, or picking up a card in this repo — invoke it whenever you pick a card up, and whenever its work lands or you're told it has, alongside `chalk:chalk`, whose plan takes its tracker edits from here.
 ---
 
 # GitHub issues, PRs and the project board in XTDB
 
-Read this before you open an issue or PR, add a card to the board, set a milestone or a label, or pick a card up.
+Read this before you open an issue or PR, add a card to the board, set a milestone or a label, pick a card up, or land its work or hear that it has landed.
 The chalk skills are generic — they come from the `juxt/claude-plugins` marketplace — so everything XTDB-specific they need lives here, and it is the caller's job to pass it on.
 
 Interpret MUST, MUST NOT, SHOULD, SHOULD NOT, MAY per RFC 2119.
@@ -224,6 +224,31 @@ The board is where everybody else sees who is on what, and for anyone outside yo
 An unassigned card sitting in `🔖 Selected` while somebody is halfway through the work is how two people start the same thing.
 
 The chalk skills do both of these for you — see [Using chalk](#using-chalk).
+
+## When the work lands
+
+When a change reaches `main` — whether you landed it, or you're told it has landed — you MUST run this checklist over the card that carries it.
+Landing is usually a human's move, cherry-picking or merging outside your session, so being told is the common trigger, and the checklist runs then rather than waiting for a cleanup you may never be asked to do.
+A card closed without it is what a release audit has to dig out afterwards, as a fix missing from the release notes or a refactor cluttering them.
+
+1. **Find the card.**
+   It's the issue the change resolves, or the PR itself where it's standalone, per [What goes where](#what-goes-where).
+   An interim PR, one step towards an issue that stays open, has nothing to do here: the checklist runs when that issue closes.
+2. **Check the card has closed.**
+   A commit closes an issue when it reaches `main` only where its message carries a closing keyword (`resolves #N`); otherwise you MUST close the issue by hand.
+3. **Set the milestone iff the change is end-user-visible.**
+   Apply the end-user-visible test in [Milestones](#milestones); the blocking test no longer applies, since the work has landed.
+   - **Passes** → set the open milestone, looked up as [Milestones](#milestones) says rather than remembered.
+   - **Fails** → the card MUST NOT carry one, so remove any that was set by reflex.
+   - **Can't tell** → you MUST ask.
+4. **Put it on the client project board iff the same test passes.**
+   One judgement answers both steps: the [client project board](#the-client-project-board) takes exactly what the milestone does.
+   - **Passes** → the card MUST be on it, in `Awaiting test-env deploy`; add it first where it isn't.
+   - **Fails** → the card MUST NOT be on it; archive it where it is.
+5. **Keep the 2.x board to one card per entry.**
+   The issue or standalone PR is on it; a PR that resolved an issue is not, so archive one that was added.
+
+With chalk in use, the board moves go through its `github` agent, with the IDs from [Cached IDs](#cached-ids), per [Using chalk](#using-chalk).
 
 ## Cached IDs
 

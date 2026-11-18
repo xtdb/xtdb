@@ -145,7 +145,7 @@ Ship/show/ask and the code-review pass live in @dev/CODING.adoc; commit messages
 
 ## GitHub issues, PRs and the project board
 
-Before you open an issue or PR, add a card to the board, set a milestone or a label, or pick up a card, you MUST invoke the `xtdb-github` skill.
+Before you open an issue or PR, add a card to the board, set a milestone or a label, pick up a card, or land its work or are told it has landed, you MUST invoke the `xtdb-github` skill.
 
-It is the single home for the GitHub conventions in this repo — what goes on the board and what inherits it through an issue, sub-issue parenting, the two tests a milestone has to pass, the label conventions, what to read and which edits to make when you pick a card up, the cached project and field IDs, and how to drive all of it through chalk.
+It is the single home for the GitHub conventions in this repo — what goes on the board and what inherits it through an issue, sub-issue parenting, the two tests a milestone has to pass, the label conventions, what to read and which edits to make when you pick a card up, the checklist to run once its work has landed, the cached project and field IDs, and how to drive all of it through chalk.
 Do not reconstruct any of it from memory, and do not guess an ID.
