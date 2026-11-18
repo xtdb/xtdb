@@ -170,6 +170,15 @@ This assumes YourKit is installed under `/opt/yourkit` (as it does from the AUR)
 To record a Java Flight Recorder profile instead, pass `-Pjfr`.
 The recording runs for the life of the JVM and is dumped to `~/Snapshots/xtdb-<timestamp>.jfr` when it exits.
 
+== Microbenchmarks
+
+JMH benchmarks against `core` live in `core/src/jmh/kotlin`.
+
+* `./gradlew :xtdb-core:jmh` runs all of them.
+* `-PjmhIncludes=<regex>` runs only the benchmarks whose name matches, e.g. `./gradlew :xtdb-core:jmh -PjmhIncludes=VectorReadBenchmark`.
+
+Results are written to `core/build/results/jmh/results.txt`.
+
 == Debugging Arrow memory leaks
 
 Invoke the `arrow-leaks` skill (`.claude/skills/arrow-leaks/`) — the debug allocator flag that `build.gradle.kts` pins,

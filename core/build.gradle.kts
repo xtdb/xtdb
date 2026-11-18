@@ -12,6 +12,7 @@ plugins {
     antlr
 
     alias(libs.plugins.protobuf)
+    alias(libs.plugins.jmh)
 }
 
 publishing {
@@ -109,6 +110,24 @@ kotlin {
     compilerOptions {
         jvmDefault.set(JvmDefaultMode.NO_COMPATIBILITY)
     }
+}
+
+jmh {
+    jmhVersion.set(libs.versions.jmh)
+    includeTests.set(false)
+    includes.addAll(providers.gradleProperty("jmhIncludes").map { listOf(it) }.orElse(emptyList()))
+    // as docker/Dockerfile's entrypoint runs a node, rather than the test JVM's defaultJvmArgs
+    jvmArgsAppend.addAll(
+        "--add-opens=java.base/java.nio=ALL-UNNAMED",
+        "--enable-native-access=ALL-UNNAMED",
+        "-Dio.netty.tryReflectionSetAccessible=true",
+        "-Dio.netty.noUnsafe=false",
+        "--sun-misc-unsafe-memory-access=allow",
+    )
+}
+
+tasks.check {
+    dependsOn(tasks.named("jmhClasses"))
 }
 
 tasks.compileKotlin {

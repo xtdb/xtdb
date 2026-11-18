@@ -20,6 +20,7 @@ clojurephant = "0.9.1"
 shadow = "9.6.1"
 freefair-javadoc = "9.8.2"
 junit = "6.1.3"
+jmh = "1.37"
 netty = "4.2.19.Final"
 protobuf = "4.31.1"
 protobuf-plugin = "0.10.1"
@@ -202,3 +203,4 @@ freefair-javadoc = { id = "io.freefair.aggregate-javadoc-legacy", version.ref = 
 protobuf = { id = "com.google.protobuf", version.ref = "protobuf-plugin" }
 jreleaser = { id = "org.jreleaser", version = "1.26.0" }
 ben-manes-versions = { id = "com.github.ben-manes.versions", version = "0.54.0" }
+jmh = { id = "me.champeau.jmh", version = "0.7.3" }
