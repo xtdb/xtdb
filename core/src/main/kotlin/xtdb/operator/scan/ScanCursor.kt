@@ -5,6 +5,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.ICursor
+import xtdb.arrow.MaskedRelation
 import xtdb.arrow.RelationReader
 import xtdb.operator.SelectionSpec
 import xtdb.segment.MergeTask
@@ -72,7 +73,8 @@ class ScanCursor(
                 EventRowPointer(leafReader, taskPath).takeIf { it.isValid() }?.let { LeafPointer(it, idx) }
             }
 
-            BitemporalConsumer.open(al, leafReaders, colNames).use { bitemporalConsumer ->
+            // the merge visits entities in iid order, and each page is sorted by iid
+            BitemporalConsumer.open(al, leafReaders, colNames, eachRowOnceAscending = resolver.atMostOneRowPerEntity).use { bitemporalConsumer ->
                 val merge = EntityMerge(pointers)
 
                 while (merge.nextEntity())
@@ -84,7 +86,10 @@ class ScanCursor(
 
                 bitemporalConsumer.build()
                     .map { childRel ->
-                        colPreds.fold(childRel) { acc, colPred -> acc.select(colPred.select(al, acc, schema, args).toSelection()) }
+                        colPreds.fold(childRel) { acc, colPred ->
+                            val mask = colPred.select(al, acc, schema, args)
+                            if (acc is MaskedRelation) MaskedRelation.of(acc, mask) else acc.select(mask.toSelection())
+                        }
                     }
                     .filter { it.rowCount > 0 }
                     .safeMap { it.openSlice(al) }

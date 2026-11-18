@@ -99,7 +99,7 @@ class AsOfResolverTest {
 
         val merge = EntityMerge(pointers)
 
-        return BitemporalConsumer.open(al, readers, COL_NAMES).use { out ->
+        return BitemporalConsumer.open(al, readers, COL_NAMES, resolver.atMostOneRowPerEntity).use { out ->
             while (merge.nextEntity()) resolver.resolveEntity(merge, out)
 
             out.build().flatMapIndexed { pageIdx, rel ->
