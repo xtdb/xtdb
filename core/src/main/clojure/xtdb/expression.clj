@@ -2016,22 +2016,24 @@
                                    ~(f #xt/type :null nil)
                                    ~(f #xt/type :bool `(== ~return-code ~res-sym))))))})))))
 
-(defmethod codegen-call [:=== :struct :struct] [{[^VectorType$Struct l-type, ^VectorType$Struct r-type] :arg-types}]
-  (let [l-field-types (.getChildren l-type)
-        r-field-types (.getChildren r-type)
-        fields (set (keys l-field-types))]
-    (if-not (= fields (set (keys r-field-types)))
-      {:return-type #xt/type :bool, :->call-code (constantly false)}
-      (let [inner-calls (->> (for [field fields]
-                               (MapEntry/create field
-                                                (->> (for [l-val-type (VectorType/.getLegs (get l-field-types field))
-                                                           r-val-type (VectorType/.getLegs (get r-field-types field))]
-                                                       (MapEntry/create [l-val-type r-val-type]
-                                                                        (codegen-call {:f :===, :arg-types [l-val-type r-val-type]})))
-                                                     (into {}))))
-                             (into {}))
-            l-sym (gensym 'l-struct)
-            r-sym (gensym 'r-struct)]
+;; `null_eq` is `===` with `==` at the leaves: NULLs match, but 1 and 1.0 still do too
+(doseq [op [:=== :null_eq]]
+  (defmethod codegen-call [op :struct :struct] [{[^VectorType$Struct l-type, ^VectorType$Struct r-type] :arg-types}]
+    (let [l-field-types (.getChildren l-type)
+          r-field-types (.getChildren r-type)
+          fields (set (keys l-field-types))]
+      (if-not (= fields (set (keys r-field-types)))
+        {:return-type #xt/type :bool, :->call-code (constantly false)}
+        (let [inner-calls (->> (for [field fields]
+                                 (MapEntry/create field
+                                                  (->> (for [l-val-type (VectorType/.getLegs (get l-field-types field))
+                                                             r-val-type (VectorType/.getLegs (get r-field-types field))]
+                                                         (MapEntry/create [l-val-type r-val-type]
+                                                                          (codegen-call {:f op, :arg-types [l-val-type r-val-type]})))
+                                                       (into {}))))
+                               (into {}))
+              l-sym (gensym 'l-struct)
+              r-sym (gensym 'r-struct)]
 
         {:return-type #xt/type :bool
          :continue-call (fn [f [l-code r-code]]
@@ -2058,7 +2060,7 @@
                                                         -1
                                                         (min ~res-sym ~r-code))))
                                                  1))]
-                               ~(f #xt/type :bool `(== 1 ~res-sym)))))}))))
+                               ~(f #xt/type :bool `(== 1 ~res-sym)))))})))))
 
 (defn -patch [^ValueReader l, ^ValueReader r]
   (if (.isNull r)
@@ -2367,17 +2369,18 @@
                                ~(f #xt/type :null nil)
                                ~(f #xt/type :bool `(== ~return-code ~res-sym))))))})))
 
-(defmethod codegen-call [:=== :list :list] [{[^VectorType$Listy l-type ^VectorType$Listy r-type] :arg-types}]
-  (let [l-el-type (.getElType l-type)
-        r-el-type (.getElType r-type)
-        n-sym (gensym 'n)
-        len-sym (gensym 'len)
-        res-sym (gensym 'res)
-        inner-calls (->> (for [l-el-type (.getLegs l-el-type)
-                               r-el-type (.getLegs r-el-type)]
-                           (MapEntry/create [l-el-type r-el-type]
-                                            (codegen-call {:f :===, :arg-types [l-el-type r-el-type]})))
-                         (into {}))]
+(doseq [op [:=== :null_eq]]
+  (defmethod codegen-call [op :list :list] [{[^VectorType$Listy l-type ^VectorType$Listy r-type] :arg-types}]
+    (let [l-el-type (.getElType l-type)
+          r-el-type (.getElType r-type)
+          n-sym (gensym 'n)
+          len-sym (gensym 'len)
+          res-sym (gensym 'res)
+          inner-calls (->> (for [l-el-type (.getLegs l-el-type)
+                                 r-el-type (.getLegs r-el-type)]
+                             (MapEntry/create [l-el-type r-el-type]
+                                              (codegen-call {:f op, :arg-types [l-el-type r-el-type]})))
+                           (into {}))]
 
     {:return-type #xt/type :bool
      :children (vals inner-calls)
@@ -2405,7 +2408,7 @@
                                                            `(.nth ~l-sym ~n-sym))]
                                             (if (< ~res-sym 1)
                                               false
-                                              (recur (inc ~n-sym)))))))))))}))
+                                              (recur (inc ~n-sym)))))))))))})))
 
 (defn series [^long start, ^long end, ^long step, inclusive?]
   (let [box (ValueBox.)

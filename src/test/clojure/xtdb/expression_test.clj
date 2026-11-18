@@ -2390,3 +2390,10 @@
                           {})
                 (mapv #(.scale ^BigDecimal %))))
         "an element type equal to the source's still takes the cast's precision and scale"))
+
+(t/deftest test-null-eq-over-nested-values
+  (t/is (true? (project1 '(null-eq [8 nil] [8 nil]) {})))
+  (t/is (true? (project1 '(null-eq {:a nil, :b 1} {:a nil, :b 1}) {})))
+  (t/is (true? (project1 '(null-eq [1 nil] [1.0 nil]) {}))
+        "`==` at the leaves, as for scalars")
+  (t/is (false? (project1 '(null-eq [8 nil] [9 nil]) {}))))
