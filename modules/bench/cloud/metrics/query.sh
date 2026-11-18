@@ -143,10 +143,10 @@ case "$BENCHMARK" in
     ;;
   clickbench)
     BENCH_NAME="Clickbench Hits"
-    PARAM_NAME="benchmark"
-    PARAM_PATH="benchmark"
-    PARAM_VALUE="Clickbench Hits"
-    PARAM_VAR=""
+    PARAM_NAME="size"
+    PARAM_PATH="parameters['size']"
+    PARAM_VALUE=$(get_var "clickbench_anomaly_size" "medium")
+    PARAM_VAR="clickbench_anomaly_size"
     PARAM_IS_STRING=true
     METRIC_PATH="'time-taken-ms'"
     METRIC_NAME="duration_minutes"

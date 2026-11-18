@@ -1,5 +1,5 @@
 name: Nightly Benchmark ClickBench
-run-name: "ClickBench (size: ${{ inputs.size || 'small' }})"
+run-name: "ClickBench (size: ${{ inputs.size || 'medium' }})"
 
 on:
   workflow_dispatch:
@@ -7,7 +7,7 @@ on:
       size:
         description: 'Dataset size (tiny, small, medium, full)'
         required: false
-        default: 'small'
+        default: 'medium'
         type: choice
         options:
           - tiny
@@ -45,7 +45,7 @@ jobs:
       branch: ${{ github.ref_name }}
       timeout_minutes: 120
       benchmark_timeout: PT3H
-      clickbench_size: ${{ inputs.size || 'small' }}
+      clickbench_size: ${{ inputs.size || 'medium' }}
       clickbench_limit: ${{ inputs.limit || '' }}
       run_queue: ${{ inputs.run_queue || 'false' }}
     secrets: inherit

@@ -106,9 +106,9 @@ locals {
       display_name    = "Clickbench"
       logic_app_name  = var.clickbench_anomaly_logic_app_name
       enabled         = var.clickbench_anomaly_alert_enabled
-      param_name      = "benchmark"
-      param_path      = "benchmark"
-      param_value     = "Clickbench Hits"
+      param_name      = "size"
+      param_path      = "parameters['size']"
+      param_value     = var.clickbench_anomaly_size
       param_is_string = true
       metric_path     = "'time-taken-ms'"
       metric_name     = "duration_minutes"

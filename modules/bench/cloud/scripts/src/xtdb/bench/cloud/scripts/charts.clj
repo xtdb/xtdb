@@ -107,9 +107,9 @@
                   :y-label "Throughput (tx/s)"}
    "clickbench" {:benchmark-name "Clickbench Hits"
                  :title "Clickbench Benchmark Performance"
-                 :filter-param nil
-                 :filter-value nil
-                 :filter-is-string false}
+                 :filter-param "size"
+                 :filter-value "medium"
+                 :filter-is-string true}
    "tsbs-iot"   {:benchmark-name "TSBS IoT"
                  :title "TSBS IoT Benchmark Performance"
                  :filter-param "devices"

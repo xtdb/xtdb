@@ -188,6 +188,12 @@ variable "clickbench_anomaly_alert_enabled" {
   default     = true
 }
 
+variable "clickbench_anomaly_size" {
+  description = "Clickbench dataset size to scope anomaly detection to (tiny, small, medium, full)"
+  type        = string
+  default     = "medium"
+}
+
 # TSBS IoT anomaly detection configuration
 variable "tsbs_iot_anomaly_logic_app_name" {
   description = "Logic App name for scheduled TSBS IoT anomaly detection"
