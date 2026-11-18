@@ -84,8 +84,8 @@
                                                      (into {} (map (fn [^VectorReader col]
                                                                      [(symbol (.getName col))
                                                                       (.getType col)]))))}]
-                  (alength (.select (expr/->expression-selection-spec (expr/form->expr form input-types) input-types)
-                                    tu/*allocator* in-rel {} arg-rel)))))]
+                  (alength (.toSelection (.rowMask (expr/->expression-row-mask-spec (expr/form->expr form input-types) input-types)
+                                                   tu/*allocator* in-rel {} arg-rel))))))]
 
       (t/testing "selector"
         (t/is (= 500 (select-relation '(>= a 500) '{a #xt/type :f64} {})))
@@ -97,14 +97,14 @@
 
 (t/deftest nil-selection-doesnt-yield-the-row
   (t/is (= 0
-           (-> (.select (expr/->expression-selection-spec (expr/form->expr '(and true nil) {}) {})
-                        tu/*allocator* (vr/rel-reader [] 1) {} vw/empty-args)
+           (-> (.rowMask (expr/->expression-row-mask-spec (expr/form->expr '(and true nil) {}) {})
+                         tu/*allocator* (vr/rel-reader [] 1) {} vw/empty-args)
+               (.toSelection)
                (alength)))))
 
 (t/deftest row-mask-sets-the-rows-the-selection-selects
   (let [input-types {:var-types '{sel #xt/type [:? :bool]}}
         expr (expr/form->expr 'sel input-types)
-        selection-spec (expr/->expression-selection-spec expr input-types)
         row-mask-spec (expr/->expression-row-mask-spec expr input-types)]
     (doseq [row-count [0 1 63 64 65 127 128 130]]
       (let [sels (for [idx (range row-count)]
@@ -114,9 +114,7 @@
         (with-open [in-rel (tu/open-rel {:sel sels})]
           (let [mask (.rowMask row-mask-spec tu/*allocator* in-rel {} vw/empty-args)]
             (t/is (= row-count (.getRowCount mask)) (str row-count " rows"))
-            (t/is (= expected (vec (.toSelection mask))) (str row-count " rows"))
-            (t/is (= expected (vec (.select selection-spec tu/*allocator* in-rel {} vw/empty-args)))
-                  (str row-count " rows"))))))))
+            (t/is (= expected (vec (.toSelection mask))) (str row-count " rows"))))))))
 
 (defn project
   "Use to test an expression on some example documents. See also, project1.

@@ -20,7 +20,7 @@
            (org.apache.commons.codec.binary Hex)
            (xtdb.arrow ListValueReader RelationReader RowMask ValueBox ValueReader Vector VectorReader VectorType VectorType$Listy VectorType$Mono VectorType$Nothing VectorType$Poly VectorType$Struct)
            (xtdb.expression PgFormat)
-           (xtdb.operator ProjectionSpec RowMaskSpec SelectionSpec)
+           (xtdb.operator ProjectionSpec RowMaskSpec)
            (xtdb.pgwire PgTypes)
            xtdb.time.Interval
            (xtdb.util StringUtil)))
@@ -2579,18 +2579,6 @@
       (util/lru-memoize) ; <<no-commit>>
       wrap-zone-id-cache-buster))
 
-(def ^:private selection-sink
-  (let [sel-sym (gensym 'sel)]
-    {:bindings (fn [row-count-sym] [sel-sym `(int-array ~row-count-sym)])
-     :init 0
-     :step (fn [n-sym idx-sym selected?]
-             `(if ~selected?
-                (do
-                  (aset ~sel-sym (int ~n-sym) (int ~idx-sym))
-                  (inc ~n-sym))
-                ~n-sym))
-     :finish (fn [n-sym] `(Arrays/copyOf ~sel-sym (int ~n-sym)))}))
-
 (def ^:private row-mask-words-sink
   (let [words-sym (gensym 'words)]
     {:bindings (fn [row-count-sym] [words-sym `(long-array (unsigned-bit-shift-right (+ ~row-count-sym 63) 6))])
@@ -2634,7 +2622,6 @@
       (util/lru-memoize)
       wrap-zone-id-cache-buster))
 
-(def ^:private emit-selection (->selection-emitter selection-sink))
 (def ^:private emit-row-mask-words (->selection-emitter row-mask-words-sink))
 
 (defmacro ^:private rethrowing-anomalies [& body]
@@ -2683,19 +2670,6 @@
 
 (defn- ->predicate-expr [expr]
   {:op :call, :f :boolean, :args [expr]})
-
-(defn ->expression-selection-spec ^SelectionSpec [expr {:keys [var-types param-types]}]
-  (let [expr (->predicate-expr expr)]
-    ;; analysed here as well as per batch, so that an expression the EE can't compile throws when the spec is built
-    (emit-selection expr {:param-types param-types
-                          :var-types var-types})
-
-    (reify SelectionSpec
-      (select [_ _al in-rel schema args]
-        (let [{:keys [!selection-fn]} (emit-selection expr {:param-types (->param-types args)
-                                                            :var-types (->var-types in-rel)})]
-          (rethrowing-anomalies
-            (@!selection-fn in-rel schema args)))))))
 
 (defn ->expression-row-mask-spec ^RowMaskSpec [expr {:keys [var-types param-types]}]
   (let [expr (->predicate-expr expr)]

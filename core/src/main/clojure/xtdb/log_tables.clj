@@ -20,7 +20,7 @@
            (xtdb.arrow Relation RelationReader VectorReader)
            (xtdb.database Database)
            (xtdb.log.proto TrieDetails)
-           (xtdb.operator SelectionSpec)
+           (xtdb.operator RowMaskSpec)
            (xtdb.api TableRef)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -199,8 +199,8 @@
   [^BufferAllocator allocator derived-table-schema col-names col-preds schema args rows c]
   (util/with-open [out-rel (Relation. allocator ^Map (update-keys derived-table-schema str))]
     (.writeRows out-rel (into-array java.util.Map rows))
-    (let [out-rel-view (reduce (fn [^RelationReader rel ^SelectionSpec col-pred]
-                                 (.select rel (.select col-pred allocator rel schema args)))
+    (let [out-rel-view (reduce (fn [^RelationReader rel ^RowMaskSpec col-pred]
+                                 (.select rel (.toSelection (.rowMask col-pred allocator rel schema args))))
                                (-> out-rel
                                    (->> (filter (comp (set col-names) #(.getName ^VectorReader %))))
                                    (vr/rel-reader (.getRowCount out-rel))

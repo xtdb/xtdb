@@ -21,7 +21,7 @@
            (xtdb.arrow Relation RelationReader VectorType VectorReader)
            xtdb.pgwire.PgType
            (xtdb.indexer Snapshot TableSnapshot)
-           xtdb.operator.SelectionSpec
+           xtdb.operator.RowMaskSpec
            (xtdb.query IQuerySource IQuerySource$QueryCatalog IQuerySource$QueryDatabase)
            xtdb.api.TableRef
            xtdb.table.TableEntry
@@ -629,8 +629,8 @@
                                    (into-array java.util.Map)))
 
           ;;TODO reuse relation selector code from trie cursor
-          (InformationSchemaCursor. (reduce (fn [^RelationReader rel ^SelectionSpec col-pred]
-                                              (.select rel (.select col-pred allocator rel schema params)))
+          (InformationSchemaCursor. (reduce (fn [^RelationReader rel ^RowMaskSpec col-pred]
+                                              (.select rel (.toSelection (.rowMask col-pred allocator rel schema params))))
                                             (-> out-rel
                                                 (->> (filter (comp (set col-names) #(.getName ^VectorReader %))))
                                                 (vr/rel-reader (.getRowCount out-rel))
