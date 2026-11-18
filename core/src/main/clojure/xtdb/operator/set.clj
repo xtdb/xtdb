@@ -139,7 +139,8 @@
                                      (cond-> (IntersectionCursor. left-cursor right-cursor
                                                                   build-side (mapv name key-col-names)
                                                                   (join/->cmp-factory {:build-vec-types left-vec-types
-                                                                                       :probe-vec-types right-vec-types})
+                                                                                       :probe-vec-types right-vec-types
+                                                                                       :nil-keys-equal? true})
                                                                   false false)
                                        (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span))))}))))
 
@@ -159,6 +160,7 @@
                                      (cond-> (IntersectionCursor. left-cursor right-cursor
                                                                   build-side (mapv name key-col-names)
                                                                   (join/->cmp-factory {:build-vec-types left-vec-types
-                                                                                       :probe-vec-types right-vec-types})
+                                                                                       :probe-vec-types right-vec-types
+                                                                                       :nil-keys-equal? true})
                                                                   true false)
                                        (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span))))}))))
