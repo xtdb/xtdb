@@ -38,7 +38,7 @@ interface GroupMapper : AutoCloseable {
 
         override fun groupMapping(inRelation: RelationReader): GroupMapping {
             groupMapping.clear()
-            val builder = relMap.buildFromRelation(inRelation)
+            val builder = relMap.buildFromRelation(inRelation, relMap.hashesFor(inRelation))
 
             repeat(inRelation.rowCount) { idx ->
                 groupMapping.writeInt(insertedIdx(builder.addIfNotPresent(idx)))

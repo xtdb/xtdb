@@ -1,5 +1,6 @@
 package xtdb.arrow
 
+import com.carrotsearch.hppc.DoubleArrayList
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.ArrowType.Decimal
@@ -8,6 +9,7 @@ import xtdb.api.query.IKeyFn.KeyFn.KEBAB_CASE_KEYWORD
 import xtdb.arrow.agg.VectorSummer
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.api.error.Unsupported
+import xtdb.hash.addDoubles
 import xtdb.util.Hasher
 import java.math.BigDecimal
 
@@ -86,4 +88,6 @@ class DecimalVector private constructor(
 
     override fun openSlice(al: BufferAllocator) =
         DecimalVector(al, name, valueCount, validityBuffer?.openSlice(al), dataBuffer.openSlice(al), decimalType)
+
+    override fun doublesTo(out: DoubleArrayList, sel: IntArray?) = out.addDoubles(valueCount, sel) { if (isNull(it)) 0.0 else getDecimal(it).toDouble() }
 }

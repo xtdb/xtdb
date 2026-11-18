@@ -2,12 +2,10 @@ package xtdb.operator.join
 
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.ICursor
+import xtdb.arrow.IntVector
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
-import xtdb.arrow.Vector.Companion.openVector
-import xtdb.operator.join.ComparatorFactory.Companion.build
 import xtdb.arrow.FieldName
-import xtdb.arrow.VectorType.Companion.I32
 import xtdb.arrow.VectorTypes
 import xtdb.util.closeOnCatch
 import java.util.function.Consumer
@@ -15,7 +13,7 @@ import java.util.function.Consumer
 class DiskHashJoin(
     private val al: BufferAllocator, private val buildSide: BuildSide,
     private val probeCursor: ICursor, private val probeKeyColNames: List<FieldName>, private val probeShuffle: Shuffle,
-    private val joinType: JoinType, private val comparatorFactory: ComparatorFactory,
+    private val joinType: JoinType, comparatorFactory: ComparatorFactory,
 ) : ICursor {
     override val cursorType = "disk-hash-join"
     override val childCursors = listOf(probeCursor)
@@ -41,7 +39,8 @@ class DiskHashJoin(
     private var partIdx: Int = -1
     private val probeRel = Relation(al, probeShuffle.schema)
     private val probeColNames = probeRel.schema.fields.map { it.name }
-    private val hashCol = al.openVector("hashes", I32)
+    private val hashCol = IntVector.open(al, "hashes", false)
+    private val probeSide = ProbeSide(al, buildSide, probeKeyColNames, comparatorFactory)
 
     override fun tryAdvance(c: Consumer<in RelationReader>): Boolean {
         while (true) {
@@ -65,13 +64,7 @@ class DiskHashJoin(
                 probeShuffle.loadDataPart(probeRel, probePartIdx)
                 probeShuffle.loadHashPart(hashCol, probePartIdx)
 
-                // TODO can probably try move this to a field now
-                val probeSide = ProbeSide(
-                    buildSide, probeRel, probeKeyColNames,
-                    comparatorFactory.build(buildSide, probeRel, probeKeyColNames)
-                )
-
-                val joinedRel = joinType.probe(probeSide)
+                val joinedRel = joinType.probe(probeSide.forBatch(probeRel, hashCol))
 
                 if (joinedRel.rowCount > 0) {
                     c.accept(joinedRel)
@@ -82,6 +75,7 @@ class DiskHashJoin(
     }
 
     override fun close() {
+        probeSide.close()
         hashCol.close()
         probeRel.close()
         probeShuffle.close()

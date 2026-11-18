@@ -9,6 +9,7 @@ import org.apache.arrow.vector.types.pojo.Field
 import xtdb.InternalApi
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.VectorType.Listy
+import xtdb.hash.perRowHashes
 import xtdb.util.Hasher
 
 class MapVector(private val listVector: ListVector, private val keysSorted: Boolean) : MonoVector() {
@@ -117,4 +118,6 @@ class MapVector(private val listVector: ListVector, private val keysSorted: Bool
 
     override fun clear() = listVector.clear()
     override fun close() = listVector.close()
+
+    override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = perRowHashes(this, out, sel, hasher)
 }

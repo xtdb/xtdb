@@ -25,7 +25,7 @@ internal fun TimeUnit.toLong(seconds: Long, nanos: Int): Long = when (this) {
 sealed class FixedWidthVector : MonoVector() {
 
     protected abstract val al: BufferAllocator
-    protected abstract val byteWidth: Int
+    internal abstract val byteWidth: Int
     override val vectors: Iterable<Vector> = emptyList()
     override val monoType get() = Scalar(arrowType)
 

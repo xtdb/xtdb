@@ -30,7 +30,7 @@
                                (fn [^RelationReader in-rel]
                                  (let [row-count (.getRowCount in-rel)]
                                    (when (pos? row-count)
-                                     (let [builder (.buildFromRelation rel-map in-rel)
+                                     (let [builder (.buildFromRelation rel-map in-rel (.hashesFor rel-map in-rel))
                                            idxs (IntStream/builder)]
                                        (dotimes [idx row-count]
                                          (when (neg? (.addIfNotPresent builder idx))

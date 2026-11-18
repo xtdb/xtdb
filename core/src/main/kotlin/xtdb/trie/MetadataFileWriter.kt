@@ -76,7 +76,7 @@ class MetadataFileWriter(
     private val pageIdxWtr = leafWtr["data-page-idx"]
 
     private val colsVec = leafWtr["columns"]
-    private val colMetaWriter = ColumnMetadata(colsVec.listElements, calculateBlooms)
+    private val colMetaWriter = ColumnMetadata(al, colsVec.listElements, calculateBlooms)
 
     private var pageIdx = 0
 

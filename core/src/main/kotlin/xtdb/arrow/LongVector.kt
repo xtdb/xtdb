@@ -1,10 +1,12 @@
 package xtdb.arrow
 
+import com.carrotsearch.hppc.DoubleArrayList
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.Types.MinorType
 import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.metadata.MetadataFlavour
+import xtdb.hash.addDoubles
 import xtdb.util.Hasher
 
 class LongVector private constructor(
@@ -55,4 +57,6 @@ class LongVector private constructor(
 
     override fun openSlice(al: BufferAllocator) =
         LongVector(al, name, valueCount, validityBuffer?.openSlice(al), dataBuffer.openSlice(al))
+
+    override fun doublesTo(out: DoubleArrayList, sel: IntArray?) = out.addDoubles(valueCount, sel) { dataBuffer.getLong(it).toDouble() }
 }

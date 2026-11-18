@@ -12,7 +12,7 @@ import java.util.function.BiFunction
 import java.util.function.IntBinaryOperator
 
 interface JoinType {
-    fun probe(probeSide: ProbeSide): RelationReader
+    fun probe(probeSide: ProbeSide.ForBatch.Hashed): RelationReader
 
     val outerJoinType: OuterJoinType? get() = null
     val joinTypeName: String
@@ -28,7 +28,7 @@ interface JoinType {
             FULL -> "full-join"
         }
 
-        override fun probe(probeSide: ProbeSide): RelationReader {
+        override fun probe(probeSide: ProbeSide.ForBatch.Hashed): RelationReader {
             val matchingBuildIdxs = IntArrayList()
             val matchingProbeIdxs = IntArrayList()
 
@@ -111,7 +111,7 @@ interface JoinType {
             return RelationReader.from(probeRel.vectors + markCol, probeRel.rowCount)
         }
 
-        private fun ProbeSide.markOver(buildIdxs: IntIterator, probeIdx: Int, markCmp: IntBinaryOperator?): Int {
+        private fun ProbeSide.ForBatch.markOver(buildIdxs: IntIterator, probeIdx: Int, markCmp: IntBinaryOperator?): Int {
             var acc = -1
             while (buildIdxs.hasNext()) {
                 val buildIdx = buildIdxs.nextInt()
@@ -122,7 +122,7 @@ interface JoinType {
             return acc
         }
 
-        override fun probe(probeSide: ProbeSide): RelationReader {
+        override fun probe(probeSide: ProbeSide.ForBatch.Hashed): RelationReader {
             val markCmp = (spec as? Spec.Compare)?.cmpFactory?.apply(probeSide.buildRel, probeSide.probeRel)
             val keyCols = probeSide.keyColNames.map { probeSide.probeRel[it] }
 
@@ -157,7 +157,7 @@ interface JoinType {
             val res = IntArray(probeRel.rowCount) { -1 }
 
             fun markAgainstLoadedRows() {
-                val probeSide = ProbeSide(buildSide, probeRel, probeKeyColNames, cmpFactory.build(buildSide, probeRel, probeKeyColNames))
+                val probeSide = ProbeSide.ForBatch.Unhashed(buildSide, probeRel, probeKeyColNames, cmpFactory.build(buildSide, probeRel, probeKeyColNames))
                 val markCmp = markCmpFactory?.apply(buildSide.dataRel, probeRel)
                 val buildRowCount = buildSide.dataRel.rowCount
                 repeat(probeSide.rowCount) { probeIdx ->
@@ -180,7 +180,7 @@ interface JoinType {
         val INNER = object : JoinType {
             override val joinTypeName = "inner-join"
             
-            override fun probe(probeSide: ProbeSide): RelationReader {
+            override fun probe(probeSide: ProbeSide.ForBatch.Hashed): RelationReader {
                 val matchingBuildIdxs = IntArrayList()
                 val matchingProbeIdxs = IntArrayList()
 
@@ -207,7 +207,7 @@ interface JoinType {
         @JvmField
         val FULL_OUTER = Outer(FULL)
 
-        internal fun ProbeSide.semiJoinSelection() =
+        internal fun ProbeSide.ForBatch.Hashed.semiJoinSelection() =
             IntArrayList().let { sel ->
                 forEachIndexOf( {probeIdx, buildIdx -> if (buildIdx >= 0) sel.add(probeIdx) } ,false)
                 sel.toArray()
@@ -217,12 +217,12 @@ interface JoinType {
         val SEMI = object : JoinType {
             override val joinTypeName = "semi-join"
             
-            override fun probe(probeSide: ProbeSide): RelationReader {
+            override fun probe(probeSide: ProbeSide.ForBatch.Hashed): RelationReader {
                 return probeSide.probeRel.select(probeSide.semiJoinSelection())
             }
         }
 
-        internal fun ProbeSide.antiJoinSelection() =
+        internal fun ProbeSide.ForBatch.Hashed.antiJoinSelection() =
             IntArrayList().let { sel ->
                 val keyCols = keyColNames.map { probeRel[it] }
 
@@ -238,7 +238,7 @@ interface JoinType {
         val ANTI = object : JoinType {
             override val joinTypeName = "anti-join"
             
-            override fun probe(probeSide: ProbeSide): RelationReader {
+            override fun probe(probeSide: ProbeSide.ForBatch.Hashed): RelationReader {
                 return probeSide.probeRel.select(probeSide.antiJoinSelection())
             }
         }
@@ -247,7 +247,7 @@ interface JoinType {
         val SINGLE = object : JoinType {
             override val joinTypeName = "single-join"
             
-            override fun probe(probeSide: ProbeSide): RelationReader {
+            override fun probe(probeSide: ProbeSide.ForBatch.Hashed): RelationReader {
                 val matchingBuildIdxs = IntArrayList()
                 val matchingProbeIdxs = IntArrayList()
 

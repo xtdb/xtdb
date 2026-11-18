@@ -4,6 +4,8 @@ import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.VectorType.Companion.VAR_BINARY
 import xtdb.arrow.metadata.MetadataFlavour
+import xtdb.hash.variableWidthHashes
+import xtdb.util.Hasher
 import java.nio.ByteBuffer
 
 class VarBinaryVector private constructor(
@@ -36,4 +38,6 @@ class VarBinaryVector private constructor(
             al, name, valueCount,
             validityBuffer?.openSlice(al), offsetBuffer.openSlice(al), dataBuffer.openSlice(al)
         )
+
+    override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = variableWidthHashes(this, out, sel, hasher)
 }

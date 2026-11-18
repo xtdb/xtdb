@@ -6,9 +6,11 @@ import org.apache.arrow.vector.types.TimeUnit.*
 import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.metadata.MetadataFlavour
+import xtdb.hash.rawBytesHashes
 import xtdb.time.MICRO_HZ
 import xtdb.time.MILLI_HZ
 import xtdb.time.NANO_HZ
+import xtdb.util.Hasher
 import java.time.LocalTime
 
 internal fun TimeUnit.toInt(value: LocalTime) = when (this) {
@@ -63,6 +65,8 @@ class Time32Vector private constructor(
 
     override fun openSlice(al: BufferAllocator) =
         Time32Vector(al, name, unit, validityBuffer?.openSlice(al), dataBuffer.openSlice(al), valueCount)
+
+    override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = rawBytesHashes(this, out, sel, hasher)
 }
 
 class Time64Vector private constructor(
@@ -99,4 +103,6 @@ class Time64Vector private constructor(
 
     override fun openSlice(al: BufferAllocator) =
         Time64Vector(al, name, unit, validityBuffer?.openSlice(al), dataBuffer.openSlice(al), valueCount)
+
+    override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = rawBytesHashes(this, out, sel, hasher)
 }

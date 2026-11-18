@@ -7,6 +7,8 @@ import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.agg.VectorSummer
 import xtdb.arrow.metadata.MetadataFlavour
+import xtdb.hash.addDoubles
+import xtdb.hash.doubleHashes
 import xtdb.time.MICRO_HZ
 import xtdb.time.MILLI_HZ
 import xtdb.time.NANO_HZ
@@ -93,4 +95,7 @@ class DurationVector private constructor(
 
     override fun openSlice(al: BufferAllocator) =
         DurationVector(al, name, valueCount, unit, validityBuffer?.openSlice(al), dataBuffer.openSlice(al))
+
+    override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) =
+        doubleHashes(this, out, sel, hasher) { it.addDoubles(valueCount, sel) { idx -> if (isNull(idx)) 0.0 else getMetaDouble(idx) } }
 }

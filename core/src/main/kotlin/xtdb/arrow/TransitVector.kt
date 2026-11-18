@@ -6,6 +6,8 @@ import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.VectorType.Scalar
 import xtdb.arrow.metadata.MetadataFlavour
+import xtdb.hash.perRowHashes
+import xtdb.util.Hasher
 import xtdb.util.requiringResolve
 import xtdb.arrow.extensions.TransitType
 import java.io.ByteArrayInputStream
@@ -30,4 +32,6 @@ class TransitVector(override val inner: VarBinaryVector) : ExtensionVector(), Me
 
     // we override this because we want getObject to return the object itself
     override fun valueReader() = ValueReader.ForVector(this)
+
+    override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = perRowHashes(this, out, sel, hasher)
 }

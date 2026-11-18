@@ -4,8 +4,10 @@ import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.VectorType.Scalar
 import xtdb.arrow.metadata.MetadataFlavour
+import xtdb.hash.perRowHashes
 import xtdb.types.Oid
 import xtdb.arrow.extensions.OidType
+import xtdb.util.Hasher
 
 class OidVector(override val inner: IntVector) : ExtensionVector(), MetadataFlavour.Presence {
     override val arrowType = OidType
@@ -24,4 +26,6 @@ class OidVector(override val inner: IntVector) : ExtensionVector(), MetadataFlav
     override val metadataFlavours get() = listOf(this)
 
     override fun openSlice(al: BufferAllocator) = OidVector(inner.openSlice(al))
+
+    override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = perRowHashes(this, out, sel, hasher)
 }

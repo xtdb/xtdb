@@ -10,7 +10,8 @@ import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.InternalApi
 import xtdb.api.query.IKeyFn
-import xtdb.arrow.metadata.MetadataFlavour.Companion.translatingMask
+import xtdb.arrow.metadata.MetadataFlavour.Companion.translatingRows
+import xtdb.hash.perRowHashes
 import xtdb.util.Hasher
 import xtdb.util.safelyOpening
 import java.nio.ByteBuffer
@@ -138,9 +139,11 @@ class RunEndEncodedVector private constructor(
 
     /**
      * Runs cover the same distinct values as the rows they encode, so metadata is the same either way.
-     * A mask over the rows selects every run holding a row it selects.
+     * A mask over the rows selects every run holding a row it selects, and a selection of rows the run holding each.
      */
-    override val metadataFlavours get() = valuesVector.metadataFlavours.map { it.translatingMask(::runMask) }
+    override val metadataFlavours get() = valuesVector.metadataFlavours.map { it.translatingRows(::runMask, ::runSel) }
+
+    private fun runSel(rowSel: IntArray) = IntArray(rowSel.size) { runIdx(rowSel[it]) }
 
     private fun runMask(rowMask: VectorMask) = object : VectorMask {
         override fun isSet(idx: Int) = (runStart(idx)..<runEnd(idx)).any(rowMask::isSet)
@@ -349,4 +352,6 @@ class RunEndEncodedVector private constructor(
         valueCount = 0
         runIdxHint = 0
     }
+
+    override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = perRowHashes(this, out, sel, hasher)
 }

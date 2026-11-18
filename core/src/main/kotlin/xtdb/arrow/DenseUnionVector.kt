@@ -12,8 +12,9 @@ import xtdb.api.query.IKeyFn
 import xtdb.arrow.VectorType.Companion.fromLegs
 import xtdb.arrow.agg.VectorSummer
 import xtdb.arrow.metadata.MetadataFlavour
-import xtdb.arrow.metadata.MetadataFlavour.Companion.translatingMask
+import xtdb.arrow.metadata.MetadataFlavour.Companion.translatingRows
 import xtdb.api.error.Unsupported
+import xtdb.hash.perRowHashes
 import xtdb.kw
 import xtdb.util.Hasher
 import xtdb.util.safeMap
@@ -313,8 +314,15 @@ class DenseUnionVector private constructor(
 
     override val metadataFlavours: Collection<MetadataFlavour>
         get() = legVectors.flatMapIndexed { typeId, leg ->
-            leg.metadataFlavours.map { it.translatingMask { mask -> legMask(typeId, mask) } }
+            leg.metadataFlavours.map { it.translatingRows({ mask -> legMask(typeId, mask) }, { sel -> legSel(typeId, sel) }) }
         }
+
+    private fun legSel(typeId: Int, sel: IntArray): IntArray {
+        val legRows = IntArray(sel.size)
+        var n = 0
+        for (idx in sel) if (getTypeId(idx).toInt() == typeId) legRows[n++] = getOffset(idx)
+        return legRows.copyOf(n)
+    }
 
     private fun legMask(typeId: Int, mask: VectorMask): VectorMask {
         if (mask === VectorMask.ALL) return VectorMask.ALL
@@ -576,4 +584,6 @@ class DenseUnionVector private constructor(
         legVectors.forEach { it.close() }
         valueCount = 0
     }
+
+    override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = perRowHashes(this, out, sel, hasher)
 }

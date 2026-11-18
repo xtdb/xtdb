@@ -8,7 +8,7 @@
   (:import java.util.stream.IntStream
            (xtdb.api ICursor)
            (xtdb.arrow RelationReader)
-           (xtdb.operator.join BuildSide ComparatorFactory ProbeSide)))
+           (xtdb.operator.join BuildSide ProbeSide)))
 
 (defmethod lp/ra-expr :intersect [_]
   (s/cat :op #{:∩ :intersect}
@@ -79,8 +79,7 @@
                                      (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))}))))
 
 (deftype IntersectionCursor [^ICursor left-cursor, ^ICursor right-cursor
-                             ^BuildSide build-side, key-col-names
-                             cmp-factory
+                             ^BuildSide build-side, ^ProbeSide probe-side
                              difference?
                              ^:unsynchronized-mutable build-phase-ran?]
   ICursor
@@ -103,10 +102,8 @@
                                 (fn [^RelationReader probe-rel]
                                   (let [row-count (.getRowCount probe-rel)]
                                     (when (pos? row-count)
-                                      (let [cmp (ComparatorFactory/build cmp-factory build-side probe-rel key-col-names)
-                                            probe-side (ProbeSide. build-side probe-rel key-col-names cmp)
-                                            idxs (IntStream/builder)]
-                                        (.forEachIndexOf probe-side
+                                      (let [idxs (IntStream/builder)]
+                                        (.forEachIndexOf (.forBatch probe-side probe-rel)
                                                          (fn [probe-idx build-idx]
                                                            (when (cond-> (not= -1 build-idx)
                                                                    difference? not)
@@ -119,6 +116,7 @@
        (aget advanced? 0))))
 
   (close [_]
+    (util/try-close probe-side)
     (util/try-close build-side)
     (util/try-close left-cursor)
     (util/try-close right-cursor)))
@@ -137,9 +135,10 @@
                                                                         :key-col-names key-col-names})]
 
                                      (cond-> (IntersectionCursor. left-cursor right-cursor
-                                                                  build-side (mapv name key-col-names)
-                                                                  (join/->cmp-factory {:build-vec-types left-vec-types
-                                                                                       :probe-vec-types right-vec-types})
+                                                                  build-side
+                                                                  (ProbeSide. allocator build-side (mapv name key-col-names)
+                                                                              (join/->cmp-factory {:build-vec-types left-vec-types
+                                                                                                   :probe-vec-types right-vec-types}))
                                                                   false false)
                                        (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span))))}))))
 
@@ -157,8 +156,9 @@
                                                                         :key-col-names key-col-names})]
 
                                      (cond-> (IntersectionCursor. left-cursor right-cursor
-                                                                  build-side (mapv name key-col-names)
-                                                                  (join/->cmp-factory {:build-vec-types left-vec-types
-                                                                                       :probe-vec-types right-vec-types})
+                                                                  build-side
+                                                                  (ProbeSide. allocator build-side (mapv name key-col-names)
+                                                                              (join/->cmp-factory {:build-vec-types left-vec-types
+                                                                                                   :probe-vec-types right-vec-types}))
                                                                   true false)
                                        (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span))))}))))

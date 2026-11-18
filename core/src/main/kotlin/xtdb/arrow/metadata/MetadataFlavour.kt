@@ -1,11 +1,11 @@
 package xtdb.arrow.metadata
 
 import org.apache.arrow.vector.types.pojo.ArrowType
+import xtdb.arrow.IntVector
 import xtdb.arrow.UNION_TYPE
 import xtdb.arrow.VectorMask
 import xtdb.arrow.VectorReader
 import xtdb.arrow.VectorType
-import xtdb.bloom.BloomBuilder
 import xtdb.util.Hasher
 import java.nio.ByteBuffer
 
@@ -31,10 +31,7 @@ sealed interface MetadataFlavour {
 
     interface Bytes : MetadataFlavour {
         fun getBytes(idx: Int): ByteBuffer
-        fun hashCode(idx: Int, hasher: Hasher): Int
-
-        fun hashInto(bloom: BloomBuilder, mask: VectorMask) =
-            repeat(valueCount) { if (mask.isSet(it)) bloom.add(this, it) }
+        fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?)
     }
 
     interface List : MetadataFlavour {
@@ -60,31 +57,34 @@ sealed interface MetadataFlavour {
     }
 
     companion object {
-        internal fun MetadataFlavour.translatingMask(translate: (VectorMask) -> VectorMask): MetadataFlavour {
+        internal fun MetadataFlavour.translatingRows(
+            translateMask: (VectorMask) -> VectorMask, translateSel: (IntArray) -> IntArray
+        ): MetadataFlavour {
             val f = this
             return when (f) {
                 is Number -> object : Number by f {
-                    override fun minMaxInto(minMax: DoubleMinMax, mask: VectorMask) = f.minMaxInto(minMax, translate(mask))
+                    override fun minMaxInto(minMax: DoubleMinMax, mask: VectorMask) = f.minMaxInto(minMax, translateMask(mask))
                 }
 
                 is DateTime -> object : DateTime by f {
-                    override fun minMaxInto(minMax: DoubleMinMax, mask: VectorMask) = f.minMaxInto(minMax, translate(mask))
+                    override fun minMaxInto(minMax: DoubleMinMax, mask: VectorMask) = f.minMaxInto(minMax, translateMask(mask))
                 }
 
                 is Duration -> object : Duration by f {
-                    override fun minMaxInto(minMax: DoubleMinMax, mask: VectorMask) = f.minMaxInto(minMax, translate(mask))
+                    override fun minMaxInto(minMax: DoubleMinMax, mask: VectorMask) = f.minMaxInto(minMax, translateMask(mask))
                 }
 
                 is TimeOfDay -> object : TimeOfDay by f {
-                    override fun minMaxInto(minMax: DoubleMinMax, mask: VectorMask) = f.minMaxInto(minMax, translate(mask))
+                    override fun minMaxInto(minMax: DoubleMinMax, mask: VectorMask) = f.minMaxInto(minMax, translateMask(mask))
                 }
 
                 is Bytes -> object : Bytes by f {
-                    override fun hashInto(bloom: BloomBuilder, mask: VectorMask) = f.hashInto(bloom, translate(mask))
+                    override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) =
+                        f.hashTo(out, hasher, sel?.let(translateSel))
                 }
 
                 is Struct -> object : Struct by f {
-                    override fun childMask(mask: VectorMask) = f.childMask(translate(mask))
+                    override fun childMask(mask: VectorMask) = f.childMask(translateMask(mask))
                 }
 
                 is Presence, is List, is Set -> f

@@ -13,6 +13,7 @@ import xtdb.arrow.VectorIndirection.Companion.selection
 import xtdb.arrow.VectorIndirection.Companion.slice
 import xtdb.arrow.agg.VectorSummer
 import xtdb.arrow.metadata.MetadataFlavour
+import xtdb.hash.perRowHashes
 import xtdb.util.Hasher
 import xtdb.util.closeOnCatch
 import java.nio.ByteBuffer
@@ -62,6 +63,12 @@ interface VectorReader : ILookup, AutoCloseable {
     fun getObject(idx: Int, keyFn: IKeyFn<*>): Any?
 
     fun hashCode(idx: Int, hasher: Hasher): Int
+
+    /**
+     * Appends `hashCode(row, hasher)` to [out] for each row of [sel] in order, or else for each row of this vector.
+     * [out] must be non-nullable.
+     */
+    fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray? = null) = perRowHashes(this, out, sel, hasher)
 
     val listElements: VectorReader get() = unsupported("listElements")
     fun getListStartIndex(idx: Int): Int = unsupported("getListStartIndex")

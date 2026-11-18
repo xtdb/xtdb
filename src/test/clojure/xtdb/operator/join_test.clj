@@ -840,6 +840,16 @@
     (binding [join/*disk-join-threshold-rows* 1]
       (t/is (= expected (tu/query-ra plan)) "spilled"))))
 
+(t/deftest test-spilled-join-pairs-every-probe-row-with-its-key
+  (let [plan [:join '{:conditions [{a b}]}
+              [::tu/pages (vec (partition-all 7 (for [a (range 60)] {:a a})))]
+              [::tu/pages (vec (partition-all 5 (for [b (range 0 60 3)] {:b b})))]]
+        expected (frequencies (for [k (range 0 60 3)] {:a k, :b k}))]
+    (t/is (= expected (frequencies (tu/query-ra plan))))
+
+    (binding [join/*disk-join-threshold-rows* 1]
+      (t/is (= expected (frequencies (tu/query-ra plan))) "spilled"))))
+
 (t/deftest test-join-on-true
   (letfn [(run-join [left? right? theta-expr]
             (->> (tu/query-ra [:join {:conditions [theta-expr]}

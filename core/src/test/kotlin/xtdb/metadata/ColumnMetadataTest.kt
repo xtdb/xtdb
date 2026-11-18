@@ -26,7 +26,7 @@ class ColumnMetadataTest {
 
             Relation(al, MetadataFileWriter.metaRelSchema(recencyBranches = false)).use { metaRel ->
                 val colsVec = metaRel["nodes"]["leaf"]["columns"].listElements
-                ColumnMetadata(colsVec, calculateBlooms).writeMetadata(structVec)
+                ColumnMetadata(al, colsVec, calculateBlooms).writeMetadata(structVec)
 
                 val idx = (0 until colsVec.valueCount).single { colsVec["col-name"].getObject(it) == childName }
                 read(structVec, colsVec, idx)

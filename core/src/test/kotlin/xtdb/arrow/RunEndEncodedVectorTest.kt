@@ -25,7 +25,8 @@ import xtdb.arrow.Vector.Companion.openVector
 import xtdb.arrow.VectorType.Companion.asType
 import xtdb.arrow.metadata.DoubleMinMax
 import xtdb.arrow.metadata.MetadataFlavour
-import xtdb.bloom.BloomBuilder
+import xtdb.bloom.bloomPositions
+import xtdb.util.Hasher
 import java.io.ByteArrayOutputStream
 import java.nio.channels.Channels
 import java.util.Random
@@ -533,12 +534,21 @@ class RunEndEncodedVectorTest {
     }
 
     @Test
-    fun `a bloom holds the rows its mask selects`() {
+    fun `a bloom holds the rows its selection selects`() {
         val iids = listOf(1L, 1L, 2L, 3L, 3L, 3L).map { it * 0x0101010101010101L }
 
-        fun bloomOf(vec: VectorReader, mask: VectorMask) = BloomBuilder().also { builder ->
-            vec.metadataFlavours.filterIsInstance<MetadataFlavour.Bytes>().forEach { it.hashInto(builder, mask) }
-        }.serialize()
+        fun bloomOf(vec: VectorReader, sel: IntArray?) =
+            IntVector.open(allocator, "xx", false).use { xxHashes ->
+                IntVector.open(allocator, "murmur3", false).use { murmur3Hashes ->
+                    vec.metadataFlavours.filterIsInstance<MetadataFlavour.Bytes>().forEach {
+                        it.hashTo(xxHashes, Hasher.Xx(), sel)
+                        it.hashTo(murmur3Hashes, Hasher.Murmur3(), sel)
+                    }
+                    bloomPositions(xxHashes, murmur3Hashes).toSet()
+                }
+            }
+
+        val rowsFromTwo = intArrayOf(2, 3, 4, 5)
 
         RunEndEncodedVector(allocator, "_iid", FixedSizeBinaryVector(allocator, REE_VALUES_NAME, false, 16)).use { vec ->
             FixedSizeBinaryVector(allocator, "_iid", false, 16).use { plain ->
@@ -547,8 +557,8 @@ class RunEndEncodedVectorTest {
                     plain.writeLongLong(iid, iid)
                 }
 
-                assertEquals(bloomOf(plain, VectorMask.ALL), bloomOf(vec, VectorMask.ALL))
-                assertEquals(bloomOf(plain, fromRowTwo), bloomOf(vec, fromRowTwo))
+                assertEquals(bloomOf(plain, null), bloomOf(vec, null))
+                assertEquals(bloomOf(plain, rowsFromTwo), bloomOf(vec, rowsFromTwo))
             }
         }
     }

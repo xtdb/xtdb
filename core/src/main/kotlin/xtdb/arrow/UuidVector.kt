@@ -5,6 +5,8 @@ import xtdb.api.query.IKeyFn
 import xtdb.arrow.VectorType.Scalar
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.arrow.extensions.UuidType
+import xtdb.hash.perRowHashes
+import xtdb.util.Hasher
 import java.nio.ByteBuffer
 import java.util.*
 
@@ -32,4 +34,6 @@ class UuidVector(override val inner: FixedSizeBinaryVector) : ExtensionVector(),
     override val metadataFlavours get() = listOf(this)
 
     override fun openSlice(al: BufferAllocator) = UuidVector(inner.openSlice(al))
+
+    override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = perRowHashes(this, out, sel, hasher)
 }

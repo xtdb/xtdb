@@ -11,6 +11,7 @@ import xtdb.InternalApi
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.VectorType.Listy
 import xtdb.arrow.metadata.MetadataFlavour
+import xtdb.hash.perRowHashes
 import xtdb.util.Hasher
 import org.apache.arrow.vector.complex.ListVector as ArrowListVector
 
@@ -259,4 +260,5 @@ class ListVector private constructor(
         lastOffset = 0
     }
 
+    override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = perRowHashes(this, out, sel, hasher)
 }

@@ -11,6 +11,7 @@ import xtdb.InternalApi
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.VectorType.Listy
 import xtdb.arrow.metadata.MetadataFlavour
+import xtdb.hash.perRowHashes
 import xtdb.util.Hasher
 import xtdb.util.closeOnCatch
 import org.apache.arrow.vector.complex.FixedSizeListVector as ArrowFixedSizeListVector
@@ -202,4 +203,6 @@ class FixedSizeListVector private constructor(
                 FixedSizeListVector(al, name, listSize, validityBuffer, elVector, valueCount)
             }
         }
+
+    override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = perRowHashes(this, out, sel, hasher)
 }

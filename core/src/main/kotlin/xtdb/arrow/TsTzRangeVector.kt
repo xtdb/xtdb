@@ -5,9 +5,11 @@ import org.apache.arrow.vector.types.TimeUnit.MICROSECOND
 import org.apache.arrow.vector.types.pojo.ArrowType.Timestamp
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.metadata.MetadataFlavour
+import xtdb.hash.perRowHashes
 import xtdb.time.microsAsInstant
 import xtdb.types.ZonedDateTimeRange
 import xtdb.arrow.extensions.TsTzRangeType
+import xtdb.util.Hasher
 import java.time.ZoneId
 import java.time.ZonedDateTime
 
@@ -44,4 +46,6 @@ class TsTzRangeVector(override val inner: FixedSizeListVector) : ExtensionVector
     override val metadataFlavours get() = listOf(this)
 
     override fun openSlice(al: BufferAllocator) = TsTzRangeVector(inner.openSlice(al))
+
+    override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = perRowHashes(this, out, sel, hasher)
 }

@@ -11,7 +11,7 @@ import xtdb.util.Hasher
 import xtdb.arrow.extensions.XtExtensionVector
 import java.nio.ByteBuffer
 
-abstract class ExtensionVector : MonoVector() {
+sealed class ExtensionVector : MonoVector() {
     protected abstract val inner: MonoVector
 
     override var name

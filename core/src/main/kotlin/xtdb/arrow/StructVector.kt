@@ -15,6 +15,7 @@ import xtdb.arrow.VectorIndirection.Companion.Selection
 import xtdb.arrow.VectorIndirection.Companion.Slice
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.api.error.Incorrect
+import xtdb.hash.perRowHashes
 import xtdb.util.Hasher
 import xtdb.util.closeAllOnCatch
 import xtdb.util.closeOnCatch
@@ -283,4 +284,6 @@ class StructVector private constructor(
         validityBuffer?.close()
         childWriters.sequencedValues().forEach(Vector::close)
     }
+
+    override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = perRowHashes(this, out, sel, hasher)
 }

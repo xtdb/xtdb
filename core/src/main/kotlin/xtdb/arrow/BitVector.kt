@@ -9,6 +9,7 @@ import xtdb.InternalApi
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.VectorType.Companion.BOOL
 import xtdb.arrow.metadata.MetadataFlavour
+import xtdb.hash.perRowHashes
 import xtdb.util.Hasher
 import org.apache.arrow.vector.BitVector as ArrowBitVector
 import org.apache.arrow.vector.types.pojo.ArrowType.Bool.INSTANCE as BIT_TYPE
@@ -142,4 +143,6 @@ class BitVector private constructor(
 
     override fun openSlice(al: BufferAllocator) =
         BitVector(al, name, valueCount, validityBuffer?.openSlice(al), dataBuffer.openSlice(al))
+
+    override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = perRowHashes(this, out, sel, hasher)
 }

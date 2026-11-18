@@ -1,10 +1,12 @@
 package xtdb.arrow
 
+import com.carrotsearch.hppc.DoubleArrayList
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.VectorType.Companion.I32
 import xtdb.arrow.metadata.MetadataFlavour
+import xtdb.hash.addDoubles
 import xtdb.util.Hasher
 import xtdb.util.closeOnCatch
 
@@ -33,6 +35,19 @@ class IntVector private constructor(
                     IntVector(al, name, valueCount, validityBuffer, dataBuffer)
                 }
             }
+    }
+
+    internal inline fun writeInts(n: Int, f: (i: Int) -> Int) {
+        check(validityBuffer == null) { "writeInts on a nullable IntVector" }
+        val start = valueCount
+        ensureCapacity(start + n)
+        for (i in 0 until n) dataBuffer[start + i] = f(i)
+        valueCount = start + n
+        dataBuffer.writerIndex = (start + n).toLong() * Int.SIZE_BYTES
+    }
+
+    internal inline fun mapInts(f: (idx: Int, v: Int) -> Int) {
+        repeat(valueCount) { dataBuffer[it] = f(it, dataBuffer.getInt(it)) }
     }
 
     override fun getInt(idx: Int) = getInt0(idx)
@@ -78,4 +93,6 @@ class IntVector private constructor(
                 IntVector(al, name, valueCount, validityBuffer, dataBuffer)
             }
         }
+
+    override fun doublesTo(out: DoubleArrayList, sel: IntArray?) = out.addDoubles(valueCount, sel) { dataBuffer.getInt(it).toDouble() }
 }

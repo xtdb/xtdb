@@ -6,6 +6,8 @@ import org.apache.arrow.vector.types.TimeUnit.*
 import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.metadata.MetadataFlavour
+import xtdb.hash.addDoubles
+import xtdb.hash.doubleHashes
 import xtdb.time.MICRO_HZ
 import xtdb.time.MILLI_HZ
 import xtdb.time.NANO_HZ
@@ -62,6 +64,9 @@ class TimestampLocalVector private constructor(
 
     override fun openSlice(al: BufferAllocator) =
         TimestampLocalVector(al, name, unit, validityBuffer?.openSlice(al), dataBuffer.openSlice(al), valueCount)
+
+    override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) =
+        doubleHashes(this, out, sel, hasher) { it.addDoubles(valueCount, sel) { idx -> if (isNull(idx)) 0.0 else getMetaDouble(idx) } }
 }
 
 class TimestampTzVector private constructor(
@@ -120,4 +125,7 @@ class TimestampTzVector private constructor(
             al, name, unit, zone, validityBuffer?.openSlice(al),
             dataBuffer.openSlice(al), valueCount
         )
+
+    override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) =
+        doubleHashes(this, out, sel, hasher) { it.addDoubles(valueCount, sel) { idx -> if (isNull(idx)) 0.0 else getMetaDouble(idx) } }
 }

@@ -50,6 +50,12 @@ internal class ExtensibleBuffer private constructor(private val allocator: Buffe
         return buf
     }
 
+    var writerIndex: Long
+        get() = buf.writerIndex()
+        set(value) {
+            buf.writerIndex(value)
+        }
+
     fun ensureCapacity(capacity: Long): ArrowBuf {
         if (buf.capacity() < capacity) realloc(capacity)
         return buf
