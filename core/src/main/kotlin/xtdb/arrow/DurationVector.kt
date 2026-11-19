@@ -40,6 +40,7 @@ class DurationVector private constructor(
 
     override fun getLong(idx: Int) = getLong0(idx)
     override fun writeLong(v: Long) = writeLong0(v)
+    override fun setLong(idx: Int, v: Long) = setLong0(idx, v)
 
     fun increment(idx: Int, v: Long) {
         ensureCapacity(idx + 1)

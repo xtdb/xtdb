@@ -23,6 +23,7 @@ class DoubleVector private constructor(
 
     override fun getDouble(idx: Int) = getDouble0(idx)
     override fun writeDouble(v: Double) = writeDouble0(v)
+    override fun setDouble(idx: Int, v: Double) = setDouble0(idx, v)
 
     override fun getAsFloat(idx: Int) = getDouble(idx).toFloat()
     override fun getAsDouble(idx: Int) = getDouble(idx)

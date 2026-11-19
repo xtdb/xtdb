@@ -52,6 +52,8 @@ class IntVector private constructor(
 
     override fun getInt(idx: Int) = getInt0(idx)
     override fun writeInt(v: Int) = writeInt0(v)
+    override fun setInt(idx: Int, v: Int) = setInt0(idx, v)
+    operator fun set(idx: Int, v: Int) = setInt(idx, v)
 
     override fun getAsInt(idx: Int) = getInt(idx)
     override fun getAsLong(idx: Int) = getInt(idx).toLong()

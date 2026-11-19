@@ -39,6 +39,7 @@ class TimestampLocalVector private constructor(
 
     override fun getLong(idx: Int) = getLong0(idx)
     override fun writeLong(v: Long) = writeLong0(v)
+    override fun setLong(idx: Int, v: Long) = setLong0(idx, v)
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>): LocalDateTime =
         LocalDateTime.ofInstant(unit.toInstant(getLong(idx)), UTC)
@@ -85,6 +86,7 @@ class TimestampTzVector private constructor(
 
     override fun getLong(idx: Int) = getLong0(idx)
     override fun writeLong(v: Long) = writeLong0(v)
+    override fun setLong(idx: Int, v: Long) = setLong0(idx, v)
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>): ZonedDateTime =
         ZonedDateTime.ofInstant(unit.toInstant(getLong(idx)), zone)

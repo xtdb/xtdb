@@ -78,6 +78,42 @@ class FixedWidthVectorTest {
     }
 
     @Test
+    fun `a vector's setX is supported only for its own storage type`(al: BufferAllocator) {
+        IntVector.open(al, "i", false).use { vec ->
+            vec.setInt(0, 42)
+            vec[1] = 43
+            vec.asList shouldBe listOf(42, 43)
+            assertThrows<UnsupportedOperationException> { vec.setLong(2, 44L) }
+            assertThrows<UnsupportedOperationException> { vec.setFloat(2, 4.5f) }
+            assertThrows<UnsupportedOperationException> { vec.setDouble(2, 4.5) }
+        }
+
+        LongVector(al, "l", false).use { vec ->
+            vec.setLong(0, 42L)
+            vec.asList shouldBe listOf(42L)
+            assertThrows<UnsupportedOperationException> { vec.setInt(1, 43) }
+            assertThrows<UnsupportedOperationException> { vec.setDouble(1, 4.5) }
+        }
+
+        FloatVector(al, "f", false).use { vec ->
+            vec.setFloat(0, 4.5f)
+            vec.asList shouldBe listOf(4.5f)
+            assertThrows<UnsupportedOperationException> { vec.setDouble(1, 4.5) }
+        }
+
+        DoubleVector(al, "d", false).use { vec ->
+            vec.setDouble(0, 4.5)
+            vec.asList shouldBe listOf(4.5)
+            assertThrows<UnsupportedOperationException> { vec.setFloat(1, 4.5f) }
+            assertThrows<UnsupportedOperationException> { vec.setLong(1, 42L) }
+        }
+
+        ShortVector(al, "s", false).use { vec ->
+            assertThrows<UnsupportedOperationException> { vec.setInt(0, 42) }
+        }
+    }
+
+    @Test
     fun `reserving capacity leaves the value count alone, setting past the end extends it with nulls`(al: BufferAllocator) {
         IntVector.open(al, "foo", true).use { vector ->
             vector.ensureCapacity(8)

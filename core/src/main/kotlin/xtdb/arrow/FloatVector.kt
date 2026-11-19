@@ -28,6 +28,8 @@ class FloatVector private constructor(
         dataBuffer.writeFloat(v)
     }
 
+    override fun setFloat(idx: Int, v: Float) = setFloat0(idx, v)
+
     override fun getAsFloat(idx: Int) = getFloat(idx)
     override fun getAsDouble(idx: Int) = getFloat(idx).toDouble()
 

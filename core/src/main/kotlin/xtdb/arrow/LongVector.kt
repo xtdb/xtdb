@@ -23,6 +23,7 @@ class LongVector private constructor(
 
     override fun getLong(idx: Int) = getLong0(idx)
     override fun writeLong(v: Long) = writeLong0(v)
+    override fun setLong(idx: Int, v: Long) = setLong0(idx, v)
 
     override fun getAsInt(idx: Int) = getLong(idx).toInt()
     override fun getAsLong(idx: Int) = getLong(idx)
