@@ -175,6 +175,18 @@ We don't make heavy use of labels, but these conventions matter:
   Like the other `-reqd` labels (`thought-reqd`, `spec-reqd`, `repro-reqd`), it names what the card is waiting on: here, only someone to spend tokens on it.
   You MAY apply it only where the card's goal and invariants are on the issue, nothing it asks has a design choice left open, and its tests would show the change is right.
   You MUST NOT apply it alongside `thought-reqd` or any other `-reqd` label, and SHOULD take it off a card whose discussion reopens a decision.
+- **`triage-reqd` marks a card an agent filed from a finding outside its own work, waiting for a human to confirm it and place it.**
+  Fixing one thing routinely turns up several more, and a finding left in a session's journal or a PR comment is lost once the branch lands.
+  - **You SHOULD file one, without asking, for a finding that meets all three:**
+    - it isn't strictly related to the branch you're on;
+    - it applied on `main` before the branch;
+    - the branch isn't the best place to fix it.
+  - **Search for an existing card first**, and comment on a match rather than filing a second.
+  - **The rest of this file still applies** — the issue type, the 2.x board, a component label where one area is obviously the subject, and no milestone, since an unconfirmed card can't pass the blocking test.
+  - **It needs no red-green before filing.**
+    Tag what you haven't confirmed `assumption:` in the body — reachability above all — so triage knows what it is confirming.
+  - **Triage replaces it** with whatever the card then waits on — `repro-reqd`, `thought-reqd`, `tokens-reqd` — or with nothing, or closes the card.
+    It never stays alongside another `-reqd` label.
 
 ## Starting work on a card
 
