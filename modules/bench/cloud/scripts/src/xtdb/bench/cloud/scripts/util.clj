@@ -59,16 +59,19 @@
   [& strings]
   (str "```\n" (str/join strings) "\n```"))
 
+(defn time-line
+  "Format a labelled duration as \"<label> time: <human> (<ISO-8601>)\", N/A for each when ms is nil."
+  [label ms]
+  (format "%s time: %s (%s)"
+          label
+          (or (format-duration :millis ms) "N/A")
+          (if ms (java.time.Duration/ofMillis ms) "N/A")))
+
 (defn totals->string
   "Format stage and benchmark totals as string.
    label: describes the type of stages summed (e.g. \"query\", \"ingest\", \"batch\")"
   ([stage-ms benchmark-ms] (totals->string stage-ms benchmark-ms "query"))
   ([stage-ms benchmark-ms label]
-   (str (format "Total %s time: %s (%s)"
-                label
-                (or (format-duration :millis stage-ms) "N/A")
-                (if stage-ms (java.time.Duration/ofMillis stage-ms) "N/A"))
+   (str (time-line (str "Total " label) stage-ms)
         "\n"
-        (format "Total benchmark time: %s (%s)"
-                (or (format-duration :millis benchmark-ms) "N/A")
-                (if benchmark-ms (java.time.Duration/ofMillis benchmark-ms) "N/A")))))
+        (time-line "Total benchmark" benchmark-ms))))
