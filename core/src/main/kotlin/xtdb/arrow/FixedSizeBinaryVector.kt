@@ -30,10 +30,21 @@ class FixedSizeBinaryVector private constructor(
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = getByteArray(idx)
 
-    override fun getLongLongHigh(idx: Int) = reverseBytes(dataBuffer.getLong(idx * 2))
-    override fun getLongLongLow(idx: Int) = reverseBytes(dataBuffer.getLong(idx * 2 + 1))
+    private fun assertLongLong() =
+        assert(byteWidth == 16) { "long-long access needs FixedSizeBinary(16), not $arrowType" }
+
+    override fun getLongLongHigh(idx: Int): Long {
+        assertLongLong()
+        return reverseBytes(dataBuffer.getLong(idx * 2))
+    }
+
+    override fun getLongLongLow(idx: Int): Long {
+        assertLongLong()
+        return reverseBytes(dataBuffer.getLong(idx * 2 + 1))
+    }
 
     override fun writeLongLong(high: Long, low: Long) {
+        assertLongLong()
         dataBuffer.writeLong(reverseBytes(high))
         dataBuffer.writeLong(reverseBytes(low))
         writeNotNull()
