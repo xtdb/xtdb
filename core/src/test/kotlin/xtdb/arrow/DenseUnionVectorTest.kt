@@ -430,4 +430,54 @@ class DenseUnionVectorTest {
             }
         }
     }
+
+    @Test
+    fun `getAsLong and readAsLong read each row through its own integer leg`() {
+        DenseUnionVector(
+            allocator, "duv",
+            listOf(
+                ShortVector(allocator, "i16", false),
+                IntVector.open(allocator, "i32", false),
+                LongVector(allocator, "i64", false)
+            )
+        ).use { duv ->
+            duv.vectorFor("i16").writeShort(-12)
+            duv.vectorFor("i32").writeInt(Int.MIN_VALUE)
+            duv.vectorFor("i64").writeLong(Long.MAX_VALUE)
+
+            val expected = listOf(-12L, Int.MIN_VALUE.toLong(), Long.MAX_VALUE)
+
+            List(3) { duv.getAsLong(it) } shouldBe expected
+
+            val selected = duv.select(intArrayOf(2, 0))
+            List(2) { selected.getAsLong(it) } shouldBe listOf(Long.MAX_VALUE, -12L)
+
+            val rdr = duv.valueReader()
+            List(3) { rdr.pos = it; rdr.readAsLong() } shouldBe expected
+        }
+    }
+
+    @Test
+    fun `getAsDouble and readAsDouble read each row through its own floating-point leg`() {
+        DenseUnionVector(
+            allocator, "duv",
+            listOf(
+                FloatVector(allocator, "f32", false),
+                DoubleVector(allocator, "f64", false)
+            )
+        ).use { duv ->
+            duv.vectorFor("f32").writeFloat(1.5f)
+            duv.vectorFor("f64").writeDouble(-2.25)
+
+            val expected = listOf(1.5, -2.25)
+
+            List(2) { duv.getAsDouble(it) } shouldBe expected
+
+            val selected = duv.select(intArrayOf(1, 0))
+            List(2) { selected.getAsDouble(it) } shouldBe expected.reversed()
+
+            val rdr = duv.valueReader()
+            List(2) { rdr.pos = it; rdr.readAsDouble() } shouldBe expected
+        }
+    }
 }

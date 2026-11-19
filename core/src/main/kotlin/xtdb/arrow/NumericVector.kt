@@ -8,7 +8,7 @@ import xtdb.util.Hasher
 sealed class NumericVector : FixedWidthVector() {
 
     abstract fun getAsFloat(idx: Int): Float
-    abstract fun getAsDouble(idx: Int): Double
+    abstract override fun getAsDouble(idx: Int): Double
 
     /**
      * Appends each row's value (of [sel], else of this vector) as `hashCode0` hashes it; a null row's value is ignored.

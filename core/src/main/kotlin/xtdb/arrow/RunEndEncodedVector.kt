@@ -109,6 +109,8 @@ class RunEndEncodedVector private constructor(
     override fun getLong(idx: Int) = valuesVector.getLong(runIdx(idx))
     override fun getFloat(idx: Int) = valuesVector.getFloat(runIdx(idx))
     override fun getDouble(idx: Int) = valuesVector.getDouble(runIdx(idx))
+    override fun getAsLong(idx: Int) = valuesVector.getAsLong(runIdx(idx))
+    override fun getAsDouble(idx: Int) = valuesVector.getAsDouble(runIdx(idx))
     override fun getBytes(idx: Int): ByteBuffer = valuesVector.getBytes(runIdx(idx))
     override fun getPointer(idx: Int, reuse: ArrowBufPointer) = valuesVector.getPointer(runIdx(idx), reuse)
     override fun getObject(idx: Int, keyFn: IKeyFn<*>) = valuesVector.getObject(runIdx(idx), keyFn)

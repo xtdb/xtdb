@@ -19,6 +19,8 @@ interface ValueReader {
 
     fun readFloat(): Float = unsupported("readFloat")
     fun readDouble(): Double = unsupported("readDouble")
+    fun readAsLong(): Long = unsupported("readAsLong")
+    fun readAsDouble(): Double = unsupported("readAsDouble")
 
     fun readBytes(): ByteBuffer = unsupported("readBytes")
     fun readObject(): Any? = unsupported("readObject")
@@ -37,6 +39,8 @@ interface ValueReader {
         override fun readLong() = vec.getLong(pos)
         override fun readFloat() = vec.getFloat(pos)
         override fun readDouble() = vec.getDouble(pos)
+        override fun readAsLong() = vec.getAsLong(pos)
+        override fun readAsDouble() = vec.getAsDouble(pos)
         override fun readBytes() = vec.getBytes(pos)
         override fun readObject() = vec.getObject(pos)
     }
