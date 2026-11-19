@@ -77,22 +77,38 @@ This decoupling of databases (storage) and clusters (compute) enables a **data m
 Teams can attach secondary databases to access shared domain data, aligning your data model with your organization's structure while keeping compute independent.
 
 ```d2
-direction: up
+grid-rows: 3
+vertical-gap: 120
+
+Storage: Storage - XTDB Databases
+
+Compute: Compute - XTDB Clusters
 
 Apps: End-User Applications {
+  grid-columns: 3
+  grid-gap: 20
+  horizontal-gap: 144
+  label.near: bottom-center
   App1: Webapp 1
   App2: Webapp 2
   App3: Analytics Service
 }
 
 Compute: Compute - XTDB Clusters {
+  grid-columns: 2
+  grid-gap: 20
+  horizontal-gap: 57
   Cluster1: XTDB Cluster 1 {
+    grid-columns: 3
+    grid-gap: 20
     Node1A: Node 1A
     Node1B: Node 1B
     Node1C: Node 1C
   }
 
   Cluster2: XTDB Cluster 2 {
+    grid-columns: 3
+    grid-gap: 20
     Node2A: Node 2A
     Node2B: Node 2B
     Node2C: Node 2C
@@ -100,6 +116,8 @@ Compute: Compute - XTDB Clusters {
 }
 
 Storage: Storage - XTDB Databases {
+  grid-columns: 4
+  grid-gap: 20
   primary1: "'xtdb'\n(log + object storage)\n(cluster 1 primary)" {
     shape: cylinder
   }
@@ -160,6 +178,7 @@ replica: "Replica log\n(e.g. Kafka topic)" {
 }
 
 cluster: XTDB cluster {
+  label.near: top-left
   leader: "Leader\n(for this database)" {
     style.bold: true
   }

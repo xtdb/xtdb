@@ -19,7 +19,10 @@ export default defineConfig({
                 default: '103',
                 dark: '200'
             },
-            sketch: true
+            sketch: true,
+            experimental: {
+                useD2js: true
+            }
         }),
 
         starlight({

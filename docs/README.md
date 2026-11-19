@@ -12,10 +12,10 @@ To work on this project you should have `git lfs` installed and initialised.
   - For Mac OS: `brew install git-lfs`
 - You will need to initialise `git lfs`:
   - `git lfs install`
-- You will also need to have the `docs/shared` git submodule checked out.
+- You will also need to have the `docs/shared` and `docs/lib/railroad` git submodules checked out.
   From the root of the project:
   - `git submodule update --init`
-- With the submodule initialised, you'll need to pull the objects from `git lfs`.
+- With the submodules initialised, you'll need to pull the objects from `git lfs`.
   Inside the `docs/shared` directory:
   - `git lfs pull`
 
