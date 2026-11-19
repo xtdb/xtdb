@@ -23,8 +23,6 @@ class ShortVector private constructor(
 
     override fun getShort(idx: Int) = getShort0(idx)
     override fun writeShort(v: Short) = writeShort0(v)
-    override fun getInt(idx: Int) = getShort(idx).toInt()
-    override fun getLong(idx: Int) = getShort(idx).toLong()
 
     override fun getAsInt(idx: Int) = getShort(idx).toInt()
     override fun getAsLong(idx: Int) = getShort(idx).toLong()

@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.extension.ExtendWith
 import xtdb.arrow.Vector.Companion.openVector
 import xtdb.arrow.VectorType.Companion.I32
@@ -50,6 +51,29 @@ class FixedWidthVectorTest {
             assertEquals(42, vector.getInt(0))
             assertEquals(43, vector.getInt(1))
             assertEquals(44, vector.getInt(2))
+        }
+    }
+
+    @Test
+    fun `a narrower vector's wider getX is unsupported, its getAsX converts`(al: BufferAllocator) {
+        ShortVector(al, "s", false).use { vec ->
+            vec.writeShort(42)
+            assertThrows<UnsupportedOperationException> { vec.getInt(0) }
+            assertThrows<UnsupportedOperationException> { vec.getLong(0) }
+            vec.getAsInt(0) shouldBe 42
+            vec.getAsLong(0) shouldBe 42L
+        }
+
+        IntVector.open(al, "i", false).use { vec ->
+            vec.writeInt(42)
+            assertThrows<UnsupportedOperationException> { vec.getLong(0) }
+            vec.getAsLong(0) shouldBe 42L
+        }
+
+        FloatVector(al, "f", false).use { vec ->
+            vec.writeFloat(4.5f)
+            assertThrows<UnsupportedOperationException> { vec.getDouble(0) }
+            vec.getAsDouble(0) shouldBe 4.5
         }
     }
 
