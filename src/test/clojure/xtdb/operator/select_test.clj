@@ -57,3 +57,11 @@
     (t/is (= (filter :sel rows)
              (tu/query-ra [:select {:predicate 'sel}
                            [::tu/pages [rows]]])))))
+
+(deftest test-stacked-selects
+  (let [rows (for [a (range 200)] {:a a, :b (* 2 a), :sixth (zero? (mod a 6))})]
+    (t/is (= (filter (fn [{:keys [a b sixth]}] (and (< b 300) sixth (> a 20))) rows)
+             (tu/query-ra [:select '{:predicate (> a 20)}
+                           [:select '{:predicate sixth}
+                            [:select '{:predicate (< b 300)}
+                             [::tu/pages [rows]]]]])))))

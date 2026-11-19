@@ -85,6 +85,43 @@ class RowMaskTest {
         shouldThrow<IllegalArgumentException> { RowMask.ofWords(LongArray(0), -1) }
     }
 
+    private fun checkRefines(rowCount: Int, outer: (Int) -> Boolean, refinement: (Int) -> Boolean) {
+        val mask = rowMask(rowCount, outer)
+        val refined = mask.refine(rowMask(mask.cardinality, refinement))
+        val expected = mask.toSelection().filterIndexed { k, _ -> refinement(k) }
+
+        refined.rowCount shouldBe rowCount
+        refined.cardinality shouldBe expected.size
+        refined.toSelection().toList() shouldBe expected
+    }
+
+    @Test
+    fun `refining keeps the set rows whose refinement bit is set, across word boundaries`() {
+        checkRefines(200, { it % 3 != 1 }, { it in setOf(0, 62, 63, 64, 65, 127, 128, 132) })
+        checkRefines(200, { true }, { it % 2 == 0 })
+        checkRefines(200, { it >= 70 }, { it < 60 })
+    }
+
+    @Test
+    fun `refining a mask ending in a partial word`() {
+        checkRefines(130, { true }, { it == 129 || it == 64 })
+        checkRefines(130, { it % 2 == 1 }, { it == 64 })
+        checkRefines(130, { it >= 128 }, { true })
+    }
+
+    @Test
+    fun `refining down to nothing, or keeping everything`() {
+        checkRefines(150, { it % 5 == 0 }, { false })
+        checkRefines(150, { it % 5 == 0 }, { true })
+        checkRefines(150, { false }, { true })
+    }
+
+    @Test
+    fun `a refinement must cover exactly the set rows`() {
+        val mask = rowMask(10) { it % 2 == 0 }
+        shouldThrow<IllegalArgumentException> { mask.refine(rowMask(10) { true }) }
+    }
+
     private fun built(rowCount: Int, rows: List<Int>): RowMask =
         RowMask.Builder(rowCount).apply { rows.forEach(::add) }.build()
 
