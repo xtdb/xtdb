@@ -13,7 +13,7 @@
 (def ^:dynamic *qs*
   (into #{} (range 1 (inc (count tpch-ra/queries)))))
 
-(defn query-tpch [stage-name query-language scale-factor expected i]
+(defn query-tpch [stage-name summary-key query-language scale-factor expected i]
   (let [q (nth tpch-ra/queries i)
         stage-name (keyword (str (name stage-name) "-" (:name (meta q))))
         run-query (case query-language
@@ -22,7 +22,7 @@
                           #(tu/query-ra q {:node %, :args args, :key-fn :snake-case-keyword}))
                     :sql (let [query+args (tpch/sql-query (inc i) scale-factor)]
                            #(xt/q % query+args {:key-fn :snake-case-keyword})))]
-    (cond-> {:t :call, :stage stage-name
+    (cond-> {:t :call, :stage stage-name, :summary-key summary-key
              :f (fn [{:keys [node]}]
                   (try
                     (run-query node)
@@ -33,12 +33,12 @@
                                 (when-let [mismatch (tpch/result-mismatch expected rows)]
                                   (throw (err/fault ::wrong-result (format "Q%02d doesn't match its pinned result: %s" (inc i) (pr-str mismatch)) mismatch))))))))
 
-(defn queries-stage [stage-name query-language scale-factor qs]
+(defn queries-stage [stage-name summary-key query-language scale-factor qs]
   (let [results (tpch/results scale-factor)]
     {:t :do, :stage stage-name
      :tasks (vec (for [i (range (count tpch-ra/queries))
                        :when (contains? qs (inc i))]
-                   (query-tpch stage-name query-language scale-factor (get results i) i)))}))
+                   (query-tpch stage-name summary-key query-language scale-factor (get results i) i)))}))
 
 (defmethod b/cli-flags :tpch [_]
   [["-s" "--scale-factor SCALE_FACTOR" "TPC-H scale factor to use"
@@ -77,28 +77,28 @@
    :tasks [(when-not no-load?
              {:t :do
               :stage :ingest
-              :tasks [{:t :call, :stage :submit-rels
+              :tasks [{:t :call, :stage :submit-rels, :summary-key :ingest-time-ms
                        :f (fn [{:keys [node]}] (tpch/submit-rels! node scale-factor))}
 
-                      {:t :call, :stage :sync,
+                      {:t :call, :stage :sync, :summary-key :ingest-time-ms
                        :f (fn [{:keys [node]}] (b/sync-node node (Duration/ofHours 5)))}
 
-                      {:t :call, :stage :finish-block
+                      {:t :call, :stage :finish-block, :summary-key :ingest-time-ms
                        :f (fn [{:keys [node]}] (b/flush-block! node))}
 
-                      {:t :call, :stage :compact
+                      {:t :call, :stage :compact, :summary-key :ingest-time-ms
                        :f (fn [{:keys [node]}] (b/compact! node))}
 
                       (b/settle-stage)]})
 
-           (queries-stage :cold-queries query-language scale-factor (or queries *qs*))
+           (queries-stage :cold-queries :cold-query-time-ms query-language scale-factor (or queries *qs*))
 
-           (queries-stage :hot-queries query-language scale-factor (or queries *qs*))
+           (queries-stage :hot-queries :hot-query-time-ms query-language scale-factor (or queries *qs*))
 
            (when (> hot-iterations 1)
              {:t :do
               :tasks (vec (for [n (range 2 (inc hot-iterations))]
-                            (queries-stage (keyword (str "hot-" n "-queries")) query-language scale-factor (or queries *qs*))))})]})
+                            (queries-stage (keyword (str "hot-" n "-queries")) nil query-language scale-factor (or queries *qs*))))})]})
 
 (comment
   (binding [*qs* #{1}]

@@ -19,7 +19,7 @@
          :repo \"xtdb/xtdb\"                                       ; github repo to filter by (default: xtdb/xtdb)
          :branch \"main\"                                          ; git branch to filter by (default: main)
          :limit 30                                                ; max number of results (default: 30)
-         :metric \"time-taken-ms\"                                 ; metric to extract (default: \"time-taken-ms\")
+         :metric \"time-taken-ms\"                                 ; field to extract, or a vector path into nested fields (default: \"time-taken-ms\")
          :unit :millis}                                           ; unit for conversion (default: :millis)
 
   Returns data in the format expected by plot-timeseries:
@@ -68,7 +68,7 @@
   | where isnotnull(log.benchmark) and (isnull(log.stage) or log.stage != \"init\")
   | extend
       benchmark = tostring(log.benchmark),
-      metric_value = todouble(log['%s']),
+      metric_value = todouble(log%s),
       github_repo = tostring(log['github-repo']),
       git_branch = tostring(log['git-branch']),
       run_id = tostring(log['github-run-id']),
@@ -82,7 +82,7 @@
                       log-field
                       log-field
                       log-field
-                      metric
+                      (apply str (map #(format "['%s']" %) (if (string? metric) [metric] metric)))
                       filter-extract
                       benchmark
                       repo

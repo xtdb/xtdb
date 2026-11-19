@@ -44,6 +44,11 @@
     {:rows rows-with-percent
      :total-ms total-ms}))
 
+(defn tpch-totals->string [{{{:keys [hot-query-time-ms cold-query-time-ms ingest-time-ms]} :stage-totals} :benchmark-summary}]
+  (str/join "\n" [(util/time-line "Hot query" hot-query-time-ms)
+                  (util/time-line "Cold query" cold-query-time-ms)
+                  (util/time-line "Ingest" ingest-time-ms)]))
+
 (defn yakbench-query->query-row
   [profile {:keys [id mean p50 p90 p99 n rows sum]}]
   {:query (str (name profile) "/" id)
@@ -246,8 +251,8 @@
 (defmulti summary->table :benchmark-type)
 
 (defmethod summary->table "tpch" [summary]
-  (let [{:keys [rows total-ms]} (tpch-summary->query-rows summary)]
-    (str (util/totals->string total-ms (:benchmark-total-time-ms summary))
+  (let [{:keys [rows]} (tpch-summary->query-rows summary)]
+    (str (tpch-totals->string summary)
          "\n\n"
          (rows->string [:temp :q :query-name :time-taken-ms :duration :percent-of-total] rows))))
 
@@ -312,9 +317,9 @@
 (defmulti summary->slack :benchmark-type)
 
 (defmethod summary->slack "tpch" [summary]
-  (let [{:keys [rows total-ms]} (tpch-summary->query-rows summary)]
+  (let [{:keys [rows]} (tpch-summary->query-rows summary)]
     (str
-     (util/totals->string total-ms (:benchmark-total-time-ms summary))
+     (tpch-totals->string summary)
      "\n\n"
      (util/wrap-slack-code
       (rows->string [:query :duration] rows)))))
@@ -419,7 +424,7 @@
 (defmulti summary->github-markdown :benchmark-type)
 
 (defmethod summary->github-markdown "tpch" [summary]
-  (let [{:keys [rows total-ms]} (tpch-summary->query-rows summary)
+  (let [{:keys [rows]} (tpch-summary->query-rows summary)
         columns [{:key :temp :header "Temp"}
                  {:key :q :header "Query"}
                  {:key :query-name :header "Query Name"}
@@ -428,7 +433,7 @@
                  {:key :percent-of-total :header "% of total"}]]
     (str (util/github-table columns rows)
          "\n\n"
-         (util/totals->string total-ms (:benchmark-total-time-ms summary)))))
+         (tpch-totals->string summary))))
 
 (defmethod summary->github-markdown "yakbench" [summary]
   (let [{:keys [rows total-ms]} (yakbench-summary->query-rows summary)

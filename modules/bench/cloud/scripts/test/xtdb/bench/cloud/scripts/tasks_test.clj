@@ -182,8 +182,19 @@
       (is (str/includes? result "Hot"))
       (is (str/includes? result "Q1"))
       (is (str/includes? result "Pricing"))
-      (is (str/includes? result "Total query time"))
-      (is (str/includes? result "Total benchmark time")))))
+      (is (str/includes? result "Hot query time")))))
+
+(deftest tpch-totals->string-test
+  (is (= (str/join "\n" ["Hot query time: 1.00s (PT1S)"
+                         "Cold query time: 2.50s (PT2.5S)"
+                         "Ingest time: 300ms (PT0.3S)"])
+         (summary/tpch-totals->string {:benchmark-summary {:stage-totals {:hot-query-time-ms 1000
+                                                                          :cold-query-time-ms 2500
+                                                                          :ingest-time-ms 300}}})))
+
+  (is (str/includes? (summary/tpch-totals->string {:benchmark-summary {:stage-totals {:hot-query-time-ms 1000}}})
+                     "Ingest time: N/A")
+      "a --no-load run has no ingest stages"))
 
 (deftest summary->table-yakbench-test
   (testing "yakbench table format"
@@ -213,14 +224,13 @@
       (is (str/includes? result "```"))
       (is (str/ends-with? result "```"))
       (is (str/includes? result "Hot Q1 Pricing"))
-      (is (str/includes? result "Total query time"))
-      (is (str/includes? result "Total benchmark time"))))
+      (is (str/includes? result "Hot query time"))))
 
   (testing "empty query stages still formats (validation happens earlier)"
     (let [test-summary {:benchmark-type "tpch" :query-stages []}
           result (summary/summary->slack test-summary)]
       (is (str/includes? result "```"))
-      (is (str/includes? result "Total query time")))))
+      (is (str/includes? result "Hot query time")))))
 
 (deftest summary->slack-yakbench-test
   (testing "yakbench slack format with single query (no split)"
@@ -259,13 +269,12 @@
       (is (str/includes? result "| Temp | Query |"))
       (is (str/includes? result "|"))
       (is (str/includes? result "| Hot | Q1 |"))
-      (is (str/includes? result "Total query time"))
-      (is (str/includes? result "Total benchmark time"))))
+      (is (str/includes? result "Hot query time"))))
 
   (testing "empty query stages still formats (validation happens earlier)"
     (let [test-summary {:benchmark-type "tpch" :query-stages []}
           result (summary/summary->github-markdown test-summary)]
-      (is (str/includes? result "Total query time")))))
+      (is (str/includes? result "Hot query time")))))
 
 (deftest summary->github-markdown-yakbench-test
   (testing "yakbench github markdown format"
@@ -310,7 +319,7 @@
   (testing "default format is table"
     (let [test-summary {:benchmark-type "tpch" :query-stages []}
           result (summary/render-summary test-summary {:format nil})]
-      (is (str/includes? result "Total query time")))))
+      (is (str/includes? result "Hot query time")))))
 
 (deftest summarize-log-test
   (testing "summarize-log with valid args"
@@ -321,7 +330,7 @@
           (is (string? result))
           (is (str/includes? result "Hot"))
           (is (str/includes? result "Q1"))
-          (is (str/includes? result "Total query time")))
+          (is (str/includes? result "Hot query time")))
         (finally
           (.delete temp-file)))))
 
@@ -331,7 +340,7 @@
         (spit temp-file "{\"stage\":\"hot-queries-q1-test\",\"time-taken-ms\":1000}")
         (let [result (tasks/summarize-log ["--format" "slack" "tpch" (.getPath temp-file)])]
           (is (str/includes? result "```"))
-          (is (str/includes? result "Total query time")))
+          (is (str/includes? result "Hot query time")))
         (finally
           (.delete temp-file)))))
 
@@ -961,6 +970,31 @@
                     charts/plot-timeseries-vega (fn [& _] nil)]
         (charts/plot-benchmark-timeseries "tpch" {})
         (is (= 1.0 (:filter-value @captured-opts)))))))
+
+(deftest plot-benchmark-timeseries-tpch-plots-hot-query-time-test
+  (doseq [bench-type ["tpch" "tpch-sql"]]
+    (let [captured-fetch (atom nil)
+          captured-plot (atom nil)]
+      (with-redefs [azure/fetch-azure-benchmark-timeseries (fn [opts]
+                                                             (reset! captured-fetch opts)
+                                                             [{:timestamp "2024-01-01" :value 120000}])
+                    charts/plot-timeseries-vega (fn [data opts] (reset! captured-plot [data opts]))]
+        (charts/plot-benchmark-timeseries bench-type {})
+        (is (= ["stage-totals" "hot-query-time-ms"] (:metric @captured-fetch)) bench-type)
+        (let [[data opts] @captured-plot]
+          (is (= [2.0] (map :value data)) "plotted in minutes")
+          (is (= :lower (:better opts)) bench-type))))))
+
+(deftest fetch-azure-benchmark-timeseries-reads-a-nested-metric-path-test
+  (let [captured-query (atom nil)]
+    (with-redefs [proc/shell (fn [_opts & args]
+                               (reset! captured-query (second (drop-while #(not= "--analytics-query" %) args)))
+                               {:out "[{\"TimeGenerated\":\"2024-01-01\",\"metric_value\":1}]"})]
+      (azure/fetch-azure-benchmark-timeseries {:workspace-id "ws", :metric ["stage-totals" "hot-query-time-ms"]})
+      (is (str/includes? @captured-query "todouble(log['stage-totals']['hot-query-time-ms'])"))
+
+      (azure/fetch-azure-benchmark-timeseries {:workspace-id "ws"})
+      (is (str/includes? @captured-query "todouble(log['time-taken-ms'])")))))
 
 (deftest plot-benchmark-timeseries-direction-test
   (doseq [[bench-type better] [["tpch" :lower] ["auctionmark" :higher]]]

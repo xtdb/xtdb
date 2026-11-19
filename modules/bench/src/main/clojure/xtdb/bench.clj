@@ -214,8 +214,9 @@
 
 (defn wrap-stage
   "Times the stage `f` and logs its report.
-   A task's `:verify`, when given, receives `f`'s return value once the clock has stopped, so the stage's time excludes it; if it throws, the stage doesn't report."
-  [f {:keys [stage setup? verify]}]
+   A task's `:verify`, when given, receives `f`'s return value once the clock has stopped, so the stage's time excludes it; if it throws, the stage doesn't report.
+   A task's `:summary-key`, when given, adds the stage's time to that key under `:stage-totals` on the run's summary record."
+  [f {:keys [stage setup? verify summary-key]}]
   (fn instrumented-stage [worker]
     (if setup?
       (log/info "Starting stage:" stage "(setup)")
@@ -231,6 +232,8 @@
         (verify result))
       (when setup?
         (swap! (:setup-time-ms worker) + elapsed-ms))
+      (when summary-key
+        (swap! (:stage-totals worker) update summary-key (fnil + 0) elapsed-ms))
       (log-report worker {:stage stage
                           :time-taken-ms elapsed-ms
                           :process-cpu-time-ms process-cpu-ms
@@ -414,7 +417,8 @@
       (letfn [(execute []
                 (util/with-open [bench-log-wrt (when bench-log-file (io/writer bench-log-file))]
                   (let [worker (into (assoc (->Worker node (Random. seed) (Clock/systemUTC) (random-uuid) (System/getProperty "user.name") bench-log-wrt)
-                                            :setup-time-ms (atom 0))
+                                            :setup-time-ms (atom 0)
+                                            :stage-totals (atom {}))
                                      (cond
                                        (vector? ->state) (apply (first ->state) (rest ->state))
                                        (fn? ->state) (->state)))
@@ -435,6 +439,7 @@
                     (let [total-ms (- (System/currentTimeMillis) start-ms)
                           setup-ms @(:setup-time-ms worker)
                           benchmark-ms (- total-ms setup-ms)
+                          stage-totals @(:stage-totals worker)
                           tx-metrics (get-transaction-metrics)
                           tx-count (reduce + 0 (map :count (vals tx-metrics)))
                           ;; Calculate throughput using configured duration if available
@@ -454,6 +459,7 @@
                                                                   :transactions tx-metrics)
                                            throughput (assoc :throughput throughput)
                                            timeout (assoc :timeout timeout)
+                                           (seq stage-totals) (assoc :stage-totals stage-totals)
                                            (seq run-context) (merge run-context)))
                       ;; Human-readable summary
                       (let [secs (/ benchmark-ms 1000.0)

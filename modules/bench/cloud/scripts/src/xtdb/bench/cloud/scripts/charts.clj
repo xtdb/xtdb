@@ -81,18 +81,25 @@
    :filter-param - parameter name in log.parameters to filter by
    :filter-value - default value to filter by
    :filter-is-string - true if filter-value is a string (for KQL quoting)
-   :metric - log field to chart (default: time-taken-ms)
+   :metric - log field to chart, or a vector path into nested fields (default: time-taken-ms)
+   :duration? - true if :metric is a duration in ms, charted in minutes with lower better (implied for time-taken-ms)
    :y-label - y-axis label (default: Duration (minutes))"
   {"tpch"       {:benchmark-name "TPC-H (OLAP)"
                  :title "TPC-H Benchmark Performance"
                  :filter-param "scale-factor"
                  :filter-value 1.0
-                 :filter-is-string false}
+                 :filter-is-string false
+                 :metric ["stage-totals" "hot-query-time-ms"]
+                 :duration? true
+                 :y-label "Hot query time (minutes)"}
    "tpch-sql" {:benchmark-name "TPC-H (OLAP, SQL)"
                :title "TPC-H (SQL) Benchmark Performance"
                :filter-param "scale-factor"
                :filter-value 1.0
-               :filter-is-string false}
+               :filter-is-string false
+               :metric ["stage-totals" "hot-query-time-ms"]
+               :duration? true
+               :y-label "Hot query time (minutes)"}
    "yakbench"   {:benchmark-name "Yakbench"
                  :title "Yakbench Benchmark Performance"
                  :filter-param "scale-factor"
@@ -159,10 +166,10 @@
                              {:benchmark-type benchmark-type
                               :supported (keys benchmark-configs)})))
          {:keys [benchmark-name title filter-param filter-value filter-is-string
-                 metric y-label]} config
+                 metric y-label duration?]} config
          metric (or metric "time-taken-ms")
          y-label (or y-label "Duration (minutes)")
-         duration-metric? (= metric "time-taken-ms")
+         duration-metric? (or duration? (= metric "time-taken-ms"))
          ;; Allow override of filter-value via opts, but only when the
          ;; benchmark's filter-param matches (e.g. --scale-factor should
          ;; only override benchmarks that filter by scale-factor)
