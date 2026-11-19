@@ -228,10 +228,7 @@ locals {
       | where isnotempty(query_name)
       | where bench_id in (runs)
       | summarize duration_ms = max(duration_ms) by bench_id, query_name, TimeGenerated;
-      let thresholds = raw | summarize p20 = percentile(duration_ms, 20) by query_name;
       raw
-      | join kind=inner thresholds on query_name
-      | where duration_ms > p20
       | top ${var.anomaly_baseline_n * 20} by TimeGenerated desc
       | order by TimeGenerated asc
       | project TimeGenerated, query_name, duration_ms
