@@ -38,6 +38,32 @@ class RowMask private constructor(private val words: LongArray, val rowCount: In
         return sel
     }
 
+    /**
+     * The rows of this mask that [refinement] keeps, over this mask's [rowCount] rows.
+     *
+     * [refinement] is over this mask's set rows: its bit `k` decides the `k`th of them.
+     */
+    fun refine(refinement: RowMask): RowMask {
+        require(refinement.rowCount == cardinality) {
+            "refinement is over ${refinement.rowCount} rows, mask sets $cardinality"
+        }
+
+        val out = LongArray(words.size)
+        var k = 0
+        for (w in words.indices) {
+            var word = words[w]
+            var kept = 0L
+            while (word != 0L) {
+                val lowest = word and -word
+                if ((refinement.words[k ushr 6] ushr (k and 63)) and 1L != 0L) kept = kept or lowest
+                k++
+                word = word xor lowest
+            }
+            out[w] = kept
+        }
+        return RowMask(out, rowCount)
+    }
+
     companion object {
         /**
          * Wraps [words] without copying: the caller MUST NOT write to them afterwards.

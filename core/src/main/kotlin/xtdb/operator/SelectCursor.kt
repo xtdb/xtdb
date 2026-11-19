@@ -2,7 +2,7 @@ package xtdb.operator
 
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.ICursor
-import xtdb.arrow.MaskedVector
+import xtdb.arrow.MaskedRelation
 import xtdb.arrow.RelationReader
 import java.util.function.Consumer
 
@@ -31,7 +31,7 @@ class SelectCursor(
                     }
 
                     else -> {
-                        c.accept(RelationReader.from(inRel.vectors.map { MaskedVector(it, mask) }, mask.cardinality))
+                        c.accept(MaskedRelation.of(inRel, mask))
                         advanced = true
                     }
                 }
