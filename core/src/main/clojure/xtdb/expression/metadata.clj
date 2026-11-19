@@ -1,6 +1,7 @@
 (ns xtdb.expression.metadata
   (:require [xtdb.expression :as expr]
             [xtdb.expression.constraints :as constraints]
+            [xtdb.expression.temporal :as temporal]
             [xtdb.expression.walk :as ewalk]
             [xtdb.serde.types :as st]
             [xtdb.types :as types]
@@ -206,8 +207,10 @@
   (let [ts-unit (st/timestamp-type->unit ts-type)]
     {:return-type #xt/type :f64, :->call-code #(do `(/ ~@% (double ~(types/ts-units-per-second ts-unit))))}))
 
-(defmethod expr/codegen-call [:_meta_double :date] [_]
-  {:return-type #xt/type :f64, :->call-code #(do `(* ~@% 86400.0))})
+(defmethod expr/codegen-call [:_meta_double :date] [expr]
+  (temporal/on-date-days expr
+    (fn [_]
+      {:return-type #xt/type :f64, :->call-code #(do `(* ~@% 86400.0))})))
 
 (defmethod expr/codegen-call [:_meta_double :time-local] [{[^VectorType$Mono time-type] :arg-types}]
   (let [ts-unit (st/time-type->unit time-type)]

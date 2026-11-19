@@ -9,7 +9,8 @@
             [xtdb.serde :as serde]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
-            [xtdb.types :as types])
+            [xtdb.types :as types]
+            [xtdb.vector.reader :as vr])
   (:import (java.time Duration Instant LocalDate LocalDateTime LocalTime Period ZoneId ZoneOffset ZonedDateTime)
            java.time.temporal.ChronoUnit
            (org.apache.arrow.vector PeriodDuration)
@@ -1245,6 +1246,33 @@
       true (list '< a-milli 'b) #xt/date "2023-01-01" #xt/date "2023-01-02"
       true (list '== a-milli 'b) #xt/date "2023-01-01" #xt/date "2023-01-01"
       true (list '> 'b a-milli) #xt/date "2023-01-01" #xt/date "2023-01-02")))
+
+(t/deftest test-date-milli-args
+  (letfn [(project-milli [form ^LocalDate a]
+            (with-open [rel (vr/rel-reader [(tu/open-vec "a" #xt/type [:date :milli] [a])])]
+              (-> (et/run-projection rel form)
+                  (update :res first))))]
+    (t/are [res res-type form a] (= {:res res, :res-type res-type} (project-milli form a))
+      #xt/date "2023-05-01" #xt/type [:date :milli] '(date_trunc "MONTH" a) #xt/date "2023-05-17"
+      #xt/date "1969-12-01" #xt/type [:date :milli] '(date_trunc "MONTH" a) #xt/date "1969-12-15"
+      #xt/date "2023-06-17" #xt/type [:date :milli] '(+ a (single-field-interval 1 "MONTH" 2 0)) #xt/date "2023-05-17"
+      #xt/date "2023-06-17" #xt/type [:date :milli] '(+ (single-field-interval 1 "MONTH" 2 0) a) #xt/date "2023-05-17"
+      #xt/date "2022-05-17" #xt/type [:date :milli] '(- a (single-field-interval 1 "YEAR" 2 0)) #xt/date "2023-05-17"
+      #xt/date-time "2023-05-17T12:00" #xt/type [:timestamp-local :micro] '(+ a (single-field-interval 12 "HOUR" 2 0)) #xt/date "2023-05-17"
+      -16 #xt/type :i32 '(- (date_trunc "MONTH" a) a) #xt/date "2023-05-17"
+      true #xt/type :bool '(< a #xt/date "2023-05-18") #xt/date "2023-05-17"
+      true #xt/type :bool '(< a "2023-05-18") #xt/date "2023-05-17"
+      false #xt/type :bool '(<> a #xt/date "2023-05-17") #xt/date "2023-05-17"
+      1684281600.0 #xt/type :f64 '(_meta_double a) #xt/date "2023-05-17"
+      2023 #xt/type :i32 '(extract "YEAR" a) #xt/date "2023-05-17"
+      #xt/date "1969-12-15" #xt/type [:date :day] (list 'cast 'a (types/->type [:date :day])) #xt/date "1969-12-15"
+      #xt/date "1969-12-15" #xt/type [:date :milli] (list 'cast 'a (types/->type [:date :milli])) #xt/date "1969-12-15"
+      #xt/date-time "1969-12-15T00:00" #xt/type [:timestamp-local :micro] (list 'cast 'a (types/->type [:timestamp-local :micro])) #xt/date "1969-12-15"
+      "1969-12-15" #xt/type :utf8 (list 'cast 'a #xt/type :utf8) #xt/date "1969-12-15"))
+
+  (t/is (anomalous? [:unsupported nil #"date-milli"]
+                    (with-open [rel (vr/rel-reader [(tu/open-vec "a" #xt/type [:date :milli] [#xt/date "2023-05-17"])])]
+                      (et/run-projection rel '(generate_series a a (single-field-interval 1 "MONTH" 2 0)))))))
 
 (t/deftest test-uoe-thrown-for-unsupported-div
   (t/is (anomalous? [:unsupported nil]
