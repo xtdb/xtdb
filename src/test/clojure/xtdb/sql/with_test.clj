@@ -1,6 +1,7 @@
 (ns xtdb.sql.with-test
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
+            [xtdb.operator.let :as let]
             [xtdb.sql :as sql]
             xtdb.sql-test
             [xtdb.test-util :as tu]))
@@ -31,6 +32,15 @@
 
     (t/is (= [{:foo-id 5, :baz-id 5}]
              (xt/q tu/*node* sql {:table-info {#xt/table bar #{"_id"}}})))))
+
+(t/deftest test-with-mat-clause-spilled
+  (xt/execute-tx tu/*node* [[:put-docs :bar {:xt/id 1, :v 10} {:xt/id 2, :v "twenty"} {:xt/id 3, :v 30.5}]])
+
+  (binding [let/*spill-threshold-rows* 1]
+    (t/is (= #{{:foo-id 1, :baz-v 10} {:foo-id 2, :baz-v "twenty"} {:foo-id 3, :baz-v 30.5}}
+             (set (xt/q tu/*node* "WITH MATERIALIZED foo AS (SELECT _id, v FROM bar)
+                                  SELECT foo._id foo_id, baz.v baz_v
+                                  FROM foo JOIN foo AS baz ON foo._id = baz._id"))))))
 
 (t/deftest disallow-period-specs-on-ctes-3440
   (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1}]])

@@ -8,6 +8,7 @@ import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorReader
 import xtdb.expression.map.IndexHasher.Companion.hasher
+import xtdb.operator.Spill
 import xtdb.arrow.FieldName
 import xtdb.arrow.VectorTypes
 import java.util.function.IntUnaryOperator

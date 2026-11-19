@@ -15,8 +15,10 @@
          :bound-relation ::lp/ra-expression
          :relation ::lp/ra-expression))
 
+(def ^:dynamic *spill-threshold-rows* 100000)
+
 (defmethod lp/emit-expr :let [{{:keys [binding-sym]} :opts, :keys [bound-relation relation]} emit-opts]
-  (let [{->bound-cursor :->cursor, :as emitted-bound-rel} (lp/emit-expr bound-relation emit-opts)
+  (let [{->bound-cursor :->cursor, bound-vec-types :vec-types, :as emitted-bound-rel} (lp/emit-expr bound-relation emit-opts)
         {->body-cursor :->cursor, body-vec-types :vec-types, :as emitted-body-rel} (lp/emit-expr relation (assoc-in emit-opts [:let-bindings binding-sym] emitted-bound-rel))]
     {:op :let
      :children [emitted-bound-rel emitted-body-rel]
@@ -24,7 +26,7 @@
      :stats (:stats emitted-body-rel)
      :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span] :as opts}]
                  (cond-> (util/with-close-on-catch [bound-cursor (ICursor/wrapInterruptible (->bound-cursor opts))
-                                                    factory (LetCursorFactory. allocator bound-cursor)
+                                                    factory (LetCursorFactory. allocator bound-cursor (update-keys bound-vec-types str) *spill-threshold-rows*)
                                                     body-cursor (->body-cursor (assoc-in opts [:let-bindings binding-sym] factory))]
                            (.wrapBodyCursor factory body-cursor))
                    (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))}))
