@@ -43,7 +43,6 @@
         {:keys [benchmark-total-time-ms benchmark-summary]} (parse-benchmark-summary lines)]
     {:all-stages stages
      :query-stages query-stages
-     :ingest-stages (filterv #(contains? #{"submit-docs" "sync" "finish-block" "compact"} (:stage %)) stages)
      :benchmark-total-time-ms benchmark-total-time-ms
      :benchmark-summary benchmark-summary}))
 
