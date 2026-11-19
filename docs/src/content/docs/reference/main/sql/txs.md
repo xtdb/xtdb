@@ -4,6 +4,24 @@ title: SQL Transactions
 
 For examples on how to submit SQL transactions in each client library, see the [individual driver documentation](/drivers).
 
+## ID types
+
+Every document's `_id` must be one of these types:
+
+| Type | Example | Stored by |
+| --- | --- | --- |
+| `UUID` | `UUID '97a392d5-5e3f-406f-9651-a828ee79b156'` | the UUID itself |
+| `VARCHAR` | `'james'` | its hash |
+| `SMALLINT`, `INTEGER`, `BIGINT` | `42` | its hash |
+| Keyword (Clojure only) | `:james` | its hash |
+
+Any other type fails the transaction with `Invalid ID type`.
+
+- IDs of different types are different records: `'42'` and `42` don't match.
+- Integers match across widths: `42` as an `INTEGER` and as a `BIGINT` are the same record.
+
+See [Data modeling in XTDB](/about/data-modeling-in-xtdb#choosing-ids) for choosing between them, and for why UUIDs aren't hashed.
+
 ## Transaction operations
 
 ### `INSERT`
@@ -22,7 +40,7 @@ const selectQuery = rr.Sequence(rr.Optional(colNames, "skip"), "<select query>")
 return rr.Diagram(rr.Stack(insertIntoTable, rr.Choice(0, values, records, selectQuery)))
 ```
 
-- Documents must contain an `_id` column.
+- Documents must contain an `_id` column - see [ID types](#id-types).
 - By default, the document will be inserted for valid-time between now and end-of-time.
   This can be overridden by including `_valid_from` and/or `_valid_to` columns in the document.
 - If the document already exists, 'insert' behaves like an upsert - it will overwrite the existing document for the valid-time range specified (or now → end-of-time if not provided).

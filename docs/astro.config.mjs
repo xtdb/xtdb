@@ -119,6 +119,7 @@ export default defineConfig({
                         'about/txs-in-xtdb',
                         'about/time-in-xtdb',
                         'about/types-in-xtdb',
+                        'about/data-modeling-in-xtdb',
                         { label: 'Community', link: '/intro/community'}
                     ]
                 },
