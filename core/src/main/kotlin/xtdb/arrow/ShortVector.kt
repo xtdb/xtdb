@@ -39,8 +39,6 @@ class ShortVector private constructor(
 
     override fun writeValue0(v: ValueReader) = writeShort(v.readShort())
 
-    override fun getMetaDouble(idx: Int) = getShort(idx).toDouble()
-
     override fun hashCode0(idx: Int, hasher: Hasher) = hasher.hash(getShort(idx).toDouble())
 
     override fun openSlice(al: BufferAllocator) =

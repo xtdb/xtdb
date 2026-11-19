@@ -24,7 +24,12 @@ sealed interface MetadataFlavour {
 
     interface Presence : MetadataFlavour
 
-    interface Number : Numeric
+    interface Number : Numeric {
+        fun getAsDouble(idx: Int): Double
+
+        override fun getMetaDouble(idx: Int) = getAsDouble(idx)
+    }
+
     interface DateTime : Numeric
     interface Duration : Numeric
     interface TimeOfDay : Numeric

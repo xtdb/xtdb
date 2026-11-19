@@ -85,8 +85,6 @@ class DoubleVector private constructor(
 
     override fun writeValue0(v: ValueReader) = writeDouble(v.readDouble())
 
-    override fun getMetaDouble(idx: Int) = getDouble(idx)
-
     override fun hashCode0(idx: Int, hasher: Hasher): Int = hasher.hash(getDouble(idx))
 
     override fun openSlice(al: BufferAllocator) =
