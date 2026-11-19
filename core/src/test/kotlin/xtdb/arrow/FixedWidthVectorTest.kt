@@ -22,6 +22,7 @@ import xtdb.arrow.VectorType.Companion.I32
 import xtdb.test.AllocatorResolver
 import xtdb.arrow.VectorType.Companion.ofType
 import kotlin.collections.map
+import java.nio.ByteBuffer
 import kotlin.random.Random
 import kotlin.use
 
@@ -110,6 +111,25 @@ class FixedWidthVectorTest {
 
         ShortVector(al, "s", false).use { vec ->
             assertThrows<UnsupportedOperationException> { vec.setInt(0, 42) }
+        }
+    }
+
+    @Test
+    fun `writeBytes is supported only on a fixed-size-binary vector, at its byte width`(al: BufferAllocator) {
+        FixedSizeBinaryVector(al, "b", false, 4).use { vec ->
+            vec.writeBytes(byteArrayOf(1, 2, 3, 4))
+            vec.getObject(0) shouldBe byteArrayOf(1, 2, 3, 4)
+            assertThrows<AssertionError> { vec.writeBytes(byteArrayOf(1, 2, 3)) }
+            assertThrows<AssertionError> { vec.writeBytes(byteArrayOf(1, 2, 3, 4, 5)) }
+            vec.valueCount shouldBe 1
+        }
+
+        IntVector.open(al, "i", false).use { vec ->
+            assertThrows<UnsupportedOperationException> { vec.writeBytes(ByteBuffer.allocate(4)) }
+        }
+
+        LongVector(al, "l", false).use { vec ->
+            assertThrows<UnsupportedOperationException> { vec.writeBytes(ByteBuffer.allocate(8)) }
         }
     }
 

@@ -96,7 +96,7 @@ class IntervalDayTimeVector private constructor(
                     putInt(value.days)
                     putInt((value.nanos / NANOS_PER_MILLI).toInt())
                     flip()
-                    writeBytes(this)
+                    writeBytes0(this)
                 }
             }
 
@@ -106,7 +106,7 @@ class IntervalDayTimeVector private constructor(
                     putInt(value.period.days)
                     putInt((value.duration.toNanos() / NANOS_PER_MILLI).toInt())
                     flip()
-                    writeBytes(this)
+                    writeBytes0(this)
                 }
             }
 
@@ -152,7 +152,7 @@ class IntervalMonthDayNanoVector private constructor(
             putInt(days)
             putLong(nanos)
             flip()
-            writeBytes(this)
+            writeBytes0(this)
         }
     }
 
