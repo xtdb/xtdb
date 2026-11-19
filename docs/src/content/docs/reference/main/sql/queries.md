@@ -3,7 +3,15 @@ title: SQL Queries
 ---
 
 <details>
-<summary>Changelog (last updated v2.2)</summary>
+<summary>Changelog (last updated v2.2.1)</summary>
+
+v2.2.1: `WITH MATERIALIZED` spills to disk
+
+: A [`WITH MATERIALIZED`](#with-clause) clause spills its results to disk past an internal threshold.
+
+  Previously its results were held in memory for the whole of the query, so a large enough one could exhaust memory.
+
+  There are no upgrade steps.
 
 v2.2: a transaction's basis is fixed at its first query
 
@@ -56,6 +64,8 @@ return rr.Diagram(rr.Sequence("WITH", rr.OneOrMore(withClause, ",")))
 
 - `WITH` clauses in XTDB are 'optimization fences' - XTDB will not attempt to optimize an outer query into a `WITH` clause, or across `WITH` clauses.
 - Supply `MATERIALIZED` to eagerly materialize a `WITH` clause, so that the results can be re-used multiple times in the same query.
+
+    Past an internal threshold, the results spill to disk under the JVM's temporary directory (`java.io.tmpdir`), as ORDER BY and joins do, rather than being held in memory, so a query needs temp space in proportion to them.
 - `WITH RECURSIVE` is not yet supported in XTDB.
 
 ### query term
