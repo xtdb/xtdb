@@ -331,6 +331,16 @@
                                           {:a #xt/date "2018-05-01"}]}]]))
         "dates")
 
+  (t/is (= [{:min #xt/date "1969-12-31",
+             :max #xt/date "2022-01-01"}]
+           (tu/query-ra '[:group-by {:columns [{min (min a)}
+                                     {max (max a)}]}
+                          [::tu/pages {a #xt/type [:date :milli]}
+                           [[{:a #xt/date "2022-01-01"}
+                             {:a #xt/date "1969-12-31"}
+                             {:a #xt/date "2018-05-01"}]]]]))
+        "date-millis")
+
   (t/is (= [{:min #xt/date-time "2018-05-01T12:00",
              :max #xt/date-time "2022-01-01T15:34:24.523286"}]
            (tu/query-ra '[:group-by {:columns [{min (min a)}

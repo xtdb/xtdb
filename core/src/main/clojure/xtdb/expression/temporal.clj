@@ -134,10 +134,14 @@
 
 ;;;; `CAST`
 
-(defmethod expr/codegen-cast [:date :date] [{:keys [^VectorType target-type]}]
-  ;; date-days and date-millis are both just represented as days throughout the EE,
-  ;; conversion is done when we read from/write to the vector.
-  {:return-type target-type, :->call-code first})
+(def ^:private ^:const millis-per-day 86400000)
+
+(defmethod expr/codegen-cast [:date :date] [{:keys [^VectorType source-type, ^VectorType target-type]}]
+  {:return-type target-type
+   :->call-code (case [(st/date-type->unit source-type) (st/date-type->unit target-type)]
+                  ([:day :day] [:milli :milli]) first
+                  [:milli :day] (fn [[x]] `(int (Math/floorDiv ~x ~millis-per-day)))
+                  [:day :milli] (fn [[x]] `(unchecked-multiply (long ~x) ~millis-per-day)))})
 
 (defmethod expr/codegen-cast [:time-local :time-local] [{:keys [^VectorType source-type, ^VectorType target-type]}]
   (let [src-tsunit (st/time-type->unit source-type)
@@ -181,6 +185,14 @@
           (assoc :->call-code (fn [[x]] (->call-code [(->day [x])])))))
     cast))
 
+(defn- with-day-target [{:keys [target-type]} {:keys [->call-code batch-bindings] :as cast}]
+  (if (= #xt/type [:date :milli] target-type)
+    (let [{->milli :->call-code, milli-bb :batch-bindings} (expr/codegen-cast {:source-type #xt/type [:date :day], :target-type target-type})]
+      (-> cast
+          (assoc :batch-bindings (into (vec batch-bindings) milli-bb))
+          (assoc :->call-code (fn [args] (->milli [(->call-code args)])))))
+    cast))
+
 (defmethod expr/codegen-cast [:date :timestamp-local] [{:keys [^VectorType target-type] :as opts}]
   (with-day-source opts
     (let [hz (types/ts-units-per-second (st/timestamp-type->unit target-type))]
@@ -222,11 +234,12 @@
                                                             ~(with-conversion tm src-tsunit tgt-tsunit))
                                              ~hz ~zone-sym))}))
 
-(defmethod expr/codegen-cast [:timestamp-local :date] [{:keys [^VectorType source-type, ^VectorType target-type]}]
-  (let [hz (types/ts-units-per-second (st/timestamp-type->unit source-type))]
-    {:return-type target-type
-     :->call-code (fn [[ts]]
-                    `(TemporalMath/epochDay ~ts ~hz))}))
+(defmethod expr/codegen-cast [:timestamp-local :date] [{:keys [^VectorType source-type, ^VectorType target-type] :as opts}]
+  (with-day-target opts
+    (let [hz (types/ts-units-per-second (st/timestamp-type->unit source-type))]
+      {:return-type target-type
+       :->call-code (fn [[ts]]
+                      `(TemporalMath/epochDay ~ts ~hz))})))
 
 (defmethod expr/codegen-cast [:timestamp-local :time-local] [{:keys [^VectorType source-type, ^VectorType target-type]}]
   (let [src-tsunit (st/timestamp-type->unit source-type)
@@ -246,13 +259,14 @@
                     (-> `(TemporalMath/fromLocal ~ts ~(types/ts-units-per-second src-tsunit) ~zone-sym)
                         (with-floored-conversion src-tsunit tgt-tsunit)))}))
 
-(defmethod expr/codegen-cast [:timestamp-tz :date] [{:keys [^VectorType source-type, ^VectorType target-type]}]
-  (let [hz (types/ts-units-per-second (st/timestamp-type->unit source-type))
-        [zone-sym zone-binding] (default-zone-binding)]
-    {:return-type target-type
-     :batch-bindings [zone-binding]
-     :->call-code (fn [[tstz]]
-                    `(TemporalMath/epochDay (TemporalMath/toLocal (Math/floorDiv ~tstz ~hz) 1 ~zone-sym) 1))}))
+(defmethod expr/codegen-cast [:timestamp-tz :date] [{:keys [^VectorType source-type, ^VectorType target-type] :as opts}]
+  (with-day-target opts
+    (let [hz (types/ts-units-per-second (st/timestamp-type->unit source-type))
+          [zone-sym zone-binding] (default-zone-binding)]
+      {:return-type target-type
+       :batch-bindings [zone-binding]
+       :->call-code (fn [[tstz]]
+                      `(TemporalMath/epochDay (TemporalMath/toLocal (Math/floorDiv ~tstz ~hz) 1 ~zone-sym) 1))})))
 
 (defmethod expr/codegen-cast [:timestamp-tz :time-local] [{:keys [^VectorType source-type, ^VectorType target-type]}]
   (let [src-tsunit (st/timestamp-type->unit source-type)
@@ -365,13 +379,13 @@
 (defn local-date->epoch-day ^long [^LocalDate d]
   (.toEpochDay d))
 
-(defmethod expr/codegen-cast [:utf8 :date] [{:keys [^VectorType target-type]}]
-  ;; FIXME this assumes date-unit :day
-  {:return-type target-type
-   :->call-code (fn [[s]]
-                  `(->> (expr/resolve-string ~s)
-                        (parse-with-error-handling "date" #(LocalDate/parse %))
-                        (local-date->epoch-day)))})
+(defmethod expr/codegen-cast [:utf8 :date] [{:keys [^VectorType target-type] :as opts}]
+  (with-day-target opts
+    {:return-type target-type
+     :->call-code (fn [[s]]
+                    `(->> (expr/resolve-string ~s)
+                          (parse-with-error-handling "date" #(LocalDate/parse %))
+                          (local-date->epoch-day)))}))
 
 (defn local-time->nano ^long [^LocalTime t]
   (.toNanoOfDay t))
