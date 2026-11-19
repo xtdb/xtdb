@@ -7,6 +7,7 @@ import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
 import xtdb.arrow.FieldName
 import xtdb.arrow.VectorTypes
+import xtdb.operator.Spill
 import xtdb.util.closeOnCatch
 import java.util.function.Consumer
 

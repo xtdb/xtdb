@@ -1,4 +1,4 @@
-package xtdb.operator.join
+package xtdb.operator
 
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.arrow.Relation
@@ -47,7 +47,7 @@ internal class Spill(
 
     companion object {
         fun open(al: BufferAllocator, dataRel: Relation): Spill = safelyOpening {
-            val dataPath = openTempFile("xtdb-build-side-", ".arrow")
+            val dataPath = openTempFile("xtdb-spill-", ".arrow")
             val dataUnloader = open { dataRel.startUnload(dataPath) }
             Spill(al, dataRel, dataPath, dataUnloader)
         }
