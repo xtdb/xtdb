@@ -510,9 +510,7 @@ class RunEndEncodedVectorTest {
         }
     }
 
-    private val fromRowTwo = object : VectorMask {
-        override fun isSet(idx: Int) = idx >= 2
-    }
+    private val fromRowTwo = rowMask(6) { it >= 2 }
 
     @Test
     fun `min and max under a mask cover the rows it selects`() {

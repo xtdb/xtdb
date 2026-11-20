@@ -7,8 +7,8 @@ private inline fun setMinMax(vec: VectorReader, set: (Long, Long) -> Unit) {
     var min = Long.MAX_VALUE
     var max = Long.MIN_VALUE
 
-    for (i in 0..<vec.valueCount) {
-        val v = vec.getLong(i)
+    for (rdr in vec.valueReader()) {
+        val v = rdr.readLong()
         min = minOf(min, v)
         max = maxOf(max, v)
     }

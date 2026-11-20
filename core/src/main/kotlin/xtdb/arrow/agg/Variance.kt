@@ -25,7 +25,7 @@ sealed class Variance(
         private val sumx2Agg = Sum("x2", "sumx2", F64, hasZeroRow).build(al, args)
         private val countAgg = Count(fromName, "count", hasZeroRow).build(al, args)
 
-        override fun aggregate(inRel: RelationReader, groupMapping: GroupMapping, mask: VectorMask) {
+        override fun aggregate(inRel: RelationReader, groupMapping: GroupMapping, mask: RowMask) {
             val inVec = inRel.vectorForOrNull(fromName) ?: return
 
             DoubleVector(al, "x2", nullable = true)

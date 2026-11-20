@@ -26,8 +26,6 @@ class RelationAsStructReader(
 
     override fun vectorForOrNull(name: String): VectorReader? = rel.vectorForOrNull(name)
 
-    override fun getObject(idx: Int): Any = rel[idx]
-
     override fun getObject(idx: Int, keyFn: IKeyFn<*>): Any = rel[idx, keyFn]
 
     override fun rowCopier(dest: VectorWriter): RowCopier {
@@ -39,11 +37,14 @@ class RelationAsStructReader(
         }
     }
 
-    override fun valueReader(): ValueReader {
+    override fun valueReader(): RowValueReader {
         val rdrs = rel.vectors.associate { it.name to it.valueReader() }
 
-        return object : ValueReader {
-            override var pos = 0
+        return object : RowValueReader {
+            private val rowCount = valueCount
+            override fun hasNext() = pos + 1 < rowCount
+
+            override var pos = -1
                 set(value) {
                     field = value
                     rdrs.values.forEach { it.pos = value }

@@ -16,7 +16,7 @@
            (java.time.temporal ChronoUnit)
            org.apache.arrow.vector.types.TimeUnit
            (xtdb.api.error Incorrect)
-           (xtdb.arrow NullVector RelationReader Vector VectorReader)
+           (xtdb.arrow DenseUnionVector NullVector RelationReader Vector VectorReader)
            (xtdb.operator ProjectionSpec$Star)
            (xtdb.time Interval)
            (xtdb.util StringUtil)))
@@ -100,6 +100,23 @@
            (-> (.select (expr/->expression-selection-spec (expr/form->expr '(and true nil) {}) {})
                         tu/*allocator* (vr/rel-reader [] 1) {} vw/empty-args)
                (alength)))))
+
+(t/deftest row-mask-sets-the-rows-the-selection-selects
+  (let [input-types {:var-types '{sel #xt/type [:? :bool]}}
+        expr (expr/form->expr 'sel input-types)
+        selection-spec (expr/->expression-selection-spec expr input-types)
+        row-mask-spec (expr/->expression-row-mask-spec expr input-types)]
+    (doseq [row-count [0 1 63 64 65 127 128 130]]
+      (let [sels (for [idx (range row-count)]
+                   (when-not (= 5 (mod idx 7))
+                     (zero? (mod idx 3))))
+            expected (keep-indexed (fn [idx sel] (when sel idx)) sels)]
+        (with-open [in-rel (tu/open-rel {:sel sels})]
+          (let [mask (.rowMask row-mask-spec tu/*allocator* in-rel {} vw/empty-args)]
+            (t/is (= row-count (.getRowCount mask)) (str row-count " rows"))
+            (t/is (= expected (vec (.toSelection mask))) (str row-count " rows"))
+            (t/is (= expected (vec (.select selection-spec tu/*allocator* in-rel {} vw/empty-args)))
+                  (str row-count " rows"))))))))
 
 (defn project
   "Use to test an expression on some example documents. See also, project1.
@@ -1284,6 +1301,22 @@
              (run-test '(cond (> x 100) "big", (> x 10) "small")
                        [500 50 5 nil])))))
 
+(t/deftest test-projection-reads-the-current-row-of-columns-read-on-only-some-rows
+  (t/is (= {:res [11 20 33 40 55]
+            :res-type #xt/type :i64}
+           (with-open [rel (tu/open-rel {:p [true false true false true], :x [1 2 3 4 5], :y [10 20 30 40 50]})]
+             (run-projection rel '(if p (+ x y) y))))))
+
+(t/deftest test-projection-reads-a-union-column-absent-on-the-rows-that-dont-read-it
+  (with-open [p (Vector/fromList tu/*allocator* "p" [true false true false])
+              x (doto (DenseUnionVector. tu/*allocator* "x" [] 0)
+                  (.writeObject 12)
+                  (.writeUndefined)
+                  (.writeObject "hello")
+                  (.writeUndefined))]
+    (t/is (= [12 0 "hello" 0]
+             (:res (run-projection (vr/rel-reader [p x] 4) '(if p x 0)))))))
+
 (t/deftest test-let
   (t/is (= {:res [6 9 12 nil]
             :res-type #xt/type [:? :i64]}
@@ -1932,8 +1965,14 @@
     (t/is (= [true] (:res (run-projection rel '(== s s))))
           "struct comparison recurses into the field, so the bottom is reached one level down")))
 
-;; `RelationAsStructReader.valueReader()` has no `pos`, so an expression can only ever see a copy -
-;; which is why the read below goes through `rowCopier` rather than reading the view directly.
+(t/deftest an-expression-reads-a-star-struct-directly
+  (with-open [inner (tu/open-rel {:a [1 nil 3]})
+              s (.project (ProjectionSpec$Star. "s" #xt/type [:struct {"a" [:? :i64]}])
+                          tu/*allocator* inner {} vw/empty-args)]
+    (let [rel (vr/rel-reader [s] 3)]
+      (t/is (= [1 nil 3] (:res (run-projection rel '(. s a)))))
+      (t/is (= [true nil true] (:res (run-projection rel '(== s s))))))))
+
 (t/deftest a-star-struct-cannot-carry-the-bottom-to-a-read-5948
   (with-open [inner (vr/rel-reader [(doto (NullVector. "a" false 0)
                                       (.writeUndefined)

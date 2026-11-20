@@ -20,7 +20,7 @@
       (fn [{inner-vec-types :vec-types, inner-stats :stats :as inner-rel}]
         (let [input-types {:var-types inner-vec-types
                            :param-types param-types}
-              selector (expr/->expression-selection-spec (expr/form->expr predicate input-types) input-types)]
+              selector (expr/->expression-row-mask-spec (expr/form->expr predicate input-types) input-types)]
           {:op :select
            :stats inner-stats
            :children [inner-rel]

@@ -7,6 +7,7 @@ import org.apache.arrow.vector.BaseFixedWidthVector
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import xtdb.InternalApi
+import xtdb.api.query.IKeyFn
 import org.apache.arrow.vector.types.TimeUnit
 import xtdb.arrow.VectorIndirection.Companion.Selection
 import xtdb.arrow.VectorIndirection.Companion.Slice
@@ -26,6 +27,7 @@ sealed class FixedWidthVector : MonoVector() {
 
     protected abstract val al: BufferAllocator
     internal abstract val byteWidth: Int
+
     override val vectors: Iterable<Vector> = emptyList()
     override val monoType get() = Scalar(arrowType)
 
@@ -40,6 +42,8 @@ sealed class FixedWidthVector : MonoVector() {
         }
 
     final override fun isNull(idx: Int) = validityBuffer?.getBoolean(idx) == false
+
+    final override fun valueReader(): RowValueReader = FixedWidthRows(this)
 
     final override fun writeUndefined() {
         validityBuffer?.writeBit(valueCount, 0)
@@ -268,4 +272,30 @@ sealed class FixedWidthVector : MonoVector() {
         validityBuffer?.close()
         dataBuffer.close()
     }
+}
+
+private class FixedWidthRows(private val vec: FixedWidthVector) :
+    ValidityWordRows(vec.valueCount) {
+
+    private val data = vec.dataBuffer
+    override val validity get() = vec.validityBuffer
+
+    private fun rawPos(): Int {
+        if (NULL_CHECKS && isNull) throw NullPointerException("null at index $pos")
+        return pos
+    }
+
+    override val leg get() = vec.getLeg(pos)
+
+    override fun readBoolean() = vec.getBoolean(pos)
+    override fun readByte() = data.getByte(rawPos())
+    override fun readShort() = data.getShort(rawPos())
+    override fun readInt() = data.getInt(rawPos())
+    override fun readLong() = data.getLong(rawPos())
+    override fun readFloat() = data.getFloat(rawPos())
+    override fun readDouble() = data.getDouble(rawPos())
+    override fun readAsLong() = vec.getAsLong(pos)
+    override fun readAsDouble() = vec.getAsDouble(pos)
+    override fun readBytes() = vec.getBytes(pos)
+    override fun readObject(keyFn: IKeyFn<*>) = vec.getObject(pos, keyFn)
 }
