@@ -101,6 +101,23 @@
                         tu/*allocator* (vr/rel-reader [] 1) {} vw/empty-args)
                (alength)))))
 
+(t/deftest row-mask-sets-the-rows-the-selection-selects
+  (let [input-types {:var-types '{sel #xt/type [:? :bool]}}
+        expr (expr/form->expr 'sel input-types)
+        selection-spec (expr/->expression-selection-spec expr input-types)
+        row-mask-spec (expr/->expression-row-mask-spec expr input-types)]
+    (doseq [row-count [0 1 63 64 65 127 128 130]]
+      (let [sels (for [idx (range row-count)]
+                   (when-not (= 5 (mod idx 7))
+                     (zero? (mod idx 3))))
+            expected (keep-indexed (fn [idx sel] (when sel idx)) sels)]
+        (with-open [in-rel (tu/open-rel {:sel sels})]
+          (let [mask (.rowMask row-mask-spec tu/*allocator* in-rel {} vw/empty-args)]
+            (t/is (= row-count (.getRowCount mask)) (str row-count " rows"))
+            (t/is (= expected (vec (.toSelection mask))) (str row-count " rows"))
+            (t/is (= expected (vec (.select selection-spec tu/*allocator* in-rel {} vw/empty-args)))
+                  (str row-count " rows"))))))))
+
 (defn project
   "Use to test an expression on some example documents. See also, project1.
 

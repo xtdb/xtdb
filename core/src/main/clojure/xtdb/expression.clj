@@ -18,9 +18,9 @@
            (org.apache.arrow.vector PeriodDuration)
            (org.apache.arrow.vector.types.pojo ArrowType$Decimal)
            (org.apache.commons.codec.binary Hex)
-           (xtdb.arrow ListValueReader RelationReader ValueBox ValueReader Vector VectorMask VectorReader VectorType VectorType$Listy VectorType$Mono VectorType$Nothing VectorType$Poly VectorType$Struct)
+           (xtdb.arrow ListValueReader RelationReader RowMask ValueBox ValueReader Vector VectorMask VectorReader VectorType VectorType$Listy VectorType$Mono VectorType$Nothing VectorType$Poly VectorType$Struct)
            (xtdb.expression PgFormat)
-           (xtdb.operator MaskSpec ProjectionSpec SelectionSpec)
+           (xtdb.operator MaskSpec ProjectionSpec RowMaskSpec SelectionSpec)
            (xtdb.pgwire PgTypes)
            xtdb.time.Interval
            (xtdb.util StringUtil)))
@@ -2591,10 +2591,28 @@
                 ~n-sym))
      :finish (fn [n-sym] `(Arrays/copyOf ~sel-sym (int ~n-sym)))}))
 
-(def ^:private emit-selection
+(def ^:private row-mask-words-sink
+  (let [words-sym (gensym 'words)]
+    {:bindings (fn [row-count-sym] [words-sym `(long-array (unsigned-bit-shift-right (+ ~row-count-sym 63) 6))])
+     :init 0
+     :step (fn [word-sym idx-sym selected?]
+             `(let [word# (if ~selected?
+                            (bit-or ~word-sym (bit-shift-left 1 (bit-and ~idx-sym 63)))
+                            ~word-sym)]
+                (if (== 63 (bit-and ~idx-sym 63))
+                  (do
+                    (aset ~words-sym (unsigned-bit-shift-right ~idx-sym 6) word#)
+                    0)
+                  word#)))
+     :finish (fn [word-sym]
+               `(do
+                  (when-not (zero? ~word-sym)
+                    (aset ~words-sym (dec (alength ~words-sym)) ~word-sym))
+                  ~words-sym))}))
+
+(defn- ->selection-emitter [{sink-bindings :bindings, :keys [init step finish]}]
   (-> (fn [expr opts]
         (let [{:keys [continue] {:keys [bindings advance-forms]} ::iterators} (emit-row-expr expr opts)
-              {sink-bindings :bindings, :keys [init step finish]} selection-sink
               row-count-sym (gensym 'row_count)
               acc-sym (gensym 'acc)]
           {:!selection-fn (delay
@@ -2615,6 +2633,9 @@
                                 eval))}))
       (util/lru-memoize)
       wrap-zone-id-cache-buster))
+
+(def ^:private emit-selection (->selection-emitter selection-sink))
+(def ^:private emit-row-mask-words (->selection-emitter row-mask-words-sink))
 
 (defmacro ^:private rethrowing-anomalies [& body]
   `(try
@@ -2682,3 +2703,17 @@
                                                             :var-types (->var-types in-rel)})]
           (rethrowing-anomalies
             (@!selection-fn in-rel schema args)))))))
+
+(defn ->expression-row-mask-spec ^RowMaskSpec [expr {:keys [var-types param-types]}]
+  (let [expr (->predicate-expr expr)]
+    ;; analysed here as well as per batch, so that an expression the EE can't compile throws when the spec is built
+    (emit-row-mask-words expr {:param-types param-types
+                               :var-types var-types})
+
+    (reify RowMaskSpec
+      (rowMask [_ _al in-rel schema args]
+        (let [{:keys [!selection-fn]} (emit-row-mask-words expr {:param-types (->param-types args)
+                                                                 :var-types (->var-types in-rel)})]
+          (RowMask/ofWords (rethrowing-anomalies
+                             (@!selection-fn in-rel schema args))
+                           (.getRowCount in-rel)))))))
