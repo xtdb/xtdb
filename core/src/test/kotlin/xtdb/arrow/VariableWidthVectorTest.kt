@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.extension.ExtendWith
 import xtdb.test.AllocatorResolver
 import xtdb.arrow.Vector.Companion.openVector
@@ -101,6 +102,17 @@ class VariableWidthVectorTest {
                     dest.asList shouldBe (offset..<(offset + len)).map { src[it] }
                 }
             }
+        }
+    }
+
+    @Test
+    fun `a non-numeric vector's getAsLong and getAsDouble are unsupported`() {
+        Utf8Vector(allocator, "v", false).use { v ->
+            v.writeObject("12")
+
+            assertThrows<UnsupportedOperationException> { v.getAsLong(0) }
+            assertThrows<UnsupportedOperationException> { v.getAsDouble(0) }
+            assertThrows<UnsupportedOperationException> { v.valueReader().readAsLong() }
         }
     }
 }

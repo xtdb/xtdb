@@ -56,6 +56,8 @@ interface VectorReader : ILookup, AutoCloseable {
     fun getLong(idx: Int): Long = unsupported("getLong")
     fun getFloat(idx: Int): Float = unsupported("getFloat")
     fun getDouble(idx: Int): Double = unsupported("getDouble")
+    fun getAsLong(idx: Int): Long = unsupported("getAsLong")
+    fun getAsDouble(idx: Int): Double = unsupported("getAsDouble")
     fun getBytes(idx: Int): ByteBuffer = unsupported("getBytes")
     fun getPointer(idx: Int, reuse: ArrowBufPointer = ArrowBufPointer()): ArrowBufPointer = unsupported("getPointer")
 
