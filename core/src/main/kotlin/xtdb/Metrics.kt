@@ -105,9 +105,6 @@ object Metrics {
     /**
      * Run [block] inside a tracing span named [name], tagging the span with [attributes].
      * A null receiver is a cheap no-op — [block] runs without any span machinery.
-     *
-     * Mirrors `xtdb.metrics/with-span`; keep them in sync until the remaining Clojure
-     * callers move across.
      */
     inline fun <R> Tracer?.withSpan(
         name: String,
