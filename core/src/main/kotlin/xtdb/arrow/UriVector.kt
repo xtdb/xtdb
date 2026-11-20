@@ -26,12 +26,6 @@ class UriVector(override val inner: Utf8Vector) : ExtensionVector(), MetadataFla
 
     override val metadataFlavours get() = listOf(this)
 
-    override fun valueReader() = object : ValueReader {
-        override var pos = 0
-        override val isNull: Boolean get() = this@UriVector.isNull(pos)
-        override fun readObject(): Any? = getObject(pos)
-    }
-
     override fun openSlice(al: BufferAllocator) = UriVector(inner.openSlice(al))
 
     override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = perRowHashes(this, out, sel, hasher)

@@ -114,7 +114,7 @@ class FixedSizeListVector private constructor(
 
         override val isNull get() = this@FixedSizeListVector.isNull(pos)
         override fun readList() = listValReader
-        override fun readObject() = readList()
+        override fun readObject(keyFn: IKeyFn<*>) = getObject(pos, keyFn)
     }
 
     override val metadataFlavours get() = listOf(this)

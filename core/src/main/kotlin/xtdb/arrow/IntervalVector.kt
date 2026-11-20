@@ -21,7 +21,7 @@ private class IntervalValueReader(private val vec: VectorReader) : ValueReader {
     override var pos = 0
     override val isNull: Boolean get() = vec.isNull(pos)
 
-    override fun readObject(): Any? = vec.getObject(pos)
+    override fun readObject(keyFn: IKeyFn<*>) = vec.getObject(pos, keyFn)
 }
 
 class IntervalYearMonthVector private constructor(

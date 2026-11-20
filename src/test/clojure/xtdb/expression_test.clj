@@ -2307,6 +2307,13 @@
     (t/is (= "[\"a\" \"b\"]" (project1 '(cast ["a" "b"] #xt/type :utf8) {})))
     (t/is (= "[[1 2] [3 4]]" (project1 '(cast [[1 2] [3 4]] #xt/type :utf8) {}))))
 
+  (t/testing "list elements read from a vector print as their logical values"
+    (t/is (= "[:foo :bar]" (project1 '(cast x #xt/type :utf8) {:x [:foo :bar]})))
+    (t/is (= "[#uuid \"123e4567-e89b-12d3-a456-426614174000\"]"
+             (project1 '(cast x #xt/type :utf8) {:x [#uuid "123e4567-e89b-12d3-a456-426614174000"]})))
+    (t/is (= "[#{1}]" (project1 '(cast x #xt/type :utf8) {:x [#{1}]})))
+    (t/is (= "[{\"a\" 1} {\"b\" 2}]" (project1 '(cast x #xt/type :utf8) {:x [{:a 1} {:b 2}]}))))
+
   (t/testing "structs"
     (t/is (= "{\"a\" 1}" (project1 '(cast {:a 1} #xt/type :utf8) {})))
     (t/is (= "{\"x\" \"hello\", \"y\" 42}" (project1 '(cast {:x "hello" :y 42} #xt/type :utf8) {}))))

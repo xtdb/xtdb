@@ -7,6 +7,7 @@ import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.InternalApi
+import xtdb.api.query.IKeyFn
 import xtdb.util.Hasher
 import xtdb.arrow.extensions.XtExtensionVector
 import java.nio.ByteBuffer
@@ -76,7 +77,14 @@ sealed class ExtensionVector : MonoVector() {
         return inner.rowCopier0(src.inner)
     }
 
-    override fun valueReader(): ValueReader = inner.valueReader()
+    override fun valueReader(): ValueReader {
+        val inner = inner.valueReader()
+
+        return object : ValueReader by inner {
+            override fun readObject() = readObject { it }
+            override fun readObject(keyFn: IKeyFn<*>) = getObject(pos, keyFn)
+        }
+    }
 
     override fun clear() = inner.clear()
     override fun close() = inner.close()

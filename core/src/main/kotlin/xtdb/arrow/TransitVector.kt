@@ -30,8 +30,5 @@ class TransitVector(override val inner: VarBinaryVector) : ExtensionVector(), Me
 
     override fun openSlice(al: BufferAllocator) = TransitVector(inner.openSlice(al))
 
-    // we override this because we want getObject to return the object itself
-    override fun valueReader() = ValueReader.ForVector(this)
-
     override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = perRowHashes(this, out, sel, hasher)
 }
