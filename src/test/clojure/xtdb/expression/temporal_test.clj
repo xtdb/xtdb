@@ -1246,6 +1246,60 @@
       true (list '== a-milli 'b) #xt/date "2023-01-01" #xt/date "2023-01-01"
       true (list '> 'b a-milli) #xt/date "2023-01-01" #xt/date "2023-01-02")))
 
+(t/deftest temporal-ne-is-the-negation-of-eq-across-types-and-units-6435-6441
+  (letfn [(cast-to [col col-type] (list 'cast col (types/->type col-type)))]
+    (t/are [eq? a-expr b-expr a b]
+        (= [eq? (not eq?)]
+           [(et/project1 (list '== a-expr b-expr) {:a a, :b b})
+            (et/project1 (list '<> a-expr b-expr) {:a a, :b b})])
+
+      true 'a (cast-to 'b [:date :milli]) #xt/date "2020-01-01" #xt/date "2020-01-01"
+      false 'a (cast-to 'b [:date :milli]) #xt/date "2020-01-01" #xt/date "2020-01-02"
+
+      true 'a 'b #xt/date "2020-01-01" #xt/date-time "2020-01-01T00:00"
+      false 'a 'b #xt/date "2020-01-01" #xt/date-time "2020-01-01T00:00:01"
+      true 'a 'b #xt/date "2020-01-01" #xt/zoned-date-time "2020-01-01T00:00Z"
+      true 'a 'b #xt/date-time "2020-01-01T00:00" #xt/zoned-date-time "2020-01-01T00:00Z"
+      false 'a 'b #xt/date-time "2020-01-01T00:00" #xt/zoned-date-time "2020-01-01T00:00+01:00"
+
+      true (cast-to 'a [:timestamp-local :milli]) (cast-to 'b [:timestamp-local :micro])
+      #xt/date-time "2020-01-01T00:00:00.123" #xt/date-time "2020-01-01T00:00:00.123"
+
+      false (cast-to 'a [:timestamp-local :milli]) (cast-to 'b [:timestamp-local :micro])
+      #xt/date-time "2020-01-01T00:00:00.123" #xt/date-time "2020-01-01T00:00:00.123001"
+
+      true (cast-to 'a [:timestamp-tz :milli "UTC"]) (cast-to 'b [:timestamp-tz :nano "UTC"])
+      #xt/zoned-date-time "2020-01-01T00:00:00.123Z" #xt/zoned-date-time "2020-01-01T00:00:00.123Z"
+
+      true (cast-to 'a [:time-local :second]) (cast-to 'b [:time-local :micro]) #xt/time "12:00:00" #xt/time "12:00:00"
+      false (cast-to 'a [:time-local :second]) (cast-to 'b [:time-local :micro]) #xt/time "12:00:00" #xt/time "12:00:01"
+
+      true (cast-to 'a [:duration :milli]) (cast-to 'b [:duration :micro]) #xt/duration "PT1S" #xt/duration "PT1S"
+      false (cast-to 'a [:duration :milli]) (cast-to 'b [:duration :micro]) #xt/duration "PT1S" #xt/duration "PT2S"
+
+      true (cast-to 'a [:interval :year-month]) (cast-to 'b [:interval :month-day-nano]) #xt/interval "P1Y" #xt/interval "P1Y"
+      false (cast-to 'a [:interval :year-month]) (cast-to 'b [:interval :month-day-nano]) #xt/interval "P1Y" #xt/interval "P13M"
+
+      true ['a] ['b] #xt/date "2020-01-01" #xt/date-time "2020-01-01T00:00"
+      false ['a] ['b] #xt/date "2020-01-01" #xt/date-time "2020-01-01T00:00:01"
+
+      true {:x 'a} {:x 'b} #xt/date "2020-01-01" #xt/date-time "2020-01-01T00:00"
+      false {:x 'a} {:x 'b} #xt/date "2020-01-01" #xt/date-time "2020-01-01T00:00:01"))
+
+  (t/are [a-expr b-expr a b expected]
+      (= expected
+         [(et/project1 (list '== a-expr b-expr) {:a a, :b b})
+          (et/project1 (list '<> a-expr b-expr) {:a a, :b b})])
+
+    ['a] ['b] nil #xt/date "2020-01-01" [nil nil]
+    {:x 'a} {:x 'b} nil #xt/date "2020-01-01" [nil nil]
+    {:x 'a} {:y 'b} #xt/date "2020-01-01" #xt/date "2020-01-01" [false true])
+
+  (t/is (= [false nil]
+           (et/project '(<> a b) [{:a #xt/date "2020-01-01", :b #xt/date-time "2020-01-01T00:00"}
+                                  {:a #xt/date "2020-01-01", :b nil}]))
+        "a null operand gives a null <>, as it does a null ="))
+
 (t/deftest test-uoe-thrown-for-unsupported-div
   (t/is (anomalous? [:unsupported nil]
                     (et/project1 '(/ (+ (single-field-interval 1 "MONTH" 2 0) (single-field-interval 3 "MINUTE" 2 0)) 3) {})))

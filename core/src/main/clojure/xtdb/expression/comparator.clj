@@ -21,11 +21,17 @@
 (defmethod expr/codegen-call [:null_eq :null :null] [_]
   {:return-type #xt/type :bool, :->call-code (constantly true)})
 
-(defmethod expr/codegen-call [:<> :num :num] [_]
-  {:return-type #xt/type :bool, :->call-code #(do `(not (== ~@%)))})
-
-(defmethod expr/codegen-call [:<> :any :any] [_]
-  {:return-type #xt/type :bool, :->call-code #(do `(not= ~@%))})
+(defmethod expr/codegen-call [:<> :any :any] [expr]
+  (let [{:keys [->call-code continue-call] :as eq-call} (expr/codegen-call (assoc expr :f :==))]
+    (cond-> eq-call
+      ->call-code (assoc :->call-code (comp #(do `(not ~%)) ->call-code))
+      continue-call (assoc :continue-call
+                           (fn [f emitted-args]
+                             (continue-call (fn [return-type code]
+                                              (if (= #xt/type :null return-type)
+                                                (f return-type code)
+                                                (f return-type `(not ~code))))
+                                            emitted-args))))))
 
 ;; distinct_from is the SQL standard NULL-safe inequality operator (IS DISTINCT FROM).
 ;; NULL IS DISTINCT FROM NULL → false (they're not distinct)

@@ -520,3 +520,9 @@
                  FROM y, x"
                 tx))
             "All Allen interval predicates should evaluate correctly"))))
+
+(t/deftest date-ne-timestamp-is-the-negation-of-eq-6435
+  (t/is (= [{:eq true, :ne false, :dist false}]
+           (xt/q tu/*node* "SELECT DATE '2020-01-01' = TIMESTAMP '2020-01-01 00:00' AS eq,
+                                   DATE '2020-01-01' <> TIMESTAMP '2020-01-01 00:00' AS ne,
+                                   DATE '2020-01-01' IS DISTINCT FROM TIMESTAMP '2020-01-01 00:00' AS dist"))))
