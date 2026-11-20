@@ -79,15 +79,15 @@
                                 "application.name" "XTDB Clojure API"}
                    :children
                    [{:name "query.cursor.project"
-                     :attributes {"cursor.page_count" "1"
+                     :attributes {"cursor.page_count" 1
                                   "cursor.peak_memory_bytes" true
-                                  "cursor.row_count" "1"
+                                  "cursor.row_count" 1
                                   "cursor.type" "project"}
                      :children []}
                     {:name "query.cursor.table"
-                     :attributes {"cursor.page_count" "1"
+                     :attributes {"cursor.page_count" 1
                                   "cursor.peak_memory_bytes" true
-                                  "cursor.row_count" "1"
+                                  "cursor.row_count" 1
                                   "cursor.type" "table"}
                      :children []}]}]
                  (mapv bool-ify-peak-memory-bytes (build-span-tree @!spans))))))))
@@ -118,15 +118,15 @@
                                   "application.name" "PostgreSQL JDBC Driver"}
                      :children
                      [{:name "query.cursor.project"
-                       :attributes {"cursor.page_count" "1"
+                       :attributes {"cursor.page_count" 1
                                     "cursor.peak_memory_bytes" true
-                                    "cursor.row_count" "1"
+                                    "cursor.row_count" 1
                                     "cursor.type" "project"}
                        :children []}
                       {:name "query.cursor.table"
-                       :attributes {"cursor.page_count" "1"
+                       :attributes {"cursor.page_count" 1
                                     "cursor.peak_memory_bytes" true
-                                    "cursor.row_count" "1"
+                                    "cursor.row_count" 1
                                     "cursor.type" "table"}
                        :children []}]}]
                    (mapv bool-ify-peak-memory-bytes (build-span-tree @!spans)))))))))
@@ -212,7 +212,11 @@
               scan-span (first scan-spans)] 
           (t/is (= "query.cursor.scan.foo" (:name scan-span)))
           (t/is (= "public.foo" (get-in scan-span [:attributes "scan_source"])))
-          (t/is (= "xtdb" (get-in scan-span [:attributes "scan_db"]))))))))
+          (t/is (= "xtdb" (get-in scan-span [:attributes "scan_db"])))
+          (t/is (every? int? (map (:attributes scan-span) ["scan_files_pruned" "scan_files_used"
+                                                           "scan_pages_pruned" "scan_pages_used"
+                                                           "scan_rows_read"]))
+                "the scan counters export as long attributes"))))))
 
 (t/deftest an-operator-span-reports-its-own-peak-memory-not-its-inputs
   (let [!spans (atom [])
@@ -231,11 +235,11 @@
             peak (fn [cursor-type]
                    (some (fn [{:keys [attributes]}]
                            (when (= cursor-type (get attributes "cursor.type"))
-                             (parse-long (get attributes "cursor.peak_memory_bytes"))))
+                             (get attributes "cursor.peak_memory_bytes")))
                          spans))]
         (t/is (pos? (peak "sort")) "the sort buffers its input")
         (t/is (< (peak "project") (peak "sort")) "the project above the sort doesn't count the sort's buffers")
-        (t/is (<= (peak "sort") (parse-long (str (get-in query-span [:attributes "query.peak_memory_bytes"]))))
+        (t/is (<= (peak "sort") (get-in query-span [:attributes "query.peak_memory_bytes"]))
               "the query's peak still covers every operator")))))
 
 (defn- without-scan-metrics
@@ -282,11 +286,11 @@
                    (mapv :name tx-child-spans)))
           (let [[put-tx update-tx _patch-tx _delete-tx _erase-tx] tx-spans]
             (t/is (= {:name "xtdb.transaction"
-                      :attributes {"operations.count" "1"}
+                      :attributes {"operations.count" 1}
                       :children []}
                      put-tx))
             (t/is (= {:name "xtdb.transaction"
-                      :attributes {"operations.count" "1"}
+                      :attributes {"operations.count" 1}
                       :children
                       [{:name "xtdb.transaction.sql"
                         :attributes {"query.text" "UPDATE users SET foo='bar' WHERE name='alice'"},
@@ -296,19 +300,19 @@
                                        "query.peak_memory_bytes" true},
                           :children
                           [{:name "query.cursor.project"
-                            :attributes {"cursor.page_count" "0" "cursor.peak_memory_bytes" true "cursor.row_count" "0" "cursor.type" "project"},
+                            :attributes {"cursor.page_count" 0 "cursor.peak_memory_bytes" true "cursor.row_count" 0 "cursor.type" "project"},
                             :children []}
                            {:name "query.cursor.rename"
-                            :attributes {"cursor.page_count" "0" "cursor.peak_memory_bytes" true "cursor.row_count" "0" "cursor.type" "rename"},
+                            :attributes {"cursor.page_count" 0 "cursor.peak_memory_bytes" true "cursor.row_count" 0 "cursor.type" "rename"},
                             :children []}
                            {:name "query.cursor.select"
-                            :attributes {"cursor.page_count" "0" "cursor.peak_memory_bytes" true "cursor.row_count" "0" "cursor.type" "select"},
+                            :attributes {"cursor.page_count" 0 "cursor.peak_memory_bytes" true "cursor.row_count" 0 "cursor.type" "select"},
                             :children []}
                            {:name "query.cursor.scan.users"
                             :attributes
-                            {"cursor.page_count" "0",
+                            {"cursor.page_count" 0,
                              "cursor.peak_memory_bytes" true,
-                             "cursor.row_count" "0",
+                             "cursor.row_count" 0,
                              "cursor.type" "scan",
                              "scan_db" "xtdb",
                              "scan_source" "public.users"},
@@ -335,7 +339,7 @@
         (let [span-tree (build-span-tree @!spans)
               tx-span (first (filter #(= (:name %) "xtdb.transaction") span-tree))]
           (t/is (= {:name "xtdb.transaction"
-                    :attributes {"operations.count" "3"}
+                    :attributes {"operations.count" 3}
                     :children []}
                    tx-span)))))))
 

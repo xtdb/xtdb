@@ -251,12 +251,10 @@ internal class SourceLogTxIndexer(
                     )
                 )
 
-                tracer.withSpan(
-                    "xtdb.transaction.patch-docs",
-                    attributes = mapOf(
-                        "db" to dbName, "schema" to tableRef.schemaName, "table" to tableRef.tableName,
-                    ),
-                ) {
+                tracer.withSpan("xtdb.transaction.patch-docs") { span ->
+                    span?.tag("db", dbName)
+                    span?.tag("schema", tableRef.schemaName)
+                    span?.tag("table", tableRef.tableName)
                     table(tableRef).patchDocs(docs, validFrom, validTo)
                 }
             }
@@ -296,10 +294,8 @@ internal class SourceLogTxIndexer(
                     else Relation.streamLoader(allocator, argsRdr.getObject(opIdx) as ByteArray)
 
                 argsLoader.use {
-                    tracer.withSpan(
-                        "xtdb.transaction.sql",
-                        attributes = mapOf("query.text" to queryStr),
-                    ) {
+                    tracer.withSpan("xtdb.transaction.sql") { span ->
+                        span?.tag("query.text", queryStr)
                         forEachArgRow(argsLoader) { args ->
                             executeSql(queryStr, args, qOpts, opts.user)
                         }

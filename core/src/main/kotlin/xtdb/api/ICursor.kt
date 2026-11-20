@@ -102,14 +102,14 @@ interface ICursor : Spliterator<RelationReader>, AutoCloseable {
                 allocator.use {
                     inner.close()
                     span?.let { s ->
-                        s.tag("cursor.total_time_ms", totalTime.toMillis().toString())
+                        s.tag("cursor.total_time_ms", totalTime.toMillis())
                         timeToFirstPage?.let { ttfp ->
-                            s.tag("cursor.time_to_first_page_ms", ttfp.toMillis().toString())
+                            s.tag("cursor.time_to_first_page_ms", ttfp.toMillis())
                         }
-                        s.tag("cursor.page_count", pageCount.toString())
-                        s.tag("cursor.row_count", rowCount.toString())
-                        s.tag("cursor.peak_memory_bytes", peakMemoryBytes.toString())
-                        attrs?.toMap()?.forEach { (k, v) -> s.tag(k, v.toString()) }
+                        s.tag("cursor.page_count", pageCount.toLong())
+                        s.tag("cursor.row_count", rowCount)
+                        s.tag("cursor.peak_memory_bytes", peakMemoryBytes)
+                        attrs?.tag(s)
                         s.end(endTime.asMicros, TimeUnit.MICROSECONDS)
                     }
                 }

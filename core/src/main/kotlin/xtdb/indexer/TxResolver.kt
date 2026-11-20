@@ -197,10 +197,8 @@ internal class TxResolver(
         defaultTz: ZoneId?,
         user: String?,
         userMetadata: Any?,
-    ): ResolvedTx = tracer.withSpan(
-        "xtdb.transaction",
-        attributes = mapOf("operations.count" to (txOps?.valueCount ?: 0).toString()),
-    ) {
+    ): ResolvedTx = tracer.withSpan("xtdb.transaction") { span ->
+        span?.tag("operations.count", (txOps?.valueCount ?: 0).toLong())
         val userMetadataMap = userMetadata as? Map<*, *>
         // The RESOLVED head (the queue), not the durable head: a tx must system-time-smooth against the
         // queued predecessors it resolves behind, which lead the durable index.
