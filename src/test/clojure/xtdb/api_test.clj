@@ -8,7 +8,7 @@
             [xtdb.time :as time]
             [xtdb.util :as util])
   (:import (java.lang AutoCloseable)
-           (java.time Duration ZoneId)))
+           (java.time Duration LocalDate ZoneId)))
 
 (t/use-fixtures :each (tu/with-each-connectable (t/join-fixtures [tu/with-mock-clock tu/with-node])))
 
@@ -29,6 +29,10 @@
 
   (t/is (anomalous? [:incorrect :missing-id]
                     (-> (xt/submit-tx *conn* [[:put-docs :docs {}]])
+                        (util/rethrowing-cause))))
+
+  (t/is (anomalous? [:incorrect :xtdb/date-out-of-range]
+                    (-> (xt/submit-tx *conn* [[:put-docs :docs {:xt/id 1, :d LocalDate/MAX}]])
                         (util/rethrowing-cause)))))
 
 (t/deftest round-trips-lists
