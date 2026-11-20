@@ -75,20 +75,21 @@ class DateMilliVector internal constructor(
     override val byteWidth = Long.SIZE_BYTES
     override val arrowType = ArrowType.Date(MILLISECOND)
 
-    // for historical reasons, the EE always writes dates as days-since-epoch, so we need to convert here.
-    override fun getLong(idx: Int) = getLong0(idx) / MILLIS_PER_DAY
-    override fun writeLong(v: Long) = writeLong0(Math.multiplyExact(v, MILLIS_PER_DAY))
+    override fun getLong(idx: Int) = getLong0(idx)
+    override fun writeLong(v: Long) = writeLong0(v)
 
-    override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = LocalDate.ofEpochDay(getLong(idx))!!
+    private fun getEpochDay(idx: Int) = Math.floorDiv(getLong(idx), MILLIS_PER_DAY)
+
+    override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = LocalDate.ofEpochDay(getEpochDay(idx))!!
 
     override fun writeObject0(value: Any) {
-        if (value is LocalDate) value.inRangeOf(this) { writeLong(value.toEpochDay()) }
+        if (value is LocalDate) value.inRangeOf(this) { writeLong(Math.multiplyExact(value.toEpochDay(), MILLIS_PER_DAY)) }
         else throw InvalidWriteObjectException(this, value)
     }
 
     override fun writeValue0(v: ValueReader) = writeLong(v.readLong())
 
-    override fun getMetaDouble(idx: Int) = (getLong(idx) * SECONDS_PER_DAY).toDouble()
+    override fun getMetaDouble(idx: Int) = (getEpochDay(idx) * SECONDS_PER_DAY).toDouble()
 
     override fun hashCode0(idx: Int, hasher: Hasher) = hasher.hash(getMetaDouble(idx))
 
