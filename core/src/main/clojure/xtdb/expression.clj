@@ -2499,7 +2499,7 @@
            batch-binding)
          (sequence (comp (distinct) cat)))))
 
-(defn- iterated-reader-bindings
+(defn iterated-reader-bindings
   [batch-bindings]
   (-> (reduce (fn [{:keys [iters] :as acc} [sym init]]
                 (if-not (::iterated? (meta sym))

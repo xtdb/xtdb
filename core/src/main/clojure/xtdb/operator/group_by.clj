@@ -106,6 +106,7 @@
 (def emit-agg
   (-> (fn [{:keys [to-type val-expr step-expr]} input-opts]
         (let [group-mapping-sym (gensym 'group-mapping)
+              group-mapping-rows-sym (gensym 'group-mapping-rows)
               to-col-type (types/vec-type->col-type to-type)
 
               acc-expr {:op :variable, :variable acc-sym, :idx group-idx-sym
@@ -118,15 +119,19 @@
                             :else acc-expr}
                            (expr/prepare-expr))
 
-              {:keys [continue] :as emitted-expr} (expr/codegen-expr agg-expr input-opts)]
+              {:keys [continue] :as emitted-expr} (expr/codegen-expr agg-expr (assoc input-opts :iterate-rows? true))
+              {:keys [bindings advance-forms]} (expr/iterated-reader-bindings (expr/batch-bindings emitted-expr))]
 
           {:eval-agg (-> `(fn [~(-> acc-sym (expr/with-tag MonoVector))
                                ~(-> expr/rel-sym (expr/with-tag RelationReader))
                                ~(-> group-mapping-sym (expr/with-tag VectorReader))
                                ~(-> mask-sym (expr/with-tag VectorMask))]
-                            (let [~@(expr/batch-bindings emitted-expr)]
+                            (let [~@bindings
+                                  ~group-mapping-rows-sym (.valueReader ~group-mapping-sym)]
                               (dotimes [~expr/idx-sym (.getRowCount ~expr/rel-sym)]
-                                (let [~group-idx-sym (.getInt ~group-mapping-sym ~expr/idx-sym)]
+                                ~@advance-forms
+                                (.next ~group-mapping-rows-sym)
+                                (let [~group-idx-sym (.readInt ~group-mapping-rows-sym)]
                                   (when (>= ~group-idx-sym (.getValueCount ~acc-sym))
                                     (.setNull ~acc-sym ~group-idx-sym))
 
