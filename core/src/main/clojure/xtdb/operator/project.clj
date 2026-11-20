@@ -6,8 +6,7 @@
             [xtdb.types :as types])
   (:import (org.apache.arrow.vector.types.pojo Field)
            (xtdb.arrow VectorType)
-           (xtdb.operator ProjectCursor ProjectionSpec ProjectionSpec$Identity ProjectionSpec$LocalRowNumber ProjectionSpec$Rename ProjectionSpec$RowNumber ProjectionSpec$Star)
-           (xtdb.api ICursor)))
+           (xtdb.operator ProjectCursor ProjectionSpec ProjectionSpec$Identity ProjectionSpec$LocalRowNumber ProjectionSpec$Rename ProjectionSpec$RowNumber ProjectionSpec$Star)))
 
 (s/def ::append-columns? boolean?)
 
@@ -97,9 +96,8 @@
                  :vec-types out-vec-types
                  :stats (:stats emitted-child-relation)
                  :col-mapping col-mapping
-                 :->cursor (fn [{:keys [explain-analyze? tracer query-span] :as opts} in-cursor]
-                             (cond-> (->project-cursor opts in-cursor projection-specs)
-                               (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))}))))
+                 :->cursor (fn [opts in-cursor]
+                             (->project-cursor opts in-cursor projection-specs))}))))
         (lp/with-col-mapping))))
 (defmethod lp/emit-expr :map [{:keys [opts] :as op} args]
   (lp/emit-expr (assoc op :op :project :opts (assoc opts :append-columns? true)) args))

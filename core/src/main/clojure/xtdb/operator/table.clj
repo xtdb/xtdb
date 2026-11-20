@@ -201,6 +201,7 @@
      :children []
      :vec-types vec-types
      :stats (when row-count {:row-count row-count})
-     :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span] :as cursor-opts}]
-                 (cond-> (TableCursor. allocator (->out-rel cursor-opts))
-                   (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))}))
+     :->cursor (fn [cursor-opts]
+                 (lp/with-tracing :table cursor-opts
+                   (fn [{:keys [allocator] :as cursor-opts}]
+                     (TableCursor. allocator (->out-rel cursor-opts)))))}))

@@ -8,6 +8,8 @@ interface ExplainAnalyze {
     val timeToFirstPage: Duration?
     /** Time in this cursor's `tryAdvance`, including its subtree but excluding the consumer's `accept`. */
     val totalTime: Duration
+    /** Peak memory this operator itself allocated, excluding the operators below it. */
+    val peakMemoryBytes: Long
     val pushdowns: Map<String, Any>?
     val cursorAttributes: ScanAttributes?
 

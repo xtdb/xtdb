@@ -74,9 +74,8 @@
                       {:op :union-all
                        :children [left-rel right-rel]
                        :vec-types out-vec-types
-                       :->cursor (fn [{:keys [explain-analyze? tracer query-span]} left-cursor right-cursor]
-                                   (cond-> (UnionAllCursor. left-cursor right-cursor)
-                                     (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))}))))
+                       :->cursor (fn [_ left-cursor right-cursor]
+                                   (UnionAllCursor. left-cursor right-cursor))}))))
 
 (deftype IntersectionCursor [^ICursor left-cursor, ^ICursor right-cursor
                              ^BuildSide build-side, ^ProbeSide probe-side
@@ -129,18 +128,17 @@
                       {:op :intersect
                        :children [left-rel right-rel]
                        :vec-types out-vec-types
-                       :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]} left-cursor right-cursor]
+                       :->cursor (fn [{:keys [allocator]} left-cursor right-cursor]
                                    (let [build-side (join/->build-side allocator
                                                                        {:vec-types left-vec-types
                                                                         :key-col-names key-col-names})]
 
-                                     (cond-> (IntersectionCursor. left-cursor right-cursor
-                                                                  build-side
-                                                                  (ProbeSide. allocator build-side (mapv name key-col-names)
-                                                                              (join/->cmp-factory {:build-vec-types left-vec-types
-                                                                                                   :probe-vec-types right-vec-types}))
-                                                                  false false)
-                                       (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span))))}))))
+                                     (IntersectionCursor. left-cursor right-cursor
+                                                          build-side
+                                                          (ProbeSide. allocator build-side (mapv name key-col-names)
+                                                                      (join/->cmp-factory {:build-vec-types left-vec-types
+                                                                                           :probe-vec-types right-vec-types}))
+                                                          false false)))}))))
 
 (defmethod lp/emit-expr :difference [{:keys [_opts left right]} args]
   (lp/binary-expr (lp/emit-expr left args) (lp/emit-expr right args)
@@ -150,15 +148,14 @@
                       {:op :difference
                        :children [left-rel right-rel]
                        :vec-types out-vec-types
-                       :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]} left-cursor right-cursor]
+                       :->cursor (fn [{:keys [allocator]} left-cursor right-cursor]
                                    (let [build-side (join/->build-side allocator
                                                                        {:vec-types left-vec-types
                                                                         :key-col-names key-col-names})]
 
-                                     (cond-> (IntersectionCursor. left-cursor right-cursor
-                                                                  build-side
-                                                                  (ProbeSide. allocator build-side (mapv name key-col-names)
-                                                                              (join/->cmp-factory {:build-vec-types left-vec-types
-                                                                                                   :probe-vec-types right-vec-types}))
-                                                                  true false)
-                                       (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span))))}))))
+                                     (IntersectionCursor. left-cursor right-cursor
+                                                          build-side
+                                                          (ProbeSide. allocator build-side (mapv name key-col-names)
+                                                                      (join/->cmp-factory {:build-vec-types left-vec-types
+                                                                                           :probe-vec-types right-vec-types}))
+                                                          true false)))}))))

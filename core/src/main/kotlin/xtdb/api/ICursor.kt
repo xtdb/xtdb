@@ -2,6 +2,7 @@ package xtdb.api
 
 import io.micrometer.tracing.Span
 import io.micrometer.tracing.Tracer
+import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.RelationReader
 import xtdb.query.ExplainAnalyze
@@ -52,8 +53,9 @@ interface ICursor : Spliterator<RelationReader>, AutoCloseable {
             private val inner: ICursor,
             private val tracer: Tracer?,
             private val parentSpan: Span?,
-            private val spanName: String? = null,
-            override val pushdowns: Map<String, Any>? = null,
+            private val spanName: String?,
+            override val pushdowns: Map<String, Any>?,
+            private val allocator: BufferAllocator,
             private val clock: InstantSource = InstantSource.system()
         ) : ICursor by inner, ExplainAnalyze {
             override var pageCount: Int = 0; private set
@@ -63,6 +65,7 @@ interface ICursor : Spliterator<RelationReader>, AutoCloseable {
             private var endTime = clock.instant()
             override var timeToFirstPage: Duration? = null; private set
             override var totalTime: Duration = Duration.ZERO; private set
+            override val peakMemoryBytes get() = allocator.peakMemoryAllocation
             private var span: Span? = null
 
             override fun tryAdvance(c: Consumer<in RelationReader>): Boolean {
@@ -96,16 +99,19 @@ interface ICursor : Spliterator<RelationReader>, AutoCloseable {
             override fun close() {
                 // read before closing the inner cursor — attributes may be derived from its (now-final) state
                 val attrs = inner.cursorAttributes
-                inner.close()
-                span?.let { s ->
-                    s.tag("cursor.total_time_ms", totalTime.toMillis().toString())
-                    timeToFirstPage?.let { ttfp ->
-                        s.tag("cursor.time_to_first_page_ms", ttfp.toMillis().toString())
+                allocator.use {
+                    inner.close()
+                    span?.let { s ->
+                        s.tag("cursor.total_time_ms", totalTime.toMillis().toString())
+                        timeToFirstPage?.let { ttfp ->
+                            s.tag("cursor.time_to_first_page_ms", ttfp.toMillis().toString())
+                        }
+                        s.tag("cursor.page_count", pageCount.toString())
+                        s.tag("cursor.row_count", rowCount.toString())
+                        s.tag("cursor.peak_memory_bytes", peakMemoryBytes.toString())
+                        attrs?.toMap()?.forEach { (k, v) -> s.tag(k, v.toString()) }
+                        s.end(endTime.asMicros, TimeUnit.MICROSECONDS)
                     }
-                    s.tag("cursor.page_count", pageCount.toString())
-                    s.tag("cursor.row_count", rowCount.toString())
-                    attrs?.toMap()?.forEach { (k, v) -> s.tag(k, v.toString()) }
-                    s.end(endTime.asMicros, TimeUnit.MICROSECONDS)
                 }
             }
 
@@ -140,15 +146,14 @@ interface ICursor : Spliterator<RelationReader>, AutoCloseable {
         @JvmStatic
         fun ICursor.wrapInterruptible(): ICursor = InterruptibleCursor(this)
 
+        /**
+         * Wraps this cursor for tracing and EXPLAIN ANALYZE.
+         *
+         * The wrapper takes ownership of [allocator], the operator's own: it closes it after this cursor, and reports its peak as the operator's.
+         */
         @JvmStatic
-        fun ICursor.wrapTracing(tracer: Tracer?, span: Span?): ICursor = TracingCursor(this, tracer, span)
-
-        @JvmStatic
-        fun ICursor.wrapTracing(tracer: Tracer?, span: Span?, spanName: String?): ICursor =
-            TracingCursor(this, tracer, span, spanName)
-
-        @JvmStatic
-        fun ICursor.wrapTracing(tracer: Tracer?, span: Span?, spanName: String?, pushdowns: Map<String, Any>?): ICursor =
-            TracingCursor(this, tracer, span, spanName, pushdowns)
+        fun ICursor.wrapTracing(
+            tracer: Tracer?, span: Span?, spanName: String?, pushdowns: Map<String, Any>?, allocator: BufferAllocator
+        ): ICursor = TracingCursor(this, tracer, span, spanName, pushdowns, allocator)
     }
 }

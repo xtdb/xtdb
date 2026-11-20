@@ -33,13 +33,15 @@
     (shutdown [_] (CompletableResultCode/ofSuccess))))
 
 (defn- bool-ify-peak-memory-bytes
-  "query.peak_memory_bytes varies with Arrow's allocation strategy, so these span-shape
+  "Peak memory varies with Arrow's allocation strategy, so these span-shape
    assertions check only that it's present, the same way api_test.clj's exact-match
    assertions treat it."
   [span]
   (cond-> span
     (contains? (:attributes span) "query.peak_memory_bytes")
     (update-in [:attributes "query.peak_memory_bytes"] some?)
+    (contains? (:attributes span) "cursor.peak_memory_bytes")
+    (update-in [:attributes "cursor.peak_memory_bytes"] some?)
     (seq (:children span)) (update :children #(mapv bool-ify-peak-memory-bytes %))))
 
 (defn build-span-tree [spans]
@@ -77,11 +79,13 @@
                    :children
                    [{:name "query.cursor.project"
                      :attributes {"cursor.page_count" "1"
+                                  "cursor.peak_memory_bytes" true
                                   "cursor.row_count" "1"
                                   "cursor.type" "project"}
                      :children []}
                     {:name "query.cursor.table"
                      :attributes {"cursor.page_count" "1"
+                                  "cursor.peak_memory_bytes" true
                                   "cursor.row_count" "1"
                                   "cursor.type" "table"}
                      :children []}]}]
@@ -110,11 +114,13 @@
                      :children
                      [{:name "query.cursor.project"
                        :attributes {"cursor.page_count" "1"
+                                    "cursor.peak_memory_bytes" true
                                     "cursor.row_count" "1"
                                     "cursor.type" "project"}
                        :children []}
                       {:name "query.cursor.table"
                        :attributes {"cursor.page_count" "1"
+                                    "cursor.peak_memory_bytes" true
                                     "cursor.row_count" "1"
                                     "cursor.type" "table"}
                        :children []}]}]
@@ -155,6 +161,30 @@
           (t/is (= "query.cursor.scan.foo" (:name scan-span)))
           (t/is (= "public.foo" (get-in scan-span [:attributes "scan_source"])))
           (t/is (= "xtdb" (get-in scan-span [:attributes "scan_db"]))))))))
+
+(t/deftest an-operator-span-reports-its-own-peak-memory-not-its-inputs
+  (let [!spans (atom [])
+        span-processor (SimpleSpanProcessor/create (test-span-exporter !spans))]
+    (with-open [node (xtn/start-node {:tracer {:enabled? true
+                                               :service-name "xtdb-test"
+                                               :span-processor span-processor}})]
+      (xt/submit-tx node [(into [:put-docs :docs] (for [i (range 1000)] {:xt/id i, :v (str "value-" i)}))])
+      (xt/q node "SELECT v FROM docs ORDER BY v")
+      (Thread/sleep 100)
+
+      (let [query-span (->> (build-span-tree @!spans)
+                            (filter #(= "xtdb.query" (:name %)))
+                            first)
+            spans (tree-seq (comp seq :children) :children query-span)
+            peak (fn [cursor-type]
+                   (some (fn [{:keys [attributes]}]
+                           (when (= cursor-type (get attributes "cursor.type"))
+                             (parse-long (get attributes "cursor.peak_memory_bytes"))))
+                         spans))]
+        (t/is (pos? (peak "sort")) "the sort buffers its input")
+        (t/is (< (peak "project") (peak "sort")) "the project above the sort doesn't count the sort's buffers")
+        (t/is (<= (peak "sort") (parse-long (str (get-in query-span [:attributes "query.peak_memory_bytes"]))))
+              "the query's peak still covers every operator")))))
 
 (defn- without-scan-metrics
   "The scan's runtime metrics ride on its span as tags but vary with storage layout,
@@ -214,17 +244,18 @@
                                        "query.peak_memory_bytes" true},
                           :children
                           [{:name "query.cursor.project"
-                            :attributes {"cursor.page_count" "0" "cursor.row_count" "0" "cursor.type" "project"},
+                            :attributes {"cursor.page_count" "0" "cursor.peak_memory_bytes" true "cursor.row_count" "0" "cursor.type" "project"},
                             :children []}
                            {:name "query.cursor.rename"
-                            :attributes {"cursor.page_count" "0" "cursor.row_count" "0" "cursor.type" "rename"},
+                            :attributes {"cursor.page_count" "0" "cursor.peak_memory_bytes" true "cursor.row_count" "0" "cursor.type" "rename"},
                             :children []}
                            {:name "query.cursor.select"
-                            :attributes {"cursor.page_count" "0" "cursor.row_count" "0" "cursor.type" "select"},
+                            :attributes {"cursor.page_count" "0" "cursor.peak_memory_bytes" true "cursor.row_count" "0" "cursor.type" "select"},
                             :children []}
                            {:name "query.cursor.scan.users"
                             :attributes
                             {"cursor.page_count" "0",
+                             "cursor.peak_memory_bytes" true,
                              "cursor.row_count" "0",
                              "cursor.type" "scan",
                              "scan_db" "xtdb",

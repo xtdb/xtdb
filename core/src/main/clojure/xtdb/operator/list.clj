@@ -58,8 +58,9 @@
     {:op :list
      :children []
      :vec-types vec-types
-     :->cursor (fn [{:keys [allocator ^RelationReader args explain-analyze? tracer query-span]}]
-                 (cond-> (ListCursor. allocator (->list-expr schema args)
-                                      (str out-col) (get vec-types out-col)
-                                      *batch-size* 0)
-                   (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))}))
+     :->cursor (fn [opts]
+                 (lp/with-tracing :list opts
+                   (fn [{:keys [allocator ^RelationReader args]}]
+                     (ListCursor. allocator (->list-expr schema args)
+                                  (str out-col) (get vec-types out-col)
+                                  *batch-size* 0))))}))

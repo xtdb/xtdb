@@ -644,17 +644,16 @@
                                                 [to-column (pr-str agg-form)]))))}
            :vec-types out-vec-types
 
-           :->cursor (fn [{:keys [allocator args schema explain-analyze? tracer query-span]} in-cursor]
-                       (cond-> (util/with-close-on-catch [agg-specs (LinkedList.)]
-                                 (doseq [{:keys [^AggregateSpec$Factory factory mask-spec]} agg-infos]
-                                   (let [built (.build factory allocator (or args vw/empty-args))]
-                                     (.add agg-specs
-                                           (if mask-spec
-                                             (wrap-filter built mask-spec allocator schema (or args vw/empty-args))
-                                             built))))
+           :->cursor (fn [{:keys [allocator args schema]} in-cursor]
+                       (util/with-close-on-catch [agg-specs (LinkedList.)]
+                         (doseq [{:keys [^AggregateSpec$Factory factory mask-spec]} agg-infos]
+                           (let [built (.build factory allocator (or args vw/empty-args))]
+                             (.add agg-specs
+                                   (if mask-spec
+                                     (wrap-filter built mask-spec allocator schema (or args vw/empty-args))
+                                     built))))
 
-                                 (GroupByCursor. allocator in-cursor
-                                                 (->group-mapper allocator (select-keys vec-types group-cols))
-                                                 (vec agg-specs)
-                                                 false))
-                         (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))})))))
+                         (GroupByCursor. allocator in-cursor
+                                         (->group-mapper allocator (select-keys vec-types group-cols))
+                                         (vec agg-specs)
+                                         false)))})))))
