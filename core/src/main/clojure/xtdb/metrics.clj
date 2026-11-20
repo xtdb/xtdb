@@ -60,19 +60,6 @@
       (.tag span (name k) (str v)))
     span))
 
-(defn end-span [^Span span]
-  (.end span))
-
-(defmacro with-span [tracer span-name opts & body]
-  `(if-let [tracer# ~tracer]
-     (let [span# (start-span tracer# ~span-name ~opts)]
-       (try
-         (with-open [_# (.withSpan tracer# span#)]
-           ~@body)
-         (finally
-           (end-span span#))))
-     (do ~@body)))
-
 (defmethod xtn/apply-config! ::cloudwatch [config _k v]
   (xtn/apply-config! config :xtdb.aws.cloudwatch/metrics v))
 

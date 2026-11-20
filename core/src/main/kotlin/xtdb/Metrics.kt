@@ -103,17 +103,13 @@ object Metrics {
     }
 
     /**
-     * Run [block] inside a tracing span named [name], tagging the span with [attributes].
-     * A null receiver is a cheap no-op — [block] runs without any span machinery.
-     *
-     * Mirrors `xtdb.metrics/with-span`; keep them in sync until the remaining Clojure
-     * callers move across.
+     * Run [block] inside a tracing span named [name], passing it the span so that it can tag it.
+     * A null receiver is a cheap no-op — [block] runs with a null span, without any span machinery.
      */
     inline fun <R> Tracer?.withSpan(
         name: String,
         parentSpan: Span? = null,
-        attributes: Map<String, Any?> = emptyMap(),
-        block: () -> R,
+        block: (Span?) -> R,
     ): R {
         // [block] is invoked exactly once so the inline expansion at each call site doesn't
         // duplicate the lambda body across the null-tracer / non-null-tracer branches.
@@ -121,12 +117,11 @@ object Metrics {
         val span = tracer?.let { t ->
             (if (parentSpan != null) t.nextSpan(parentSpan) else t.nextSpan())
                 ?.name(name)?.start()
-                ?.also { sp -> for ((k, v) in attributes) sp.tag(k, v.toString()) }
         }
         val scope = if (tracer != null && span != null) tracer.withSpan(span) else null
 
         return try {
-            block()
+            block(span)
         } finally {
             scope?.close()
             span?.end()
