@@ -151,14 +151,17 @@ class RunEndEncodedVector private constructor(
         override fun isSet(idx: Int) = (runStart(idx)..<runEnd(idx)).any(rowMask::isSet)
     }
 
-    override fun valueReader(): ValueReader {
+    override fun valueReader(): RowValueReader {
         val inner = valuesVector.valueReader()
 
-        return object : ValueReader by inner {
-            override var pos = 0
+        return object : RowValueReader, ValueReader by inner {
+            private val rowCount = valueCount
+            override fun hasNext() = pos + 1 < rowCount
+
+            override var pos = -1
                 set(value) {
                     field = value
-                    if (value in 0..<valueCount) inner.pos = runIdx(value)
+                    inner.pos = runIdx(value)
                 }
         }
     }

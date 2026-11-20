@@ -102,9 +102,12 @@ class DenseUnionVector private constructor(
             return RowCopier { srcIdx -> innerCopier.copyRow(getOffset(srcIdx)) }
         }
 
-        override fun valueReader(): ValueReader {
+        override fun valueReader(): RowValueReader {
             val inner = inner.valueReader()
-            return object : ValueReader by inner {
+            return object : RowValueReader, ValueReader by inner {
+                private val rowCount = valueCount
+                override fun hasNext() = pos + 1 < rowCount
+
                 override var pos: Int = -1
                     set(value) {
                         field = value
@@ -287,12 +290,15 @@ class DenseUnionVector private constructor(
 
     private fun legWriter(arrowType: ArrowType, nullable: Boolean) = vectorFor(arrowType.toLeg(), arrowType, nullable)
 
-    override fun valueReader(): ValueReader {
+    override fun valueReader(): RowValueReader {
         val legReaders = Array(legVectors.size) { LegVector(it.toByte(), legVectors[it]).valueReader() }
         val legNames = Array(legVectors.size) { legVectors[it].name }
 
-        return object : ValueReader {
+        return object : RowValueReader {
             lateinit var legReader: ValueReader
+
+            private val rowCount = valueCount
+            override fun hasNext() = pos + 1 < rowCount
             override var leg: String? = null
 
             override var pos = -1

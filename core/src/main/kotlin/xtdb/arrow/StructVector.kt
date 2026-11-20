@@ -158,10 +158,13 @@ class StructVector private constructor(
 
     override fun writeValue0(v: ValueReader) = writeObject(v.readStruct())
 
-    override fun valueReader() = object : ValueReader {
+    override fun valueReader() = object : RowValueReader {
         val readers = childWriters.mapValues { it.value.valueReader() }
 
-        override var pos = 0
+        private val rowCount = valueCount
+        override fun hasNext() = pos + 1 < rowCount
+
+        override var pos = -1
             set(value) {
                 field = value
                 if (!isNull) readers.forEach { it.value.pos = value }
