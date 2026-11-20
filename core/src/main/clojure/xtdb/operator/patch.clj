@@ -7,7 +7,6 @@
             [xtdb.types :as types])
   (:import java.util.Map
            org.apache.arrow.memory.BufferAllocator
-           (xtdb.api ICursor)
            [xtdb.arrow Relation RelationReader]
            xtdb.operator.PatchGapsCursor))
 
@@ -42,7 +41,7 @@
          :explain {:valid-from (pr-str valid-from)
                    :valid-to (pr-str valid-to)}
          :vec-types out-vec-types
-         :->cursor (fn [{:keys [^BufferAllocator allocator current-time explain-analyze? tracer query-span] :as qopts} inner]
+         :->cursor (fn [{:keys [^BufferAllocator allocator current-time] :as qopts} inner]
                      (let [valid-from (time/instant->micros (->instant (or valid-from [:literal current-time]) qopts))
                            valid-to (or (some-> valid-to (->instant qopts) time/instant->micros) Long/MAX_VALUE)]
                        (if (> valid-from valid-to)
@@ -50,8 +49,7 @@
                                                "Invalid valid times"
                                                {:valid-from (time/micros->instant valid-from)
                                                 :valid-to (time/micros->instant valid-to)}))
-                         (cond-> (PatchGapsCursor. inner
-                                                   (Relation. allocator ^Map (update-keys out-vec-types str))
-                                                   valid-from
-                                                   valid-to)
-                           (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))))}))))
+                         (PatchGapsCursor. inner
+                                           (Relation. allocator ^Map (update-keys out-vec-types str))
+                                           valid-from
+                                           valid-to))))}))))

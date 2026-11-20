@@ -244,18 +244,17 @@
        :stats (:stats inner-rel)
        :children [inner-rel]
        :vec-types inner-types
-       :->cursor (fn [{:keys [explain-analyze? tracer query-span]}, ^ICursor in-cursor]
-                   (cond-> (reify ICursor
-                             (getCursorType [_] "prn")
-                             (getChildCursors [_] [in-cursor])
+       :->cursor (fn [_, ^ICursor in-cursor]
+                   (reify ICursor
+                     (getCursorType [_] "prn")
+                     (getChildCursors [_] [in-cursor])
 
-                             (tryAdvance [_ c]
-                               (.tryAdvance in-cursor
-                                            (fn [^RelationReader rel]
-                                              (println (.getCursorType in-cursor) ":")
-                                              (clojure.pprint/pprint (util/->clj (.getAsMaps rel)))
-                                              (.accept c rel)))))
-                     (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))})))
+                     (tryAdvance [_ c]
+                       (.tryAdvance in-cursor
+                                    (fn [^RelationReader rel]
+                                      (println (.getCursorType in-cursor) ":")
+                                      (clojure.pprint/pprint (util/->clj (.getAsMaps rel)))
+                                      (.accept c rel))))))})))
 
 (defn latest-completed-txs [node]
   (-> (.latestCompletedTxs ^Xtdb node)

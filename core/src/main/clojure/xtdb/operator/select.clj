@@ -3,8 +3,7 @@
             [xtdb.coalesce :as coalesce]
             [xtdb.expression :as expr]
             [xtdb.logical-plan :as lp])
-  (:import (xtdb.api ICursor)
-           (xtdb.operator SelectCursor)))
+  (:import (xtdb.operator SelectCursor)))
 
 (defmethod lp/ra-expr :select [_]
   (s/cat :op #{:σ :sigma :select}
@@ -27,7 +26,6 @@
            :children [inner-rel]
            :explain {:predicate (pr-str predicate)}
            :vec-types inner-vec-types
-           :->cursor (fn [{:keys [allocator args schema explain-analyze? tracer query-span]} in-cursor]
-                       (cond-> (-> (SelectCursor. allocator in-cursor selector schema args)
-                                   (coalesce/->coalescing-cursor allocator))
-                         (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))})))))
+           :->cursor (fn [{:keys [allocator args schema]} in-cursor]
+                       (-> (SelectCursor. allocator in-cursor selector schema args)
+                           (coalesce/->coalescing-cursor allocator)))})))))

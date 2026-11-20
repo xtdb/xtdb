@@ -310,7 +310,7 @@
          :vec-types (->> vec-types (into {} (keep (fn [[k v]] (when v [k v])))))
          :stats {:row-count row-count}
          :->cursor (fn [{:keys [allocator, query-source, db-cat, dbs, snaps, system-time-basis, schema, args
-                                pushdown-blooms pushdown-iids explain-analyze? tracer query-span] :as opts}]
+                                pushdown-blooms pushdown-iids] :as opts}]
                      (let [^IQuerySource$QueryDatabase db (db-or-throw dbs db-name)
                            storage (.getStorage db)
                            ^DatabaseSnapshot db-snapshot (db-or-throw snaps db-name)
@@ -329,66 +329,59 @@
                          (info-schema/->cursor info-schema allocator db db-cat query-source snapshot derived-table-schema table col-names col-preds schema args)
 
                          :else
+                         (lp/with-tracing opts
+                           (fn []
+                             {:span-name (format "query.cursor.scan.%s" (.getTableName table))
+                              :pushdowns (not-empty
+                                          (merge-with merge
+                                                      (when pushdown-blooms
+                                                        (update-keys (update-vals pushdown-blooms (fn [b] {:bloom-filter b}))
+                                                                     str))
+                                                      (update-keys (update-vals (into {} (filter val) (or pushdown-iids {}))
+                                                                                (fn [s] {:iids s}))
+                                                                   str)))})
+                           (fn [{:keys [allocator]}]
+                             (let [iid-set (or (selects->iid-set selects args)
+                                               (get pushdown-iids '_iid) ; usually patch
+                                               (get pushdown-iids '_id)) ; any other foreign-key join
+                                   col-preds (cond-> col-preds
+                                               (not (empty? iid-set))
+                                               (assoc "_iid" (if (= 1 (count iid-set))
+                                                               (SingleIidSelector. (first iid-set))
+                                                               (MultiIidSelector. iid-set))))
+                                   metadata-pred (expr.meta/->metadata-selector allocator (cons 'and metadata-args) vec-types args)
+                                   metadata-pred (reify MetadataPredicate
+                                                   (build [_ page-metadata]
+                                                     (-> (.build metadata-pred page-metadata)
+                                                         (as-> pred (reduce (fn [^IntPredicate page-idx-pred col-name]
+                                                                              (if-let [bloom-page-idx-pred (filter-pushdown-bloom-page-idx-pred page-metadata pushdown-blooms col-name)]
+                                                                                (.and page-idx-pred bloom-page-idx-pred)
+                                                                                page-idx-pred))
+                                                                            pred
+                                                                            col-names)))))
+                                   scan-opts (-> scan-opts
+                                                 (update :for-valid-time
+                                                         (fn [fvt]
+                                                           (or fvt [:at [:now]]))))
 
-                         (let [iid-set (or (selects->iid-set selects args)
-                                           (get pushdown-iids '_iid) ; usually patch
-                                           (get pushdown-iids '_id)) ; any other foreign-key join
-                               col-preds (cond-> col-preds
-                                           (not (empty? iid-set))
-                                           (assoc "_iid" (if (= 1 (count iid-set))
-                                                           (SingleIidSelector. (first iid-set))
-                                                           (MultiIidSelector. iid-set))))
-                               metadata-pred (expr.meta/->metadata-selector allocator (cons 'and metadata-args) vec-types args)
-                               metadata-pred (reify MetadataPredicate
-                                               (build [_ page-metadata]
-                                                 (-> (.build metadata-pred page-metadata)
-                                                     (as-> pred (reduce (fn [^IntPredicate page-idx-pred col-name]
-                                                                          (if-let [bloom-page-idx-pred (filter-pushdown-bloom-page-idx-pred page-metadata pushdown-blooms col-name)]
-                                                                            (.and page-idx-pred bloom-page-idx-pred)
-                                                                            page-idx-pred))
-                                                                        pred
-                                                                        col-names)))))
-                               scan-opts (-> scan-opts
-                                             (update :for-valid-time
-                                                     (fn [fvt]
-                                                       (or fvt [:at [:now]]))))
+                                   ;; EXPLAIN ANALYZE reports one set of counters per operator, and these
+                                   ;; are keyed by (db, scan source) — operator identity. Built here so
+                                   ;; that stays true however many cursors the operator ends up building.
+                                   ^ScanMetrics metrics (ScanMetrics. db-name
+                                                                      (str (.getSchemaName table) "." (.getTableName table)))
 
-                               ;; EXPLAIN ANALYZE reports one set of counters per operator, and these
-                               ;; are keyed by (db, scan source) — operator identity. Built here so
-                               ;; that stays true however many cursors the operator ends up building.
-                               ^ScanMetrics metrics (ScanMetrics. db-name
-                                                                  (str (.getSchemaName table) "." (.getTableName table)))
+                                   ;; TODO (#5835) partition 0's slot for every partition. Wrong rather than
+                                   ;; absent at N>1: each would apply partition 0's temporal bound, so the
+                                   ;; scan returns wrong rows rather than failing. `system-time-basis` is
+                                   ;; already indexed by partition — the walk over partitions is what's missing.
+                                   temporal-bounds (->temporal-bounds allocator args scan-opts
+                                                                      (get-in system-time-basis [db-name 0]))]
 
-                               ;; TODO (#5835) partition 0's slot for every partition. Wrong rather than
-                               ;; absent at N>1: each would apply partition 0's temporal bound, so the
-                               ;; scan returns wrong rows rather than failing. `system-time-basis` is
-                               ;; already indexed by partition — the walk over partitions is what's missing.
-                               temporal-bounds (->temporal-bounds allocator args scan-opts
-                                                                  (get-in system-time-basis [db-name 0]))
-
-                               trace? (or explain-analyze? (and tracer query-span))
-                               trace-attrs (when trace?
-                                             (not-empty
-                                              (merge-with merge
-                                                          (when pushdown-blooms
-                                                            (update-keys (update-vals pushdown-blooms (fn [b] {:bloom-filter b}))
-                                                                         str))
-                                                          (update-keys (update-vals (into {} (filter val) (or pushdown-iids {}))
-                                                                                    (fn [s] {:iids s}))
-                                                                       str))))]
-
-                           ;; the cursor owns its segments from the moment it's built, and the tracing
-                           ;; wrap takes that ownership over — so it has to happen under a scope that
-                           ;; closes the cursor if the wrap itself throws.
-                           (util/with-close-on-catch [cursor (->partition-scan-cursor
-                                                              {:allocator allocator, :table table, :col-names col-names,
-                                                               :col-preds col-preds, :iid-set iid-set, :metadata-pred metadata-pred,
-                                                               :scan-opts scan-opts, :schema schema, :args args, :metrics metrics}
-                                                              storage snapshot temporal-bounds)]
-                             (cond-> cursor
-                               trace? (ICursor/wrapTracing tracer query-span
-                                                           (format "query.cursor.scan.%s" (.getTableName table))
-                                                           trace-attrs)))))))}))))
+                               (->partition-scan-cursor
+                                {:allocator allocator, :table table, :col-names col-names,
+                                 :col-preds col-preds, :iid-set iid-set, :metadata-pred metadata-pred,
+                                 :scan-opts scan-opts, :schema schema, :args args, :metrics metrics}
+                                storage snapshot temporal-bounds)))))))}))))
 
 (defmethod lp/emit-expr :scan [scan-expr {:keys [^IScanEmitter scan-emitter dbs scan-vec-types, param-types]}]
   (.emitScan scan-emitter dbs scan-expr scan-vec-types param-types))

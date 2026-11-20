@@ -56,7 +56,8 @@
        :vec-types out-vec-types
        :stats (:stats emitted-child-relation)
        :col-mapping col-mapping
-       :->cursor (fn [{:keys [explain-analyze? tracer query-span] :as opts}]
-                   (cond-> (util/with-close-on-catch [in-cursor (->inner-cursor opts)]
-                             (RenameCursor. in-cursor col-name-mapping))
-                     (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))})))
+       :->cursor (fn [opts]
+                   (lp/with-tracing opts
+                     (fn [opts]
+                       (util/with-close-on-catch [in-cursor (->inner-cursor opts)]
+                         (RenameCursor. in-cursor col-name-mapping)))))})))

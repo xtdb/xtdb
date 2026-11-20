@@ -124,12 +124,28 @@
   (fn [ra-expr opts]
     (:op ra-expr)))
 
+(def ^:private no-span-opts (constantly nil))
+
+(defn with-tracing
+  "Builds an operator's cursor with `(build opts)`, wrapped for EXPLAIN ANALYZE and tracing when either is on.
+
+   `->span-opts` is called only when the cursor is wrapped, and returns `{:keys [span-name pushdowns]}`:
+   `span-name` overrides the default `query.cursor.<cursor-type>`.
+
+   `unary-expr` and `binary-expr` apply it to the cursors of the operators they emit."
+  ([opts build] (with-tracing opts no-span-opts build))
+  ([{:keys [explain-analyze? tracer query-span] :as opts} ->span-opts build]
+   (if (or explain-analyze? (and tracer query-span))
+     (let [{:keys [span-name pushdowns]} (->span-opts)]
+       (ICursor/wrapTracing (build opts) tracer query-span span-name pushdowns))
+     (build opts))))
+
 (defn unary-expr {:style/indent 1} [{->inner-cursor :->cursor, :as inner-rel} f]
   (-> (f inner-rel)
       (update :->cursor (fn [->cursor]
                           (fn [opts]
                             (util/with-close-on-catch [inner (ICursor/wrapInterruptible (->inner-cursor opts))]
-                              (->cursor opts inner)))))))
+                              (with-tracing opts #(->cursor % inner))))))))
 
 (defn with-col-mapping
   "Wraps ->cursor to remap pushdown-blooms and pushdown-iids keys
@@ -150,7 +166,7 @@
                           (fn [opts]
                             (util/with-close-on-catch [left (ICursor/wrapInterruptible (->left-cursor opts))
                                                        right (ICursor/wrapInterruptible (->right-cursor opts))]
-                              (->cursor opts left right)))))))
+                              (with-tracing opts #(->cursor % left right))))))))
 
 ;;;; Rewriting of logical plan.
 

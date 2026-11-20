@@ -53,15 +53,14 @@
                       :limit (some-> (second limit) pr-str)}
                      (into {} (filter val)))
        :vec-types vec-types
-       :->cursor (fn [{:keys [allocator args explain-analyze? tracer query-span]} in-cursor]
+       :->cursor (fn [{:keys [allocator args]} in-cursor]
                    (let [skip-n (resolve-arg skip args 0)
                          limit-n (resolve-arg limit args Long/MAX_VALUE)]
-                     (cond-> (SortCursor. in-cursor
-                                          (as-> in-cursor cursor
-                                            (if (seq order-specs)
-                                              (order-by/->order-by-cursor allocator cursor vec-types order-specs (row-limit skip-n limit-n))
-                                              cursor)
-                                            (if (or skip limit)
-                                              (TopCursor. cursor skip-n limit-n 0)
-                                              cursor)))
-                       (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span))))})))
+                     (SortCursor. in-cursor
+                                  (as-> in-cursor cursor
+                                    (if (seq order-specs)
+                                      (order-by/->order-by-cursor allocator cursor vec-types order-specs (row-limit skip-n limit-n))
+                                      cursor)
+                                    (if (or skip limit)
+                                      (TopCursor. cursor skip-n limit-n 0)
+                                      cursor)))))})))

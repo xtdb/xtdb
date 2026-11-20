@@ -244,14 +244,13 @@
                                                       [to-column (pr-str window-agg)]))))}
            :vec-types out-vec-types
 
-           :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]} in-cursor]
-                       (cond-> (util/with-close-on-catch [window-fn-specs (LinkedList.)]
-                                 (doseq [^IWindowFnSpecFactory factory window-fn-factories]
-                                   (.add window-fn-specs (.build factory allocator)))
+           :->cursor (fn [{:keys [allocator]} in-cursor]
+                       (util/with-close-on-catch [window-fn-specs (LinkedList.)]
+                         (doseq [^IWindowFnSpecFactory factory window-fn-factories]
+                           (.add window-fn-specs (.build factory allocator)))
 
-                                 (WindowFnCursor. allocator in-cursor vec-types
-                                                  (group-by/->group-mapper allocator (select-keys vec-types partition-cols))
-                                                  order-specs
-                                                  (vec window-fn-specs)
-                                                  false))
-                         (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))})))))
+                         (WindowFnCursor. allocator in-cursor vec-types
+                                          (group-by/->group-mapper allocator (select-keys vec-types partition-cols))
+                                          order-specs
+                                          (vec window-fn-specs)
+                                          false)))})))))

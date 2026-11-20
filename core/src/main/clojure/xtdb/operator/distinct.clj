@@ -77,10 +77,9 @@
                    {:op :distinct
                     :children [inner-rel]
                     :vec-types inner-vec-types
-                    :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]} in-cursor]
-                                (cond-> (DistinctCursor. allocator in-cursor
-                                                         (->relation-map allocator
-                                                                         {:build-vec-types inner-vec-types
-                                                                          :key-col-names (set (keys inner-vec-types))
-                                                                          :nil-keys-equal? true}))
-                                  (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))})))
+                    :->cursor (fn [{:keys [allocator]} in-cursor]
+                                (DistinctCursor. allocator in-cursor
+                                                 (->relation-map allocator
+                                                                 {:build-vec-types inner-vec-types
+                                                                  :key-col-names (set (keys inner-vec-types))
+                                                                  :nil-keys-equal? true})))})))

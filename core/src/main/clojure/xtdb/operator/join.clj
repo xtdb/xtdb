@@ -158,9 +158,8 @@
         {:op :cross-join
          :children [left-rel right-rel]
          :vec-types out-vec-types
-         :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]} left-cursor right-cursor]
-                     (cond-> (CrossJoinCursor. allocator left-cursor right-cursor (ArrayList.) nil nil)
-                       (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))}))))
+         :->cursor (fn [{:keys [allocator]} left-cursor right-cursor]
+                     (CrossJoinCursor. allocator left-cursor right-cursor (ArrayList.) nil nil))}))))
 
 (defmethod lp/emit-expr :cross-join [join-expr args]
   (emit-cross-join (emit-join-children join-expr args)))
@@ -404,59 +403,61 @@
 
      :vec-types (projection-specs->vec-types output-projections)
 
-     :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span args] :as opts}]
-                 (util/with-close-on-catch [build-cursor (->build-cursor opts)
-                                            build-side (->build-side allocator {:vec-types build-vec-types
-                                                                                :key-col-names build-key-col-names
-                                                                                :with-nil-row? with-nil-row?
-                                                                                :track-unmatched-build-idxs? track-unmatched-build-idxs?})
-                                            mark (when (= join-type ::mark-join)
-                                                   (let [->mark-cmp (fn [build-rel probe-rel]
-                                                                      (emap/->theta-comparator build-rel probe-rel mark-condition args
-                                                                                               {:build-vec-types build-vec-types
-                                                                                                :probe-vec-types probe-vec-types
-                                                                                                :param-types param-types}))]
-                                                     (JoinType$Mark. allocator (name mark-col-name)
-                                                                     (cond
-                                                                       mark-key (JoinType$Mark$Spec$KeyedIn. ->mark-cmp (BuildKeyFacts. (str (first build-key-col-names))))
-                                                                       (every? true? (rest mark-condition)) JoinType$Mark$Spec$Exists/INSTANCE
-                                                                       :else (JoinType$Mark$Spec$Compare. ->mark-cmp)))))]
-                   (letfn [(->probe-cursor-with-pushdowns [our-pushdown-blooms our-pushdown-iids]
-                             (->probe-cursor (cond-> opts
-                                               our-pushdown-blooms (update :pushdown-blooms (fnil into {}) our-pushdown-blooms)
-                                               our-pushdown-iids (update :pushdown-iids (fnil into {}) our-pushdown-iids))))]
-                     (let [pushdown-blooms (when pushdown-blooms?
-                                             (vec (repeatedly (count build-key-col-names) #(MutableRoaringBitmap.))))
-                           pushdown-iids (->> probe-key-col-names
-                                              (mapv (fn [col-name]
-                                                      (when (#{"_id" "_iid"} (name col-name))
-                                                        (TreeSet. Bytes/COMPARATOR)))))
-                           cmp-factory (->cmp-factory {:build-vec-types build-vec-types
-                                                       :probe-vec-types probe-vec-types
-                                                       :with-nil-row? with-nil-row?
-                                                       :key-col-names probe-key-col-names
-                                                       :theta-expr theta-expr
-                                                       :param-types param-types
-                                                       :args args})]
-                       (project/->project-cursor opts
-                                                 (cond-> (if (= join-type ::mark-join)
-                                                           (MarkJoinCursor. allocator build-side build-cursor build-plan-side
-                                                                            probe-vec-types probe-key-col-names ->probe-cursor-with-pushdowns
-                                                                            nil cmp-factory mark)
-                                                           (JoinCursor. allocator build-side build-cursor build-plan-side
-                                                                        probe-vec-types probe-key-col-names
-                                                                        ->probe-cursor-with-pushdowns nil
-                                                                        pushdown-blooms pushdown-iids cmp-factory
-                                                                        (case join-type
-                                                                          ::inner-join JoinType/INNER
-                                                                          ::left-outer-join JoinType/LEFT_OUTER
-                                                                          ::left-outer-join-flipped JoinType/LEFT_OUTER_FLIPPED
-                                                                          ::full-outer-join JoinType/FULL_OUTER
-                                                                          ::semi-join JoinType/SEMI
-                                                                          ::anti-semi-join JoinType/ANTI
-                                                                          ::single-join JoinType/SINGLE)))
-                                                   (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span))
-                                                 output-projections)))))}))
+     :->cursor (fn [opts]
+                 (project/->project-cursor
+                  opts
+                  (lp/with-tracing opts
+                    (fn [{:keys [allocator args] :as opts}]
+                      (util/with-close-on-catch [build-cursor (->build-cursor opts)
+                                                 build-side (->build-side allocator {:vec-types build-vec-types
+                                                                                     :key-col-names build-key-col-names
+                                                                                     :with-nil-row? with-nil-row?
+                                                                                     :track-unmatched-build-idxs? track-unmatched-build-idxs?})
+                                                 mark (when (= join-type ::mark-join)
+                                                        (let [->mark-cmp (fn [build-rel probe-rel]
+                                                                           (emap/->theta-comparator build-rel probe-rel mark-condition args
+                                                                                                    {:build-vec-types build-vec-types
+                                                                                                     :probe-vec-types probe-vec-types
+                                                                                                     :param-types param-types}))]
+                                                          (JoinType$Mark. allocator (name mark-col-name)
+                                                                          (cond
+                                                                            mark-key (JoinType$Mark$Spec$KeyedIn. ->mark-cmp (BuildKeyFacts. (str (first build-key-col-names))))
+                                                                            (every? true? (rest mark-condition)) JoinType$Mark$Spec$Exists/INSTANCE
+                                                                            :else (JoinType$Mark$Spec$Compare. ->mark-cmp)))))]
+                        (letfn [(->probe-cursor-with-pushdowns [our-pushdown-blooms our-pushdown-iids]
+                                  (->probe-cursor (cond-> opts
+                                                    our-pushdown-blooms (update :pushdown-blooms (fnil into {}) our-pushdown-blooms)
+                                                    our-pushdown-iids (update :pushdown-iids (fnil into {}) our-pushdown-iids))))]
+                          (let [pushdown-blooms (when pushdown-blooms?
+                                                  (vec (repeatedly (count build-key-col-names) #(MutableRoaringBitmap.))))
+                                pushdown-iids (->> probe-key-col-names
+                                                   (mapv (fn [col-name]
+                                                           (when (#{"_id" "_iid"} (name col-name))
+                                                             (TreeSet. Bytes/COMPARATOR)))))
+                                cmp-factory (->cmp-factory {:build-vec-types build-vec-types
+                                                            :probe-vec-types probe-vec-types
+                                                            :with-nil-row? with-nil-row?
+                                                            :key-col-names probe-key-col-names
+                                                            :theta-expr theta-expr
+                                                            :param-types param-types
+                                                            :args args})]
+                            (if (= join-type ::mark-join)
+                              (MarkJoinCursor. allocator build-side build-cursor build-plan-side
+                                               probe-vec-types probe-key-col-names ->probe-cursor-with-pushdowns
+                                               nil cmp-factory mark)
+                              (JoinCursor. allocator build-side build-cursor build-plan-side
+                                           probe-vec-types probe-key-col-names
+                                           ->probe-cursor-with-pushdowns nil
+                                           pushdown-blooms pushdown-iids cmp-factory
+                                           (case join-type
+                                             ::inner-join JoinType/INNER
+                                             ::left-outer-join JoinType/LEFT_OUTER
+                                             ::left-outer-join-flipped JoinType/LEFT_OUTER_FLIPPED
+                                             ::full-outer-join JoinType/FULL_OUTER
+                                             ::semi-join JoinType/SEMI
+                                             ::anti-semi-join JoinType/ANTI
+                                             ::single-join JoinType/SINGLE))))))))
+                  output-projections))}))
 
 (defn determine-build-side [left right default-side]
   (let [^long left-row-count (or (:row-count (:stats left)) Long/MAX_VALUE)
