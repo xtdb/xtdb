@@ -279,11 +279,14 @@ Ship/show/ask settles who needs to see or agree with a change: an approach that 
 
 We assess risk with a standard risk matrix — the probability of a bug against its impact — and the cell gives the effort level for the `/code-review` skill, or the depth asked of a code-review agent (e.g. `feature-dev:code-reviewer`).
 
-Probability of a bug::
+The risk is the residual risk once the test suite has passed, so place a change in the matrix only after a green run.
+A bug that would break every query is low probability, because the suite would already be red; the bugs that survive a green run are narrow ones.
+
+Probability of a bug the green suite misses::
 +
-* *Low* — one site, mechanical, with a regression test pinning the behaviour.
-* *Medium* — several sites, or a new code path.
-* *High* — a new mechanism, concurrency or ordering, or a claim that holds for every case ("for every argument type", "never wraps").
+* *Low* — a test pins the changed behaviour, or a bug would surface too broadly for the suite to miss.
+* *Medium* — the change reaches cases the suite only samples: several sites of which some are tested, or a new code path tested only on its happy path.
+* *High* — the change reaches cases the suite seldom or never runs: concurrency and ordering, failure and recovery paths, behaviour only property or integration tests reach, or a claim that holds for every case ("for every argument type", "never wraps") tested on a sample of them.
 
 Impact of a bug::
 +
