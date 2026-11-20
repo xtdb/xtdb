@@ -121,4 +121,97 @@ class RowMaskTest {
         val mask = rowMask(10) { it % 2 == 0 }
         shouldThrow<IllegalArgumentException> { mask.refine(rowMask(10) { true }) }
     }
+
+    private fun built(rowCount: Int, rows: List<Int>): RowMask =
+        RowMask.Builder(rowCount).apply { rows.forEach(::add) }.build()
+
+    @Test
+    fun `builder sets rows either side of each word boundary`() {
+        val rows = listOf(0, 62, 63, 64, 65, 127, 128, 191, 199)
+        val mask = built(200, rows)
+
+        mask.rowCount shouldBe 200
+        mask.cardinality shouldBe rows.size
+        mask.toSelection().toList() shouldBe rows
+    }
+
+    @Test
+    fun `builder ending in a partial last word`() {
+        built(70, listOf(3, 66, 69)).toSelection().toList() shouldBe listOf(3, 66, 69)
+    }
+
+    @Test
+    fun `builder with no rows added`() {
+        built(0, emptyList()).toSelection().toList() shouldBe emptyList()
+
+        val none = built(130, emptyList())
+        none.rowCount shouldBe 130
+        none.wordCount shouldBe 3
+        none.cardinality shouldBe 0
+    }
+
+    @Test
+    fun `builder with every row added`() {
+        built(130, (0 until 130).toList()).toSelection().toList() shouldBe (0 until 130).toList()
+    }
+
+    @Test
+    fun `builder runs of consecutive rows across word boundaries`() {
+        val rows = (60..70) + (126..129) + (190..199)
+        built(200, rows).toSelection().toList() shouldBe rows
+    }
+
+    @Test
+    fun `builder rejects an out-of-order or duplicate add`() {
+        shouldThrow<IllegalStateException> { RowMask.Builder(200).apply { add(65); add(64) } }
+        shouldThrow<IllegalStateException> { RowMask.Builder(200).apply { add(65); add(65) } }
+        shouldThrow<IllegalStateException> { RowMask.Builder(200).apply { add(3); add(2) } }
+    }
+
+    @Test
+    fun `builder rejects a duplicate or out-of-order add within a run`() {
+        val b = RowMask.Builder(200)
+        b.add(1); b.add(2); b.add(3)
+        shouldThrow<IllegalStateException> { b.add(3) }
+        shouldThrow<IllegalStateException> { b.add(2) }
+    }
+
+    @Test
+    fun `builder rejects a row outside rowCount`() {
+        shouldThrow<IllegalArgumentException> { RowMask.Builder(64).add(64) }
+        shouldThrow<IllegalArgumentException> { RowMask.Builder(64).add(-1) }
+    }
+
+    @Test
+    fun `builder rejects the row after the last, continuing a run`() {
+        val b = RowMask.Builder(10)
+        b.add(8); b.add(9)
+        shouldThrow<IllegalArgumentException> { b.add(10) }
+    }
+
+    @Test
+    fun `builder rejects an add after build`() {
+        val builder = RowMask.Builder(64).apply { add(1) }
+        val mask = builder.build()
+
+        shouldThrow<IllegalStateException> { builder.add(2) }
+        mask.toSelection().toList() shouldBe listOf(1)
+    }
+
+    @Test
+    fun `isSet reads each row's bit, either side of each word boundary`() {
+        val set = setOf(0, 63, 64, 127, 128, 129)
+        val mask = rowMask(130) { it in set }
+        (0 until 130).filter(mask::isSet) shouldBe set.sorted()
+    }
+
+    @Test
+    fun `all sets every row and no more`() {
+        for (n in listOf(0, 1, 63, 64, 65, 200)) {
+            val mask = RowMask.all(n)
+            mask.rowCount shouldBe n
+            mask.cardinality shouldBe n
+            mask.toSelection().toList() shouldBe (0 until n).toList()
+        }
+    }
 }

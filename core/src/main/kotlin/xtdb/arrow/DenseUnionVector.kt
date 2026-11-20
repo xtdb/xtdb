@@ -366,17 +366,16 @@ class DenseUnionVector private constructor(
         return legRows.copyOf(n)
     }
 
-    private fun legMask(typeId: Int, mask: VectorMask): VectorMask {
-        if (mask === VectorMask.ALL) return VectorMask.ALL
+    private fun legMask(typeId: Int, mask: RowMask): RowMask {
+        val legRowCount = legVectors[typeId].valueCount
+        if (mask.cardinality == mask.rowCount) return RowMask.all(legRowCount)
 
         val legRows = BitSet()
         repeat(valueCount) { idx ->
             if (mask.isSet(idx) && getTypeId(idx).toInt() == typeId) legRows.set(getOffset(idx))
         }
 
-        return object : VectorMask {
-            override fun isSet(idx: Int) = legRows[idx]
-        }
+        return RowMask.ofWords(legRows.toLongArray().copyOf((legRowCount + 63) ushr 6), legRowCount)
     }
 
     override fun hashCode(idx: Int, hasher: Hasher) = leg(idx)!!.hashCode(getOffset(idx), hasher)

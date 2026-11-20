@@ -12,6 +12,8 @@ class RowMask private constructor(private val words: LongArray, val rowCount: In
 
     val wordCount: Int get() = words.size
 
+    fun isSet(row: Int): Boolean = (words[row ushr 6] ushr (row and 63)) and 1L != 0L
+
     /** Rows `64 * w` to `64 * w + 63`, row `64 * w` in the low bit. */
     fun word(w: Int): Long = words[w]
 
@@ -64,7 +66,56 @@ class RowMask private constructor(private val words: LongArray, val rowCount: In
         return RowMask(out, rowCount)
     }
 
+    /**
+     * Builds a [RowMask] over [rowCount] rows from its set rows, added in strictly ascending order.
+     * An out-of-order or duplicate add, a row outside `0 until rowCount`, or an add after [build] throws.
+     */
+    class Builder(private val rowCount: Int) {
+        private val words = LongArray((rowCount + 63) ushr 6)
+        private var curWord = -1
+        private var cur = 0L
+        private var last = -1
+
+        fun add(row: Int) {
+            if (row == last + 1 && row < rowCount && row ushr 6 == curWord) {
+                cur = cur or (1L shl (row and 63))
+                last = row
+                return
+            }
+
+            require(row in 0 until rowCount) { "row $row outside 0 until $rowCount" }
+            check(row > last) { if (last == BUILT) "row $row added after build" else "row $row added after row $last" }
+            last = row
+
+            val w = row ushr 6
+            if (w != curWord) {
+                if (curWord >= 0) words[curWord] = cur
+                curWord = w
+                cur = 0L
+            }
+            cur = cur or (1L shl (row and 63))
+        }
+
+        fun build(): RowMask {
+            if (curWord >= 0) words[curWord] = cur
+            last = BUILT
+            return RowMask(words, rowCount)
+        }
+
+        private companion object {
+            const val BUILT = Int.MAX_VALUE
+        }
+    }
+
     companion object {
+        @JvmStatic
+        fun all(rowCount: Int): RowMask {
+            val words = LongArray((rowCount + 63) ushr 6) { -1L }
+            val tailBits = rowCount and 63
+            if (tailBits != 0) words[words.size - 1] = (1L shl tailBits) - 1
+            return RowMask(words, rowCount)
+        }
+
         /**
          * Wraps [words] without copying: the caller MUST NOT write to them afterwards.
          *
