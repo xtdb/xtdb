@@ -7,7 +7,6 @@ import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.ICursor
 import xtdb.arrow.RelationReader
 import xtdb.operator.RowMaskSpec
-import xtdb.operator.SelectionSpec
 import xtdb.segment.MergeTask
 import xtdb.segment.Segment
 import xtdb.trie.ColumnName
@@ -23,7 +22,7 @@ class ScanCursor(
     private val al: BufferAllocator,
 
     private val colNames: List<ColumnName>, private val colPreds: Map<ColumnName, RowMaskSpec>,
-    private val iidSelector: SelectionSpec?,
+    private val iidSelector: IidSelector?,
     private val temporalBounds: TemporalBounds, private val clampValidTime: Boolean,
 
     private val ownedSegments: List<Segment<*>>,
@@ -43,15 +42,13 @@ class ScanCursor(
             AsOfResolver(temporalBounds, clampValidTime)
         else PolygonResolver(temporalBounds, clampValidTime)
 
-    private fun RelationReader.maybeSelect(path: ByteArray): RelationReader =
-        when (iidSelector) {
-            null -> colPreds["_iid"]
-                ?.let { select(it.rowMask(al, this, this@ScanCursor.schema, this@ScanCursor.args).toSelection()) }
-                ?: this
+    private fun RelationReader.maybeSelect(path: ByteArray): RelationReader {
+        val mask = iidSelector?.rowMask(al, this, path)
+            ?: colPreds["_iid"]?.rowMask(al, this, this@ScanCursor.schema, this@ScanCursor.args)
+            ?: return this
 
-            is MultiIidSelector -> select(iidSelector.select(al, this, path))
-            else -> select(iidSelector.select(al, this, this@ScanCursor.schema, this@ScanCursor.args))
-        }
+        return select(mask.toSelection())
+    }
 
     private val bufferedRels: Queue<RelationReader> = LinkedList()
 
