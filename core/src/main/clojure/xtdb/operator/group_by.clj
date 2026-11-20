@@ -17,10 +17,10 @@
            (java.util.stream IntStream IntStream$Builder)
            (org.apache.arrow.memory BufferAllocator)
            (xtdb.api ICursor)
-           (xtdb.arrow IntVector MonoVector RelationReader Vector VectorMask VectorMask$Builder VectorReader VectorType VectorWriter)
+           (xtdb.arrow IntVector MonoVector RelationReader RowMask RowMask$Builder Vector VectorReader VectorType VectorWriter)
            (xtdb.arrow.agg AggregateSpec AggregateSpec$Factory Average Count GroupMapper GroupMapper$Mapper GroupMapper$Null RowCount StdDevPop StdDevSamp Sum VarWidthMinMax VariancePop VarianceSamp)
            (xtdb.expression.map IndexHasher RelationMapBuilder)
-           xtdb.operator.MaskSpec
+           xtdb.operator.RowMaskSpec
            xtdb.operator.ExternalSorter
            xtdb.operator.distinct.DistinctRelationMap
            xtdb.types.LeastUpperBound))
@@ -125,7 +125,7 @@
           {:eval-agg (-> `(fn [~(-> acc-sym (expr/with-tag MonoVector))
                                ~(-> expr/rel-sym (expr/with-tag RelationReader))
                                ~(-> group-mapping-sym (expr/with-tag VectorReader))
-                               ~(-> mask-sym (expr/with-tag VectorMask))]
+                               ~(-> mask-sym (expr/with-tag RowMask))]
                             (let [~@bindings
                                   ~group-mapping-rows-sym (.valueReader ~group-mapping-sym)]
                               (dotimes [~expr/idx-sym (.getRowCount ~expr/rel-sym)]
@@ -258,7 +258,7 @@
                   builders (ArrayList. (.size rel-maps))
                   in-key-rel (vr/rel-reader [in-vec])]
               (.hashTo (IndexHasher. in-key-rel [in-vec]) hashes hash-scratch)
-              (util/with-open [^VectorMask$Builder mask-builder (VectorMask/openBuilder al row-count)]
+              (let [mask-builder (RowMask$Builder. row-count)]
                 (dotimes [idx row-count]
                   (when (.isSet mask idx)
                     (let [group-idx (.getInt group-mapping idx)]
@@ -275,10 +275,9 @@
                                             (.set builders group-idx builder)
                                             builder))]
                           (when (neg? (.addIfNotPresent builder idx))
-                            (.set mask-builder idx)))))))
+                            (.add mask-builder idx)))))))
 
-                (util/with-open [distinct-mask (.build mask-builder)]
-                  (.aggregate agg-spec in-rel group-mapping distinct-mask)))))
+                (.aggregate agg-spec in-rel group-mapping (.build mask-builder)))))
 
           (openFinishedVector [_] (.openFinishedVector agg-spec))
 
@@ -559,7 +558,7 @@
                           (fn [^RelationReader in-rel]
                             (let [group-mapping (.groupMapping group-mapper in-rel)]
                               (doseq [^AggregateSpec agg-spec aggregate-specs]
-                                (.aggregate agg-spec in-rel group-mapping VectorMask/ALL)))))
+                                (.aggregate agg-spec in-rel group-mapping (RowMask/all (.getRowCount in-rel)))))))
 
        (util/with-open [agg-cols (map #(.openFinishedVector ^AggregateSpec %) aggregate-specs)]
          (let [gm-rel (.finish group-mapper)
@@ -579,13 +578,12 @@
     (util/close in-cursor)
     (util/close group-mapper)))
 
-(defn- wrap-filter [^AggregateSpec inner, ^MaskSpec mask-spec, ^BufferAllocator allocator, schema, args]
+(defn- wrap-filter [^AggregateSpec inner, ^RowMaskSpec mask-spec, ^BufferAllocator allocator, schema, args]
   (reify AggregateSpec
-    ;; the incoming mask is always `VectorMask/ALL` - this is only ever applied outermost, so that
+    ;; the incoming mask always sets every row - this is only ever applied outermost, so that
     ;; `COUNT(DISTINCT x) FILTER (...)` takes distinct values of the rows that passed the filter.
     (aggregate [_ in-rel group-mapping _mask]
-      (util/with-open [mask (.mask mask-spec allocator in-rel schema args)]
-        (.aggregate inner in-rel group-mapping mask)))
+      (.aggregate inner in-rel group-mapping (.rowMask mask-spec allocator in-rel schema args)))
 
     (openFinishedVector [_] (.openFinishedVector inner))
 
@@ -632,8 +630,8 @@
                                                                   :zero-row? (empty? group-cols)}
                                                                  factory-opts))
                              :mask-spec (when filter-form
-                                          (expr/->expression-mask-spec (expr/form->expr filter-form input-types)
-                                                                       input-types))}))
+                                          (expr/->expression-row-mask-spec (expr/form->expr filter-form input-types)
+                                                                           input-types))}))
               out-vec-types (into (->> group-cols
                                          (into {} (map (juxt identity vec-types))))
                                     (->> agg-infos

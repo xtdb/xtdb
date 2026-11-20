@@ -18,9 +18,9 @@
            (org.apache.arrow.vector PeriodDuration)
            (org.apache.arrow.vector.types.pojo ArrowType$Decimal)
            (org.apache.commons.codec.binary Hex)
-           (xtdb.arrow ListValueReader RelationReader RowMask ValueBox ValueReader Vector VectorMask VectorReader VectorType VectorType$Listy VectorType$Mono VectorType$Nothing VectorType$Poly VectorType$Struct)
+           (xtdb.arrow ListValueReader RelationReader RowMask ValueBox ValueReader Vector VectorReader VectorType VectorType$Listy VectorType$Mono VectorType$Nothing VectorType$Poly VectorType$Struct)
            (xtdb.expression PgFormat)
-           (xtdb.operator MaskSpec ProjectionSpec RowMaskSpec SelectionSpec)
+           (xtdb.operator ProjectionSpec RowMaskSpec SelectionSpec)
            (xtdb.pgwire PgTypes)
            xtdb.time.Interval
            (xtdb.util StringUtil)))
@@ -2683,13 +2683,6 @@
 
 (defn- ->predicate-expr [expr]
   {:op :call, :f :boolean, :args [expr]})
-
-(defn ->expression-mask-spec ^MaskSpec [expr input-types]
-  (let [projector (->expression-projection-spec "select" (->predicate-expr expr) input-types)]
-    (reify MaskSpec
-      (mask [_ al in-rel schema args]
-        (with-open [selection (.project projector al in-rel schema args)]
-          (VectorMask/open al (.getRowCount in-rel) selection))))))
 
 (defn ->expression-selection-spec ^SelectionSpec [expr {:keys [var-types param-types]}]
   (let [expr (->predicate-expr expr)]

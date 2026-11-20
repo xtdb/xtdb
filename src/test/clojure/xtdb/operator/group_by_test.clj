@@ -7,7 +7,7 @@
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
-  (:import [xtdb.arrow DenseUnionVector Vector VectorMask]))
+  (:import [xtdb.arrow DenseUnionVector RowMask Vector]))
 
 (t/use-fixtures :each tu/with-allocator tu/with-node)
 
@@ -131,8 +131,8 @@
       (t/is (= #xt/type [:? :f64] (.getType sum-factory)))
       (try
 
-        (.aggregate sum-spec v0 gm VectorMask/ALL)
-        (.aggregate sum-spec v1 gm VectorMask/ALL)
+        (.aggregate sum-spec v0 gm (RowMask/all (.getRowCount v0)))
+        (.aggregate sum-spec v1 gm (RowMask/all (.getRowCount v1)))
         (with-open [res (.openFinishedVector sum-spec)]
           (t/is (= [12.0] (.getAsList res))))
         (finally
@@ -151,7 +151,7 @@
                                                      :to-name 'xmax, :zero-row? true})
           max-spec (.build max-factory tu/*allocator* vw/empty-args)]
       (try
-        (.aggregate max-spec (vr/rel-reader [x] 6) gm (reify VectorMask (isSet [_ idx] (not= 2 idx))))
+        (.aggregate max-spec (vr/rel-reader [x] 6) gm (RowMask/ofWords (long-array [2r111011]) 6))
         (with-open [res (.openFinishedVector max-spec)]
           (t/is (= [3.5 4.0] (.getAsList res))))
         (finally
@@ -441,8 +441,8 @@
       (util/with-open [agg-spec (.build agg-factory tu/*allocator* vw/empty-args)]
         (t/is (= #xt/type [:? :list :i64] (.getType agg-factory)))
 
-        (.aggregate agg-spec (vr/rel-reader [k0]) gm0 VectorMask/ALL)
-        (.aggregate agg-spec (vr/rel-reader [k1]) gm1 VectorMask/ALL)
+        (.aggregate agg-spec (vr/rel-reader [k0]) gm0 (RowMask/all (.getValueCount k0)))
+        (.aggregate agg-spec (vr/rel-reader [k1]) gm1 (RowMask/all (.getValueCount k1)))
 
         (with-open [res (.openFinishedVector agg-spec)]
           (t/is (= [[1 3 6] [2 4] [5]] (.getAsList res))))))))
