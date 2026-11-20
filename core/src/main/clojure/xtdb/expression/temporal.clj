@@ -940,7 +940,7 @@
 (defmethod expr/codegen-call [:- :date :date] [expr]
   (on-date-days expr
     (fn [_]
-      {:return-type #xt/type :i32, :->call-code (fn [[x y]] `(Math/subtractExact ~x ~y))})))
+      {:return-type #xt/type :i32, :->call-code (fn [[x y]] `(Math/subtractExact (int ~x) (int ~y)))})))
 
 (doseq [t [:timestamp-tz :timestamp-local]]
   (defmethod expr/codegen-call [:- :date t] [{[_ t2-type] :arg-types, :as expr}]

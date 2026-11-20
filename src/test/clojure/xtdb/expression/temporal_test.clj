@@ -1301,6 +1301,15 @@
                                   {:a #xt/date "2020-01-01", :b nil}]))
         "a null operand gives a null <>, as it does a null ="))
 
+(t/deftest date-minus-date-literal-is-the-days-between
+  (with-open [rel (vr/rel-reader [(tu/open-vec "a" #xt/type [:date :day] [#xt/date "2023-05-11" #xt/date "2023-04-01"])])]
+    (t/is (= {:res [10 -30], :res-type #xt/type :i32}
+             (et/run-projection rel '(- a #xt/date "2023-05-01")))
+          "column minus literal")
+    (t/is (= {:res [-10 30], :res-type #xt/type :i32}
+             (et/run-projection rel '(- #xt/date "2023-05-01" a)))
+          "literal minus column")))
+
 (t/deftest test-date-milli-args
   (letfn [(project-milli [form ^LocalDate a]
             (with-open [rel (vr/rel-reader [(tu/open-vec "a" #xt/type [:date :milli] [a])])]
@@ -1314,6 +1323,7 @@
       #xt/date "2022-05-17" #xt/type [:date :milli] '(- a (single-field-interval 1 "YEAR" 2 0)) #xt/date "2023-05-17"
       #xt/date-time "2023-05-17T12:00" #xt/type [:timestamp-local :micro] '(+ a (single-field-interval 12 "HOUR" 2 0)) #xt/date "2023-05-17"
       -16 #xt/type :i32 '(- (date_trunc "MONTH" a) a) #xt/date "2023-05-17"
+      16 #xt/type :i32 '(- a #xt/date "2023-05-01") #xt/date "2023-05-17"
       true #xt/type :bool '(< a #xt/date "2023-05-18") #xt/date "2023-05-17"
       true #xt/type :bool '(< a "2023-05-18") #xt/date "2023-05-17"
       false #xt/type :bool '(<> a #xt/date "2023-05-17") #xt/date "2023-05-17"

@@ -3725,3 +3725,11 @@ UNION ALL
 
   (t/is (= [{:x "a", :xt/id 1} {:x "b", :xt/id 2} {:x "d", :xt/id 4}]
            (xt/q tu/*node* "SELECT _id, x FROM foo WHERE _id = 1 OR _id = 4 OR _id = 2 ORDER BY _id"))))
+
+(t/deftest date-column-minus-date-literal-is-the-days-between
+  (xt/execute-tx tu/*node* [[:put-docs :docs
+                             {:xt/id 1, :d #xt/date "2023-05-11"}
+                             {:xt/id 2, :d #xt/date "2023-04-01"}]])
+
+  (t/is (= [{:xt/id 1, :diff 10, :rdiff -10} {:xt/id 2, :diff -30, :rdiff 30}]
+           (xt/q tu/*node* "SELECT _id, d - DATE '2023-05-01' AS diff, DATE '2023-05-01' - d AS rdiff FROM docs ORDER BY _id"))))
