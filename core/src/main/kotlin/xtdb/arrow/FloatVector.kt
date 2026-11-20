@@ -36,8 +36,6 @@ class FloatVector private constructor(
         setFloat(idx, if (isNull(idx)) v else getFloat(idx) + v)
     }
 
-    override fun getDouble(idx: Int) = getFloat(idx).toDouble()
-
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = getFloat(idx)
 
     override fun writeObject0(value: Any) {
