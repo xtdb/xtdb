@@ -46,8 +46,6 @@ class FloatVector private constructor(
 
     override fun writeValue0(v: ValueReader) = writeFloat(v.readFloat())
 
-    override fun getMetaDouble(idx: Int) = getFloat(idx).toDouble()
-
     override fun hashCode0(idx: Int, hasher: Hasher): Int = hasher.hash(getFloat(idx).toDouble())
 
     override fun openSlice(al: BufferAllocator) =

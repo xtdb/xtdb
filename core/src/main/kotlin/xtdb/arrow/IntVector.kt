@@ -82,8 +82,6 @@ class IntVector private constructor(
 
     override fun writeValue0(v: ValueReader) = writeInt(v.readInt())
 
-    override fun getMetaDouble(idx: Int) = getInt(idx).toDouble()
-
     override fun hashCode0(idx: Int, hasher: Hasher) = hasher.hash(getInt(idx).toDouble())
 
     override fun openSlice(al: BufferAllocator) =
