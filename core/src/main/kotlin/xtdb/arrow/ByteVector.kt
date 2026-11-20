@@ -24,6 +24,7 @@ class ByteVector private constructor(
 
     override fun getByte(idx: Int) = getByte0(idx)
     override fun writeByte(v: Byte) = writeByte0(v)
+    override fun setByte(idx: Int, v: Byte) = setByte0(idx, v)
 
     override fun getAsInt(idx: Int) = getByte(idx).toInt()
     override fun getAsLong(idx: Int) = getByte(idx).toLong()
