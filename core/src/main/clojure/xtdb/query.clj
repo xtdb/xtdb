@@ -464,7 +464,10 @@
 
                       tracer (.getTracer opts)
                       query-span (when tracer
-                                   (metrics/start-span tracer "xtdb.query" {:attributes {:query.text query-text}}))
+                                   (metrics/start-span tracer "xtdb.query"
+                                                        {:attributes (cond-> {:query.text query-text}
+                                                                       (.getApplicationName opts)
+                                                                       (assoc :application.name (.getApplicationName opts)))}))
                       closeable-query-span (when query-span
                                              (reify AutoCloseable
                                                (close [_]

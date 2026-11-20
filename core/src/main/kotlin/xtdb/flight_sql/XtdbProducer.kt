@@ -244,7 +244,7 @@ class XtdbProducer(
             caller,
         ) { dbName ->
             unknownDbs.beforeConnect(dbName)
-            caller.connect(node, dbName)
+            caller.connect(node, dbName).also { it.setApplicationName("XTDB Flight SQL") }
         }
     }
 

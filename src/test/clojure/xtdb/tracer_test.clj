@@ -75,7 +75,8 @@
 
         (t/is (= [{:name "xtdb.query"
                    :attributes {"query.text" "SELECT 1"
-                                "query.peak_memory_bytes" true}
+                                "query.peak_memory_bytes" true
+                                "application.name" "XTDB Clojure API"}
                    :children
                    [{:name "query.cursor.project"
                      :attributes {"cursor.page_count" "1"
@@ -109,8 +110,12 @@
           (Thread/sleep 100)
 
           (t/is (= [{:name "xtdb.query"
+                     ;; pgjdbc sends "PostgreSQL JDBC Driver" as application_name when the
+                     ;; client doesn't set one - see test-query-span-includes-application-name
+                     ;; for a client-supplied value.
                      :attributes {"query.text" "SELECT 1"
-                                  "query.peak_memory_bytes" true}
+                                  "query.peak_memory_bytes" true
+                                  "application.name" "PostgreSQL JDBC Driver"}
                      :children
                      [{:name "query.cursor.project"
                        :attributes {"cursor.page_count" "1"
@@ -125,6 +130,53 @@
                                     "cursor.type" "table"}
                        :children []}]}]
                    (mapv bool-ify-peak-memory-bytes (build-span-tree @!spans)))))))))
+
+(t/deftest test-query-span-includes-application-name
+  (t/testing "a pgwire connection's application_name becomes an attribute on its query span"
+    (let [!spans (atom [])
+          exporter (test-span-exporter !spans)
+          span-processor (SimpleSpanProcessor/create exporter)]
+      (with-open [node (xtn/start-node {:tracer {:enabled? true
+                                                 :service-name "xtdb-test"
+                                                 :span-processor span-processor}})]
+        (binding [pgw-test/*port* (.getServerPort node)
+                  pgw-test/*server* node]
+          (with-open [conn (pgw-test/jdbc-conn {"ApplicationName" "bench-tool"})
+                      stmt (.createStatement conn)
+                      rs (.executeQuery stmt "SELECT 1")]
+            (t/is (= [{"_column_1" 1}] (pgw-test/rs->maps rs)))
+
+            ;; Give spans a moment to be exported
+            (Thread/sleep 100)
+
+            (t/is (= ["bench-tool"]
+                     (->> @!spans
+                          (filter #(= (:name %) "xtdb.query"))
+                          (mapv #(get-in % [:attributes "application.name"])))))))))))
+
+(t/deftest test-set-application-name-updates-the-query-span
+  (t/testing "a mid-session SET application_name updates the connection's own tag, not just the startup value"
+    (let [!spans (atom [])
+          exporter (test-span-exporter !spans)
+          span-processor (SimpleSpanProcessor/create exporter)]
+      (with-open [node (xtn/start-node {:tracer {:enabled? true
+                                                 :service-name "xtdb-test"
+                                                 :span-processor span-processor}})]
+        (binding [pgw-test/*port* (.getServerPort node)
+                  pgw-test/*server* node]
+          (with-open [conn (pgw-test/jdbc-conn {})
+                      stmt (.createStatement conn)]
+            (.execute stmt "SET application_name = 'Metabase'")
+            (with-open [rs (.executeQuery stmt "SELECT 1")]
+              (t/is (= [{"_column_1" 1}] (pgw-test/rs->maps rs))))
+
+            ;; Give spans a moment to be exported
+            (Thread/sleep 100)
+
+            (t/is (= ["Metabase"]
+                     (->> @!spans
+                          (filter #(= (:name %) "xtdb.query"))
+                          (mapv #(get-in % [:attributes "application.name"])))))))))))
 
 (t/deftest EXPLAIN_works_with_tracer_enabled__issue-5091
   (let [!spans (atom [])

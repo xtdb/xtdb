@@ -18,5 +18,6 @@ data class QueryBasis(
     val snapshotToken: String,
     @Serializable(InstantSerde::class) val snapshotTime: Instant?,
 ) {
-    fun toQueryOpts(tracer: Tracer?) = QueryOpts(currentTime, defaultTz, snapshotToken, snapshotTime, tracer)
+    fun toQueryOpts(tracer: Tracer?, applicationName: String? = null) =
+        QueryOpts(currentTime, defaultTz, snapshotToken, snapshotTime, tracer, applicationName)
 }

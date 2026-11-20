@@ -35,14 +35,15 @@
 ;; opens a connection to the op's `:database` (the connection carries the routing, so the ADBC
 ;; bodies read/write against it) — defaulting to the node's default db.
 (defn- connect-node ^Xtdb$Connection [^Xtdb node {:keys [database]}]
-  (if database
-    (let [^String db-name (cond-> database (keyword? database) (-> symbol str NormalForm/normalForm))]
-      ;; validate up-front so an unknown db surfaces the same on the read path as the write path (the
-      ;; connection's db() only checks on submit, so a read would otherwise fail later as 'table not found')
-      (when-not (.contains (.getDatabaseNames node) db-name)
-        (throw (err/incorrect :xtdb/unknown-db (str "Unknown database: " db-name) {:db-name db-name})))
-      (.connect node db-name))
-    (.connect node)))
+  (doto (if database
+          (let [^String db-name (cond-> database (keyword? database) (-> symbol str NormalForm/normalForm))]
+            ;; validate up-front so an unknown db surfaces the same on the read path as the write path (the
+            ;; connection's db() only checks on submit, so a read would otherwise fail later as 'table not found')
+            (when-not (.contains (.getDatabaseNames node) db-name)
+              (throw (err/incorrect :xtdb/unknown-db (str "Unknown database: " db-name) {:db-name db-name})))
+            (.connect node db-name))
+          (.connect node))
+    (.setApplicationName "XTDB Clojure API")))
 
 ;; threads the node's await-basis onto the per-op connection (and, for writes, back off it) so a read
 ;; sees this node's prior writes — the read-your-writes the DataSource/pgwire path gets from the same

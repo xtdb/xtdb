@@ -43,6 +43,10 @@ import org.apache.arrow.flight.sql.impl.FlightSql.SqlSupportedTransaction
 import org.apache.arrow.flight.sql.impl.FlightSql.CommandStatementIngest.TableDefinitionOptions
 import org.apache.arrow.flight.sql.impl.FlightSql.CommandStatementIngest.TableDefinitionOptions.TableExistsOption
 import org.apache.arrow.flight.sql.impl.FlightSql.CommandStatementIngest.TableDefinitionOptions.TableNotExistOption
+import io.opentelemetry.sdk.common.CompletableResultCode
+import io.opentelemetry.sdk.trace.data.SpanData
+import io.opentelemetry.sdk.trace.export.SimpleSpanProcessor
+import io.opentelemetry.sdk.trace.export.SpanExporter
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.vector.BigIntVector
@@ -94,11 +98,25 @@ class FlightSqlAdbcTest {
 
     private val emptyCallOpts = arrayOf<CallOption>()
 
+    private val spans = mutableListOf<SpanData>()
+
     @BeforeEach
     fun setUp() {
         xtdb = Xtdb.openNode {
             server { port = 0 }
             flightSql { port = 0 }
+            tracer {
+                enabled = true
+                spanProcessor = SimpleSpanProcessor.create(object : SpanExporter {
+                    override fun export(spanData: Collection<SpanData>): CompletableResultCode {
+                        spans.addAll(spanData)
+                        return CompletableResultCode.ofSuccess()
+                    }
+
+                    override fun flush() = CompletableResultCode.ofSuccess()
+                    override fun shutdown() = CompletableResultCode.ofSuccess()
+                })
+            }
         }
 
         flightPort = xtdb.flightSqlPort
@@ -1799,6 +1817,22 @@ class FlightSqlAdbcTest {
         assertEquals(
             listOf(mapOf("_id" to "jms", "name" to "James")),
             fsqlClient.execute("SELECT _id, name FROM users", *emptyCallOpts).readRows()
+        )
+    }
+
+    @Test
+    fun `a flight sql connection tags its query span XTDB Flight SQL`() {
+        conn.createStatement().use { stmt ->
+            stmt.setSqlQuery("SELECT 1")
+            stmt.executeQuery().use { r -> while (r.reader.loadNextBatch()) { } }
+        }
+
+        Thread.sleep(100)
+
+        assertEquals(
+            "XTDB Flight SQL",
+            spans.first { it.name == "xtdb.query" }.attributes.asMap()
+                .entries.first { it.key.key == "application.name" }.value
         )
     }
 }

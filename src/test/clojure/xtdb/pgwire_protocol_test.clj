@@ -92,6 +92,7 @@
     (with-open [_ (->conn frontend {"user" "xtdb", "database" "xtdb"} "xtdb")]
       (t/is (= [[:msg-auth {:result 3}]
                 [:msg-auth {:result 0}]
+                [:msg-parameter-status {:parameter "application_name", :value "XTDB PGWire"}]
                 [:msg-parameter-status {:parameter "server_encoding", :value "UTF8"}]
                 [:msg-parameter-status {:parameter "client_encoding", :value "UTF8"}]
                 [:msg-parameter-status {:parameter "DateStyle", :value "ISO"}]
