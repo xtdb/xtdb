@@ -315,6 +315,8 @@ class DenseUnionVector private constructor(
             override fun readAsDouble() = legReader.readAsDouble()
             override fun readBytes() = legReader.readBytes()
             override fun readObject() = legReader.readObject()
+            override fun readList() = legReader.readList()
+            override fun readStruct() = legReader.readStruct()
         }
     }
 

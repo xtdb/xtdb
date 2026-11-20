@@ -44,7 +44,8 @@ class RelationAsStructReader(
 
         return object : ValueReader {
             override val isNull get() = false
-            override fun readObject() = rdrs
+            override fun readStruct() = rdrs
+            override fun readObject() = readStruct()
         }
     }
 
