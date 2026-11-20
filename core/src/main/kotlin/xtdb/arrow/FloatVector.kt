@@ -28,6 +28,8 @@ class FloatVector private constructor(
         dataBuffer.writeFloat(v)
     }
 
+    override fun setFloat(idx: Int, v: Float) = setFloat0(idx, v)
+
     override fun getAsFloat(idx: Int) = getFloat(idx)
     override fun getAsDouble(idx: Int) = getFloat(idx).toDouble()
 
@@ -36,8 +38,6 @@ class FloatVector private constructor(
         setFloat(idx, if (isNull(idx)) v else getFloat(idx) + v)
     }
 
-    override fun getDouble(idx: Int) = getFloat(idx).toDouble()
-
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = getFloat(idx)
 
     override fun writeObject0(value: Any) {
@@ -45,8 +45,6 @@ class FloatVector private constructor(
     }
 
     override fun writeValue0(v: ValueReader) = writeFloat(v.readFloat())
-
-    override fun getMetaDouble(idx: Int) = getFloat(idx).toDouble()
 
     override fun hashCode0(idx: Int, hasher: Hasher): Int = hasher.hash(getFloat(idx).toDouble())
 

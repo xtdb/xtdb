@@ -43,8 +43,15 @@ class RelationAsStructReader(
         val rdrs = rel.vectors.associate { it.name to it.valueReader() }
 
         return object : ValueReader {
+            override var pos = 0
+                set(value) {
+                    field = value
+                    rdrs.values.forEach { it.pos = value }
+                }
+
             override val isNull get() = false
-            override fun readObject() = rdrs
+            override fun readStruct() = rdrs
+            override fun readObject(keyFn: IKeyFn<*>) = getObject(pos, keyFn)
         }
     }
 

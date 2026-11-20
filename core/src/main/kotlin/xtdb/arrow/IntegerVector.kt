@@ -1,11 +1,14 @@
 package xtdb.arrow
 
+import org.apache.arrow.memory.BufferAllocator
 import xtdb.arrow.agg.VectorSummer
 
 sealed class IntegerVector : NumericVector() {
 
     abstract fun getAsInt(idx: Int): Int
-    abstract fun getAsLong(idx: Int): Long
+    abstract override fun getAsLong(idx: Int): Long
+
+    abstract override fun openSlice(al: BufferAllocator): IntegerVector
 
     override fun sumInto(outVec: Vector): VectorSummer =
         when (outVec) {

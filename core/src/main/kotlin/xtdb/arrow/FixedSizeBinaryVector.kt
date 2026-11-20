@@ -21,14 +21,30 @@ class FixedSizeBinaryVector private constructor(
     constructor(al: BufferAllocator, name: String, nullable: Boolean, byteWidth: Int)
             : this(al, name, 0, byteWidth, if (nullable) BitBuffer(al) else null, ExtensibleBuffer(al))
 
+    override fun writeBytes(v: ByteBuffer) {
+        assert(v.remaining() == byteWidth) { "Expected $byteWidth bytes for $arrowType, got ${v.remaining()}" }
+        writeBytes0(v)
+    }
+
     override fun getBytes(idx: Int): ByteBuffer = getBytes0(idx)
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = getByteArray(idx)
 
-    override fun getLongLongHigh(idx: Int) = reverseBytes(dataBuffer.getLong(idx * 2))
-    override fun getLongLongLow(idx: Int) = reverseBytes(dataBuffer.getLong(idx * 2 + 1))
+    private fun assertLongLong() =
+        assert(byteWidth == 16) { "long-long access needs FixedSizeBinary(16), not $arrowType" }
+
+    override fun getLongLongHigh(idx: Int): Long {
+        assertLongLong()
+        return reverseBytes(dataBuffer.getLong(idx * 2))
+    }
+
+    override fun getLongLongLow(idx: Int): Long {
+        assertLongLong()
+        return reverseBytes(dataBuffer.getLong(idx * 2 + 1))
+    }
 
     override fun writeLongLong(high: Long, low: Long) {
+        assertLongLong()
         dataBuffer.writeLong(reverseBytes(high))
         dataBuffer.writeLong(reverseBytes(low))
         writeNotNull()

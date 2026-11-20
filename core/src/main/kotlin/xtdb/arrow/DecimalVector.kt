@@ -89,8 +89,6 @@ class DecimalVector private constructor(
         }
     }
 
-    override fun getMetaDouble(idx: Int): Double = getObject0(idx, KEBAB_CASE_KEYWORD).toDouble()
-
     override fun hashCode0(idx: Int, hasher: Hasher) = hasher.hash(getObject0(idx, KEBAB_CASE_KEYWORD).toDouble())
 
     override fun openSlice(al: BufferAllocator) =

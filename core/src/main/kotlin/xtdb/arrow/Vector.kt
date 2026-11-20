@@ -221,7 +221,9 @@ sealed class Vector : VectorReader, VectorWriter {
 
                 override fun visit(type: RunEndEncoded): Vector {
                     require(children.size == 2) { "run-end encoded fields have exactly two children" }
-                    return RunEndEncodedVector(name, children[0], children[1])
+                    val runEnds = children[0]
+                    require(runEnds is IntegerVector) { "run-ends must be a signed integer vector, got ${runEnds.arrowType}" }
+                    return RunEndEncodedVector(name, runEnds, children[1])
                 }
 
                 override fun visit(type: ExtensionType): Vector = when (type) {

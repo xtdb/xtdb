@@ -77,6 +77,8 @@ class DenseUnionVector private constructor(
         override fun getLong(idx: Int) = inner.getLong(getOffset(idx))
         override fun getFloat(idx: Int) = inner.getFloat(getOffset(idx))
         override fun getDouble(idx: Int) = inner.getDouble(getOffset(idx))
+        override fun getAsLong(idx: Int) = inner.getAsLong(getOffset(idx))
+        override fun getAsDouble(idx: Int) = inner.getAsDouble(getOffset(idx))
         override fun getBytes(idx: Int): ByteBuffer = inner.getBytes(getOffset(idx))
         override fun getObject(idx: Int, keyFn: IKeyFn<*>) = inner.getObject(getOffset(idx), keyFn)
 
@@ -219,6 +221,8 @@ class DenseUnionVector private constructor(
     override fun getLong(idx: Int): Long = leg(idx)!!.getLong(getOffset(idx))
     override fun getFloat(idx: Int): Float = leg(idx)!!.getFloat(getOffset(idx))
     override fun getDouble(idx: Int): Double = leg(idx)!!.getDouble(getOffset(idx))
+    override fun getAsLong(idx: Int): Long = leg(idx)!!.getAsLong(getOffset(idx))
+    override fun getAsDouble(idx: Int): Double = leg(idx)!!.getAsDouble(getOffset(idx))
     override fun getBytes(idx: Int): ByteBuffer = leg(idx)!!.getBytes(getOffset(idx))
 
     override fun writeUndefined() {
@@ -307,8 +311,12 @@ class DenseUnionVector private constructor(
             override fun readLong() = legReader.readLong()
             override fun readFloat() = legReader.readFloat()
             override fun readDouble() = legReader.readDouble()
+            override fun readAsLong() = legReader.readAsLong()
+            override fun readAsDouble() = legReader.readAsDouble()
             override fun readBytes() = legReader.readBytes()
-            override fun readObject() = legReader.readObject()
+            override fun readObject(keyFn: IKeyFn<*>) = legReader.readObject(keyFn)
+            override fun readList() = legReader.readList()
+            override fun readStruct() = legReader.readStruct()
         }
     }
 

@@ -198,9 +198,9 @@ sealed class PgType(
         override fun readText(data: ByteArray): Long = readUtf8(data).toLong()
 
         override fun writeBinary(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray =
-            ByteBuffer.allocate(typlen).putLong(rdr.getLong(idx)).array()
+            ByteBuffer.allocate(typlen).putLong(rdr.getAsLong(idx)).array()
 
-        override fun writeText(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray = utf8(rdr.getLong(idx))
+        override fun writeText(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray = utf8(rdr.getAsLong(idx))
     }
 
     data object Int4 : PgType(
@@ -275,9 +275,9 @@ sealed class PgType(
         override fun readText(data: ByteArray): Double = readUtf8(data).toDouble()
 
         override fun writeBinary(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray =
-            ByteBuffer.allocate(typlen).putDouble(rdr.getDouble(idx)).array()
+            ByteBuffer.allocate(typlen).putDouble(rdr.getAsDouble(idx)).array()
 
-        override fun writeText(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray = utf8(rdr.getDouble(idx))
+        override fun writeText(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray = utf8(rdr.getAsDouble(idx))
     }
 
     data object Bool : PgType(

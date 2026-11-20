@@ -23,8 +23,7 @@ class ShortVector private constructor(
 
     override fun getShort(idx: Int) = getShort0(idx)
     override fun writeShort(v: Short) = writeShort0(v)
-    override fun getInt(idx: Int) = getShort(idx).toInt()
-    override fun getLong(idx: Int) = getShort(idx).toLong()
+    override fun setShort(idx: Int, v: Short) = setShort0(idx, v)
 
     override fun getAsInt(idx: Int) = getShort(idx).toInt()
     override fun getAsLong(idx: Int) = getShort(idx).toLong()
@@ -38,8 +37,6 @@ class ShortVector private constructor(
     }
 
     override fun writeValue0(v: ValueReader) = writeShort(v.readShort())
-
-    override fun getMetaDouble(idx: Int) = getShort(idx).toDouble()
 
     override fun hashCode0(idx: Int, hasher: Hasher) = hasher.hash(getShort(idx).toDouble())
 

@@ -15,12 +15,14 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.extension.ExtendWith
 import xtdb.arrow.Vector.Companion.openVector
 import xtdb.arrow.VectorType.Companion.I32
 import xtdb.test.AllocatorResolver
 import xtdb.arrow.VectorType.Companion.ofType
 import kotlin.collections.map
+import java.nio.ByteBuffer
 import kotlin.random.Random
 import kotlin.use
 
@@ -50,6 +52,109 @@ class FixedWidthVectorTest {
             assertEquals(42, vector.getInt(0))
             assertEquals(43, vector.getInt(1))
             assertEquals(44, vector.getInt(2))
+        }
+    }
+
+    @Test
+    fun `a narrower vector's wider getX is unsupported, its getAsX converts`(al: BufferAllocator) {
+        ShortVector(al, "s", false).use { vec ->
+            vec.writeShort(42)
+            assertThrows<UnsupportedOperationException> { vec.getInt(0) }
+            assertThrows<UnsupportedOperationException> { vec.getLong(0) }
+            vec.getAsInt(0) shouldBe 42
+            vec.getAsLong(0) shouldBe 42L
+        }
+
+        IntVector.open(al, "i", false).use { vec ->
+            vec.writeInt(42)
+            assertThrows<UnsupportedOperationException> { vec.getLong(0) }
+            vec.getAsLong(0) shouldBe 42L
+        }
+
+        FloatVector(al, "f", false).use { vec ->
+            vec.writeFloat(4.5f)
+            assertThrows<UnsupportedOperationException> { vec.getDouble(0) }
+            vec.getAsDouble(0) shouldBe 4.5
+        }
+    }
+
+    @Test
+    fun `a vector's setX is supported only for its own storage type`(al: BufferAllocator) {
+        IntVector.open(al, "i", false).use { vec ->
+            vec.setInt(0, 42)
+            vec[1] = 43
+            vec.asList shouldBe listOf(42, 43)
+            assertThrows<UnsupportedOperationException> { vec.setLong(2, 44L) }
+            assertThrows<UnsupportedOperationException> { vec.setFloat(2, 4.5f) }
+            assertThrows<UnsupportedOperationException> { vec.setDouble(2, 4.5) }
+        }
+
+        LongVector(al, "l", false).use { vec ->
+            vec.setLong(0, 42L)
+            vec.asList shouldBe listOf(42L)
+            assertThrows<UnsupportedOperationException> { vec.setInt(1, 43) }
+            assertThrows<UnsupportedOperationException> { vec.setDouble(1, 4.5) }
+        }
+
+        FloatVector(al, "f", false).use { vec ->
+            vec.setFloat(0, 4.5f)
+            vec.asList shouldBe listOf(4.5f)
+            assertThrows<UnsupportedOperationException> { vec.setDouble(1, 4.5) }
+        }
+
+        DoubleVector(al, "d", false).use { vec ->
+            vec.setDouble(0, 4.5)
+            vec.asList shouldBe listOf(4.5)
+            assertThrows<UnsupportedOperationException> { vec.setFloat(1, 4.5f) }
+            assertThrows<UnsupportedOperationException> { vec.setLong(1, 42L) }
+        }
+
+        ShortVector(al, "s", false).use { vec ->
+            vec.setShort(0, 42)
+            vec.asList shouldBe listOf<Short>(42)
+            assertThrows<UnsupportedOperationException> { vec.setInt(1, 42) }
+        }
+
+        ByteVector(al, "b", false).use { vec ->
+            vec.setByte(0, 42)
+            vec.asList shouldBe listOf<Byte>(42)
+            assertThrows<UnsupportedOperationException> { vec.setShort(1, 42) }
+        }
+    }
+
+    @Test
+    fun `writeBytes is supported only on a fixed-size-binary vector, at its byte width`(al: BufferAllocator) {
+        FixedSizeBinaryVector(al, "b", false, 4).use { vec ->
+            vec.writeBytes(byteArrayOf(1, 2, 3, 4))
+            vec.getObject(0) shouldBe byteArrayOf(1, 2, 3, 4)
+            assertThrows<AssertionError> { vec.writeBytes(byteArrayOf(1, 2, 3)) }
+            assertThrows<AssertionError> { vec.writeBytes(byteArrayOf(1, 2, 3, 4, 5)) }
+            vec.valueCount shouldBe 1
+        }
+
+        IntVector.open(al, "i", false).use { vec ->
+            assertThrows<UnsupportedOperationException> { vec.writeBytes(ByteBuffer.allocate(4)) }
+        }
+
+        LongVector(al, "l", false).use { vec ->
+            assertThrows<UnsupportedOperationException> { vec.writeBytes(ByteBuffer.allocate(8)) }
+        }
+    }
+
+    @Test
+    fun `long-long reads and writes are supported only on a 16-byte fixed-size-binary vector`(al: BufferAllocator) {
+        FixedSizeBinaryVector(al, "iid", false, 16).use { vec ->
+            vec.writeLongLong(0x0102030405060708L, -1L)
+            vec.getLongLongHigh(0) shouldBe 0x0102030405060708L
+            vec.getLongLongLow(0) shouldBe -1L
+        }
+
+        FixedSizeBinaryVector(al, "b", false, 8).use { vec ->
+            vec.writeBytes(ByteArray(8))
+            assertThrows<AssertionError> { vec.getLongLongHigh(0) }
+            assertThrows<AssertionError> { vec.getLongLongLow(0) }
+            assertThrows<AssertionError> { vec.writeLongLong(1, 2) }
+            vec.valueCount shouldBe 1
         }
     }
 

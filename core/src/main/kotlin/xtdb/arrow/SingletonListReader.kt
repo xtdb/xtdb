@@ -51,7 +51,10 @@ class SingletonListReader(override val name: String, private val elReader: Vecto
         val valueCount = getListCount(0)
         val elValueReader = elReader.valueReader()
 
-        override fun readObject() = object : ListValueReader {
+        override val isNull get() = false
+        override fun readObject(keyFn: IKeyFn<*>) = getObject(0, keyFn)
+
+        override fun readList() = object : ListValueReader {
             override fun size() = valueCount
 
             override fun nth(idx: Int): ValueReader {

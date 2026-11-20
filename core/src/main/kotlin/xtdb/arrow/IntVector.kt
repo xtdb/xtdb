@@ -52,7 +52,8 @@ class IntVector private constructor(
 
     override fun getInt(idx: Int) = getInt0(idx)
     override fun writeInt(v: Int) = writeInt0(v)
-    override fun getLong(idx: Int) = getInt(idx).toLong()
+    override fun setInt(idx: Int, v: Int) = setInt0(idx, v)
+    operator fun set(idx: Int, v: Int) = setInt(idx, v)
 
     override fun getAsInt(idx: Int) = getInt(idx)
     override fun getAsLong(idx: Int) = getInt(idx).toLong()
@@ -81,8 +82,6 @@ class IntVector private constructor(
     }
 
     override fun writeValue0(v: ValueReader) = writeInt(v.readInt())
-
-    override fun getMetaDouble(idx: Int) = getInt(idx).toDouble()
 
     override fun hashCode0(idx: Int, hasher: Hasher) = hasher.hash(getInt(idx).toDouble())
 

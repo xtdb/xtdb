@@ -384,7 +384,7 @@
 
 (def ^:private col-type->rw-fn
   '{:bool Boolean, :i8 Byte, :i16 Short, :i32 Int, :i64 Long, :f32 Float, :f64 Double,
-    :timestamp-tz Long, :timestamp-local Long, :duration Long, :tstz-range Object
+    :timestamp-tz Long, :timestamp-local Long, :duration Long
     :utf8 Bytes, :varbinary Bytes, :keyword Bytes, :uuid Bytes
 
     :list Object, :set Object, :struct Object :transit Object})
@@ -396,7 +396,7 @@
   `(do ~@args (.writeNull ~w)))
 
 (doseq [k [:bool :i8 :i16 :i32 :i64 :f32 :f64
-           :timestamp-tz :timestamp-local :duration :tstz-range
+           :timestamp-tz :timestamp-local :duration
            :utf8 :varbinary :uuid :keyword :transit]
         :let [rw-fn (col-type->rw-fn k)]]
   (defmethod read-value-code k [_ & args] `(~(symbol (str ".read" rw-fn)) ~@args))
@@ -421,12 +421,22 @@
 
 (defmethod write-value-code :oid [_ & args] `(.writeInt ~@args))
 
-(doseq [[k tag] {:interval Interval :decimal BigDecimal,
-                 :list ListValueReader, :set ListValueReader, :struct Map}]
+(doseq [[k tag] {:interval Interval :decimal BigDecimal}]
   (defmethod read-value-code k [_ & args]
     (-> `(.readObject ~@args) (with-tag tag)))
 
   (defmethod write-value-code k [_ & args] `(.writeObject ~@args)))
+
+(doseq [k [:list :set :tstz-range]]
+  (defmethod read-value-code k [_ & args]
+    (-> `(.readList ~@args) (with-tag ListValueReader)))
+
+  (defmethod write-value-code k [_ & args] `(.writeObject ~@args)))
+
+(defmethod read-value-code :struct [_ & args]
+  (-> `(.readStruct ~@args) (with-tag Map)))
+
+(defmethod write-value-code :struct [_ & args] `(.writeObject ~@args))
 
 (defn- continue-read-union [f inner-types reader-sym args]
   (let [without-null (disj inner-types #xt/type :null)]

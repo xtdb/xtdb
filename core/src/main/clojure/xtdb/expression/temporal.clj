@@ -134,10 +134,14 @@
 
 ;;;; `CAST`
 
-(defmethod expr/codegen-cast [:date :date] [{:keys [^VectorType target-type]}]
-  ;; date-days and date-millis are both just represented as days throughout the EE,
-  ;; conversion is done when we read from/write to the vector.
-  {:return-type target-type, :->call-code first})
+(def ^:private ^:const millis-per-day 86400000)
+
+(defmethod expr/codegen-cast [:date :date] [{:keys [^VectorType source-type, ^VectorType target-type]}]
+  {:return-type target-type
+   :->call-code (case [(st/date-type->unit source-type) (st/date-type->unit target-type)]
+                  ([:day :day] [:milli :milli]) first
+                  [:milli :day] (fn [[x]] `(int (Math/floorDiv ~x ~millis-per-day)))
+                  [:day :milli] (fn [[x]] `(unchecked-multiply (long ~x) ~millis-per-day)))})
 
 (defmethod expr/codegen-cast [:time-local :time-local] [{:keys [^VectorType source-type, ^VectorType target-type]}]
   (let [src-tsunit (st/time-type->unit source-type)
@@ -173,19 +177,37 @@
   (let [zone-sym (-> (gensym 'default-zone) (expr/with-tag ZoneOffsets))]
     [zone-sym [zone-sym `(ZoneOffsets/of expr/*default-tz*)]]))
 
-(defmethod expr/codegen-cast [:date :timestamp-local] [{:keys [^VectorType target-type]}]
-  (let [hz (types/ts-units-per-second (st/timestamp-type->unit target-type))]
-    {:return-type target-type
-     :->call-code (fn [[dt]]
-                    `(TemporalMath/dayToLocal ~dt ~hz))}))
+(defn- with-day-source [{:keys [source-type]} {:keys [->call-code] :as cast}]
+  (if (= #xt/type [:date :milli] source-type)
+    (let [{->day :->call-code, day-bb :batch-bindings} (expr/codegen-cast {:source-type source-type, :target-type #xt/type [:date :day]})]
+      (-> cast
+          (update :batch-bindings #(into (vec day-bb) %))
+          (assoc :->call-code (fn [[x]] (->call-code [(->day [x])])))))
+    cast))
 
-(defmethod expr/codegen-cast [:date :timestamp-tz] [{:keys [^VectorType target-type]}]
-  (let [hz (types/ts-units-per-second (st/timestamp-type->unit target-type))
-        [zone-sym zone-binding] (default-zone-binding)]
-    {:return-type target-type
-     :batch-bindings [zone-binding]
-     :->call-code (fn [[dt]]
-                    `(TemporalMath/startOfDay ~dt ~hz ~zone-sym))}))
+(defn- with-day-target [{:keys [target-type]} {:keys [->call-code batch-bindings] :as cast}]
+  (if (= #xt/type [:date :milli] target-type)
+    (let [{->milli :->call-code, milli-bb :batch-bindings} (expr/codegen-cast {:source-type #xt/type [:date :day], :target-type target-type})]
+      (-> cast
+          (assoc :batch-bindings (into (vec batch-bindings) milli-bb))
+          (assoc :->call-code (fn [args] (->milli [(->call-code args)])))))
+    cast))
+
+(defmethod expr/codegen-cast [:date :timestamp-local] [{:keys [^VectorType target-type] :as opts}]
+  (with-day-source opts
+    (let [hz (types/ts-units-per-second (st/timestamp-type->unit target-type))]
+      {:return-type target-type
+       :->call-code (fn [[dt]]
+                      `(TemporalMath/dayToLocal ~dt ~hz))})))
+
+(defmethod expr/codegen-cast [:date :timestamp-tz] [{:keys [^VectorType target-type] :as opts}]
+  (with-day-source opts
+    (let [hz (types/ts-units-per-second (st/timestamp-type->unit target-type))
+          [zone-sym zone-binding] (default-zone-binding)]
+      {:return-type target-type
+       :batch-bindings [zone-binding]
+       :->call-code (fn [[dt]]
+                      `(TemporalMath/startOfDay ~dt ~hz ~zone-sym))})))
 
 (defn- today-code [zone-sym]
   `(TemporalMath/epochDay (TemporalMath/toLocal (.getEpochSecond (expr/current-time)) 1 ~zone-sym) 1))
@@ -212,11 +234,12 @@
                                                             ~(with-conversion tm src-tsunit tgt-tsunit))
                                              ~hz ~zone-sym))}))
 
-(defmethod expr/codegen-cast [:timestamp-local :date] [{:keys [^VectorType source-type, ^VectorType target-type]}]
-  (let [hz (types/ts-units-per-second (st/timestamp-type->unit source-type))]
-    {:return-type target-type
-     :->call-code (fn [[ts]]
-                    `(TemporalMath/epochDay ~ts ~hz))}))
+(defmethod expr/codegen-cast [:timestamp-local :date] [{:keys [^VectorType source-type, ^VectorType target-type] :as opts}]
+  (with-day-target opts
+    (let [hz (types/ts-units-per-second (st/timestamp-type->unit source-type))]
+      {:return-type target-type
+       :->call-code (fn [[ts]]
+                      `(TemporalMath/epochDay ~ts ~hz))})))
 
 (defmethod expr/codegen-cast [:timestamp-local :time-local] [{:keys [^VectorType source-type, ^VectorType target-type]}]
   (let [src-tsunit (st/timestamp-type->unit source-type)
@@ -236,13 +259,14 @@
                     (-> `(TemporalMath/fromLocal ~ts ~(types/ts-units-per-second src-tsunit) ~zone-sym)
                         (with-floored-conversion src-tsunit tgt-tsunit)))}))
 
-(defmethod expr/codegen-cast [:timestamp-tz :date] [{:keys [^VectorType source-type, ^VectorType target-type]}]
-  (let [hz (types/ts-units-per-second (st/timestamp-type->unit source-type))
-        [zone-sym zone-binding] (default-zone-binding)]
-    {:return-type target-type
-     :batch-bindings [zone-binding]
-     :->call-code (fn [[tstz]]
-                    `(TemporalMath/epochDay (TemporalMath/toLocal (Math/floorDiv ~tstz ~hz) 1 ~zone-sym) 1))}))
+(defmethod expr/codegen-cast [:timestamp-tz :date] [{:keys [^VectorType source-type, ^VectorType target-type] :as opts}]
+  (with-day-target opts
+    (let [hz (types/ts-units-per-second (st/timestamp-type->unit source-type))
+          [zone-sym zone-binding] (default-zone-binding)]
+      {:return-type target-type
+       :batch-bindings [zone-binding]
+       :->call-code (fn [[tstz]]
+                      `(TemporalMath/epochDay (TemporalMath/toLocal (Math/floorDiv ~tstz ~hz) 1 ~zone-sym) 1))})))
 
 (defmethod expr/codegen-cast [:timestamp-tz :time-local] [{:keys [^VectorType source-type, ^VectorType target-type]}]
   (let [src-tsunit (st/timestamp-type->unit source-type)
@@ -355,13 +379,13 @@
 (defn local-date->epoch-day ^long [^LocalDate d]
   (.toEpochDay d))
 
-(defmethod expr/codegen-cast [:utf8 :date] [{:keys [^VectorType target-type]}]
-  ;; FIXME this assumes date-unit :day
-  {:return-type target-type
-   :->call-code (fn [[s]]
-                  `(->> (expr/resolve-string ~s)
-                        (parse-with-error-handling "date" #(LocalDate/parse %))
-                        (local-date->epoch-day)))})
+(defmethod expr/codegen-cast [:utf8 :date] [{:keys [^VectorType target-type] :as opts}]
+  (with-day-target opts
+    {:return-type target-type
+     :->call-code (fn [[s]]
+                    `(->> (expr/resolve-string ~s)
+                          (parse-with-error-handling "date" #(LocalDate/parse %))
+                          (local-date->epoch-day)))}))
 
 (defn local-time->nano ^long [^LocalTime t]
   (.toNanoOfDay t))
@@ -429,13 +453,13 @@
                          (.toString)
                          (string->byte-buffer)))}))
 
-(defmethod expr/codegen-cast [:date :utf8] [_]
-  ;; FIXME this assumes date-unit :day
-  {:return-type #xt/type :utf8
-   :->call-code (fn [[x]]
-                  `(-> (LocalDate/ofEpochDay ~x)
-                       (.toString)
-                       (string->byte-buffer)))})
+(defmethod expr/codegen-cast [:date :utf8] [opts]
+  (with-day-source opts
+    {:return-type #xt/type :utf8
+     :->call-code (fn [[x]]
+                    `(-> (LocalDate/ofEpochDay ~x)
+                         (.toString)
+                         (string->byte-buffer)))}))
 
 (defmethod expr/codegen-cast [:time-local :utf8] [{:keys [^VectorType source-type]}]
   (let [t-unit (st/time-type->unit source-type)]
@@ -764,6 +788,35 @@
                                (update :arg-types (comp vec rseq))))]
     {:return-type ret-type, :batch-bindings bb, :->call-code (comp ->cc vec rseq)}))
 
+(def ^:private date-milli-type #xt/type [:date :milli])
+(def ^:private date-day-type #xt/type [:date :day])
+
+(defn on-date-days
+  "Calls `f` with `expr`, its `[:date :milli]` arg-types cast to `[:date :day]`.
+  With `:keep-unit?`, a `[:date :day]` result is cast back to `[:date :milli]` where an arg was."
+  ([expr f] (on-date-days expr {} f))
+
+  ([{:keys [arg-types] :as expr} {:keys [keep-unit?]} f]
+   (if-not (some #{date-milli-type} arg-types)
+     (f expr)
+     (let [arg-casts (mapv (fn [t]
+                             (if (= date-milli-type t)
+                               (expr/codegen-cast {:source-type t, :target-type date-day-type})
+                               {:return-type t, :->call-code first}))
+                           arg-types)
+           {:keys [return-type batch-bindings ->call-code]} (f (assoc expr :arg-types (mapv :return-type arg-casts)))
+           {ret :return-type, ret-bb :batch-bindings, ->cast-ret :->call-code}
+           (if (and keep-unit? (= date-day-type return-type))
+             (expr/codegen-cast {:source-type date-day-type, :target-type date-milli-type})
+             {:return-type return-type, :->call-code first})]
+       {:return-type ret
+        :batch-bindings (-> []
+                            (into (mapcat :batch-bindings) arg-casts)
+                            (into batch-bindings)
+                            (into ret-bb))
+        :->call-code (fn [args]
+                       (->cast-ret [(->call-code (mapv (fn [{->cast :->call-code} arg] (->cast [arg])) arg-casts args))]))}))))
+
 ;;; addition
 
 (defmethod expr/codegen-call [:+ :date :time-local] [{[_ ^VectorType$Mono time-type] :arg-types, :as expr}]
@@ -805,14 +858,16 @@
       #(do [:duration %]) #(do `(Math/addExact ~@%)))))
 
 (doseq [[f-kw sign] [[:+ 1] [:- -1]]]
-  (defmethod expr/codegen-call [f-kw :date :interval] [{[dt-type, ^VectorType$Mono i-type] :arg-types, :as expr}]
-    (let [iunit (st/interval-type->unit i-type)]
-      (case iunit
-        :year-month {:return-type dt-type
-                     :->call-code (fn [[x-arg y-arg]]
-                                    `(TemporalMath/datePlusInterval ~x-arg ~y-arg ~sign))}
-        :month-day-micro (recall-with-cast2 expr [:timestamp-local :micro] [:interval :month-day-micro])
-        :month-day-nano (recall-with-cast2 expr [:timestamp-local :nano] [:interval :month-day-nano]))))
+  (defmethod expr/codegen-call [f-kw :date :interval] [expr]
+    (on-date-days expr {:keep-unit? true}
+      (fn [{[dt-type, ^VectorType$Mono i-type] :arg-types, :as expr}]
+        (let [iunit (st/interval-type->unit i-type)]
+          (case iunit
+            :year-month {:return-type dt-type
+                         :->call-code (fn [[x-arg y-arg]]
+                                        `(TemporalMath/datePlusInterval ~x-arg ~y-arg ~sign))}
+            :month-day-micro (recall-with-cast2 expr [:timestamp-local :micro] [:interval :month-day-micro])
+            :month-day-nano (recall-with-cast2 expr [:timestamp-local :nano] [:interval :month-day-nano]))))))
 
   (defmethod expr/codegen-call [f-kw :timestamp-local :interval] [{[^VectorType$Mono ts-type, ^VectorType$Mono i-type] :arg-types}]
     (let [ts-unit (st/timestamp-type->unit ts-type)
@@ -882,9 +937,10 @@
   (let [x-unit (st/timestamp-type->unit x-type)]
     (-> expr (recall-with-cast2 [:timestamp-local x-unit] y))))
 
-(defmethod expr/codegen-call [:- :date :date] [_expr]
-  ;; FIXME this assumes date-unit :day
-  {:return-type #xt/type :i32, :->call-code (fn [[x y]] `(Math/subtractExact ~x ~y))})
+(defmethod expr/codegen-call [:- :date :date] [expr]
+  (on-date-days expr
+    (fn [_]
+      {:return-type #xt/type :i32, :->call-code (fn [[x y]] `(Math/subtractExact ~x ~y))})))
 
 (doseq [t [:timestamp-tz :timestamp-local]]
   (defmethod expr/codegen-call [:- :date t] [{[_ t2-type] :arg-types, :as expr}]
@@ -987,10 +1043,11 @@
   (let [x-unit (st/timestamp-type->unit x)]
     (-> expr (recall-with-cast2 [:timestamp-local x-unit] y))))
 
-;; both sides are epoch days whatever their unit - `DateMilliVector` converts millis to days on read
-(defmethod expr/codegen-call [:compare :date :date] [_]
-  {:return-type #xt/type :i32
-   :->call-code #(do `(Long/compare ~@%))})
+(defmethod expr/codegen-call [:compare :date :date] [expr]
+  (on-date-days expr
+    (fn [_]
+      {:return-type #xt/type :i32
+       :->call-code #(do `(Long/compare ~@%))})))
 
 (doseq [t [:timestamp-tz :timestamp-local]]
   (defmethod expr/codegen-call [:compare :date t] [{[_ t2] :arg-types, :as expr}]
@@ -1481,14 +1538,15 @@
                                                             {:field :epoch, :source-type :timestamp-local}))
                             (extract-local-ts-field-code field ts-sym hz)))))}))
 
-(defmethod expr/codegen-call [:extract :utf8 :date] [{[{field :literal} _] :args}]
-  ;; FIXME this assumes date-unit :day
-  {:return-type #xt/type :i32
-   :->call-code (fn [[_ epoch-day-code]]
-                  (or (extract-date-field-code field epoch-day-code)
-                      (throw (err/unsupported ::expr/extract-not-supported
-                                              (format "Extract \"%s\" not supported for type date" field)
-                                              {:field field, :source-type :date}))))})
+(defmethod expr/codegen-call [:extract :utf8 :date] [{[{field :literal} _] :args, :as expr}]
+  (on-date-days expr
+    (fn [_]
+      {:return-type #xt/type :i32
+       :->call-code (fn [[_ epoch-day-code]]
+                      (or (extract-date-field-code field epoch-day-code)
+                          (throw (err/unsupported ::expr/extract-not-supported
+                                                  (format "Extract \"%s\" not supported for type date" field)
+                                                  {:field field, :source-type :date}))))})))
 
 (defmethod expr/codegen-call [:extract :utf8 :interval] [{[{field :literal} _] :args}]
   {:return-type #xt/type :i32
@@ -1587,11 +1645,12 @@
      :->call-code (fn [[_ x]]
                     (truncate-tstz-code field x hz zone-sym))}))
 
-(defmethod expr/codegen-call [:date_trunc :utf8 :date] [{[{field :literal} _] :args, [_ date-type] :arg-types}]
-  ;; FIXME this assumes epoch-day
-  {:return-type date-type
-   :->call-code (fn [[_ epoch-day-code]]
-                  (truncate-date-code field epoch-day-code))})
+(defmethod expr/codegen-call [:date_trunc :utf8 :date] [{[{field :literal} _] :args, :as expr}]
+  (on-date-days expr {:keep-unit? true}
+    (fn [{[_ date-type] :arg-types}]
+      {:return-type date-type
+       :->call-code (fn [[_ epoch-day-code]]
+                      (truncate-date-code field epoch-day-code))})))
 
 (defn truncated-millennium [^Period period]
   (let [months (.toTotalMonths period)]

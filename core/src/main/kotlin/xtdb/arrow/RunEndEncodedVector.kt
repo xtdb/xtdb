@@ -26,7 +26,7 @@ import org.apache.arrow.vector.complex.RunEndEncodedVector as ArrowRunEndEncoded
  */
 class RunEndEncodedVector private constructor(
     override var name: String,
-    private val runEndsVector: Vector,
+    private val runEndsVector: IntegerVector,
     private val valuesVector: Vector,
     override var valueCount: Int
 ) : Vector(), LongLongVectorReader {
@@ -39,7 +39,7 @@ class RunEndEncodedVector private constructor(
         require(!runEndsVector.nullable) { "run-ends must be non-nullable" }
     }
 
-    constructor(name: String, runEndsVector: Vector, valuesVector: Vector)
+    constructor(name: String, runEndsVector: IntegerVector, valuesVector: Vector)
             : this(name, runEndsVector, valuesVector, 0)
 
     constructor(al: BufferAllocator, name: String, valuesVector: Vector)
@@ -70,7 +70,7 @@ class RunEndEncodedVector private constructor(
 
     val runCount get() = runEndsVector.valueCount
 
-    fun runEnd(runIdx: Int) = runEndsVector.getLong(runIdx).toInt()
+    fun runEnd(runIdx: Int) = runEndsVector.getAsLong(runIdx).toInt()
 
     fun runStart(runIdx: Int) = if (runIdx == 0) 0 else runEnd(runIdx - 1)
 
@@ -109,6 +109,8 @@ class RunEndEncodedVector private constructor(
     override fun getLong(idx: Int) = valuesVector.getLong(runIdx(idx))
     override fun getFloat(idx: Int) = valuesVector.getFloat(runIdx(idx))
     override fun getDouble(idx: Int) = valuesVector.getDouble(runIdx(idx))
+    override fun getAsLong(idx: Int) = valuesVector.getAsLong(runIdx(idx))
+    override fun getAsDouble(idx: Int) = valuesVector.getAsDouble(runIdx(idx))
     override fun getBytes(idx: Int): ByteBuffer = valuesVector.getBytes(runIdx(idx))
     override fun getPointer(idx: Int, reuse: ArrowBufPointer) = valuesVector.getPointer(runIdx(idx), reuse)
     override fun getObject(idx: Int, keyFn: IKeyFn<*>) = valuesVector.getObject(runIdx(idx), keyFn)
@@ -330,7 +332,7 @@ class RunEndEncodedVector private constructor(
         var prev = 0L
 
         for (i in 0..<runCount) {
-            val end = runEndsVector.getLong(i)
+            val end = runEndsVector.getAsLong(i)
             check(end in prev + 1..Int.MAX_VALUE.toLong()) { "run end $end at run $i doesn't follow $prev" }
             prev = end
         }

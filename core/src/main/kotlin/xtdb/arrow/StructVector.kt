@@ -119,9 +119,8 @@ class StructVector private constructor(
                 val obj = it.value
 
                 if (obj is ValueReader) {
-                    // Handle ValueReader (e.g. ValueBox) - read the object and infer type
-                    val actualObj = obj.readObject()
-                    val childWriter = childWriters[key] ?: vectorFor(key, actualObj.toArrowType(), actualObj == null)
+                    val childWriter = childWriters[key]
+                        ?: obj.readObject().let { v -> vectorFor(key, v.toArrowType(), v == null) }
 
                     if (childWriter.valueCount != this.valueCount)
                         throw Incorrect(
@@ -157,7 +156,7 @@ class StructVector private constructor(
             endStruct()
         }
 
-    override fun writeValue0(v: ValueReader) = writeObject(v.readObject())
+    override fun writeValue0(v: ValueReader) = writeObject(v.readStruct())
 
     override fun valueReader() = object : ValueReader {
         val readers = childWriters.mapValues { it.value.valueReader() }
@@ -170,7 +169,8 @@ class StructVector private constructor(
 
         override val isNull get() = this@StructVector.isNull(pos)
 
-        override fun readObject() = if (isNull) null else readers
+        override fun readStruct() = readers
+        override fun readObject(keyFn: IKeyFn<*>) = getObject(pos, keyFn)
     }
 
     override fun hashCode0(idx: Int, hasher: Hasher) =

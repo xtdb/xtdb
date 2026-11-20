@@ -108,7 +108,7 @@ class ListVector private constructor(
         else -> throw InvalidWriteObjectException(this, value)
     }
 
-    override fun writeValue0(v: ValueReader) = writeObject(v.readObject())
+    override fun writeValue0(v: ValueReader) = writeObject(v.readList())
 
     override val listElements get() = elVector
 
@@ -241,7 +241,8 @@ class ListVector private constructor(
         }
 
         override val isNull get() = this@ListVector.isNull(pos)
-        override fun readObject() = listValReader
+        override fun readList() = listValReader
+        override fun readObject(keyFn: IKeyFn<*>) = getObject(pos, keyFn)
     }
 
     override fun clear() {

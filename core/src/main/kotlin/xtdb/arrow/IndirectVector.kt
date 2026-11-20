@@ -30,6 +30,8 @@ class IndirectVector(private val inner: VectorReader, private val sel: VectorInd
     override fun getLong(idx: Int) = inner.getLong(sel[idx])
     override fun getFloat(idx: Int) = inner.getFloat(sel[idx])
     override fun getDouble(idx: Int) = inner.getDouble(sel[idx])
+    override fun getAsLong(idx: Int) = inner.getAsLong(sel[idx])
+    override fun getAsDouble(idx: Int) = inner.getAsDouble(sel[idx])
     override fun getBytes(idx: Int): ByteBuffer = inner.getBytes(sel[idx])
     override fun getPointer(idx: Int, reuse: ArrowBufPointer) = inner.getPointer(sel[idx], reuse)
     override fun getObject(idx: Int, keyFn: IKeyFn<*>) = inner.getObject(sel[idx], keyFn)

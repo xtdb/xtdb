@@ -21,7 +21,7 @@ private class IntervalValueReader(private val vec: VectorReader) : ValueReader {
     override var pos = 0
     override val isNull: Boolean get() = vec.isNull(pos)
 
-    override fun readObject(): Any? = vec.getObject(pos)
+    override fun readObject(keyFn: IKeyFn<*>) = vec.getObject(pos, keyFn)
 }
 
 class IntervalYearMonthVector private constructor(
@@ -38,6 +38,7 @@ class IntervalYearMonthVector private constructor(
 
     override fun getInt(idx: Int) = getInt0(idx)
     override fun writeInt(v: Int) = writeInt0(v)
+    override fun setInt(idx: Int, v: Int) = setInt0(idx, v)
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = Interval(getInt(idx), 0, 0)
 
@@ -95,7 +96,7 @@ class IntervalDayTimeVector private constructor(
                     putInt(value.days)
                     putInt((value.nanos / NANOS_PER_MILLI).toInt())
                     flip()
-                    writeBytes(this)
+                    writeBytes0(this)
                 }
             }
 
@@ -105,7 +106,7 @@ class IntervalDayTimeVector private constructor(
                     putInt(value.period.days)
                     putInt((value.duration.toNanos() / NANOS_PER_MILLI).toInt())
                     flip()
-                    writeBytes(this)
+                    writeBytes0(this)
                 }
             }
 
@@ -151,7 +152,7 @@ class IntervalMonthDayNanoVector private constructor(
             putInt(days)
             putLong(nanos)
             flip()
-            writeBytes(this)
+            writeBytes0(this)
         }
     }
 

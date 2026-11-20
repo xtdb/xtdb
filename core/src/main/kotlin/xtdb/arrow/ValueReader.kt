@@ -1,5 +1,6 @@
 package xtdb.arrow
 
+import xtdb.api.query.IKeyFn
 import java.nio.ByteBuffer
 
 interface ValueReader {
@@ -19,9 +20,14 @@ interface ValueReader {
 
     fun readFloat(): Float = unsupported("readFloat")
     fun readDouble(): Double = unsupported("readDouble")
+    fun readAsLong(): Long = unsupported("readAsLong")
+    fun readAsDouble(): Double = unsupported("readAsDouble")
 
     fun readBytes(): ByteBuffer = unsupported("readBytes")
-    fun readObject(): Any? = unsupported("readObject")
+    fun readObject(): Any? = readObject { it }
+    fun readObject(keyFn: IKeyFn<*>): Any? = unsupported("readObject")
+    fun readList(): ListValueReader = unsupported("readList")
+    fun readStruct(): Map<String, ValueReader> = unsupported("readStruct")
 
     open class ForVector(private val vec: VectorReader) : ValueReader {
         override var pos: Int = 0
@@ -37,7 +43,9 @@ interface ValueReader {
         override fun readLong() = vec.getLong(pos)
         override fun readFloat() = vec.getFloat(pos)
         override fun readDouble() = vec.getDouble(pos)
+        override fun readAsLong() = vec.getAsLong(pos)
+        override fun readAsDouble() = vec.getAsDouble(pos)
         override fun readBytes() = vec.getBytes(pos)
-        override fun readObject() = vec.getObject(pos)
+        override fun readObject(keyFn: IKeyFn<*>) = vec.getObject(pos, keyFn)
     }
 }
