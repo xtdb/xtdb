@@ -197,4 +197,21 @@ class RowMaskTest {
         shouldThrow<IllegalStateException> { builder.add(2) }
         mask.toSelection().toList() shouldBe listOf(1)
     }
+
+    @Test
+    fun `isSet reads each row's bit, either side of each word boundary`() {
+        val set = setOf(0, 63, 64, 127, 128, 129)
+        val mask = rowMask(130) { it in set }
+        (0 until 130).filter(mask::isSet) shouldBe set.sorted()
+    }
+
+    @Test
+    fun `all sets every row and no more`() {
+        for (n in listOf(0, 1, 63, 64, 65, 200)) {
+            val mask = RowMask.all(n)
+            mask.rowCount shouldBe n
+            mask.cardinality shouldBe n
+            mask.toSelection().toList() shouldBe (0 until n).toList()
+        }
+    }
 }

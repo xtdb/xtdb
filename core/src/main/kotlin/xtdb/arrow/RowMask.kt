@@ -12,6 +12,8 @@ class RowMask private constructor(private val words: LongArray, val rowCount: In
 
     val wordCount: Int get() = words.size
 
+    fun isSet(row: Int): Boolean = (words[row ushr 6] ushr (row and 63)) and 1L != 0L
+
     /** Rows `64 * w` to `64 * w + 63`, row `64 * w` in the low bit. */
     fun word(w: Int): Long = words[w]
 
@@ -112,6 +114,15 @@ class RowMask private constructor(private val words: LongArray, val rowCount: In
     }
 
     companion object {
+        @JvmStatic
+        fun all(rowCount: Int): RowMask {
+            val words = LongArray((rowCount + 63) ushr 6) { -1L }
+            val tailBits = rowCount and 63
+            // a partial last word sets only its low `tailBits` bits, the rows below `rowCount`
+            if (tailBits != 0) words[words.size - 1] = (1L shl tailBits) - 1
+            return RowMask(words, rowCount)
+        }
+
         /**
          * Wraps [words] without copying: the caller MUST NOT write to them afterwards.
          *
