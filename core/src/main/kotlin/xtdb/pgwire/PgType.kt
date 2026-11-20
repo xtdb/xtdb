@@ -2,10 +2,12 @@ package xtdb.pgwire
 
 import org.apache.arrow.vector.types.FloatingPointPrecision.DOUBLE
 import org.apache.arrow.vector.types.FloatingPointPrecision.SINGLE
+import org.apache.arrow.vector.types.TimeUnit
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.ArrowType.ArrowTypeVisitor
 import org.apache.commons.codec.binary.Hex
 import xtdb.api.error.Incorrect
+import xtdb.arrow.RowValueReader
 import xtdb.arrow.VectorReader
 import xtdb.arrow.VectorType
 import xtdb.arrow.VectorType.Companion.BOOL
@@ -151,8 +153,19 @@ sealed class PgType(
 
     open fun readBinary(data: ByteArray): Any? = unsupported("readBinary")
     open fun readText(data: ByteArray): Any? = unsupported("readText")
-    open fun writeBinary(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray? = unsupported("writeBinary")
-    open fun writeText(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray? = unsupported("writeText")
+    protected open fun writeBinary(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray? = unsupported("writeBinary")
+    protected open fun writeText(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray? = unsupported("writeText")
+
+    /** Writes the cell [rdr] is on, null meaning SQL NULL. */
+    fun interface CellWriter {
+        fun write(env: PgSessionEnv, rdr: RowValueReader): ByteArray?
+    }
+
+    /** Writes [col]'s non-null cells in this type's binary format, read through [col]'s value reader. */
+    open fun binaryWriter(col: VectorReader) = CellWriter { env, rdr -> writeBinary(env, col, rdr) }
+
+    /** Writes [col]'s non-null cells in this type's text format, read through [col]'s value reader. */
+    open fun textWriter(col: VectorReader) = CellWriter { env, rdr -> writeText(env, col, rdr) }
 
     // Default type for unknown parameters
     data object Default : PgType(
@@ -179,8 +192,8 @@ sealed class PgType(
     ) {
         override fun readBinary(data: ByteArray): String = Text.readBinary(data)
         override fun readText(data: ByteArray): String = Text.readText(data)
-        override fun writeBinary(env: PgSessionEnv, rdr: VectorReader, idx: Int) = Text.writeBinary(env, rdr, idx)
-        override fun writeText(env: PgSessionEnv, rdr: VectorReader, idx: Int) = Text.writeText(env, rdr, idx)
+        override fun binaryWriter(col: VectorReader) = Text.binaryWriter(col)
+        override fun textWriter(col: VectorReader) = Text.textWriter(col)
     }
 
     data object Int8 : PgType(
@@ -197,10 +210,10 @@ sealed class PgType(
 
         override fun readText(data: ByteArray): Long = readUtf8(data).toLong()
 
-        override fun writeBinary(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray =
-            ByteBuffer.allocate(typlen).putLong(rdr.getAsLong(idx)).array()
+        override fun writeBinary(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray =
+            ByteBuffer.allocate(typlen).putLong(rdr.readAsLong()).array()
 
-        override fun writeText(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray = utf8(rdr.getAsLong(idx))
+        override fun writeText(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray = utf8(rdr.readAsLong())
     }
 
     data object Int4 : PgType(
@@ -217,10 +230,10 @@ sealed class PgType(
 
         override fun readText(data: ByteArray): Int = readUtf8(data).toInt()
 
-        override fun writeBinary(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray =
-            ByteBuffer.allocate(typlen).putInt(rdr.getInt(idx)).array()
+        override fun writeBinary(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray =
+            ByteBuffer.allocate(typlen).putInt(rdr.readInt()).array()
 
-        override fun writeText(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray = utf8(rdr.getInt(idx))
+        override fun writeText(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray = utf8(rdr.readInt())
     }
 
     data object Int2 : PgType(
@@ -236,10 +249,10 @@ sealed class PgType(
 
         override fun readText(data: ByteArray): Short = readUtf8(data).toShort()
 
-        override fun writeBinary(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray =
-            ByteBuffer.allocate(typlen).putShort(rdr.getShort(idx)).array()
+        override fun writeBinary(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray =
+            ByteBuffer.allocate(typlen).putShort(rdr.readShort()).array()
 
-        override fun writeText(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray = utf8(rdr.getShort(idx))
+        override fun writeText(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray = utf8(rdr.readShort())
     }
 
     data object Float4 : PgType(
@@ -255,10 +268,10 @@ sealed class PgType(
 
         override fun readText(data: ByteArray): Float = readUtf8(data).toFloat()
 
-        override fun writeBinary(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray =
-            ByteBuffer.allocate(typlen).putFloat(rdr.getFloat(idx)).array()
+        override fun writeBinary(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray =
+            ByteBuffer.allocate(typlen).putFloat(rdr.readFloat()).array()
 
-        override fun writeText(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray = utf8(rdr.getFloat(idx))
+        override fun writeText(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray = utf8(rdr.readFloat())
     }
 
     data object Float8 : PgType(
@@ -274,10 +287,10 @@ sealed class PgType(
 
         override fun readText(data: ByteArray): Double = readUtf8(data).toDouble()
 
-        override fun writeBinary(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray =
-            ByteBuffer.allocate(typlen).putDouble(rdr.getAsDouble(idx)).array()
+        override fun writeBinary(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray =
+            ByteBuffer.allocate(typlen).putDouble(rdr.readAsDouble()).array()
 
-        override fun writeText(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray = utf8(rdr.getAsDouble(idx))
+        override fun writeText(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray = utf8(rdr.readAsDouble())
     }
 
     data object Bool : PgType(
@@ -302,11 +315,11 @@ sealed class PgType(
                 else -> throw IllegalArgumentException("Invalid boolean value")
             }
 
-        override fun writeBinary(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray =
-            byteArrayOf(if (rdr.getBoolean(idx)) 1 else 0)
+        override fun writeBinary(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray =
+            byteArrayOf(if (rdr.readBoolean()) 1 else 0)
 
-        override fun writeText(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray =
-            utf8(if (rdr.getBoolean(idx)) "t" else "f")
+        override fun writeText(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray =
+            utf8(if (rdr.readBoolean()) "t" else "f")
     }
 
     data object Text : PgType(
@@ -322,10 +335,10 @@ sealed class PgType(
 
         override fun readText(data: ByteArray): String = readUtf8(data)
 
-        override fun writeBinary(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray =
-            rdr.getBytes(idx).let { bb -> ByteArray(bb.remaining()).also { bb.get(it) } }
+        override fun writeBinary(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray =
+            rdr.readBytes().let { bb -> ByteArray(bb.remaining()).also { bb.get(it) } }
 
-        override fun writeText(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray = writeBinary(env, rdr, idx)
+        override fun writeText(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray = writeBinary(env, col, rdr)
     }
 
     data object VarChar : PgType(
@@ -340,10 +353,10 @@ sealed class PgType(
 
         override fun readText(data: ByteArray): String = readUtf8(data)
 
-        override fun writeBinary(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray =
-            rdr.getBytes(idx).let { bb -> ByteArray(bb.remaining()).also { bb.get(it) } }
+        override fun writeBinary(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray =
+            rdr.readBytes().let { bb -> ByteArray(bb.remaining()).also { bb.get(it) } }
 
-        override fun writeText(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray = writeBinary(env, rdr, idx)
+        override fun writeText(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray = writeBinary(env, col, rdr)
     }
 
     data object Numeric : PgType(
@@ -358,11 +371,11 @@ sealed class PgType(
 
         override fun readText(data: ByteArray): BigDecimal = BigDecimal(readUtf8(data))
 
-        override fun writeBinary(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray =
-            encode(rdr.getObject(idx) as BigDecimal).array()
+        override fun writeBinary(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray =
+            encode(col.getObject(rdr.pos) as BigDecimal).array()
 
-        override fun writeText(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray =
-            utf8(rdr.getObject(idx)!!)
+        override fun writeText(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray =
+            utf8(col.getObject(rdr.pos)!!)
     }
 
     data object Timestamp : PgType(
@@ -386,13 +399,17 @@ sealed class PgType(
                 ?: throw IllegalArgumentException("Cannot parse '$text' as timestamp")
         }
 
-        override fun writeBinary(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray {
-            val micros = rdr.getUnixMicros(idx) - UNIX_PG_EPOCH_DIFF_MICROS
-            return ByteBuffer.allocate(8).putLong(micros).array()
+        override fun binaryWriter(col: VectorReader): CellWriter {
+            val nanos = (col.arrowType as? ArrowType.Timestamp)?.unit == TimeUnit.NANOSECOND
+
+            return CellWriter { _, rdr ->
+                val unixMicros = rdr.readLong().let { if (nanos) it / 1000 else it }
+                ByteBuffer.allocate(8).putLong(unixMicros - UNIX_PG_EPOCH_DIFF_MICROS).array()
+            }
         }
 
-        override fun writeText(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray {
-            val ldt = rdr.getObject(idx) as LocalDateTime
+        override fun writeText(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray {
+            val ldt = col.getObject(rdr.pos) as LocalDateTime
             return utf8(
                 if (env["datestyle"] == "iso8601") ldt.toString()
                 else ldt.format(ISO_OFFSET_DATE_TIME_FORMATTER_WITH_SPACE)
@@ -423,15 +440,15 @@ sealed class PgType(
             }
         }
 
-        override fun writeBinary(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray? {
-            val zdt = rdr.getObject(idx) as? ZonedDateTime ?: return null
+        override fun writeBinary(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray? {
+            val zdt = col.getObject(rdr.pos) as? ZonedDateTime ?: return null
             val unixMicros = with(InstantUtil) { zdt.toInstant().asMicros }
             val micros = unixMicros - UNIX_PG_EPOCH_DIFF_MICROS
             return ByteBuffer.allocate(8).putLong(micros).array()
         }
 
-        override fun writeText(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray? {
-            val zdt = rdr.getObject(idx) as? ZonedDateTime ?: return null
+        override fun writeText(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray? {
+            val zdt = col.getObject(rdr.pos) as? ZonedDateTime ?: return null
             return utf8(
                 if (env["datestyle"] == "iso8601") zdt.toString()
                 else zdt.format(ISO_OFFSET_DATE_TIME_FORMATTER_WITH_SPACE)
@@ -455,14 +472,14 @@ sealed class PgType(
 
         override fun readText(data: ByteArray): LocalDate = LocalDate.parse(readUtf8(data))
 
-        override fun writeBinary(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray {
-            val date = rdr.getObject(idx) as LocalDate
+        override fun writeBinary(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray {
+            val date = col.getObject(rdr.pos) as LocalDate
             val days = Math.toIntExact(date.toEpochDay() - UNIX_PG_EPOCH_DIFF_DAYS)
             return ByteBuffer.allocate(4).putInt(days).array()
         }
 
-        override fun writeText(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray {
-            val date = rdr.getObject(idx) as LocalDate
+        override fun writeText(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray {
+            val date = col.getObject(rdr.pos) as LocalDate
             return utf8(date.format(DateTimeFormatter.ISO_LOCAL_DATE))
         }
     }
@@ -483,14 +500,14 @@ sealed class PgType(
 
         override fun readText(data: ByteArray): LocalTime = LocalTime.parse(readUtf8(data))
 
-        override fun writeBinary(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray {
-            val time = rdr.getObject(idx) as LocalTime
+        override fun writeBinary(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray {
+            val time = col.getObject(rdr.pos) as LocalTime
             val micros = time.toNanoOfDay() / 1000
             return ByteBuffer.allocate(8).putLong(micros).array()
         }
 
-        override fun writeText(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray {
-            val time = rdr.getObject(idx) as LocalTime
+        override fun writeText(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray {
+            val time = col.getObject(rdr.pos) as LocalTime
             return utf8(time.format(DateTimeFormatter.ISO_LOCAL_TIME))
         }
     }
@@ -515,11 +532,11 @@ sealed class PgType(
         override fun readText(data: ByteArray): Interval =
             readUtf8(data).asInterval()
 
-        override fun writeBinary(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray =
-            rdr.intervalToIsoMicroBytes(idx)
+        override fun writeBinary(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray =
+            col.intervalToIsoMicroBytes(rdr.pos)
 
-        override fun writeText(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray =
-            rdr.intervalToIsoMicroBytes(idx)
+        override fun writeText(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray =
+            col.intervalToIsoMicroBytes(rdr.pos)
     }
 
     data object PgDuration : PgType(
@@ -534,8 +551,8 @@ sealed class PgType(
         override fun readText(data: ByteArray): Duration =
             Duration.parse(readUtf8(data))
 
-        override fun writeText(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray =
-            utf8(rdr.getObject(idx)!!)
+        override fun writeText(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray =
+            utf8(col.getObject(rdr.pos)!!)
     }
 
     data object TsTzRange : PgType(
@@ -565,14 +582,14 @@ sealed class PgType(
             return ZonedDateTimeRange(from, to)
         }
 
-        override fun writeBinary(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray {
-            val range = rdr.getObject(idx) as ZonedDateTimeRange
+        override fun writeBinary(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray {
+            val range = col.getObject(rdr.pos) as ZonedDateTimeRange
             return ("[${range.from?.format(ISO_OFFSET_DATE_TIME_FORMATTER_WITH_SPACE) ?: ""}" +
                     ",${range.to?.format(ISO_OFFSET_DATE_TIME_FORMATTER_WITH_SPACE) ?: ""})").toByteArray()
         }
 
-        override fun writeText(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray {
-            val range = rdr.getObject(idx) as ZonedDateTimeRange
+        override fun writeText(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray {
+            val range = col.getObject(rdr.pos) as ZonedDateTimeRange
             return utf8(
                 "[${range.from?.format(ISO_OFFSET_DATE_TIME_FORMATTER_WITH_SPACE) ?: ""}" +
                         ",${range.to?.format(ISO_OFFSET_DATE_TIME_FORMATTER_WITH_SPACE) ?: ""})"
@@ -595,11 +612,11 @@ sealed class PgType(
             return if (s.startsWith("\\x")) Hex.decodeHex(s.substring(2)) else data
         }
 
-        override fun writeBinary(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray =
-            rdr.getBytes(idx).let { bb -> ByteArray(bb.remaining()).also { bb.get(it) } }
+        override fun writeBinary(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray =
+            rdr.readBytes().let { bb -> ByteArray(bb.remaining()).also { bb.get(it) } }
 
-        override fun writeText(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray {
-            val bb = rdr.getBytes(idx)
+        override fun writeText(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray {
+            val bb = rdr.readBytes()
             val ba = ByteArray(bb.remaining())
             bb.get(ba)
             return utf8("\\x" + Hex.encodeHexString(ba))
@@ -625,8 +642,8 @@ sealed class PgType(
 
         override fun readText(data: ByteArray): List<Int?> = parsePgArray(readUtf8(data)).map { it?.toInt() }
 
-        override fun writeBinary(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray {
-            val list = rdr.getObject(idx) as List<*>
+        override fun writeBinary(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray {
+            val list = col.getObject(rdr.pos) as List<*>
             val bb = binaryListHeader(list.size, typelem!!, TYPLEN)
             for (elem in list) {
                 bb.putInt(TYPLEN)
@@ -635,8 +652,8 @@ sealed class PgType(
             return bb.array()
         }
 
-        override fun writeText(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray {
-            val list = rdr.getObject(idx) as List<*>
+        override fun writeText(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray {
+            val list = col.getObject(rdr.pos) as List<*>
             val sb = StringBuilder("{")
             for (elem in list) {
                 sb.append(elem ?: "NULL")
@@ -664,8 +681,8 @@ sealed class PgType(
 
         override fun readText(data: ByteArray): List<Long?> = parsePgArray(readUtf8(data)).map { it?.toLong() }
 
-        override fun writeBinary(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray {
-            val list = rdr.getObject(idx) as List<*>
+        override fun writeBinary(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray {
+            val list = col.getObject(rdr.pos) as List<*>
             val bb = binaryListHeader(list.size, typelem!!, TYPLEN)
             for (elem in list) {
                 bb.putInt(TYPLEN)
@@ -674,8 +691,8 @@ sealed class PgType(
             return bb.array()
         }
 
-        override fun writeText(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray {
-            val list = rdr.getObject(idx) as List<*>
+        override fun writeText(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray {
+            val list = col.getObject(rdr.pos) as List<*>
             val sb = StringBuilder("{")
             for (elem in list) {
                 sb.append(elem ?: "NULL")
@@ -701,8 +718,8 @@ sealed class PgType(
 
         override fun readText(data: ByteArray): List<String?> = parsePgArray(readUtf8(data))
 
-        override fun writeBinary(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray {
-            val list = rdr.getObject(idx) as List<*>
+        override fun writeBinary(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray {
+            val list = col.getObject(rdr.pos) as List<*>
             val elemBytes = list.map { if (it == null) null else utf8(it) }
             val totalLen = elemBytes.sumOf { it?.size ?: 0 }
             val bb = binaryVariableSizeArrayHeader(list.size, typelem!!, totalLen)
@@ -717,8 +734,8 @@ sealed class PgType(
             return bb.array()
         }
 
-        override fun writeText(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray {
-            val list = rdr.getObject(idx) as List<*>
+        override fun writeText(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray {
+            val list = col.getObject(rdr.pos) as List<*>
             val sb = StringBuilder("{")
             for (elem in list) {
                 if (elem == null) {
@@ -755,11 +772,11 @@ sealed class PgType(
         override fun readText(data: ByteArray): java.util.UUID =
             java.util.UUID.fromString(readUtf8(data))
 
-        override fun writeBinary(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray =
-            ByteArray(16).also { rdr.getBytes(idx).get(it) }
+        override fun writeBinary(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray =
+            ByteArray(16).also { rdr.readBytes().get(it) }
 
-        override fun writeText(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray =
-            utf8(rdr.getBytes(idx).toUuid())
+        override fun writeText(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray =
+            utf8(rdr.readBytes().toUuid())
     }
 
     data object Keyword : PgType(
@@ -774,10 +791,10 @@ sealed class PgType(
 
         override fun readText(data: ByteArray): String = readUtf8(data)
 
-        override fun writeBinary(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray =
-            rdr.getBytes(idx).let { bb -> ByteArray(bb.remaining()).also { bb.get(it) } }
+        override fun writeBinary(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray =
+            rdr.readBytes().let { bb -> ByteArray(bb.remaining()).also { bb.get(it) } }
 
-        override fun writeText(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray = writeBinary(env, rdr, idx)
+        override fun writeText(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray = writeBinary(env, col, rdr)
     }
 
     data object PgOid : PgType(
@@ -788,11 +805,11 @@ sealed class PgType(
         typsend = "oidsend",
         typreceive = "oidrecv",
     ) {
-        override fun writeBinary(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray =
-            utf8(Integer.toUnsignedString(rdr.getInt(idx)))
+        override fun writeBinary(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray =
+            utf8(Integer.toUnsignedString(rdr.readInt()))
 
-        override fun writeText(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray =
-            utf8(Integer.toUnsignedString(rdr.getInt(idx)))
+        override fun writeText(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray =
+            utf8(Integer.toUnsignedString(rdr.readInt()))
     }
 
     data object RegClass : PgType(
@@ -803,11 +820,11 @@ sealed class PgType(
         typsend = "regclasssend",
         typreceive = "regclassrecv",
     ) {
-        override fun writeBinary(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray =
-            utf8(Integer.toUnsignedString(rdr.getInt(idx)))
+        override fun writeBinary(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray =
+            utf8(Integer.toUnsignedString(rdr.readInt()))
 
-        override fun writeText(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray =
-            utf8(Integer.toUnsignedString(rdr.getInt(idx)))
+        override fun writeText(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray =
+            utf8(Integer.toUnsignedString(rdr.readInt()))
     }
 
     data object RegProc : PgType(
@@ -818,11 +835,11 @@ sealed class PgType(
         typsend = "regprocsend",
         typreceive = "regprocrecv",
     ) {
-        override fun writeBinary(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray =
-            utf8(Integer.toUnsignedString(rdr.getInt(idx)))
+        override fun writeBinary(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray =
+            utf8(Integer.toUnsignedString(rdr.readInt()))
 
-        override fun writeText(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray =
-            utf8(Integer.toUnsignedString(rdr.getInt(idx)))
+        override fun writeText(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray =
+            utf8(Integer.toUnsignedString(rdr.readInt()))
     }
 
     data object Json : PgType(
@@ -837,11 +854,11 @@ sealed class PgType(
 
         override fun readText(data: ByteArray): Any? = jsonDecode(ByteArrayInputStream(data))
 
-        override fun writeBinary(env: PgSessionEnv, rdr: VectorReader, idx: Int) =
-            jsonEncode(rdr.getObject(idx)!!).toByteArray()
+        override fun writeBinary(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader) =
+            jsonEncode(col.getObject(rdr.pos)!!).toByteArray()
 
-        override fun writeText(env: PgSessionEnv, rdr: VectorReader, idx: Int) =
-            jsonEncode(rdr.getObject(idx)!!).toByteArray()
+        override fun writeText(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader) =
+            jsonEncode(col.getObject(rdr.pos)!!).toByteArray()
     }
 
     data object JsonLd : PgType(
@@ -856,11 +873,11 @@ sealed class PgType(
 
         override fun readText(data: ByteArray): Any? = jsonDecode(ByteArrayInputStream(data))
 
-        override fun writeBinary(env: PgSessionEnv, rdr: VectorReader, idx: Int) =
-            encodeJsonLd(rdr.getObject(idx)!!).toByteArray()
+        override fun writeBinary(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader) =
+            encodeJsonLd(col.getObject(rdr.pos)!!).toByteArray()
 
-        override fun writeText(env: PgSessionEnv, rdr: VectorReader, idx: Int) =
-            encodeJsonLd(rdr.getObject(idx)!!).toByteArray()
+        override fun writeText(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader) =
+            encodeJsonLd(col.getObject(rdr.pos)!!).toByteArray()
     }
 
     data object Jsonb : PgType(
@@ -898,11 +915,11 @@ sealed class PgType(
 
         override fun readText(data: ByteArray): Any? = readTransit(data, TransitFormat.JSON)
 
-        override fun writeBinary(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray =
-            writeTransit(rdr.getObject(idx)!!, TransitFormat.JSON)
+        override fun writeBinary(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray =
+            writeTransit(col.getObject(rdr.pos)!!, TransitFormat.JSON)
 
-        override fun writeText(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray =
-            writeTransit(rdr.getObject(idx)!!, TransitFormat.JSON)
+        override fun writeText(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray =
+            writeTransit(col.getObject(rdr.pos)!!, TransitFormat.JSON)
     }
 
     companion object {

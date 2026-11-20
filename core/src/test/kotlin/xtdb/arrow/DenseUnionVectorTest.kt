@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.util.Hasher
 
@@ -122,6 +123,85 @@ class DenseUnionVectorTest {
             assertEquals(Triple("i32", false, 34), readAt(3))
             assertEquals(Triple("utf8", false, "hello"), readAt(1))
             assertEquals(34, rdr.also { it.pos = 3 }.readInt())
+        }
+    }
+
+    private fun ValueReader.present() = Pair(leg, if (isNull) null else readObject())
+
+    @Test
+    fun `value reader positions across absent rows and reads the present rows after them`() {
+        openDuv(listOf(12L, Undefined, "hello", Undefined, Undefined, null, 34L)).use { duv ->
+            val expected = listOf(
+                Pair("i64", 12L), Pair("utf8", "hello"), Pair("null", null), Pair("i64", 34L)
+            )
+            val presentRows = intArrayOf(0, 2, 5, 6)
+
+            val rdr = duv.valueReader()
+            assertEquals(
+                expected,
+                (0..<duv.valueCount).mapNotNull { idx ->
+                    rdr.pos = idx
+                    if (idx in presentRows) rdr.present() else null
+                },
+                "direct"
+            )
+
+            assertEquals(
+                expected,
+                duv.valueReader().asSequence().mapNotNull { row ->
+                    if (row.pos in presentRows) row.present() else null
+                }.toList(),
+                "iterated"
+            )
+
+            val sel = intArrayOf(1, 6, 3, 0, 4, 2)
+            assertEquals(
+                listOf(Pair("i64", 34L), Pair("i64", 12L), Pair("utf8", "hello")),
+                duv.select(sel).valueReader().asSequence().mapNotNull { row ->
+                    if (sel[row.pos] in presentRows) row.present() else null
+                }.toList(),
+                "select(IntArray)"
+            )
+        }
+    }
+
+    @Test
+    fun `a leg's value reader positions across other legs' rows and absent rows`() {
+        DenseUnionVector(allocator, "duv").use { duv ->
+            val structLeg = duv.vectorFor("struct", STRUCT_TYPE, true)
+            structLeg.writeObject(mapOf("a" to 1L))
+            repeat(2000) { duv.writeObject(it.toLong()) }
+            duv.writeUndefined()
+            structLeg.writeObject(mapOf("a" to 2L))
+
+            val structRows = setOf(0, duv.valueCount - 1)
+
+            val rdr = structLeg.valueReader()
+            assertEquals(
+                listOf(1L, 2L),
+                (0..<duv.valueCount).mapNotNull { idx ->
+                    rdr.pos = idx
+                    assertEquals(structLeg.isNull(idx), rdr.isNull, "isNull at $idx")
+                    if (idx in structRows) rdr.readStruct().getValue("a").readLong() else null
+                }
+            )
+        }
+    }
+
+    @Test
+    fun `value reader on an absent row reads as the vector's own getters do`() {
+        openDuv(listOf(12L, Undefined)).use { duv ->
+            val rdr = duv.valueReader().also { it.pos = 1 }
+
+            assertNull(duv.getLeg(1))
+            assertNull(rdr.leg)
+            assertEquals(true, duv.isNull(1))
+            assertEquals(true, rdr.isNull)
+
+            assertThrows<IllegalStateException> { duv.getObject(1) }
+            assertThrows<IllegalStateException> { rdr.readObject() }
+            assertThrows<NullPointerException> { duv.getLong(1) }
+            assertThrows<NullPointerException> { rdr.readLong() }
         }
     }
 

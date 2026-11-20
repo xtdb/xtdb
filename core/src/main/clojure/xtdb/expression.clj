@@ -544,22 +544,31 @@
       emitted-expr)))
 
 (defmethod codegen-expr :variable [{:keys [variable rel idx extract-vec-from-rel?],
-                                    :or {rel rel-sym, idx idx-sym, extract-vec-from-rel? true}}
-                                   {:keys [var-types extract-vecs-from-rel?]
+                                    :or {rel rel-sym, idx idx-sym, extract-vec-from-rel? true}
+                                    :as expr}
+                                   {:keys [var-types extract-vecs-from-rel? iterate-rows?]
                                     :or {extract-vecs-from-rel? true}}]
   (let [return-type (.getUnencoded ^VectorType (or (get var-types variable)
                                                    (throw (AssertionError. (str "unknown variable: " variable)))))
-        var-rdr-sym (gensym (util/symbol->normal-form-symbol variable))]
+        var-rdr-sym (gensym (util/symbol->normal-form-symbol variable))
+        extract-vec? (and extract-vecs-from-rel? extract-vec-from-rel?)]
 
-    ;; NOTE: when used from metadata exprs, incoming vectors might not exist
-    {:return-type return-type
-     :batch-bindings [(if (and extract-vecs-from-rel? extract-vec-from-rel?)
-                        [var-rdr-sym `(.valueReader (.get ~rel ~(str variable)))]
-                        [var-rdr-sym `(some-> ~variable (.valueReader))])]
-     :continue (fn [f]
-                 `(do
-                    (.setPos ~var-rdr-sym ~idx)
-                    ~(continue-read f return-type var-rdr-sym)))}))
+    (if (and iterate-rows? extract-vec? (not (contains? expr :rel)) (not (contains? expr :idx)))
+      {:return-type return-type
+       :batch-bindings [[(vary-meta var-rdr-sym assoc ::iterated? true)
+                         `(.valueReader (.get ~rel ~(str variable)))]]
+       :continue (fn [f]
+                   (continue-read f return-type var-rdr-sym))}
+
+      ;; NOTE: when used from metadata exprs, incoming vectors might not exist
+      {:return-type return-type
+       :batch-bindings [(if extract-vec?
+                          [var-rdr-sym `(.valueReader (.get ~rel ~(str variable)))]
+                          [var-rdr-sym `(some-> ~variable (.valueReader))])]
+       :continue (fn [f]
+                   `(do
+                      (.setPos ~var-rdr-sym ~idx)
+                      ~(continue-read f return-type var-rdr-sym)))})))
 
 (defmethod codegen-expr :param [{:keys [param]} {:keys [param-types]}]
   (codegen-expr {:op :variable, :variable param, :rel args-sym, :idx 0}
@@ -2490,6 +2499,21 @@
            batch-binding)
          (sequence (comp (distinct) cat)))))
 
+(defn iterated-reader-bindings
+  [batch-bindings]
+  (-> (reduce (fn [{:keys [iters] :as acc} [sym init]]
+                (if-not (::iterated? (meta sym))
+                  (update acc :bindings conj sym init)
+                  (if-let [iter-sym (get iters init)]
+                    (update acc :bindings conj sym iter-sym)
+                    (-> acc
+                        (update :bindings conj sym init)
+                        (update :advance-forms conj `(.next ~sym))
+                        (assoc-in [:iters init] sym)))))
+              {:bindings [], :advance-forms [], :iters {}}
+              (partition 2 batch-bindings))
+      (dissoc :iters)))
+
 (defn write-value-out-code [^VectorType return-type]
   (if (instance? VectorType$Poly return-type)
     (let [writer-syms (->> (.getLegs return-type)
@@ -2529,7 +2553,8 @@
    macroexpansion is non-deterministic (gensym), so busts the memo cache."
   (-> (fn [expr opts]
         (let [expr (prepare-expr expr)
-              {:keys [return-type continue] :as emitted-expr} (codegen-expr expr opts)
+              {:keys [return-type continue] :as emitted-expr} (codegen-expr expr (assoc opts :iterate-rows? true))
+              {:keys [bindings advance-forms]} (iterated-reader-bindings (batch-bindings emitted-expr))
               {:keys [writer-bindings write-value-out!]} (write-value-out-code return-type)]
           (assert return-type (pr-str expr))
           {:!projection-fn (delay
@@ -2537,10 +2562,11 @@
                                        ~(-> schema-sym (with-tag IPersistentMap))
                                        ~(-> args-sym (with-tag RelationReader))
                                        ~(-> out-vec-sym (with-tag Vector))]
-                                    (let [~@(batch-bindings emitted-expr)
+                                    (let [~@bindings
                                           ~@writer-bindings
                                           row-count# (.getRowCount ~rel-sym)]
                                       (dotimes [~idx-sym row-count#]
+                                        ~@advance-forms
                                         ~(continue (fn [t c]
                                                      (write-value-out! t c))))))
                                  #_(doto clojure.pprint/pprint) ; <<no-commit>>

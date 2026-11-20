@@ -114,7 +114,11 @@ interface VectorReader : ILookup, AutoCloseable {
      */
     fun getTypeId(idx: Int): Byte = unsupported("getTypeId")
 
-    fun valueReader(): ValueReader = ValueReader.ForVector(this)
+    /**
+     * Reads this vector's rows: set [ValueReader.pos] to read a row, or iterate to walk them in order.
+     * Starts before row 0.
+     */
+    fun valueReader(): RowValueReader = ValueReader.ForVector(this)
 
     /**
      * Writes rows `[startIdx, startIdx + len)` of this vector into [out] as part of one page, [len] defaulting
@@ -140,7 +144,7 @@ interface VectorReader : ILookup, AutoCloseable {
     fun select(idxs: IntArray): VectorReader = IndirectVector(this, selection(idxs))
     fun select(startIdx: Int, len: Int): VectorReader = IndirectVector(this, slice(startIdx, len))
 
-    val asList get() = List(valueCount) { getObject(it) }
+    val asList get() = toList { it }
     fun toList(keyFn: IKeyFn<*>) = List(valueCount) { getObject(it, keyFn) }
 
     val metadataFlavours: Collection<MetadataFlavour> get() = unsupported("metadataFlavours")

@@ -98,8 +98,11 @@ class FixedSizeListVector private constructor(
 
     override fun endList() = writeNotNull()
 
-    override fun valueReader(): ValueReader = object : ValueReader {
-        override var pos = 0
+    override fun valueReader(): RowValueReader = object : RowValueReader {
+        private val rowCount = valueCount
+        override fun hasNext() = pos + 1 < rowCount
+
+        override var pos = -1
 
         val elValueReader = elVector.valueReader()
 
