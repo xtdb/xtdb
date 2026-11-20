@@ -267,15 +267,45 @@ Use when the change is uncertain, experimental, or invites discussion — you're
 The key distinction between show and ask: show merges without waiting; ask waits.
 Default toward show over ask when you're confident — don't manufacture review gates for changes you'd stand behind anyway.
 
-For show and ask changes, run a code-review pass over the diff before raising the commit or PR — the `/code-review` skill, or a code-review agent (e.g. `feature-dev:code-reviewer`).
-Ship changes don't need it.
-Whether the findings block the commit/PR or are merely noted is a judgement call on their severity and the cost to address: fix what's cheap and clearly right, and raise the rest rather than sitting on it.
-Since show and ask normally go through plan mode, this review MUST appear as an explicit step in the plan, ahead of the commit/PR step — which is itself a `chalk:commit`/`chalk:pr` step — and alongside the chill step.
-
-The review MUST cover the diff's comments as well as its code, against the `chalk:code-comments` skill (see <<_comments,Comments>>), and MUST report a failing comment as a deletion rather than a rewrite.
-Deleting one costs nothing at review time and never happens afterwards.
-
 NOTE: AI agents working in this repo — if you're not sure which path applies, ask the human you're paired with rather than guessing.
 
 For branch-level practices — linear history, resolving a rebase conflict, the merge patterns — see the `xtdb-git` skill (`.claude/skills/xtdb-git/`).
 For issues, PRs and the project board, see `xtdb-github`.
+
+=== Code review
+
+A change's risk decides whether it gets a code-review pass and how deep, whichever of ship, show or ask it lands by.
+Ship/show/ask settles who needs to see or agree with a change: an approach that is obvious from the issue is grounds to ship it, not evidence that its implementation is right.
+
+We assess risk with a standard risk matrix — the probability of a bug against its impact — and the cell gives the effort level for the `/code-review` skill, or the depth asked of a code-review agent (e.g. `feature-dev:code-reviewer`).
+
+Probability of a bug::
++
+* *Low* — one site, mechanical, with a regression test pinning the behaviour.
+* *Medium* — several sites, or a new code path.
+* *High* — a new mechanism, concurrency or ordering, or a claim that holds for every case ("for every argument type", "never wraps").
+
+Impact of a bug::
++
+* *None* — it cannot reach a user: `docs:`, `ai:`, `dev:`, `build:` and `test:` changes, and comment-only diffs.
+* *Low* — a wrong error message or category, an edge case that fails loudly, a perf regression in one operator.
+* *Medium* — wrong query results for some inputs, a broad perf regression.
+* *High* — data loss or corruption, an incompatible on-disk or wire format, an unavailable node: indexing, compaction, GC, the log and leader path, storage formats, and anything an Allium spec covers.
+
+[cols="h,1,1,1,1",options="header"]
+|===
+| | Impact none | Impact low | Impact medium | Impact high
+| Probability low | no review | low | low | medium
+| Probability medium | no review | low | medium | high
+| Probability high | no review | medium | high | high
+|===
+
+A rename or move driven by the IDE's refactoring tooling has no probability to speak of, and needs no review either; one hand-edited across its sites is placed like any other change.
+A change that looks trivial to its author sits low in the matrix, never outside it.
+
+Run the review over the whole change before proposing it for landing — raising its PR, or handing a ship over to be committed to `main` — rather than commit by commit as it is built.
+Whether the findings block it or are merely noted is a judgement call on their severity and the cost to address: fix what's cheap and clearly right, and raise the rest rather than sitting on it.
+Where the change goes through plan mode, the review MUST appear as an explicit step in the plan, ahead of the step that proposes it for landing — a `chalk:pr` step, or the finish step for a ship — and alongside the chill step.
+
+The review MUST cover the diff's comments as well as its code, against the `chalk:code-comments` skill (see <<_comments,Comments>>), and MUST report a failing comment as a deletion rather than a rewrite.
+Deleting one costs nothing at review time and never happens afterwards.
