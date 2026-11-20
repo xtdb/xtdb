@@ -142,6 +142,23 @@ class FixedWidthVectorTest {
     }
 
     @Test
+    fun `long-long reads and writes are supported only on a 16-byte fixed-size-binary vector`(al: BufferAllocator) {
+        FixedSizeBinaryVector(al, "iid", false, 16).use { vec ->
+            vec.writeLongLong(0x0102030405060708L, -1L)
+            vec.getLongLongHigh(0) shouldBe 0x0102030405060708L
+            vec.getLongLongLow(0) shouldBe -1L
+        }
+
+        FixedSizeBinaryVector(al, "b", false, 8).use { vec ->
+            vec.writeBytes(ByteArray(8))
+            assertThrows<AssertionError> { vec.getLongLongHigh(0) }
+            assertThrows<AssertionError> { vec.getLongLongLow(0) }
+            assertThrows<AssertionError> { vec.writeLongLong(1, 2) }
+            vec.valueCount shouldBe 1
+        }
+    }
+
+    @Test
     fun `reserving capacity leaves the value count alone, setting past the end extends it with nulls`(al: BufferAllocator) {
         IntVector.open(al, "foo", true).use { vector ->
             vector.ensureCapacity(8)
