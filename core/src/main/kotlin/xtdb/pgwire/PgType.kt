@@ -456,7 +456,8 @@ sealed class PgType(
         override fun readText(data: ByteArray): LocalDate = LocalDate.parse(readUtf8(data))
 
         override fun writeBinary(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray {
-            val days = rdr.getInt(idx) - UNIX_PG_EPOCH_DIFF_DAYS
+            val date = rdr.getObject(idx) as LocalDate
+            val days = Math.toIntExact(date.toEpochDay() - UNIX_PG_EPOCH_DIFF_DAYS)
             return ByteBuffer.allocate(4).putInt(days).array()
         }
 
