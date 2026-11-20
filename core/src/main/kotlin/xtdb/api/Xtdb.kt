@@ -80,6 +80,8 @@ private fun parseSkipDbsEnv(skipDbs: String): Set<String> =
 // ParameterStatus echo read it back through [Xtdb.Connection.sessionParameters], derived from the live zone.
 private const val TIMEZONE_PARAM = "timezone"
 
+private const val APPLICATION_NAME_PARAM = "application_name"
+
 interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
     val allocator: BufferAllocator
@@ -340,10 +342,16 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
         private val _sessionParameters = mutableMapOf<String, String?>()
 
+        private var _applicationName: String = "XTDB"
+        val applicationName: String get() = _applicationName
+        fun setApplicationName(name: String) { _applicationName = name }
+
         // `timezone` is derived from the live tz rather than a stored copy — SET TIME ZONE mutates the zone, and
         // SHOW / the ParameterStatus echo read it back through here, so the two can't drift.
         val sessionParameters: Map<String, String?>
-            get() = _sessionParameters + (TIMEZONE_PARAM to effectiveDefaultTz.toString())
+            get() = _sessionParameters +
+                (TIMEZONE_PARAM to effectiveDefaultTz.toString()) +
+                (APPLICATION_NAME_PARAM to _applicationName)
 
         // the sanctioned external writer, for a frontend's SET (pgwire funnels its startup defaults + SET here).
         fun setSessionParameter(name: String, value: String?) {
@@ -444,7 +452,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                 stmt.prepare()
                 Relation.openFromRows(allocator, listOf(mapOf("?_0" to txId))).use { stmt.bind(it) }
 
-                stmt.openQuery(QueryOpts(null, defaultTz)).use { c ->
+                stmt.openQuery(QueryOpts(null, defaultTz, applicationName = applicationName)).use { c ->
                     var result: ExecutedTx? = null
                     c.tryAdvance { rel ->
                         if (rel.rowCount > 0)
@@ -636,7 +644,9 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                 }
 
                 override fun executeQueryAt(basis: QueryBasis): QueryResult =
-                    QueryResult(-1, ensurePrepared().openQuery(openQueryArgs(), basis.toQueryOpts(tracer)).metered().toArrowReader())
+                    QueryResult(-1, ensurePrepared()
+                        .openQuery(openQueryArgs(), basis.toQueryOpts(tracer, applicationName))
+                        .metered().toArrowReader())
 
                 override fun executeQuery(): QueryResult {
                     if (parsedStatement == null) throw Incorrect("SQL query not set", "xtdb.adbc/no-sql")
@@ -817,6 +827,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             defaultTz = initialTz
             awaitToken = null
             defaultAccessMode = null
+            // _applicationName is deliberately not reset here - it's the connection's own identity, not a GUC.
         }
 
         // the default access mode a bare BEGIN (explicit or implicit) takes; set by SET SESSION CHARACTERISTICS.
@@ -1194,7 +1205,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             QueryBasis(b?.currentTime ?: clock.instant(), t?.txDefaultTz ?: defaultTz, snapshotToken, b?.snapshotTime)
         }
 
-        private fun queryOpts() = queryBasis().toQueryOpts(tracer)
+        private fun queryOpts() = queryBasis().toQueryOpts(tracer, applicationName)
 
         private class ShowPreparedQuery(
             override val parsed: ParsedStatement.ShowVariable,

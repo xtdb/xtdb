@@ -11,4 +11,5 @@ data class QueryOpts @JvmOverloads constructor(
     val snapshotToken: String? = null,
     val snapshotTime: Instant? = null,
     val tracer: Tracer? = null,
+    val applicationName: String? = null,
 )

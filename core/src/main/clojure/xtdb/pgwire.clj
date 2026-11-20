@@ -210,6 +210,7 @@
                             [[k v]]))))))
 
 (def time-zone-nf-param-name "timezone")
+(def application-name-param-name "application_name")
 
 (def pg-param-nf->display-format
   {time-zone-nf-param-name "TimeZone"
@@ -240,6 +241,12 @@
   (let [^ZoneId zone-id (if (instance? ZoneId tz) tz (ZoneId/of tz))]
     (.setTimeZone ^Xtdb$Connection (:node-conn @conn-state) zone-id)
     (send-parameter-status conn time-zone-nf-param-name (str zone-id))))
+
+(defn set-application-name [{:keys [conn-state] :as conn} name]
+  ;; the connection owns its own application-name default (see Connection.applicationName); this is
+  ;; the sanctioned writer for both pgwire's own default and a client's startup/SET value.
+  (.setApplicationName ^Xtdb$Connection (:node-conn @conn-state) name)
+  (send-parameter-status conn application-name-param-name name))
 
 (defn- fallback-output-format
   "Interpret the raw fallback_output_format session param — the format used for complex-type row values and
@@ -346,16 +353,23 @@
 
 (defn- apply-startup-params [{:keys [conn-state] :as conn}]
   (doseq [[k v] (:startup-params @conn-state)]
-    (if (= time-zone-nf-param-name k)
-      (set-time-zone conn v)
-      (set-session-parameter conn k v))))
+    (cond
+      (= time-zone-nf-param-name k) (set-time-zone conn v)
+      (= application-name-param-name k) (set-application-name conn v)
+      :else (set-session-parameter conn k v))))
 
-(defn startup-ok [{:keys [server] :as conn} startup-opts]
-  (let [{:keys [server-state]} server]
+(defn startup-ok [{:keys [server conn-state] :as conn} startup-opts]
+  (let [{:keys [server-state]} server
+        startup-params (merge (update-keys (:parameters @server-state) str/lower-case)
+                              (update-keys startup-opts str/lower-case))]
 
-    (swap! (:conn-state conn) assoc :startup-params
-           (merge (update-keys (:parameters @server-state) str/lower-case)
-                  (update-keys startup-opts str/lower-case)))
+    ;; pgwire's own default, same shape as every other entry point asserting its own identity -
+    ;; skipped when the client's startup packet already supplies one, so as not to send the
+    ;; ParameterStatus echo twice for the same param.
+    (when-not (contains? startup-params application-name-param-name)
+      (set-application-name conn "XTDB PGWire"))
+
+    (swap! conn-state assoc :startup-params startup-params)
     (apply-startup-params conn)
 
     (-> conn
@@ -1087,9 +1101,10 @@
     (pgio/cmd-write-msg conn pgio/msg-command-complete {:command (str (statement-head q) " " (count rows))})))
 
 (defn cmd-set-session-parameter [conn parameter value]
-  (if (= time-zone-nf-param-name parameter)
-    (set-time-zone conn value)
-    (set-session-parameter conn parameter value))
+  (cond
+    (= time-zone-nf-param-name parameter) (set-time-zone conn value)
+    (= application-name-param-name parameter) (set-application-name conn value)
+    :else (set-session-parameter conn parameter value))
   (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET"}))
 
 
