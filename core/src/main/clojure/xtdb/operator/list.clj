@@ -59,7 +59,7 @@
      :children []
      :vec-types vec-types
      :->cursor (fn [opts]
-                 (lp/with-tracing opts
+                 (lp/with-tracing :list opts
                    (fn [{:keys [allocator ^RelationReader args]}]
                      (ListCursor. allocator (->list-expr schema args)
                                   (str out-col) (get vec-types out-col)

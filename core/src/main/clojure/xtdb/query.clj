@@ -489,7 +489,7 @@
                               (wrap-closeables ref-ctr [closeable-query-span args snaps allocator])))
 
                         (let [result-types (->result-types (:ordered-outer-projection planned-query) vec-types)
-                              cursor (-> (->cursor {:allocator allocator,
+                              cursor (-> (->cursor {:allocator allocator, :query-allocator allocator
                                                     :query-source this
                                                     :db-cat db-cat
                                                     :dbs dbs

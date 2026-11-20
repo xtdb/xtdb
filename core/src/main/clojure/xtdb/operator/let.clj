@@ -25,7 +25,7 @@
      :vec-types body-vec-types
      :stats (:stats emitted-body-rel)
      :->cursor (fn [opts]
-                 (lp/with-tracing opts
+                 (lp/with-tracing :let opts
                    (fn [{:keys [allocator] :as opts}]
                      (util/with-close-on-catch [bound-cursor (ICursor/wrapInterruptible (->bound-cursor opts))
                                                 factory (LetCursorFactory. allocator bound-cursor (update-keys bound-vec-types str) *spill-threshold-rows*)
@@ -61,6 +61,6 @@
                                                                                {:cte-id cte-id
                                                                                 :available available}))))]
 
-                   (lp/with-tracing opts
+                   (lp/with-tracing :relation opts
                      (fn [_]
                        (.open cursor-factory)))))}))

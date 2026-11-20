@@ -385,17 +385,18 @@
                                                       equi-specs))
                                 (mapv (fn [col-name]
                                         (let [col-type (get merged-vec-types col-name)]
-                                          (project/->identity-projection-spec col-name col-type)))))]
+                                          (project/->identity-projection-spec col-name col-type)))))
+        op (case join-type
+             ::inner-join :inner-join
+             ::left-outer-join :left-join
+             ::left-outer-join-flipped :left-join
+             ::full-outer-join :full-join
+             ::semi-join :semi-join
+             ::anti-semi-join :anti-join
+             ::single-join :single-join
+             ::mark-join :mark-join)]
 
-    {:op (case join-type
-           ::inner-join :inner-join
-           ::left-outer-join :left-join
-           ::left-outer-join-flipped :left-join
-           ::full-outer-join :full-join
-           ::semi-join :semi-join
-           ::anti-semi-join :anti-join
-           ::single-join :single-join
-           ::mark-join :mark-join)
+    {:op op
 
      :children [left right]
      :explain (cond-> {:condition (pr-str (mapv second condition))}
@@ -406,7 +407,7 @@
      :->cursor (fn [opts]
                  (project/->project-cursor
                   opts
-                  (lp/with-tracing opts
+                  (lp/with-tracing op opts
                     (fn [{:keys [allocator args] :as opts}]
                       (util/with-close-on-catch [build-cursor (->build-cursor opts)
                                                  build-side (->build-side allocator {:vec-types build-vec-types

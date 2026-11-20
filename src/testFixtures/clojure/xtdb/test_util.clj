@@ -228,9 +228,10 @@
      :children []
      :vec-types out-vec-types
      :stats stats
-     :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]}]
-                 (cond-> (->cursor allocator schema pages)
-                   (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))}))
+     :->cursor (fn [opts]
+                 (lp/with-tracing :pages opts
+                   (fn [{:keys [allocator]}]
+                     (->cursor allocator schema pages))))}))
 
 
 (defmethod lp/ra-expr :prn [_]

@@ -329,7 +329,7 @@
                          (info-schema/->cursor info-schema allocator db db-cat query-source snapshot derived-table-schema table col-names col-preds schema args)
 
                          :else
-                         (lp/with-tracing opts
+                         (lp/with-tracing :scan opts
                            (fn []
                              {:span-name (format "query.cursor.scan.%s" (.getTableName table))
                               :pushdowns (not-empty

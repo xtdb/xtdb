@@ -80,7 +80,7 @@
                                                 :param-types param-types}
                                    projection-spec (expr/->expression-projection-spec "_expr" (expr/form->expr form input-types) input-types)]
                                (fn [query-opts]
-                                 (lp/with-tracing query-opts
+                                 (lp/with-tracing :apply-mark-join query-opts
                                    (fn [{:keys [allocator args] :as query-opts}]
                                      (let [^ICursor dep-cursor (->dependent-cursor query-opts)]
                                        (reify ICursor

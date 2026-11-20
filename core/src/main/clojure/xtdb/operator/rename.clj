@@ -57,7 +57,7 @@
        :stats (:stats emitted-child-relation)
        :col-mapping col-mapping
        :->cursor (fn [opts]
-                   (lp/with-tracing opts
+                   (lp/with-tracing :rename opts
                      (fn [opts]
                        (util/with-close-on-catch [in-cursor (->inner-cursor opts)]
                          (RenameCursor. in-cursor col-name-mapping)))))})))

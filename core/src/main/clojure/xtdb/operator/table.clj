@@ -202,6 +202,6 @@
      :vec-types vec-types
      :stats (when row-count {:row-count row-count})
      :->cursor (fn [cursor-opts]
-                 (lp/with-tracing cursor-opts
+                 (lp/with-tracing :table cursor-opts
                    (fn [{:keys [allocator] :as cursor-opts}]
                      (TableCursor. allocator (->out-rel cursor-opts)))))}))
