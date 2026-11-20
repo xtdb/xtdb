@@ -104,15 +104,37 @@ class DenseUnionVector private constructor(
 
         override fun valueReader(): RowValueReader {
             val inner = inner.valueReader()
-            return object : RowValueReader, ValueReader by inner {
+            val offLegReader = ValueReader.ForVector(this)
+
+            return object : RowValueReader {
+                lateinit var rdr: ValueReader
+
                 private val rowCount = valueCount
                 override fun hasNext() = pos + 1 < rowCount
 
                 override var pos: Int = -1
                     set(value) {
                         field = value
-                        inner.pos = getOffset(value)
+                        rdr =
+                            if (unionTypeId(value) == typeId) inner.also { it.pos = getOffset(value) }
+                            else offLegReader.also { it.pos = value }
                     }
+
+                override val leg get() = rdr.leg
+                override val isNull get() = rdr.isNull
+                override fun readBoolean() = rdr.readBoolean()
+                override fun readByte() = rdr.readByte()
+                override fun readShort() = rdr.readShort()
+                override fun readInt() = rdr.readInt()
+                override fun readLong() = rdr.readLong()
+                override fun readFloat() = rdr.readFloat()
+                override fun readDouble() = rdr.readDouble()
+                override fun readAsLong() = rdr.readAsLong()
+                override fun readAsDouble() = rdr.readAsDouble()
+                override fun readBytes() = rdr.readBytes()
+                override fun readObject(keyFn: IKeyFn<*>) = rdr.readObject(keyFn)
+                override fun readList() = rdr.readList()
+                override fun readStruct() = rdr.readStruct()
             }
         }
 
@@ -291,8 +313,9 @@ class DenseUnionVector private constructor(
     private fun legWriter(arrowType: ArrowType, nullable: Boolean) = vectorFor(arrowType.toLeg(), arrowType, nullable)
 
     override fun valueReader(): RowValueReader {
-        val legReaders = Array(legVectors.size) { LegVector(it.toByte(), legVectors[it]).valueReader() }
+        val legReaders = Array(legVectors.size) { legVectors[it].valueReader() }
         val legNames = Array(legVectors.size) { legVectors[it].name }
+        val absentReader = ValueReader.ForVector(this)
 
         return object : RowValueReader {
             lateinit var legReader: ValueReader
@@ -305,8 +328,13 @@ class DenseUnionVector private constructor(
                 set(value) {
                     field = value
                     val typeId = typeBuffer.getByte(value).toInt()
-                    leg = legNames[typeId]
-                    legReader = legReaders[typeId].also { it.pos = value }
+                    if (typeId < 0) {
+                        leg = null
+                        legReader = absentReader.also { it.pos = value }
+                    } else {
+                        leg = legNames[typeId]
+                        legReader = legReaders[typeId].also { it.pos = getOffset(value) }
+                    }
                 }
 
             override val isNull: Boolean get() = legReader.isNull
