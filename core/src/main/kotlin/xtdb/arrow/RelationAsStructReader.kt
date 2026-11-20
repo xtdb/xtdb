@@ -26,8 +26,6 @@ class RelationAsStructReader(
 
     override fun vectorForOrNull(name: String): VectorReader? = rel.vectorForOrNull(name)
 
-    override fun getObject(idx: Int): Any = rel[idx]
-
     override fun getObject(idx: Int, keyFn: IKeyFn<*>): Any = rel[idx, keyFn]
 
     override fun rowCopier(dest: VectorWriter): RowCopier {

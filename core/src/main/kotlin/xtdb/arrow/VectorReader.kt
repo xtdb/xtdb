@@ -140,7 +140,7 @@ interface VectorReader : ILookup, AutoCloseable {
     fun select(idxs: IntArray): VectorReader = IndirectVector(this, selection(idxs))
     fun select(startIdx: Int, len: Int): VectorReader = IndirectVector(this, slice(startIdx, len))
 
-    val asList get() = List(valueCount) { getObject(it) }
+    val asList get() = toList { it }
     fun toList(keyFn: IKeyFn<*>) = List(valueCount) { getObject(it, keyFn) }
 
     val metadataFlavours: Collection<MetadataFlavour> get() = unsupported("metadataFlavours")
