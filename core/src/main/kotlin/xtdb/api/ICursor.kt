@@ -65,6 +65,7 @@ interface ICursor : Spliterator<RelationReader>, AutoCloseable {
             private var endTime = clock.instant()
             override var timeToFirstPage: Duration? = null; private set
             override var totalTime: Duration = Duration.ZERO; private set
+            override val peakMemoryBytes get() = allocator.peakMemoryAllocation
             private var span: Span? = null
 
             override fun tryAdvance(c: Consumer<in RelationReader>): Boolean {
@@ -107,7 +108,7 @@ interface ICursor : Spliterator<RelationReader>, AutoCloseable {
                         }
                         s.tag("cursor.page_count", pageCount.toString())
                         s.tag("cursor.row_count", rowCount.toString())
-                        s.tag("cursor.peak_memory_bytes", allocator.peakMemoryAllocation.toString())
+                        s.tag("cursor.peak_memory_bytes", peakMemoryBytes.toString())
                         attrs?.toMap()?.forEach { (k, v) -> s.tag(k, v.toString()) }
                         s.end(endTime.asMicros, TimeUnit.MICROSECONDS)
                     }

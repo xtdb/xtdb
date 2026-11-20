@@ -244,7 +244,8 @@
                                   "page_count" #xt/type :i64
                                   "row_count" #xt/type :i64
                                   "pushdowns" #xt/type [:? :transit]
-                                  "peak_memory_bytes" #xt/type :i64})))
+                                  "peak_memory_bytes" #xt/type :i64
+                                  "query_peak_memory_bytes" #xt/type :i64})))
 
 (def ^:private ^Schema explain-analyze-schema
   (Schema. (for [[col-name ^VectorType vec-type] explain-analyze-types]
@@ -265,7 +266,7 @@
                (map (fn [[k v]] [k (truncate-pushdown-val k v)]))
                col-pushdowns))))
 
-(defn- explain-analyze-results [^ResultCursor cursor, peak-memory-bytes]
+(defn- explain-analyze-results [^ResultCursor cursor, query-peak-memory-bytes]
   (letfn [(->results [^ICursor cursor, depth]
             (if-let [ea (.getExplainAnalyze cursor)]
               (let [child-results (mapv #(->results % (inc depth)) (.getChildCursors cursor))
@@ -283,7 +284,8 @@
                         :page-count (long (.getPageCount ea))
                         :row-count (.getRowCount ea)
                         :pushdowns (not-empty (truncate-pushdowns (.getPushdowns ea)))
-                        :peak-memory-bytes peak-memory-bytes}]
+                        :peak-memory-bytes (.getPeakMemoryBytes ea)
+                        :query-peak-memory-bytes query-peak-memory-bytes}]
                       cat
                       child-results))
               (->results (first (.getChildCursors cursor)) depth)))]
