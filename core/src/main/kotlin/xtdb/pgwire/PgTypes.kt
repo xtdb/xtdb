@@ -2,8 +2,6 @@
 
 package xtdb.pgwire
 
-import org.apache.arrow.vector.types.TimeUnit
-import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.arrow.VectorReader
 import xtdb.time.Interval
 import java.nio.ByteBuffer
@@ -171,17 +169,6 @@ fun readBinaryTextArray(ba: ByteArray): List<String> {
 }
 
 // Vector utilities
-
-fun VectorReader.getUnixMicros(idx: Int): Long {
-    val arrowType = this.arrowType
-    val micros = getLong(idx)
-
-    return if (arrowType is ArrowType.Timestamp && arrowType.unit == TimeUnit.NANOSECOND) {
-        micros / 1000
-    } else {
-        micros
-    }
-}
 
 fun VectorReader.intervalToIsoMicroBytes(idx: Int): ByteArray {
     val itvl = getObject(idx)

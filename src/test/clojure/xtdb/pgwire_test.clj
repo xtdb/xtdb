@@ -2982,6 +2982,41 @@ ORDER BY 1,2;")
                  "SELECT CASE WHEN _id = 2 THEN d ELSE DATE '2020-01-01' END FROM dm"]]
       (t/is (= (read-val false sql) (read-val true sql)) sql))))
 
+(t/deftest test-filtered-batch-serialises-each-column-in-step
+  (with-open [conn (pgjdbc-conn)
+              stmt (.createStatement conn)]
+    (.execute stmt "INSERT INTO docs (_id, n, s, l, ts, tsn, tstz)
+                    VALUES (1, 10, {a: 1, b: 'x'}, [1, 2], TIMESTAMP '2024-01-01 00:00:01.123456',
+                            '2024-01-01T00:00:01.123456789'::TIMESTAMP(9), TIMESTAMP '2024-01-01 00:00:01.5Z'),
+                           (2, 20, {a: 2, b: 'y'}, [3], TIMESTAMP '2024-01-02 00:00:02',
+                            '2024-01-02T00:00:02.000000001'::TIMESTAMP(9), TIMESTAMP '2024-01-02 00:00:02Z'),
+                           (3, NULL, NULL, NULL, NULL, NULL, NULL),
+                           (4, 40, {a: 4, b: 'z'}, [], TIMESTAMP '1441-07-25 18:00:11.888842',
+                            '1901-12-13T20:45:52.888842'::TIMESTAMP(9), TIMESTAMP '1441-07-25 18:00:11Z')"))
+
+  (let [expected [["1" "10" "{\"a\":1,\"b\":\"x\"}" [1 2] "2024-01-01 00:00:01.123456" "2024-01-01 00:00:01.123456" #xt/odt "2024-01-01T00:00:01.5Z"]
+                  ["3" nil nil nil nil nil nil]
+                  ["4" "40" "{\"a\":4,\"b\":\"z\"}" [] "1441-07-25 18:00:11.888842" "1901-12-13 20:45:52.888842" #xt/odt "1441-07-25T18:00:11Z"]]
+        read-row (fn [^ResultSet rs]
+                   [(.getString rs "_id") (.getString rs "n") (.getString rs "s")
+                    (some-> (.getArray rs "l") .getArray vec)
+                    (.getString rs "ts") (.getString rs "tsn")
+                    (.getObject rs "tstz" OffsetDateTime)])]
+    (doseq [binary? [false true]
+            fetch-size [0 1]]
+      (with-open [conn (pgjdbc-conn {"prepareThreshold" -1 "binaryTransfer" binary? "timezone" "UTC"})]
+        (.setAutoCommit conn false)
+        (let [stmt (doto (.prepareStatement conn "SELECT _id, n, s, l, ts, tsn, tstz FROM docs WHERE _id <> 2")
+                     (.setFetchSize fetch-size))]
+          (with-open [rs (.executeQuery stmt)]
+            (t/is (= expected
+                     (->> (loop [rows []]
+                            (if (.next rs)
+                              (recur (conj rows (read-row rs)))
+                              rows))
+                          (sort-by #(parse-long (first %)))))
+                  (format "binary? %s, fetch-size %d" binary? fetch-size))))))))
+
 (defn- compare-decimals-with-scale [^BigDecimal d1 ^BigDecimal d2]
   (and (= (.scale d1) (.scale d2))
        (= (.unscaledValue d1) (.unscaledValue d2))))
