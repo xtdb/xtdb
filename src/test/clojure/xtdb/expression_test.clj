@@ -15,6 +15,7 @@
            (java.time Duration Instant InstantSource LocalDate LocalDateTime LocalTime Period ZoneId ZonedDateTime)
            (java.time.temporal ChronoUnit)
            org.apache.arrow.vector.types.TimeUnit
+           (xtdb.api.error Incorrect)
            (xtdb.arrow NullVector RelationReader Vector VectorReader)
            (xtdb.operator ProjectionSpec$Star)
            (xtdb.time Interval)
@@ -1519,6 +1520,105 @@
     ;; the others are thrown by java.lang.Math/*Exact, which throw ArithmeticException
     (t/is (thrown? ArithmeticException
                    (run-unary-test '- (Short/MIN_VALUE))))))
+
+(t/deftest test-mod
+  (letfn [(run-mod [xs ys]
+            (with-open [rel (tu/open-rel {:x xs, :y ys})]
+              (run-projection rel '(mod x y))))]
+
+    (t/testing "integers take the divisor's sign and the wider argument type"
+      (doseq [[->x ->y res-type] [[short short #xt/type :i16]
+                                  [int int #xt/type :i32]
+                                  [int long #xt/type :i64]
+                                  [long int #xt/type :i64]
+                                  [long long #xt/type :i64]]]
+        (t/is (= {:res [1 2 -2 -1], :res-type res-type}
+                 (run-mod (map ->x [7 -7 7 -7]) (map ->y [3 3 -3 -3])))
+              (str res-type))))
+
+    (t/testing "floating point takes the divisor's sign and the wider argument type"
+      (doseq [[->x ->y res-type] [[double double #xt/type :f64]
+                                  [float float #xt/type :f32]
+                                  [float double #xt/type :f64]
+                                  [long double #xt/type :f64]
+                                  [long float #xt/type :f32]]]
+        (t/is (= {:res [2.0 0.5 -0.5 -2.0], :res-type res-type}
+                 (run-mod (map ->x [7 -7 7 -7]) (map ->y [2.5 2.5 -2.5 -2.5])))
+              (str res-type)))
+
+      (doseq [[->x res-type] [[double #xt/type :f64]
+                              [float #xt/type :f32]]]
+        (t/is (= {:res [1.5 0.5 -0.5 -1.5], :res-type res-type}
+                 (run-mod (map ->x [7.5 -7.5 7.5 -7.5]) [2 2 -2 -2]))
+              (str res-type))))
+
+    (t/testing "a zero divisor raises"
+      (doseq [[x y] [[(int 7) (int 0)] [7 0]]]
+        (t/is (anomalous? [:incorrect ::expr/division-by-zero]
+                          (run-mod [x] [y]))
+              (pr-str [x y])))
+
+      (doseq [[x y] [[7.5 0.0] [(float 7.5) (float 0.0)] [7.5 0] [7 0.0]]]
+        (t/is (anomalous? [:incorrect nil]
+                          (run-mod [x] [y]))
+              (pr-str [x y]))))
+
+    (t/testing "a mod result feeds a comparison"
+      (doseq [x [(int 7) 7 (float 7.5) 7.5]]
+        (with-open [rel (tu/open-rel {:x [x]})]
+          (t/is (= {:res [true], :res-type #xt/type :bool}
+                   (run-projection rel '(> (mod x 2) 0)))
+                (pr-str x)))))))
+
+(defn- double-outcome [f x y]
+  (try
+    (Double/doubleToLongBits (f x y))
+    (catch Exception e (class e))))
+
+(tct/defspec mod-double-is-equiv-to-core-mod-prop
+  (tcp/for-all [x tcg/double, y tcg/double]
+    (= (double-outcome mod x y)
+       (double-outcome #(expr/mod-double %1 %2) x y))))
+
+(defn- int-arg-gen [->int lo hi]
+  (tcg/fmap ->int (tcg/one-of [(tcg/large-integer* {:min lo, :max hi})
+                               (tcg/elements [lo hi -1 0 1])])))
+
+(def ^:private mod-arg-types
+  "In widening order: the LUB of any two is the later of them."
+  [[:i8 (int-arg-gen byte Byte/MIN_VALUE Byte/MAX_VALUE)]
+   [:i16 (int-arg-gen short Short/MIN_VALUE Short/MAX_VALUE)]
+   [:i32 (int-arg-gen int Integer/MIN_VALUE Integer/MAX_VALUE)]
+   [:i64 (int-arg-gen long Long/MIN_VALUE Long/MAX_VALUE)]
+   [:f32 (tcg/fmap unchecked-float tcg/double)]
+   [:f64 tcg/double]])
+
+(tct/defspec mod-is-equiv-to-core-mod-cast-to-lub-prop
+  (tcp/for-all [[x-idx y-idx x y] (tcg/let [x-idx (tcg/choose 0 5)
+                                            y-idx (tcg/choose 0 5)
+                                            x (second (nth mod-arg-types x-idx))
+                                            y (second (nth mod-arg-types y-idx))]
+                                    [x-idx y-idx x y])]
+    (let [lub-k (first (nth mod-arg-types (max x-idx y-idx)))
+          ->bits (fn [v]
+                   (case lub-k
+                     (:i8 :i16 :i32 :i64) (long v)
+                     (:f32 :f64) (Double/doubleToLongBits (double v))))
+          expected (try
+                     {:res (->bits (case lub-k
+                                     (:i8 :i16 :i32 :i64) (mod (long x) (long y))
+                                     :f32 (float (mod (double x) (double y)))
+                                     :f64 (mod (double x) (double y))))
+                      :res-type (case lub-k
+                                  :i8 #xt/type :i8, :i16 #xt/type :i16, :i32 #xt/type :i32
+                                  :i64 #xt/type :i64, :f32 #xt/type :f32, :f64 #xt/type :f64)}
+                     (catch Exception _ ::throws))
+          actual (try
+                   (with-open [rel (tu/open-rel {:x [x], :y [y]})]
+                     (-> (run-projection rel '(mod x y))
+                         (update :res (comp ->bits first))))
+                   (catch Incorrect _ ::throws))]
+      (= expected actual))))
 
 (t/deftest test-polymorphic-columns
   (t/is (= {:res [1.2 1 3.4]

@@ -1019,10 +1019,30 @@
      :->call-code (fn [emitted-args]
                     `(bit-shift-right ~@(with-math-integer-cast left-col-type emitted-args)))}))
 
-(defmethod codegen-call [:mod :num :num] [{:keys [arg-types]}]
-  (let [return-type (types/least-upper-bound arg-types)]
+(defmethod codegen-call [:mod :int :int] [{:keys [arg-types]}]
+  (let [return-type (types/least-upper-bound arg-types)
+        return-col-type (types/vec-type->col-type return-type)]
     {:return-type return-type
-     :->call-code #(do `(mod ~@%))}))
+     :->call-code (fn [emitted-args]
+                    (list (type->cast return-col-type)
+                          `(Math/floorMod ~@(with-math-integer-cast return-col-type emitted-args))))}))
+
+;; `clojure.core/mod` over primitive doubles - `mod` has no primitive arity, so calling it boxes
+(defn mod-double ^double [^double x ^double y]
+  (let [m (rem x y)]
+    (if (or (zero? m) (= (pos? x) (pos? y)))
+      m
+      (+ m y))))
+
+(defmethod codegen-call [:mod :num :num] [{:keys [arg-types]}]
+  (let [return-type (types/least-upper-bound arg-types)
+        return-col-type (types/vec-type->col-type return-type)]
+    {:return-type return-type
+     :->call-code (if (isa? types/col-type-hierarchy (types/col-type-head return-col-type) :float)
+                    (fn [[x y]]
+                      (list (type->cast return-col-type)
+                            `(mod-double (double ~x) (double ~y))))
+                    #(do `(mod ~@%)))}))
 
 (defn throw-div-0 []
   (throw (err/incorrect ::division-by-zero "data exception - division by zero")))
