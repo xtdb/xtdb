@@ -75,12 +75,16 @@ internal class ExtensibleBuffer private constructor(private val allocator: Buffe
         buf.writeByte(value.toInt())
     }
 
+    operator fun set(idx: Int, v: Byte) = buf.setByte(idx.toLong() * Byte.SIZE_BYTES, v.toInt())
+
     fun getShort(idx: Int) = buf.getShort((idx * Short.SIZE_BYTES).toLong())
 
     fun writeShort(value: Short) {
         ensureWritable(Short.SIZE_BYTES.toLong())
         buf.writeShort(value.toInt())
     }
+
+    operator fun set(idx: Int, v: Short) = buf.setShort(idx.toLong() * Short.SIZE_BYTES, v.toInt())
 
     fun getInt(idx: Int) = buf.getInt((idx * Int.SIZE_BYTES).toLong())
 

@@ -3,6 +3,7 @@
             [xtdb.api :as xt]
             [xtdb.operator.group-by :as group-by]
             [xtdb.test-util :as tu]
+            [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
@@ -365,6 +366,40 @@
                                    [:table {:rows [{:a #xt/date-time "2022-08-01T13:34"}
                                                    {:a #xt/zoned-date-time "2022-08-01T12:58+01:00[Europe/London]"}
                                                    {:a 12}]}]]))))
+
+(t/deftest test-min-max-over-narrow-types-keep-the-argument-type-6439
+  (doseq [[a-type [lo mid hi]] [[#xt/type :i8 [(byte -3) (byte 1) (byte 7)]]
+                                [#xt/type :i16 [(short -3) (short 1) (short 7)]]
+                                [#xt/type [:decimal 4 2 32] [-1.25M 3.50M 7.10M]]
+                                [#xt/type [:decimal 4 2 128] [-1.25M 3.50M 7.10M]]
+                                [#xt/type [:time-local :second] [#xt/time "09:30" #xt/time "10:00" #xt/time "12:15:01"]]
+                                [#xt/type [:time-local :milli] [#xt/time "09:30" #xt/time "10:00" #xt/time "12:15:01.5"]]
+                                [#xt/type [:time-local :micro] [#xt/time "09:30" #xt/time "10:00" #xt/time "12:15:01.000005"]]
+                                [#xt/type [:time-local :nano] [#xt/time "09:30" #xt/time "10:00" #xt/time "12:15:01.000000005"]]]]
+    (let [out-type (types/->nullable-type a-type)]
+      (t/is (= {:res #{{:g 1, :mn lo, :mx hi} {:g 2, :mn mid, :mx mid}}
+                :types {'g #xt/type :i64, 'mn out-type, 'mx out-type}}
+               (-> (tu/query-ra [:group-by {:columns '[g {mn (min a)} {mx (max a)}]}
+                                 [::tu/pages {'g #xt/type :i64, 'a (types/->nullable-type a-type)}
+                                  [[{:g 1, :a mid} {:g 2, :a mid} {:g 1, :a hi}]
+                                   [{:g 1, :a nil} {:g 1, :a lo}]]]]
+                                {:with-types? true})
+                   (update :res set)))
+            (pr-str a-type)))))
+
+(t/deftest test-sql-min-max-over-smallint-decimal-and-time-6439
+  (xt/execute-tx tu/*node* [[:sql "INSERT INTO docs (_id, s, d, tm) VALUES
+                                   (1, CAST(3 AS SMALLINT), CAST(3.5 AS DECIMAL(4,2)), TIME '10:00:00'),
+                                   (2, CAST(-1 AS SMALLINT), CAST(-1.25 AS DECIMAL(4,2)), TIME '09:30:00'),
+                                   (3, CAST(7 AS SMALLINT), CAST(7.1 AS DECIMAL(4,2)), TIME '12:15:01.5')"]])
+
+  (t/is (= [{:mn-s -1, :mx-s 7
+             :mn-d -1.25M, :mx-d 7.10M
+             :mn-tm #xt/time "09:30", :mx-tm #xt/time "12:15:01.5"}]
+           (xt/q tu/*node* "SELECT MIN(s) AS mn_s, MAX(s) AS mx_s,
+                                   MIN(d) AS mn_d, MAX(d) AS mx_d,
+                                   MIN(tm) AS mn_tm, MAX(tm) AS mx_tm
+                            FROM docs"))))
 
 (t/deftest test-array-agg
   (with-open [gm0 (tu/open-vec "gm0" #xt/type :i32 (map int [0 1 0]))

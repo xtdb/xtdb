@@ -2028,3 +2028,19 @@
                                                  {:default-tz zone})]
     (t/is (= (.toInstant (.atStartOfDay (LocalDate/parse "2018-11-04") zone))
              (.toInstant res)))))
+
+(t/deftest time-columns-of-second-and-milli-unit-are-readable
+  (letfn [(project [unit expr]
+            (-> (tu/query-ra [:project {:projections [{'res expr}]}
+                              [:project {:projections [{'a (list 'cast "12:34:56.789" (types/->type [:time-local unit]))}
+                                                       {'b (list 'cast "12:34:57" (types/->type [:time-local unit]))}]}
+                               [:table {:rows [{}]}]]])
+                first :res))]
+    (t/are [unit expected expr] (= expected (project unit expr))
+      :second #xt/time "12:34:56" '(cast a #xt/type [:time-local :micro])
+      :second 56 '(extract "SECOND" a)
+      :second true '(< a b)
+
+      :milli #xt/time "12:34:56.789" '(cast a #xt/type [:time-local :nano] {:precision 9})
+      :milli 56 '(extract "SECOND" a)
+      :milli true '(< a b))))

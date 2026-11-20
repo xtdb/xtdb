@@ -353,6 +353,8 @@
 
 (defmethod set-value-code :null [_ w idx _val] `(.setNull ~w ~idx))
 (defmethod set-value-code :bool [_ w idx val] `(.setBoolean ~w ~idx ~val))
+(defmethod set-value-code :i8 [_ w idx val] `(.setByte ~w ~idx ~val))
+(defmethod set-value-code :i16 [_ w idx val] `(.setShort ~w ~idx ~val))
 (defmethod set-value-code :i32 [_ w idx val] `(.setInt ~w ~idx ~val))
 (defmethod set-value-code :i64 [_ w idx val] `(.setLong ~w ~idx ~val))
 (defmethod set-value-code :f32 [_ w idx val] `(.setFloat ~w ~idx ~val))
@@ -366,6 +368,13 @@
     :day `(.setInt ~w ~idx ~val)
     :milli `(.setLong ~w ~idx ~val)))
 
+(defmethod set-value-code :time-local [vec-type w idx val]
+  (case (st/time-type->unit vec-type)
+    (:second :milli) `(.setInt ~w ~idx ~val)
+    (:micro :nano) `(.setLong ~w ~idx ~val)))
+
+(defmethod set-value-code :decimal [_ w idx val] `(.setBigDecimal ~w ~idx ~val))
+
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti write-value-code
   (fn [^VectorType$Mono vec-type & args]
@@ -375,7 +384,7 @@
 
 (def ^:private col-type->rw-fn
   '{:bool Boolean, :i8 Byte, :i16 Short, :i32 Int, :i64 Long, :f32 Float, :f64 Double,
-    :time-local Long, :timestamp-tz Long, :timestamp-local Long, :duration Long, :tstz-range Object
+    :timestamp-tz Long, :timestamp-local Long, :duration Long, :tstz-range Object
     :utf8 Bytes, :varbinary Bytes, :keyword Bytes, :uuid Bytes
 
     :list Object, :set Object, :struct Object :transit Object})
@@ -387,7 +396,7 @@
   `(do ~@args (.writeNull ~w)))
 
 (doseq [k [:bool :i8 :i16 :i32 :i64 :f32 :f64
-           :timestamp-tz :timestamp-local :time-local :duration :tstz-range
+           :timestamp-tz :timestamp-local :duration :tstz-range
            :utf8 :varbinary :uuid :keyword :transit]
         :let [rw-fn (col-type->rw-fn k)]]
   (defmethod read-value-code k [_ & args] `(~(symbol (str ".read" rw-fn)) ~@args))
@@ -402,6 +411,13 @@
   (case (st/date-type->unit vec-type)
     :day `(.writeInt ~@args)
     :milli `(.writeLong ~@args)))
+
+(defmethod read-value-code :time-local [vec-type & args]
+  (case (st/time-type->unit vec-type)
+    (:second :milli) `(.readInt ~@args)
+    (:micro :nano) `(.readLong ~@args)))
+
+(defmethod write-value-code :time-local [_ & args] `(.writeLong ~@args))
 
 (defmethod write-value-code :oid [_ & args] `(.writeInt ~@args))
 
