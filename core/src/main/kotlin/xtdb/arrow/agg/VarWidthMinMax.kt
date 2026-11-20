@@ -16,7 +16,7 @@ class VarWidthMinMax(
     override fun build(al: BufferAllocator, args: RelationReader) = object : AggregateSpec {
         private val winners = ArrayList<ByteArray?>()
 
-        override fun aggregate(inRel: RelationReader, groupMapping: GroupMapping, mask: VectorMask) {
+        override fun aggregate(inRel: RelationReader, groupMapping: GroupMapping, mask: RowMask) {
             val inVec = inRel.vectorForOrNull(fromName) ?: return
 
             repeat(inRel.rowCount) { idx ->
