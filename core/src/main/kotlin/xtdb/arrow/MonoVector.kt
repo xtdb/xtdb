@@ -7,6 +7,7 @@ import xtdb.api.query.IKeyFn
 import xtdb.arrow.VectorType.Companion.maybe
 import xtdb.arrow.VectorType.Mono
 import xtdb.util.Hasher
+import java.math.BigDecimal
 
 sealed class MonoVector : Vector(), VectorReader, VectorWriter {
 
@@ -25,10 +26,13 @@ sealed class MonoVector : Vector(), VectorReader, VectorWriter {
 
     open fun setNull(idx: Int): Unit = unsupported("setNull")
     open fun setBoolean(idx: Int, v: Boolean): Unit = unsupported("setBoolean")
+    open fun setByte(idx: Int, v: Byte): Unit = unsupported("setByte")
+    open fun setShort(idx: Int, v: Short): Unit = unsupported("setShort")
     open fun setInt(idx: Int, v: Int): Unit = unsupported("setInt")
     open fun setLong(idx: Int, v: Long): Unit = unsupported("setLong")
     open fun setFloat(idx: Int, v: Float): Unit = unsupported("setFloat")
     open fun setDouble(idx: Int, v: Double): Unit = unsupported("setDouble")
+    open fun setBigDecimal(idx: Int, v: BigDecimal): Unit = unsupported("setBigDecimal")
 
     override fun writeNull() {
         if (!nullable) nullable = true

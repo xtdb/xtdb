@@ -353,6 +353,8 @@
 
 (defmethod set-value-code :null [_ w idx _val] `(.setNull ~w ~idx))
 (defmethod set-value-code :bool [_ w idx val] `(.setBoolean ~w ~idx ~val))
+(defmethod set-value-code :i8 [_ w idx val] `(.setByte ~w ~idx ~val))
+(defmethod set-value-code :i16 [_ w idx val] `(.setShort ~w ~idx ~val))
 (defmethod set-value-code :i32 [_ w idx val] `(.setInt ~w ~idx ~val))
 (defmethod set-value-code :i64 [_ w idx val] `(.setLong ~w ~idx ~val))
 (defmethod set-value-code :f32 [_ w idx val] `(.setFloat ~w ~idx ~val))
@@ -365,6 +367,13 @@
   (case (st/date-type->unit vec-type)
     :day `(.setInt ~w ~idx ~val)
     :milli `(.setLong ~w ~idx ~val)))
+
+(defmethod set-value-code :time-local [vec-type w idx val]
+  (case (st/time-type->unit vec-type)
+    (:second :milli) `(.setInt ~w ~idx ~val)
+    (:micro :nano) `(.setLong ~w ~idx ~val)))
+
+(defmethod set-value-code :decimal [_ w idx val] `(.setBigDecimal ~w ~idx ~val))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti write-value-code

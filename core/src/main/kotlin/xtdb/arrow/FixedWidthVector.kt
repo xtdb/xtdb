@@ -94,6 +94,20 @@ sealed class FixedWidthVector : MonoVector() {
         valueCount = maxOf(valueCount, idx + 1)
     }
 
+    override fun setByte(idx: Int, v: Byte) {
+        ensureCapacity(idx + 1)
+        setNotNull(idx)
+        dataBuffer[idx] = v
+        valueCount = maxOf(valueCount, idx + 1)
+    }
+
+    override fun setShort(idx: Int, v: Short) {
+        ensureCapacity(idx + 1)
+        setNotNull(idx)
+        dataBuffer[idx] = v
+        valueCount = maxOf(valueCount, idx + 1)
+    }
+
     override fun setInt(idx: Int, v: Int) {
         ensureCapacity(idx + 1)
         setNotNull(idx)
