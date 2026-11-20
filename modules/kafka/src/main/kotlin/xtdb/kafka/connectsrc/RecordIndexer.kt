@@ -5,6 +5,7 @@ import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.polymorphic
 import org.apache.kafka.connect.sink.SinkRecord
 import xtdb.api.error.Unsupported
+import xtdb.api.tx.ExternalSourceToken
 import xtdb.api.tx.TxIndexer
 import java.util.ServiceLoader
 import com.google.protobuf.Any as ProtoAny
@@ -16,7 +17,12 @@ interface RecordIndexer : AutoCloseable {
     override fun close() = Unit
 
     interface Factory {
-        fun open(): RecordIndexer
+        /**
+         * Opens the indexer for a leader term on [partition].
+         *
+         * @param afterToken the token of the last transaction indexed from this source, as the term resumes after it - null if none has been.
+         */
+        fun open(partition: Int, afterToken: ExternalSourceToken?): RecordIndexer
 
         companion object {
             private val registrations = ServiceLoader.load(Registration::class.java).toList()
