@@ -79,7 +79,7 @@ class FixedSizeListVector private constructor(
         else -> throw InvalidWriteObjectException(this, value)
     }
 
-    override fun writeValue0(v: ValueReader) = writeObject(v.readObject())
+    override fun writeValue0(v: ValueReader) = writeObject(v.readList())
 
     override val listElements get() = elVector
 
@@ -113,7 +113,8 @@ class FixedSizeListVector private constructor(
         }
 
         override val isNull get() = this@FixedSizeListVector.isNull(pos)
-        override fun readObject() = listValReader
+        override fun readList() = listValReader
+        override fun readObject() = readList()
     }
 
     override val metadataFlavours get() = listOf(this)

@@ -24,6 +24,8 @@ interface ValueReader {
 
     fun readBytes(): ByteBuffer = unsupported("readBytes")
     fun readObject(): Any? = unsupported("readObject")
+    fun readList(): ListValueReader = unsupported("readList")
+    fun readStruct(): Map<String, ValueReader> = unsupported("readStruct")
 
     open class ForVector(private val vec: VectorReader) : ValueReader {
         override var pos: Int = 0

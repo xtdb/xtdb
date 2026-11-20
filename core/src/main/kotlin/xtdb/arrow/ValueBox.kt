@@ -25,6 +25,10 @@ class ValueBox : ValueReader {
     override fun readDouble() = longBitsToDouble(prim)
     override fun readBytes(): ByteBuffer = obj as ByteBuffer
     override fun readObject(): Any? = obj
+    override fun readList() = obj as ListValueReader
+
+    @Suppress("UNCHECKED_CAST")
+    override fun readStruct() = obj as Map<String, ValueReader>
 
     fun writeNull() {
         leg = NULL_LEG
