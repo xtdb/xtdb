@@ -170,7 +170,7 @@ sealed class FixedWidthVector : MonoVector() {
         return ByteArray(buf.remaining()).also { buf.duplicate().get(it) }
     }
 
-    override fun writeBytes(v: ByteBuffer) {
+    protected fun writeBytes0(v: ByteBuffer) {
         dataBuffer.writeBytes(v)
         writeNotNull()
     }

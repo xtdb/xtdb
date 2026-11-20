@@ -21,6 +21,11 @@ class FixedSizeBinaryVector private constructor(
     constructor(al: BufferAllocator, name: String, nullable: Boolean, byteWidth: Int)
             : this(al, name, 0, byteWidth, if (nullable) BitBuffer(al) else null, ExtensibleBuffer(al))
 
+    override fun writeBytes(v: ByteBuffer) {
+        assert(v.remaining() == byteWidth) { "Expected $byteWidth bytes for $arrowType, got ${v.remaining()}" }
+        writeBytes0(v)
+    }
+
     override fun getBytes(idx: Int): ByteBuffer = getBytes0(idx)
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = getByteArray(idx)
