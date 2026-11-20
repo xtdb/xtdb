@@ -7,6 +7,7 @@ import org.apache.arrow.vector.BaseVariableWidthVector
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import xtdb.InternalApi
+import xtdb.api.query.IKeyFn
 import xtdb.arrow.VectorIndirection.Companion.Selection
 import xtdb.arrow.VectorIndirection.Companion.Slice
 import xtdb.arrow.VectorType.Scalar
@@ -41,6 +42,8 @@ sealed class VariableWidthVector : MonoVector() {
     protected abstract var lastOffset: Int
 
     override fun isNull(idx: Int) = nullable && !validityBuffer!!.getBoolean(idx)
+
+    final override fun valueReader(): RowValueReader = VariableWidthRows(this)
 
     private fun writeOffset(newOffset: Int) {
         if (valueCount == 0) offsetBuffer.writeInt(0)
@@ -228,4 +231,47 @@ sealed class VariableWidthVector : MonoVector() {
         offsetBuffer.close()
         dataBuffer.close()
     }
+}
+
+private class VariableWidthRows(private val vec: VariableWidthVector) :
+    ValidityWordRows(vec.valueCount) {
+
+    private val offsets = vec.offsetBuffer
+    private val data = vec.dataBuffer
+    override val validity get() = vec.validityBuffer
+
+    private var boundsPos = Int.MIN_VALUE
+    private var start = 0
+    private var end = 0
+
+    private fun loadBounds() {
+        val pos = pos
+        if (pos == boundsPos) return
+        start = if (pos == boundsPos + 1) end else offsets.getInt(pos)
+        end = offsets.getInt(pos + 1)
+        boundsPos = pos
+    }
+
+    override fun onSeek() {
+        boundsPos = Int.MIN_VALUE
+    }
+
+    override val leg get() = vec.getLeg(pos)
+
+    override fun readBoolean() = vec.getBoolean(pos)
+    override fun readByte() = vec.getByte(pos)
+    override fun readShort() = vec.getShort(pos)
+    override fun readInt() = vec.getInt(pos)
+    override fun readLong() = vec.getLong(pos)
+    override fun readFloat() = vec.getFloat(pos)
+    override fun readDouble() = vec.getDouble(pos)
+    override fun readAsLong() = vec.getAsLong(pos)
+    override fun readAsDouble() = vec.getAsDouble(pos)
+
+    override fun readBytes(): ByteBuffer {
+        loadBounds()
+        return data.getBytes(start, end - start)
+    }
+
+    override fun readObject(keyFn: IKeyFn<*>) = vec.getObject(pos, keyFn)
 }
