@@ -147,18 +147,24 @@ class RunEndEncodedVector private constructor(
 
     private fun runSel(rowSel: IntArray) = IntArray(rowSel.size) { runIdx(rowSel[it]) }
 
-    private fun runMask(rowMask: VectorMask) = object : VectorMask {
-        override fun isSet(idx: Int) = (runStart(idx)..<runEnd(idx)).any(rowMask::isSet)
+    private fun runMask(rowMask: RowMask): RowMask {
+        val runs = RowMask.Builder(valuesVector.valueCount)
+        for (run in 0 until valuesVector.valueCount)
+            if ((runStart(run)..<runEnd(run)).any(rowMask::isSet)) runs.add(run)
+        return runs.build()
     }
 
-    override fun valueReader(): ValueReader {
+    override fun valueReader(): RowValueReader {
         val inner = valuesVector.valueReader()
 
-        return object : ValueReader by inner {
-            override var pos = 0
+        return object : RowValueReader, ValueReader by inner {
+            private val rowCount = valueCount
+            override fun hasNext() = pos + 1 < rowCount
+
+            override var pos = -1
                 set(value) {
                     field = value
-                    if (value in 0..<valueCount) inner.pos = runIdx(value)
+                    inner.pos = runIdx(value)
                 }
         }
     }

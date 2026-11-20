@@ -77,10 +77,17 @@ sealed class ExtensionVector : MonoVector() {
         return inner.rowCopier0(src.inner)
     }
 
-    override fun valueReader(): ValueReader {
+    override fun valueReader(): RowValueReader {
         val inner = inner.valueReader()
 
-        return object : ValueReader by inner {
+        return object : RowValueReader, ValueReader by inner {
+            private val rowCount = valueCount
+            override fun hasNext() = pos + 1 < rowCount
+
+            override var pos: Int
+                get() = inner.pos
+                set(value) { inner.pos = value }
+
             override fun readObject() = readObject { it }
             override fun readObject(keyFn: IKeyFn<*>) = getObject(pos, keyFn)
         }

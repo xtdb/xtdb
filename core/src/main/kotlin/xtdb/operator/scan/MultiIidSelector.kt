@@ -1,36 +1,18 @@
 package xtdb.operator.scan
 
-import com.carrotsearch.hppc.IntArrayList
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ArrowBufPointer
 import xtdb.arrow.FixedSizeBinaryVector
 import xtdb.arrow.RelationReader
+import xtdb.arrow.RowMask
 import xtdb.arrow.VectorReader
-import xtdb.operator.SelectionSpec
 import xtdb.trie.Bucketer
 import java.util.*
 
-class MultiIidSelector(private val iids: SortedSet<ByteArray>) : SelectionSpec {
+class MultiIidSelector(private val iids: SortedSet<ByteArray>) : IidSelector {
 
     private val haystackPtr = ArrowBufPointer()
     private val needlePtr = ArrowBufPointer()
-
-    private fun select(readRelation: RelationReader, iids: SortedSet<ByteArray>): IntArray {
-        val res = IntArrayList()
-        val iidReader = readRelation["_iid"]
-
-        repeat(readRelation.rowCount) { rowIdx ->
-            if (iidReader[rowIdx] in iids) {
-                res.add(rowIdx)
-            }
-        }
-
-        return res.toArray()
-    }
-
-    override fun select(
-        allocator: BufferAllocator, readRelation: RelationReader, schema: Map<String, Any>, params: RelationReader
-    ) = select(readRelation, iids)
 
     private val bucketer = Bucketer.DEFAULT
 
@@ -51,13 +33,13 @@ class MultiIidSelector(private val iids: SortedSet<ByteArray>) : SelectionSpec {
         return left
     }
 
-    fun select(allocator: BufferAllocator, readRelation: RelationReader, path: ByteArray): IntArray {
+    override fun rowMask(al: BufferAllocator, page: RelationReader, path: ByteArray): RowMask {
         val iids = bucketer.filterIidsForPath(this.iids, path)
 
-        val res = IntArrayList()
-        val iidReader = readRelation["_iid"]
+        val iidReader = page["_iid"]
+        val mask = RowMask.Builder(iidReader.valueCount)
 
-        FixedSizeBinaryVector(allocator, "_iid", false, 16).use { needlesVec ->
+        FixedSizeBinaryVector(al, "_iid", false, 16).use { needlesVec ->
             for (iid in iids) needlesVec.writeBytes(iid)
 
             var haystackIdx = 0
@@ -77,7 +59,7 @@ class MultiIidSelector(private val iids: SortedSet<ByteArray>) : SelectionSpec {
                     when {
                         cmp > 0 -> break
                         cmp == 0 -> {
-                            res.add(haystackIdx)
+                            mask.add(haystackIdx)
                             haystackIdx++
                         }
                         else -> {
@@ -97,6 +79,6 @@ class MultiIidSelector(private val iids: SortedSet<ByteArray>) : SelectionSpec {
             }
         }
 
-        return res.toArray()
+        return mask.build()
     }
 }

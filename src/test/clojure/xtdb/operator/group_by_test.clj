@@ -7,7 +7,7 @@
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
-  (:import [xtdb.arrow Vector VectorMask]))
+  (:import [xtdb.arrow DenseUnionVector RowMask Vector]))
 
 (t/use-fixtures :each tu/with-allocator tu/with-node)
 
@@ -131,12 +131,31 @@
       (t/is (= #xt/type [:? :f64] (.getType sum-factory)))
       (try
 
-        (.aggregate sum-spec v0 gm VectorMask/ALL)
-        (.aggregate sum-spec v1 gm VectorMask/ALL)
+        (.aggregate sum-spec v0 gm (RowMask/all (.getRowCount v0)))
+        (.aggregate sum-spec v1 gm (RowMask/all (.getRowCount v1)))
         (with-open [res (.openFinishedVector sum-spec)]
           (t/is (= [12.0] (.getAsList res))))
         (finally
           (util/try-close sum-spec))))))
+
+(t/deftest test-filtered-aggregate-over-a-union-column-absent-on-the-filtered-out-rows
+  (with-open [gm (tu/open-vec "gm" #xt/type :i32 (map int [0 1 0 1 0 1]))
+              x (doto (DenseUnionVector. tu/*allocator* "x" [] 0)
+                  (.writeObject 1)
+                  (.writeObject 0.5)
+                  (.writeUndefined)
+                  (.writeObject 2)
+                  (.writeObject 3.5)
+                  (.writeObject 4))]
+    (let [max-factory (group-by/->aggregate-factory {:f :max, :from-name 'x, :from-type (.getType x)
+                                                     :to-name 'xmax, :zero-row? true})
+          max-spec (.build max-factory tu/*allocator* vw/empty-args)]
+      (try
+        (.aggregate max-spec (vr/rel-reader [x] 6) gm (RowMask/ofWords (long-array [2r111011]) 6))
+        (with-open [res (.openFinishedVector max-spec)]
+          (t/is (= [3.5 4.0] (.getAsList res))))
+        (finally
+          (util/try-close max-spec))))))
 
 (t/deftest test-row-count
   (t/is (= [{:n 0}]
@@ -422,8 +441,8 @@
       (util/with-open [agg-spec (.build agg-factory tu/*allocator* vw/empty-args)]
         (t/is (= #xt/type [:? :list :i64] (.getType agg-factory)))
 
-        (.aggregate agg-spec (vr/rel-reader [k0]) gm0 VectorMask/ALL)
-        (.aggregate agg-spec (vr/rel-reader [k1]) gm1 VectorMask/ALL)
+        (.aggregate agg-spec (vr/rel-reader [k0]) gm0 (RowMask/all (.getValueCount k0)))
+        (.aggregate agg-spec (vr/rel-reader [k1]) gm1 (RowMask/all (.getValueCount k1)))
 
         (with-open [res (.openFinishedVector agg-spec)]
           (t/is (= [[1 3 6] [2 4] [5]] (.getAsList res))))))))

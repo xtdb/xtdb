@@ -97,17 +97,17 @@ class IndirectVector(private val inner: VectorReader, private val sel: VectorInd
         }
     }
 
-    override fun valueReader(): ValueReader {
+    override fun valueReader(): RowValueReader {
         val inner = inner.valueReader()
-        return object : ValueReader by inner {
+        return object : RowValueReader, ValueReader by inner {
             val sel = this@IndirectVector.sel
-            val valueCount = sel.valueCount()
+            private val rowCount = sel.valueCount()
+            override fun hasNext() = pos + 1 < rowCount
 
-            override var pos: Int = 0
+            override var pos: Int = -1
                 set(value) {
                     field = value
-                    if (value in 0..<valueCount)
-                        inner.pos = sel[value]
+                    inner.pos = sel[value]
                 }
         }
     }

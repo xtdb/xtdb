@@ -102,14 +102,39 @@ class DenseUnionVector private constructor(
             return RowCopier { srcIdx -> innerCopier.copyRow(getOffset(srcIdx)) }
         }
 
-        override fun valueReader(): ValueReader {
+        override fun valueReader(): RowValueReader {
             val inner = inner.valueReader()
-            return object : ValueReader by inner {
+            val offLegReader = ValueReader.ForVector(this)
+
+            return object : RowValueReader {
+                lateinit var rdr: ValueReader
+
+                private val rowCount = valueCount
+                override fun hasNext() = pos + 1 < rowCount
+
                 override var pos: Int = -1
                     set(value) {
                         field = value
-                        inner.pos = getOffset(value)
+                        rdr =
+                            if (unionTypeId(value) == typeId) inner.also { it.pos = getOffset(value) }
+                            else offLegReader.also { it.pos = value }
                     }
+
+                override val leg get() = rdr.leg
+                override val isNull get() = rdr.isNull
+                override fun readBoolean() = rdr.readBoolean()
+                override fun readByte() = rdr.readByte()
+                override fun readShort() = rdr.readShort()
+                override fun readInt() = rdr.readInt()
+                override fun readLong() = rdr.readLong()
+                override fun readFloat() = rdr.readFloat()
+                override fun readDouble() = rdr.readDouble()
+                override fun readAsLong() = rdr.readAsLong()
+                override fun readAsDouble() = rdr.readAsDouble()
+                override fun readBytes() = rdr.readBytes()
+                override fun readObject(keyFn: IKeyFn<*>) = rdr.readObject(keyFn)
+                override fun readList() = rdr.readList()
+                override fun readStruct() = rdr.readStruct()
             }
         }
 
@@ -143,6 +168,8 @@ class DenseUnionVector private constructor(
         internal val typeId: Byte, internal val inner: VectorWriter, private val nested: Boolean = false,
         private val reader: LegReader = LegReader(valueCount, typeBuffer, offsetBuffer, false, typeId, inner, nested)
     ) : VectorReader by reader, VectorWriter {
+
+        fun getOffset(idx: Int) = reader.getOffset(idx)
 
         override val listElements get() = inner.listElements
 
@@ -287,20 +314,29 @@ class DenseUnionVector private constructor(
 
     private fun legWriter(arrowType: ArrowType, nullable: Boolean) = vectorFor(arrowType.toLeg(), arrowType, nullable)
 
-    override fun valueReader(): ValueReader {
-        val legReaders = Array(legVectors.size) { LegVector(it.toByte(), legVectors[it]).valueReader() }
+    override fun valueReader(): RowValueReader {
+        val legReaders = Array(legVectors.size) { legVectors[it].valueReader() }
         val legNames = Array(legVectors.size) { legVectors[it].name }
+        val absentReader = ValueReader.ForVector(this)
 
-        return object : ValueReader {
+        return object : RowValueReader {
             lateinit var legReader: ValueReader
+
+            private val rowCount = valueCount
+            override fun hasNext() = pos + 1 < rowCount
             override var leg: String? = null
 
             override var pos = -1
                 set(value) {
                     field = value
                     val typeId = typeBuffer.getByte(value).toInt()
-                    leg = legNames[typeId]
-                    legReader = legReaders[typeId].also { it.pos = value }
+                    if (typeId < 0) {
+                        leg = null
+                        legReader = absentReader.also { it.pos = value }
+                    } else {
+                        leg = legNames[typeId]
+                        legReader = legReaders[typeId].also { it.pos = getOffset(value) }
+                    }
                 }
 
             override val isNull: Boolean get() = legReader.isNull
@@ -332,17 +368,16 @@ class DenseUnionVector private constructor(
         return legRows.copyOf(n)
     }
 
-    private fun legMask(typeId: Int, mask: VectorMask): VectorMask {
-        if (mask === VectorMask.ALL) return VectorMask.ALL
+    private fun legMask(typeId: Int, mask: RowMask): RowMask {
+        val legRowCount = legVectors[typeId].valueCount
+        if (mask.cardinality == mask.rowCount) return RowMask.all(legRowCount)
 
         val legRows = BitSet()
         repeat(valueCount) { idx ->
             if (mask.isSet(idx) && getTypeId(idx).toInt() == typeId) legRows.set(getOffset(idx))
         }
 
-        return object : VectorMask {
-            override fun isSet(idx: Int) = legRows[idx]
-        }
+        return RowMask.ofWords(legRows.toLongArray().copyOf((legRowCount + 63) ushr 6), legRowCount)
     }
 
     override fun hashCode(idx: Int, hasher: Hasher) = leg(idx)!!.hashCode(getOffset(idx), hasher)

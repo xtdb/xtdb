@@ -29,8 +29,11 @@ interface ValueReader {
     fun readList(): ListValueReader = unsupported("readList")
     fun readStruct(): Map<String, ValueReader> = unsupported("readStruct")
 
-    open class ForVector(private val vec: VectorReader) : ValueReader {
-        override var pos: Int = 0
+    class ForVector(private val vec: VectorReader) : RowValueReader {
+        override var pos: Int = -1
+
+        private val rowCount = vec.valueCount
+        override fun hasNext() = pos + 1 < rowCount
 
         override val leg get() = vec.getLeg(pos)
 

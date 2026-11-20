@@ -6,9 +6,9 @@ import xtdb.arrow.F64_TYPE
 import xtdb.arrow.I32_TYPE
 import xtdb.arrow.IntVector
 import xtdb.arrow.LIST_TYPE
+import xtdb.arrow.RowMask
 import xtdb.arrow.STRUCT_TYPE
 import xtdb.arrow.VAR_BINARY_TYPE
-import xtdb.arrow.VectorMask
 import xtdb.arrow.VectorReader
 import xtdb.arrow.VectorType
 import xtdb.arrow.VectorType.Companion.BOOL
@@ -69,7 +69,7 @@ class ColumnMetadata(
         typeVec.endStruct()
     }
 
-    private fun writeMetadata(col: VectorReader, rootCol: Boolean, mask: VectorMask): RowIndex {
+    private fun writeMetadata(col: VectorReader, rootCol: Boolean, mask: RowMask): RowIndex {
         val withBloom = calculateBlooms || (col.name == "_iid" && rootCol)
 
         val childRefWrites = mutableListOf<() -> Unit>()
@@ -85,12 +85,12 @@ class ColumnMetadata(
         for (flavour in col.metadataFlavours) {
             when (flavour) {
                 is MetadataFlavour.List -> {
-                    val childIdx = writeMetadata(flavour.listElements, false, VectorMask.ALL)
+                    val childIdx = writeMetadata(flavour.listElements, false, RowMask.all(flavour.listElements.valueCount))
                     childRefWrites += { colsVec.vectorFor("list", I32_TYPE, true).writeInt(childIdx) }
                 }
 
                 is MetadataFlavour.Set -> {
-                    val childIdx = writeMetadata(flavour.listElements, false, VectorMask.ALL)
+                    val childIdx = writeMetadata(flavour.listElements, false, RowMask.all(flavour.listElements.valueCount))
                     childRefWrites += { colsVec.vectorFor("set", I32_TYPE, true).writeInt(childIdx) }
                 }
 
@@ -128,7 +128,7 @@ class ColumnMetadata(
         writeNumericMetadata(durations, Duration::class)
 
         if (bytesFlavours.isNotEmpty())
-            writeBytesMetadata(if (withBloom) bloomOf(bytesFlavours, mask.selection(col.valueCount)) else null)
+            writeBytesMetadata(if (withBloom) bloomOf(bytesFlavours, mask.selection()) else null)
 
         presence.forEach { colsVec.vectorFor(it.arrowType.toLeg(), BOOL_TYPE, true).writeBoolean(true) }
 
@@ -137,14 +137,7 @@ class ColumnMetadata(
         return colsVec.valueCount - 1
     }
 
-    fun writeMetadata(col: VectorReader) = writeMetadata(col, true, VectorMask.ALL)
+    fun writeMetadata(col: VectorReader) = writeMetadata(col, true, RowMask.all(col.valueCount))
 }
 
-private fun VectorMask.selection(rowCount: Int): IntArray? {
-    if (this === VectorMask.ALL) return null
-
-    val rows = IntArray(rowCount)
-    var n = 0
-    repeat(rowCount) { if (isSet(it)) rows[n++] = it }
-    return rows.copyOf(n)
-}
+private fun RowMask.selection(): IntArray? = if (cardinality == rowCount) null else toSelection()

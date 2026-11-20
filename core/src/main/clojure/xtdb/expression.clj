@@ -15,13 +15,12 @@
            (java.time Duration Instant InstantSource LocalDate LocalDateTime LocalTime OffsetDateTime ZoneId ZoneOffset ZonedDateTime)
            (java.util Arrays Date List Map UUID)
            (java.util.regex Pattern)
-           (java.util.stream IntStream)
            (org.apache.arrow.vector PeriodDuration)
            (org.apache.arrow.vector.types.pojo ArrowType$Decimal)
            (org.apache.commons.codec.binary Hex)
-           (xtdb.arrow ListValueReader RelationReader ValueBox ValueReader Vector VectorMask VectorReader VectorType VectorType$Listy VectorType$Mono VectorType$Nothing VectorType$Poly VectorType$Struct)
+           (xtdb.arrow ListValueReader RelationReader RowMask ValueBox ValueReader Vector VectorReader VectorType VectorType$Listy VectorType$Mono VectorType$Nothing VectorType$Poly VectorType$Struct)
            (xtdb.expression PgFormat)
-           (xtdb.operator MaskSpec ProjectionSpec SelectionSpec)
+           (xtdb.operator ProjectionSpec RowMaskSpec)
            (xtdb.pgwire PgTypes)
            xtdb.time.Interval
            (xtdb.util StringUtil)))
@@ -544,22 +543,31 @@
       emitted-expr)))
 
 (defmethod codegen-expr :variable [{:keys [variable rel idx extract-vec-from-rel?],
-                                    :or {rel rel-sym, idx idx-sym, extract-vec-from-rel? true}}
-                                   {:keys [var-types extract-vecs-from-rel?]
+                                    :or {rel rel-sym, idx idx-sym, extract-vec-from-rel? true}
+                                    :as expr}
+                                   {:keys [var-types extract-vecs-from-rel? iterate-rows?]
                                     :or {extract-vecs-from-rel? true}}]
   (let [return-type (.getUnencoded ^VectorType (or (get var-types variable)
                                                    (throw (AssertionError. (str "unknown variable: " variable)))))
-        var-rdr-sym (gensym (util/symbol->normal-form-symbol variable))]
+        var-rdr-sym (gensym (util/symbol->normal-form-symbol variable))
+        extract-vec? (and extract-vecs-from-rel? extract-vec-from-rel?)]
 
-    ;; NOTE: when used from metadata exprs, incoming vectors might not exist
-    {:return-type return-type
-     :batch-bindings [(if (and extract-vecs-from-rel? extract-vec-from-rel?)
-                        [var-rdr-sym `(.valueReader (.get ~rel ~(str variable)))]
-                        [var-rdr-sym `(some-> ~variable (.valueReader))])]
-     :continue (fn [f]
-                 `(do
-                    (.setPos ~var-rdr-sym ~idx)
-                    ~(continue-read f return-type var-rdr-sym)))}))
+    (if (and iterate-rows? extract-vec? (not (contains? expr :rel)) (not (contains? expr :idx)))
+      {:return-type return-type
+       :batch-bindings [[(vary-meta var-rdr-sym assoc ::iterated? true)
+                         `(.valueReader (.get ~rel ~(str variable)))]]
+       :continue (fn [f]
+                   (continue-read f return-type var-rdr-sym))}
+
+      ;; NOTE: when used from metadata exprs, incoming vectors might not exist
+      {:return-type return-type
+       :batch-bindings [(if extract-vec?
+                          [var-rdr-sym `(.valueReader (.get ~rel ~(str variable)))]
+                          [var-rdr-sym `(some-> ~variable (.valueReader))])]
+       :continue (fn [f]
+                   `(do
+                      (.setPos ~var-rdr-sym ~idx)
+                      ~(continue-read f return-type var-rdr-sym)))})))
 
 (defmethod codegen-expr :param [{:keys [param]} {:keys [param-types]}]
   (codegen-expr {:op :variable, :variable param, :rel args-sym, :idx 0}
@@ -2490,6 +2498,21 @@
            batch-binding)
          (sequence (comp (distinct) cat)))))
 
+(defn iterated-reader-bindings
+  [batch-bindings]
+  (-> (reduce (fn [{:keys [iters] :as acc} [sym init]]
+                (if-not (::iterated? (meta sym))
+                  (update acc :bindings conj sym init)
+                  (if-let [iter-sym (get iters init)]
+                    (update acc :bindings conj sym iter-sym)
+                    (-> acc
+                        (update :bindings conj sym init)
+                        (update :advance-forms conj `(.next ~sym))
+                        (assoc-in [:iters init] sym)))))
+              {:bindings [], :advance-forms [], :iters {}}
+              (partition 2 batch-bindings))
+      (dissoc :iters)))
+
 (defn write-value-out-code [^VectorType return-type]
   (if (instance? VectorType$Poly return-type)
     (let [writer-syms (->> (.getLegs return-type)
@@ -2522,25 +2545,30 @@
       :else
       (err/incorrect ::unknown-arithmetic-error "data exception - arithmetic exception" {::err/cause cause}))))
 
+(defn- emit-row-expr [expr opts]
+  (let [expr (prepare-expr expr)
+        emitted-expr (codegen-expr expr (assoc opts :iterate-rows? true))]
+    (assert (:return-type emitted-expr) (pr-str expr))
+    (assoc emitted-expr ::iterators (iterated-reader-bindings (batch-bindings emitted-expr)))))
+
 (def ^:private emit-projection
   "NOTE: we macroexpand inside the memoize on the assumption that
    everything outside yields the same result on the pre-expanded expr - this
    assumption wouldn't hold if macroexpansion created new variable exprs, for example.
    macroexpansion is non-deterministic (gensym), so busts the memo cache."
   (-> (fn [expr opts]
-        (let [expr (prepare-expr expr)
-              {:keys [return-type continue] :as emitted-expr} (codegen-expr expr opts)
+        (let [{:keys [return-type continue] {:keys [bindings advance-forms]} ::iterators} (emit-row-expr expr opts)
               {:keys [writer-bindings write-value-out!]} (write-value-out-code return-type)]
-          (assert return-type (pr-str expr))
           {:!projection-fn (delay
                              (-> `(fn [~(-> rel-sym (with-tag RelationReader))
                                        ~(-> schema-sym (with-tag IPersistentMap))
                                        ~(-> args-sym (with-tag RelationReader))
                                        ~(-> out-vec-sym (with-tag Vector))]
-                                    (let [~@(batch-bindings emitted-expr)
+                                    (let [~@bindings
                                           ~@writer-bindings
                                           row-count# (.getRowCount ~rel-sym)]
                                       (dotimes [~idx-sym row-count#]
+                                        ~@advance-forms
                                         ~(continue (fn [t c]
                                                      (write-value-out! t c))))))
                                  #_(doto clojure.pprint/pprint) ; <<no-commit>>
@@ -2551,12 +2579,75 @@
       (util/lru-memoize) ; <<no-commit>>
       wrap-zone-id-cache-buster))
 
+(def ^:private row-mask-words-sink
+  (let [words-sym (gensym 'words)]
+    {:bindings (fn [row-count-sym] [words-sym `(long-array (unsigned-bit-shift-right (+ ~row-count-sym 63) 6))])
+     :init 0
+     :step (fn [word-sym idx-sym selected?]
+             `(let [word# (if ~selected?
+                            (bit-or ~word-sym (bit-shift-left 1 (bit-and ~idx-sym 63)))
+                            ~word-sym)]
+                (if (== 63 (bit-and ~idx-sym 63))
+                  (do
+                    (aset ~words-sym (unsigned-bit-shift-right ~idx-sym 6) word#)
+                    0)
+                  word#)))
+     :finish (fn [word-sym]
+               `(do
+                  (when-not (zero? ~word-sym)
+                    (aset ~words-sym (dec (alength ~words-sym)) ~word-sym))
+                  ~words-sym))}))
+
+(defn- ->selection-emitter [{sink-bindings :bindings, :keys [init step finish]}]
+  (-> (fn [expr opts]
+        (let [{:keys [continue] {:keys [bindings advance-forms]} ::iterators} (emit-row-expr expr opts)
+              row-count-sym (gensym 'row_count)
+              acc-sym (gensym 'acc)]
+          {:!selection-fn (delay
+                            (-> `(fn [~(-> rel-sym (with-tag RelationReader))
+                                      ~(-> schema-sym (with-tag IPersistentMap))
+                                      ~(-> args-sym (with-tag RelationReader))]
+                                   (let [~@bindings
+                                         ~row-count-sym (.getRowCount ~rel-sym)
+                                         ~@(sink-bindings row-count-sym)]
+                                     (loop [~idx-sym 0, ~acc-sym ~init]
+                                       (if (< ~idx-sym ~row-count-sym)
+                                         (do
+                                           ~@advance-forms
+                                           (recur (inc ~idx-sym)
+                                                  (long ~(continue (fn [_ c]
+                                                                     (step acc-sym idx-sym c))))))
+                                         ~(finish acc-sym)))))
+                                eval))}))
+      (util/lru-memoize)
+      wrap-zone-id-cache-buster))
+
+(def ^:private emit-row-mask-words (->selection-emitter row-mask-words-sink))
+
+(defmacro ^:private rethrowing-anomalies [& body]
+  `(try
+     ~@body
+     (catch ArithmeticException e#
+       (throw (arithmetic-ex->anomaly e#)))
+     (catch NumberFormatException e#
+       (throw (err/incorrect :xtdb.expression/number-format-error (ex-message e#) {::err/cause e#})))
+     (catch ClassCastException e#
+       (throw (err/incorrect :xtdb.expression/class-cast-exception (ex-message e#) {::err/cause e#})))
+     (catch IllegalArgumentException e#
+       (throw (err/incorrect :xtdb.expression/illegal-argument-exception (ex-message e#) {::err/cause e#})))))
+
 (defn ->param-types [^RelationReader args]
   (->> args
        (into {} (map (fn [^VectorReader col]
                        (MapEntry/create
                         (symbol (.getName col))
                         (.getType col)))))))
+
+(defn- ->var-types [^RelationReader in-rel]
+  (->> in-rel
+       (into {} (map (fn [^VectorReader iv]
+                       [(symbol (.getName iv))
+                        (.getType iv)])))))
 
 (defn ->expression-projection-spec ^xtdb.operator.ProjectionSpec [col-name expr {:keys [var-types param-types]}]
   (let [;; HACK - this runs the analyser (we discard the emission) to get the widest possible out-type.
@@ -2569,41 +2660,27 @@
       (getType [_] widest-out-type)
 
       (project [_ allocator in-rel schema args]
-        (let [var-types (->> in-rel
-                             (into {} (map (fn [^VectorReader iv]
-                                             [(symbol (.getName iv))
-                                              (.getType iv)]))))
-
-              {:keys [return-type !projection-fn]} (emit-projection expr {:param-types (->param-types args)
-                                                                          :var-types var-types})]
+        (let [{:keys [return-type !projection-fn]} (emit-projection expr {:param-types (->param-types args)
+                                                                          :var-types (->var-types in-rel)})]
           (util/with-close-on-catch [out-vec (Vector/open allocator (str col-name) return-type)]
-            (try
-              (@!projection-fn in-rel schema args out-vec)
-              (catch ArithmeticException e
-                (throw (arithmetic-ex->anomaly e)))
-              (catch NumberFormatException e
-                (throw (err/incorrect :xtdb.expression/number-format-error (ex-message e) {::err/cause e})))
-              (catch ClassCastException e
-                (throw (err/incorrect :xtdb.expression/class-cast-exception (ex-message e) {::err/cause e})))
-              (catch IllegalArgumentException e
-                (throw (err/incorrect :xtdb.expression/illegal-argument-exception (ex-message e) {::err/cause e}))))
+            (rethrowing-anomalies
+              (@!projection-fn in-rel schema args out-vec))
 
             out-vec))))))
 
-(defn ->expression-mask-spec ^MaskSpec [expr input-types]
-  (let [projector (->expression-projection-spec "select" {:op :call, :f :boolean, :args [expr]} input-types)]
-    (reify MaskSpec
-      (mask [_ al in-rel schema args]
-        (with-open [selection (.project projector al in-rel schema args)]
-          (VectorMask/open al (.getRowCount in-rel) selection))))))
+(defn- ->predicate-expr [expr]
+  {:op :call, :f :boolean, :args [expr]})
 
-(defn ->expression-selection-spec ^SelectionSpec [expr input-types]
-  (let [mask-spec (->expression-mask-spec expr input-types)]
-    (reify SelectionSpec
-      (select [_ al in-rel schema args]
-        (with-open [mask (.mask mask-spec al in-rel schema args)]
-          (let [res (IntStream/builder)]
-            (dotimes [idx (.getRowCount in-rel)]
-              (when (.isSet mask idx)
-                (.add res idx)))
-            (.toArray (.build res))))))))
+(defn ->expression-row-mask-spec ^RowMaskSpec [expr {:keys [var-types param-types]}]
+  (let [expr (->predicate-expr expr)]
+    ;; analysed here as well as per batch, so that an expression the EE can't compile throws when the spec is built
+    (emit-row-mask-words expr {:param-types param-types
+                               :var-types var-types})
+
+    (reify RowMaskSpec
+      (rowMask [_ _al in-rel schema args]
+        (let [{:keys [!selection-fn]} (emit-row-mask-words expr {:param-types (->param-types args)
+                                                                 :var-types (->var-types in-rel)})]
+          (RowMask/ofWords (rethrowing-anomalies
+                             (@!selection-fn in-rel schema args))
+                           (.getRowCount in-rel)))))))

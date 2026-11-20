@@ -3,6 +3,7 @@
             [xtdb.api :as xt]
             [xtdb.basis :as basis]
             [xtdb.compactor :as c]
+            [xtdb.db-catalog :as db]
             xtdb.error
             [xtdb.expression :as expr]
             [xtdb.logical-plan :as lp]
@@ -18,8 +19,10 @@
            java.util.Arrays
            java.util.Date
            java.util.SortedSet
-           xtdb.arrow.RelationReader
-           (xtdb.compactor RecencyPartition)))
+           (xtdb.api.query PrepareOpts QueryOpts)
+           (xtdb.arrow MaskedRelation RelationReader)
+           (xtdb.compactor RecencyPartition)
+           (xtdb.query IQuerySource PreparedQuery)))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-allocator tu/with-node)
 
@@ -990,3 +993,57 @@
                       (filter #(= :scan (:op %)))
                       first :attributes :scan-pages-pruned))
             "the v = 2 version lies between the v = 1 versions, overlapping neither"))))
+
+(defn- scan-batches
+  [scan]
+  (let [db-cat (db/<-node tu/*node*)
+        snapshot-token (.snapshotToken db-cat)
+        ^IQuerySource q-src (.getQuerySource (util/node-base tu/*node*))
+        ^PreparedQuery pq (.prepareRa q-src scan db-cat (PrepareOpts. nil nil "xtdb" nil false false snapshot-token))
+        !batches (atom [])]
+    (with-open [res (.openQuery pq (.openSlice ^RelationReader vw/empty-args tu/*allocator*) (QueryOpts. nil nil snapshot-token nil))]
+      (while (.tryAdvance res (fn [^RelationReader rel]
+                                (swap! !batches conj [(instance? MaskedRelation rel) (.getAsMaps rel)])))))
+    {:masked? (set (map first @!batches))
+     :rows (->> (mapcat second @!batches)
+                ;; `_iid` reads as a byte array, which compares by reference
+                (map #(update-vals % (fn [v] (cond-> v (bytes? v) vec))))
+                frequencies)}))
+
+(t/deftest as-of-scans-of-flushed-pages-emit-masked-relations-6419
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1, :v 1} {:xt/id 2, :v 2} {:xt/id 3, :v 3} {:xt/id 4, :w "w"}]])
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1, :v 10}]
+                            [:delete-docs :docs 3]
+                            [:erase-docs :docs 2]])
+
+  (let [as-of-scans '[[:scan {:db-name "xtdb", :table #xt/table docs, :columns [_id v]}]
+                      [:scan {:db-name "xtdb", :table #xt/table docs, :columns [_id v w _valid_from _valid_to _system_from _system_to]}]
+                      [:scan {:db-name "xtdb", :table #xt/table docs, :columns [_system_from]}]
+                      [:scan {:db-name "xtdb", :table #xt/table docs, :columns [_id {v (> v 1)}]}]
+                      [:scan {:db-name "xtdb", :table #xt/table docs, :columns [{v (> v 0)} {_id (< _id 5)} _valid_from]}]]
+        selecting-scans '[[:scan {:db-name "xtdb", :table #xt/table docs, :columns [v {_id (== _id 1)}]}]
+                          [:scan {:db-name "xtdb", :table #xt/table docs, :columns [_iid v]}]
+                          [:scan {:db-name "xtdb", :table #xt/table docs, :for-valid-time :all-time, :columns [_id v]}]]
+        live (into {} (map (juxt identity scan-batches)) (concat as-of-scans selecting-scans))]
+
+    (t/is (= {{:xt/id 1, :v 10} 1, {:xt/id 4} 1} (:rows (live (first as-of-scans)))))
+
+    (doseq [scan (concat as-of-scans selecting-scans)]
+      (t/is (= #{false} (:masked? (live scan))) (str "live-index pages are selected: " scan)))
+
+    (tu/flush-block! tu/*node*)
+
+    (doseq [scan as-of-scans]
+      (t/is (= {:masked? #{true}, :rows (:rows (live scan))} (scan-batches scan))
+            (str "flushed pages are masked, with the same rows: " scan)))
+
+    (doseq [scan selecting-scans]
+      (t/is (= {:masked? #{false}, :rows (:rows (live scan))} (scan-batches scan))
+            (str "still selected: " scan))))
+
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1, :v 100} {:xt/id 5, :v 5}]])
+  (tu/flush-block! tu/*node*)
+
+  (t/is (= {:masked? #{true}, :rows {{:xt/id 1, :v 100} 1, {:xt/id 4} 1, {:xt/id 5, :v 5} 1}}
+           (scan-batches '[:scan {:db-name "xtdb", :table #xt/table docs, :columns [_id v]}]))
+        "an entity's events span two flushed pages"))

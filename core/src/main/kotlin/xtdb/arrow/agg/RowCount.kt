@@ -5,9 +5,9 @@ import xtdb.arrow.FieldName
 import xtdb.arrow.LongVector
 import xtdb.arrow.MonoVector
 import xtdb.arrow.RelationReader
+import xtdb.arrow.RowMask
 import xtdb.arrow.Vector
 import xtdb.arrow.Vector.Companion.openVector
-import xtdb.arrow.VectorMask
 import xtdb.arrow.VectorType
 import xtdb.arrow.VectorType.Companion.I64
 
@@ -19,7 +19,7 @@ class RowCount(override val colName: FieldName, val hasZeroRow: Boolean) : Aggre
 
         return object : AggregateSpec {
 
-            override fun aggregate(inRel: RelationReader, groupMapping: GroupMapping, mask: VectorMask) {
+            override fun aggregate(inRel: RelationReader, groupMapping: GroupMapping, mask: RowMask) {
                 repeat(inRel.rowCount) { idx ->
                     val groupIdx = groupMapping.getInt(idx)
 

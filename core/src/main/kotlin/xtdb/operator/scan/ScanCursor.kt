@@ -5,8 +5,9 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.ICursor
+import xtdb.arrow.MaskedRelation
 import xtdb.arrow.RelationReader
-import xtdb.operator.SelectionSpec
+import xtdb.operator.RowMaskSpec
 import xtdb.segment.MergeTask
 import xtdb.segment.Segment
 import xtdb.trie.ColumnName
@@ -21,7 +22,8 @@ import java.util.function.Consumer
 class ScanCursor(
     private val al: BufferAllocator,
 
-    private val colNames: List<ColumnName>, private val colPreds: Map<ColumnName, SelectionSpec>,
+    private val colNames: List<ColumnName>, private val colPreds: Map<ColumnName, RowMaskSpec>,
+    private val iidSelector: IidSelector?,
     private val temporalBounds: TemporalBounds, private val clampValidTime: Boolean,
 
     private val ownedSegments: List<Segment<*>>,
@@ -41,18 +43,18 @@ class ScanCursor(
             AsOfResolver(temporalBounds, clampValidTime)
         else PolygonResolver(temporalBounds, clampValidTime)
 
-    private fun RelationReader.maybeSelect(iidPred: SelectionSpec?, path: ByteArray) =
-        when (iidPred) {
-            null -> this
-            is MultiIidSelector -> select(iidPred.select(al, this, path))
-            else -> select(iidPred.select(al, this, this@ScanCursor.schema, this@ScanCursor.args))
-        }
+    private fun RelationReader.maybeSelect(path: ByteArray): RelationReader {
+        val mask = iidSelector?.rowMask(al, this, path)
+            ?: colPreds["_iid"]?.rowMask(al, this, this@ScanCursor.schema, this@ScanCursor.args)
+            ?: return this
+
+        return select(mask.toSelection())
+    }
 
     private val bufferedRels: Queue<RelationReader> = LinkedList()
 
     private fun bufferTask(task: MergeTask) {
         task.use {
-            val iidPred = colPreds["_iid"]
             val taskPath = task.path
             val resolver = openResolver()
 
@@ -63,13 +65,14 @@ class ScanCursor(
             // before iid-selection and bitemporal resolution whittle them down to the emitted rows
             metrics.addRowsRead(loadedPages.sumOf { it.rowCount.toLong() })
 
-            val leafReaders = loadedPages.map { it.maybeSelect(iidPred, taskPath) }
+            val leafReaders = loadedPages.map { it.maybeSelect(taskPath) }
 
             val pointers = leafReaders.mapIndexedNotNull { idx, leafReader ->
                 EventRowPointer(leafReader, taskPath).takeIf { it.isValid() }?.let { LeafPointer(it, idx) }
             }
 
-            BitemporalConsumer.open(al, leafReaders, colNames).use { bitemporalConsumer ->
+            // the merge visits entities in iid order, and each page is sorted by iid
+            BitemporalConsumer.open(al, leafReaders, colNames, eachRowOnceAscending = resolver.atMostOneRowPerEntity).use { bitemporalConsumer ->
                 val merge = EntityMerge(pointers)
 
                 while (merge.nextEntity())
@@ -81,7 +84,10 @@ class ScanCursor(
 
                 bitemporalConsumer.build()
                     .map { childRel ->
-                        colPreds.fold(childRel) { acc, colPred -> acc.select(colPred.select(al, acc, schema, args)) }
+                        colPreds.fold(childRel) { acc, colPred ->
+                            val mask = colPred.rowMask(al, acc, schema, args)
+                            if (acc is MaskedRelation) MaskedRelation.of(acc, mask) else acc.select(mask.toSelection())
+                        }
                     }
                     .filter { it.rowCount > 0 }
                     .safeMap { it.openSlice(al) }

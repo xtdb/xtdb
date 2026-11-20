@@ -9,6 +9,8 @@ import kotlin.math.min
 
 /** Resolves one entity's events into the rows the query observes. */
 internal interface EntityResolver {
+    val atMostOneRowPerEntity: Boolean
+
     fun resolveEntity(events: EntityEvents, out: BitemporalConsumer)
 }
 
@@ -28,6 +30,8 @@ internal class AsOfResolver(
     private val vtLower = temporalBounds.validTime.lower
     private val vtUpper = temporalBounds.validTime.upper
     private val stUpper = temporalBounds.systemTime.upper
+
+    override val atMostOneRowPerEntity = true
 
     override fun resolveEntity(events: EntityEvents, out: BitemporalConsumer) {
         var leftBound = Long.MIN_VALUE
@@ -77,6 +81,8 @@ internal class PolygonResolver(
 ) : EntityResolver {
 
     private val polygonCalculator = PolygonCalculator(temporalBounds)
+
+    override val atMostOneRowPerEntity = false
 
     private val vtLower = temporalBounds.validTime.lower
     private val vtUpper = temporalBounds.validTime.upper

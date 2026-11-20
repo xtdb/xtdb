@@ -2,13 +2,14 @@ package xtdb.operator
 
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.ICursor
+import xtdb.arrow.MaskedRelation
 import xtdb.arrow.RelationReader
 import java.util.function.Consumer
 
 class SelectCursor(
     private val al: BufferAllocator,
     private val inCursor: ICursor,
-    private val selector: SelectionSpec,
+    private val selector: RowMaskSpec,
     private val schema: Map<String, Any>,
     private val args: RelationReader
 ) : ICursor {
@@ -20,10 +21,19 @@ class SelectCursor(
 
         while (!advanced) {
             inCursor.tryAdvance { inRel ->
-                val sel = selector.select(al, inRel, schema, args)
-                if (sel.isNotEmpty()) {
-                    c.accept(inRel.select(sel))
-                    advanced = true
+                val mask = selector.rowMask(al, inRel, schema, args)
+                when (mask.cardinality) {
+                    0 -> {}
+
+                    inRel.rowCount -> {
+                        c.accept(inRel)
+                        advanced = true
+                    }
+
+                    else -> {
+                        c.accept(MaskedRelation.of(inRel, mask))
+                        advanced = true
+                    }
                 }
             } || break
         }

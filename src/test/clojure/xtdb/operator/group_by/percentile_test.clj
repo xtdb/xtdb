@@ -9,7 +9,7 @@
            (java.nio.file.attribute FileAttribute)
            (java.time LocalDate)
            (java.util Random)
-           (xtdb.arrow RelationReader VectorMask)
+           (xtdb.arrow RelationReader RowMask)
            (xtdb.arrow.agg AggregateSpec)))
 
 (t/use-fixtures :each tu/with-allocator tu/with-node)
@@ -332,7 +332,7 @@
                                                                                  :zero-row? true
                                                                                  :sort-opts {:direction :asc}})
                                                   tu/*allocator* nil)]
-            (.aggregate spec rel group-mapping VectorMask/ALL)
+            (.aggregate spec rel group-mapping (RowMask/all (.getRowCount rel)))
             (t/is (seq (.list parent)) "spilled a run"))
 
           (t/is (empty? (.list parent)) "spill dir cleaned up on close"))))))
