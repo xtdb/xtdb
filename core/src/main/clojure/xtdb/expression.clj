@@ -18,7 +18,7 @@
            (org.apache.arrow.vector PeriodDuration)
            (org.apache.arrow.vector.types.pojo ArrowType$Decimal)
            (org.apache.commons.codec.binary Hex)
-           (xtdb.arrow ListValueReader RelationReader ValueBox ValueReader Vector VectorMask VectorReader VectorType VectorType$Listy VectorType$Mono VectorType$Nothing VectorType$Poly VectorType$Struct)
+           (xtdb.arrow ListValueReader RelationReader RowMask ValueBox ValueReader Vector VectorMask VectorReader VectorType VectorType$Listy VectorType$Mono VectorType$Nothing VectorType$Poly VectorType$Struct)
            (xtdb.expression PgFormat)
            (xtdb.operator MaskSpec ProjectionSpec SelectionSpec)
            (xtdb.pgwire PgTypes)
@@ -2558,25 +2558,34 @@
   (-> (fn [expr opts]
         (let [{:keys [continue] :as emitted-expr} (emit-row-expr expr opts)
               row-count-sym (gensym 'row_count)
-              sel-sym (gensym 'sel)
-              n-sym (gensym 'n)]
+              words-sym (gensym 'words)
+              word-sym (gensym 'word)]
           {:!selection-fn (delay
                             (-> `(fn [~(-> rel-sym (with-tag RelationReader))
                                       ~(-> schema-sym (with-tag IPersistentMap))
                                       ~(-> args-sym (with-tag RelationReader))]
                                    (let [~@(batch-bindings emitted-expr)
                                          ~row-count-sym (.getRowCount ~rel-sym)
-                                         ~sel-sym (int-array ~row-count-sym)]
-                                     (loop [~idx-sym 0, ~n-sym 0]
+                                         ~words-sym (long-array (unsigned-bit-shift-right (+ ~row-count-sym 63) 6))]
+                                     ;; the loop carries the current 64-row word of the mask: row idx is bit (idx & 63) of word (idx >>> 6).
+                                     ;; A word is stored once its last row has been stepped, and the next starts from zero;
+                                     ;; a partial last word is stored after the loop, unless nothing in it is set.
+                                     (loop [~idx-sym 0, ~word-sym 0]
                                        (if (< ~idx-sym ~row-count-sym)
                                          (recur (inc ~idx-sym)
                                                 (long ~(continue (fn [_ selected?]
-                                                                   `(if ~selected?
-                                                                      (do
-                                                                        (aset ~sel-sym (int ~n-sym) (int ~idx-sym))
-                                                                        (inc ~n-sym))
-                                                                      ~n-sym)))))
-                                         (Arrays/copyOf ~sel-sym (int ~n-sym))))))
+                                                                   `(let [word# (if ~selected?
+                                                                                  (bit-or ~word-sym (bit-shift-left 1 (bit-and ~idx-sym 63)))
+                                                                                  ~word-sym)]
+                                                                      (if (== 63 (bit-and ~idx-sym 63))
+                                                                        (do
+                                                                          (aset ~words-sym (unsigned-bit-shift-right ~idx-sym 6) word#)
+                                                                          0)
+                                                                        word#))))))
+                                         (do
+                                           (when-not (zero? ~word-sym)
+                                             (aset ~words-sym (dec (alength ~words-sym)) ~word-sym))
+                                           ~words-sym)))))
                                 eval))}))
       (util/lru-memoize)
       wrap-zone-id-cache-buster))
@@ -2645,5 +2654,6 @@
       (select [_ _al in-rel schema args]
         (let [{:keys [!selection-fn]} (emit-selection expr {:param-types (->param-types args)
                                                             :var-types (->var-types in-rel)})]
-          (rethrowing-anomalies
-            (@!selection-fn in-rel schema args)))))))
+          (RowMask/ofWords (rethrowing-anomalies
+                             (@!selection-fn in-rel schema args))
+                           (.getRowCount in-rel)))))))

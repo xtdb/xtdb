@@ -59,7 +59,7 @@ class MultiIidSelectorTest {
             iids.writeUuid(Uuid.parse("90000000-0000-0000-0000-000000000000"))
             rel.endRow()
 
-            val result = selector.select(al, rel, emptyMap(), RelationReader.from(emptyList(), 0))
+            val result = selector.select(al, rel, emptyMap(), RelationReader.from(emptyList(), 0)).toSelection()
             assertArrayEquals(IntArray(0), result, "empty iid set should match nothing")
         }
     }
@@ -73,7 +73,7 @@ class MultiIidSelectorTest {
 
         Relation(al).use { rel ->
             rel.vectorFor("_iid", IID_TYPE, false)
-            val result = selector.select(al, rel, emptyMap(), RelationReader.from(emptyList(), 0))
+            val result = selector.select(al, rel, emptyMap(), RelationReader.from(emptyList(), 0)).toSelection()
             assertArrayEquals(IntArray(0), result, "empty relation should match nothing")
         }
     }
@@ -94,7 +94,7 @@ class MultiIidSelectorTest {
             iids.writeUuid(Uuid.parse("90000000-0000-0000-0000-000000000000"))
             rel.endRow()
 
-            val result = selector.select(al, rel, emptyMap(), RelationReader.from(emptyList(), 0))
+            val result = selector.select(al, rel, emptyMap(), RelationReader.from(emptyList(), 0)).toSelection()
             assertArrayEquals(intArrayOf(1), result, "should match only the search UUID")
         }
     }
@@ -122,7 +122,7 @@ class MultiIidSelectorTest {
             iids.writeUuid(uuid3)
             rel.endRow()
 
-            val result = selector.select(al, rel, emptyMap(), RelationReader.from(emptyList(), 0))
+            val result = selector.select(al, rel, emptyMap(), RelationReader.from(emptyList(), 0)).toSelection()
             assertArrayEquals(intArrayOf(1, 3, 4), result, "should match all three search UUIDs")
         }
     }
@@ -143,7 +143,7 @@ class MultiIidSelectorTest {
             iids.writeUuid(searchUuid)
             rel.endRow()
 
-            val result = selector.select(al, rel, emptyMap(), RelationReader.from(emptyList(), 0))
+            val result = selector.select(al, rel, emptyMap(), RelationReader.from(emptyList(), 0)).toSelection()
             assertArrayEquals(intArrayOf(0, 1, 2), result, "should match all duplicate occurrences")
         }
     }
@@ -166,7 +166,7 @@ class MultiIidSelectorTest {
             iids.writeUuid(Uuid.parse("30000000-0000-0000-0000-000000000000"))
             rel.endRow()
 
-            val result = selector.select(al, rel, emptyMap(), RelationReader.from(emptyList(), 0))
+            val result = selector.select(al, rel, emptyMap(), RelationReader.from(emptyList(), 0)).toSelection()
             assertArrayEquals(IntArray(0), result, "should match nothing when all IIDs are different")
         }
     }
@@ -184,7 +184,7 @@ class MultiIidSelectorTest {
             iids.writeUuid(Uuid.parse("80000000-0000-0000-0000-000000000000"))
             rel.endRow()
 
-            val result = selector.select(al, rel, path)
+            val result = selector.select(al, rel, path).toSelection()
             assertArrayEquals(IntArray(0), result, "empty iid set should match nothing")
         }
     }
@@ -206,7 +206,7 @@ class MultiIidSelectorTest {
             iids.writeUuid(Uuid.parse("90000000-0000-0000-0000-000000000000"))
             rel.endRow()
 
-            val result = selector.select(al, rel, path)
+            val result = selector.select(al, rel, path).toSelection()
             assertArrayEquals(intArrayOf(1), result, "should find the matching UUID")
         }
     }
@@ -235,7 +235,7 @@ class MultiIidSelectorTest {
             iids.writeUuid(uuid3)
             rel.endRow()
 
-            val result = selector.select(al, rel, path)
+            val result = selector.select(al, rel, path).toSelection()
             assertArrayEquals(intArrayOf(1, 3, 4), result, "should match all search UUIDs")
         }
     }
@@ -267,7 +267,7 @@ class MultiIidSelectorTest {
             iids.writeUuid(uuid4)
             rel.endRow()
 
-            val result = selector.select(al, rel, path)
+            val result = selector.select(al, rel, path).toSelection()
             // Should only match UUIDs that fall within the path's bucket range
             assertArrayEquals(intArrayOf(0), result, "should only match IIDs in the specified path bucket")
         }
@@ -290,7 +290,7 @@ class MultiIidSelectorTest {
             iids.writeUuid(uuid)
             rel.endRow()
 
-            val result = selector.select(al, rel, path)
+            val result = selector.select(al, rel, path).toSelection()
             assertArrayEquals(intArrayOf(0, 1, 2), result, "should match all duplicates")
         }
     }
@@ -317,7 +317,7 @@ class MultiIidSelectorTest {
                 rel.endRow()
             }
 
-            val result = selector.select(al, rel, path)
+            val result = selector.select(al, rel, path).toSelection()
             // Should find all 100 matches at positions 0, 10, 20, ..., 990
             val expectedIndices = (0..99).map { it * 10 }.toIntArray()
             assertArrayEquals(expectedIndices, result, "should find all 100 matches at every 10th position")
@@ -351,7 +351,7 @@ class MultiIidSelectorTest {
             iids.writeUuid(uuid3)
             rel.endRow()
 
-            val result = selector.select(al, rel, path)
+            val result = selector.select(al, rel, path).toSelection()
             assertArrayEquals(intArrayOf(1, 3, 5), result, "results should be in sorted row order")
         }
     }
@@ -380,7 +380,7 @@ class MultiIidSelectorTest {
                 rel.endRow()
             }
 
-            val result = selector.select(al, rel, path)
+            val result = selector.select(al, rel, path).toSelection()
             assertArrayEquals(intArrayOf(100, 500, 900), result, "should find sparse matches efficiently")
         }
     }
@@ -402,7 +402,7 @@ class MultiIidSelectorTest {
             iids.writeUuid(Uuid.parse("20000000-0000-0000-0000-000000000000"))
             rel.endRow()
 
-            val result = selector.select(al, rel, path)
+            val result = selector.select(al, rel, path).toSelection()
             assertArrayEquals(IntArray(0), result, "should match nothing")
         }
     }
@@ -425,7 +425,7 @@ class MultiIidSelectorTest {
             iids.writeUuid(Uuid.parse("90000000-0000-0000-0000-000000000000"))
             rel.endRow()
 
-            val result = selector.select(al, rel, path)
+            val result = selector.select(al, rel, path).toSelection()
             assertArrayEquals(IntArray(0), result, "should find no matches when needles before haystack")
         }
     }
@@ -448,7 +448,7 @@ class MultiIidSelectorTest {
             iids.writeUuid(Uuid.parse("20000000-0000-0000-0000-000000000000"))
             rel.endRow()
 
-            val result = selector.select(al, rel, path)
+            val result = selector.select(al, rel, path).toSelection()
             assertArrayEquals(IntArray(0), result, "should find no matches when needles after haystack")
         }
     }

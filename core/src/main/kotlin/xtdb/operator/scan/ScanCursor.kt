@@ -44,8 +44,8 @@ class ScanCursor(
     private fun RelationReader.maybeSelect(iidPred: SelectionSpec?, path: ByteArray) =
         when (iidPred) {
             null -> this
-            is MultiIidSelector -> select(iidPred.select(al, this, path))
-            else -> select(iidPred.select(al, this, this@ScanCursor.schema, this@ScanCursor.args))
+            is MultiIidSelector -> select(iidPred.select(al, this, path).toSelection())
+            else -> select(iidPred.select(al, this, this@ScanCursor.schema, this@ScanCursor.args).toSelection())
         }
 
     private val bufferedRels: Queue<RelationReader> = LinkedList()
@@ -81,7 +81,7 @@ class ScanCursor(
 
                 bitemporalConsumer.build()
                     .map { childRel ->
-                        colPreds.fold(childRel) { acc, colPred -> acc.select(colPred.select(al, acc, schema, args)) }
+                        colPreds.fold(childRel) { acc, colPred -> acc.select(colPred.select(al, acc, schema, args).toSelection()) }
                     }
                     .filter { it.rowCount > 0 }
                     .safeMap { it.openSlice(al) }
