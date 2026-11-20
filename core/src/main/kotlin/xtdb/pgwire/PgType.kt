@@ -2,7 +2,6 @@ package xtdb.pgwire
 
 import org.apache.arrow.vector.types.FloatingPointPrecision.DOUBLE
 import org.apache.arrow.vector.types.FloatingPointPrecision.SINGLE
-import org.apache.arrow.vector.types.TimeUnit
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.ArrowType.ArrowTypeVisitor
 import org.apache.commons.codec.binary.Hex
@@ -42,6 +41,7 @@ import xtdb.pg.codec.decode
 import xtdb.pg.codec.encode
 import xtdb.pgwire.TypCategory.*
 import xtdb.time.InstantUtil
+import xtdb.time.LocalDateTimeUtil
 import xtdb.time.Interval
 import xtdb.time.asInterval
 import xtdb.time.asSqlTimestamp
@@ -399,13 +399,10 @@ sealed class PgType(
                 ?: throw IllegalArgumentException("Cannot parse '$text' as timestamp")
         }
 
-        override fun binaryWriter(col: VectorReader): CellWriter {
-            val nanos = (col.arrowType as? ArrowType.Timestamp)?.unit == TimeUnit.NANOSECOND
-
-            return CellWriter { _, rdr ->
-                val unixMicros = rdr.readLong().let { if (nanos) it / 1000 else it }
-                ByteBuffer.allocate(8).putLong(unixMicros - UNIX_PG_EPOCH_DIFF_MICROS).array()
-            }
+        override fun writeBinary(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray {
+            val ldt = col.getObject(rdr.pos) as LocalDateTime
+            val micros = with(LocalDateTimeUtil) { ldt.asMicros } - UNIX_PG_EPOCH_DIFF_MICROS
+            return ByteBuffer.allocate(8).putLong(micros).array()
         }
 
         override fun writeText(env: PgSessionEnv, col: VectorReader, rdr: RowValueReader): ByteArray {

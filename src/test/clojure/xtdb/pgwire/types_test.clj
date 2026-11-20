@@ -25,3 +25,11 @@
     (t/is (thrown? ArithmeticException
                    (.write (.binaryWriter PgType/PG_DATE rdr) {} (.next (.valueReader rdr))))
           "a date past int4 days raises rather than wrapping")))
+
+(t/deftest test-pg-timestamp-binary-sends-the-micro-text-shows
+  (doseq [[vec-type val expected] [[#xt/type [:timestamp-local :nano] #xt/date-time "1901-12-13T20:45:52.888842999" #xt/date-time "1901-12-13T20:45:52.888842"]
+                                   [#xt/type [:timestamp-local :second] #xt/date-time "2020-01-01T00:00:01" #xt/date-time "2020-01-01T00:00:01"]
+                                   [#xt/type [:timestamp-local :milli] #xt/date-time "2020-01-01T00:00:01.123" #xt/date-time "2020-01-01T00:00:01.123"]]]
+    (with-open [rdr (tu/open-vec "val" vec-type [val])]
+      (t/is (= expected (.readBinary PgType/PG_TIMESTAMP (.write (.binaryWriter PgType/PG_TIMESTAMP rdr) {} (.next (.valueReader rdr)))))
+            (str vec-type)))))
