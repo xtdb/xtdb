@@ -11,7 +11,7 @@ import xtdb.metadata.PageMetadata
 import xtdb.segment.Segment.PageMeta
 import xtdb.segment.Segment.PageMeta.Companion.pageMeta
 import xtdb.storage.BufferPool
-import xtdb.table.TableSlug
+import xtdb.table.TrieFiles
 import xtdb.trie.ArrowHashTrie
 import xtdb.trie.Trie
 import xtdb.trie.RecencyMicros
@@ -22,10 +22,10 @@ import xtdb.util.closeOnCatch
 
 class BufferPoolSegment private constructor(
     private val al: BufferAllocator, private val bp: BufferPool, private val mm: PageMetadata.Factory,
-    val slug: TableSlug, val trieKey: TrieKey, val metadataPredicate: MetadataPredicate?,
+    val files: TrieFiles, val trieKey: TrieKey, val metadataPredicate: MetadataPredicate?,
     private val footer: ArrowFooter,
 ) : Segment<ArrowHashTrie.Leaf> {
-    val dataFilePath = slug.dataFilePath(trieKey)
+    val dataFilePath = files.dataFilePath(trieKey)
     private val parsedTrieKey = Trie.parseKey(trieKey)
     private val recency: RecencyMicros = parsedTrieKey.recency?.atStartOfDay()?.asMicros ?: Long.MAX_VALUE
 
@@ -79,7 +79,7 @@ class BufferPoolSegment private constructor(
         override fun close() = pageMetadata.close()
     }
 
-    override suspend fun openMetadata(): Metadata = Metadata(mm.openPageMetadata(slug.metaFilePath(trieKey)))
+    override suspend fun openMetadata(): Metadata = Metadata(mm.openPageMetadata(files.metaFilePath(trieKey)))
 
     override fun close() {
         dataPages.closeAll()
@@ -88,13 +88,13 @@ class BufferPoolSegment private constructor(
     companion object {
         suspend fun open(
             al: BufferAllocator, bp: BufferPool, mm: PageMetadata.Factory,
-            slug: TableSlug, trieKey: TrieKey, metadataPredicate: MetadataPredicate? = null,
-        ) = BufferPoolSegment(al, bp, mm, slug, trieKey, metadataPredicate, bp.getFooter(slug.dataFilePath(trieKey)))
+            files: TrieFiles, trieKey: TrieKey, metadataPredicate: MetadataPredicate? = null,
+        ) = BufferPoolSegment(al, bp, mm, files, trieKey, metadataPredicate, bp.getFooter(files.dataFilePath(trieKey)))
 
         @JvmStatic
         fun openSync(
             al: BufferAllocator, bp: BufferPool, mm: PageMetadata.Factory,
-            slug: TableSlug, trieKey: TrieKey, metadataPredicate: MetadataPredicate?,
-        ) = runBlocking { open(al, bp, mm, slug, trieKey, metadataPredicate) }
+            files: TrieFiles, trieKey: TrieKey, metadataPredicate: MetadataPredicate?,
+        ) = runBlocking { open(al, bp, mm, files, trieKey, metadataPredicate) }
     }
 }
