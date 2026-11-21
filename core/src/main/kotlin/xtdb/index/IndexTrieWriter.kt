@@ -9,6 +9,7 @@ import xtdb.arrow.VectorType.Companion.IID
 import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.arrow.schema
 import xtdb.storage.BufferPool
+import xtdb.table.IndexFiles
 import xtdb.table.TrieFiles
 import xtdb.trie.BlockIndex
 import xtdb.trie.ColumnName
@@ -46,18 +47,44 @@ class IndexTrieWriter @JvmOverloads constructor(
      *
      * [rel] is in the live index's layout: an `_iid` column and an `op` union whose `put` leg holds the document.
      */
-    suspend fun writeL0(files: TrieFiles, blockIdx: BlockIndex, rel: RelationReader, column: ColumnName): IndexTrie? {
-        val colRdr = rel["op"].vectorForOrNull("put")?.vectorForOrNull(column) ?: return null
-        val iidRdr = rel["_iid"]
+    suspend fun writeL0(files: TrieFiles, blockIdx: BlockIndex, rel: RelationReader, column: ColumnName): IndexTrie? =
+        writeL0(files, blockIdx, entries().also { it.addPuts(rel, column) })
 
-        val entries = TreeSet<Entry> { a, b ->
-            compareUnsigned(a.hash, b.hash).takeIf { it != 0 } ?: Bytes.COMPARATOR.compare(a.iid, b.iid)
+    /**
+     * Writes the L0 for block [blockIdx] of an index on [column], from the put rows of the table's data L0 for that block —
+     * null where the table has no data L0 for the block, or none of its put rows gives the column a value.
+     */
+    suspend fun backfillL0(files: IndexFiles, blockIdx: BlockIndex, column: ColumnName): IndexTrie? {
+        val table = files.table
+        val dataPath = table.dataFilePath(Trie.l0Key(blockIdx).toString())
+        if (bp.listAllObjects(table.dataFileDir()).none { it.key == dataPath }) return null
+
+        val entries = entries()
+        val footer = bp.getFooter(dataPath)
+        Relation(al, footer.schema).use { rel ->
+            for (pageIdx in footer.recordBatches.indices) {
+                bp.getRecordBatch(dataPath, pageIdx).use { rel.load(it) }
+                entries.addPuts(rel, column)
+            }
         }
+
+        return writeL0(files, blockIdx, entries)
+    }
+
+    private fun entries() = TreeSet<Entry> { a, b ->
+        compareUnsigned(a.hash, b.hash).takeIf { it != 0 } ?: Bytes.COMPARATOR.compare(a.iid, b.iid)
+    }
+
+    private fun MutableSet<Entry>.addPuts(rel: RelationReader, column: ColumnName) {
+        val colRdr = rel["op"].vectorForOrNull("put")?.vectorForOrNull(column) ?: return
+        val iidRdr = rel["_iid"]
 
         for (idx in 0 until rel.rowCount)
             if (!colRdr.isNull(idx))
-                entries += Entry(IndexHash.of(colRdr, idx), iidRdr.getBytes(idx).let { buf -> ByteArray(buf.remaining()).also { buf.duplicate().get(it) } })
+                this += Entry(IndexHash.of(colRdr, idx), iidRdr.getBytes(idx).let { buf -> ByteArray(buf.remaining()).also { buf.duplicate().get(it) } })
+    }
 
+    private suspend fun writeL0(files: TrieFiles, blockIdx: BlockIndex, entries: Set<Entry>): IndexTrie? {
         if (entries.isEmpty()) return null
 
         val key = Trie.l0Key(blockIdx)

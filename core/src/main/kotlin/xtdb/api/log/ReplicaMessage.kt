@@ -13,6 +13,7 @@ import xtdb.log.proto.blockBoundary
 import xtdb.log.proto.blockUploaded
 import xtdb.log.proto.detachDatabase
 import xtdb.log.proto.droppedIndex
+import xtdb.log.proto.copy
 import xtdb.log.proto.indexReady
 import xtdb.log.proto.noOp
 import xtdb.log.proto.oversizedMessage
@@ -118,6 +119,10 @@ sealed interface ReplicaMessage {
 
                         ReplicaLogMessage.MessageCase.TRIES_DELETED -> msg.triesDeleted.let {
                             TriesDeleted(it.tableName, it.trieKeysList.toSet(), termId = msg.termId, termSeq = termSeq)
+                        }
+
+                        ReplicaLogMessage.MessageCase.INDEX_BACKFILLED -> msg.indexBackfilled.let {
+                            IndexBackfilled(SourceMessage.IndexBackfilled.fromProto(it), it.sourceMsgId, termId = msg.termId, termSeq = termSeq)
                         }
 
                         ReplicaLogMessage.MessageCase.INDEX_READY ->
@@ -281,6 +286,20 @@ sealed interface ReplicaMessage {
                 tableName = this@TriesDeleted.tableName
                 trieKeys.addAll(this@TriesDeleted.trieKeys)
             }
+        }
+    }
+
+    /** The leader's forward of [backfilled], from [sourceMsgId] on the source log. */
+    data class IndexBackfilled(
+        val backfilled: SourceMessage.IndexBackfilled,
+        val sourceMsgId: MessageId,
+        override val termId: Long,
+        override val termSeq: Long? = null,
+    ) : ProtobufMessage() {
+        override fun withTermSeq(termSeq: Long) = copy(termSeq = termSeq)
+
+        override fun toLogMessage() = replicaLogMessage {
+            indexBackfilled = backfilled.toProto().copy { sourceMsgId = this@IndexBackfilled.sourceMsgId }
         }
     }
 

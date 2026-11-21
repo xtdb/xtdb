@@ -16,6 +16,7 @@ message ReplicaLogMessage {
         TriesDeleted tries_deleted = 6;
         OversizedMessage oversized_message = 8;
         IndexReady index_ready = 10;
+        IndexBackfilled index_backfilled = 11;
     }
 
     // The leader term that produced this message, for read-side fencing: followers

@@ -185,6 +185,26 @@ class IndexCatalog private constructor(private val byId: Map<UUID, SecondaryInde
         }
     }
 
+    /**
+     * A backfill job's cover of [block] for [id]: adds its [l0], if it wrote one, and strikes [block] from the blocks owed.
+     * A no-op unless [id] is Building and still owes [block], so a late or repeated cover, or one for an index since
+     * dropped, changes nothing.
+     */
+    fun backfilled(id: UUID, block: BlockIndex, l0: IndexTrie?): IndexCatalog {
+        val index = byId[id]
+            ?: throw Fault("index $id is not in the catalog", "xtdb.index/unknown-index", mapOf("index-id" to id))
+
+        val state = index.state as? IndexState.Building ?: return this
+        if (block !in state.owedBlocks) return this
+
+        return IndexCatalog(
+            byId + (id to index.copy(
+                state = state.copy(owedBlocks = state.owedBlocks - block),
+                tries = index.tries + listOfNotNull(l0),
+            ))
+        )
+    }
+
     /** Adds a block's index L0s, [l0s] keyed by index id. */
     fun withL0s(l0s: Map<UUID, IndexTrie>): IndexCatalog =
         IndexCatalog(byId + l0s.map { (id, l0) ->

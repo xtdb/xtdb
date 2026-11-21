@@ -213,6 +213,17 @@ internal class LeaderLogProcessor(
                 watchers.notifyApplied(msg.sourceMsgId)
             }
 
+            is ReplicaMessage.IndexBackfilled -> {
+                val backfilled = msg.backfilled
+                if (backfilled.storageVersion == Storage.VERSION && backfilled.storageEpoch == bufferPool.epoch)
+                    partitionState.indexBackfilled(backfilled.indexId, backfilled.blockIndex, backfilled.l0)
+
+                // Below the guard, as for TriesAdded: the compactor awaits this watermark and then recalculates its jobs.
+                watchers.notifyApplied(msg.sourceMsgId)
+
+                announceReady(listOfNotNull(partitionState.indexCatalog[backfilled.indexId]))
+            }
+
             is BlockBoundary -> {
                 // Produce only: the catalog refresh, the index roll, the source watermark and the
                 // resolution resume all wait for the `BlockUploaded` this appends to come back.

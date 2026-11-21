@@ -16,11 +16,13 @@ import xtdb.api.TableRef
 import xtdb.api.log.IndexOp
 import xtdb.api.log.Log
 import xtdb.api.log.ReplicaMessage
+import xtdb.api.log.SourceMessage
 import xtdb.api.log.Watchers
 import xtdb.api.storage.Storage
 import xtdb.block.proto.block
 import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
+import xtdb.index.IndexCatalog
 import xtdb.index.IndexDef
 import xtdb.index.IndexState
 import xtdb.index.IndexTrie
@@ -365,5 +367,36 @@ class FollowerLogProcessorTest {
 
         proc.processRecords(listOf(record(2, ready)))
         assertEquals(listOf(SecondaryIndex(def, 0, IndexState.Ready, emptyList())), value.indexCat.indices.toList())
+    }
+
+    @Test
+    fun `a backfill read off the replica log strikes its block and adds its L0, under the storage guard and the staleness check`() = runTest {
+        val def = IndexDef(UUID.randomUUID(), "by_email", TableRef("public", "users"), "email")
+        partition.close()
+        partition = TestPartition(
+            allocator, bufferPool,
+            block = block { blockIndex = 1 },
+            indexCat = IndexCatalog.EMPTY.withIndex(def, 2, setOf(0L, 1L)),
+        )
+        val proc = makeProcessor()
+
+        fun backfilled(srcMsgId: Long, block: Long, l0DataFileSize: Long?, epoch: Int = 1) =
+            ReplicaMessage.decode(
+                ReplicaMessage.IndexBackfilled(
+                    SourceMessage.IndexBackfilled(Storage.VERSION, epoch, def.id, block, l0DataFileSize),
+                    srcMsgId, termId = TERM,
+                ).encode()
+            )!!
+
+        proc.processRecords(listOf(record(0, backfilled(5, 0, 1024)), record(1, backfilled(6, 1, null, epoch = 0))))
+        assertEquals(
+            SecondaryIndex(def, 2, IndexState.Building(setOf(1L)), listOf(IndexTrie(Trie.l0Key(0), 1024))),
+            value.indexCat[def.id],
+            "the second carries a storage epoch this node has moved past",
+        )
+        assertEquals(6, watchers.latestSourceMsgId)
+
+        proc.processRecords(listOf(record(2, backfilled(4, 1, null))))
+        assertEquals(IndexState.Building(setOf(1L)), value.indexCat[def.id]?.state, "a record behind the source watermark is stale")
     }
 }

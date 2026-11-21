@@ -70,6 +70,7 @@ class PartitionState private constructor(
     val liveIndexOrNull: LiveIndex? = openLiveIndex?.invoke(ref.mapState { it.live })
     val liveIndex: LiveIndex get() = liveIndexOrNull ?: error("no live-index")
     val indexCatalog: IndexCatalog get() = ref.value.indexCat
+    internal val indexCatalogFlow: StateFlow<IndexCatalog> = ref.mapState { it.indexCat }
 
     private val snapLock = StampedLock()
 
@@ -95,6 +96,10 @@ class PartitionState private constructor(
 
     fun deleteTries(table: TableRef, garbageTrieKeys: Set<TrieKey>) =
         ref.update { it.withTrieCat(it.trieCat.withoutTries(table, garbageTrieKeys)) }
+
+    /** @see IndexCatalog.backfilled */
+    fun indexBackfilled(id: UUID, block: BlockIndex, l0: IndexTrie?) =
+        ref.update { it.withIndexCat(it.indexCat.backfilled(id, block, l0)) }
 
     /** @see IndexCatalog.ready */
     fun indexReady(id: UUID) = ref.update { it.withIndexCat(it.indexCat.ready(id)) }

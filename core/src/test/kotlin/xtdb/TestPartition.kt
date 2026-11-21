@@ -4,6 +4,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.SimulationTestUtils.Companion.createPartitionValue
+import xtdb.index.IndexCatalog
 import xtdb.api.IndexerConfig
 import xtdb.api.log.InMemoryLog
 import xtdb.api.log.Log
@@ -27,7 +28,8 @@ fun <M> inMemoryLog() = InMemoryLog<M>(InstantSource.system(), 0)
  * where both belong to the Database — so a test sharing either across nodes passes the same instance to
  * each and closes it itself.
  *
- * [block] starts the table catalog on an already-flushed block, as a node restarting from storage does.
+ * [block] starts the table catalog on an already-flushed block, as a node restarting from storage does, and [indexCat]
+ * is the index catalog its table files would hold.
  */
 class TestPartition(
     allocator: BufferAllocator,
@@ -35,11 +37,12 @@ class TestPartition(
     val sourceLog: Log<SourceMessage> = inMemoryLog(),
     val replicaLog: Log<ReplicaMessage> = inMemoryLog(),
     block: Block? = null,
+    indexCat: IndexCatalog = IndexCatalog.EMPTY,
     indexerConfig: IndexerConfig = IndexerConfig(),
     ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : AutoCloseable {
 
-    val state = PartitionState.open(allocator, createPartitionValue(block), indexerConfig, ioDispatcher)
+    val state = PartitionState.open(allocator, createPartitionValue(block, indexCat), indexerConfig, ioDispatcher)
     val liveIndex = state.liveIndex
     val tableCatalog = state.tableCatalog
     val trieCatalog = state.trieCatalog

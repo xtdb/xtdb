@@ -36,6 +36,7 @@ import xtdb.database.Database
 import xtdb.database.PartitionState
 import xtdb.index.IndexDef
 import xtdb.index.IndexState
+import xtdb.index.IndexTrie
 import xtdb.log.proto.TrieDetails
 import xtdb.log.proto.trieMetadata
 import xtdb.table.fromSchemaAndTable
@@ -587,5 +588,48 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
         partitionState.awaitIndexState(complete.id, IndexState.Ready)
 
         assertEquals(IndexState.Building(setOf(0L, 1L)), partitionState.indexCatalog[owing.id]?.state)
+    }
+
+    @Test
+    fun `backfills are forwarded and applied, and the one leaving the index owing nothing publishes Ready behind it`() = runTest(timeout = 5.seconds) {
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+        val def = IndexDef(UUID.randomUUID(), "by_email", TableRef("public", "users"), "email")
+        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
+        lateinit var partitionState: PartitionState
+
+        val lp = leaderProc(
+            StandardTestDispatcher(testScheduler), replicaLog = replicaLog, watchers = watchers,
+            initial = createPartitionValue().let { pv -> pv.withIndexCat(pv.indexCat.withIndex(def, 2, setOf(0L, 1L))) },
+            wrapPartitionState = { it.also { partitionState = it } },
+        )
+
+        val b0 = SourceMessage.IndexBackfilled(Storage.VERSION, 0, def.id, 0, 1024)
+        val b1 = SourceMessage.IndexBackfilled(Storage.VERSION, 0, def.id, 1, null)
+
+        lp.srcLogProc.processRecords(listOf(Log.Record(0, 0, Instant.now(), b0)))
+        watchers.awaitSource(0)
+        assertEquals(IndexState.Building(setOf(1L)), partitionState.indexCatalog[def.id]?.state, "one backfill applied, one block still owed")
+
+        lp.srcLogProc.processRecords(listOf(Log.Record(0, 1, Instant.now(), b1)))
+        partitionState.awaitIndexState(def.id, IndexState.Ready)
+
+        assertEquals(listOf(IndexTrie(Trie.l0Key(0), 1024)), partitionState.indexCatalog[def.id]?.tries)
+        assertEquals(
+            listOf(
+                ReplicaMessage.IndexBackfilled(b0, sourceMsgId = 0, termId = 1),
+                ReplicaMessage.IndexBackfilled(b1, sourceMsgId = 1, termId = 1),
+                ReplicaMessage.IndexReady(def.id, termId = 1),
+            ),
+            replicaLog.readRecords(0, 0, replicaLog.latestSubmittedMsgId() + 1)
+                .map { it.message }
+                .mapNotNull {
+                    when (it) {
+                        is ReplicaMessage.IndexBackfilled -> it.copy(termSeq = null)
+                        is ReplicaMessage.IndexReady -> it.copy(termSeq = null)
+                        else -> null
+                    }
+                }
+                .toList(),
+        )
     }
 }

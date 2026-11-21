@@ -247,6 +247,13 @@ internal class SourceLogProcessor(
                 txResolver.advanceSrcMsgId(msgId)
                 false
             }
+
+            is SourceMessage.IndexBackfilled -> {
+                // Forwarded whatever its storage version, as TriesAdded is.
+                replicaAppender.append(ControlItem(ReplicaMessage.IndexBackfilled(msg, sourceMsgId = msgId, termId = leaderTerm)))
+                txResolver.advanceSrcMsgId(msgId)
+                false
+            }
         }
     }
 

@@ -95,6 +95,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
             when (this) {
                 is ReplicaMessage.ResolvedTx -> txId <= watchers.latestTxId
                 is ReplicaMessage.TriesAdded -> sourceMsgId <= watchers.latestSourceMsgId
+                is ReplicaMessage.IndexBackfilled -> sourceMsgId <= watchers.latestSourceMsgId
                 is ReplicaMessage.BlockBoundary -> blockIndex <= (tableCatalog.snap().blockIdx ?: -1)
                 is ReplicaMessage.BlockUploaded -> blockIndex <= (tableCatalog.snap().blockIdx ?: -1)
                 is ReplicaMessage.NoOp -> srcMsgId != null && srcMsgId <= watchers.latestSourceMsgId
@@ -155,6 +156,14 @@ class FollowerLogProcessor @JvmOverloads constructor(
             is ReplicaMessage.TriesAdded -> triesAddedTimer.timed {
                 if (msg.storageVersion == Storage.VERSION && msg.storageEpoch == bufferPool.epoch)
                     partitionState.addTries(msg.tries, record.logTimestamp)
+
+                watchers.notifyApplied(msg.sourceMsgId)
+            }
+
+            is ReplicaMessage.IndexBackfilled -> {
+                val backfilled = msg.backfilled
+                if (backfilled.storageVersion == Storage.VERSION && backfilled.storageEpoch == bufferPool.epoch)
+                    partitionState.indexBackfilled(backfilled.indexId, backfilled.blockIndex, backfilled.l0)
 
                 watchers.notifyApplied(msg.sourceMsgId)
             }

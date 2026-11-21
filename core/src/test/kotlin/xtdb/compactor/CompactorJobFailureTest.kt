@@ -14,13 +14,16 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import xtdb.SimulationTestUtils.Companion.createPartitionValue
+import xtdb.api.log.SourceMessage.IndexBackfilled
 import xtdb.api.log.SourceMessage.TriesAdded
 import xtdb.api.log.Watchers
 import xtdb.database.DatabaseLogs
 import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
+import xtdb.index.IndexDef
 import xtdb.storage.MemoryStorage
 import xtdb.table.fromSchemaAndTable
+import xtdb.trie.BlockIndex
 import xtdb.trie.Trie
 import xtdb.trie.TrieCatalog
 
@@ -43,6 +46,8 @@ class CompactorJobFailureTest {
         ) = object : Compactor.Driver {
             override suspend fun executeJob(job: Compactor.Job): TriesAdded = throw jobError
             override suspend fun publishTries(triesAdded: TriesAdded) = Unit
+            override suspend fun executeBackfill(index: IndexDef, block: BlockIndex): IndexBackfilled = throw jobError
+            override suspend fun publishBackfill(backfilled: IndexBackfilled) = Unit
             override fun close() = Unit
         }
     }

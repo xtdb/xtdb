@@ -5,12 +5,14 @@ import xtdb.api.tx.ExternalSourceToken
 import xtdb.database.Database
 import xtdb.database.DatabaseName
 import xtdb.index.IndexDef
+import xtdb.index.IndexTrie
 import xtdb.log.proto.SourceLogMessage
 import xtdb.log.proto.TrieDetails
 import xtdb.log.proto.attachDatabase
 import xtdb.log.proto.detachDatabase
 import xtdb.log.proto.dropIndex
 import xtdb.log.proto.flushBlock
+import xtdb.log.proto.indexBackfilled
 import xtdb.log.proto.sourceLogMessage
 import xtdb.log.proto.triesAdded
 import xtdb.log.proto.tx
@@ -18,9 +20,12 @@ import xtdb.storage.StorageEpoch
 import xtdb.time.InstantUtil
 import xtdb.time.InstantUtil.asMicros
 import xtdb.trie.BlockIndex
+import xtdb.trie.FileSize
+import xtdb.trie.Trie
 import java.nio.ByteBuffer
 import java.time.Instant
 import java.time.ZoneId
+import java.util.UUID
 
 sealed interface SourceMessage {
 
@@ -79,6 +84,8 @@ sealed interface SourceMessage {
                             SourceLogMessage.MessageCase.CREATE_INDEX -> CreateIndex(IndexDef.fromProto(msg.createIndex))
 
                             SourceLogMessage.MessageCase.DROP_INDEX -> DropIndex(msg.dropIndex.indexName)
+
+                            SourceLogMessage.MessageCase.INDEX_BACKFILLED -> IndexBackfilled.fromProto(msg.indexBackfilled)
 
                             SourceLogMessage.MessageCase.TX -> msg.tx.let {
                                 Tx(
@@ -178,6 +185,37 @@ sealed interface SourceMessage {
     data class DropIndex(val indexName: String) : ProtobufMessage() {
         override fun toLogMessage() = sourceLogMessage {
             dropIndex = dropIndex { this.indexName = this@DropIndex.indexName }
+        }
+    }
+
+    /**
+     * A backfill job's cover of [blockIndex] for [indexId], published by whichever node's compactor ran it.
+     *
+     * [l0DataFileSize] is null where the block gave the index's column no value, and the job wrote no L0.
+     */
+    data class IndexBackfilled(
+        val storageVersion: Int, val storageEpoch: StorageEpoch,
+        val indexId: UUID, val blockIndex: BlockIndex, val l0DataFileSize: FileSize?,
+    ) : ProtobufMessage() {
+        /** The L0 the job wrote, under the key a flush of [blockIndex] would have used. */
+        val l0: IndexTrie? get() = l0DataFileSize?.let { IndexTrie(Trie.l0Key(blockIndex), it) }
+
+        fun toProto(): xtdb.log.proto.IndexBackfilled = indexBackfilled {
+            storageVersion = this@IndexBackfilled.storageVersion
+            storageEpoch = this@IndexBackfilled.storageEpoch
+            indexId = this@IndexBackfilled.indexId.toString()
+            blockIndex = this@IndexBackfilled.blockIndex
+            this@IndexBackfilled.l0DataFileSize?.let { l0DataFileSize = it }
+        }
+
+        override fun toLogMessage() = sourceLogMessage { indexBackfilled = toProto() }
+
+        companion object {
+            fun fromProto(proto: xtdb.log.proto.IndexBackfilled) =
+                IndexBackfilled(
+                    proto.storageVersion, proto.storageEpoch, UUID.fromString(proto.indexId), proto.blockIndex,
+                    if (proto.hasL0DataFileSize()) proto.l0DataFileSize else null,
+                )
         }
     }
 }

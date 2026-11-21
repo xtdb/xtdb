@@ -13,12 +13,12 @@
            (xtdb.api.log Log Log$Record SourceMessage SourceMessage$Tx
                          SourceMessage$FlushBlock SourceMessage$TriesAdded
                          SourceMessage$AttachDatabase SourceMessage$DetachDatabase
-                         SourceMessage$CreateIndex SourceMessage$DropIndex
+                         SourceMessage$CreateIndex SourceMessage$DropIndex SourceMessage$IndexBackfilled
                          SourceMessage$LegacyTx
                          ReplicaMessage ReplicaMessage$ResolvedTx
                          ReplicaMessage$TriesAdded ReplicaMessage$BlockBoundary
                          ReplicaMessage$BlockUploaded ReplicaMessage$NoOp
-                         ReplicaMessage$IndexReady
+                         ReplicaMessage$IndexReady ReplicaMessage$IndexBackfilled
                          DbOp$Attach DbOp$Detach IndexOp$Create IndexOp$Drop)
            (xtdb.arrow Relation RelationReader VectorReader)
            (xtdb.database Database)
@@ -55,6 +55,7 @@
     SourceMessage$DetachDatabase "detach-database"
     SourceMessage$CreateIndex "create-index"
     SourceMessage$DropIndex "drop-index"
+    SourceMessage$IndexBackfilled "index-backfilled"
     SourceMessage$LegacyTx "legacy-tx"
     "unknown"))
 
@@ -64,6 +65,12 @@
            :trie-key (.getTrieKey td)
            :data-file-size (.getDataFileSize td)})
         tries))
+
+(defn- index-backfilled->edn [^SourceMessage$IndexBackfilled m]
+  {:type :index-backfilled
+   :index-id (str (.getIndexId m))
+   :block-index (.getBlockIndex m)
+   :l0-data-file-size (.getL0DataFileSize m)})
 
 (defn- source-msg->edn [^SourceMessage msg]
   (pr-str
@@ -108,6 +115,9 @@
      {:type :drop-index
       :index-name (.getIndexName ^SourceMessage$DropIndex msg)}
 
+     SourceMessage$IndexBackfilled
+     (index-backfilled->edn msg)
+
      SourceMessage$LegacyTx
      {:type :legacy-tx}
 
@@ -132,6 +142,7 @@
     ReplicaMessage$BlockUploaded "block-uploaded"
     ReplicaMessage$NoOp "no-op"
     ReplicaMessage$IndexReady "index-ready"
+    ReplicaMessage$IndexBackfilled "index-backfilled"
     "unknown"))
 
 (defn- replica-msg->edn [^ReplicaMessage msg]
@@ -196,6 +207,11 @@
      ReplicaMessage$IndexReady
      {:type :index-ready
       :index-id (str (.getIndexId ^ReplicaMessage$IndexReady msg))}
+
+     ReplicaMessage$IndexBackfilled
+     (let [^ReplicaMessage$IndexBackfilled m msg]
+       (assoc (index-backfilled->edn (.getBackfilled m))
+              :source-msg-id (.getSourceMsgId m)))
 
      {:type :unknown})))
 

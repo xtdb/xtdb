@@ -350,3 +350,53 @@
         (xt-log/sync-node node #xt/duration "PT5S")
         (t/is (= expected (index-tries (db/primary-db node)))
               "a restarted node reloads the index tries from the latest block")))))
+
+(t/deftest an-index-on-a-populated-table-is-backfilled-to-ready
+  (util/with-tmp-dirs #{path}
+    (let [node-opts {:log [:local {:path (.resolve path "log")}]
+                     :storage [:local {:path (.resolve path "objects")}]}
+          expected {:state :ready
+                    :tries ["l00-rc-b00" "l00-rc-b03"]
+                    :files ["tables/public$users/indices/<id>/data/l00-rc-b00.arrow"
+                            "tables/public$users/indices/<id>/data/l00-rc-b03.arrow"
+                            "tables/public$users/indices/<id>/meta/l00-rc-b00.arrow"
+                            "tables/public$users/indices/<id>/meta/l00-rc-b03.arrow"]}
+          by-email (fn [db]
+                     (let [{:keys [tries files]} (get (index-tries db) "by_email")]
+                       {:state (:state (first (indices db)))
+                        :tries (vec (sort tries))
+                        :files files}))
+          await-by-email (fn [db]
+                           (let [deadline (+ (System/currentTimeMillis) 10000)]
+                             (loop []
+                               (let [actual (by-email db)]
+                                 (if (or (= expected actual) (> (System/currentTimeMillis) deadline))
+                                   actual
+                                   (do (Thread/sleep 10) (recur)))))))]
+
+      (with-open [node (xtn/start-node node-opts)
+                  follower (-> (xtn/->config node-opts) (.readOnlyDatabases true) (.open))]
+        (jdbc/execute! node ["INSERT INTO users RECORDS {_id: 1, email: 'ada@example.com'}"])
+        (tu/flush-block! node)
+        (jdbc/execute! node ["INSERT INTO users RECORDS {_id: 2, name: 'Bob'}, {_id: 3, email: NULL}"])
+        (tu/flush-block! node)
+        (jdbc/execute! node ["INSERT INTO orders RECORDS {_id: 1, sku: 'X-1'}"])
+        (tu/flush-block! node)
+        (jdbc/execute! node ["INSERT INTO users RECORDS {_id: 4, email: 'dee@example.com'}"])
+        (tu/flush-block! node)
+
+        (jdbc/execute! node ["CREATE INDEX by_email ON users (email)"])
+
+        (t/is (= expected (await-by-email (db/primary-db node)))
+              "L0s for the blocks whose puts gave the column a value, none for one whose puts didn't or that the table didn't write in, then Ready")
+
+        (xt-log/sync-node follower #xt/duration "PT5S")
+        (t/is (= expected (await-by-email (db/primary-db follower)))
+              "a follower applies the same backfills and Ready off the replica log")
+
+        (tu/flush-block! node))
+
+      (with-open [node (xtn/start-node node-opts)]
+        (xt-log/sync-node node #xt/duration "PT5S")
+        (t/is (= expected (await-by-email (db/primary-db node)))
+              "a restarted node holds the same index")))))

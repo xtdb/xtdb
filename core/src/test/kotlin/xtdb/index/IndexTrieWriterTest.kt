@@ -171,4 +171,42 @@ class IndexTrieWriterTest {
         assertEquals(200, rows.size)
         assertEquals(rows.sortedWith { a, b -> java.lang.Long.compareUnsigned(a.hash, b.hash) }, rows)
     }
+
+    @Test
+    fun `a backfill writes the block's L0 from every page of the table's data L0`() {
+        val dataPath = files.table.dataFilePath(Trie.l0Key(2).toString())
+
+        Trie.openLogDataWriter(al).use { rel ->
+            rel.put(iid(1), mapOf("email" to "ada@example.com", "name" to "Ada"))
+            rel.put(iid(2), mapOf("email" to null, "name" to "Bob"))
+            rel.delete(iid(3))
+
+            runBlocking {
+                bp.openArrowWriter(dataPath, rel).use { writer ->
+                    writer.writePage()
+                    rel.clear()
+
+                    rel.put(iid(4), mapOf("email" to "eve@example.com", "name" to "Eve"))
+                    rel.put(iid(1), mapOf("email" to "ada@example.com", "name" to "Ada"))
+                    writer.writePage()
+                    writer.end()
+                }
+            }
+        }
+
+        val trie = runBlocking { IndexTrieWriter(al, bp).backfillL0(files, 2, "email") }!!
+
+        assertEquals(Trie.l0Key(2), trie.key)
+        assertEquals(
+            listOf(row(hashOf("ada@example.com"), iid(1)), row(hashOf("eve@example.com"), iid(4)))
+                .sortedWith { a, b -> java.lang.Long.compareUnsigned(a.hash, b.hash) },
+            readPage(files.dataFilePath(trie.key.toString()), 0),
+        )
+    }
+
+    @Test
+    fun `a backfill of a block the table has no data L0 for writes no L0`() {
+        assertNull(runBlocking { IndexTrieWriter(al, bp).backfillL0(files, 0, "email") })
+        assertEquals(emptyList<Any>(), bp.listAllObjects().toList())
+    }
 }

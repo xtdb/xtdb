@@ -4,8 +4,7 @@
 -- Secondary indices on one database: how a user declares one on a column, how it comes to cover every flushed block, how an equality scan uses it, and how it compacts, is collected and is dropped.
 --
 -- STATUS: this spec runs ahead of the implementation.
--- Of what follows, declaring and dropping an index, writing its L0s at block flush and publishing Ready are true of the code yet: an index is declared Building and dropped as below, each block flush writes its L0 as BlockFlushWritesIndexL0s has it, the leader publishes Ready as LeaderDeclaresReady has it, and its declaration, state and tries persist in its table's block file.
--- Nothing yet backfills an index, so one declared owing blocks stays Building.
+-- Of what follows, declaring and dropping an index, writing its L0s at block flush and by backfill, and publishing Ready are true of the code yet: an index is declared Building and dropped as below, each block flush writes its L0 as BlockFlushWritesIndexL0s has it, backfill covers each owed block as BackfillWritesIndexL0 has it, the leader publishes Ready as LeaderDeclaresReady has it, and its declaration, state and tries persist in its table's block file.
 -- Nothing yet compacts an index's tries, collects them or scans with it, and a drop leaves an index's tries live rather than garbage.
 -- Each contract under Obligations on neighbouring specs names a delta that trie-cat.allium, db.allium, compaction.allium or gc.allium takes in the same commit as the code that makes it true; the contract leaves this spec as its delta lands.
 -- live-index.allium takes no delta: the scan reads the live tier by applying its predicate to the live index's rows.
@@ -138,7 +137,7 @@ contract IndexDeclarationsOnTheLogs {
     -- db.allium's delta.
 
     @invariant IndexTriesTravelLikeTries
-        -- Backfill and index compaction output go to the source log in a message analogous to TriesAdded, and the leader forwards it to the replica log.
+        -- Index compaction output goes to the source log in a message analogous to TriesAdded, and the leader forwards it to the replica log.
         -- The leader's trie GC publishes the index tries it deletes in a message analogous to TriesDeleted.
 
 }
@@ -163,10 +162,10 @@ contract IndexTreeCompaction {
         -- The same pair recurs across inputs whenever an entity keeps a value across blocks.
 
     @invariant DeterministicIndexJobs
-        -- Index compaction and backfill jobs are selected deterministically from the catalog, and their output files are a deterministic function of the job, so any node in the pool can run any of them.
+        -- Index compaction jobs are selected deterministically from the catalog, and their output files are a deterministic function of the job, so any node in the pool can run any of them.
 
     @invariant OneConcurrencyLimit
-        -- Index jobs and data jobs share the compactor's configured concurrency: with 8 configured, at most 8 run across both.
+        -- Index compaction jobs share the compactor's configured concurrency with data and backfill jobs: with 8 configured, at most 8 run across all three.
 
     @invariant DataCompactionIsIrrelevant
         -- An index's entries are a function of the data L0 sequence alone, so no index job waits for, or reacts to, a data compaction job.
@@ -362,8 +361,10 @@ rule BackfillWritesIndexL0 {
     -- One job per owed block, run by whichever node's compaction pool selects it.
     -- It reads the block's data L0, which is never deleted, so it needs nothing from the data compactor.
     -- A block with no put row carrying the column, the table's data L0 absent included, writes no L0 and is covered all the same.
-    -- Its output, and the block it covers, are published like compaction output, and reach every node through the replica log.
+    -- Its output, and the block it covers, go out as db.allium's IndexBackfilledMessage, and every node applies it at the same position on the replica log.
+    -- Applied to an index no longer Building, or no longer owing the block, it changes nothing, and its L0, if any, is left to the collector.
     when: BackfillJobRuns(compactor, index, block_index)
+    requires: index.state = building
     requires: block_index in index.owed_blocks
 
     ensures:
