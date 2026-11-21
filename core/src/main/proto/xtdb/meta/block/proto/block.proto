@@ -55,7 +55,12 @@ message TableEntry {
     string slug = 4;
 }
 
-message BuildingIndex {}
+message BuildingIndex {
+    // the blocks below the index's first_flushed_block that a backfill has still to cover
+    repeated int64 owed_blocks = 1;
+}
+
+message ReadyIndex {}
 
 message DroppedIndex {
     int64 as_of_micros = 1;
@@ -67,6 +72,7 @@ message SecondaryIndexEntry {
     oneof state {
         BuildingIndex building = 2;
         DroppedIndex dropped = 3;
+        ReadyIndex ready = 5;
     }
     repeated xtdb.log.proto.IndexTrieDetails tries = 4;
 }

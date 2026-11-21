@@ -100,6 +100,8 @@ class FollowerLogProcessor @JvmOverloads constructor(
                 is ReplicaMessage.NoOp -> srcMsgId != null && srcMsgId <= watchers.latestSourceMsgId
                 // `deleteTries` is set-removal — idempotent — so replay is always safe.
                 is ReplicaMessage.TriesDeleted -> false
+                // `ready` is a no-op on an index already Ready, so replay is always safe.
+                is ReplicaMessage.IndexReady -> false
 
                 is ReplicaMessage.OversizedMessage ->
                     error("oversized message reached the staleness check unresolved")
@@ -172,6 +174,8 @@ class FollowerLogProcessor @JvmOverloads constructor(
             is ReplicaMessage.TriesDeleted -> triesDeletedTimer.timed {
                 partitionState.deleteTries(fromSchemaAndTable(msg.tableName), msg.trieKeys)
             }
+
+            is ReplicaMessage.IndexReady -> partitionState.indexReady(msg.indexId)
 
             is ReplicaMessage.OversizedMessage -> error(
                 "OversizedMessage should be resolved by the replica tail, never reaching processRecord directly. msgId=${record.msgId}, payload=${msg.path}"

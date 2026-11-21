@@ -4,7 +4,7 @@
             [xtdb.api :as xt]
             [xtdb.log-tables :as log-tables]
             [xtdb.test-util :as tu])
-  (:import (xtdb.api.log ReplicaMessage$BlockUploaded)
+  (:import (xtdb.api.log ReplicaMessage$BlockUploaded ReplicaMessage$IndexReady)
            (xtdb.index IndexTrie)
            (xtdb.trie Trie)))
 
@@ -66,3 +66,7 @@
             (ReplicaMessage$BlockUploaded. (int 6) (int 0) 3 42 []
                                            {index-id (IndexTrie. (Trie/parseKey "l00-rc-b03") 128)}
                                            nil 0 nil)))))
+
+(deftest test-replica-index-ready-renders
+  (t/is (= ["index-ready" {:type :index-ready, :index-id (str index-id)}]
+           (render-replica-msg (ReplicaMessage$IndexReady. index-id 0 nil)))))

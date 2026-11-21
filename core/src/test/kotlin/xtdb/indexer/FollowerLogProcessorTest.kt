@@ -308,7 +308,7 @@ class FollowerLogProcessorTest {
 
         proc.processRecords(listOf(record(0, indexTx(1, IndexOp.Create(def)))))
         assertEquals(
-            listOf(SecondaryIndex(def, 0, IndexState.Building, emptyList())),
+            listOf(SecondaryIndex(def, 0, IndexState.Building(emptySet()), emptyList())),
             value.indexCat.indices.toList()
         )
 
@@ -349,8 +349,21 @@ class FollowerLogProcessorTest {
         ))
 
         assertEquals(
-            listOf(SecondaryIndex(def, 0, IndexState.Building, listOf(l0))),
+            listOf(SecondaryIndex(def, 0, IndexState.Building(emptySet()), listOf(l0))),
             value.indexCat.indices.toList()
         )
+    }
+
+    @Test
+    fun `Ready read off the replica log marks the index Ready, and a replay of it changes nothing`() = runTest {
+        val proc = makeProcessor()
+        val def = IndexDef(UUID.randomUUID(), "by_email", TableRef("public", "users"), "email")
+        val ready = ReplicaMessage.decode(ReplicaMessage.IndexReady(def.id, termId = TERM).encode())!!
+
+        proc.processRecords(listOf(record(0, indexTx(1, IndexOp.Create(def))), record(1, ready)))
+        assertEquals(listOf(SecondaryIndex(def, 0, IndexState.Ready, emptyList())), value.indexCat.indices.toList())
+
+        proc.processRecords(listOf(record(2, ready)))
+        assertEquals(listOf(SecondaryIndex(def, 0, IndexState.Ready, emptyList())), value.indexCat.indices.toList())
     }
 }

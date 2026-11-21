@@ -50,7 +50,7 @@ class TableBlockFormatTest {
     @Test
     fun `a table only an index names gets an index-only block file, which loads as its indices and no table metadata`() {
         val bySku = IndexDef(UUID.randomUUID(), "by_sku", TableRef("public", "orders"), "sku")
-        val indexCat = IndexCatalog.EMPTY.withIndex(bySku, 0)
+        val indexCat = IndexCatalog.EMPTY.withIndex(bySku, 0, emptySet())
 
         val tableBlocks = TableCatalog(MutableStateFlow(TableCatalog.initialState(null)))
             .buildTableBlocks(emptyMap(), emptyMap(), indexCat)

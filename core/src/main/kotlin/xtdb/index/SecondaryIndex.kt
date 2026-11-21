@@ -6,6 +6,7 @@ import xtdb.block.proto.SecondaryIndexEntry
 import xtdb.block.proto.TableIndices
 import xtdb.block.proto.buildingIndex
 import xtdb.block.proto.droppedIndex
+import xtdb.block.proto.readyIndex
 import xtdb.block.proto.secondaryIndexEntry
 import xtdb.block.proto.tableIndices
 import xtdb.log.proto.CreateIndex
@@ -43,8 +44,19 @@ data class IndexDef(val id: UUID, val name: String, val table: TableRef, val col
 }
 
 sealed interface IndexState {
-    /** Declared, and not yet usable by a scan. */
-    data object Building : IndexState
+    /**
+     * Declared, and not yet usable by a scan.
+     *
+     * [owedBlocks] are the blocks below the index's first flushed block that a backfill has still to cover,
+     * whether or not the table wrote in them.
+     * The index is complete once none are owed.
+     */
+    data class Building(val owedBlocks: Set<BlockIndex>) : IndexState {
+        val complete: Boolean get() = owedBlocks.isEmpty()
+    }
+
+    /** Covers every block the node has adopted, so a scan may use it. */
+    data object Ready : IndexState
 
     /**
      * Dropped by the transaction at [asOf]: out of the name set, and never used by a scan from then on.
@@ -74,7 +86,8 @@ data class SecondaryIndex(val def: IndexDef, val firstFlushedBlock: BlockIndex, 
         definition = def.toProto()
         firstFlushedBlock = this@SecondaryIndex.firstFlushedBlock
         when (state) {
-            IndexState.Building -> building = buildingIndex { }
+            is IndexState.Building -> building = buildingIndex { owedBlocks += state.owedBlocks.sorted() }
+            IndexState.Ready -> ready = readyIndex { }
             is IndexState.Dropped -> dropped = droppedIndex { asOfMicros = state.asOf.asMicros }
         }
         tries += this@SecondaryIndex.tries.map { it.toProto() }
@@ -86,7 +99,8 @@ data class SecondaryIndex(val def: IndexDef, val firstFlushedBlock: BlockIndex, 
                 IndexDef.fromProto(proto.definition),
                 proto.firstFlushedBlock,
                 when (proto.stateCase) {
-                    SecondaryIndexEntry.StateCase.BUILDING -> IndexState.Building
+                    SecondaryIndexEntry.StateCase.BUILDING -> IndexState.Building(proto.building.owedBlocksList.toSet())
+                    SecondaryIndexEntry.StateCase.READY -> IndexState.Ready
                     SecondaryIndexEntry.StateCase.DROPPED -> IndexState.Dropped(fromMicros(proto.dropped.asOfMicros))
                     else -> throw Fault(
                         "secondary index ${proto.definition.indexId} has no state in its block",
@@ -111,8 +125,13 @@ class IndexCatalog private constructor(private val byId: Map<UUID, SecondaryInde
     fun declared(name: String): SecondaryIndex? =
         indices.firstOrNull { it.def.name == name && it.state !is IndexState.Dropped }
 
-    /** [openBlock] is the block the live index is filling as the declaration applies. */
-    fun withIndex(def: IndexDef, openBlock: BlockIndex): IndexCatalog {
+    operator fun get(id: UUID): SecondaryIndex? = byId[id]
+
+    /**
+     * [openBlock] is the block the live index is filling as the declaration applies;
+     * [owedBlocks] are the blocks below it that a backfill has to cover before the index is complete.
+     */
+    fun withIndex(def: IndexDef, openBlock: BlockIndex, owedBlocks: Set<BlockIndex>): IndexCatalog {
         if (def.id in byId)
             throw Fault(
                 "index ${def.id} is already in the catalog", "xtdb.index/index-id-exists",
@@ -126,7 +145,7 @@ class IndexCatalog private constructor(private val byId: Map<UUID, SecondaryInde
             )
         }
 
-        return IndexCatalog(byId + (def.id to SecondaryIndex(def, openBlock, IndexState.Building, emptyList())))
+        return IndexCatalog(byId + (def.id to SecondaryIndex(def, openBlock, IndexState.Building(owedBlocks), emptyList())))
     }
 
     fun dropped(id: UUID, asOf: Instant): IndexCatalog {
@@ -140,6 +159,30 @@ class IndexCatalog private constructor(private val byId: Map<UUID, SecondaryInde
             )
 
         return IndexCatalog(byId + (id to index.copy(state = IndexState.Dropped(asOf))))
+    }
+
+    /**
+     * The leader's decision that [id] is complete: Building becomes Ready.
+     * A no-op on an index already Ready, or dropped since the decision, so re-applying it is harmless.
+     */
+    fun ready(id: UUID): IndexCatalog {
+        val index = byId[id]
+            ?: throw Fault("index $id is not in the catalog", "xtdb.index/unknown-index", mapOf("index-id" to id))
+
+        return when (val state = index.state) {
+            is IndexState.Building -> {
+                if (!state.complete)
+                    throw Fault(
+                        "index ${index.def.name} ($id) is Ready on the log, but still owes blocks here",
+                        "xtdb.index/index-not-complete",
+                        mapOf("index-id" to id, "index-name" to index.def.name, "owed-blocks" to state.owedBlocks.sorted()),
+                    )
+
+                IndexCatalog(byId + (id to index.copy(state = IndexState.Ready)))
+            }
+
+            IndexState.Ready, is IndexState.Dropped -> this
+        }
     }
 
     /** Adds a block's index L0s, [l0s] keyed by index id. */

@@ -96,6 +96,9 @@ class PartitionState private constructor(
     fun deleteTries(table: TableRef, garbageTrieKeys: Set<TrieKey>) =
         ref.update { it.withTrieCat(it.trieCat.withoutTries(table, garbageTrieKeys)) }
 
+    /** @see IndexCatalog.ready */
+    fun indexReady(id: UUID) = ref.update { it.withIndexCat(it.indexCat.ready(id)) }
+
     /** @see TrieCatalog.State.withL0Reset */
     fun resetToL0(tableToL0Entries: Map<TableRef, Any?>) =
         ref.update { it.withTrieCat(it.trieCat.withL0Reset(tableToL0Entries)) }
@@ -132,7 +135,7 @@ class PartitionState private constructor(
         val next = live
         ref.update {
             it.withTableCat(it.tableCat.withEntriesFor(tables.keys)).withLive(next)
-                .withIndexCat(it.indexCat.applying(indexOp, txKey, next.blockIdx))
+                .withIndexCat(it.indexCat.applying(indexOp, txKey, next.blockIdx, it.tableCat))
         }
         tables.clear()
 
@@ -156,7 +159,7 @@ class PartitionState private constructor(
             val next = live.withLatestCompletedTx(txKey)
             ref.update {
                 it.withTableCat(it.tableCat.withEntriesFor(tables.keys)).withLive(next)
-                    .withIndexCat(it.indexCat.applying(indexOp, txKey, next.blockIdx))
+                    .withIndexCat(it.indexCat.applying(indexOp, txKey, next.blockIdx, it.tableCat))
             }
         }
 
@@ -202,9 +205,16 @@ class PartitionState private constructor(
         liveIndexOrNull?.afterNextBlock()
     }
 
-    private fun IndexCatalog.applying(indexOp: IndexOp?, txKey: TransactionKey, openBlock: BlockIndex) =
+    // A table with flushed rows owes every block below [openBlock], since which of them it wrote in isn't recorded; one without owes none.
+    private fun IndexCatalog.applying(
+        indexOp: IndexOp?, txKey: TransactionKey, openBlock: BlockIndex, tableCat: TableCatalog.State,
+    ) =
         when (indexOp) {
-            is IndexOp.Create -> withIndex(indexOp.def, openBlock)
+            is IndexOp.Create -> {
+                val tableFlushed = (tableCat.rowCount(indexOp.def.table) ?: 0) > 0
+                withIndex(indexOp.def, openBlock, if (tableFlushed) (0 until openBlock).toSet() else emptySet())
+            }
+
             is IndexOp.Drop -> dropped(indexOp.id, txKey.systemTime)
             null -> this
         }

@@ -16,7 +16,7 @@
            (xtdb.api TableRef Xtdb Xtdb$Connection)
            (xtdb.api.storage ObjectStore$StoredObject)
            (xtdb.database Database Database$Config)
-           (xtdb.index IndexState$Building IndexState$Dropped IndexTrie SecondaryIndex)))
+           (xtdb.index IndexState$Building IndexState$Dropped IndexState$Ready IndexTrie SecondaryIndex)))
 
 (t/use-fixtures :each tu/with-node)
 
@@ -31,15 +31,26 @@
                  :column (.getColumn index-def)
                  :state (condp instance? state
                           IndexState$Building :building
+                          IndexState$Ready :ready
                           IndexState$Dropped :dropped)})))
        (sort-by (juxt :name :state))))
+
+(defn- await-indices
+  "The database's indices, once they equal `expected` or after 5s: Ready reaches a node's catalog behind the declaring transaction, not with it."
+  [db expected]
+  (let [deadline (+ (System/currentTimeMillis) 5000)]
+    (loop []
+      (let [actual (indices db)]
+        (if (or (= expected actual) (> (System/currentTimeMillis) deadline))
+          actual
+          (do (Thread/sleep 10) (recur)))))))
 
 (t/deftest create-and-drop-index
   (jdbc/execute! tu/*node* ["CREATE INDEX by_email ON users (email)"])
 
-  (t/is (= [{:name "by_email", :table ["public" "users"], :column "email", :state :building}]
-           (indices (db/primary-db tu/*node*)))
-        "an absent table and column are accepted, and the index starts Building")
+  (let [expected [{:name "by_email", :table ["public" "users"], :column "email", :state :ready}]]
+    (t/is (= expected (await-indices (db/primary-db tu/*node*) expected))
+          "an absent table and column are accepted, and the index, owing no blocks, becomes Ready"))
 
   (t/is (thrown-with-msg? PSQLException #"Index already exists"
                           (jdbc/execute! tu/*node* ["CREATE INDEX by_email ON orders (email)"])))
@@ -51,10 +62,10 @@
 
   (jdbc/execute! tu/*node* ["CREATE INDEX by_email ON crm.users (email)"])
 
-  (t/is (= [{:name "by_email", :table ["crm" "users"], :column "email", :state :building}
-            {:name "by_email", :table ["public" "users"], :column "email", :state :dropped}]
-           (indices (db/primary-db tu/*node*)))
-        "the dropped index stays in the catalog, and its name is free to declare again"))
+  (let [expected [{:name "by_email", :table ["public" "users"], :column "email", :state :dropped}
+                  {:name "by_email", :table ["crm" "users"], :column "email", :state :ready}]]
+    (t/is (= expected (await-indices (db/primary-db tu/*node*) expected))
+          "the dropped index stays in the catalog, and its name is free to declare again")))
 
 (t/deftest an-index-on-a-column-no-document-holds-is-rejected
   (with-open [conn (.connect ^Xtdb tu/*node*)]
@@ -227,12 +238,12 @@
         (t/is (nil? (.rowCount (.snap (.getTableCatalog (db/primary-db node))) (TableRef. "public" "orders")))
               "and stays out of them across a restart, though its block file holds its indices")
 
-        (t/is (= [{:name "by_email", :table ["public" "users"], :column "email", :state :building}
-                  {:name "by_name", :table ["public" "users"], :column "name", :state :dropped}
-                  {:name "by_sku", :table ["public" "orders"], :column "sku", :state :building}
-                  {:name "by_total", :table ["public" "orders"], :column "total", :state :dropped}]
-                 (indices (db/primary-db node)))
-              "the block's indices, including one on a table no block has written, with the drop after it replayed onto them")
+        (let [expected [{:name "by_email", :table ["public" "users"], :column "email", :state :ready}
+                        {:name "by_name", :table ["public" "users"], :column "name", :state :dropped}
+                        {:name "by_sku", :table ["public" "orders"], :column "sku", :state :ready}
+                        {:name "by_total", :table ["public" "orders"], :column "total", :state :dropped}]]
+          (t/is (= expected (await-indices (db/primary-db node) expected))
+                "the block's indices, including one on a table no block has written, with the drop after it replayed onto them"))
 
         (t/is (thrown-with-msg? PSQLException #"Index already exists"
                                 (jdbc/execute! node ["CREATE INDEX by_email ON users (email)"])))
@@ -245,6 +256,39 @@
         (t/is (= :dropped (->> (indices (db/primary-db node))
                                (filter (comp #{"by_email"} :name))
                                first :state)))))))
+
+(t/deftest only-an-index-owing-no-blocks-becomes-ready
+  (util/with-tmp-dirs #{path}
+    (let [node-opts {:log [:local {:path (.resolve path "log")}]
+                     :storage [:local {:path (.resolve path "objects")}]
+                     :compactor {:threads 0}}
+          expected [{:name "by_email", :table ["public" "users"], :column "email", :state :building}
+                    {:name "by_name", :table ["public" "people"], :column "name", :state :ready}
+                    {:name "by_sku", :table ["public" "orders"], :column "sku", :state :ready}]]
+
+      (with-open [node (xtn/start-node node-opts)
+                  follower (-> (xtn/->config node-opts) (.readOnlyDatabases true) (.open))]
+        (jdbc/execute! node ["INSERT INTO users RECORDS {_id: 1, email: 'ada@example.com'}"])
+        (tu/flush-block! node)
+        (jdbc/execute! node ["INSERT INTO orders RECORDS {_id: 1, sku: 'X-1'}"])
+
+        (jdbc/execute! node ["CREATE INDEX by_email ON users (email)"])
+        (jdbc/execute! node ["CREATE INDEX by_sku ON orders (sku)"])
+        (jdbc/execute! node ["CREATE INDEX by_name ON people (name)"])
+
+        (t/is (= expected (await-indices (db/primary-db node) expected))
+              "Ready on a table first written in the open block and on one never written; Building on one with a flushed block")
+
+        (tu/flush-block! node)
+
+        (xt-log/sync-node follower #xt/duration "PT5S")
+        (t/is (= expected (await-indices (db/primary-db follower) expected))
+              "a follower holds the leader's decision"))
+
+      (with-open [node (xtn/start-node node-opts)]
+        (xt-log/sync-node node #xt/duration "PT5S")
+        (t/is (= expected (await-indices (db/primary-db node) expected))
+              "a restarted node holds the same states")))))
 
 (defn- index-tries
   "Each index's tries, by name, with the files under its directory."

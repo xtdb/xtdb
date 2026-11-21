@@ -24,6 +24,8 @@ import xtdb.api.tx.ExternalSource
 import xtdb.database.Database
 import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
+import xtdb.index.IndexState
+import xtdb.index.SecondaryIndex
 import xtdb.types.MessageId
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.closeAllOnCatch
@@ -150,6 +152,13 @@ internal class LeaderLogProcessor(
         }
     }
 
+    // No record of what's been announced: applying Ready twice is harmless, so a new term may republish its predecessor's.
+    private suspend fun announceReady(indices: Collection<SecondaryIndex>) {
+        for (index in indices)
+            if ((index.state as? IndexState.Building)?.complete == true)
+                replicaAppender.append(ControlItem(ReplicaMessage.IndexReady(index.def.id, termId = leaderTerm)))
+    }
+
     suspend fun applyReplicaMessage(record: Log.Record<ReplicaMessage>) {
         blockCutter.pendingBlock?.let { pending ->
             val msg = record.message
@@ -189,6 +198,9 @@ internal class LeaderLogProcessor(
                         applyResolvedTx(tx)
                     }
                 }
+
+                (msg.ddl as? IndexOp.Create)?.takeIf { msg.committed }
+                    ?.let { announceReady(listOfNotNull(partitionState.indexCatalog[it.def.id])) }
             }
 
             is ReplicaMessage.TriesAdded -> {
@@ -219,6 +231,8 @@ internal class LeaderLogProcessor(
 
             is ReplicaMessage.TriesDeleted -> gc.triesDeleted(msg)
 
+            is ReplicaMessage.IndexReady -> partitionState.indexReady(msg.indexId)
+
             is ReplicaMessage.OversizedMessage -> error(
                 "[$dbName] OversizedMessage at ${record.msgId} reached apply unresolved (payload=${msg.path})"
             )
@@ -238,6 +252,7 @@ internal class LeaderLogProcessor(
             try {
                 launch { gc.runGc() }
                 launch(CoroutineName("$dbName-replica-appender")) { replicaAppender.run() }
+                announceReady(partitionState.indexCatalog.indices)
                 launch(CoroutineName("$dbName-source-tail")) { sourceLog.tailAll(afterSourceMessageId, srcLogProc) }
 
                 extSrcProc?.let { extSrcProc -> launch(CoroutineName("$dbName-ext-source")) { extSrcProc.run() } }

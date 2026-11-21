@@ -4,8 +4,9 @@
 -- Secondary indices on one database: how a user declares one on a column, how it comes to cover every flushed block, how an equality scan uses it, and how it compacts, is collected and is dropped.
 --
 -- STATUS: this spec runs ahead of the implementation.
--- Of what follows, declaring and dropping an index and writing its L0s at block flush are true of the code yet: an index is declared Building and dropped as below, each block flush writes its L0 as BlockFlushWritesIndexL0s has it, and its declaration, state and tries persist in its table's block file.
--- Nothing yet backfills an index, makes it Ready, compacts its tries, collects them or scans with it, and a drop leaves an index's tries live rather than garbage.
+-- Of what follows, declaring and dropping an index, writing its L0s at block flush and publishing Ready are true of the code yet: an index is declared Building and dropped as below, each block flush writes its L0 as BlockFlushWritesIndexL0s has it, the leader publishes Ready as LeaderDeclaresReady has it, and its declaration, state and tries persist in its table's block file.
+-- Nothing yet backfills an index, so one declared owing blocks stays Building.
+-- Nothing yet compacts an index's tries, collects them or scans with it, and a drop leaves an index's tries live rather than garbage.
 -- Each contract under Obligations on neighbouring specs names a delta that trie-cat.allium, db.allium, compaction.allium or gc.allium takes in the same commit as the code that makes it true; the contract leaves this spec as its delta lands.
 -- live-index.allium takes no delta: the scan reads the live tier by applying its predicate to the live index's rows.
 --
@@ -140,9 +141,6 @@ contract IndexDeclarationsOnTheLogs {
         -- Backfill and index compaction output go to the source log in a message analogous to TriesAdded, and the leader forwards it to the replica log.
         -- The leader's trie GC publishes the index tries it deletes in a message analogous to TriesDeleted.
 
-    @invariant ReadyIsAReplicaMessage
-        -- The leader publishes an index's Ready on the replica log, behind every record carrying the tries that complete its coverage.
-        -- Every node applies it at the same logical position, and a stale one is skipped like any other replica message.
 }
 
 contract IndexTreeCatalog {
@@ -213,8 +211,12 @@ entity SecondaryIndex {
     state: building | ready | dropped
 
     -- The block in progress when the declaration applied.
-    -- Its flush, and every later one, writes this index's L0; backfill covers every block below it.
+    -- Its flush, and every later one, writes this index's L0; backfill covers the blocks below it.
     first_flushed_block: Integer
+
+    -- The blocks below first_flushed_block that backfill has still to cover.
+    -- Which blocks a table wrote in is not recorded, so a table holding a flushed row when the declaration applies owes every block below first_flushed_block, and one holding none owes none.
+    owed_blocks: Set<Integer>
 
     -- The system time of the transaction that dropped it.
     dropped_as_of: Timestamp?
@@ -225,8 +227,7 @@ entity SecondaryIndex {
     live_tries: tries where trie_state = live
 
     -- Derived
-    -- Whether every block below first_flushed_block has its entries in live_tries: what the leader checks for is open (see Open Questions).
-    backfill_complete: coverage_complete(live_tries, first_flushed_block)
+    backfill_complete: owed_blocks.count = 0
 
     transitions state {
         building -> ready
@@ -306,7 +307,8 @@ rule DeclarationCreatesBuildingIndex {
 
     ensures: SecondaryIndex.created(
         catalog: catalog, id: fresh_index_id(), name: index_name, table: table, column: column,
-        state: building, first_flushed_block: current_block_index()
+        state: building, first_flushed_block: current_block_index(),
+        owed_blocks: blocks_owed_at_declaration(table, current_block_index())
     )
 
     @guidance
@@ -357,15 +359,19 @@ rule BlockFlushWritesIndexL0s {
 }
 
 rule BackfillWritesIndexL0 {
-    -- One job per pre-declaration block that holds data for the table, run by whichever node's compaction pool selects it.
+    -- One job per owed block, run by whichever node's compaction pool selects it.
     -- It reads the block's data L0, which is never deleted, so it needs nothing from the data compactor.
-    -- Its output is published like compaction output, and reaches every node through the replica log.
+    -- A block with no put row carrying the column, the table's data L0 absent included, writes no L0 and is covered all the same.
+    -- Its output, and the block it covers, are published like compaction output, and reach every node through the replica log.
     when: BackfillJobRuns(compactor, index, block_index)
-    requires: block_index < index.first_flushed_block
+    requires: block_index in index.owed_blocks
 
-    ensures: IndexTrie.created(
-        index: index, key: l0_key(block_index), trie_state: live, garbage_as_of: null
-    )
+    ensures:
+        if has_put_with_column(block_index, index.table, index.column):
+            IndexTrie.created(
+                index: index, key: l0_key(block_index), trie_state: live, garbage_as_of: null
+            )
+        index.owed_blocks = without(index.owed_blocks, block_index)
 }
 
 rule IndexCompactionWritesOutput {
@@ -382,8 +388,10 @@ rule IndexCompactionWritesOutput {
 ---- Readiness
 
 rule LeaderDeclaresReady {
-    -- The leader decides when backfill is complete; how is open (see Open Questions).
-    -- It publishes Ready only behind every replica record that carries the tries completing coverage, so a follower applying Ready already holds them.
+    -- The leader decides when an index owes no blocks, and every index becomes Ready this way, one declared owing none included.
+    -- It checks on applying a record that can leave an index owing none — the declaration itself, or a backfill — and once at the start of each term, for a decision an earlier term made but never published.
+    -- It publishes Ready only behind every replica record that completes the index, so a follower applying Ready already holds the same index owing no blocks.
+    -- Two checks can publish Ready twice, which ReadyApplied takes once.
     when: index: SecondaryIndex.backfill_complete
     requires: index.state = building
     requires: is_leader()
@@ -392,7 +400,8 @@ rule LeaderDeclaresReady {
 }
 
 rule ReadyApplied {
-    -- Every node applies Ready at the same position on the replica log.
+    -- Every node applies Ready at the same position on the replica log, and with the leader's view of the index: building and owing no blocks.
+    -- Ready on an index already Ready, or dropped since the leader published it, changes nothing.
     when: IndexReadyApplied(replica, index)
     requires: index.state = building
 
@@ -549,8 +558,6 @@ surface IndexReplication {
 ------------------------------------------------------------
 -- Open Questions
 ------------------------------------------------------------
-
-open question "What does the leader check to decide that backfill is complete? Index L0s are collected once compacted, so 'an index L0 exists for every block' stops being checkable once compaction has run. One idea is a coverage watermark carried on the index's catalog entry. It decides what `backfill_complete` means in LeaderDeclaresReady."
 
 open question "How does a client wait for an index to become Ready? The declaring transaction completes while the index is still Building, so awaiting its tx_id says nothing about readiness."
 

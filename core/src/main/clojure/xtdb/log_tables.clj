@@ -18,6 +18,7 @@
                          ReplicaMessage ReplicaMessage$ResolvedTx
                          ReplicaMessage$TriesAdded ReplicaMessage$BlockBoundary
                          ReplicaMessage$BlockUploaded ReplicaMessage$NoOp
+                         ReplicaMessage$IndexReady
                          DbOp$Attach DbOp$Detach IndexOp$Create IndexOp$Drop)
            (xtdb.arrow Relation RelationReader VectorReader)
            (xtdb.database Database)
@@ -130,6 +131,7 @@
     ReplicaMessage$BlockBoundary "block-boundary"
     ReplicaMessage$BlockUploaded "block-uploaded"
     ReplicaMessage$NoOp "no-op"
+    ReplicaMessage$IndexReady "index-ready"
     "unknown"))
 
 (defn- replica-msg->edn [^ReplicaMessage msg]
@@ -190,6 +192,10 @@
 
      ReplicaMessage$NoOp
      {:type :no-op}
+
+     ReplicaMessage$IndexReady
+     {:type :index-ready
+      :index-id (str (.getIndexId ^ReplicaMessage$IndexReady msg))}
 
      {:type :unknown})))
 

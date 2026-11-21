@@ -15,6 +15,7 @@ message ReplicaLogMessage {
         NoOp no_op = 5;
         TriesDeleted tries_deleted = 6;
         OversizedMessage oversized_message = 8;
+        IndexReady index_ready = 10;
     }
 
     // The leader term that produced this message, for read-side fencing: followers
@@ -26,6 +27,11 @@ message ReplicaLogMessage {
     // term, then consecutive from 1 for everything its leader writes. Absent on messages
     // written before this field existed. See #6105.
     int64 term_seq = 9;
+}
+
+// The leader's decision that an index covers every block before its declaration.
+message IndexReady {
+    string index_id = 1;
 }
 
 message TriesDeleted {

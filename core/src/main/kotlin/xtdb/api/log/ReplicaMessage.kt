@@ -13,6 +13,7 @@ import xtdb.log.proto.blockBoundary
 import xtdb.log.proto.blockUploaded
 import xtdb.log.proto.detachDatabase
 import xtdb.log.proto.droppedIndex
+import xtdb.log.proto.indexReady
 import xtdb.log.proto.noOp
 import xtdb.log.proto.oversizedMessage
 import xtdb.log.proto.replicaLogMessage
@@ -118,6 +119,9 @@ sealed interface ReplicaMessage {
                         ReplicaLogMessage.MessageCase.TRIES_DELETED -> msg.triesDeleted.let {
                             TriesDeleted(it.tableName, it.trieKeysList.toSet(), termId = msg.termId, termSeq = termSeq)
                         }
+
+                        ReplicaLogMessage.MessageCase.INDEX_READY ->
+                            IndexReady(UUID.fromString(msg.indexReady.indexId), termId = msg.termId, termSeq = termSeq)
 
                         ReplicaLogMessage.MessageCase.OVERSIZED_MESSAGE -> msg.oversizedMessage.let {
                             OversizedMessage(
@@ -277,6 +281,19 @@ sealed interface ReplicaMessage {
                 tableName = this@TriesDeleted.tableName
                 trieKeys.addAll(this@TriesDeleted.trieKeys)
             }
+        }
+    }
+
+    /** The leader's decision that [indexId] covers every block before its declaration. */
+    data class IndexReady(
+        val indexId: UUID,
+        override val termId: Long,
+        override val termSeq: Long? = null,
+    ) : ProtobufMessage() {
+        override fun withTermSeq(termSeq: Long) = copy(termSeq = termSeq)
+
+        override fun toLogMessage() = replicaLogMessage {
+            indexReady = indexReady { indexId = this@IndexReady.indexId.toString() }
         }
     }
 
