@@ -1,0 +1,540 @@
+-- allium: 3
+-- secondary-index.allium
+--
+-- Secondary indices on one database: how a user declares one on a column, how it comes to cover every flushed block, how an equality scan uses it, and how it compacts, is collected and is dropped.
+--
+-- STATUS: this spec runs ahead of the implementation.
+-- Nothing below is true of the code yet.
+-- Each contract under Obligations on neighbouring specs names a delta that trie-cat.allium, db.allium, compaction.allium or gc.allium takes in the same commit as the code that makes it true; the contract leaves this spec as its delta lands.
+-- live-index.allium takes no delta: the scan reads the live tier by applying its predicate to the live index's rows.
+--
+-- Scope: one ordinary database, as db.allium scopes it.
+-- Excludes: external-source databases, which reject both declarations; secondary databases inheriting an index; joins using an index; and every predicate shape but equality.
+--
+-- The index proposes, the store disposes.
+-- An index yields CANDIDATE IIDs for a value, and the scan's predicate and bitemporal resolution decide which of them match.
+-- So an index may over-approximate, costing only reads, and never under-approximates, which would lose rows.
+-- That one asymmetry is what every rule and invariant below protects.
+--
+-- An index is a log-structured tree of ENTRIES, one per (hash of a value, IID) pair, built from the put rows of its table's column.
+-- Entries are atemporal: an entity contributes an entry for every value it has ever held in that column, and the scan's resolution tells "holds now" from "held once" from "held as of T".
+-- Entries carry the value's 64-bit hash and no value: a collision adds a candidate, which the recheck drops.
+-- A NULL value contributes no entry.
+--
+-- Three words recur.
+--
+-- - BUILDING -- the index is declared, every block flushed since its declaration has its entries, and the blocks before it may not.
+--   No scan uses it.
+--
+-- - READY -- every adopted block's entries are in the index's live tries.
+--   A scan whose snapshot holds the index Ready uses it.
+--
+-- - DROPPED -- the index has left the set.
+--   No scan at or after the drop uses it, and its files are collected.
+--
+-- An index's tries are fed from two directions.
+-- Each BLOCK FLUSH from the declaration on writes one index L0 per index on the flushed table, adopted with the block's data tries.
+-- BACKFILL writes the index L0s for the blocks flushed before the declaration, from those blocks' data L0s, as jobs in the compaction pool on any node.
+-- The leader decides when backfill is complete and publishes Ready on the replica log; it runs none of the backfill.
+-- From there the index's tries compact among themselves, by set union, independently of the data tree.
+
+------------------------------------------------------------
+-- Given
+------------------------------------------------------------
+
+given {
+    database: Database
+    catalog: IndexCatalog
+}
+
+------------------------------------------------------------
+-- External Entities
+------------------------------------------------------------
+
+external entity Database {
+    -- The database the indices belong to, as db.allium has it.
+    -- Only whether it is fed by an external source matters here.
+    is_external_source: Boolean
+}
+
+external entity Caller {
+    -- A client submitting a declaration, over SQL or the Java API.
+}
+
+external entity QueryEngine {
+    -- The scan operator, which consults the index set of the snapshot it runs at.
+}
+
+external entity CompactionPool {
+    -- The compactor on every node, which runs index jobs alongside data compaction jobs under one concurrency limit.
+}
+
+external entity ReplicaReader {
+    -- A node's replica-log read, feeding whichever role is live on it.
+}
+
+------------------------------------------------------------
+-- Value Types
+------------------------------------------------------------
+
+value IndexId {
+    -- An index's identity, fixed before its declaration reaches the replica log and carried on the log to every node.
+    -- Distinct from the name, so that dropping an index and declaring another under the same name never brings back the first one's files.
+    uuid: String
+}
+
+value TableRef {
+    -- trie-cat.allium's TableRef, within this database.
+    schema_name: String
+    table_name: String
+}
+
+value IndexTrieKey {
+    -- Where an index trie sits in its tree.
+    -- The tree has levels and, at L2 and above, partitions by hash prefix, mirroring the current side of the data tree.
+    level: Integer
+    part: List<Integer>
+    block_index: Integer
+}
+
+value Snapshot {
+    -- What a scan runs against: one value of the partition, so its index set, trie catalog and live tier are at one position.
+    indices: IndexCatalog
+}
+
+------------------------------------------------------------
+-- Contracts
+------------------------------------------------------------
+
+contract CandidateSet {
+    -- What an index probe owes the scan.
+    probe: (index: SecondaryIndex, value: Any) -> Set<Any>
+
+    @invariant CandidatesOverApproximate
+        -- For a Ready index, the candidates for a value include the IID of every row, in any adopted block, whose put event gave the column a value that `=` holds equal to it.
+        -- Which version of the entity is current at the scan's basis plays no part: the candidates cover every version.
+
+    @invariant CandidatesAreIidGranular
+        -- A candidate is an IID, never a row or a page.
+        -- The scan reads every candidate's complete history, so shadowing, delete and erase events still resolve.
+
+    @invariant HashAgreesWithEquality
+        -- Two values that `=` holds equal hash equal, across every leg of a union-typed column.
+        -- Numerics hash through one representation, so `1`, `1::bigint` and `1.0` agree, and `-0.0` hashes as `0.0`.
+        -- A TimestampLocal and a TimestampTz compare equal only in a session zone, which a write cannot know.
+        -- So the probe hashes the literal as `=` would coerce it against each timestamp leg the column holds, in the query's session zone, and takes the union of the candidates.
+
+    @invariant ResultsUnchangedByTheIndex
+        -- Every query returns the same rows with an index as without it, whatever compaction, collection and queries interleave with it.
+}
+
+------------------------------------------------------------
+-- Obligations on neighbouring specs
+------------------------------------------------------------
+
+contract IndexDeclarationsOnTheLogs {
+    -- db.allium's delta.
+
+    @invariant DeclarationsAreSourceLogDdl
+        -- CREATE INDEX and DROP INDEX travel the source log as messages of their own, are resolved by the leader in log order like any transaction, and reach every node as part of a resolved transaction on the replica log.
+        -- Each completes as a transaction, with a tx_id the caller can await.
+        -- A submit to an external-source database rejects both, as it rejects any client transaction.
+
+    @invariant IndexTriesTravelLikeTries
+        -- A block upload carries the block's index L0s beside its data tries, and the adopt installs both in the one write of the partition's value.
+        -- Backfill and index compaction output go to the source log in a message analogous to TriesAdded, and the leader forwards it to the replica log.
+        -- The leader's trie GC publishes the index tries it deletes in a message analogous to TriesDeleted.
+
+    @invariant ReadyIsAReplicaMessage
+        -- The leader publishes an index's Ready on the replica log, behind every record carrying the tries that complete its coverage.
+        -- Every node applies it at the same logical position, and a stale one is skipped like any other replica message.
+
+    @invariant IndicesPersistWithTheBlock
+        -- Each index's declaration, state and live tries are in the block files, so a node that restarts or catches up from a block learns them with the rest of the catalog.
+        -- That holds for an index on a table no block has yet written, which has no per-table block file of its own.
+}
+
+contract IndexTreeCatalog {
+    -- trie-cat.allium's delta.
+
+    @invariant OneTreePerIndex
+        -- Each index holds its own tries, with the nascent / live / garbage states and the current side's insertion strategy: L0 live on arrival, L1 levelled, L2 and above tiered with partition-group completion.
+        -- The data tries take no part in an index's tree, nor its tries in theirs.
+
+    @invariant LateL0sAreNotStale
+        -- Backfill adds index L0s for blocks below ones the index already holds, compacted or not.
+        -- Insertion accepts them, whatever the highest block the index already holds.
+}
+
+contract IndexTreeCompaction {
+    -- compaction.allium's delta.
+
+    @invariant SetUnionMerge
+        -- An index compaction job's output holds exactly the union of its inputs' entries, each (hash, IID) pair once.
+        -- The same pair recurs across inputs whenever an entity keeps a value across blocks.
+
+    @invariant DeterministicIndexJobs
+        -- Index compaction and backfill jobs are selected deterministically from the catalog, and their output files are a deterministic function of the job, so any node in the pool can run any of them.
+
+    @invariant OneConcurrencyLimit
+        -- Index jobs and data jobs share the compactor's configured concurrency: with 8 configured, at most 8 run across both.
+
+    @invariant DataCompactionIsIrrelevant
+        -- An index's entries are a function of the data L0 sequence alone, so no index job waits for, or reacts to, a data compaction job.
+}
+
+contract IndexTreeCollection {
+    -- gc.allium's delta.
+
+    @invariant DataL0sOutliveEveryIndex
+        -- Every row appears in exactly one data L0, and data L0s are never deleted.
+        -- Backfill reads them, as does the compactor's reset.
+
+    @invariant SupersededIndexTriesAreCollected
+        -- Garbage index tries are deleted, index L0s included, after the same grace period as data tries, and the deletion is published so that every node drops them from its catalog.
+        -- Index L0s can be rebuilt from data L0s, so nothing pins them.
+
+    @invariant DroppedIndexFilesAreCollected
+        -- Every file of a dropped index is collected, after that grace period, so that a scan already running against it reads files that still exist.
+}
+
+------------------------------------------------------------
+-- Entities and Variants
+------------------------------------------------------------
+
+entity IndexCatalog {
+    -- One database's indices on one node, as one value.
+    -- It is replaced with the partition's value, beside the trie catalog, the table catalog and the live index, so a snapshot sees all four at one position.
+    indices: SecondaryIndex with catalog = this
+
+    -- Projections
+    ready: indices where state = ready
+}
+
+entity SecondaryIndex {
+    -- One declared index: its identity, the column it covers, its state and its tries.
+    catalog: IndexCatalog
+    id: IndexId
+    name: String
+    table: TableRef
+    column: String
+    state: building | ready
+
+    -- The block in progress when the declaration applied.
+    -- Its flush, and every later one, writes this index's L0; backfill covers every block below it.
+    first_flushed_block: Integer
+
+    tries: IndexTrie with index = this
+
+    -- Projections
+    live_tries: tries where trie_state = live
+
+    -- Derived
+    -- Whether every block below first_flushed_block has its entries in live_tries: what the leader checks for is open (see Open Questions).
+    backfill_complete: coverage_complete(live_tries, first_flushed_block)
+
+    transitions state {
+        building -> ready
+        terminal: ready
+    }
+}
+
+entity IndexTrie {
+    -- One immutable file of an index's tree, holding (hash, IID) entries bucketed by hash prefix.
+    index: SecondaryIndex
+    key: IndexTrieKey
+    trie_state: nascent | live | garbage
+    garbage_as_of: Timestamp?
+}
+
+------------------------------------------------------------
+-- Config
+------------------------------------------------------------
+
+config {
+    -- gc.allium's garbage_lifetime, which index tries share; it moves there with IndexTreeCollection's delta.
+    garbage_lifetime: Duration = 24.hours
+}
+
+------------------------------------------------------------
+-- Rules
+------------------------------------------------------------
+
+---- Declaring and dropping
+
+rule DeclarationRejectedOnExternalSourceDb {
+    -- An external-source database takes no client transactions, so it takes no declarations either.
+    when: IndexDeclared(caller, index_name, table, column)
+    requires: database.is_external_source
+
+    ensures: DeclarationRejected(index_name: index_name)
+}
+
+rule DropRejectedOnExternalSourceDb {
+    when: IndexDropRequested(caller, index_name)
+    requires: database.is_external_source
+
+    ensures: DeclarationRejected(index_name: index_name)
+}
+
+rule DuplicateNameAbortsDeclaration {
+    -- Checked at resolution, against the index set at the RESOLVED head, so two declarations of one name in one block cannot both pass.
+    when: IndexDeclared(caller, index_name, table, column)
+    requires: not database.is_external_source
+    requires: resolved_index_set_holds(index_name)
+
+    ensures: TransactionAborted(index_name: index_name)
+}
+
+rule DeclarationCreatesBuildingIndex {
+    -- An absent table or column is accepted: tables and columns come into existence with their first write, and until then the index is empty.
+    when: IndexDeclared(caller, index_name, table, column)
+    requires: not database.is_external_source
+    requires: not resolved_index_set_holds(index_name)
+
+    ensures: SecondaryIndex.created(
+        catalog: catalog, id: fresh_index_id(), name: index_name, table: table, column: column,
+        state: building, first_flushed_block: current_block_index()
+    )
+
+    @guidance
+        -- Every node applies the declaration from the replica log, with the id the log carries, in the same write as the transaction it rides in.
+}
+
+rule DropOfAbsentIndexAborts {
+    when: IndexDropRequested(caller, index_name)
+    requires: not database.is_external_source
+    requires: not resolved_index_set_holds(index_name)
+
+    ensures: TransactionAborted(index_name: index_name)
+}
+
+rule DropRemovesIndex {
+    -- A dropped index leaves the set whatever its state, so no scan at a snapshot from the drop onwards sees it.
+    -- Its tries are left to the collector.
+    when: IndexDropRequested(caller, index_name)
+    let index = SecondaryIndex{catalog, name: index_name}
+    requires: not database.is_external_source
+    requires: exists index
+
+    ensures:
+        for trie in index.tries:
+            trie.trie_state = garbage
+            trie.garbage_as_of = now
+        not exists index
+}
+
+---- Writing index L0s
+
+rule BlockFlushWritesIndexL0s {
+    -- Every index on the flushed table, Building or Ready, gets one L0 for the block's put rows.
+    -- A block with no put row carrying the column writes none for that index.
+    -- The L0s ride in the block upload and are adopted with the block's data tries, so a snapshot's index set covers exactly the blocks its trie catalog does.
+    when: BlockProduced(block_index, table)
+
+    ensures:
+        for index in catalog.indices:
+            if index.table = table and has_put_with_column(block_index, table, index.column):
+                IndexTrie.created(
+                    index: index, key: l0_key(block_index), trie_state: live, garbage_as_of: null
+                )
+}
+
+rule BackfillWritesIndexL0 {
+    -- One job per pre-declaration block that holds data for the table, run by whichever node's compaction pool selects it.
+    -- It reads the block's data L0, which is never deleted, so it needs nothing from the data compactor.
+    -- Its output is published like compaction output, and reaches every node through the replica log.
+    when: BackfillJobRuns(compactor, index, block_index)
+    requires: block_index < index.first_flushed_block
+
+    ensures: IndexTrie.created(
+        index: index, key: l0_key(block_index), trie_state: live, garbage_as_of: null
+    )
+}
+
+rule IndexCompactionWritesOutput {
+    -- Inputs and output belong to one index; the output's entries are the union of the inputs'.
+    -- Levelling, tiering and partition-group completion follow the current side of the data tree, so an output may first be nascent, and its inputs become garbage once it is live.
+    -- Its output is published like data compaction output, and reaches every node through the replica log.
+    when: IndexCompactionJobRuns(compactor, index, inputs, output_key)
+
+    ensures: IndexTrie.created(
+        index: index, key: output_key, trie_state: nascent, garbage_as_of: null
+    )
+}
+
+---- Readiness
+
+rule LeaderDeclaresReady {
+    -- The leader decides when backfill is complete; how is open (see Open Questions).
+    -- It publishes Ready only behind every replica record that carries the tries completing coverage, so a follower applying Ready already holds them.
+    when: index: SecondaryIndex.backfill_complete
+    requires: index.state = building
+    requires: is_leader()
+
+    ensures: IndexReadyPublished(index: index)
+}
+
+rule ReadyApplied {
+    -- Every node applies Ready at the same position on the replica log.
+    when: IndexReadyApplied(replica, index)
+    requires: index.state = building
+
+    ensures: index.state = ready
+}
+
+---- Collection
+
+rule CollectorDeletesGarbageIndexTries {
+    -- Leader-only, like the data tries' collector, and on the same grace period.
+    -- The deletion is published on the replica log, so every node drops the tries from its catalog at the same position.
+    when: trie: IndexTrie.garbage_as_of + config.garbage_lifetime <= now
+    requires: trie.trie_state = garbage
+    requires: is_leader()
+
+    ensures: not exists trie
+}
+
+---- Scanning
+
+rule ScanProbesReadyIndex {
+    -- An equality predicate against a literal or a parameter, on a column with an index Ready in the scan's own snapshot.
+    -- The IID set is the probe's candidates united with the live tier's: the live index's rows whose column satisfies the predicate.
+    -- From the IID set on, the scan is the existing primary-key lookup path, with the predicate rechecked after bitemporal resolution.
+    when: EqualityScan(scan, snapshot, table, column, value)
+    requires: snapshot.indices.ready.any(i => i.table = table and i.column = column)
+
+    let index = ready_index_for(snapshot.indices, table, column)
+
+    ensures: ScanByIids(iids: probe(index, value) + live_tier_matches(table, column, value))
+}
+
+rule ScanWithoutReadyIndex {
+    -- No index, or one still Building: the scan prunes by page metadata alone.
+    when: EqualityScan(scan, snapshot, table, column, value)
+    requires: not snapshot.indices.ready.any(i => i.table = table and i.column = column)
+
+    ensures: ScanByPageMetadata(table: table, column: column, value: value)
+}
+
+------------------------------------------------------------
+-- Invariants
+------------------------------------------------------------
+
+invariant UniqueIndexNames {
+    -- A name identifies at most one index per database.
+    for a in SecondaryIndexes:
+        for b in SecondaryIndexes:
+            a != b and a.catalog = b.catalog implies a.name != b.name
+}
+
+invariant ReadyIndexCoversEveryAdoptedBlock {
+    -- Every put row's (hash, IID) pair, in every block this node has adopted, is in a live trie of every Ready index on its table and column.
+    -- What CandidatesOverApproximate rests on.
+    for index in SecondaryIndexes:
+        index.state = ready implies covers_adopted_blocks(index)
+}
+
+invariant SupersessionPreservesEntries {
+    -- An index trie becomes garbage only once every entry it holds is in a live trie of the same index.
+    -- With ReadyIndexCoversEveryAdoptedBlock, this is what keeps a Ready index Ready across compaction and collection.
+    for trie in IndexTries:
+        trie.trie_state = garbage and exists trie.index implies entries_covered_by_live(trie)
+}
+
+------------------------------------------------------------
+-- Actor Declarations
+------------------------------------------------------------
+
+actor Client {
+    identified_by: Caller where true
+}
+
+actor ScanOperator {
+    identified_by: QueryEngine where true
+}
+
+actor Compactor {
+    identified_by: CompactionPool where true
+}
+
+actor Replica {
+    identified_by: ReplicaReader where true
+}
+
+------------------------------------------------------------
+-- Surfaces
+------------------------------------------------------------
+
+surface IndexDeclaration {
+    facing client: Client
+
+    provides:
+        IndexDeclared(client, index_name, table, column)
+        IndexDropRequested(client, index_name)
+
+    contracts:
+        demands IndexDeclarationsOnTheLogs
+
+    @guarantee EveryNodeHoldsTheSameIndices
+        -- Every node that has applied the replica log to the same position holds the same indices, with the same ids and states.
+
+    @guarantee DeclarationCompletesWhileBuilding
+        -- The declaring transaction completes once the index is declared, while it is still Building.
+}
+
+surface IndexedScan {
+    facing scan: ScanOperator
+
+    context snapshot: Snapshot
+
+    exposes:
+        for index in snapshot.indices.ready:
+            index.table
+            index.column
+
+    provides:
+        EqualityScan(scan, snapshot, table, column, value)
+
+    contracts:
+        fulfils CandidateSet
+
+    @guarantee OnlyEqualityUsesTheIndex
+        -- Only an equality predicate, against a literal or a parameter, on the scan's own table, uses an index.
+        -- Every other shape, and every join, reads without an index.
+
+    @guarantee ErasedEntitiesNeedNothing
+        -- An erased entity's entries remain until the index is dropped.
+        -- They carry no value, and point at an IID that no longer resolves, which the recheck drops.
+}
+
+surface IndexMaintenance {
+    facing compactor: Compactor
+
+    provides:
+        BackfillJobRuns(compactor, index, block_index)
+        IndexCompactionJobRuns(compactor, index, inputs, output_key)
+
+    contracts:
+        demands IndexTreeCompaction
+        demands IndexTreeCollection
+}
+
+surface IndexReplication {
+    facing replica: Replica
+
+    provides:
+        IndexReadyApplied(replica, index)
+
+    contracts:
+        demands IndexTreeCatalog
+}
+
+------------------------------------------------------------
+-- Open Questions
+------------------------------------------------------------
+
+open question "What does the leader check to decide that backfill is complete? Index L0s are collected once compacted, so 'an index L0 exists for every block' stops being checkable once compaction has run. One idea is a coverage watermark carried on the index's catalog entry. It decides what `backfill_complete` means in LeaderDeclaresReady."
+
+open question "How does a client wait for an index to become Ready? The declaring transaction completes while the index is still Building, so awaiting its tx_id says nothing about readiness."
+
