@@ -9,6 +9,7 @@
             [xtdb.log-tables :as log-tables]
             [xtdb.logical-plan :as lp]
             xtdb.object-store
+            [xtdb.serde.types :as st]
             [xtdb.table :as table]
             [xtdb.time :as time]
             [xtdb.trie :as trie]
@@ -17,15 +18,16 @@
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
   (:import (clojure.lang MapEntry)
-           java.time.Instant
-           (java.util LinkedList SortedSet TreeSet)
+           (java.time Instant LocalDate LocalDateTime ZonedDateTime)
+           (java.util LinkedList Set SortedSet TreeSet)
            (java.util.function IntPredicate Predicate)
            (org.apache.arrow.memory BufferAllocator)
            [org.roaringbitmap.buffer MutableRoaringBitmap]
-           (xtdb.arrow RelationReader Vector VectorReader)
+           (xtdb.arrow RelationReader Vector VectorReader VectorType)
            (xtdb.bloom BloomUtils)
            (xtdb Bytes)
            (xtdb.api ICursor)
+           (xtdb.api.error Incorrect)
            (xtdb.indexer DatabaseSnapshot Snapshot Snapshot$Source TableSnapshot)
            (xtdb.database PartitionStorage)
            (xtdb.index IndexHash IndexProbe IndexProber SecondaryIndex)
@@ -190,34 +192,64 @@
         (= col-sym l) [r]
         (= col-sym r) [l]))))
 
-(defn- index-hashable?
-  "Whether `IndexHash` agrees with `==` on a value of this type, against every type a column can hold.
-   A date or timestamp compares across its types in the session's zone, which the index doesn't hash in."
-  [v]
-  (or (string? v) (boolean? v) (uuid? v) (decimal? v)
-      (instance? Long v) (instance? Integer v) (instance? Short v) (instance? Byte v)
-      (instance? Double v) (instance? Float v)))
+(defn- index-hashes
+  "The `IndexHash`es of every value `==` holds equal to `rdr`'s first value, or nil where the index can't answer for its type."
+  ^Set [^BufferAllocator al ^VectorReader rdr]
+  (let [v (.getObject rdr 0)]
+    (cond
+      (nil? v) #{}
+
+      (or (string? v) (boolean? v) (uuid? v) (decimal? v)
+          (instance? Long v) (instance? Integer v) (instance? Short v) (instance? Byte v)
+          (instance? Double v) (instance? Float v))
+      #{(IndexHash/of rdr 0)}
+
+      (instance? LocalDate v) (IndexHash/ofLocal al (.atStartOfDay ^LocalDate v) expr/*default-tz*)
+      (instance? LocalDateTime v) (IndexHash/ofLocal al ^LocalDateTime v expr/*default-tz*)
+      (instance? ZonedDateTime v) (IndexHash/ofInstant al (.toInstant ^ZonedDateTime v) expr/*default-tz*))))
+
+(defn- cast-hash
+  "The `IndexHash` of `s` cast to `leg` by the engine's own cast, or nil where that cast raises."
+  [^BufferAllocator al ^String s ^VectorType leg]
+  (let [cast-spec (expr/->expression-projection-spec "operand" {:op :call, :f :cast, :args [{:op :literal, :literal s}], :target-type leg} {})]
+    (try
+      (with-open [rdr (.project cast-spec al vw/empty-args {} vw/empty-args)]
+        (IndexHash/of rdr 0))
+      (catch Incorrect _))))
+
+(defn- string-literal-hashes
+  "The `IndexHash`es of every value `==` holds equal to the string literal in `rdr`, compared with a column of `col-type`, or nil where the index can't answer.
+   `==` casts a string literal to each date or timestamp leg it meets, and raises on that leg's rows where the cast does."
+  ^Set [^BufferAllocator al ^VectorReader rdr ^VectorType col-type]
+  (let [s (.getObject rdr 0)]
+    (reduce (fn [hashes ^VectorType leg]
+              (if (isa? types/col-type-hierarchy (types/col-type-head (st/render-type leg)) :date-time)
+                (if-let [leg-hash (cast-hash al s leg)]
+                  (conj hashes leg-hash)
+                  (reduced nil))
+                hashes))
+            #{(IndexHash/of rdr 0)}
+            (some-> col-type .getLegs))))
 
 (defn- probe-index
-  ^IndexProbe [^BufferAllocator al ^BufferPool bp ^Snapshot snapshot ^SecondaryIndex index operand ^RelationReader args]
-  (letfn [(probe [^VectorReader rdr]
-            (IndexProber/probeSync al bp snapshot index (IndexHash/of rdr 0)))]
+  ^IndexProbe [^BufferAllocator al ^BufferPool bp ^Snapshot snapshot ^SecondaryIndex index ^VectorType col-type operand ^RelationReader args]
+  (letfn [(probe [hashes]
+            (when hashes
+              (IndexProber/probeSync al bp snapshot index hashes)))]
     (cond
-      (s/valid? ::lp/param operand) (when-let [rdr (.vectorForOrNull args (name operand))]
-                                      (let [v (.getObject rdr 0)]
-                                        (cond
-                                          (nil? v) (IndexProbe/none)
-                                          (index-hashable? v) (probe rdr))))
-      (nil? operand) (IndexProbe/none)
-      (index-hashable? operand) (with-open [rdr (Vector/fromList al "operand" [operand])]
-                                  (probe rdr)))))
+      (s/valid? ::lp/param operand) (some->> (.vectorForOrNull args (name operand)) (index-hashes al) probe)
+      (or (symbol? operand) (coll? operand)) nil
+      :else (with-open [rdr (Vector/fromList al "operand" [operand])]
+              (probe (if (string? operand)
+                       (string-literal-hashes al rdr col-type)
+                       (index-hashes al rdr)))))))
 
 (defn- index-probe
   ^IndexProbe [^BufferAllocator al ^BufferPool bp ^Snapshot snapshot ^TableRef table selects ^RelationReader args]
   (some (fn [[^String col-name pred]]
           (when-let [index (.readyOn (.getIndexCatSnap snapshot) table col-name)]
             (when-let [[operand] (eq-operand pred col-name)]
-              (probe-index al bp snapshot index operand args))))
+              (probe-index al bp snapshot index (get (.columnTypes snapshot table [col-name]) col-name) operand args))))
         selects))
 
 (defn filter-pushdown-bloom-page-idx-pred ^IntPredicate [^PageMetadata page-metadata, pushdown-blooms, ^String col-name]

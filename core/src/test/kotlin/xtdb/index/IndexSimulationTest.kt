@@ -235,7 +235,7 @@ class IndexSimulationTest : SimulationTestBase() {
     private fun IndexProbe.iidSet() = iids.mapTo(mutableSetOf()) { it.toHex() }
 
     private fun probeNow(index: SecondaryIndex, hash: Long) =
-        partitionState.openSnapshot(latestTxTime).use { snap -> runBlocking(dispatcher) { IndexProber.probe(allocator, bp, snap, index, hash) } }.iidSet()
+        partitionState.openSnapshot(latestTxTime).use { snap -> runBlocking(dispatcher) { IndexProber.probe(allocator, bp, snap, index, setOf(hash)) } }.iidSet()
 
     private fun filesOf(id: UUID, keys: Collection<Trie.Key>): Set<String> {
         val files = IndexFiles(partitionState.tableCatalog.snap().slug(table), id)
@@ -297,7 +297,7 @@ class IndexSimulationTest : SimulationTestBase() {
 
                         for (index in snap.indexCatSnap.indices.filter { it.state == IndexState.Ready }) {
                             val h = hashes.random(rand)
-                            val probed = runCatching { IndexProber.probe(allocator, bp, snap, index, h) }
+                            val probed = runCatching { IndexProber.probe(allocator, bp, snap, index, setOf(h)) }
 
                             // GC deletes a trie only once it's been Garbage for the grace period, so a probe within it finds every file its snapshot names
                             if (Duration.between(openedAt, clock) < garbageLifetime) {

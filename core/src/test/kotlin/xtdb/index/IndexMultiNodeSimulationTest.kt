@@ -354,7 +354,7 @@ class IndexMultiNodeSimulationTest : SimulationTestBase() {
             for (node in nodes) {
                 val ready = node.state.indexCatalog[index.id]!!
                 for (h in hashes) {
-                    val probed = node.state.openSnapshot(null).use { snap -> IndexProber.probe(allocator, bp, snap, ready, h) }
+                    val probed = node.state.openSnapshot(null).use { snap -> IndexProber.probe(allocator, bp, snap, ready, setOf(h)) }
                     assertEquals(truth[h].orEmpty(), probed.iids.mapTo(mutableSetOf()) { it.toHex() }, "node ${node.idx}'s probe (seed=$currentSeed)")
                 }
             }

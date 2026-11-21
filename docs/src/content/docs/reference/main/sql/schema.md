@@ -51,8 +51,10 @@ SELECT * FROM users WHERE email = ?;
 On a table that already holds data, XTDB builds the index in the background; until it's built, queries read the table as they would without it.
 Once it's built, every query that can use it does — you don't need to change your queries.
 
-A query uses an index when it compares the indexed column with `=` to a literal or a parameter that is a number, a string, a boolean or a UUID.
-Any other predicate — a range, a `LIKE`, a comparison with another column, a date or timestamp value — and any join, reads the table as it would without the index.
+A query uses an index when it compares the indexed column with `=` to a literal or a parameter that is a number, a string, a boolean, a UUID, a date or a timestamp.
+A date or timestamp finds the rows `=` holds equal to it in the session's time zone, whichever of `DATE`, `TIMESTAMP` and `TIMESTAMP WITH TIME ZONE` they hold.
+A string literal compared with a date or timestamp column finds the rows equal to the date or timestamp it reads as, as `=` does; one that doesn't read as each date and timestamp type the column holds reads the table as it would without the index.
+Any other predicate — a range, a `LIKE`, a comparison with another column, a time, an interval or a nested value — and any join, reads the table as it would without the index.
 An index never changes which rows a query returns.
 
 `EXPLAIN ANALYZE` shows the effect: a scan that uses an index counts the index's own files and pages in `scan_files_used` and `scan_pages_used`, alongside the data it reads.

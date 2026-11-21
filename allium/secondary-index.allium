@@ -3,14 +3,6 @@
 --
 -- Secondary indices on one database: how a user declares one on a column, how it comes to cover every flushed block, how an equality scan uses it, and how it compacts, is collected and is dropped.
 --
--- STATUS: this spec runs ahead of the implementation.
--- Of what follows, declaring and dropping an index, writing its L0s at block flush and by backfill, publishing Ready, compacting and collecting its tries and scanning with a Ready index are true of the code yet: an index is declared Building and dropped as below, each block flush writes its L0 as BlockFlushWritesIndexL0s has it, backfill covers each owed block as BackfillWritesIndexL0 has it, the leader publishes Ready as LeaderDeclaresReady has it, its tries compact as IndexCompactionWritesOutputs and IndexCompactionApplied have it, gc.allium collects them as IndexTriesDeletedApplied has it, its declaration, state and tries persist in its table's block file, and an equality scan probes a Ready index as ScanProbesReadyIndex has it.
--- The probe takes a number, a string, a boolean or a UUID, and NULL.
--- It doesn't yet hash a date or timestamp as HashAgreesWithEquality has it, so a scan comparing the column with one reads without the index, as it does for a list, set, struct or interval.
--- db.allium and gc.allium have taken every delta this spec placed on them: db.allium carries the index messages and each table block file's index entries, and gc.allium collects an index's garbage tries.
--- trie-cat.allium and compaction.allium take none: an index's tries live in the index catalog, not the trie catalog, and this spec selects and merges its compaction jobs; db.allium's compaction orchestration runs them under the compactor's one concurrency limit.
--- live-index.allium takes no delta: the scan reads the live tier by applying its predicate to the live index's rows.
---
 -- Scope: one ordinary database, as db.allium scopes it.
 -- Excludes: external-source databases, which reject both declarations; secondary databases inheriting an index; joins using an index; and every predicate shape but equality.
 --
@@ -132,8 +124,11 @@ contract CandidateSet {
     @invariant HashAgreesWithEquality
         -- Two values that `=` holds equal hash equal, across every leg of a union-typed column.
         -- Numerics hash through one representation, so `1`, `1::bigint` and `1.0` agree, and `-0.0` hashes as `0.0`.
-        -- A TimestampLocal and a TimestampTz compare equal only in a session zone, which a write cannot know.
-        -- So the probe hashes the literal as `=` would coerce it against each timestamp leg the column holds, in the query's session zone, and takes the union of the candidates.
+        -- A date or timestamp can hash apart from one `=` holds equal to it, so the probe hashes each value `=` holds equal to the operand, and takes the union of their candidates:
+        --   - `=` compares a date, a TimestampLocal and a TimestampTz in the query's session zone, which a write cannot know, while each hashes its own reading: a date or TimestampLocal its wall clock, a TimestampTz its instant;
+        --   - so a wall-clock operand hashes as itself and as each instant the session zone reads as it, none in a gap and two in an overlap, and an instant operand as itself and as its wall-clock reading in the session zone, a date where that reading is midnight;
+        --   - each hashes at every precision that holds it exactly, since one value's hash can differ between precisions.
+        -- A string literal compared with a date or timestamp leg is cast to that leg's type before `=` compares them, so it hashes as itself and as its cast to each date or timestamp leg the column holds in the scan's snapshot.
 
     @invariant ResultsUnchangedByTheIndex
         -- Every query returns the same rows with an index as without it, whatever compaction, collection and queries interleave with it.
@@ -436,8 +431,12 @@ rule ScanProbesReadyIndex {
     -- The IID set is the probe's candidates united with the live tier's: the live index's rows whose column satisfies the predicate.
     -- From the IID set on, the scan is the existing primary-key lookup path, with the predicate rechecked after bitemporal resolution.
     -- A NULL value has no candidates, since `=` holds it equal to nothing, so the scan reads nothing.
+    -- The probe takes a number, a string, a boolean, a UUID, a date or a timestamp, and NULL.
+    -- A date or timestamp value is probed in the query's session zone, as HashAgreesWithEquality has it.
+    -- It doesn't take a string literal that fails to cast to a date or timestamp leg the column holds in the scan's snapshot, since `=` raises on that leg's rows.
     when: EqualityScan(scan, snapshot, table, column, value)
     requires: snapshot.indices.ready.any(i => i.table = table and i.column = column)
+    requires: probe_takes(snapshot, table, column, value)
 
     let index = ready_index_for(snapshot.indices, table, column)
 
@@ -445,9 +444,10 @@ rule ScanProbesReadyIndex {
 }
 
 rule ScanWithoutReadyIndex {
-    -- No index, or one still Building: the scan prunes by page metadata alone.
+    -- No index, one still Building, or a value the probe doesn't take: the scan prunes by page metadata alone.
+    -- The probe doesn't take a time of day, a duration, an interval, a keyword, a list, a set or a struct, nor a string literal that fails to cast to a date or timestamp leg of the column.
     when: EqualityScan(scan, snapshot, table, column, value)
-    requires: not snapshot.indices.ready.any(i => i.table = table and i.column = column)
+    requires: not snapshot.indices.ready.any(i => i.table = table and i.column = column) or not probe_takes(snapshot, table, column, value)
 
     ensures: ScanByPageMetadata(table: table, column: column, value: value)
 }
@@ -578,10 +578,3 @@ surface IndexReplication {
         IndexCompactionApplied(replica, index, outputs, inputs, log_timestamp)
         IndexTriesDeletedApplied(replica, index, trie_keys)
 }
-
-------------------------------------------------------------
--- Open Questions
-------------------------------------------------------------
-
-open question "How does a client wait for an index to become Ready? The declaring transaction completes while the index is still Building, so awaiting its tx_id says nothing about readiness."
-

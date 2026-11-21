@@ -14,7 +14,7 @@
            (java.net InetAddress Socket)
            (java.nio ByteBuffer)
            (java.nio.charset StandardCharsets)
-           (java.time Duration InstantSource LocalDate LocalDateTime ZoneOffset ZonedDateTime)
+           (java.time Duration InstantSource LocalDate LocalDateTime ZoneId ZoneOffset ZonedDateTime)
            (org.postgresql.util PSQLException)
            (xtdb.api TableRef Xtdb Xtdb$Config Xtdb$Connection)
            (xtdb.api.log InMemoryLog Log$Factory ReadOnlyLog SourceMessage$CreateIndex SourceMessage$IndexBackfilled)
@@ -417,16 +417,19 @@
   (xt/execute-tx node (->ops :plain)))
 
 (defn- matching
-  [node table where args]
-  (try
-    (set (xt/q node (into [(format "SELECT _id, v FROM %s WHERE %s" (name table) where)] args)))
-    (catch Exception e
-      [:error (ex-message e)])))
+  ([node table where args] (matching node table where args {}))
+  ([node table where args opts]
+   (try
+     (set (xt/q node (into [(format "SELECT _id, v FROM %s WHERE %s" (name table) where)] args) opts))
+     (catch Exception e
+       [:error (ex-message e)]))))
 
-(defn- scan-pages-used [node table where args]
-  (->> (xt/q node (into [(format "EXPLAIN ANALYZE SELECT _id, v FROM %s WHERE %s" (name table) where)] args))
-       (filter #(= :scan (:op %)))
-       first :attributes :scan-pages-used))
+(defn- scan-pages-used
+  ([node table where args] (scan-pages-used node table where args {}))
+  ([node table where args opts]
+   (->> (xt/q node (into [(format "EXPLAIN ANALYZE SELECT _id, v FROM %s WHERE %s" (name table) where)] args) opts)
+        (filter #(= :scan (:op %)))
+        first :attributes :scan-pages-used)))
 
 (defn- await-ready [node]
   (let [expected [{:name "by_v", :table ["public" "docs"], :column "v", :state :ready}]]
@@ -482,6 +485,97 @@
                  "DATE '2020-01-01'" "TIMESTAMP '2020-01-01 00:00:00'" "TIMESTAMP '2020-01-01 00:00:00Z'" "[1, 2]"]]
       (t/is (= (matching node :plain (str "v = " lit) []) (matching node :docs (str "v = " lit) []))
             (str "literal " lit)))))
+
+(def ^:private london (ZoneId/of "Europe/London"))
+(def ^:private new-york (ZoneId/of "America/New_York"))
+
+(def ^:private temporal-values
+  "London's clocks went forward at 01:00 UTC on 2021-03-28 and back at 01:00 UTC on 2021-10-31;
+   New York's at 07:00 UTC on 2021-03-14 and 06:00 UTC on 2021-11-07."
+  [(LocalDate/of 2020 1 1) (LocalDate/of 2021 3 28) (LocalDate/of 2021 10 31) (LocalDate/of 2021 3 14) (LocalDate/of 2021 11 7)
+   (LocalDateTime/of 2020 1 1 0 0) (LocalDateTime/of 2021 10 31 0 0) (LocalDateTime/of 2021 11 7 0 0)
+   (LocalDateTime/of 2021 3 28 1 30) (LocalDateTime/of 2021 10 31 1 30)
+   (LocalDateTime/of 2021 3 14 2 30) (LocalDateTime/of 2021 11 7 1 30)
+   (LocalDateTime/of 2021 6 1 12 34 56 123458000)
+   (ZonedDateTime/of 2020 1 1 0 0 0 0 ZoneOffset/UTC) (ZonedDateTime/of 2020 1 1 0 0 0 0 london) (ZonedDateTime/of 2019 12 31 19 0 0 0 new-york)
+   (ZonedDateTime/of 2021 10 31 0 30 0 0 ZoneOffset/UTC) (ZonedDateTime/of 2021 10 31 1 30 0 0 ZoneOffset/UTC)
+   (ZonedDateTime/of 2021 11 7 5 30 0 0 ZoneOffset/UTC) (ZonedDateTime/of 2021 11 7 6 30 0 0 ZoneOffset/UTC)
+   (ZonedDateTime/of 2021 3 28 1 30 0 0 ZoneOffset/UTC) (ZonedDateTime/of 2021 3 14 7 30 0 0 ZoneOffset/UTC)
+   (ZonedDateTime/of 2021 10 30 23 0 0 0 ZoneOffset/UTC) (ZonedDateTime/of 2021 11 7 4 0 0 0 ZoneOffset/UTC)
+   (ZonedDateTime/of 2021 6 1 12 34 56 123458000 ZoneOffset/UTC) (ZonedDateTime/of 2021 6 1 12 34 56 123458000 london)])
+
+(def ^:private typed-temporal-docs
+  "Each of `d`, `ts` and `tstz` holds one temporal type, so a string literal that reads as it finds rows rather than raising on another type's rows, as it does against `v`."
+  [{:xt/id 40000, :v "t-0", :d (LocalDate/of 2020 1 1), :ts (LocalDateTime/of 2020 1 1 0 0), :tstz (ZonedDateTime/of 2020 1 1 0 0 0 0 ZoneOffset/UTC)}
+   {:xt/id 40001, :v "t-1", :d (LocalDate/of 2021 10 31), :ts (LocalDateTime/of 2021 10 31 1 30), :tstz (ZonedDateTime/of 2021 10 31 1 30 0 0 london)}
+   {:xt/id 40002, :v "t-2", :d (LocalDate/of 2021 3 28), :ts (LocalDateTime/of 2021 6 1 12 34 56 123458000), :tstz (ZonedDateTime/of 2021 6 1 12 34 56 123458000 ZoneOffset/UTC)}])
+
+(t/deftest an-equality-scan-on-dates-and-timestamps-returns-the-same-rows-with-an-index-as-without-in-any-session-zone
+  (let [node tu/*node*
+        flushed (take 20 temporal-values)
+        live (drop 20 temporal-values)]
+    (execute-on-both! node (fn [table] [(into [:put-docs table] (for [i (range 3000)] {:xt/id i, :v (str "user-" i)}))
+                                        (into [:put-docs table] (map-indexed (fn [i v] {:xt/id (+ 10000 i), :v v}) flushed))
+                                        (into [:put-docs table] (take 2 typed-temporal-docs))]))
+    (tu/flush-block! node)
+
+    (doseq [[index col] [["by_d" "d"] ["by_ts" "ts"] ["by_tstz" "tstz"] ["by_v" "v"]]]
+      (jdbc/execute! node [(format "CREATE INDEX %s ON docs (%s)" index col)]))
+    (let [expected (for [[index col] [["by_d" "d"] ["by_ts" "ts"] ["by_tstz" "tstz"] ["by_v" "v"]]]
+                     {:name index, :table ["public" "docs"], :column col, :state :ready})]
+      (t/is (= expected (await-indices (db/primary-db node) expected))))
+
+    (execute-on-both! node (fn [table] [(into [:put-docs table] (map-indexed (fn [i v] {:xt/id (+ 30000 i), :v v}) live))
+                                        (into [:put-docs table] (drop 2 typed-temporal-docs))]))
+
+    (t/is (= #{10009 10016 10017}
+             (set (map :xt/id (matching node :docs "v = ?" [(LocalDateTime/of 2021 10 31 1 30)] {:default-tz london}))))
+          "a wall-clock reading in London's overlap matches both instants London reads as it")
+
+    (t/is (= #{10012 30005}
+             (set (map :xt/id (matching node :docs "v = ?" [(LocalDateTime/of 2021 6 1 12 34 56 123458000)] {:default-tz london}))))
+          "a fractional wall-clock reading matches the instant London reads as it")
+
+    (doseq [zone [london new-york]
+            :let [opts {:default-tz zone}]]
+      (t/is (< (scan-pages-used node :docs "v = ?" [(LocalDateTime/of 2021 10 31 1 30)] opts)
+               (scan-pages-used node :plain "v = ?" [(LocalDateTime/of 2021 10 31 1 30)] opts))
+            (str "a timestamp probes the index in " zone))
+
+      (doseq [v (concat temporal-values
+                        [(LocalDate/of 2021 6 1) (LocalDateTime/of 2021 6 1 12 34 56 123457000)
+                         (ZonedDateTime/of 2021 10 31 1 30 0 0 london) (ZonedDateTime/of 2021 11 7 1 30 0 0 new-york)])]
+        (t/is (= (matching node :plain "v = ?" [v] opts) (matching node :docs "v = ?" [v] opts))
+              (str "param " (pr-str v) " in " zone)))
+
+      (doseq [lit ["DATE '2020-01-01'" "DATE '2021-10-31'" "DATE '2021-11-07'" "DATE '2021-03-28'"
+                   "TIMESTAMP '2020-01-01 00:00:00'" "TIMESTAMP '2021-10-31 01:30:00'" "TIMESTAMP '2021-03-28 01:30:00'"
+                   "TIMESTAMP '2021-11-07 01:30:00'" "TIMESTAMP '2021-03-14 02:30:00'" "TIMESTAMP '2021-06-01 12:34:56.123458'"
+                   "TIMESTAMP '2020-01-01 00:00:00Z'" "TIMESTAMP '2019-12-31 19:00:00-05:00'" "TIMESTAMP '2021-10-31 00:30:00+00:00'"
+                   "TIMESTAMP '2021-10-31 01:30:00+01:00'" "TIMESTAMP '2021-11-07 01:30:00-05:00'" "TIMESTAMP '2021-06-01 12:34:56.123458Z'"]]
+        (t/is (= (matching node :plain (str "v = " lit) [] opts) (matching node :docs (str "v = " lit) [] opts))
+              (str "literal " lit " in " zone)))
+
+      (t/is (= #{{:xt/id 40000, :v "t-0"}} (matching node :docs "d = '2020-01-01'" [] opts))
+            (str "a string literal is cast to the date it is compared with in " zone))
+
+      (t/is (< (scan-pages-used node :docs "d = '2020-01-01'" [] opts)
+               (scan-pages-used node :plain "d = '2020-01-01'" [] opts))
+            (str "a string literal compared with a date probes the index in " zone))
+
+      (doseq [[col strs] [["d" ["2020-01-01" "2021-03-28" "2021-10-31" "2020-01-01 00:00:00" "nope"]]
+                          ["ts" ["2020-01-01 00:00:00" "2020-01-01" "2021-10-31 01:30:00" "2021-06-01 12:34:56.123458"
+                                 "2021-06-01 12:34:56.123458999" "2020-01-01 00:00:00Z" "2021-10-31 01:30:00+01:00" "nope"]]
+                          ["tstz" ["2020-01-01 00:00:00Z" "2020-01-01 00:00:00+00:00" "2019-12-31 19:00:00-05:00"
+                                   "2021-10-31 01:30:00+01:00" "2021-10-31 00:30:00Z" "2021-06-01 12:34:56.123458Z"
+                                   "2021-06-01 12:34:56.123458999Z" "2020-01-01 00:00:00" "nope"]]
+                          ["v" ["user-7" "2020-01-01" "2020-01-01 00:00:00Z"]]]
+              s strs
+              :let [where (str col " = ?")]]
+        (t/is (= (matching node :plain (str col " = '" s "'") [] opts) (matching node :docs (str col " = '" s "'") [] opts))
+              (str "string literal '" s "' against " col " in " zone))
+        (t/is (= (matching node :plain where [s] opts) (matching node :docs where [s] opts))
+              (str "string param " (pr-str s) " against " col " in " zone))))))
 
 (t/deftest an-index-reads-fewer-pages-of-a-flushed-block-until-it-is-dropped
   (with-open [node (xtn/start-node {:compactor {:threads 0}})]
