@@ -10,6 +10,8 @@ import org.antlr.v4.runtime.misc.ParseCancellationException
 import xtdb.antlr.Sql
 import xtdb.antlr.SqlBaseVisitor
 import xtdb.antlr.SqlLexer
+import xtdb.api.DEFAULT_SCHEMA
+import xtdb.api.TableRef
 import xtdb.api.error.Incorrect
 import xtdb.query.ParsedStatement.*
 import xtdb.util.normalForm
@@ -281,6 +283,15 @@ private class ParsedStatementVisitor : SqlBaseVisitor<ParsedStatement>() {
 
     override fun visitDetachDatabaseStatement(ctx: Sql.DetachDatabaseStatementContext) =
         DetachDatabase(ctx, identStr(ctx.dbName))
+
+    override fun visitCreateIndexStatement(ctx: Sql.CreateIndexStatementContext): ParsedStatement {
+        val tt = ctx.targetTable()
+        val table = TableRef(tt.schemaName?.let(::identStr) ?: DEFAULT_SCHEMA, identStr(tt.tableName))
+        return CreateIndex(ctx, identStr(ctx.indexName), table, identStr(ctx.columnName().identifier()))
+    }
+
+    override fun visitDropIndexStatement(ctx: Sql.DropIndexStatementContext) =
+        DropIndex(ctx, identStr(ctx.indexName))
 }
 
 /**

@@ -12,6 +12,8 @@ import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import xtdb.TestPartition
+import xtdb.api.TableRef
+import xtdb.api.log.IndexOp
 import xtdb.api.log.Log
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.Watchers
@@ -19,11 +21,15 @@ import xtdb.api.storage.Storage
 import xtdb.block.proto.block
 import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
+import xtdb.index.IndexDef
+import xtdb.index.IndexState
+import xtdb.index.SecondaryIndex
 import xtdb.api.error.Fault
 import xtdb.storage.MemoryStorage
 import xtdb.util.closeAll
 import java.nio.ByteBuffer
 import java.time.Instant
+import java.util.UUID
 
 private fun FollowerLogProcessor.processRecords(records: List<Log.Record<ReplicaMessage>>) =
     records.forEach { handleRecord(it) }
@@ -286,5 +292,39 @@ class FollowerLogProcessorTest {
         val bufferedRecords = registry.find("xtdb.replica.block.buffered.records").tag("db", "test").summary()
         assertEquals(1L, bufferedRecords?.count())
         assertEquals(2.0, bufferedRecords?.totalAmount(), "the two records held between boundary and upload")
+    }
+
+    private fun indexTx(txId: Long, ddl: IndexOp, committed: Boolean = true): ReplicaMessage =
+        ReplicaMessage.ResolvedTx(
+            txId, Instant.EPOCH.plusSeconds(txId), committed, null, emptyMap(), ddl, srcMsgId = txId, termId = TERM
+        ).let { ReplicaMessage.decode(it.encode())!! }
+
+    @Test
+    fun `a declaration read off the replica log is applied as a Building index, and a drop marks it Dropped`() = runTest {
+        val proc = makeProcessor()
+        val def = IndexDef(UUID.randomUUID(), "by_email", TableRef("public", "users"), "email")
+
+        proc.processRecords(listOf(record(0, indexTx(1, IndexOp.Create(def)))))
+        assertEquals(
+            listOf(SecondaryIndex(def, 0, IndexState.Building)),
+            value.indexCat.indices.toList()
+        )
+
+        proc.processRecords(listOf(record(1, indexTx(2, IndexOp.Drop(def.id, "by_email")))))
+        assertEquals(
+            listOf(SecondaryIndex(def, 0, IndexState.Dropped(Instant.EPOCH.plusSeconds(2)))),
+            value.indexCat.indices.toList()
+        )
+        assertNull(value.indexCat.declared("by_email"))
+    }
+
+    @Test
+    fun `an aborted transaction's index declaration is not applied`() = runTest {
+        val proc = makeProcessor()
+        val def = IndexDef(UUID.randomUUID(), "by_email", TableRef("public", "users"), "email")
+
+        proc.processRecords(listOf(record(0, indexTx(1, IndexOp.Create(def), committed = false))))
+
+        assertEquals(emptyList<SecondaryIndex>(), value.indexCat.indices.toList())
     }
 }

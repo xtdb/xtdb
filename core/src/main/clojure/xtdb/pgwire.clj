@@ -47,7 +47,8 @@
                        ParsedStatement ParsedStatement$Visitor ParsedStatement$Begin
                        ParsedStatement$Commit ParsedStatement$CommitMode ParsedStatement$Query ParsedStatement$Dml
                        ParsedStatement$ShowVariable ParsedStatement$CopyIn ParsedStatement$Execute
-                       ParsedStatement$SetTransaction ParsedStatement$DiscardTarget ParsedStatement$Discard)
+                       ParsedStatement$SetTransaction ParsedStatement$DiscardTarget ParsedStatement$Discard
+                       ParsedStatement$CreateIndex ParsedStatement$DropIndex)
            (xtdb.tx TxOp$PutDocs)))
 
 ;; references
@@ -1261,6 +1262,26 @@
       (when-let [error (.getError tx)]
         (throw error)))))
 
+(defn- create-index [{:keys [conn-state] :as conn} ^ParsedStatement$CreateIndex stmt]
+  (when (and (.isTxOpen ^Xtdb$Connection (:node-conn @conn-state)) (not (:implicit-tx? @conn-state)))
+    (throw (err/incorrect ::create-index-in-tx "Cannot create an index in a transaction."
+                          {:index-name (.getIndexName stmt)})))
+
+  (with-auth-check conn
+    (let [tx (.createIndex ^Xtdb$Connection (:node-conn @conn-state) (.getIndexName stmt) (.getTable stmt) (.getColumn stmt))]
+      (when-let [error (.getError tx)]
+        (throw error)))))
+
+(defn- drop-index [{:keys [conn-state] :as conn} ^String index-name]
+  (when (and (.isTxOpen ^Xtdb$Connection (:node-conn @conn-state)) (not (:implicit-tx? @conn-state)))
+    (throw (err/incorrect ::drop-index-in-tx "Cannot drop an index in a transaction."
+                          {:index-name index-name})))
+
+  (with-auth-check conn
+    (let [tx (.dropIndex ^Xtdb$Connection (:node-conn @conn-state) index-name)]
+      (when-let [error (.getError tx)]
+        (throw error)))))
+
 (defn- close-all-prepared-statements [{:keys [conn-state] :as conn}]
   (close-all-portals conn)
   (doseq [stmt (vals (:prepared-statements @conn-state))]
@@ -1373,7 +1394,15 @@
 
                (visitDetachDatabase [_ stmt]
                  (detach-db conn (.getDbName stmt))
-                 (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "DETACH DATABASE"}))))))
+                 (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "DETACH DATABASE"}))
+
+               (visitCreateIndex [_ stmt]
+                 (create-index conn stmt)
+                 (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "CREATE INDEX"}))
+
+               (visitDropIndex [_ stmt]
+                 (drop-index conn (.getIndexName stmt))
+                 (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "DROP INDEX"}))))))
 
 (defmethod handle-msg* :msg-execute [{:keys [conn-state] :as conn} {:keys [portal-name limit]}]
   ;; Handles a msg-execute to run a previously bound portal (via msg-bind).

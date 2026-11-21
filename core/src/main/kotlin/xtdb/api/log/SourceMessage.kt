@@ -4,10 +4,12 @@ import com.google.protobuf.ByteString
 import xtdb.api.tx.ExternalSourceToken
 import xtdb.database.Database
 import xtdb.database.DatabaseName
+import xtdb.index.IndexDef
 import xtdb.log.proto.SourceLogMessage
 import xtdb.log.proto.TrieDetails
 import xtdb.log.proto.attachDatabase
 import xtdb.log.proto.detachDatabase
+import xtdb.log.proto.dropIndex
 import xtdb.log.proto.flushBlock
 import xtdb.log.proto.sourceLogMessage
 import xtdb.log.proto.triesAdded
@@ -73,6 +75,10 @@ sealed interface SourceMessage {
                             }
 
                             SourceLogMessage.MessageCase.DETACH_DATABASE -> DetachDatabase(msg.detachDatabase.dbName)
+
+                            SourceLogMessage.MessageCase.CREATE_INDEX -> CreateIndex(IndexDef.fromProto(msg.createIndex))
+
+                            SourceLogMessage.MessageCase.DROP_INDEX -> DropIndex(msg.dropIndex.indexName)
 
                             SourceLogMessage.MessageCase.TX -> msg.tx.let {
                                 Tx(
@@ -162,6 +168,16 @@ sealed interface SourceMessage {
             detachDatabase = detachDatabase {
                 this.dbName = this@DetachDatabase.dbName
             }
+        }
+    }
+
+    data class CreateIndex(val def: IndexDef) : ProtobufMessage() {
+        override fun toLogMessage() = sourceLogMessage { createIndex = def.toProto() }
+    }
+
+    data class DropIndex(val indexName: String) : ProtobufMessage() {
+        override fun toLogMessage() = sourceLogMessage {
+            dropIndex = dropIndex { this.indexName = this@DropIndex.indexName }
         }
     }
 }

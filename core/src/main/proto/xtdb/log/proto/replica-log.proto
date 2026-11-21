@@ -40,9 +40,11 @@ message ResolvedTx {
     bytes error = 4;
     map<string, bytes> table_data = 5;
 
-    oneof db_op {
+    oneof ddl {
         AttachDatabase attach_database = 6;
         DetachDatabase detach_database = 7;
+        CreateIndex create_index = 10;
+        DroppedIndex drop_index = 11;
     }
 
     bytes external_source_token = 8;
@@ -50,6 +52,11 @@ message ResolvedTx {
     // Set when this tx came from the source log; absent for ext-source txs whose tx_id is an
     // independent counter rather than a source-log msgId.
     int64 src_msg_id = 9 [features.field_presence = EXPLICIT];
+}
+
+message DroppedIndex {
+    string index_id = 1;
+    string index_name = 2;
 }
 
 message BlockBoundary {

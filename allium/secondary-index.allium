@@ -4,7 +4,7 @@
 -- Secondary indices on one database: how a user declares one on a column, how it comes to cover every flushed block, how an equality scan uses it, and how it compacts, is collected and is dropped.
 --
 -- STATUS: this spec runs ahead of the implementation.
--- Nothing below is true of the code yet.
+-- Of what follows, only declaring and dropping an index is true of the code yet: an index is declared Building and dropped as below, its declaration and state persist in its table's block file, and nothing writes its tries, makes it Ready or collects it.
 -- Each contract under Obligations on neighbouring specs names a delta that trie-cat.allium, db.allium, compaction.allium or gc.allium takes in the same commit as the code that makes it true; the contract leaves this spec as its delta lands.
 -- live-index.allium takes no delta: the scan reads the live tier by applying its predicate to the live index's rows.
 --
@@ -29,8 +29,8 @@
 -- - READY -- every adopted block's entries are in the index's live tries.
 --   A scan whose snapshot holds the index Ready uses it.
 --
--- - DROPPED -- the index has left the set.
---   No scan at or after the drop uses it, and its files are collected.
+-- - DROPPED -- the index has left the set of names, so the name is free to declare again.
+--   No scan at or after the drop uses it, and its files are collected; it stays in the catalog until the last of them is.
 --
 -- An index's tries are fed from two directions.
 -- Each BLOCK FLUSH from the declaration on writes one index L0 per index on the flushed table, adopted with the block's data tries.
@@ -135,11 +135,6 @@ contract CandidateSet {
 contract IndexDeclarationsOnTheLogs {
     -- db.allium's delta.
 
-    @invariant DeclarationsAreSourceLogDdl
-        -- CREATE INDEX and DROP INDEX travel the source log as messages of their own, are resolved by the leader in log order like any transaction, and reach every node as part of a resolved transaction on the replica log.
-        -- Each completes as a transaction, with a tx_id the caller can await.
-        -- A submit to an external-source database rejects both, as it rejects any client transaction.
-
     @invariant IndexTriesTravelLikeTries
         -- A block upload carries the block's index L0s beside its data tries, and the adopt installs both in the one write of the partition's value.
         -- Backfill and index compaction output go to the source log in a message analogous to TriesAdded, and the leader forwards it to the replica log.
@@ -149,9 +144,8 @@ contract IndexDeclarationsOnTheLogs {
         -- The leader publishes an index's Ready on the replica log, behind every record carrying the tries that complete its coverage.
         -- Every node applies it at the same logical position, and a stale one is skipped like any other replica message.
 
-    @invariant IndicesPersistWithTheBlock
-        -- Each index's declaration, state and live tries are in the block files, so a node that restarts or catches up from a block learns them with the rest of the catalog.
-        -- That holds for an index on a table no block has yet written, which has no per-table block file of its own.
+    @invariant IndexTriesPersistWithTheBlock
+        -- Each index's live tries are in its table's block file beside its declaration and state, so a node that restarts or catches up from a block learns them with the rest of the catalog.
 }
 
 contract IndexTreeCatalog {
@@ -208,6 +202,7 @@ entity IndexCatalog {
     indices: SecondaryIndex with catalog = this
 
     -- Projections
+    declared: indices where state != dropped
     ready: indices where state = ready
 }
 
@@ -218,11 +213,14 @@ entity SecondaryIndex {
     name: String
     table: TableRef
     column: String
-    state: building | ready
+    state: building | ready | dropped
 
     -- The block in progress when the declaration applied.
     -- Its flush, and every later one, writes this index's L0; backfill covers every block below it.
     first_flushed_block: Integer
+
+    -- The system time of the transaction that dropped it.
+    dropped_as_of: Timestamp?
 
     tries: IndexTrie with index = this
 
@@ -235,7 +233,9 @@ entity SecondaryIndex {
 
     transitions state {
         building -> ready
-        terminal: ready
+        building -> dropped
+        ready -> dropped
+        terminal: dropped
     }
 }
 
@@ -254,6 +254,9 @@ entity IndexTrie {
 config {
     -- gc.allium's garbage_lifetime, which index tries share; it moves there with IndexTreeCollection's delta.
     garbage_lifetime: Duration = 24.hours
+
+    -- The columns no put document holds, so that an index on one would always be empty.
+    unindexable_columns: Set<String> = {"_iid", "_valid_from", "_valid_to", "_system_from", "_system_to"}
 }
 
 ------------------------------------------------------------
@@ -277,10 +280,21 @@ rule DropRejectedOnExternalSourceDb {
     ensures: DeclarationRejected(index_name: index_name)
 }
 
+rule DeclarationOnUnindexableColumnRejected {
+    -- Rejected at submit, ahead of the source log, as a declaration on an external-source database is.
+    -- `_id` is a put document's column, and takes an index.
+    when: IndexDeclared(caller, index_name, table, column)
+    requires: not database.is_external_source
+    requires: column in config.unindexable_columns
+
+    ensures: DeclarationRejected(index_name: index_name)
+}
+
 rule DuplicateNameAbortsDeclaration {
     -- Checked at resolution, against the index set at the RESOLVED head, so two declarations of one name in one block cannot both pass.
     when: IndexDeclared(caller, index_name, table, column)
     requires: not database.is_external_source
+    requires: column not in config.unindexable_columns
     requires: resolved_index_set_holds(index_name)
 
     ensures: TransactionAborted(index_name: index_name)
@@ -290,6 +304,7 @@ rule DeclarationCreatesBuildingIndex {
     -- An absent table or column is accepted: tables and columns come into existence with their first write, and until then the index is empty.
     when: IndexDeclared(caller, index_name, table, column)
     requires: not database.is_external_source
+    requires: column not in config.unindexable_columns
     requires: not resolved_index_set_holds(index_name)
 
     ensures: SecondaryIndex.created(
@@ -310,18 +325,22 @@ rule DropOfAbsentIndexAborts {
 }
 
 rule DropRemovesIndex {
-    -- A dropped index leaves the set whatever its state, so no scan at a snapshot from the drop onwards sees it.
+    -- A dropped index leaves the set of names whatever its state, so no scan at a snapshot from the drop onwards uses it.
     -- Its tries are left to the collector.
     when: IndexDropRequested(caller, index_name)
-    let index = SecondaryIndex{catalog, name: index_name}
+    let index = (catalog.declared where name = index_name).first
     requires: not database.is_external_source
-    requires: exists index
+    requires: resolved_index_set_holds(index_name)
 
     ensures:
         for trie in index.tries:
             trie.trie_state = garbage
             trie.garbage_as_of = now
-        not exists index
+        index.state = dropped
+        index.dropped_as_of = now
+
+    @guidance
+        -- The leader resolves the name to the index's id, and every node applies the drop by that id, in the same write as the transaction it rides in.
 }
 
 ---- Writing index L0s
@@ -422,10 +441,10 @@ rule ScanWithoutReadyIndex {
 ------------------------------------------------------------
 
 invariant UniqueIndexNames {
-    -- A name identifies at most one index per database.
+    -- A name identifies at most one declared index per database.
     for a in SecondaryIndexes:
         for b in SecondaryIndexes:
-            a != b and a.catalog = b.catalog implies a.name != b.name
+            a != b and a.catalog = b.catalog and a.state != dropped and b.state != dropped implies a.name != b.name
 }
 
 invariant ReadyIndexCoversEveryAdoptedBlock {

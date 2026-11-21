@@ -1,5 +1,6 @@
 package xtdb.api.tx
 
+import clojure.lang.Keyword
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.spyk
@@ -19,6 +20,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import xtdb.SimulationTestUtils.Companion.createPartitionValue
 import xtdb.api.log.*
+import xtdb.api.TableRef
 import xtdb.api.error.Incorrect
 import xtdb.api.tx.TxIndexer.TxResult
 import xtdb.database.Database
@@ -290,37 +292,50 @@ internal class ExternalSourceTest : LeaderTermTest() {
         )
     }
 
-    @Test
-    fun `submitTxBlocking rejects when externalSource is configured`() {
-        val extFactory = mockk<ExternalSource.Factory>()
-        val config = Database.Config(externalSource = extFactory)
-
-        // note: not .use — Database.close() would close `allocator`, which @AfterEach also closes
+    // note: not .use — Database.close() would close `allocator`, which @AfterEach also closes
+    private fun externalSourceDb(): Database {
         val partition = DatabasePartition(
             storage = PartitionStorage(DatabaseLogs(null, null), null, null),
             state = PartitionState(createPartitionValue()),
             watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1),
         )
-        val db = Database(
+        return Database(
             allocator = allocator,
-            config = config,
+            config = Database.Config(externalSource = mockk<ExternalSource.Factory>()),
             name = "cdc",
             logs = DatabaseLogs(null, null),
             isIndexing = false,
             partitions = listOf(partition),
             meterRegistry = null,
         )
+    }
 
+    @Test
+    fun `submitTxBlocking rejects when externalSource is configured`() {
         val ex = assertThrows(Incorrect::class.java) {
-            db.submitTxBlocking(emptyList(), TxOpts(defaultTz = ZoneId.of("UTC")))
+            externalSourceDb().submitTxBlocking(emptyList(), TxOpts(defaultTz = ZoneId.of("UTC")))
         }
         assertTrue(ex.message!!.contains("external source"), "message mentions external source")
+    }
+
+    @Test
+    fun `CREATE INDEX and DROP INDEX are rejected when externalSource is configured`() {
+        val db = externalSourceDb()
+
+        val errorCode = Keyword.intern("xtdb", "index-ddl-on-external-source-db")
+        val codeKey = Keyword.intern("xtdb.error", "code")
+
+        val create = assertThrows(Incorrect::class.java) { db.sendCreateIndexMessage("by_id", TableRef("public", "foo"), "_id") }
+        assertEquals(errorCode, create.data.valAt(codeKey))
+
+        val drop = assertThrows(Incorrect::class.java) { db.sendDropIndexMessage("by_id") }
+        assertEquals(errorCode, drop.data.valAt(codeKey))
     }
 
     // Both apply paths: a tx this term resolved is applied by `applyTx`, one read back without having been
     // staged by `commitTx`, and these tests drive the former.
     private fun faulting(partitionState: PartitionState) = spyk(partitionState) {
-        every { applyTx(any(), any()) } throws RuntimeException("commit pipeline fault")
-        every { commitTx(any(), any()) } throws RuntimeException("commit pipeline fault")
+        every { applyTx(any(), any(), any()) } throws RuntimeException("commit pipeline fault")
+        every { commitTx(any(), any(), any()) } throws RuntimeException("commit pipeline fault")
     }
 }

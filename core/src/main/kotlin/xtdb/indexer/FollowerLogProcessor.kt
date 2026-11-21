@@ -113,13 +113,13 @@ class FollowerLogProcessor @JvmOverloads constructor(
 
                 val tables = msg.loadTableData(allocator)
                 try {
-                    partitionState.commitTx(txKey, tables)
+                    partitionState.commitTx(txKey, tables, (msg.ddl as? IndexOp)?.takeIf { msg.committed })
                 } finally {
                     tables.closeAll()
                 }
 
                 if (msg.committed) {
-                    when (val dbOp = msg.dbOp) {
+                    when (val dbOp = msg.ddl as? DbOp) {
                         is DbOp.Attach -> if (dbCatalog != null) {
                             try {
                                 dbCatalog.attach(dbOp.dbName, dbOp.config)

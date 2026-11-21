@@ -32,6 +32,12 @@ message TableBlock {
     repeated Partition partitions = 5;
     // keyed by the Arrow field name a column's data is written under, as `arrow_schema` is.
     map<string, xtdb.cols.proto.ColumnMeta> columns = 6;
+
+    TableIndices secondary_indices = 7;
+
+    // No block has written the table: this file exists for its secondary indices alone, and its table
+    // metadata is empty rather than the table's.
+    bool index_only = 8;
 }
 
 message TxKey {
@@ -47,6 +53,26 @@ message TableEntry {
     // recorded — renaming the table does not move them. A table already on disk before this field
     // existed takes its escaped name, which is what keeps its existing files reachable. See #4037.
     string slug = 4;
+}
+
+message BuildingIndex {}
+
+message DroppedIndex {
+    int64 as_of_micros = 1;
+}
+
+message SecondaryIndexEntry {
+    xtdb.log.proto.CreateIndex definition = 1;
+    int64 first_flushed_block = 6;
+    oneof state {
+        BuildingIndex building = 2;
+        DroppedIndex dropped = 3;
+    }
+}
+
+message TableIndices {
+    // sorted by id
+    repeated SecondaryIndexEntry indices = 1;
 }
 
 message Block {

@@ -31,11 +31,13 @@ import xtdb.compactor.Compactor
 import xtdb.database.proto.DatabaseConfig
 import xtdb.database.proto.DatabaseMode
 import xtdb.api.error.Incorrect
+import xtdb.index.IndexDef
 import xtdb.indexer.*
 import xtdb.metadata.PageMetadata
 import xtdb.query.IQuerySource
 import xtdb.storage.BufferPool
 import xtdb.storage.ReadOnlyBufferPool
+import xtdb.time.TEMPORAL_COL_NAMES
 import xtdb.api.DatabaseName
 import xtdb.api.TableRef
 import xtdb.trie.ColumnName
@@ -198,6 +200,32 @@ class Database(
 
     fun sendDetachDbMessage(dbName: DatabaseName): Log.MessageMetadata = runBlocking {
         sourceLog.appendMessage(SourceMessage.DetachDatabase(dbName))
+    }
+
+    private fun checkNoExternalSource(statement: String) {
+        if (config.externalSource != null)
+            throw Incorrect(
+                "Cannot $statement on database '$name': it has an external source configured.",
+                "xtdb/index-ddl-on-external-source-db",
+                mapOf("db-name" to name)
+            )
+    }
+
+    fun sendCreateIndexMessage(indexName: String, table: TableRef, column: ColumnName): Log.MessageMetadata {
+        checkNoExternalSource("CREATE INDEX")
+        if (column == "_iid" || column in TEMPORAL_COL_NAMES)
+            throw Incorrect(
+                "Cannot index column '$column': no document holds it, so an index on it would always be empty.",
+                "xtdb/index-on-system-column",
+                mapOf("column" to column)
+            )
+        val def = IndexDef(UUID.randomUUID(), indexName, table, column)
+        return runBlocking { sourceLog.appendMessage(SourceMessage.CreateIndex(def)) }
+    }
+
+    fun sendDropIndexMessage(indexName: String): Log.MessageMetadata {
+        checkNoExternalSource("DROP INDEX")
+        return runBlocking { sourceLog.appendMessage(SourceMessage.DropIndex(indexName)) }
     }
 
     /**

@@ -1,5 +1,6 @@
 package xtdb.indexer
 
+import clojure.lang.Keyword
 import com.google.protobuf.ByteString
 import io.mockk.every
 import io.mockk.mockk
@@ -14,6 +15,9 @@ import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import xtdb.api.IndexerConfig
 import xtdb.api.TableRef
+import xtdb.api.TransactionKey
+import xtdb.api.error.Anomaly
+import xtdb.api.log.IndexOp
 import xtdb.api.log.InMemoryLog
 import xtdb.api.log.Log
 import xtdb.api.log.ReplicaMessage
@@ -25,6 +29,7 @@ import xtdb.database.Database
 import xtdb.database.DatabaseLogs
 import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
+import xtdb.index.IndexDef
 import xtdb.log.proto.TrieDetails
 import xtdb.log.proto.trieMetadata
 import xtdb.storage.BufferPool
@@ -34,6 +39,7 @@ import xtdb.util.closeAll
 import java.time.Instant
 import java.time.InstantSource
 import java.time.ZoneId
+import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.time.Duration.Companion.seconds
 
@@ -145,6 +151,132 @@ internal class SourceLogProcessorTest : LeaderTermTest() {
         runCurrent()
 
         assertEquals(listOf(true, false), rs.verdicts)
+    }
+
+    private fun createIndex(name: String) =
+        SourceMessage.CreateIndex(IndexDef(UUID.randomUUID(), name, TableRef("public", "foo"), "email"))
+
+    @Test
+    fun `a second index of one name resolved before the first is read back is refused`() = runTest {
+        val rs = resolveSide()
+
+        rs.srcLogProc.handleRecord(record(0, createIndex("by_email")))
+        rs.srcLogProc.handleRecord(record(1, createIndex("by_email")))
+        runCurrent()
+
+        assertEquals(listOf(true, false), rs.verdicts)
+    }
+
+    @Test
+    fun `a drop of an index declared but not yet read back drops that index`() = runTest {
+        val rs = resolveSide()
+        val create = createIndex("by_email")
+
+        rs.srcLogProc.handleRecord(record(0, create))
+        rs.srcLogProc.handleRecord(record(1, SourceMessage.DropIndex("by_email")))
+        runCurrent()
+
+        assertEquals(listOf(true, true), rs.verdicts)
+        assertEquals(
+            IndexOp.Drop(create.def.id, "by_email"),
+            rs.appended.filterIsInstance<ReplicaMessage.ResolvedTx>().last().ddl
+        )
+    }
+
+    @Test
+    fun `a drop of an undeclared index is refused, as is a second drop`() = runTest {
+        val rs = resolveSide()
+
+        rs.srcLogProc.handleRecord(record(0, SourceMessage.DropIndex("by_email")))
+        rs.srcLogProc.handleRecord(record(1, createIndex("by_email")))
+        rs.srcLogProc.handleRecord(record(2, SourceMessage.DropIndex("by_email")))
+        rs.srcLogProc.handleRecord(record(3, SourceMessage.DropIndex("by_email")))
+        runCurrent()
+
+        assertEquals(listOf(false, true, true, false), rs.verdicts)
+    }
+
+    @Test
+    fun `a name is free to declare again once its index is dropped`() = runTest {
+        val rs = resolveSide()
+
+        rs.srcLogProc.handleRecord(record(0, createIndex("by_email")))
+        rs.srcLogProc.handleRecord(record(1, SourceMessage.DropIndex("by_email")))
+        rs.srcLogProc.handleRecord(record(2, createIndex("by_email")))
+        runCurrent()
+
+        assertEquals(listOf(true, true, true), rs.verdicts)
+    }
+
+    @Test
+    fun `an index the partition already holds is checked against its catalog`() = runTest {
+        val rs = resolveSide()
+        val held = IndexDef(UUID.randomUUID(), "by_email", TableRef("public", "foo"), "email")
+        rs.partitionState.applyTx(TransactionKey(0, Instant.EPOCH), mutableMapOf(), IndexOp.Create(held))
+
+        rs.srcLogProc.handleRecord(record(1, createIndex("by_email")))
+        rs.srcLogProc.handleRecord(record(2, SourceMessage.DropIndex("by_email")))
+        runCurrent()
+
+        assertEquals(listOf(false, true), rs.verdicts)
+        assertEquals(IndexOp.Drop(held.id, "by_email"), rs.appended.filterIsInstance<ReplicaMessage.ResolvedTx>().last().ddl)
+    }
+
+    private val ReplicaMessage.ResolvedTx.errorCode
+        get() = (error as Anomaly).data.valAt(Keyword.intern("xtdb.error", "code"))
+
+    private val ResolveSide.resolvedTxs get() = appended.filterIsInstance<ReplicaMessage.ResolvedTx>()
+
+    @Test
+    fun `a repeated declaration of a live index is refused as already resolved`() = runTest {
+        val rs = resolveSide()
+        val create = createIndex("by_email")
+
+        rs.srcLogProc.handleRecord(record(0, create))
+        rs.srcLogProc.handleRecord(record(1, create))
+        runCurrent()
+
+        assertEquals(listOf(true, false), rs.verdicts)
+        assertEquals(Keyword.intern("xtdb", "index-id-exists"), rs.resolvedTxs.last().errorCode)
+    }
+
+    @Test
+    fun `a repeated declaration of an index dropped this term is refused`() = runTest {
+        val rs = resolveSide()
+        val create = createIndex("by_email")
+
+        rs.srcLogProc.handleRecord(record(0, create))
+        rs.srcLogProc.handleRecord(record(1, SourceMessage.DropIndex("by_email")))
+        rs.srcLogProc.handleRecord(record(2, create))
+        runCurrent()
+
+        assertEquals(listOf(true, true, false), rs.verdicts)
+        assertEquals(Keyword.intern("xtdb", "index-id-exists"), rs.resolvedTxs.last().errorCode)
+    }
+
+    @Test
+    fun `a repeated declaration of an index the catalog holds as dropped aborts, and the partition carries on`() = runTest {
+        val rs = resolveSide()
+        val create = createIndex("by_email")
+        rs.partitionState.applyTx(TransactionKey(0, Instant.EPOCH), mutableMapOf(), IndexOp.Create(create.def))
+        rs.partitionState.applyTx(TransactionKey(1, Instant.EPOCH), mutableMapOf(), IndexOp.Drop(create.def.id, "by_email"))
+
+        rs.srcLogProc.handleRecord(record(2, create))
+        rs.srcLogProc.handleRecord(record(3, createIndex("by_email")))
+        runCurrent()
+
+        assertEquals(listOf(false, true), rs.verdicts)
+
+        val (repeat, fresh) = rs.resolvedTxs
+        assertEquals(Keyword.intern("xtdb", "index-id-exists"), repeat.errorCode)
+        assertNull(repeat.ddl)
+
+        rs.partitionState.applyTx(TransactionKey(2, Instant.EPOCH), mutableMapOf(), repeat.ddl as? IndexOp)
+        rs.partitionState.applyTx(TransactionKey(3, Instant.EPOCH), mutableMapOf(), fresh.ddl as? IndexOp)
+        assertEquals(
+            (fresh.ddl as IndexOp.Create).def.id,
+            rs.partitionState.indexCatalog.declared("by_email")?.def?.id
+        )
     }
 
     @Test

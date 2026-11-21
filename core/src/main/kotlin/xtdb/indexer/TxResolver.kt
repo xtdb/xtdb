@@ -16,6 +16,8 @@ import xtdb.api.error.Anomaly
 import xtdb.api.error.Fault
 import xtdb.api.error.Incorrect
 import xtdb.api.log.DbOp
+import xtdb.api.log.Ddl
+import xtdb.api.log.IndexOp
 import xtdb.api.log.SourceMessage
 import xtdb.api.tx.ExternalSourceToken
 import xtdb.api.tx.OpenTx
@@ -25,6 +27,7 @@ import xtdb.arrow.VectorReader
 import xtdb.arrow.asChannel
 import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
+import xtdb.index.IndexDef
 import xtdb.time.InstantUtil.asMicros
 import xtdb.time.InstantUtil.fromMicros
 import xtdb.tx.deserializeUserMetadata
@@ -41,6 +44,7 @@ import java.time.Instant
 import java.time.InstantSource
 import java.time.ZoneId
 import java.time.ZonedDateTime
+import java.util.UUID
 
 private val SKIPPED_EXN: Throwable = Fault("Transaction was skipped", "xtdb/skipped-tx")
 
@@ -61,7 +65,7 @@ internal class ExtSourceMessage(
 }
 
 /**
- * Resolves transactions for the leader: turns a source-log message, a database attach/detach, or an
+ * Resolves transactions for the leader: turns a source-log message, its DDL, or an
  * external source's writer into a [ResolvedTx], and holds it until the leader has applied it.
  *
  * State, no processes — the [LeaderLogProcessor] both creates and drives this, calling it only from its
@@ -145,7 +149,25 @@ internal class TxResolver(
      * The catalog is mutated when a record is read back, so it still shows the state before everything
      * queued here, and a resolving dbOp that consulted it alone would not see the term's own.
      */
-    fun stagedDbOp(dbName: DatabaseName): DbOp? = queue.lastOrNull { it.dbOp?.dbName == dbName }?.dbOp
+    fun stagedDbOp(dbName: DatabaseName): DbOp? = queue.lastOrNull { (it.ddl as? DbOp)?.dbName == dbName }?.ddl as DbOp?
+
+    /**
+     * The index declared under [name] at the RESOLVED head: the last index op this term has queued for the name, or,
+     * with none, the partition's own catalog — the same layering as [stagedDbOp], for the partition's indices.
+     */
+    fun declaredIndex(name: String): IndexDef? =
+        when (val op = queue.lastOrNull { (it.ddl as? IndexOp)?.name == name }?.ddl as IndexOp?) {
+            is IndexOp.Create -> op.def
+            is IndexOp.Drop -> null
+            null -> partitionState.indexCatalog.declared(name)?.def
+        }
+
+    /**
+     * Whether a declaration of [id] is queued this term or held by the partition's catalog, dropped included:
+     * a repeat of its source message, which [declaredIndex] passes once the index is dropped.
+     */
+    fun indexIdResolved(id: UUID): Boolean =
+        id in partitionState.indexCatalog || queue.any { (it.ddl as? IndexOp.Create)?.def?.id == id }
 
     /** Remove and return the head (oldest) tx, if any; ownership passes to the caller, which imports then closes it. */
     fun removeHead(): ResolvedTx? = queue.removeFirstOrNull()
@@ -163,9 +185,9 @@ internal class TxResolver(
      */
     private fun stage(
         openTx: OpenTx, srcMsgId: MessageId, txResult: TransactionResult,
-        dbOp: DbOp?, pending: CompletableDeferred<TransactionResult>?,
+        ddl: Ddl?, pending: CompletableDeferred<TransactionResult>?,
     ): ResolvedTx =
-        ResolvedTx.stage(openTx, srcMsgId, txResult, dbOp, pending)
+        ResolvedTx.stage(openTx, srcMsgId, txResult, ddl, pending)
             .also {
                 queue.addLast(it)
                 latestCompletedTx = openTx.txKey
@@ -185,7 +207,7 @@ internal class TxResolver(
 
         return openTx(txKey, null).use { openTx ->
             openTx.writeTxRow(error, userMetadata)
-            stage(openTx, msgId, Aborted(txKey, error), dbOp = null, pending = null)
+            stage(openTx, msgId, Aborted(txKey, error), ddl = null, pending = null)
         }
     }
 
@@ -254,7 +276,7 @@ internal class TxResolver(
             is TxResult.Committed ->
                 openTx.use {
                     it.writeTxRow(null, userMetadataMap)
-                    stage(it, msgId, Committed(txKey), dbOp = null, pending = null)
+                    stage(it, msgId, Committed(txKey), ddl = null, pending = null)
                 }
 
             is TxResult.Aborted -> {
@@ -361,7 +383,7 @@ internal class TxResolver(
                     }
                 }
 
-                stage(openTx, resolvedSrcMsgId, txResult, dbOp = null, pending = msg.pending)
+                stage(openTx, resolvedSrcMsgId, txResult, ddl = null, pending = msg.pending)
             } catch (e: Throwable) {
                 // Writer, writeTxRow, or stage threw before the tx reached the queue, so nothing will ever
                 // settle it — complete the handle here, or a caller awaiting it hangs until the term closes.
@@ -373,23 +395,21 @@ internal class TxResolver(
         }
     }
 
-    /** Stage the tx row recording an applied database attach/detach. */
-    fun indexDbOp(msgId: MessageId, msgTimestamp: Instant, dbOp: DbOp): ResolvedTx {
+    fun indexDdl(msgId: MessageId, msgTimestamp: Instant, ddl: Ddl): ResolvedTx {
         val txKey = TransactionKey(msgId, msgTimestamp)
 
         return openTx(txKey, null).use { openTx ->
             openTx.writeTxRow(null, null)
-            stage(openTx, msgId, Committed(txKey), dbOp, pending = null)
+            stage(openTx, msgId, Committed(txKey), ddl, pending = null)
         }
     }
 
-    /** Stage the abort row for a database attach/detach the catalog rejected. */
-    fun indexFailedDbOp(msgId: MessageId, msgTimestamp: Instant, error: Anomaly.Caller): ResolvedTx {
+    fun indexFailedDdl(msgId: MessageId, msgTimestamp: Instant, error: Anomaly.Caller): ResolvedTx {
         val txKey = TransactionKey(msgId, msgTimestamp)
 
         return openTx(txKey, null).use { openTx ->
             openTx.writeTxRow(error, null)
-            stage(openTx, msgId, Aborted(txKey, error), dbOp = null, pending = null)
+            stage(openTx, msgId, Aborted(txKey, error), ddl = null, pending = null)
         }
     }
 

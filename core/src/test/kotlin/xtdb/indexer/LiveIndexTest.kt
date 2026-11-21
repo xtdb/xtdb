@@ -88,7 +88,7 @@ class LiveIndexTest {
         fun commitTx(openTx: OpenTx) {
             openTx.writeTxRow(null, null)
             openTx.sealTables().associateTo(mutableMapOf()) { it.ref to it.liveTable }
-                .closeAllOnCatch { state.applyTx(openTx.txKey, it) }
+                .closeAllOnCatch { state.applyTx(openTx.txKey, it, null) }
         }
 
         override fun close() {
@@ -286,7 +286,7 @@ class LiveIndexTest {
                     rel["_valid_to"].writeLong(Long.MAX_VALUE)
                     rel["op"].vectorFor("put", STRUCT_TYPE, false).endStruct()
                     rel.endRow()
-                    db.state.commitTx(TransactionKey(txId, systemTime), mapOf(table to rel))
+                    db.state.commitTx(TransactionKey(txId, systemTime), mapOf(table to rel), null)
                 }
 
             import(0, Instant.parse("2020-01-01T00:00:00Z"), 1)
@@ -719,7 +719,7 @@ class LiveIndexTest {
                 val tables = tx.sealTables().associateTo(mutableMapOf()) { it.ref to it.liveTable }
                 assertTrue(tables.isNotEmpty())
 
-                db.state.applyTx(tx.txKey, tables)
+                db.state.applyTx(tx.txKey, tables, null)
 
                 assertTrue(
                     tables.isEmpty(),

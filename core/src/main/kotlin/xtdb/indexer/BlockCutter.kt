@@ -212,7 +212,7 @@ internal class BlockCutter(
             trieCatState.withPartitions(table, listOfNotNull(addedTriesByTable[table]), triesAsOf)
         }
 
-        val tableBlocks = tableCatalog.buildTableBlocks(finishedBlocks, tablePartitions)
+        val tableBlocks = tableCatalog.buildTableBlocks(finishedBlocks, tablePartitions, partitionState.indexCatalog)
 
         val entries = tableCatalog.resolveTables(tableBlocks.keys).associateBy { it.table }
 

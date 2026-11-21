@@ -3,6 +3,7 @@ package xtdb.api.log
 import com.google.protobuf.ByteString
 import xtdb.api.tx.ExternalSourceToken
 import xtdb.database.Database
+import xtdb.index.IndexDef
 import xtdb.types.MessageId
 import xtdb.log.proto.ReplicaLogMessage
 import xtdb.log.proto.TrieDetails
@@ -10,6 +11,7 @@ import xtdb.log.proto.attachDatabase
 import xtdb.log.proto.blockBoundary
 import xtdb.log.proto.blockUploaded
 import xtdb.log.proto.detachDatabase
+import xtdb.log.proto.droppedIndex
 import xtdb.log.proto.noOp
 import xtdb.log.proto.oversizedMessage
 import xtdb.log.proto.replicaLogMessage
@@ -30,6 +32,7 @@ import xtdb.util.writeTransit
 import java.nio.ByteBuffer
 import java.nio.file.Path
 import java.time.Instant
+import java.util.UUID
 
 sealed interface ReplicaMessage {
 
@@ -60,11 +63,15 @@ sealed interface ReplicaMessage {
 
                     when (msg.messageCase) {
                         ReplicaLogMessage.MessageCase.RESOLVED_TX -> msg.resolvedTx.let {
-                            val dbOp = when (it.dbOpCase) {
-                                xtdb.log.proto.ResolvedTx.DbOpCase.ATTACH_DATABASE ->
+                            val ddl = when (it.ddlCase) {
+                                xtdb.log.proto.ResolvedTx.DdlCase.ATTACH_DATABASE ->
                                     it.attachDatabase.let { a -> DbOp.Attach(a.dbName, Database.Config.fromProto(a.config)) }
-                                xtdb.log.proto.ResolvedTx.DbOpCase.DETACH_DATABASE ->
+                                xtdb.log.proto.ResolvedTx.DdlCase.DETACH_DATABASE ->
                                     DbOp.Detach(it.detachDatabase.dbName)
+                                xtdb.log.proto.ResolvedTx.DdlCase.CREATE_INDEX ->
+                                    IndexOp.Create(IndexDef.fromProto(it.createIndex))
+                                xtdb.log.proto.ResolvedTx.DdlCase.DROP_INDEX ->
+                                    it.dropIndex.let { d -> IndexOp.Drop(UUID.fromString(d.indexId), d.indexName) }
                                 else -> null
                             }
                             ResolvedTx(
@@ -75,7 +82,7 @@ sealed interface ReplicaMessage {
                                     if (bs.isEmpty()) null else readTransit(bs, MSGPACK) as Throwable
                                 },
                                 it.tableDataMap,
-                                dbOp,
+                                ddl,
                                 it.externalSourceToken.takeIf { _ -> it.hasExternalSourceToken() }?.toByteArray(),
                                 if (it.hasSrcMsgId()) it.srcMsgId else null,
                                 termId = msg.termId, termSeq = termSeq,
@@ -136,7 +143,7 @@ sealed interface ReplicaMessage {
         val committed: Boolean,
         val error: Throwable?,
         val tableData: Map<String, ByteString>,
-        val dbOp: DbOp? = null,
+        val ddl: Ddl? = null,
         val externalSourceToken: ExternalSourceToken? = null,
         // The source-log watermark when this record was produced: for a source-log tx, its own
         // msgId; for an ext-source tx, the leader's current source-log position (so followers keep
@@ -155,7 +162,7 @@ sealed interface ReplicaMessage {
                 this.committed = this@ResolvedTx.committed
                 this.error = this@ResolvedTx.error?.let { ByteString.copyFrom(writeTransit(it, MSGPACK)) } ?: ByteString.EMPTY
                 this.tableData.putAll(this@ResolvedTx.tableData)
-                when (val op = this@ResolvedTx.dbOp) {
+                when (val op = this@ResolvedTx.ddl) {
                     is DbOp.Attach -> attachDatabase = attachDatabase {
                         this.dbName = op.dbName
                         this.config = op.config.serializedConfig
@@ -163,6 +170,13 @@ sealed interface ReplicaMessage {
 
                     is DbOp.Detach -> detachDatabase = detachDatabase {
                         this.dbName = op.dbName
+                    }
+
+                    is IndexOp.Create -> createIndex = op.def.toProto()
+
+                    is IndexOp.Drop -> dropIndex = droppedIndex {
+                        indexId = op.id.toString()
+                        indexName = op.name
                     }
 
                     null -> {}

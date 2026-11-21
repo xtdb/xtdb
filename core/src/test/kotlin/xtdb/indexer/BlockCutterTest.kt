@@ -103,7 +103,7 @@ internal class BlockCutterTest {
                 }
                 tx.writeTxRow(null, null)
                 tx.sealTables().associateTo(mutableMapOf()) { it.ref to it.liveTable }
-                    .closeAllOnCatch { partition.state.applyTx(tx.txKey, it) }
+                    .closeAllOnCatch { partition.state.applyTx(tx.txKey, it, null) }
             }
         }
 

@@ -13,10 +13,12 @@
            (xtdb.api.log Log Log$Record SourceMessage SourceMessage$Tx
                          SourceMessage$FlushBlock SourceMessage$TriesAdded
                          SourceMessage$AttachDatabase SourceMessage$DetachDatabase
+                         SourceMessage$CreateIndex SourceMessage$DropIndex
                          SourceMessage$LegacyTx
                          ReplicaMessage ReplicaMessage$ResolvedTx
                          ReplicaMessage$TriesAdded ReplicaMessage$BlockBoundary
-                         ReplicaMessage$BlockUploaded ReplicaMessage$NoOp)
+                         ReplicaMessage$BlockUploaded ReplicaMessage$NoOp
+                         DbOp$Attach DbOp$Detach IndexOp$Create IndexOp$Drop)
            (xtdb.arrow Relation RelationReader VectorReader)
            (xtdb.database Database)
            (xtdb.log.proto TrieDetails)
@@ -49,6 +51,8 @@
     SourceMessage$TriesAdded "tries-added"
     SourceMessage$AttachDatabase "attach-database"
     SourceMessage$DetachDatabase "detach-database"
+    SourceMessage$CreateIndex "create-index"
+    SourceMessage$DropIndex "drop-index"
     SourceMessage$LegacyTx "legacy-tx"
     "unknown"))
 
@@ -90,6 +94,18 @@
      {:type :detach-database
       :db-name (.getDbName ^SourceMessage$DetachDatabase msg)}
 
+     SourceMessage$CreateIndex
+     (let [index-def (.getDef ^SourceMessage$CreateIndex msg)]
+       {:type :create-index
+        :index-id (str (.getId index-def))
+        :index-name (.getName index-def)
+        :table (str (.getTable index-def))
+        :column (.getColumn index-def)})
+
+     SourceMessage$DropIndex
+     {:type :drop-index
+      :index-name (.getIndexName ^SourceMessage$DropIndex msg)}
+
      SourceMessage$LegacyTx
      {:type :legacy-tx}
 
@@ -126,14 +142,22 @@
                 :committed (.getCommitted m)
                 :error (some-> (.getError m) str)
                 :table-names (vec (keys (.getTableData m)))}
-         (.getDbOp m) (assoc :db-op (let [op (.getDbOp m)]
-                                      (condp instance? op
-                                        xtdb.api.log.DbOp$Attach
-                                        {:op :attach
-                                         :db-name (.getDbName ^xtdb.api.log.DbOp$Attach op)}
-                                        xtdb.api.log.DbOp$Detach
-                                        {:op :detach
-                                         :db-name (.getDbName ^xtdb.api.log.DbOp$Detach op)})))))
+         (.getDdl m) (merge (let [op (.getDdl m)]
+                              (condp instance? op
+                                DbOp$Attach
+                                {:db-op {:op :attach
+                                         :db-name (.getDbName ^DbOp$Attach op)}}
+                                DbOp$Detach
+                                {:db-op {:op :detach
+                                         :db-name (.getDbName ^DbOp$Detach op)}}
+                                IndexOp$Create
+                                {:index-op {:op :create
+                                            :index-id (str (.getId (.getDef ^IndexOp$Create op)))
+                                            :index-name (.getName ^IndexOp$Create op)}}
+                                IndexOp$Drop
+                                {:index-op {:op :drop
+                                            :index-id (str (.getId ^IndexOp$Drop op))
+                                            :index-name (.getName ^IndexOp$Drop op)}})))))
 
      ReplicaMessage$TriesAdded
      (let [^ReplicaMessage$TriesAdded m msg]

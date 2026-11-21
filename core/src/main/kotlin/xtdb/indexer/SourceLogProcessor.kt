@@ -8,6 +8,7 @@ import xtdb.api.error.Anomaly
 import xtdb.api.error.Conflict
 import xtdb.api.error.NotFound
 import xtdb.api.log.DbOp
+import xtdb.api.log.IndexOp
 import xtdb.api.log.Log
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.ReplicaMessage.TriesAdded
@@ -168,9 +169,9 @@ internal class SourceLogProcessor(
 
                 appendTx(
                     if (error == null)
-                        txResolver.indexDbOp(msgId, record.logTimestamp, DbOp.Attach(msg.dbName, msg.config))
+                        txResolver.indexDdl(msgId, record.logTimestamp, DbOp.Attach(msg.dbName, msg.config))
                     else
-                        txResolver.indexFailedDbOp(msgId, record.logTimestamp, error)
+                        txResolver.indexFailedDdl(msgId, record.logTimestamp, error)
                 )
             }
 
@@ -190,9 +191,45 @@ internal class SourceLogProcessor(
 
                 appendTx(
                     if (error == null)
-                        txResolver.indexDbOp(msgId, record.logTimestamp, DbOp.Detach(msg.dbName))
+                        txResolver.indexDdl(msgId, record.logTimestamp, DbOp.Detach(msg.dbName))
                     else
-                        txResolver.indexFailedDbOp(msgId, record.logTimestamp, error)
+                        txResolver.indexFailedDdl(msgId, record.logTimestamp, error)
+                )
+            }
+
+            is SourceMessage.CreateIndex -> {
+                val (id, name) = msg.def
+                appendTx(
+                    when {
+                        txResolver.indexIdResolved(id) ->
+                            txResolver.indexFailedDdl(
+                                msgId, record.logTimestamp,
+                                Conflict(
+                                    "Index declaration already resolved", "xtdb/index-id-exists",
+                                    mapOf("index-name" to name, "index-id" to id)
+                                )
+                            )
+
+                        txResolver.declaredIndex(name) != null ->
+                            txResolver.indexFailedDdl(
+                                msgId, record.logTimestamp,
+                                Conflict("Index already exists", "xtdb/index-exists", mapOf("index-name" to name))
+                            )
+
+                        else -> txResolver.indexDdl(msgId, record.logTimestamp, IndexOp.Create(msg.def))
+                    }
+                )
+            }
+
+            is SourceMessage.DropIndex -> {
+                val name = msg.indexName
+                appendTx(
+                    txResolver.declaredIndex(name)
+                        ?.let { txResolver.indexDdl(msgId, record.logTimestamp, IndexOp.Drop(it.id, name)) }
+                        ?: txResolver.indexFailedDdl(
+                            msgId, record.logTimestamp,
+                            NotFound("Index does not exist", "xtdb/no-such-index", mapOf("index-name" to name))
+                        )
                 )
             }
 

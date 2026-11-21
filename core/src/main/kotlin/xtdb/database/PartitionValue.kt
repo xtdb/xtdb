@@ -1,6 +1,7 @@
 package xtdb.database
 
 import xtdb.catalog.TableCatalog
+import xtdb.index.IndexCatalog
 import xtdb.indexer.LiveIndex
 import xtdb.indexer.LiveSnap
 import xtdb.trie.TrieCatalog
@@ -25,20 +26,23 @@ class PartitionValue internal constructor(
      * the write that replaces it releases the old one.
      */
     internal val liveSnap: LiveSnap?,
+    val indexCat: IndexCatalog,
 ) {
-    internal fun withTrieCat(trieCat: TrieCatalog.State) = PartitionValue(trieCat, tableCat, live, liveSnap)
-    internal fun withTableCat(tableCat: TableCatalog.State) = PartitionValue(trieCat, tableCat, live, liveSnap)
-    internal fun withLive(live: LiveIndex.State) = PartitionValue(trieCat, tableCat, live, liveSnap)
-    internal fun withLiveSnap(liveSnap: LiveSnap?) = PartitionValue(trieCat, tableCat, live, liveSnap)
+    internal fun withTrieCat(trieCat: TrieCatalog.State) = PartitionValue(trieCat, tableCat, live, liveSnap, indexCat)
+    internal fun withTableCat(tableCat: TableCatalog.State) = PartitionValue(trieCat, tableCat, live, liveSnap, indexCat)
+    internal fun withLive(live: LiveIndex.State) = PartitionValue(trieCat, tableCat, live, liveSnap, indexCat)
+    internal fun withLiveSnap(liveSnap: LiveSnap?) = PartitionValue(trieCat, tableCat, live, liveSnap, indexCat)
+    internal fun withIndexCat(indexCat: IndexCatalog) = PartitionValue(trieCat, tableCat, live, liveSnap, indexCat)
 
     companion object {
         /** A partition's value as its catalogs load it: the live index empty, on the block after the catalogs' latest. */
         @JvmStatic
-        fun loaded(trieCat: TrieCatalog.State, tableCat: TableCatalog.State) =
+        fun loaded(trieCat: TrieCatalog.State, tableCat: TableCatalog.State, indexCat: IndexCatalog) =
             PartitionValue(
                 trieCat, tableCat,
                 LiveIndex.State((tableCat.blockIdx ?: -1L) + 1L, tableCat.block?.latestCompletedTx),
                 liveSnap = null,
+                indexCat,
             )
     }
 }

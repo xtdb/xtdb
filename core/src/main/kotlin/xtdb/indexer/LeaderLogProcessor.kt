@@ -14,6 +14,7 @@ import xtdb.api.TransactionKey
 import xtdb.api.TransactionResult
 import xtdb.api.error.Fault
 import xtdb.api.log.DbOp
+import xtdb.api.log.IndexOp
 import xtdb.api.log.Log
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.ReplicaMessage.BlockBoundary
@@ -102,7 +103,7 @@ internal class LeaderLogProcessor(
     private fun applyResolvedTx(msg: ReplicaMessage.ResolvedTx) {
         val txKey = TransactionKey(msg.txId, msg.systemTime)
 
-        msg.loadTableData(al).useAll { tables -> partitionState.commitTx(txKey, tables) }
+        msg.loadTableData(al).useAll { tables -> partitionState.commitTx(txKey, tables, (msg.ddl as? IndexOp)?.takeIf { msg.committed }) }
 
         val result =
             if (msg.committed) TransactionResult.Committed(txKey)
@@ -125,7 +126,7 @@ internal class LeaderLogProcessor(
 
     private fun applyResolvedTx(tx: ResolvedTx) {
         try {
-            tx.sealTables().closeAllOnCatch { partitionState.applyTx(tx.txKey, it) }
+            tx.sealTables().closeAllOnCatch { partitionState.applyTx(tx.txKey, it, tx.ddl as? IndexOp) }
 
             watchers.notifyApplied(tx.srcMsgId, tx.txResult, tx.externalSourceToken)
 
@@ -138,7 +139,7 @@ internal class LeaderLogProcessor(
         }
     }
 
-    private fun applyDbOp(dbOp: DbOp?) {
+    private fun applyDbOp(dbOp: DbOp) {
         // Only the primary carries a catalog, and a secondary's log can hold dbOps all the same: it was
         // some other cluster's primary before it was attached here, and those are that cluster's to apply.
         val dbCatalog = dbCatalog ?: return
@@ -146,7 +147,6 @@ internal class LeaderLogProcessor(
         when (dbOp) {
             is DbOp.Attach -> dbCatalog.attach(dbOp.dbName, dbOp.config)
             is DbOp.Detach -> dbCatalog.detach(dbOp.dbName)
-            null -> {}
         }
     }
 
@@ -172,7 +172,7 @@ internal class LeaderLogProcessor(
                 // Ahead of the tx itself, so a caller that submitted an attach can use the database as
                 // soon as its transaction returns — and once, whichever way the tx below is applied.
                 // Nothing to guard on `committed`: a refused dbOp resolves to an abort carrying no dbOp.
-                applyDbOp(msg.dbOp)
+                (msg.ddl as? DbOp)?.let(::applyDbOp)
 
                 // Below this term: a previous leader's, replayed from the block this term inherited, so never resolved here.
                 if (msg.termId < leaderTerm) {

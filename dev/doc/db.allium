@@ -301,6 +301,30 @@ value Block {
     tables: List<TableEntry>
 }
 
+value TableBlock {
+    -- One table's file beside a block, at `tables/{slug}/blocks/b{idx}.binpb`, one for each table the block records.
+    -- The table catalog's metadata for the table, as the block's adopt folds it; empty where index_only.
+    metadata: TableMetadata
+    -- The table's secondary indices as the block's last transaction left them, dropped ones included.
+    -- A node starting from the block takes every recorded table's as its index catalog, so it holds the indices its peers hold at the same log position.
+    secondary_indices: List<SecondaryIndexEntry>
+    -- No block has written the table, and the file exists for its indices alone.
+    -- A node starting from the block leaves such a table out of its table catalog's metadata, as an adopt does.
+    index_only: Boolean
+}
+
+value SecondaryIndexEntry {
+    -- One index as its table's block file records it: secondary-index.allium's SecondaryIndex, without its tries.
+    index_id: String
+    index_name: String
+    schema_name: String
+    table_name: String
+    column_name: String
+    first_flushed_block: Integer
+    state: building | dropped
+    dropped_as_of: Timestamp?  -- present iff dropped
+}
+
 value TableEntry {
     -- A table's identity, and the directory under which its files live.
     oid: Integer
@@ -328,18 +352,34 @@ value TableMetadata {
     row_count: Integer?
 }
 
-value DbOp {
-    -- A database-level side-effect carried within a resolved transaction.
-    kind: Attach | Detach
+value Ddl {
+    -- The catalog change a resolved transaction carries, if any.
+    -- An Attach or Detach changes the node's set of databases, which only the primary holds.
+    -- A CreateIndex or DropIndex changes this database's own secondary indices (secondary-index.allium), which every node holds.
+    kind: Attach | Detach | CreateIndex | DropIndex
 }
 
-variant Attach : DbOp {
+variant Attach : Ddl {
     db_name: String
     config: DatabaseConfig
 }
 
-variant Detach : DbOp {
+variant Detach : Ddl {
     db_name: String
+}
+
+variant CreateIndex : Ddl {
+    index_id: String
+    index_name: String
+    schema_name: String
+    table_name: String
+    column_name: String
+}
+
+variant DropIndex : Ddl {
+    -- The index the dropped name resolved to at the resolved head.
+    index_id: String
+    index_name: String
 }
 
 ---- Source Log Messages
@@ -351,6 +391,7 @@ entity SourceMessage {
     log_timestamp: Timestamp
     kind: TxMessage | LegacyTxMessage | FlushBlockMessage | TriesAddedMessage
          | AttachDbMessage | DetachDbMessage
+         | CreateIndexMessage | DropIndexMessage
 }
 
 variant TxMessage : SourceMessage {
@@ -389,6 +430,20 @@ variant DetachDbMessage : SourceMessage {
     db_name: String
 }
 
+variant CreateIndexMessage : SourceMessage {
+    -- A client's CREATE INDEX, carrying the index's id, fixed at submit so that every node learns the same one.
+    index_id: String
+    index_name: String
+    schema_name: String
+    table_name: String
+    column_name: String
+}
+
+variant DropIndexMessage : SourceMessage {
+    -- A client's DROP INDEX, naming the index; the leader resolves the name to an id.
+    index_name: String
+}
+
 ---- Replica Log Messages
 
 -- Messages on the replica log, written by the leader for its term.
@@ -415,14 +470,14 @@ entity ReplicaMessage {
 
 variant ResolvedTxMessage : ReplicaMessage {
     -- A resolved transaction: put, delete and erase events that require no database reads.
-    -- An attach or detach result is carried as a database operation within it.
+    -- An attach, a detach, or an index declaration or drop is carried as its DDL.
     -- For an external-source database it carries the resume token as at the transaction boundary.
     tx_id: MessageId                          -- the source-log position of the original message,
                                               -- or the resolver-assigned tx_id for an external-source database
     system_time: Timestamp                    -- the resolved system time
     committed: Boolean
     error: Throwable?                         -- the abort reason, null if committed
-    db_op: DbOp?                              -- an attach or detach side-effect, if any
+    ddl: Ddl?                                 -- the catalog change it carries, if any; only ever on a committed transaction
     table_data: Map<String, Bytes>            -- the resolved row data per table
     external_source_token: ExternalSourceToken?
 
@@ -574,8 +629,9 @@ config {
 --   1. Finish the live index's block, yielding L0 tries — one per table that took rows in this block, and none at all for a table that took none.
 --      A block cut with no transactions in it therefore writes no tries whatsoever.
 --   2. Compute the trie layout those L0 tries imply, which is what the per-table block files record and what the trie catalog will hold once the adopt has added them.
---   3. Build the per-table block files and upload one for EVERY table the table catalog knows, not only the tables from step 1.
+--   3. Build the per-table block files and upload one for EVERY table the table catalog knows, not only the tables from step 1, and one for every table an index is declared on.
 --      Block GC's per-table sweep depends on this — see block-gc.allium, EveryTableBlockAtCurrentIndex.
+--      Each carries its table's indices, which the pause leaves as the block's last transaction left them; a table only an index names gets an index-only file.
 --   4. Build and persist the block file, carrying the boundary's term and its position within that term, which are what seed a restarted node's fence and term position, and stamp the database's last-upload time.
 --   5. Append the upload to the replica log and await it.
 --      This is the message the whole cluster closes the block on, this node included.
@@ -730,6 +786,43 @@ rule ClientSubmitsTransactionToExternalSourceDb {
         )
 }
 
+rule ClientSubmitsIndexDeclaration {
+    -- CREATE INDEX or DROP INDEX, in the database the client is connected to: appended to the source log, resolved in log order like any transaction, and completing as one, with a tx_id the client awaits.
+    when: ClientSubmitsIndexDdl(client, database, msg)
+    requires: msg.kind = CreateIndexMessage or msg.kind = DropIndexMessage
+    requires: database.external_source = null
+    requires: msg.kind = DropIndexMessage or not unindexable_column(msg.column_name)
+
+    ensures:
+        msg appended to database.source_log
+}
+
+rule ClientSubmitsIndexDeclarationOnUnindexableColumn {
+    -- A column no put document holds, as secondary-index.allium's unindexable_columns lists them: an index on one would always be empty.
+    when: ClientSubmitsIndexDdl(client, database, msg)
+    requires: msg.kind = CreateIndexMessage
+    requires: database.external_source = null
+    requires: unindexable_column(msg.column_name)
+
+    ensures:
+        SubmitTxRejected(
+            error_code: `xtdb/index-on-system-column`,
+            db_name: database.name
+        )
+}
+
+rule ClientSubmitsIndexDeclarationToExternalSourceDb {
+    -- Rejected, as a client transaction is: an external-source database takes nothing from a client.
+    when: ClientSubmitsIndexDdl(client, database, msg)
+    requires: database.external_source != null
+
+    ensures:
+        SubmitTxRejected(
+            error_code: `xtdb/index-ddl-on-external-source-db`,
+            db_name: database.name
+        )
+}
+
 ---- Rules: Leader Mode — resolve side
 
 -- The leader resolves from four sources: the source log, the external source, the trie GC's publish step, and the resume of a paused block cut.
@@ -770,9 +863,9 @@ rule LeaderProcessesAttachDb {
         let error = CheckCanAttach(msg.db_name, msg.config)
         let resolved =
             if error = null:
-                ResolveDbOp(tx_resolver, msg, Attach{db_name: msg.db_name, config: msg.config})
+                ResolveDdl(tx_resolver, msg, Attach{db_name: msg.db_name, config: msg.config})
             else:
-                ResolveFailedDbOp(tx_resolver, msg, error)
+                ResolveFailedDdl(tx_resolver, msg, error)
         AppendTx(resolved, src_msg_id: msg.msg_id)
 }
 
@@ -785,9 +878,46 @@ rule LeaderProcessesDetachDb {
         let error = CheckCanDetach(msg.db_name)
         let resolved =
             if error = null:
-                ResolveDbOp(tx_resolver, msg, Detach{db_name: msg.db_name})
+                ResolveDdl(tx_resolver, msg, Detach{db_name: msg.db_name})
             else:
-                ResolveFailedDbOp(tx_resolver, msg, error)
+                ResolveFailedDdl(tx_resolver, msg, error)
+        AppendTx(resolved, src_msg_id: msg.msg_id)
+}
+
+rule LeaderProcessesCreateIndex {
+    -- The verdict is taken at the RESOLVED head, with the layering LeaderProcessesAttachDb reads the catalog through, turned on this database's index set: the last index operation this term has queued for the name says whether an index of that name is declared when this one applies, and with none, the index set's own state stands.
+    -- So two declarations of one name resolved before either is read back cannot both commit.
+    -- A table or column nothing has written yet is no reason to refuse.
+    when: SourceCreateIndexMessageReceived(msg)
+    requires: log_processor.mode = Leader
+
+    ensures:
+        let error = CheckCanDeclareIndex(msg.index_id, msg.index_name)
+        let resolved =
+            if error = null:
+                ResolveDdl(tx_resolver, msg, CreateIndex{
+                    index_id: msg.index_id, index_name: msg.index_name,
+                    schema_name: msg.schema_name, table_name: msg.table_name, column_name: msg.column_name
+                })
+            else:
+                ResolveFailedDdl(tx_resolver, msg, error)
+        AppendTx(resolved, src_msg_id: msg.msg_id)
+}
+
+rule LeaderProcessesDropIndex {
+    -- Mirror of LeaderProcessesCreateIndex: the name resolves, at the RESOLVED head, to the index declared under it, and the resolved transaction carries that index's id.
+    when: SourceDropIndexMessageReceived(msg)
+    requires: log_processor.mode = Leader
+
+    ensures:
+        let error = CheckCanDropIndex(msg.index_name)
+        let resolved =
+            if error = null:
+                ResolveDdl(tx_resolver, msg, DropIndex{
+                    index_id: DeclaredIndexId(msg.index_name), index_name: msg.index_name
+                })
+            else:
+                ResolveFailedDdl(tx_resolver, msg, error)
         AppendTx(resolved, src_msg_id: msg.msg_id)
 }
 
@@ -932,7 +1062,7 @@ rule LeaderAppliesOwnTx {
     --
     -- This is the point at which the transaction becomes queryable: the DURABLE head advances here, the watchers advance here, and an external caller's durability handle completes here — after, not before, the transaction is durable.
     --
-    -- The database operation it carries is applied here, as a follower applies it on its own read — before the durability handle completes, so a caller that submitted an attach can use the database the moment its transaction returns.
+    -- The DDL it carries is applied here, as a follower applies it on its own read — before the durability handle completes, so a caller that submitted an attach can use the database the moment its transaction returns.
     when: ApplyOwnRecord(record)
     requires: record.kind = ResolvedTxMessage
     requires: record.term_id >= log_processor.leader_term
@@ -946,8 +1076,8 @@ rule LeaderAppliesOwnTx {
         -- Everything reported below comes from the HEAD, not from the record: the head still holds the transaction's result, watermark stamp and token, which is exactly why the record needs no re-reading.
         -- The two agree by construction — the head is what was stamped onto the record at append time.
         ApplyResolvedTx(tx_resolver, head)
-        if record.committed and record.db_op != null:
-            ApplyDbOpToCatalog(database.catalog, record.db_op)
+        if record.committed and (record.ddl.kind = Attach or record.ddl.kind = Detach):
+            ApplyDbOpToCatalog(database.catalog, record.ddl)
         watchers.notifyTx(head.tx_result, head.src_msg_id, head.external_source_token)
 }
 
@@ -959,8 +1089,8 @@ rule LeaderAppliesInheritedTx {
     requires: record.term_id < log_processor.leader_term
 
     ensures:
-        if record.committed and record.db_op != null:
-            ApplyDbOpToCatalog(database.catalog, record.db_op)
+        if record.committed and (record.ddl.kind = Attach or record.ddl.kind = Detach):
+            ApplyDbOpToCatalog(database.catalog, record.ddl)
         ApplyResolvedTxFromRecord(record)
 }
 
@@ -1187,12 +1317,13 @@ rule HandleReplicaMessage {
 
     ensures:
         if msg.kind = ResolvedTxMessage:
+            -- Imports the rows, and applies an index declaration or drop the transaction carries, in the one write of the partition's value.
             live_index.importTx(msg)
             if msg.committed:
-                if msg.db_op.kind = Attach:
-                    database.catalog.attach(msg.db_op.db_name, msg.db_op.config)
-                if msg.db_op.kind = Detach:
-                    database.catalog.detach(msg.db_op.db_name)
+                if msg.ddl.kind = Attach:
+                    database.catalog.attach(msg.ddl.db_name, msg.ddl.config)
+                if msg.ddl.kind = Detach:
+                    database.catalog.detach(msg.ddl.db_name)
             -- The stamped position where present.
             -- On an older record it is absent, and the fallback differs by database: an external-source tx_id is an independent counter, so it says nothing about the source log and the tracked watermark has to stand in; a source-log tx_id IS a source-log position.
             let effective_src_msg_id =
@@ -1363,6 +1494,7 @@ contract TableEntries {
     @invariant OnlyARecordedTableHasABlockFile
         -- A per-table block file exists for exactly the tables the block records.
         -- - A table allocated but not yet written has an entry and no file.
+        -- - A table no block has written, with an index declared on it, is recorded, and its file is index-only.
 }
 
 contract ExternalSourceConfirmation {
@@ -1402,6 +1534,8 @@ surface TransactionSubmission {
     provides:
         ClientSubmitsTx(caller, db, tx_ops, opts)
             when db.external_source = null
+        ClientSubmitsIndexDdl(caller, db, msg)
+            when db.external_source = null
 
     @guarantee OrderedProcessing
         -- Transactions are processed in the order they appear in the source log.
@@ -1438,16 +1572,25 @@ deferred ResolveTx
 deferred ResolveExternalSourceTx
   -- Assign the next tx_id off the RESOLVED head, smooth the system time strictly greater than the previous transaction's, run the caller's writer against a fresh transaction, and stage the result with the caller's durability handle.
   -- See: live-index.allium CommitTransaction
-deferred ResolveDbOp
-  -- Resolve an attach or detach as a transaction carrying the database operation, for the catalog to be brought into line with when the record is read back.
-deferred ResolveFailedDbOp
-  -- Resolve an attach or detach that would be refused, as an ABORTED transaction carrying the caller fault that refused it.
+deferred ResolveDdl
+  -- Resolve an attach, detach, index declaration or index drop as a transaction carrying the DDL, for every node to bring its catalogs into line with when it applies the record.
+deferred ResolveFailedDdl
+  -- Resolve DDL that would be refused, as an ABORTED transaction carrying the caller fault that refused it, and no DDL.
 deferred CheckCanAttach
   -- Whether an attach would be refused, and with which caller fault.
   -- Answered from the catalog's own records folded together with the database operations the resolver still holds: the last one queued for a name says what will be there when this attach applies, and with none the catalog's own records stand.
   -- Reaches its verdict without changing anything.
 deferred CheckCanDetach
   -- Whether a detach would be refused, answered the same way.
+deferred CheckCanDeclareIndex
+  -- Whether an index declaration would be refused: with xtdb/index-id-exists where its id is already in the index set, dropped included, or queued this term, and otherwise with xtdb/index-exists where an index of the name is declared at the RESOLVED head.
+  -- The id is minted at submit, so a repeated id is a repeat of the same source message, by a producer retry or a redelivery.
+  -- See: secondary-index.allium DuplicateNameAbortsDeclaration
+deferred CheckCanDropIndex
+  -- Whether an index drop would be refused: with xtdb/no-such-index where no index of the name is declared at the RESOLVED head.
+  -- See: secondary-index.allium DropOfAbsentIndexAborts
+deferred DeclaredIndexId
+  -- The id of the index declared under a name at the RESOLVED head.
 deferred ApplyDbOpToCatalog
   -- Bring the catalog into line with a committed database operation, swallowing a caller fault: the transaction has already committed, so a node that cannot carry the instruction out holds none of a database the cluster agrees exists.
   -- See: database-lifecycle.allium AdmitInstructionCreatesEntry, RemoveBeginsTeardown
@@ -1457,6 +1600,8 @@ deferred TakeResolvedHead
   -- See: live-index.allium ApplyResolvedTx
 deferred ApplyResolvedTx
   -- Apply on read-back: import the head's rows into the durable live tables, advance the DURABLE head to it, and complete its durability handle.
+  -- An index declaration or drop the head carries applies to the database's index set in the same write of the partition's value as its rows.
+  -- See: secondary-index.allium DeclarationCreatesBuildingIndex, DropRemovesIndex
   -- See: live-index.allium ApplyResolvedTx
 deferred ProduceBlock
   -- Produce the block a boundary cut: finish the live index's block, build and upload the per-table block files and the block file, and append the upload under this term.
@@ -1465,7 +1610,7 @@ deferred AdoptBlock
   -- Adopt a block a confirmation names: add its L0 tries to the trie catalog, refresh the table catalog onto the block, and roll the live index onto the block behind it, in one write of the partition's value.
   -- See: Adopting a block, above.
 deferred ApplyResolvedTxFromRecord
-  -- Apply a resolved transaction this term did not resolve: import the record's rows into the durable live tables, advance the DURABLE head to it, and report it to the watchers from the record.
+  -- Apply a resolved transaction this term did not resolve: import the record's rows into the durable live tables, with any index declaration or drop it carries in the same write, advance the DURABLE head to it, and report it to the watchers from the record.
 deferred FoldIntoTermPosition
   -- Fold one record into this node's highest term read and its position within that term, and return the verdict: fenced, discarded, voided or admitted.
   -- See: log-processor-lifecycle.allium, Rules: fold a record into the term position

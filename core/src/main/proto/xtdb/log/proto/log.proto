@@ -18,7 +18,21 @@ message SourceLogMessage {
         AttachDatabase attach_database = 3;
         DetachDatabase detach_database = 4;
         Tx tx = 6;
+        CreateIndex create_index = 7;
+        DropIndex drop_index = 8;
     }
+}
+
+message CreateIndex {
+    string index_id = 1;
+    string index_name = 2;
+    string schema_name = 3;
+    string table_name = 4;
+    string column_name = 5;
+}
+
+message DropIndex {
+    string index_name = 1;
 }
 
 message Tx {

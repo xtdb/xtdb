@@ -3,7 +3,7 @@ package xtdb.indexer
 import kotlinx.coroutines.CompletableDeferred
 import xtdb.api.TransactionKey
 import xtdb.api.TransactionResult
-import xtdb.api.log.DbOp
+import xtdb.api.log.Ddl
 import xtdb.types.MessageId
 import xtdb.api.log.ReplicaMessage
 import xtdb.arrow.VectorType
@@ -17,7 +17,7 @@ import xtdb.api.tx.OpenTx
 /**
  * A committed-but-not-yet-durable transaction, held in memory between the resolver committing it and the
  * replica-log producer confirming it durable. Carries the salient facts of the [OpenTx] that produced it
- * — its key, result, any db-op, source-log position and external-source token — plus ownership of its
+ * — its key, result, any DDL, source-log position and external-source token — plus ownership of its
  * table relations. Distinct from [OpenTx] on purpose: a resolved tx is no longer *open* — it can't be
  * written to or queried. It exists only to be (a) read by later txs resolving behind it (read-your-writes
  * across the in-flight batch) and (b) imported into the durable live tables once its replica-log commit
@@ -40,7 +40,7 @@ class ResolvedTx private constructor(
     val txResult: TransactionResult,
     val externalSourceToken: ExternalSourceToken?,
     val pending: CompletableDeferred<TransactionResult>?,
-    val dbOp: DbOp?,
+    val ddl: Ddl?,
     private val tables: MutableMap<TableRef, Table>,
 ) : AutoCloseable {
 
@@ -103,7 +103,7 @@ class ResolvedTx private constructor(
                 ref.schemaAndTable to
                         table.liveTable.relation.toArrowStream(table.rowsFrom, table.rowCount)
             },
-            dbOp = dbOp,
+            ddl = ddl,
             externalSourceToken = externalSourceToken,
             srcMsgId = srcMsgId,
             termId = termId,
@@ -120,11 +120,11 @@ class ResolvedTx private constructor(
         @JvmStatic
         fun stage(
             openTx: OpenTx, srcMsgId: MessageId,
-            txResult: TransactionResult, dbOp: DbOp?,
+            txResult: TransactionResult, ddl: Ddl?,
             pending: CompletableDeferred<TransactionResult>?,
         ): ResolvedTx =
             ResolvedTx(
-                openTx.txKey, srcMsgId, txResult, openTx.externalSourceToken, pending, dbOp,
+                openTx.txKey, srcMsgId, txResult, openTx.externalSourceToken, pending, ddl,
                 // Every table the tx touched, including 0-row ones: `CREATE TABLE` declares columns with no
                 // rows, and it must register in the durable index on promotion. Its segment declares no
                 // columns, so the table's existence reaches resolution via its `columnTypes` instead
