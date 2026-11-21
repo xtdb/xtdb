@@ -484,6 +484,8 @@
 
 (defrecord TrieCatalogState [table-cats ^long file-size-target]
   TrieCatalog$State
+  (getFileSizeTarget [_] file-size-target)
+
   (getTables [_] (set (keys table-cats)))
 
   (tableState [_ table] (get table-cats table))

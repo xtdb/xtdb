@@ -23,6 +23,9 @@ class TrieCatalog(private val flow: StateFlow<State>) {
     val state: State get() = flow.value
 
     interface State {
+        /** The data-file size, in bytes, at which a levelled file is full and stops absorbing more. */
+        val fileSizeTarget: FileSize
+
         val tables: Set<TableRef>
 
         /** The raw per-table trie-state value (a Clojure persistent map) for downstream `current-tries` planning. */
