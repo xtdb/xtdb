@@ -4,8 +4,10 @@
 -- Secondary indices on one database: how a user declares one on a column, how it comes to cover every flushed block, how an equality scan uses it, and how it compacts, is collected and is dropped.
 --
 -- STATUS: this spec runs ahead of the implementation.
--- Of what follows, declaring and dropping an index, writing its L0s at block flush and by backfill, and publishing Ready are true of the code yet: an index is declared Building and dropped as below, each block flush writes its L0 as BlockFlushWritesIndexL0s has it, backfill covers each owed block as BackfillWritesIndexL0 has it, the leader publishes Ready as LeaderDeclaresReady has it, and its declaration, state and tries persist in its table's block file.
--- Nothing yet compacts an index's tries, collects them or scans with it, and a drop leaves an index's tries live rather than garbage.
+-- Of what follows, declaring and dropping an index, writing its L0s at block flush and by backfill, publishing Ready and scanning with a Ready index are true of the code yet: an index is declared Building and dropped as below, each block flush writes its L0 as BlockFlushWritesIndexL0s has it, backfill covers each owed block as BackfillWritesIndexL0 has it, the leader publishes Ready as LeaderDeclaresReady has it, its declaration, state and tries persist in its table's block file, and an equality scan probes a Ready index as ScanProbesReadyIndex has it.
+-- Nothing yet compacts an index's tries or collects them, and a drop leaves an index's tries live rather than garbage.
+-- The probe takes a number, a string, a boolean or a UUID, and NULL.
+-- It doesn't yet hash a date or timestamp as HashAgreesWithEquality has it, so a scan comparing the column with one reads without the index, as it does for a list, set, struct or interval.
 -- Each contract under Obligations on neighbouring specs names a delta that trie-cat.allium, db.allium, compaction.allium or gc.allium takes in the same commit as the code that makes it true; the contract leaves this spec as its delta lands.
 -- live-index.allium takes no delta: the scan reads the live tier by applying its predicate to the live index's rows.
 --
@@ -427,6 +429,7 @@ rule ScanProbesReadyIndex {
     -- An equality predicate against a literal or a parameter, on a column with an index Ready in the scan's own snapshot.
     -- The IID set is the probe's candidates united with the live tier's: the live index's rows whose column satisfies the predicate.
     -- From the IID set on, the scan is the existing primary-key lookup path, with the predicate rechecked after bitemporal resolution.
+    -- A NULL value has no candidates, since `=` holds it equal to nothing, so the scan reads nothing.
     when: EqualityScan(scan, snapshot, table, column, value)
     requires: snapshot.indices.ready.any(i => i.table = table and i.column = column)
 

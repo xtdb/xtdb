@@ -7,6 +7,7 @@ import xtdb.arrow.MergeTypes.Companion.mergeTypes
 import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorType
 import xtdb.catalog.TableCatalog
+import xtdb.index.IndexCatalog
 import xtdb.api.TableRef
 import xtdb.table.Oid
 import xtdb.trie.ColumnName
@@ -27,7 +28,7 @@ import xtdb.api.tx.OpenTx
 /**
  * A frozen view of **one partition** at a point in time — see [DatabaseSnapshot] for the whole database.
  *
- * It pins both catalogs, and a [LiveSnap] of the in-memory segments, so a reader is not combining pinned data with
+ * It pins the trie, table and index catalogs, and a [LiveSnap] of the in-memory segments, so a reader is not combining pinned data with
  * a catalog read live at call time.
  *
  * Which live segments it reads rows from follows from its trie catalog: a live table whose block a published L0
@@ -36,6 +37,7 @@ import xtdb.api.tx.OpenTx
 class Snapshot internal constructor(
     val trieCatSnap: TrieCatalog.State,
     val tableCatSnap: TableCatalog.State,
+    val indexCatSnap: IndexCatalog,
     private val live: LiveSnap,
 ) : AutoCloseable {
 
@@ -135,9 +137,9 @@ class Snapshot internal constructor(
         // durable only (strict visibility); a resolving tx passes the in-flight staged txs it must read
         // behind plus itself (read-your-writes across the batch).
         internal fun open(
-            al: BufferAllocator, trieCat: TrieCatalog.State, tableCat: TableCatalog.State, live: LiveIndex.State,
-            resolvedTxs: List<ResolvedTx>, ownTx: OpenTx?,
-        ): Snapshot = Snapshot(trieCat, tableCat, LiveSnap.open(al, live, resolvedTxs, ownTx))
+            al: BufferAllocator, trieCat: TrieCatalog.State, tableCat: TableCatalog.State, indexCat: IndexCatalog,
+            live: LiveIndex.State, resolvedTxs: List<ResolvedTx>, ownTx: OpenTx?,
+        ): Snapshot = Snapshot(trieCat, tableCat, indexCat, LiveSnap.open(al, live, resolvedTxs, ownTx))
     }
 }
 

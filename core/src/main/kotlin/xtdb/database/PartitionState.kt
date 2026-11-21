@@ -229,7 +229,7 @@ class PartitionState private constructor(
 
     private fun PartitionValue.snapshotOver(liveSnap: LiveSnap): Snapshot {
         liveSnap.retain()
-        return Snapshot(trieCat, tableCat, liveSnap)
+        return Snapshot(trieCat, tableCat, indexCat, liveSnap)
     }
 
     /**
@@ -258,7 +258,7 @@ class PartitionState private constructor(
     // The read lock spans the whole capture, not just the read of the value: it holds off block adoption and the
     // installs, which close the live tables the capture is slicing.
     fun openSnapshot(resolvedTxs: List<ResolvedTx>, ownTx: OpenTx): Snapshot =
-        snapLock.withReadLock { ref.value.let { Snapshot.open(allocator, it.trieCat, it.tableCat, it.live, resolvedTxs, ownTx) } }
+        snapLock.withReadLock { ref.value.let { Snapshot.open(allocator, it.trieCat, it.tableCat, it.indexCat, it.live, resolvedTxs, ownTx) } }
 
     // The live snapshot and the live tables of [this], once a write has replaced it.
     private fun PartitionValue.releaseLive() =

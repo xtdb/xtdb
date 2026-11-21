@@ -22,12 +22,14 @@
            (java.util.function IntPredicate Predicate)
            (org.apache.arrow.memory BufferAllocator)
            [org.roaringbitmap.buffer MutableRoaringBitmap]
-           xtdb.arrow.RelationReader
+           (xtdb.arrow RelationReader Vector VectorReader)
            (xtdb.bloom BloomUtils)
            (xtdb Bytes)
            (xtdb.api ICursor)
            (xtdb.indexer DatabaseSnapshot Snapshot Snapshot$Source TableSnapshot)
            (xtdb.database PartitionStorage)
+           (xtdb.index IndexHash IndexProbe IndexProber SecondaryIndex)
+           (xtdb.storage BufferPool)
            (xtdb.metadata MetadataPredicate PageMetadata)
            (xtdb.operator.scan MultiIidSelector ScanCursor ScanMetrics SingleIidSelector)
            (xtdb.query IQuerySource$QueryDatabase)
@@ -179,6 +181,45 @@
           (doto (TreeSet. Bytes/COMPARATOR)
             (.addAll iids)))))))
 
+(defn- eq-operand
+  [pred ^String col-name]
+  (when (and (seq? pred) (= '== (first pred)) (= 3 (count pred)))
+    (let [[_ l r] pred
+          col-sym (symbol col-name)]
+      (cond
+        (= col-sym l) [r]
+        (= col-sym r) [l]))))
+
+(defn- index-hashable?
+  "Whether `IndexHash` agrees with `==` on a value of this type, against every type a column can hold.
+   A date or timestamp compares across its types in the session's zone, which the index doesn't hash in."
+  [v]
+  (or (string? v) (boolean? v) (uuid? v) (decimal? v)
+      (instance? Long v) (instance? Integer v) (instance? Short v) (instance? Byte v)
+      (instance? Double v) (instance? Float v)))
+
+(defn- probe-index
+  ^IndexProbe [^BufferAllocator al ^BufferPool bp ^Snapshot snapshot ^SecondaryIndex index operand ^RelationReader args]
+  (letfn [(probe [^VectorReader rdr]
+            (IndexProber/probeSync al bp snapshot index (IndexHash/of rdr 0)))]
+    (cond
+      (s/valid? ::lp/param operand) (when-let [rdr (.vectorForOrNull args (name operand))]
+                                      (let [v (.getObject rdr 0)]
+                                        (cond
+                                          (nil? v) (IndexProbe/none)
+                                          (index-hashable? v) (probe rdr))))
+      (nil? operand) (IndexProbe/none)
+      (index-hashable? operand) (with-open [rdr (Vector/fromList al "operand" [operand])]
+                                  (probe rdr)))))
+
+(defn- index-probe
+  ^IndexProbe [^BufferAllocator al ^BufferPool bp ^Snapshot snapshot ^TableRef table selects ^RelationReader args]
+  (some (fn [[^String col-name pred]]
+          (when-let [index (.readyOn (.getIndexCatSnap snapshot) table col-name)]
+            (when-let [[operand] (eq-operand pred col-name)]
+              (probe-index al bp snapshot index operand args))))
+        selects))
+
 (defn filter-pushdown-bloom-page-idx-pred ^IntPredicate [^PageMetadata page-metadata, pushdown-blooms, ^String col-name]
   (when-let [^MutableRoaringBitmap pushdown-bloom (get pushdown-blooms (symbol col-name))]
     (let [metadata-rdr (.getMetadataLeafReader page-metadata)
@@ -196,7 +237,7 @@
 
 
 (defn ->path-pred [^SortedSet iid-set]
-  (when (and iid-set (not (.isEmpty iid-set)))
+  (when iid-set
     (let [bucketer Bucketer/DEFAULT]
       (reify Predicate
         (test [_ path]
@@ -341,9 +382,20 @@
                                                                                 (fn [s] {:iids s}))
                                                                    str)))})
                            (fn [{:keys [allocator]}]
-                             (let [iid-set (or (selects->iid-set selects args)
-                                               (get pushdown-iids '_iid) ; usually patch
-                                               (get pushdown-iids '_id)) ; any other foreign-key join
+                             (let [;; EXPLAIN ANALYZE reports one set of counters per operator, and these
+                                   ;; are keyed by (db, scan source) — operator identity. Built here so
+                                   ;; that stays true however many cursors the operator ends up building.
+                                   ^ScanMetrics metrics (ScanMetrics. db-name
+                                                                      (str (.getSchemaName table) "." (.getTableName table)))
+
+                                   iid-set (or (selects->iid-set selects args)
+                                               (when-let [probe (index-probe allocator (.getBufferPool storage) snapshot table selects args)]
+                                                 (.addFiles metrics 0 (.getTriesRead probe))
+                                                 (.addPages metrics 0 (.getPagesRead probe))
+                                                 (.getIids probe))
+                                               (some-> (or (get pushdown-iids '_iid) ; usually patch
+                                                           (get pushdown-iids '_id)) ; any other foreign-key join
+                                                       not-empty))
                                    col-preds (cond-> col-preds
                                                (not (empty? iid-set))
                                                (assoc "_iid" (if (= 1 (count iid-set))
@@ -363,12 +415,6 @@
                                                  (update :for-valid-time
                                                          (fn [fvt]
                                                            (or fvt [:at [:now]]))))
-
-                                   ;; EXPLAIN ANALYZE reports one set of counters per operator, and these
-                                   ;; are keyed by (db, scan source) — operator identity. Built here so
-                                   ;; that stays true however many cursors the operator ends up building.
-                                   ^ScanMetrics metrics (ScanMetrics. db-name
-                                                                      (str (.getSchemaName table) "." (.getTableName table)))
 
                                    ;; TODO (#5835) partition 0's slot for every partition. Wrong rather than
                                    ;; absent at N>1: each would apply partition 0's temporal bound, so the

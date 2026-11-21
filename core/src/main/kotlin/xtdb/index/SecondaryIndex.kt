@@ -127,6 +127,10 @@ class IndexCatalog private constructor(private val byId: Map<UUID, SecondaryInde
 
     operator fun get(id: UUID): SecondaryIndex? = byId[id]
 
+    /** A Ready index on [table]'s [column], if there is one. */
+    fun readyOn(table: TableRef, column: ColumnName): SecondaryIndex? =
+        indices.firstOrNull { it.state == IndexState.Ready && it.def.table == table && it.def.column == column }
+
     /**
      * [openBlock] is the block the live index is filling as the declaration applies;
      * [owedBlocks] are the blocks below it that a backfill has to cover before the index is complete.

@@ -12,10 +12,12 @@
            (java.net InetAddress Socket)
            (java.nio ByteBuffer)
            (java.nio.charset StandardCharsets)
+           (java.time InstantSource LocalDate LocalDateTime ZoneOffset ZonedDateTime)
            (org.postgresql.util PSQLException)
-           (xtdb.api TableRef Xtdb Xtdb$Connection)
-           (xtdb.api.storage ObjectStore$StoredObject)
-           (xtdb.database Database Database$Config)
+           (xtdb.api TableRef Xtdb Xtdb$Config Xtdb$Connection)
+           (xtdb.api.log InMemoryLog Log$Factory ReadOnlyLog SourceMessage$IndexBackfilled)
+           (xtdb.api.storage ObjectStore$StoredObject Storage)
+           (xtdb.database Database Database$Config DatabasePartition)
            (xtdb.index IndexState$Building IndexState$Dropped IndexState$Ready IndexTrie SecondaryIndex)))
 
 (t/use-fixtures :each tu/with-node)
@@ -400,3 +402,266 @@
         (xt-log/sync-node node #xt/duration "PT5S")
         (t/is (= expected (await-by-email (db/primary-db node)))
               "a restarted node holds the same index")))))
+
+(defn- execute-on-both!
+  "`docs` carries the index and `plain` doesn't, so a query answered differently by the two is the index's doing."
+  [node ->ops]
+  (xt/execute-tx node (->ops :docs))
+  (xt/execute-tx node (->ops :plain)))
+
+(defn- matching
+  [node table where args]
+  (try
+    (set (xt/q node (into [(format "SELECT _id, v FROM %s WHERE %s" (name table) where)] args)))
+    (catch Exception e
+      [:error (ex-message e)])))
+
+(defn- scan-pages-used [node table where args]
+  (->> (xt/q node (into [(format "EXPLAIN ANALYZE SELECT _id, v FROM %s WHERE %s" (name table) where)] args))
+       (filter #(= :scan (:op %)))
+       first :attributes :scan-pages-used))
+
+(defn- await-ready [node]
+  (let [expected [{:name "by_v", :table ["public" "docs"], :column "v", :state :ready}]]
+    (t/is (= expected (await-indices (db/primary-db node) expected)))))
+
+(def ^:private mixed-docs
+  [{:xt/id 10000, :v 1}
+   {:xt/id 10001, :v 1.0}
+   {:xt/id 10002, :v 1.0M}
+   {:xt/id 10003, :v 0.0}
+   {:xt/id 10004, :v -0.0}
+   {:xt/id 10005, :v 2.5}
+   {:xt/id 10006, :v 12345678901234567}
+   {:xt/id 10007, :v "dup"}
+   {:xt/id 10008, :v "dup"}
+   {:xt/id 10009, :v true}
+   {:xt/id 10010, :v #uuid "00000000-0000-0000-0000-000000000001"}
+   {:xt/id 10011, :v (LocalDate/of 2020 1 1)}
+   {:xt/id 10012, :v (ZonedDateTime/of 2020 1 1 0 0 0 0 ZoneOffset/UTC)}
+   {:xt/id 10013, :v (LocalDateTime/of 2020 1 1 0 0)}
+   {:xt/id 10014, :v [1 2]}
+   {:xt/id 10015, :v nil}
+   {:xt/id 10016}])
+
+(t/deftest an-equality-scan-returns-the-same-rows-with-an-index-as-without
+  (let [node tu/*node*]
+    (execute-on-both! node (fn [table] [(into [:put-docs table] (for [i (range 3000)] {:xt/id i, :v (str "user-" i)}))
+                                        (into [:put-docs table] mixed-docs)]))
+    (tu/flush-block! node)
+
+    (jdbc/execute! node ["CREATE INDEX by_v ON docs (v)"])
+    (await-ready node)
+
+    (execute-on-both! node (fn [table] [[:put-docs table {:xt/id 7, :v "user-7-renamed"} {:xt/id 20000, :v 1} {:xt/id 20001, :v -0.0}]
+                                        [:delete-docs table 8]]))
+    (tu/flush-block! node)
+
+    (execute-on-both! node (fn [table] [[:put-docs table {:xt/id 9, :v "user-9-live"} {:xt/id 30000, :v "live"} {:xt/id 30001, :v 1.0M} {:xt/id 30002, :v false}]
+                                        [:delete-docs table 10]]))
+
+    (t/is (= #{{:xt/id 0, :v "user-0"}} (matching node :docs "v = ?" ["user-0"])))
+    (t/is (= #{{:xt/id 30000, :v "live"}} (matching node :docs "v = ?" ["live"])))
+
+    (doseq [v ["user-0" "user-1234" "user-2999" "user-7" "user-7-renamed" "user-8" "user-9" "user-9-live" "user-10"
+               "dup" "nope" "live"
+               1 (int 1) 1.0 1.0M 0 0.0 -0.0 2.5 12345678901234567 12345678901234568
+               true false #uuid "00000000-0000-0000-0000-000000000001" nil
+               (LocalDate/of 2020 1 1) (ZonedDateTime/of 2020 1 1 0 0 0 0 ZoneOffset/UTC) (LocalDateTime/of 2020 1 1 0 0)]]
+      (t/is (= (matching node :plain "v = ?" [v]) (matching node :docs "v = ?" [v]))
+            (str "param " (pr-str v))))
+
+    (doseq [lit ["1" "1.0" "0" "0.0" "-0.0" "2.5" "12345678901234567" "TRUE" "FALSE" "NULL"
+                 "DATE '2020-01-01'" "TIMESTAMP '2020-01-01 00:00:00'" "TIMESTAMP '2020-01-01 00:00:00Z'" "[1, 2]"]]
+      (t/is (= (matching node :plain (str "v = " lit) []) (matching node :docs (str "v = " lit) []))
+            (str "literal " lit)))))
+
+(t/deftest an-index-reads-fewer-pages-of-a-flushed-block-until-it-is-dropped
+  (with-open [node (xtn/start-node {:compactor {:threads 0}})]
+    (jdbc/execute! node ["CREATE INDEX by_v ON docs (v)"])
+    (await-ready node)
+
+    (execute-on-both! node (fn [table] [(into [:put-docs table] (for [i (range 3000)] {:xt/id i, :v (str "user-" i)}))]))
+    (tu/flush-block! node)
+
+    (let [plain-pages (scan-pages-used node :plain "v = ?" ["user-1234"])]
+      (t/is (= #{{:xt/id 1234, :v "user-1234"}} (matching node :docs "v = ?" ["user-1234"])))
+
+      (t/is (< (scan-pages-used node :docs "v = ?" ["user-1234"]) plain-pages)
+            "the index's own page, and the data pages holding its candidates, are fewer than the pages a flushed block's metadata can't prune")
+
+      (jdbc/execute! node ["DROP INDEX by_v"])
+
+      (t/is (= plain-pages (scan-pages-used node :docs "v = ?" ["user-1234"]))
+            "a scan after the drop reads without it"))))
+
+(defn- await=
+  [expected f]
+  (let [deadline (+ (System/currentTimeMillis) 10000)]
+    (loop []
+      (let [actual (f)]
+        (if (or (= expected actual) (> (System/currentTimeMillis) deadline))
+          actual
+          (do (Thread/sleep 10) (recur)))))))
+
+(defn- leader? [node]
+  (.isLeader (.getLogProcessor ^DatabasePartition (first (.getPartitions (db/primary-db node))))))
+
+(t/deftest a-leader-failing-mid-backfill-leaves-the-new-leader-to-take-the-index-to-ready
+  (util/with-tmp-dirs #{path}
+    (let [source-log (InMemoryLog. (InstantSource/system) 0)
+          replica-log (InMemoryLog. (InstantSource/system) 0)
+          log-factory (reify Log$Factory
+                        (openSourceLog [_ _ _] source-log)
+                        (openReadOnlySourceLog [_ _ _] (ReadOnlyLog. source-log))
+                        (openReplicaLog [_ _ _] replica-log)
+                        (openReadOnlyReplicaLog [_ _ _] (ReadOnlyLog. replica-log))
+                        (writeTo [_ _]))
+          open-node #(-> ^Xtdb$Config (xtn/->config {:storage [:local {:path (.resolve path "objects")}]})
+                         (.log log-factory)
+                         (.open))
+          vs (concat ["user-0" "user-1001" "user-2999" "user-3001" "live" "nope"] (map #(str "moved-" %) (range 4)))
+          same-rows? (fn [node]
+                       (every? #(= (matching node :plain "v = ?" [%]) (matching node :docs "v = ?" [%])) vs))]
+
+      (with-open [new-leader (let [old-leader (open-node)]
+                               (try
+                                 (t/is (true? (await= true #(leader? old-leader))))
+
+                                 (doseq [block (range 4)]
+                                   (execute-on-both! old-leader (fn [table] [(into [:put-docs table] (for [i (range 1000)] {:xt/id (+ (* block 1000) i), :v (str "user-" (+ (* block 1000) i))}))
+                                                                             [:put-docs table {:xt/id block, :v (str "moved-" block)}]]))
+                                   (tu/flush-block! old-leader))
+
+                                 (let [new-leader (open-node)]
+                                   (xt-log/sync-node new-leader #xt/duration "PT5S")
+                                   (t/is (false? (leader? new-leader)))
+
+                                   (jdbc/execute! old-leader ["CREATE INDEX by_v ON docs (v)"])
+                                   (t/is (= [:building] (map :state (indices (db/primary-db old-leader))))
+                                         "the leader fails while the index owes blocks")
+                                   new-leader)
+                                 (finally
+                                   (.close old-leader))))]
+
+        (t/is (same-rows? new-leader) "a follower answers without the Building index")
+
+        (t/is (true? (await= true #(leader? new-leader))) "the follower claims the leadership the failed leader no longer asserts")
+
+        (await-ready new-leader)
+        (t/is (same-rows? new-leader))
+
+        (execute-on-both! new-leader (fn [table] [[:put-docs table {:xt/id 1001, :v "live"}]]))
+        (t/is (same-rows? new-leader) "the new leader's own writes, matched in the live tier")
+
+        (tu/flush-block! new-leader)
+        (t/is (same-rows? new-leader) "and in the index L0 its flush writes")))))
+
+(t/deftest an-index-on-a-populated-table-owes-every-earlier-block-and-is-ready-only-once-all-are-backfilled
+  (util/with-tmp-dirs #{path}
+    (let [node-opts {:log [:local {:path (.resolve path "log")}]
+                     :storage [:local {:path (.resolve path "objects")}]}
+          index-state (fn [db]
+                        (let [^SecondaryIndex index (first (.getIndices (.getIndexCatalog (.getQueryState ^Database db))))
+                              state (.getState index)]
+                          {:first-flushed-block (.getFirstFlushedBlock index)
+                           :owed (when (instance? IndexState$Building state)
+                                   (set (.getOwedBlocks ^IndexState$Building state)))
+                           :ready? (instance? IndexState$Ready state)}))
+          same-rows? (fn [node]
+                       (every? #(= (matching node :plain "v = ?" [%]) (matching node :docs "v = ?" [%]))
+                               ["a" "b" "c" "nope"]))]
+
+      (with-open [node (xtn/start-node (assoc node-opts :compactor {:threads 0}))]
+        (execute-on-both! node (fn [table] [[:put-docs table {:xt/id 1, :v "a"}]]))
+        (tu/flush-block! node)
+        (xt/execute-tx node [[:put-docs :orders {:xt/id 1, :sku "X-1"}]])
+        (tu/flush-block! node)
+        (execute-on-both! node (fn [table] [[:put-docs table {:xt/id 2, :v "b"}]]))
+        (tu/flush-block! node)
+        (execute-on-both! node (fn [table] [[:put-docs table {:xt/id 3, :v "c"}]]))
+
+        (jdbc/execute! node ["CREATE INDEX by_v ON docs (v)"])
+
+        (let [db (db/primary-db node)
+              index-id (.getId (.getDef ^SecondaryIndex (first (.getIndices (.getIndexCatalog (.getQueryState db))))))]
+          (t/is (= {:first-flushed-block 3, :owed #{0 1 2}, :ready? false} (index-state db))
+                "every block below the open one, the block holding only `orders` rows included")
+
+          (.appendMessageBlocking (.getSourceLog db)
+                                  (SourceMessage$IndexBackfilled. Storage/VERSION (.getEpoch (.getBufferPool db)) index-id 1 nil)
+                                  0)
+          (xt-log/sync-node node #xt/duration "PT5S")
+
+          (t/is (= {:first-flushed-block 3, :owed #{0 2}, :ready? false} (index-state db))
+                "a backfill of the block with no `docs` rows writes no L0, and strikes the block all the same; the rest are still owed")
+          (t/is (same-rows? node))))
+
+      (with-open [node (xtn/start-node node-opts)]
+        (xt-log/sync-node node #xt/duration "PT5S")
+        (let [db (db/primary-db node)
+              expected {:first-flushed-block 3, :owed nil, :ready? true}]
+          (t/is (= expected (await= expected #(index-state db))) "Ready once a compactor backfills the remaining blocks")
+          (t/is (same-rows? node)))))))
+
+(t/deftest a-query-reads-its-snapshot-s-live-rows-after-a-block-flush-has-indexed-them
+  (let [node tu/*node*]
+    (jdbc/execute! node ["CREATE INDEX by_v ON docs (v)"])
+    (await-ready node)
+
+    (xt/execute-tx node [(into [:put-docs :docs] (for [i (range 100)] {:xt/id i, :v (str "user-" i)}))])
+    (tu/flush-block! node)
+    (xt/execute-tx node [[:put-docs :docs {:xt/id 1000, :v "alice"}]])
+
+    (with-open [conn (.connect ^Xtdb node)
+                stmt (.createStatement conn "SELECT _id, v FROM docs WHERE v = 'alice'")
+                cursor (.openQuery stmt)]
+      (tu/flush-block! node)
+
+      (t/is (= #{{:xt/id 1000, :v "alice"}} (matching node :docs "v = ?" ["alice"]))
+            "a query opened after the flush finds the row in the block's index L0")
+
+      (t/is (= [{:xt/id 1000, :v "alice"}] (into [] cat (tu/<-cursor cursor)))
+            "a query opened before it finds the row in its own snapshot's live tier"))))
+
+(t/deftest a-transaction-s-own-writes-are-matched-by-an-indexed-scan-within-it
+  (let [node tu/*node*]
+    (jdbc/execute! node ["CREATE INDEX by_v ON docs (v)"])
+    (await-ready node)
+
+    (execute-on-both! node (fn [table] [[:put-docs table {:xt/id 1, :v "b@x"}]]))
+    (tu/flush-block! node)
+
+    (execute-on-both! node (fn [table]
+                             (let [t (name table)]
+                               [[:put-docs table {:xt/id 2, :v "c@x"} {:xt/id 1, :v "b@y"}]
+                                [:sql (format "UPDATE %s SET hit = 'c' WHERE v = 'c@x'" t)]
+                                [:sql (format "UPDATE %s SET hit = 'by' WHERE v = 'b@y'" t)]
+                                [:sql (format "UPDATE %s SET hit = 'bx' WHERE v = 'b@x'" t)]])))
+
+    (let [rows #(set (xt/q node (format "SELECT _id, v, hit FROM %s" (name %))))]
+      (t/is (= #{{:xt/id 1, :v "b@y", :hit "by"} {:xt/id 2, :v "c@x", :hit "c"}} (rows :docs))
+            "the staged puts are matched; the flushed value they replaced is proposed, and rechecked away")
+      (t/is (= (rows :plain) (rows :docs))))))
+
+(t/deftest every-block-is-indexed-or-owed-when-an-index-is-declared-during-its-flush
+  (let [node tu/*node*
+        tables (map #(keyword (str "t" %)) (range 5))]
+    (doseq [table tables
+            :let [t (name table)]]
+      (xt/execute-tx node [[:put-docs table {:xt/id 1, :v "flushed"}]])
+      (tu/flush-block! node)
+      (xt/execute-tx node [[:put-docs table {:xt/id 2, :v "flushing"}]])
+      (xt-log/send-flush-block-msg! (db/primary-db node))
+      (jdbc/execute! node [(format "CREATE INDEX by_v_%s ON %s (v)" t t)])
+      (xt/execute-tx node [[:put-docs table {:xt/id 3, :v "after"}]]))
+
+    (tu/flush-block! node)
+
+    (let [db (db/primary-db node)]
+      (t/is (= (repeat 5 :ready) (await= (repeat 5 :ready) #(map :state (indices db)))))
+
+      (doseq [table tables
+              [id v] [[1 "flushed"] [2 "flushing"] [3 "after"]]]
+        (t/is (= [{:xt/id id}] (xt/q node [(format "SELECT _id FROM %s WHERE v = ?" (name table)) v]))
+              (str table " " v))))))
