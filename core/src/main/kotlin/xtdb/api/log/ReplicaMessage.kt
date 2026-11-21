@@ -4,6 +4,7 @@ import com.google.protobuf.ByteString
 import xtdb.api.tx.ExternalSourceToken
 import xtdb.database.Database
 import xtdb.index.IndexDef
+import xtdb.index.IndexTrie
 import xtdb.types.MessageId
 import xtdb.log.proto.ReplicaLogMessage
 import xtdb.log.proto.TrieDetails
@@ -104,6 +105,7 @@ sealed interface ReplicaMessage {
                         ReplicaLogMessage.MessageCase.BLOCK_UPLOADED -> msg.blockUploaded.let {
                             BlockUploaded(
                                 it.storageVersion, it.storageEpoch, it.blockIndex, it.latestProcessedMsgId, it.triesList,
+                                it.indexTriesMap.entries.associate { (id, trie) -> UUID.fromString(id) to IndexTrie.fromProto(trie) },
                                 it.externalSourceToken.takeIf { _ -> it.hasExternalSourceToken() }?.toByteArray(),
                                 termId = msg.termId, termSeq = termSeq,
                             )
@@ -226,6 +228,8 @@ sealed interface ReplicaMessage {
         val storageVersion: Int, val storageEpoch: StorageEpoch,
         val blockIndex: BlockIndex, val latestProcessedMsgId: MessageId,
         val tries: List<TrieDetails>,
+        /** The block's index L0s, keyed by index id. */
+        val indexTries: Map<UUID, IndexTrie>,
         val externalSourceToken: ExternalSourceToken? = null,
         override val termId: Long,
         override val termSeq: Long? = null,
@@ -239,6 +243,7 @@ sealed interface ReplicaMessage {
                 this.blockIndex = this@BlockUploaded.blockIndex
                 this.latestProcessedMsgId = this@BlockUploaded.latestProcessedMsgId
                 tries.addAll(this@BlockUploaded.tries)
+                this@BlockUploaded.indexTries.forEach { (id, trie) -> indexTries[id.toString()] = trie.toProto() }
                 this@BlockUploaded.externalSourceToken?.let { this.externalSourceToken = ByteString.copyFrom(it) }
             }
         }

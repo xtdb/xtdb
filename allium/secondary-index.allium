@@ -4,7 +4,8 @@
 -- Secondary indices on one database: how a user declares one on a column, how it comes to cover every flushed block, how an equality scan uses it, and how it compacts, is collected and is dropped.
 --
 -- STATUS: this spec runs ahead of the implementation.
--- Of what follows, only declaring and dropping an index is true of the code yet: an index is declared Building and dropped as below, its declaration and state persist in its table's block file, and nothing writes its tries, makes it Ready or collects it.
+-- Of what follows, declaring and dropping an index and writing its L0s at block flush are true of the code yet: an index is declared Building and dropped as below, each block flush writes its L0 as BlockFlushWritesIndexL0s has it, and its declaration, state and tries persist in its table's block file.
+-- Nothing yet backfills an index, makes it Ready, compacts its tries, collects them or scans with it, and a drop leaves an index's tries live rather than garbage.
 -- Each contract under Obligations on neighbouring specs names a delta that trie-cat.allium, db.allium, compaction.allium or gc.allium takes in the same commit as the code that makes it true; the contract leaves this spec as its delta lands.
 -- live-index.allium takes no delta: the scan reads the live tier by applying its predicate to the live index's rows.
 --
@@ -136,16 +137,12 @@ contract IndexDeclarationsOnTheLogs {
     -- db.allium's delta.
 
     @invariant IndexTriesTravelLikeTries
-        -- A block upload carries the block's index L0s beside its data tries, and the adopt installs both in the one write of the partition's value.
         -- Backfill and index compaction output go to the source log in a message analogous to TriesAdded, and the leader forwards it to the replica log.
         -- The leader's trie GC publishes the index tries it deletes in a message analogous to TriesDeleted.
 
     @invariant ReadyIsAReplicaMessage
         -- The leader publishes an index's Ready on the replica log, behind every record carrying the tries that complete its coverage.
         -- Every node applies it at the same logical position, and a stale one is skipped like any other replica message.
-
-    @invariant IndexTriesPersistWithTheBlock
-        -- Each index's live tries are in its table's block file beside its declaration and state, so a node that restarts or catches up from a block learns them with the rest of the catalog.
 }
 
 contract IndexTreeCatalog {
@@ -346,14 +343,14 @@ rule DropRemovesIndex {
 ---- Writing index L0s
 
 rule BlockFlushWritesIndexL0s {
-    -- Every index on the flushed table, Building or Ready, gets one L0 for the block's put rows.
+    -- Every index on the flushed table not dropped, Building or Ready, gets one L0 for the block's put rows.
     -- A block with no put row carrying the column writes none for that index.
     -- The L0s ride in the block upload and are adopted with the block's data tries, so a snapshot's index set covers exactly the blocks its trie catalog does.
     when: BlockProduced(block_index, table)
 
     ensures:
         for index in catalog.indices:
-            if index.table = table and has_put_with_column(block_index, table, index.column):
+            if index.table = table and index.state != dropped and has_put_with_column(block_index, table, index.column):
                 IndexTrie.created(
                     index: index, key: l0_key(block_index), trie_state: live, garbage_as_of: null
                 )

@@ -321,7 +321,7 @@ class LiveIndexTest {
             val seen = mutableListOf<PartitionValue>()
             runBlocking {
                 val collector = launch(Dispatchers.Unconfined) { db.state.value.collect { seen += it } }
-                db.state.adoptBlock(block { blockIndex = 0 }, listOf(l0), Instant.parse("2020-01-01T00:00:00Z"))
+                db.state.adoptBlock(block { blockIndex = 0 }, listOf(l0), emptyMap(), Instant.parse("2020-01-01T00:00:00Z"))
                 collector.cancel()
             }
 
@@ -347,7 +347,7 @@ class LiveIndexTest {
             db.put(0, t0, table)
 
             db.state.openSnapshot(t0).use { held ->
-                db.state.adoptBlock(block { blockIndex = 0 }, listOf(db.finishBlock0L0(table)), t0)
+                db.state.adoptBlock(block { blockIndex = 0 }, listOf(db.finishBlock0L0(table)), emptyMap(), t0)
 
                 db.state.openSnapshot(null).use { after ->
                     assertTrue(after.table(table).isEmpty(), "the next snapshot reads the block from its L0")
@@ -384,7 +384,7 @@ class LiveIndexTest {
             assertNotNull(db.liveIndex.state.table(table))
 
             runBlocking { db.liveIndex.finishBlock(db.bp, 0L, TableSlug::of) }
-            db.state.adoptBlock(block { blockIndex = 0 }, emptyList(), Instant.parse("2020-01-01T00:00:00Z"))
+            db.state.adoptBlock(block { blockIndex = 0 }, emptyList(), emptyMap(), Instant.parse("2020-01-01T00:00:00Z"))
 
             assertNull(db.liveIndex.state.table(table))
         }
@@ -544,7 +544,7 @@ class LiveIndexTest {
             val t1 = Instant.parse("2020-01-02T00:00:00Z")
 
             db.put(0, Instant.parse("2020-01-01T00:00:00Z"), table)
-            db.state.adoptBlock(block { blockIndex = 0 }, listOf(db.finishBlock0L0(table)), Instant.parse("2020-01-01T00:00:00Z"))
+            db.state.adoptBlock(block { blockIndex = 0 }, listOf(db.finishBlock0L0(table)), emptyMap(), Instant.parse("2020-01-01T00:00:00Z"))
             db.put(1, t1, table)
 
             db.state.openSnapshot(t1).use { before ->
@@ -570,7 +570,7 @@ class LiveIndexTest {
             val t2 = Instant.parse("2020-01-03T00:00:00Z")
 
             db.put(0, Instant.parse("2020-01-01T00:00:00Z"), table)
-            db.state.adoptBlock(block { blockIndex = 0 }, listOf(db.finishBlock0L0(table)), Instant.parse("2020-01-01T00:00:00Z"))
+            db.state.adoptBlock(block { blockIndex = 0 }, listOf(db.finishBlock0L0(table)), emptyMap(), Instant.parse("2020-01-01T00:00:00Z"))
             db.put(1, t1, table)
 
             db.state.openSnapshot(t1).use { held ->
@@ -614,7 +614,7 @@ class LiveIndexTest {
                     var adoption: Throwable? = null
                     val adopting = thread {
                         try {
-                            db.state.adoptBlock(block { blockIndex = 0 }, listOf(l0), t1)
+                            db.state.adoptBlock(block { blockIndex = 0 }, listOf(l0), emptyMap(), t1)
                         } catch (e: Throwable) {
                             adoption = e
                         }

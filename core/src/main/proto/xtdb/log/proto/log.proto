@@ -51,6 +51,13 @@ message BlockUploaded {
     int64 latest_processed_msg_id = 4;
     repeated TrieDetails tries = 5;
     bytes external_source_token = 6;
+    // the block's index L0s, keyed by index id: at most one per index
+    map<string, IndexTrieDetails> index_tries = 7;
+}
+
+message IndexTrieDetails {
+    string trie_key = 1;
+    int64 data_file_size = 2;
 }
 
 message FlushBlock {

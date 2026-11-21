@@ -68,6 +68,7 @@ message SecondaryIndexEntry {
         BuildingIndex building = 2;
         DroppedIndex dropped = 3;
     }
+    repeated xtdb.log.proto.IndexTrieDetails tries = 4;
 }
 
 message TableIndices {

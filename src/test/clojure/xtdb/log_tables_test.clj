@@ -1,7 +1,12 @@
 (ns xtdb.log-tables-test
-  (:require [clojure.test :as t :refer [deftest]]
+  (:require [clojure.edn :as edn]
+            [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
-            [xtdb.test-util :as tu]))
+            [xtdb.log-tables :as log-tables]
+            [xtdb.test-util :as tu])
+  (:import (xtdb.api.log ReplicaMessage$BlockUploaded)
+           (xtdb.index IndexTrie)
+           (xtdb.trie Trie)))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-allocator tu/with-node)
 
@@ -45,3 +50,19 @@
 
     (t/testing "tx_ops contains decoded operations"
       (t/is (re-find #"put-docs" (:tx-ops (first tx-rows)))))))
+
+(defn- render-replica-msg [msg]
+  [(#'log-tables/replica-msg-type msg)
+   (edn/read-string (#'log-tables/replica-msg->edn msg))])
+
+(def ^:private index-id #uuid "6e1f3c2a-0000-4000-8000-000000000001")
+
+(deftest test-replica-block-uploaded-renders-index-tries
+  (t/is (= ["block-uploaded"
+            {:type :block-uploaded, :block-index 3, :latest-processed-msg-id 42
+             :storage-version 6, :storage-epoch 0, :tries []
+             :index-tries {(str index-id) {:trie-key "l00-rc-b03", :data-file-size 128}}}]
+           (render-replica-msg
+            (ReplicaMessage$BlockUploaded. (int 6) (int 0) 3 42 []
+                                           {index-id (IndexTrie. (Trie/parseKey "l00-rc-b03") 128)}
+                                           nil 0 nil)))))

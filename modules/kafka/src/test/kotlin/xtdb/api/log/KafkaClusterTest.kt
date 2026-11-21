@@ -209,6 +209,7 @@ class KafkaClusterTest {
             blockIndex = 42,
             latestProcessedMsgId = 100,
             tries = tries,
+            indexTries = emptyMap(),
             termId = 1
         ).also {
             val encodedSize = it.encode().size

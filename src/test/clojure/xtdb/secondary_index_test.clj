@@ -14,8 +14,9 @@
            (java.nio.charset StandardCharsets)
            (org.postgresql.util PSQLException)
            (xtdb.api TableRef Xtdb Xtdb$Connection)
+           (xtdb.api.storage ObjectStore$StoredObject)
            (xtdb.database Database Database$Config)
-           (xtdb.index IndexState$Building IndexState$Dropped SecondaryIndex)))
+           (xtdb.index IndexState$Building IndexState$Dropped IndexTrie SecondaryIndex)))
 
 (t/use-fixtures :each tu/with-node)
 
@@ -244,3 +245,64 @@
         (t/is (= :dropped (->> (indices (db/primary-db node))
                                (filter (comp #{"by_email"} :name))
                                first :state)))))))
+
+(defn- index-tries
+  "Each index's tries, by name, with the files under its directory."
+  [^Database db]
+  (let [files (->> (.listAllObjects (.getBufferPool db) (util/->path "tables"))
+                   (map (comp str #(.getKey ^ObjectStore$StoredObject %)))
+                   (filter #(str/includes? % "/indices/")))]
+    (->> (.getIndices (.getIndexCatalog (.getQueryState db)))
+         (into {} (map (fn [^SecondaryIndex index]
+                         (let [index-id (str (.getId (.getDef index)))]
+                           [(.getName (.getDef index))
+                            {:tries (mapv #(str (.getKey ^IndexTrie %)) (.getTries index))
+                             :files (->> files
+                                         (filter #(str/includes? % index-id))
+                                         (map #(str/replace % index-id "<id>"))
+                                         sort vec)}])))))))
+
+(t/deftest flushed-blocks-write-index-l0s
+  (util/with-tmp-dirs #{path}
+    (let [node-opts {:log [:local {:path (.resolve path "log")}]
+                     :storage [:local {:path (.resolve path "objects")}]
+                     :compactor {:threads 0}}
+          expected {"by_email" {:tries ["l00-rc-b00"]
+                                :files ["tables/public$users/indices/<id>/data/l00-rc-b00.arrow"
+                                        "tables/public$users/indices/<id>/meta/l00-rc-b00.arrow"]}
+                    "by_name" {:tries [], :files []}
+                    "by_sku" {:tries ["l00-rc-b01"]
+                              :files ["tables/public$orders/indices/<id>/data/l00-rc-b01.arrow"
+                                      "tables/public$orders/indices/<id>/meta/l00-rc-b01.arrow"]}}]
+
+      (with-open [node (xtn/start-node node-opts)
+                  follower (-> (xtn/->config node-opts) (.readOnlyDatabases true) (.open))]
+        (jdbc/execute! node ["CREATE INDEX by_email ON users (email)"])
+        (jdbc/execute! node ["CREATE INDEX by_name ON users (name)"])
+        (jdbc/execute! node ["DROP INDEX by_name"])
+        (jdbc/execute! node ["CREATE INDEX by_sku ON orders (sku)"])
+
+        (jdbc/execute! node ["INSERT INTO users RECORDS {_id: 1, email: 'ada@example.com', name: 'Ada'}, {_id: 2, email: NULL}"])
+        (jdbc/execute! node ["INSERT INTO orders RECORDS {_id: 1, total: 3}"])
+        (tu/flush-block! node)
+
+        (t/is (= {"by_email" (get expected "by_email")
+                  "by_name" {:tries [], :files []}
+                  "by_sku" {:tries [], :files []}}
+                 (index-tries (db/primary-db node)))
+              "an L0 for the Building index whose column a put gave a value, and none for a dropped index or for a block with no such put")
+
+        (jdbc/execute! node ["INSERT INTO users RECORDS {_id: 3, name: 'Carol'}"])
+        (jdbc/execute! node ["INSERT INTO orders RECORDS {_id: 2, sku: 'X-1'}"])
+        (tu/flush-block! node)
+
+        (t/is (= expected (index-tries (db/primary-db node))))
+
+        (xt-log/sync-node follower #xt/duration "PT5S")
+        (t/is (= expected (index-tries (db/primary-db follower)))
+              "a follower adopts the same index tries off the replica log"))
+
+      (with-open [node (xtn/start-node node-opts)]
+        (xt-log/sync-node node #xt/duration "PT5S")
+        (t/is (= expected (index-tries (db/primary-db node)))
+              "a restarted node reloads the index tries from the latest block")))))

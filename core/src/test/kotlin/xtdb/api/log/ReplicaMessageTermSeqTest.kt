@@ -17,7 +17,7 @@ class ReplicaMessageTermSeqTest {
             ReplicaMessage.ResolvedTx(1, Instant.EPOCH, true, null, emptyMap(), srcMsgId = 1, termId = 3),
             ReplicaMessage.TriesAdded(1, 0, emptyList(), sourceMsgId = 1, termId = 3),
             ReplicaMessage.BlockBoundary(0, 1, termId = 3),
-            ReplicaMessage.BlockUploaded(1, 0, 0, 1, emptyList(), termId = 3),
+            ReplicaMessage.BlockUploaded(1, 0, 0, 1, emptyList(), emptyMap(), termId = 3),
             ReplicaMessage.NoOp(termId = 3),
             ReplicaMessage.TriesDeleted("public/foo", setOf("trie"), termId = 3),
             ReplicaMessage.OversizedMessage(1, 0, 0, "payload", termId = 3),
@@ -51,7 +51,7 @@ class ReplicaMessageTermSeqTest {
                         termId = 3,
                         boundaryTermSeq = boundaryTermSeq,
                     ),
-                    emptyList(), Instant.now(),
+                    emptyList(), emptyMap(), Instant.now(),
                 )
             }.tableCatalog
 

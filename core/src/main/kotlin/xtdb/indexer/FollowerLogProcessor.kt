@@ -208,7 +208,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
         val bufferedRecords = blockUploadedTimer.timed {
             val block = parseFrom(bufferPool.getByteArray(blockFilePath(pending.blockIdx)))
 
-            partitionState.adoptBlock(block, msg.tries, record.logTimestamp)
+            partitionState.adoptBlock(block, msg.tries, msg.indexTries, record.logTimestamp)
             compactor.signalBlock()
 
             // Ahead of the drain below, whose records carry later source positions — behind it, this one would go backwards and trip the watchers' monotonicity check.

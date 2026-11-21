@@ -314,7 +314,7 @@ value TableBlock {
 }
 
 value SecondaryIndexEntry {
-    -- One index as its table's block file records it: secondary-index.allium's SecondaryIndex, without its tries.
+    -- One index as its table's block file records it: secondary-index.allium's SecondaryIndex.
     index_id: String
     index_name: String
     schema_name: String
@@ -323,6 +323,14 @@ value SecondaryIndexEntry {
     first_flushed_block: Integer
     state: building | dropped
     dropped_as_of: Timestamp?  -- present iff dropped
+    -- The index's tries as of the block, its own L0 for the block included.
+    tries: List<IndexTrieDetails>
+}
+
+value IndexTrieDetails {
+    -- One file pair of an index's tree: secondary-index.allium's IndexTrie, which its key places in the tree.
+    trie_key: String
+    data_file_size: Integer
 }
 
 value TableEntry {
@@ -498,13 +506,15 @@ variant BlockBoundaryMessage : ReplicaMessage {
 
 variant BlockUploadedMessage : ReplicaMessage {
     -- The block has been written to the object store.
-    -- Carries the L0 tries, so that every node can update its trie catalog.
+    -- Carries the L0 tries and the index L0s, so that every node can update its trie catalog and its index catalog.
     -- The role holding the block adopts it on this and moves onto the next block.
     block_index: Integer
     latest_processed_msg_id: MessageId
     storage_version: Integer
     storage_epoch: Integer
     tries: List<trie_cat/TrieDetails>
+    -- The block's index L0s, at most one per index, keyed by index id.
+    index_tries: Map<String, IndexTrieDetails>
     external_source_token: ExternalSourceToken?
 }
 
@@ -629,11 +639,12 @@ config {
 --   1. Finish the live index's block, yielding L0 tries — one per table that took rows in this block, and none at all for a table that took none.
 --      A block cut with no transactions in it therefore writes no tries whatsoever.
 --   2. Compute the trie layout those L0 tries imply, which is what the per-table block files record and what the trie catalog will hold once the adopt has added them.
+--      Write one index L0 for each index not dropped on a table that took rows in this block, from those rows (secondary-index.allium BlockFlushWritesIndexL0s).
 --   3. Build the per-table block files and upload one for EVERY table the table catalog knows, not only the tables from step 1, and one for every table an index is declared on.
 --      Block GC's per-table sweep depends on this — see block-gc.allium, EveryTableBlockAtCurrentIndex.
---      Each carries its table's indices, which the pause leaves as the block's last transaction left them; a table only an index names gets an index-only file.
+--      Each carries its table's indices, which the pause leaves as the block's last transaction left them, with the index L0s of step 2 added as the adopt will add them; a table only an index names gets an index-only file.
 --   4. Build and persist the block file, carrying the boundary's term and its position within that term, which are what seed a restarted node's fence and term position, and stamp the database's last-upload time.
---   5. Append the upload to the replica log and await it.
+--   5. Append the upload, carrying the L0 tries and the index L0s, to the replica log and await it.
 --      This is the message the whole cluster closes the block on, this node included.
 --      It is appended in its turn behind whatever the term has already queued, through the one ordered path every record the term writes takes, and a term ending while it is queued fails the wait.
 --   The block, its L0 tries and its boundary are held from here until the adopt.
@@ -642,7 +653,7 @@ config {
 --   That allocation is what keeps re-producibility true rather than an exception to it: it is idempotent and carries no summed field, so a block produced twice mints nothing the second time and no value drifts.
 --
 -- ADOPT, on reading a confirmation of the held block back: see Adopting a block.
---   The role that produced the block holds it until here, because only the produce can build it; the tries and the log timestamp come off the confirming record, as a follower's do.
+--   The role that produced the block holds it until here, because only the produce can build it; the tries, the index L0s and the log timestamp come off the confirming record, as a follower's do.
 --   The records held behind the boundary are applied once the adopt has returned.
 --   Nothing may apply a transaction between the produce's step 1 and the block adoption's write: the live tables have been snapshotted into L0 and are about to be cleared, so a transaction applied in between is written nowhere.
 --   The pending-block hold is what holds a record arriving in that window, and the resolution pause is what keeps the set of held records small.
@@ -661,11 +672,11 @@ config {
 -- == Adopting a block ==
 --
 -- Adopting a block is ONE operation, run by whichever role holds the block.
--- It adds the block's L0 tries to the trie catalog as of the record's log timestamp, refreshes the table catalog onto the block, folding in the live index's block metadata, and rolls the live index onto the block behind it.
--- All three are ONE write of the partition's value, under the partition's write lock, so a reader sees all of them or none.
+-- It adds the block's L0 tries to the trie catalog as of the record's log timestamp, adds its index L0s to their indices in the index catalog, refreshes the table catalog onto the block, folding in the live index's block metadata, and rolls the live index onto the block behind it.
+-- All four are ONE write of the partition's value, under the partition's write lock, so a reader sees all of them or none.
 -- The metadata is read from the finished block's live tables ahead of that write, and those tables are closed after it.
 -- The leader and the follower run that one operation, not two matching sequences: what each supplies differently is the block itself — the leader passes the one its produce built and has held since, the follower one it reads from storage off the block index the boundary carried.
--- The tries and the log timestamp come off the record either way.
+-- The tries, the index L0s and the log timestamp come off the record either way.
 --
 -- The block MUST be durable before it is adopted, because the adopt is what moves this node's catalog past it: a term that dies before adopting leaves the block re-producible, while a catalog past a block nobody wrote is past it for good.
 -- It MUST run exactly once per block, the table catalog's refresh summing row counts.
@@ -1607,7 +1618,7 @@ deferred ProduceBlock
   -- Produce the block a boundary cut: finish the live index's block, build and upload the per-table block files and the block file, and append the upload under this term.
   -- See: The block cycle, above.
 deferred AdoptBlock
-  -- Adopt a block a confirmation names: add its L0 tries to the trie catalog, refresh the table catalog onto the block, and roll the live index onto the block behind it, in one write of the partition's value.
+  -- Adopt a block a confirmation names: add its L0 tries to the trie catalog and its index L0s to the index catalog, refresh the table catalog onto the block, and roll the live index onto the block behind it, in one write of the partition's value.
   -- See: Adopting a block, above.
 deferred ApplyResolvedTxFromRecord
   -- Apply a resolved transaction this term did not resolve: import the record's rows into the durable live tables, with any index declaration or drop it carries in the same write, advance the DURABLE head to it, and report it to the watchers from the record.

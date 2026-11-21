@@ -192,7 +192,7 @@ class NodeSimulationTest : SimulationTestBase() {
                 boundaryTermSeq = null,
             )
             sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
-            db.partitionState.adoptBlock(block, emptyList(), Instant.now())
+            db.partitionState.adoptBlock(block, emptyList(), emptyMap(), Instant.now())
         }
 
         assertEquals(l1Tries, trieCatalog.state.listAllTrieKeys(table), "l1s present in trie catalog")
@@ -252,7 +252,7 @@ class NodeSimulationTest : SimulationTestBase() {
                 boundaryTermSeq = null,
             )
             sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
-            db.partitionState.adoptBlock(block, emptyList(), Instant.now())
+            db.partitionState.adoptBlock(block, emptyList(), emptyMap(), Instant.now())
         }
 
         assertEquals(l1Tries, trieCatalog.state.listAllTrieKeys(table), "l1s present initially")
@@ -331,7 +331,7 @@ class NodeSimulationTest : SimulationTestBase() {
                 boundaryTermSeq = null,
             )
             sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
-            db.partitionState.adoptBlock(block, emptyList(), Instant.now())
+            db.partitionState.adoptBlock(block, emptyList(), emptyMap(), Instant.now())
         }
 
         val expectedNewL2Tries = listOf("l02-rc-p0-b07", "l02-rc-p1-b07", "l02-rc-p2-b07", "l02-rc-p3-b07")
@@ -404,7 +404,7 @@ class NodeSimulationTest : SimulationTestBase() {
                     boundaryTermSeq = null,
                 )
                 sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
-                db.partitionState.adoptBlock(block, emptyList(), Instant.now())
+                db.partitionState.adoptBlock(block, emptyList(), emptyMap(), Instant.now())
             }
         }
 
@@ -478,7 +478,7 @@ class NodeSimulationTest : SimulationTestBase() {
                     boundaryTermSeq = null,
                 )
                 sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
-                db.partitionState.adoptBlock(block, emptyList(), Instant.now())
+                db.partitionState.adoptBlock(block, emptyList(), emptyMap(), Instant.now())
             }
         }
 
@@ -575,7 +575,7 @@ class NodeSimulationTest : SimulationTestBase() {
                 boundaryTermSeq = null,
             )
             sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
-            db.partitionState.adoptBlock(block, emptyList(), Instant.now())
+            db.partitionState.adoptBlock(block, emptyList(), emptyMap(), Instant.now())
         }
 
         compactorForDb.compactAllSync(null)
@@ -628,7 +628,7 @@ class NodeSimulationTest : SimulationTestBase() {
                     boundaryTermSeq = null,
                 )
                 sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
-                db.partitionState.adoptBlock(block, emptyList(), Instant.now())
+                db.partitionState.adoptBlock(block, emptyList(), emptyMap(), Instant.now())
             }
         }
 
@@ -720,7 +720,7 @@ class NodeSimulationTest : SimulationTestBase() {
                     boundaryTermSeq = null,
                 )
                 sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
-                db.partitionState.adoptBlock(block, emptyList(), Instant.now())
+                db.partitionState.adoptBlock(block, emptyList(), emptyMap(), Instant.now())
             }
         }
 

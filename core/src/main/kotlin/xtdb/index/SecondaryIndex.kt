@@ -9,11 +9,15 @@ import xtdb.block.proto.droppedIndex
 import xtdb.block.proto.secondaryIndexEntry
 import xtdb.block.proto.tableIndices
 import xtdb.log.proto.CreateIndex
+import xtdb.log.proto.IndexTrieDetails
 import xtdb.log.proto.createIndex
+import xtdb.log.proto.indexTrieDetails
 import xtdb.time.InstantUtil.asMicros
 import xtdb.time.InstantUtil.fromMicros
 import xtdb.trie.BlockIndex
 import xtdb.trie.ColumnName
+import xtdb.trie.FileSize
+import xtdb.trie.Trie
 import java.time.Instant
 import java.util.UUID
 
@@ -49,11 +53,23 @@ sealed interface IndexState {
     data class Dropped(val asOf: Instant) : IndexState
 }
 
+/** One file pair of an index's tree, at [key] in it. */
+data class IndexTrie(val key: Trie.Key, val dataFileSize: FileSize) {
+    fun toProto(): IndexTrieDetails = indexTrieDetails {
+        trieKey = key.toString()
+        dataFileSize = this@IndexTrie.dataFileSize
+    }
+
+    companion object {
+        fun fromProto(proto: IndexTrieDetails) = IndexTrie(Trie.parseKey(proto.trieKey), proto.dataFileSize)
+    }
+}
+
 /**
  * [firstFlushedBlock] is the block that was open when the declaration applied: its flush, and every later one,
  * covers this index, and the blocks below it are the ones a backfill has to cover.
  */
-data class SecondaryIndex(val def: IndexDef, val firstFlushedBlock: BlockIndex, val state: IndexState) {
+data class SecondaryIndex(val def: IndexDef, val firstFlushedBlock: BlockIndex, val state: IndexState, val tries: List<IndexTrie>) {
     fun toProto(): SecondaryIndexEntry = secondaryIndexEntry {
         definition = def.toProto()
         firstFlushedBlock = this@SecondaryIndex.firstFlushedBlock
@@ -61,6 +77,7 @@ data class SecondaryIndex(val def: IndexDef, val firstFlushedBlock: BlockIndex, 
             IndexState.Building -> building = buildingIndex { }
             is IndexState.Dropped -> dropped = droppedIndex { asOfMicros = state.asOf.asMicros }
         }
+        tries += this@SecondaryIndex.tries.map { it.toProto() }
     }
 
     companion object {
@@ -77,6 +94,7 @@ data class SecondaryIndex(val def: IndexDef, val firstFlushedBlock: BlockIndex, 
                         mapOf("index-id" to proto.definition.indexId),
                     )
                 },
+                proto.triesList.map { IndexTrie.fromProto(it) },
             )
     }
 }
@@ -108,7 +126,7 @@ class IndexCatalog private constructor(private val byId: Map<UUID, SecondaryInde
             )
         }
 
-        return IndexCatalog(byId + (def.id to SecondaryIndex(def, openBlock, IndexState.Building)))
+        return IndexCatalog(byId + (def.id to SecondaryIndex(def, openBlock, IndexState.Building, emptyList())))
     }
 
     fun dropped(id: UUID, asOf: Instant): IndexCatalog {
@@ -123,6 +141,15 @@ class IndexCatalog private constructor(private val byId: Map<UUID, SecondaryInde
 
         return IndexCatalog(byId + (id to index.copy(state = IndexState.Dropped(asOf))))
     }
+
+    /** Adds a block's index L0s, [l0s] keyed by index id. */
+    fun withL0s(l0s: Map<UUID, IndexTrie>): IndexCatalog =
+        IndexCatalog(byId + l0s.map { (id, l0) ->
+            val index = byId[id]
+                ?: throw Fault("index $id is not in the catalog", "xtdb.index/unknown-index", mapOf("index-id" to id))
+
+            id to index.copy(tries = index.tries + l0)
+        })
 
     /** The tables an index here is declared on, dropped ones included: each one's block file records its indices. */
     val tables: Set<TableRef> get() = indices.mapTo(HashSet()) { it.def.table }

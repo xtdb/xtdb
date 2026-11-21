@@ -23,9 +23,11 @@ import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
 import xtdb.index.IndexDef
 import xtdb.index.IndexState
+import xtdb.index.IndexTrie
 import xtdb.index.SecondaryIndex
 import xtdb.api.error.Fault
 import xtdb.storage.MemoryStorage
+import xtdb.trie.Trie
 import xtdb.util.closeAll
 import java.nio.ByteBuffer
 import java.time.Instant
@@ -125,7 +127,7 @@ class FollowerLogProcessorTest {
             proc.processRecords(listOf(
                 record(0, ReplicaMessage.BlockBoundary(0, 0, termId = TERM)),
                 record(1, ReplicaMessage.ResolvedTx(7, Instant.now(), true, null, emptyMap(), srcMsgId = 1, termId = TERM)),
-                record(2, ReplicaMessage.BlockUploaded(Storage.VERSION, 1, 0, 0, emptyList(), termId = TERM)),
+                record(2, ReplicaMessage.BlockUploaded(Storage.VERSION, 1, 0, 0, emptyList(), emptyMap(), termId = TERM)),
             ))
 
             assertEquals(0L, value.tableCat.blockIdx, "the block closed, so the follower stopped buffering")
@@ -144,7 +146,7 @@ class FollowerLogProcessorTest {
         val proc = makeProcessor(pendingBlock = inherited)
 
         proc.handleRecord(
-            record(2, ReplicaMessage.BlockUploaded(Storage.VERSION, 1, 0, 0, emptyList(), termId = TERM))
+            record(2, ReplicaMessage.BlockUploaded(Storage.VERSION, 1, 0, 0, emptyList(), emptyMap(), termId = TERM))
         )
 
         assertNull(proc.pendingBlock)
@@ -181,7 +183,7 @@ class FollowerLogProcessorTest {
             record(0, ReplicaMessage.ResolvedTx(500, Instant.now(), true, null, emptyMap(), srcMsgId = 500, termId = TERM)),
             record(1, ReplicaMessage.TriesAdded(1, 1, emptyList(), sourceMsgId = 600, termId = TERM)),
             record(2, ReplicaMessage.BlockBoundary(1, 700, termId = TERM)),
-            record(3, ReplicaMessage.BlockUploaded(1, 1, 1, 800, emptyList(), termId = TERM)),
+            record(3, ReplicaMessage.BlockUploaded(1, 1, 1, 800, emptyList(), emptyMap(), termId = TERM)),
             // at the boundary — skipped too
             record(4, ReplicaMessage.ResolvedTx(1000, Instant.now(), true, null, emptyMap(), srcMsgId = 1000, termId = TERM)),
         ))
@@ -206,7 +208,7 @@ class FollowerLogProcessorTest {
         proc.processRecords(listOf(
             record(0, ReplicaMessage.ResolvedTx(txId, Instant.now(), true, null, emptyMap(), termId = TERM)),
             record(1, ReplicaMessage.BlockBoundary(0, txId, termId = TERM)),
-            record(2, ReplicaMessage.BlockUploaded(Storage.VERSION, 1, 0, txId, emptyList(), termId = TERM)),
+            record(2, ReplicaMessage.BlockUploaded(Storage.VERSION, 1, 0, txId, emptyList(), emptyMap(), termId = TERM)),
         ))
 
         assertEquals(0L, value.tableCat.blockIdx,
@@ -239,7 +241,7 @@ class FollowerLogProcessorTest {
         proc.processRecords(listOf(
             record(0, ReplicaMessage.ResolvedTx(0, Instant.now(), true, null, emptyMap(), srcMsgId = null, termId = TERM)),
             record(1, ReplicaMessage.BlockBoundary(0, -1, termId = TERM)),
-            record(2, ReplicaMessage.BlockUploaded(Storage.VERSION, 1, 0, -1, emptyList(), termId = TERM)),
+            record(2, ReplicaMessage.BlockUploaded(Storage.VERSION, 1, 0, -1, emptyList(), emptyMap(), termId = TERM)),
         ))
 
         val after = value
@@ -275,7 +277,7 @@ class FollowerLogProcessorTest {
             record(0, ReplicaMessage.BlockBoundary(0, 0, termId = TERM)),
             record(1, ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap(), termId = TERM)),
             record(2, ReplicaMessage.ResolvedTx(2, Instant.now(), true, null, emptyMap(), termId = TERM)),
-            record(3, ReplicaMessage.BlockUploaded(Storage.VERSION, 1, 0, 0, emptyList(), termId = TERM)),
+            record(3, ReplicaMessage.BlockUploaded(Storage.VERSION, 1, 0, 0, emptyList(), emptyMap(), termId = TERM)),
         ))
 
         fun timerCount(msgType: String) = registry.find("xtdb.replica.process.timer")
@@ -306,13 +308,13 @@ class FollowerLogProcessorTest {
 
         proc.processRecords(listOf(record(0, indexTx(1, IndexOp.Create(def)))))
         assertEquals(
-            listOf(SecondaryIndex(def, 0, IndexState.Building)),
+            listOf(SecondaryIndex(def, 0, IndexState.Building, emptyList())),
             value.indexCat.indices.toList()
         )
 
         proc.processRecords(listOf(record(1, indexTx(2, IndexOp.Drop(def.id, "by_email")))))
         assertEquals(
-            listOf(SecondaryIndex(def, 0, IndexState.Dropped(Instant.EPOCH.plusSeconds(2)))),
+            listOf(SecondaryIndex(def, 0, IndexState.Dropped(Instant.EPOCH.plusSeconds(2)), emptyList())),
             value.indexCat.indices.toList()
         )
         assertNull(value.indexCat.declared("by_email"))
@@ -326,5 +328,29 @@ class FollowerLogProcessorTest {
         proc.processRecords(listOf(record(0, indexTx(1, IndexOp.Create(def), committed = false))))
 
         assertEquals(emptyList<SecondaryIndex>(), value.indexCat.indices.toList())
+    }
+
+    @Test
+    fun `an upload's index L0s, decoded off the replica log, join their indices as the block is adopted`() = runTest {
+        val proc = makeProcessor()
+        val def = IndexDef(UUID.randomUUID(), "by_email", TableRef("public", "users"), "email")
+        val l0 = IndexTrie(Trie.l0Key(0), 1024)
+
+        writeBlockFile(0)
+
+        proc.processRecords(listOf(
+            record(0, indexTx(1, IndexOp.Create(def))),
+            record(1, ReplicaMessage.BlockBoundary(0, 1, termId = TERM)),
+            record(
+                2,
+                ReplicaMessage.BlockUploaded(Storage.VERSION, 1, 0, 1, emptyList(), mapOf(def.id to l0), termId = TERM)
+                    .let { ReplicaMessage.decode(it.encode())!! }
+            ),
+        ))
+
+        assertEquals(
+            listOf(SecondaryIndex(def, 0, IndexState.Building, listOf(l0))),
+            value.indexCat.indices.toList()
+        )
     }
 }

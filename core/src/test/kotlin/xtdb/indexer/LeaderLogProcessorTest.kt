@@ -182,7 +182,7 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
 
     private fun uploaded(blockIdx: Long, latestProcessedMsgId: Long) =
         ReplicaMessage.BlockUploaded(
-            Storage.VERSION, 0, blockIdx, latestProcessedMsgId, emptyList(), termId = 1
+            Storage.VERSION, 0, blockIdx, latestProcessedMsgId, emptyList(), emptyMap(), termId = 1
         )
 
     @Test

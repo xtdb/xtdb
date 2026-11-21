@@ -21,6 +21,7 @@
                          DbOp$Attach DbOp$Detach IndexOp$Create IndexOp$Drop)
            (xtdb.arrow Relation RelationReader VectorReader)
            (xtdb.database Database)
+           (xtdb.index IndexTrie)
            (xtdb.log.proto TrieDetails)
            (xtdb.operator SelectionSpec)
            (xtdb.api TableRef)))
@@ -180,7 +181,12 @@
         :latest-processed-msg-id (.getLatestProcessedMsgId m)
         :storage-version (.getStorageVersion m)
         :storage-epoch (.getStorageEpoch m)
-        :tries (trie-details->edn (.getTries m))})
+        :tries (trie-details->edn (.getTries m))
+        :index-tries (into (sorted-map)
+                           (map (fn [[index-id ^IndexTrie trie]]
+                                  [(str index-id) {:trie-key (str (.getKey trie))
+                                                   :data-file-size (.getDataFileSize trie)}]))
+                           (.getIndexTries m))})
 
      ReplicaMessage$NoOp
      {:type :no-op}

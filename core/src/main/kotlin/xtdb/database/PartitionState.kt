@@ -16,6 +16,7 @@ import xtdb.block.proto.Block
 import xtdb.catalog.TableCatalog
 import xtdb.catalog.TableCatalog.Companion.latestBlock
 import xtdb.index.IndexCatalog
+import xtdb.index.IndexTrie
 import xtdb.indexer.LiveIndex
 import xtdb.indexer.LiveTable
 import xtdb.indexer.LiveSnap
@@ -42,6 +43,7 @@ import xtdb.util.safelyOpening
 import xtdb.util.withReadLock
 import xtdb.util.withWriteLock
 import java.time.Instant
+import java.util.UUID
 import java.util.concurrent.locks.StampedLock
 
 private val LOG = PartitionState::class.logger
@@ -162,17 +164,17 @@ class PartitionState private constructor(
     }
 
     /**
-     * Adopt [block], in one write of the partition's value: register the L0 [tries] it carries, refresh the table
-     * catalog onto it, roll the live index onto the block behind it, and drop the live snapshot, which holds the
-     * finished block's tables. Those tables, and the partition's hold on the live snapshot, are released after that
-     * write; a query still holding either keeps it until it closes.
+     * Adopt [block], in one write of the partition's value: register the L0 [tries] it carries, and its index L0s
+     * ([indexTries], keyed by index id), refresh the table catalog onto it, roll the live index onto the block behind
+     * it, and drop the live snapshot, which holds the finished block's tables. Those tables, and the partition's hold
+     * on the live snapshot, are released after that write; a query still holding either keeps it until it closes.
      *
      * The caller MUST have made [block] durable first, because this is what moves the node past it — and
      * MUST call it once per block, the refresh's fold summing row counts.
      *
      * [logTimestamp] is the replica record's, dating the supersession the tries cause.
      */
-    fun adoptBlock(block: Block, tries: List<TrieDetails>, logTimestamp: LogTimestamp) {
+    fun adoptBlock(block: Block, tries: List<TrieDetails>, indexTries: Map<UUID, IndexTrie>, logTimestamp: LogTimestamp) {
         val finished = ref.value
         val metadata = finished.live.blockMetadata()
 
@@ -183,6 +185,7 @@ class PartitionState private constructor(
 
                 ref.update { v ->
                     v.withTrieCat(v.trieCat.withTries(tries, logTimestamp))
+                        .withIndexCat(v.indexCat.withL0s(indexTries))
                         .withTableCat(v.tableCat.refreshed(block, metadata))
                         .withLive(v.live.nextBlock())
                         .withLiveSnap(null)
