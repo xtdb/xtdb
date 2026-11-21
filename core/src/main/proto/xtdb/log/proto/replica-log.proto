@@ -18,6 +18,7 @@ message ReplicaLogMessage {
         IndexReady index_ready = 10;
         IndexBackfilled index_backfilled = 11;
         IndexCompacted index_compacted = 12;
+        IndexTriesDeleted index_tries_deleted = 13;
     }
 
     // The leader term that produced this message, for read-side fencing: followers
@@ -38,6 +39,11 @@ message IndexReady {
 
 message TriesDeleted {
     string table_name = 1;
+    repeated string trie_keys = 2;
+}
+
+message IndexTriesDeleted {
+    string index_id = 1;
     repeated string trie_keys = 2;
 }
 

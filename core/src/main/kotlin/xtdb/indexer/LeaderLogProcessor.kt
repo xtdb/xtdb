@@ -251,6 +251,8 @@ internal class LeaderLogProcessor(
 
             is ReplicaMessage.TriesDeleted -> gc.triesDeleted(msg)
 
+            is ReplicaMessage.IndexTriesDeleted -> gc.indexTriesDeleted(msg)
+
             is ReplicaMessage.IndexReady -> partitionState.indexReady(msg.indexId)
 
             is ReplicaMessage.OversizedMessage -> error(

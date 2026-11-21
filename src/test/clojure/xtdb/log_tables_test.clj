@@ -4,7 +4,8 @@
             [xtdb.api :as xt]
             [xtdb.log-tables :as log-tables]
             [xtdb.test-util :as tu])
-  (:import (xtdb.api.log ReplicaMessage$BlockUploaded ReplicaMessage$IndexBackfilled ReplicaMessage$IndexCompacted ReplicaMessage$IndexReady
+  (:import (xtdb.api.log ReplicaMessage$BlockUploaded ReplicaMessage$IndexBackfilled ReplicaMessage$IndexCompacted
+                         ReplicaMessage$IndexReady ReplicaMessage$IndexTriesDeleted
                          SourceMessage$IndexBackfilled SourceMessage$IndexCompacted)
            (xtdb.index IndexTrie)
            (xtdb.trie Trie)))
@@ -90,3 +91,12 @@
                                                                            [(IndexTrie. (Trie/parseKey "l01-rc-b03") 256)]
                                                                            [(Trie/parseKey "l00-rc-b02") (Trie/parseKey "l00-rc-b03")])
                                             17 0 nil)))))
+
+(deftest test-replica-index-tries-deleted-renders
+  (t/is (= ["index-tries-deleted"
+            {:type :index-tries-deleted, :index-id (str index-id)
+             :trie-keys ["l00-rc-b02" "l00-rc-b03"]}]
+           (render-replica-msg
+            (ReplicaMessage$IndexTriesDeleted. index-id
+                                               #{(Trie/parseKey "l00-rc-b03") (Trie/parseKey "l00-rc-b02")}
+                                               0 nil)))))

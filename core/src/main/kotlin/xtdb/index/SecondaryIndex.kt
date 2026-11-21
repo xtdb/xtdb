@@ -61,7 +61,8 @@ sealed interface IndexState {
 
     /**
      * Dropped by the transaction at [asOf]: out of the name set, and never used by a scan from then on.
-     * The index stays in the catalog until its files are collected.
+     * Every trie it holds is Garbage, and it stays in the catalog until a GC cycle collects the last of them,
+     * or, holding none, until the first cycle whose cutoff is past [asOf].
      */
     data class Dropped(val asOf: Instant) : IndexState
 }
@@ -96,6 +97,10 @@ data class SecondaryIndex(
     val def: IndexDef, val firstFlushedBlock: BlockIndex, val state: IndexState, val tries: Map<IndexTrie, IndexTrieState>,
 ) {
     val liveTries: List<IndexTrie> get() = tries.filterValues { it == IndexTrieState.Live }.keys.toList()
+
+    /** Whether GC deleting [keys] collects this index's last trie, so that it leaves the catalog. */
+    fun isCollectedBy(keys: Collection<Trie.Key>): Boolean =
+        state is IndexState.Dropped && tries.keys.all { it.key in keys }
 
     /** [this] with [added] Live, skipping any whose key it already holds, in whatever state. */
     fun withTries(added: Collection<IndexTrie>): SecondaryIndex {
@@ -159,13 +164,20 @@ data class SecondaryIndex(
     }
 }
 
-/** One partition's secondary indices, as one value. */
-class IndexCatalog private constructor(private val byId: Map<UUID, SecondaryIndex>) {
+/**
+ * One partition's secondary indices, as one value.
+ *
+ * [collected] holds the dropped indices whose every file GC has collected, each with the table it was on: out of [indices],
+ * and never declarable again.
+ */
+class IndexCatalog private constructor(private val byId: Map<UUID, SecondaryIndex>, private val collected: Map<UUID, TableRef>) {
+
+    val collectedIds: Set<UUID> get() = collected.keys
 
     val indices: Collection<SecondaryIndex> get() = byId.values
 
-    /** Whether the catalog holds [id], in any state, dropped included. */
-    operator fun contains(id: UUID): Boolean = id in byId
+    /** Whether [id] was ever declared here, whatever became of its index since. */
+    operator fun contains(id: UUID): Boolean = id in byId || id in collectedIds
 
     /** The index declared under [name] and not since dropped — at most one. */
     fun declared(name: String): SecondaryIndex? =
@@ -182,7 +194,7 @@ class IndexCatalog private constructor(private val byId: Map<UUID, SecondaryInde
      * [owedBlocks] are the blocks below it that a backfill has to cover before the index is complete.
      */
     fun withIndex(def: IndexDef, openBlock: BlockIndex, owedBlocks: Set<BlockIndex>): IndexCatalog {
-        if (def.id in byId)
+        if (def.id in this)
             throw Fault(
                 "index ${def.id} is already in the catalog", "xtdb.index/index-id-exists",
                 mapOf("index-id" to def.id, "index-name" to def.name),
@@ -195,31 +207,46 @@ class IndexCatalog private constructor(private val byId: Map<UUID, SecondaryInde
             )
         }
 
-        return IndexCatalog(byId + (def.id to SecondaryIndex(def, openBlock, IndexState.Building(owedBlocks), emptyMap())))
+        return copy(byId + (def.id to SecondaryIndex(def, openBlock, IndexState.Building(owedBlocks), emptyMap())))
     }
 
+    private fun copy(byId: Map<UUID, SecondaryIndex>, collected: Map<UUID, TableRef> = this.collected) = IndexCatalog(byId, collected)
+
+    private fun unknownIndex(id: UUID) =
+        Fault("index $id is not in the catalog", "xtdb.index/unknown-index", mapOf("index-id" to id))
+
+    /** [id]'s index: null once it is collected, and an id never declared here faults. */
+    private fun heldOrNull(id: UUID): SecondaryIndex? =
+        byId[id] ?: if (id in collectedIds) null else throw unknownIndex(id)
+
+    /** [f] of [id]'s index for a message about it: a no-op once it is collected, so a late message changes nothing. */
+    private inline fun updating(id: UUID, f: (SecondaryIndex) -> IndexCatalog): IndexCatalog =
+        heldOrNull(id)?.let(f) ?: this
+
+    /** [index] with its tries replaced by [tries], leaving the catalog once it is dropped and holds none. */
+    private fun withTriesOf(index: SecondaryIndex, tries: Map<IndexTrie, IndexTrieState>): IndexCatalog {
+        val id = index.def.id
+        return if (index.state is IndexState.Dropped && tries.isEmpty()) copy(byId - id, collected + (id to index.def.table))
+        else copy(byId + (id to index.copy(tries = tries)))
+    }
+
+    /** Drops [id] as of [asOf]: every trie it holds becomes Garbage then. */
     fun dropped(id: UUID, asOf: Instant): IndexCatalog {
-        val index = byId[id]
-            ?: throw Fault("index $id is not in the catalog", "xtdb.index/unknown-index", mapOf("index-id" to id))
+        val index = heldOrNull(id)
+        if (index == null || index.state is IndexState.Dropped)
+            throw Fault("index $id is already dropped", "xtdb.index/index-already-dropped", mapOf("index-id" to id))
 
-        if (index.state is IndexState.Dropped)
-            throw Fault(
-                "index ${index.def.name} ($id) is already dropped", "xtdb.index/index-already-dropped",
-                mapOf("index-id" to id, "index-name" to index.def.name),
-            )
-
-        return IndexCatalog(byId + (id to index.copy(state = IndexState.Dropped(asOf))))
+        val garbage = IndexTrieState.Garbage(asOf)
+        val tries = index.tries.mapValues { (_, state) -> state as? IndexTrieState.Garbage ?: garbage }
+        return copy(byId + (id to index.copy(state = IndexState.Dropped(asOf), tries = tries)))
     }
 
     /**
      * The leader's decision that [id] is complete: Building becomes Ready.
      * A no-op on an index already Ready, or dropped since the decision, so re-applying it is harmless.
      */
-    fun ready(id: UUID): IndexCatalog {
-        val index = byId[id]
-            ?: throw Fault("index $id is not in the catalog", "xtdb.index/unknown-index", mapOf("index-id" to id))
-
-        return when (val state = index.state) {
+    fun ready(id: UUID): IndexCatalog = updating(id) { index ->
+        when (val state = index.state) {
             is IndexState.Building -> {
                 if (!state.complete)
                     throw Fault(
@@ -228,7 +255,7 @@ class IndexCatalog private constructor(private val byId: Map<UUID, SecondaryInde
                         mapOf("index-id" to id, "index-name" to index.def.name, "owed-blocks" to state.owedBlocks.sorted()),
                     )
 
-                IndexCatalog(byId + (id to index.copy(state = IndexState.Ready)))
+                copy(byId + (id to index.copy(state = IndexState.Ready)))
             }
 
             IndexState.Ready, is IndexState.Dropped -> this
@@ -240,50 +267,65 @@ class IndexCatalog private constructor(private val byId: Map<UUID, SecondaryInde
      * A no-op unless [id] is Building and still owes [block], so a late or repeated cover, or one for an index since
      * dropped, changes nothing.
      */
-    fun backfilled(id: UUID, block: BlockIndex, l0: IndexTrie?): IndexCatalog {
-        val index = byId[id]
-            ?: throw Fault("index $id is not in the catalog", "xtdb.index/unknown-index", mapOf("index-id" to id))
-
-        val state = index.state as? IndexState.Building ?: return this
-        if (block !in state.owedBlocks) return this
-
-        return IndexCatalog(
-            byId + (id to index.copy(state = state.copy(owedBlocks = state.owedBlocks - block)).withTries(listOfNotNull(l0)))
-        )
+    fun backfilled(id: UUID, block: BlockIndex, l0: IndexTrie?): IndexCatalog = updating(id) { index ->
+        val state = index.state as? IndexState.Building
+        if (state == null || block !in state.owedBlocks) this
+        else copy(byId + (id to index.copy(state = state.copy(owedBlocks = state.owedBlocks - block)).withTries(listOfNotNull(l0))))
     }
 
     /** Adds a block's index L0s, [l0s] keyed by index id. */
     fun withL0s(l0s: Map<UUID, IndexTrie>): IndexCatalog =
-        IndexCatalog(byId + l0s.map { (id, l0) ->
-            val index = byId[id]
-                ?: throw Fault("index $id is not in the catalog", "xtdb.index/unknown-index", mapOf("index-id" to id))
-
+        copy(byId + l0s.map { (id, l0) ->
+            val index = byId[id] ?: throw unknownIndex(id)
             id to index.withTries(listOf(l0))
         })
 
     /** @see SecondaryIndex.compacted */
-    fun compacted(id: UUID, outputs: Collection<IndexTrie>, inputs: Collection<Trie.Key>, asOf: Instant): IndexCatalog {
-        val index = byId[id]
-            ?: throw Fault("index $id is not in the catalog", "xtdb.index/unknown-index", mapOf("index-id" to id))
+    fun compacted(id: UUID, outputs: Collection<IndexTrie>, inputs: Collection<Trie.Key>, asOf: Instant): IndexCatalog =
+        updating(id) { index -> copy(byId + (id to index.compacted(outputs, inputs, asOf))) }
 
-        return IndexCatalog(byId + (id to index.compacted(outputs, inputs, asOf)))
+    /**
+     * Each index's Garbage tries dated at or before [asOf], for those holding any,
+     * and, with no keys, each dropped index holding no tries whose drop is at or before [asOf].
+     */
+    fun garbage(asOf: Instant): Map<SecondaryIndex, List<Trie.Key>> =
+        indices.mapNotNull { index ->
+            val keys = index.tries.mapNotNull { (trie, state) -> trie.key.takeIf { state is IndexTrieState.Garbage && !state.asOf.isAfter(asOf) } }
+            val state = index.state
+            val due = keys.isNotEmpty() || (index.tries.isEmpty() && state is IndexState.Dropped && !state.asOf.isAfter(asOf))
+            (index to keys).takeIf { due }
+        }.toMap()
+
+    /**
+     * GC's deletion of [keys] from [id]'s Garbage tries; a dropped index left holding none leaves the catalog.
+     * A no-op on a key it holds Live or not at all.
+     */
+    fun withoutGarbage(id: UUID, keys: Set<Trie.Key>): IndexCatalog = updating(id) { index ->
+        withTriesOf(index, index.tries.filterNot { (trie, state) -> state is IndexTrieState.Garbage && trie.key in keys })
     }
 
-    /** The tables an index here is declared on, dropped ones included: each one's block file records its indices. */
-    val tables: Set<TableRef> get() = indices.mapTo(HashSet()) { it.def.table }
+    /**
+     * The tables an index here was ever declared on, through an index it holds or one it has collected:
+     * each one's block file records its indices.
+     */
+    val tables: Set<TableRef> get() = indices.mapTo(HashSet()) { it.def.table } + collected.values
 
-    /** [table]'s indices, as its block file records them. */
+    /** [table]'s indices and collected ids, as its block file records them. */
     fun toProto(table: TableRef): TableIndices = tableIndices {
         indices += this@IndexCatalog.indices.filter { it.def.table == table }.sortedBy { it.def.id.toString() }.map { it.toProto() }
+        collectedIds += collected.filterValues { it == table }.keys.map { it.toString() }.sorted()
     }
 
     companion object {
         @JvmField
-        val EMPTY = IndexCatalog(emptyMap())
+        val EMPTY = IndexCatalog(emptyMap(), emptyMap())
 
         /** The catalog the block files of a block's tables record, keyed by table. */
         @JvmStatic
         fun fromProto(tableIndices: Map<TableRef, TableIndices>) =
-            IndexCatalog(tableIndices.values.flatMap { it.indicesList }.map { SecondaryIndex.fromProto(it) }.associateBy { it.def.id })
+            IndexCatalog(
+                tableIndices.values.flatMap { it.indicesList }.map { SecondaryIndex.fromProto(it) }.associateBy { it.def.id },
+                tableIndices.flatMap { (table, indices) -> indices.collectedIdsList.map { UUID.fromString(it) to table } }.toMap(),
+            )
     }
 }

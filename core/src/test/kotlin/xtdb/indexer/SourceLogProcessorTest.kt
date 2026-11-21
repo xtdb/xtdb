@@ -255,11 +255,28 @@ internal class SourceLogProcessorTest : LeaderTermTest() {
     }
 
     @Test
-    fun `a repeated declaration of an index the catalog holds as dropped aborts, and the partition carries on`() = runTest {
+    fun `a drop of an index the catalog has collected is refused as absent`() = runTest {
         val rs = resolveSide()
         val create = createIndex("by_email")
         rs.partitionState.applyTx(TransactionKey(0, Instant.EPOCH), mutableMapOf(), IndexOp.Create(create.def))
         rs.partitionState.applyTx(TransactionKey(1, Instant.EPOCH), mutableMapOf(), IndexOp.Drop(create.def.id, "by_email"))
+        rs.partitionState.deleteIndexTries(create.def.id, emptySet())
+
+        rs.srcLogProc.handleRecord(record(2, SourceMessage.DropIndex("by_email")))
+        runCurrent()
+
+        assertEquals(listOf(false), rs.verdicts)
+        assertNull(rs.resolvedTxs.single().ddl)
+    }
+
+    @Test
+    fun `a repeated declaration of an index dropped and collected aborts, and the partition carries on`() = runTest {
+        val rs = resolveSide()
+        val create = createIndex("by_email")
+        rs.partitionState.applyTx(TransactionKey(0, Instant.EPOCH), mutableMapOf(), IndexOp.Create(create.def))
+        rs.partitionState.applyTx(TransactionKey(1, Instant.EPOCH), mutableMapOf(), IndexOp.Drop(create.def.id, "by_email"))
+        rs.partitionState.deleteIndexTries(create.def.id, emptySet())
+        assertEquals(setOf(create.def.id), rs.partitionState.indexCatalog.collectedIds)
 
         rs.srcLogProc.handleRecord(record(2, create))
         rs.srcLogProc.handleRecord(record(3, createIndex("by_email")))

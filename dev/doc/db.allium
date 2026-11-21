@@ -305,9 +305,11 @@ value TableBlock {
     -- One table's file beside a block, at `tables/{slug}/blocks/b{idx}.binpb`, one for each table the block records.
     -- The table catalog's metadata for the table, as the block's adopt folds it; empty where index_only.
     metadata: TableMetadata
-    -- The table's secondary indices as the block's last transaction left them, dropped ones included.
+    -- The table's secondary indices as the block's last transaction left them, dropped ones still holding files included.
     -- A node starting from the block takes every recorded table's as its index catalog, so it holds the indices its peers hold at the same log position.
     secondary_indices: List<SecondaryIndexEntry>
+    -- The ids of the table's dropped indices the collector has emptied (secondary-index.allium collected_ids), so a node starting from the block refuses them as its peers do.
+    collected_index_ids: Set<String>
     -- No block has written the table, and the file exists for its indices alone.
     -- A node starting from the block leaves such a table out of its table catalog's metadata, as an adopt does.
     index_only: Boolean
@@ -326,7 +328,7 @@ value SecondaryIndexEntry {
     dropped_as_of: Timestamp?   -- present iff dropped
     -- The index's Live tries as of the block, its own L0 for the block included.
     tries: List<IndexTrieDetails>
-    -- The tries a compaction has replaced and the collector has not yet deleted, each with the time it was replaced.
+    -- The tries a compaction or the drop has replaced and the collector has not yet deleted, each with the time it was replaced.
     garbage_tries: List<GarbageIndexTrie>
 }
 
@@ -504,7 +506,7 @@ entity ReplicaMessage {
 
     kind: ResolvedTxMessage | BlockBoundaryMessage | BlockUploadedMessage
          | TriesAddedMessage | TriesDeletedMessage | NoOpMessage
-         | IndexBackfilledMessage | IndexCompactedMessage | IndexReadyMessage | OversizedMessage
+         | IndexBackfilledMessage | IndexCompactedMessage | IndexReadyMessage | IndexTriesDeletedMessage | OversizedMessage
 }
 
 variant ResolvedTxMessage : ReplicaMessage {
@@ -570,7 +572,8 @@ variant TriesDeletedMessage : ReplicaMessage {
 variant IndexBackfilledMessage : ReplicaMessage {
     -- A backfill job's cover of one block, forwarded by the leader from the source log.
     -- source_msg_id carries the original source-log position, as on TriesAddedMessage.
-    -- Applied to an index that no longer owes the block, or since dropped, it changes nothing, and leaves the L0 it names, if any, to the collector.
+    -- Applied to an index that no longer owes the block, or since dropped or collected, it changes nothing.
+    -- The L0 it names, if any, then stays in the object store with no catalog entry: under an index since dropped, gc.allium's collector deletes it with the index's last tries, and under a live index it is a recorded leak.
     storage_version: Integer
     storage_epoch: Integer
     index_id: String
@@ -594,8 +597,17 @@ variant IndexCompactedMessage : ReplicaMessage {
 variant IndexReadyMessage : ReplicaMessage {
     -- The leader's decision that an index owes no blocks, so that every node moves it from Building to Ready at the same logical position.
     -- Written only by the leader, behind every record that completed the index (secondary-index.allium, LeaderDeclaresReady).
-    -- Replay is always safe: applied to an index already Ready, or dropped since, it changes nothing.
+    -- Replay is always safe: applied to an index already Ready, or dropped or collected since, it changes nothing.
     index_id: String
+}
+
+variant IndexTriesDeletedMessage : ReplicaMessage {
+    -- An index's Garbage tries the leader's trie GC has deleted from the object store, as TriesDeletedMessage is for a table's (secondary-index.allium IndexTriesDeletedApplied).
+    -- Written only by the leader, and only once every file in the chunk is gone.
+    -- Replay is always safe: the removal is idempotent, and applied to an index since collected it changes nothing.
+    -- See: gc.allium.
+    index_id: String
+    trie_keys: Set<String>
 }
 
 variant NoOpMessage : ReplicaMessage {
@@ -702,7 +714,7 @@ config {
 --      A block cut with no transactions in it therefore writes no tries whatsoever.
 --   2. Compute the trie layout those L0 tries imply, which is what the per-table block files record and what the trie catalog will hold once the adopt has added them.
 --      Write one index L0 for each index not dropped on a table that took rows in this block, from those rows (secondary-index.allium BlockFlushWritesIndexL0s).
---   3. Build the per-table block files and upload one for EVERY table the table catalog knows, not only the tables from step 1, and one for every table an index is declared on.
+--   3. Build the per-table block files and upload one for EVERY table the table catalog knows, not only the tables from step 1, and one for every table an index was ever declared on, its index held or its id collected.
 --      Block GC's per-table sweep depends on this — see block-gc.allium, EveryTableBlockAtCurrentIndex.
 --      Each carries its table's indices, which the pause leaves as the block's last transaction left them, with the index L0s of step 2 added as the adopt will add them; a table only an index names gets an index-only file.
 --   4. Build and persist the block file, carrying the boundary's term and its position within that term, which are what seed a restarted node's fence and term position, and stamp the database's last-upload time.
@@ -1113,7 +1125,7 @@ rule LeaderProcessesIndexCompacted {
 -- gc.allium owns that rule, including the ordering the append and the removal it publishes have to keep.
 -- Two facts belong here, being properties of this pipeline rather than of the GC:
 --   the GC's source is SUSPENDED while block_in_progress, so a tries-deleted can never be appended between a boundary and its upload;
---   its message is appended like any other, and the removal it carries is applied on the leader's own read-back (LeaderAppliesOwnTriesDeleted), which is where the chunk awaiting it is released.
+--   its message is appended like any other, and the removal it carries is applied on the leader's own read-back (LeaderAppliesOwnTriesDeleted, LeaderAppliesOwnIndexTriesDeleted), which is where the chunk awaiting it is released.
 
 ---- Rules: Leader Mode — append
 
@@ -1285,6 +1297,15 @@ rule LeaderAppliesOwnTriesDeleted {
 
     ensures:
         trie_cat/trie_catalog.deleteTries(record.table_name, record.trie_keys)
+}
+
+rule LeaderAppliesOwnIndexTriesDeleted {
+    -- As LeaderAppliesOwnTriesDeleted, for one index's tries: from the RECORD, releasing the oldest chunk outstanding, a table's and an index's alike.
+    when: ApplyOwnRecord(record)
+    requires: record.kind = IndexTriesDeletedMessage
+
+    ensures:
+        IndexTriesDeletedApplied(record.index_id, record.trie_keys)
 }
 
 rule LeaderAppliesOwnIndexBackfilled {
@@ -1507,6 +1528,10 @@ rule HandleReplicaMessage {
         if msg.kind = IndexReadyMessage:
             -- Idempotent, so unconditional.
             IndexReadyApplied(msg.index_id)
+
+        if msg.kind = IndexTriesDeletedMessage:
+            -- Idempotent removal, so unconditional, as for tries-deleted.
+            IndexTriesDeletedApplied(msg.index_id, msg.trie_keys)
 
         if msg.kind = BlockBoundaryMessage:
             -- The follower opens a pending block. Every subsequent message except the matching upload is held by the hold above.
@@ -1781,7 +1806,7 @@ deferred CheckCanAttach
 deferred CheckCanDetach
   -- Whether a detach would be refused, answered the same way.
 deferred CheckCanDeclareIndex
-  -- Whether an index declaration would be refused: with xtdb/index-id-exists where its id is already in the index set, dropped included, or queued this term, and otherwise with xtdb/index-exists where an index of the name is declared at the RESOLVED head.
+  -- Whether an index declaration would be refused: with xtdb/index-id-exists where its id was ever in the index set, dropped and collected included, or is queued this term, and otherwise with xtdb/index-exists where an index of the name is declared at the RESOLVED head.
   -- The id is minted at submit, so a repeated id is a repeat of the same source message, by a producer retry or a redelivery.
   -- See: secondary-index.allium DuplicateNameAbortsDeclaration
 deferred CheckCanDropIndex

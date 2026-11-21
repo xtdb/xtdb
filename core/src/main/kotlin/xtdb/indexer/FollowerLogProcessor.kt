@@ -100,8 +100,9 @@ class FollowerLogProcessor @JvmOverloads constructor(
                 is ReplicaMessage.BlockBoundary -> blockIndex <= (tableCatalog.snap().blockIdx ?: -1)
                 is ReplicaMessage.BlockUploaded -> blockIndex <= (tableCatalog.snap().blockIdx ?: -1)
                 is ReplicaMessage.NoOp -> srcMsgId != null && srcMsgId <= watchers.latestSourceMsgId
-                // `deleteTries` is set-removal — idempotent — so replay is always safe.
+                // Both are set-removal — idempotent — so replay is always safe.
                 is ReplicaMessage.TriesDeleted -> false
+                is ReplicaMessage.IndexTriesDeleted -> false
                 // `ready` is a no-op on an index already Ready, so replay is always safe.
                 is ReplicaMessage.IndexReady -> false
 
@@ -192,6 +193,8 @@ class FollowerLogProcessor @JvmOverloads constructor(
             is ReplicaMessage.TriesDeleted -> triesDeletedTimer.timed {
                 partitionState.deleteTries(fromSchemaAndTable(msg.tableName), msg.trieKeys)
             }
+
+            is ReplicaMessage.IndexTriesDeleted -> partitionState.deleteIndexTries(msg.indexId, msg.trieKeys)
 
             is ReplicaMessage.IndexReady -> partitionState.indexReady(msg.indexId)
 

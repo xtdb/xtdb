@@ -26,6 +26,7 @@ class IndexCatalogTest {
         val byEmail = def("by_email")
         val bySku = def("by_sku", table = "orders", column = "sku")
         val byName = def("by_name", column = "name")
+        val byTotal = def("by_total", table = "orders", column = "total")
         val byEmailL0s = listOf(IndexTrie(Trie.l0Key(3), 1024), IndexTrie(Trie.l0Key(4), 2048))
         val bySkuL0 = IndexTrie(Trie.l0Key(5), 512)
 
@@ -37,19 +38,29 @@ class IndexCatalogTest {
             .withL0s(mapOf(byEmail.id to byEmailL0s[0]))
             .withL0s(mapOf(byEmail.id to byEmailL0s[1], bySku.id to bySkuL0))
             .dropped(bySku.id, dropAt)
+            .withIndex(byTotal, 5, emptySet())
+            .dropped(byTotal.id, dropAt)
+            .withoutGarbage(byTotal.id, emptySet())
 
+        val roundTripped = catalog.roundTripped()
         assertEquals(
             setOf(
                 SecondaryIndex(byEmail, 3, IndexState.Building(setOf(0L, 1L, 2L)), byEmailL0s.associateWith { IndexTrieState.Live }),
-                SecondaryIndex(bySku, 5, IndexState.Dropped(dropAt), mapOf(bySkuL0 to IndexTrieState.Live)),
+                SecondaryIndex(bySku, 5, IndexState.Dropped(dropAt), mapOf(bySkuL0 to IndexTrieState.Garbage(dropAt))),
                 SecondaryIndex(byName, 5, IndexState.Ready, emptyMap()),
             ),
-            catalog.roundTripped().indices.toSet(),
+            roundTripped.indices.toSet(),
         )
         assertEquals(
             listOf(bySku.id.toString()),
             catalog.toProto(bySku.table).indicesList.map { it.definition.indexId },
         )
+        assertEquals(
+            listOf(byTotal.id.toString()),
+            catalog.toProto(byTotal.table).collectedIdsList,
+            "a collected id stays in the file of the table its index was on",
+        )
+        assertEquals(setOf(byTotal.id), roundTripped.collectedIds)
     }
 
     @Test
@@ -84,12 +95,17 @@ class IndexCatalogTest {
     }
 
     @Test
-    fun `dropping an index twice faults`() {
+    fun `dropping an index twice faults, whether or not it holds files, and once it is collected`() {
         val byEmail = def("by_email")
-        val catalog = IndexCatalog.EMPTY.withIndex(byEmail, 0, emptySet()).dropped(byEmail.id, Instant.EPOCH)
+        val holding = IndexCatalog.EMPTY.withIndex(byEmail, 0, emptySet())
+            .withL0s(mapOf(byEmail.id to IndexTrie(Trie.l0Key(0), 1))).dropped(byEmail.id, Instant.EPOCH)
+        val empty = IndexCatalog.EMPTY.withIndex(byEmail, 0, emptySet()).dropped(byEmail.id, Instant.EPOCH)
+        val collected = empty.withoutGarbage(byEmail.id, emptySet())
 
-        val fault = assertThrows<Fault> { catalog.dropped(byEmail.id, Instant.EPOCH) }
-        assertEquals(Keyword.intern("xtdb.index", "index-already-dropped"), fault.errorCode())
+        for (catalog in listOf(holding, empty, collected)) {
+            val fault = assertThrows<Fault> { catalog.dropped(byEmail.id, Instant.EPOCH) }
+            assertEquals(Keyword.intern("xtdb.index", "index-already-dropped"), fault.errorCode())
+        }
     }
 
     @Test
@@ -222,6 +238,111 @@ class IndexCatalogTest {
     @Test
     fun `a compaction for an index the catalog does not hold faults`() {
         val fault = assertThrows<Fault> { IndexCatalog.EMPTY.compacted(UUID.randomUUID(), emptyList(), emptyList(), Instant.EPOCH) }
+        assertEquals(Keyword.intern("xtdb.index", "unknown-index"), fault.errorCode())
+    }
+
+    @Test
+    fun `a drop makes every trie Garbage as of the drop, keeping an earlier compaction's date`() {
+        val byEmail = def("by_email")
+        val compactedAt = Instant.parse("2026-01-01T00:00:00Z")
+        val dropAt = Instant.parse("2026-01-02T00:00:00Z")
+        val l0 = IndexTrie(Trie.l0Key(0), 10)
+        val out = IndexTrie(l1(0), 10)
+
+        val catalog = IndexCatalog.EMPTY.withIndex(byEmail, 0, emptySet()).withL0s(mapOf(byEmail.id to l0))
+            .compacted(byEmail.id, listOf(out), listOf(l0.key), compactedAt)
+            .dropped(byEmail.id, dropAt)
+
+        assertEquals(
+            SecondaryIndex(byEmail, 0, IndexState.Dropped(dropAt), mapOf(l0 to IndexTrieState.Garbage(compactedAt), out to IndexTrieState.Garbage(dropAt))),
+            catalog[byEmail.id],
+        )
+    }
+
+    @Test
+    fun `an index dropped holding no tries stays Dropped until GC's empty deletion collects it, and its id can't be declared again`() {
+        val byEmail = def("by_email")
+        val dropped = IndexCatalog.EMPTY.withIndex(byEmail, 0, emptySet()).dropped(byEmail.id, Instant.EPOCH)
+
+        assertEquals(listOf(SecondaryIndex(byEmail, 0, IndexState.Dropped(Instant.EPOCH), emptyMap())), dropped.indices.toList())
+        assertEquals(emptySet<UUID>(), dropped.collectedIds)
+
+        val collected = dropped.withoutGarbage(byEmail.id, emptySet())
+        assertEquals(emptyList<SecondaryIndex>(), collected.indices.toList())
+        assertEquals(setOf(byEmail.id), collected.collectedIds)
+
+        val fault = assertThrows<Fault> { collected.withIndex(byEmail, 1, emptySet()) }
+        assertEquals(Keyword.intern("xtdb.index", "index-id-exists"), fault.errorCode())
+    }
+
+    @Test
+    fun `GC's garbage is each index's Garbage tries dated at or before its cutoff`() {
+        val byEmail = def("by_email")
+        val bySku = def("by_sku", table = "orders", column = "sku")
+        val compactedAt = Instant.parse("2026-01-01T00:00:00Z")
+        val l0s = (0L..1L).map { IndexTrie(Trie.l0Key(it), 10) }
+
+        val catalog = IndexCatalog.EMPTY
+            .withIndex(byEmail, 0, emptySet()).withL0s(mapOf(byEmail.id to l0s[0])).withL0s(mapOf(byEmail.id to l0s[1]))
+            .compacted(byEmail.id, listOf(IndexTrie(l1(1), 20)), l0s.map { it.key }, compactedAt)
+            .withIndex(bySku, 0, emptySet()).withL0s(mapOf(bySku.id to l0s[0]))
+
+        assertEquals(emptyMap<SecondaryIndex, List<Trie.Key>>(), catalog.garbage(compactedAt.minusNanos(1000)))
+        assertEquals(mapOf(catalog[byEmail.id] to l0s.map { it.key }), catalog.garbage(compactedAt), "index L0s included, and no Live trie")
+    }
+
+    @Test
+    fun `GC's garbage holds a dropped index with no tries, with no keys, once its drop is at or before the cutoff`() {
+        val byEmail = def("by_email")
+        val dropAt = Instant.parse("2026-01-01T00:00:00Z")
+        val catalog = IndexCatalog.EMPTY.withIndex(byEmail, 0, emptySet()).dropped(byEmail.id, dropAt)
+
+        assertEquals(emptyMap<SecondaryIndex, List<Trie.Key>>(), catalog.garbage(dropAt.minusNanos(1000)))
+        assertEquals(mapOf(catalog[byEmail.id] to emptyList<Trie.Key>()), catalog.garbage(dropAt))
+    }
+
+    @Test
+    fun `GC's deletion removes only Garbage tries, and a dropped index's last takes it out of the catalog`() {
+        val byEmail = def("by_email")
+        val l0s = (0L..1L).map { IndexTrie(Trie.l0Key(it), 10) }
+        val out = IndexTrie(l1(1), 20)
+
+        val compacted = IndexCatalog.EMPTY.withIndex(byEmail, 0, emptySet())
+            .withL0s(mapOf(byEmail.id to l0s[0])).withL0s(mapOf(byEmail.id to l0s[1]))
+            .compacted(byEmail.id, listOf(out), l0s.map { it.key }, Instant.EPOCH)
+
+        val collected = compacted.withoutGarbage(byEmail.id, setOf(l0s[0].key, out.key))
+        assertEquals(
+            mapOf(l0s[1] to IndexTrieState.Garbage(Instant.EPOCH), out to IndexTrieState.Live),
+            collected[byEmail.id]?.tries,
+            "the Live output stays",
+        )
+
+        val dropped = collected.dropped(byEmail.id, Instant.EPOCH.plusSeconds(1))
+        assertEquals(setOf(byEmail.id), dropped.indices.map { it.def.id }.toSet(), "a dropped index stays while it holds files")
+
+        val gone = dropped.withoutGarbage(byEmail.id, setOf(l0s[1].key)).withoutGarbage(byEmail.id, setOf(out.key))
+        assertEquals(emptyList<SecondaryIndex>(), gone.indices.toList())
+        assertEquals(setOf(byEmail.id), gone.collectedIds)
+        assertEquals(gone.collectedIds, gone.roundTripped().collectedIds, "collected ids persist")
+    }
+
+    @Test
+    fun `a late message for a collected index changes nothing, where one for an id never declared faults`() {
+        val byEmail = def("by_email")
+        val collected = IndexCatalog.EMPTY.withIndex(byEmail, 1, setOf(0L)).dropped(byEmail.id, Instant.EPOCH)
+            .withoutGarbage(byEmail.id, emptySet())
+
+        val late = collected
+            .ready(byEmail.id)
+            .backfilled(byEmail.id, 0, IndexTrie(Trie.l0Key(0), 1))
+            .compacted(byEmail.id, listOf(IndexTrie(l1(0), 1)), listOf(Trie.l0Key(0)), Instant.EPOCH)
+            .withoutGarbage(byEmail.id, setOf(Trie.l0Key(0)))
+
+        assertEquals(emptyList<SecondaryIndex>(), late.indices.toList())
+        assertEquals(setOf(byEmail.id), late.collectedIds)
+
+        val fault = assertThrows<Fault> { IndexCatalog.EMPTY.withoutGarbage(UUID.randomUUID(), emptySet()) }
         assertEquals(Keyword.intern("xtdb.index", "unknown-index"), fault.errorCode())
     }
 }

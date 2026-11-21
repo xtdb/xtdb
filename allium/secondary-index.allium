@@ -4,11 +4,10 @@
 -- Secondary indices on one database: how a user declares one on a column, how it comes to cover every flushed block, how an equality scan uses it, and how it compacts, is collected and is dropped.
 --
 -- STATUS: this spec runs ahead of the implementation.
--- Of what follows, declaring and dropping an index, writing its L0s at block flush and by backfill, publishing Ready, compacting its tries and scanning with a Ready index are true of the code yet: an index is declared Building and dropped as below, each block flush writes its L0 as BlockFlushWritesIndexL0s has it, backfill covers each owed block as BackfillWritesIndexL0 has it, the leader publishes Ready as LeaderDeclaresReady has it, its tries compact as IndexCompactionWritesOutputs and IndexCompactionApplied have it, its declaration, state and tries persist in its table's block file, and an equality scan probes a Ready index as ScanProbesReadyIndex has it.
--- Nothing yet collects an index's garbage tries, and a drop leaves an index's tries live rather than garbage.
+-- Of what follows, declaring and dropping an index, writing its L0s at block flush and by backfill, publishing Ready, compacting and collecting its tries and scanning with a Ready index are true of the code yet: an index is declared Building and dropped as below, each block flush writes its L0 as BlockFlushWritesIndexL0s has it, backfill covers each owed block as BackfillWritesIndexL0 has it, the leader publishes Ready as LeaderDeclaresReady has it, its tries compact as IndexCompactionWritesOutputs and IndexCompactionApplied have it, gc.allium collects them as IndexTriesDeletedApplied has it, its declaration, state and tries persist in its table's block file, and an equality scan probes a Ready index as ScanProbesReadyIndex has it.
 -- The probe takes a number, a string, a boolean or a UUID, and NULL.
 -- It doesn't yet hash a date or timestamp as HashAgreesWithEquality has it, so a scan comparing the column with one reads without the index, as it does for a list, set, struct or interval.
--- Each contract under Obligations on neighbouring specs names a delta that db.allium or gc.allium takes in the same commit as the code that makes it true; the contract leaves this spec as its delta lands.
+-- db.allium and gc.allium have taken every delta this spec placed on them: db.allium carries the index messages and each table block file's index entries, and gc.allium collects an index's garbage tries.
 -- trie-cat.allium and compaction.allium take none: an index's tries live in the index catalog, not the trie catalog, and this spec selects and merges its compaction jobs; db.allium's compaction orchestration runs them under the compactor's one concurrency limit.
 -- live-index.allium takes no delta: the scan reads the live tier by applying its predicate to the live index's rows.
 --
@@ -35,6 +34,7 @@
 --
 -- - DROPPED -- the index has left the set of names, so the name is free to declare again.
 --   No scan at or after the drop uses it, and its files are collected; it stays in the catalog until the last of them is.
+--   From then on only its id stays, COLLECTED, so its declaration can never apply again.
 --
 -- An index's tries are fed from two directions.
 -- Each BLOCK FLUSH from the declaration on writes one index L0 per index on the flushed table, adopted with the block's data tries.
@@ -140,33 +140,6 @@ contract CandidateSet {
 }
 
 ------------------------------------------------------------
--- Obligations on neighbouring specs
-------------------------------------------------------------
-
-contract IndexDeclarationsOnTheLogs {
-    -- db.allium's delta.
-
-    @invariant IndexTriesTravelLikeTries
-        -- The leader's trie GC publishes the index tries it deletes in a message analogous to TriesDeleted.
-
-}
-
-contract IndexTreeCollection {
-    -- gc.allium's delta.
-
-    @invariant DataL0sOutliveEveryIndex
-        -- Every row appears in exactly one data L0, and data L0s are never deleted.
-        -- Backfill reads them, as does the compactor's reset.
-
-    @invariant SupersededIndexTriesAreCollected
-        -- Garbage index tries are deleted, index L0s included, after the same grace period as data tries, and the deletion is published so that every node drops them from its catalog.
-        -- Index L0s can be rebuilt from data L0s, so nothing pins them.
-
-    @invariant DroppedIndexFilesAreCollected
-        -- Every file of a dropped index is collected, after that grace period, so that a scan already running against it reads files that still exist.
-}
-
-------------------------------------------------------------
 -- Entities and Variants
 ------------------------------------------------------------
 
@@ -174,6 +147,10 @@ entity IndexCatalog {
     -- One database's indices on one node, as one value.
     -- It is replaced with the partition's value, beside the trie catalog, the table catalog and the live index, so a snapshot sees all four at one position.
     indices: SecondaryIndex with catalog = this
+
+    -- The ids of the dropped indices whose every file is collected.
+    -- An id is in indices or here, never both, and stays here for good: a declaration's source message can be repeated at any later position, by a producer retry or a redelivery, so no position bounds when it might arrive.
+    collected_ids: Set<IndexId>
 
     -- Projections
     declared: indices where state != dropped
@@ -238,9 +215,6 @@ entity IndexTrie {
 ------------------------------------------------------------
 
 config {
-    -- gc.allium's garbage_lifetime, which index tries share; it moves there with IndexTreeCollection's delta.
-    garbage_lifetime: Duration = 24.hours
-
     -- The columns no put document holds, so that an index on one would always be empty.
     unindexable_columns: Set<String> = {"_iid", "_valid_from", "_valid_to", "_system_from", "_system_to"}
 }
@@ -313,14 +287,15 @@ rule DropOfAbsentIndexAborts {
 
 rule DropRemovesIndex {
     -- A dropped index leaves the set of names whatever its state, so no scan at a snapshot from the drop onwards uses it.
-    -- Its tries are left to the collector.
+    -- Its live tries become garbage as of the drop, and a trie a compaction made garbage keeps its earlier date; all of them are left to the collector.
+    -- The index itself, holding tries or none, stays dropped until the collector collects it, so a job in flight at the drop writes under a directory the collector still sweeps.
     when: IndexDropRequested(caller, index_name)
     let index = (catalog.declared where name = index_name).first
     requires: not database.is_external_source
     requires: resolved_index_set_holds(index_name)
 
     ensures:
-        for trie in index.tries:
+        for trie in index.live_tries:
             trie.trie_state = garbage
             trie.garbage_as_of = now
         index.state = dropped
@@ -352,7 +327,9 @@ rule BackfillWritesIndexL0 {
     -- It reads the block's data L0, which is never deleted, so it needs nothing from the data compactor.
     -- A block with no put row carrying the column, the table's data L0 absent included, writes no L0 and is covered all the same.
     -- Its output, and the block it covers, go out as db.allium's IndexBackfilledMessage, and every node applies it at the same position on the replica log.
-    -- Applied to an index no longer Building, or no longer owing the block, it changes nothing, and its L0, if any, is left to the collector.
+    -- Applied to an index no longer Building, or no longer owing the block, or since collected, it changes nothing.
+    -- Its L0, if any, then stays in the object store with no catalog entry.
+    -- Under an index since dropped, gc.allium's collector deletes it along with the index's last tries; under a live index it stays, a recorded leak.
     when: BackfillJobRuns(compactor, index, block_index)
     requires: index.state = building
     requires: block_index in index.owed_blocks
@@ -391,6 +368,8 @@ rule IndexCompactionWritesOutputs {
 rule IndexCompactionApplied {
     -- In one write of the index catalog, so a snapshot sees either the inputs live or the outputs live, never neither.
     -- A publish whose inputs are not all still live — a duplicate, or a late one from a node that selected its job before another job replaced an input — changes nothing, so it can neither resurrect a garbage trie nor retire one twice.
+    -- Nor does one for an index since collected.
+    -- A refused publish's outputs stay in the object store with no catalog entry; under an index since dropped, gc.allium's collector deletes them along with the index's last tries.
     -- An output whose key the index already holds is not added again.
     when: IndexCompactionApplied(replica, index, outputs, inputs, log_timestamp)
     requires: inputs.all(k => index.live_tries.any(t => t.key = k))
@@ -423,7 +402,7 @@ rule LeaderDeclaresReady {
 
 rule ReadyApplied {
     -- Every node applies Ready at the same position on the replica log, and with the leader's view of the index: building and owing no blocks.
-    -- Ready on an index already Ready, or dropped since the leader published it, changes nothing.
+    -- Ready on an index already Ready, or dropped or collected since the leader published it, changes nothing.
     when: IndexReadyApplied(replica, index)
     requires: index.state = building
 
@@ -432,14 +411,22 @@ rule ReadyApplied {
 
 ---- Collection
 
-rule CollectorDeletesGarbageIndexTries {
-    -- Leader-only, like the data tries' collector, and on the same grace period.
-    -- The deletion is published on the replica log, so every node drops the tries from its catalog at the same position.
-    when: trie: IndexTrie.garbage_as_of + config.garbage_lifetime <= now
-    requires: trie.trie_state = garbage
-    requires: is_leader()
+rule IndexTriesDeletedApplied {
+    -- gc.allium's collector deletes an index's garbage tries' files, index L0s included, and publishes the keys as db.allium's IndexTriesDeletedMessage; every node applies it at the same position on the replica log.
+    -- A key the index holds live, or not at all, is left alone, so a repeated deletion changes nothing.
+    -- A dropped index left holding no tries is collected: it leaves the catalog, and its id stays.
+    -- One dropped holding none is collected by a deletion with no keys.
+    -- By then the collector has deleted every file under its directory, those no catalog named included.
+    -- Applied to an index already collected, it changes nothing.
+    when: IndexTriesDeletedApplied(replica, index, trie_keys)
 
-    ensures: not exists trie
+    ensures:
+        for trie in index.tries:
+            if trie.trie_state = garbage and trie_keys.any(k => trie.key = k):
+                not exists trie
+        if index.state = dropped and index.tries.all(t => trie_keys.any(k => t.key = k)):
+            catalog.collected_ids.add(index.id)
+            not exists index
 }
 
 ---- Scanning
@@ -481,6 +468,18 @@ invariant ReadyIndexCoversEveryAdoptedBlock {
     -- What CandidatesOverApproximate rests on.
     for index in SecondaryIndexes:
         index.state = ready implies covers_adopted_blocks(index)
+}
+
+invariant CollectedIdsStayRefused {
+    -- No index in the catalog has a collected id, so the declaration check finds every id ever declared in one of the two.
+    for index in SecondaryIndexes:
+        not index.catalog.collected_ids.any(id => id = index.id)
+}
+
+invariant DroppedIndicesHoldOnlyGarbage {
+    -- What lets the collector empty a dropped index, and so collect it.
+    for trie in IndexTries:
+        trie.index.state = dropped implies trie.trie_state = garbage
 }
 
 invariant SupersessionPreservesEntries {
@@ -530,9 +529,6 @@ surface IndexDeclaration {
         IndexDeclared(client, index_name, table, column)
         IndexDropRequested(client, index_name)
 
-    contracts:
-        demands IndexDeclarationsOnTheLogs
-
     @guarantee EveryNodeHoldsTheSameIndices
         -- Every node that has applied the replica log to the same position holds the same indices, with the same ids and states.
 
@@ -572,9 +568,6 @@ surface IndexMaintenance {
         BackfillJobRuns(compactor, index, block_index)
         IndexCompactionJobsRequested(compactor)
         IndexCompactionJobRuns(compactor, index, inputs, output_keys)
-
-    contracts:
-        demands IndexTreeCollection
 }
 
 surface IndexReplication {
@@ -583,6 +576,7 @@ surface IndexReplication {
     provides:
         IndexReadyApplied(replica, index)
         IndexCompactionApplied(replica, index, outputs, inputs, log_timestamp)
+        IndexTriesDeletedApplied(replica, index, trie_keys)
 }
 
 ------------------------------------------------------------

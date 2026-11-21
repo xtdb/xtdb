@@ -306,7 +306,7 @@ class FollowerLogProcessorTest {
         ).let { ReplicaMessage.decode(it.encode())!! }
 
     @Test
-    fun `a declaration read off the replica log is applied as a Building index, and a drop marks it Dropped`() = runTest {
+    fun `a declaration read off the replica log is applied as a Building index, a drop marks it Dropped, and an empty deletion collects it`() = runTest {
         val proc = makeProcessor()
         val def = IndexDef(UUID.randomUUID(), "by_email", TableRef("public", "users"), "email")
 
@@ -322,6 +322,10 @@ class FollowerLogProcessorTest {
             value.indexCat.indices.toList()
         )
         assertNull(value.indexCat.declared("by_email"))
+
+        proc.processRecords(listOf(record(2, ReplicaMessage.IndexTriesDeleted(def.id, emptySet(), termId = TERM))))
+        assertEquals(emptyList<SecondaryIndex>(), value.indexCat.indices.toList())
+        assertEquals(setOf(def.id), value.indexCat.collectedIds)
     }
 
     @Test

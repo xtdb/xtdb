@@ -19,6 +19,7 @@
                          ReplicaMessage$TriesAdded ReplicaMessage$BlockBoundary
                          ReplicaMessage$BlockUploaded ReplicaMessage$NoOp
                          ReplicaMessage$IndexReady ReplicaMessage$IndexBackfilled ReplicaMessage$IndexCompacted
+                         ReplicaMessage$IndexTriesDeleted
                          DbOp$Attach DbOp$Detach IndexOp$Create IndexOp$Drop)
            (xtdb.arrow Relation RelationReader VectorReader)
            (xtdb.database Database)
@@ -154,6 +155,7 @@
     ReplicaMessage$IndexReady "index-ready"
     ReplicaMessage$IndexBackfilled "index-backfilled"
     ReplicaMessage$IndexCompacted "index-compacted"
+    ReplicaMessage$IndexTriesDeleted "index-tries-deleted"
     "unknown"))
 
 (defn- replica-msg->edn [^ReplicaMessage msg]
@@ -228,6 +230,12 @@
      (let [^ReplicaMessage$IndexCompacted m msg]
        (assoc (index-compacted->edn (.getCompacted m))
               :source-msg-id (.getSourceMsgId m)))
+
+     ReplicaMessage$IndexTriesDeleted
+     (let [^ReplicaMessage$IndexTriesDeleted m msg]
+       {:type :index-tries-deleted
+        :index-id (str (.getIndexId m))
+        :trie-keys (vec (sort (map str (.getTrieKeys m))))})
 
      {:type :unknown})))
 

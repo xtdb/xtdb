@@ -24,6 +24,11 @@ class ReplicaMessageTermSeqTest {
             ReplicaMessage.BlockUploaded(1, 0, 0, 1, emptyList(), emptyMap(), termId = 3),
             ReplicaMessage.NoOp(termId = 3),
             ReplicaMessage.TriesDeleted("public/foo", setOf("trie"), termId = 3),
+            ReplicaMessage.IndexTriesDeleted(
+                UUID.fromString("00000000-0000-0000-0000-00000000000a"),
+                setOf(Trie.l0Key(0), Trie.Key(2, null, ByteArrayList.from(1), 7)),
+                termId = 3,
+            ),
             ReplicaMessage.OversizedMessage(1, 0, 0, "payload", termId = 3),
             ReplicaMessage.IndexCompacted(
                 SourceMessage.IndexCompacted(

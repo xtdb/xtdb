@@ -11,13 +11,16 @@ import kotlinx.coroutines.supervisorScope
 import xtdb.NodeBase
 import xtdb.api.DatabaseName
 import xtdb.api.TableRef
+import xtdb.api.log.ReplicaMessage.IndexTriesDeleted
 import xtdb.api.log.ReplicaMessage.TriesDeleted
 import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
 import xtdb.garbage_collector.BlockGarbageCollector
 import xtdb.garbage_collector.TrieGarbageCollector
 import xtdb.table.fromSchemaAndTable
+import xtdb.trie.Trie
 import xtdb.trie.TrieKey
+import java.util.UUID
 
 internal class GarbageCollector(
     private val nodeBase: NodeBase,
@@ -63,6 +66,12 @@ internal class GarbageCollector(
 
                         inFlight += task
                     }
+
+                    is GcTask.IndexTriesDeleted -> {
+                        replicaAppender.append(ControlItem(IndexTriesDeleted(task.indexId, task.trieKeys, termId = leaderTerm)))
+
+                        inFlight += task
+                    }
                 }
             } catch (e: Throwable) {
                 task.onComplete.completeExceptionally(e)
@@ -96,10 +105,26 @@ internal class GarbageCollector(
         task.onComplete.complete(Unit)
     }
 
+    /** As [commitTriesDeleted], for [indexId]'s Garbage tries. */
+    suspend fun commitIndexTriesDeleted(indexId: UUID, trieKeys: Set<Trie.Key>) {
+        val task = GcTask.IndexTriesDeleted(indexId, trieKeys)
+        gcCh.send(task)
+        task.onComplete.await()
+    }
+
+    fun indexTriesDeleted(msg: IndexTriesDeleted) {
+        val task = inFlight.removeFirstOrNull()
+            ?: error("[$dbName] IndexTriesDeleted for index ${msg.indexId} read back with nothing in flight")
+
+        partitionState.deleteIndexTries(msg.indexId, msg.trieKeys)
+
+        task.onComplete.complete(Unit)
+    }
+
     private val trieGc = nodeBase.config.garbageCollector.let { cfg ->
         TrieGarbageCollector(
             bufferPool, partitionState, dbName,
-            ::commitTriesDeleted, cfg.blocksToKeep, cfg.garbageLifetime,
+            ::commitTriesDeleted, ::commitIndexTriesDeleted, cfg.blocksToKeep, cfg.garbageLifetime,
             cfg.enabled,
             nodeBase.meterRegistry,
             dispatcher = gcDispatcher,
@@ -112,6 +137,7 @@ internal class GarbageCollector(
         fun cancel() = onComplete.cancel()
 
         data class TriesDeleted(val tableName: TableRef, val trieKeys: Set<TrieKey>) : GcTask()
+        data class IndexTriesDeleted(val indexId: UUID, val trieKeys: Set<Trie.Key>) : GcTask()
     }
 
     fun signal() {

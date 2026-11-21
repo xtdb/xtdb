@@ -14,13 +14,14 @@
            (java.net InetAddress Socket)
            (java.nio ByteBuffer)
            (java.nio.charset StandardCharsets)
-           (java.time InstantSource LocalDate LocalDateTime ZoneOffset ZonedDateTime)
+           (java.time Duration InstantSource LocalDate LocalDateTime ZoneOffset ZonedDateTime)
            (org.postgresql.util PSQLException)
            (xtdb.api TableRef Xtdb Xtdb$Config Xtdb$Connection)
-           (xtdb.api.log InMemoryLog Log$Factory ReadOnlyLog SourceMessage$IndexBackfilled)
+           (xtdb.api.log InMemoryLog Log$Factory ReadOnlyLog SourceMessage$CreateIndex SourceMessage$IndexBackfilled)
            (xtdb.api.storage ObjectStore$StoredObject Storage)
            (xtdb.database Database Database$Config DatabasePartition)
-           (xtdb.index IndexState$Building IndexState$Dropped IndexState$Ready IndexTrie SecondaryIndex)))
+           (xtdb.index IndexState$Building IndexState$Dropped IndexState$Ready IndexTrie IndexTrieState$Garbage SecondaryIndex)
+           (xtdb.table IndexFiles TableSlug)))
 
 (t/use-fixtures :each tu/with-node)
 
@@ -40,7 +41,7 @@
        (sort-by (juxt :name :state))))
 
 (defn- await-indices
-  "The database's indices, once they equal `expected` or after 5s: Ready reaches a node's catalog behind the declaring transaction, not with it."
+  "The database's indices, once they equal `expected` or after 5s: Ready, and a GC's collection, reach a node's catalog off the replica log, behind every source message `sync-node` waits on."
   [db expected]
   (let [deadline (+ (System/currentTimeMillis) 5000)]
     (loop []
@@ -69,7 +70,7 @@
   (let [expected [{:name "by_email", :table ["public" "users"], :column "email", :state :dropped}
                   {:name "by_email", :table ["crm" "users"], :column "email", :state :ready}]]
     (t/is (= expected (await-indices (db/primary-db tu/*node*) expected))
-          "the dropped index stays in the catalog, and its name is free to declare again")))
+          "the dropped index stays in the catalog until GC collects it, and its name is free to declare again")))
 
 (t/deftest an-index-on-a-column-no-document-holds-is-rejected
   (with-open [conn (.connect ^Xtdb tu/*node*)]
@@ -527,6 +528,162 @@
         (t/is (= (matching node :plain "v = ?" [v]) (matching node :docs "v = ?" [v]))
               (str "param " (pr-str v)))))))
 
+
+(defn- index-files [^Database db]
+  (->> (.listAllObjects (.getBufferPool db) (util/->path "tables"))
+       (map (comp str #(.getKey ^ObjectStore$StoredObject %)))
+       (filter #(str/includes? % "/indices/"))
+       sort vec))
+
+(defn- catalog-files
+  "The data and meta files of every trie each index holds, Live or Garbage."
+  [^Database db]
+  (->> (.getIndices (.getIndexCatalog (.getQueryState db)))
+       (mapcat (fn [^SecondaryIndex index]
+                 (let [index-def (.getDef index)
+                       files (IndexFiles. (TableSlug/of (.getTable index-def)) (.getId index-def))]
+                   (for [^IndexTrie trie (keys (.getTries index))
+                         path [(.dataFilePath files (str (.getKey trie))) (.metaFilePath files (str (.getKey trie)))]]
+                     (str path)))))
+       sort vec))
+
+(t/deftest a-dropped-index-is-collected-after-the-grace-period-and-its-id-stays-refused
+  (util/with-tmp-dirs #{path}
+    (let [node-opts {:log [:local {:path (.resolve path "log")}]
+                     :storage [:local {:path (.resolve path "objects")}]
+                     :compactor {:threads 0}
+                     :garbage-collector {:enabled? false, :blocks-to-keep 1, :garbage-lifetime (Duration/ofHours 0)}}]
+      (with-open [node (xtn/start-node node-opts)
+                  follower (-> (xtn/->config node-opts) (.readOnlyDatabases true) (.open))]
+        (jdbc/execute! node ["CREATE INDEX by_v ON docs (v)"])
+        (await-ready node)
+        (jdbc/execute! node ["INSERT INTO docs RECORDS {_id: 1, v: 'a'}"])
+        (tu/flush-block! node)
+
+        (let [db (db/primary-db node)
+              ^SecondaryIndex index (first (.getIndices (.getIndexCatalog (.getQueryState db))))
+              index-def (.getDef index)
+              files (index-files db)]
+          (t/is (= 2 (count files)) "the block's L0, data and meta")
+
+          (jdbc/execute! node ["DROP INDEX by_v"])
+          (.gcAll db)
+          (t/is (= files (index-files db)) "within the grace period: the drop is later than the latest block")
+          (t/is (= [:dropped] (map :state (indices db))))
+
+          (jdbc/execute! node ["INSERT INTO docs RECORDS {_id: 2, v: 'b'}"])
+          (tu/flush-block! node)
+          (.gcAll db)
+          (t/is (= [] (index-files db)) "the L0 is collected, as every file of a dropped index is")
+          (t/is (= [] (indices db)) "the index leaves the catalog with its last file")
+
+          (xt-log/sync-node follower #xt/duration "PT5S")
+          (t/is (= [] (await-indices (db/primary-db follower) [])) "a follower drops it off the replica log")
+          (t/is (= #{(.getId index-def)} (.getCollectedIds (.getIndexCatalog (.getQueryState (db/primary-db follower))))))
+
+          (.appendMessageBlocking (.getSourceLog db) (SourceMessage$CreateIndex. index-def) 0)
+          (xt-log/sync-node node #xt/duration "PT5S")
+          (t/is (= [false] (map :committed (xt/q node "SELECT committed FROM xt.txs ORDER BY _id DESC LIMIT 1")))
+                "a replayed declaration of the collected index's id aborts")
+          (t/is (= [] (indices db)))))
+
+      (with-open [node (xtn/start-node node-opts)]
+        (xt-log/sync-node node #xt/duration "PT5S")
+        (let [db (db/primary-db node)]
+          (t/is (= [] (indices db)) "a restarted node replays the collection onto its block")
+          (t/is (= 1 (count (.getCollectedIds (.getIndexCatalog (.getQueryState db))))))
+          (t/is (= [] (index-files db))))))))
+
+(t/deftest an-index-dropped-holding-no-files-is-collected-by-the-first-gc-past-the-drop
+  (util/with-tmp-dirs #{path}
+    (let [node-opts {:log [:local {:path (.resolve path "log")}]
+                     :storage [:local {:path (.resolve path "objects")}]
+                     :compactor {:threads 0}
+                     :garbage-collector {:enabled? false, :blocks-to-keep 1, :garbage-lifetime (Duration/ofHours 0)}}]
+      (with-open [node (xtn/start-node node-opts)
+                  follower (-> (xtn/->config node-opts) (.readOnlyDatabases true) (.open))]
+        (jdbc/execute! node ["CREATE INDEX by_v ON docs (v)"])
+        (await-ready node)
+        (jdbc/execute! node ["DROP INDEX by_v"])
+
+        (let [db (db/primary-db node)]
+          (.gcAll db)
+          (t/is (= [:dropped] (map :state (indices db))) "within the grace period: no block is later than the drop")
+
+          (jdbc/execute! node ["INSERT INTO docs RECORDS {_id: 1, v: 'a'}"])
+          (tu/flush-block! node)
+          (.gcAll db)
+          (t/is (= [] (indices db)))
+          (t/is (= 1 (count (.getCollectedIds (.getIndexCatalog (.getQueryState db))))))
+
+          (xt-log/sync-node follower #xt/duration "PT5S")
+          (t/is (= [] (await-indices (db/primary-db follower) [])) "a follower applies the empty deletion off the replica log"))))))
+
+(t/deftest a-collected-index-s-id-persists-in-the-block-file-of-a-table-no-block-has-written
+  (util/with-tmp-dirs #{path}
+    (let [node-opts {:log [:local {:path (.resolve path "log")}]
+                     :storage [:local {:path (.resolve path "objects")}]
+                     :compactor {:threads 0}
+                     :garbage-collector {:enabled? false, :blocks-to-keep 1, :garbage-lifetime (Duration/ofHours 0)}}]
+      (with-open [node (xtn/start-node node-opts)]
+        (jdbc/execute! node ["CREATE INDEX by_sku ON orders (sku)"])
+        (let [ready [{:name "by_sku", :table ["public" "orders"], :column "sku", :state :ready}]]
+          (t/is (= ready (await-indices (db/primary-db node) ready))))
+        (jdbc/execute! node ["DROP INDEX by_sku"])
+        (jdbc/execute! node ["INSERT INTO docs RECORDS {_id: 1}"])
+        (tu/flush-block! node)
+        (.gcAll (db/primary-db node))
+        (t/is (= [] (indices (db/primary-db node))))
+
+        (jdbc/execute! node ["INSERT INTO docs RECORDS {_id: 2}"])
+        (tu/flush-block! node))
+
+      (with-open [node (xtn/start-node node-opts)]
+        (xt-log/sync-node node #xt/duration "PT5S")
+        (let [db (db/primary-db node)]
+          (t/is (= 1 (count (.getCollectedIds (.getIndexCatalog (.getQueryState db)))))
+                "the block after the collection holds its id, in the file of the table its index was on")
+          (t/is (nil? (.rowCount (.snap (.getTableCatalog db)) (TableRef. "public" "orders")))))))))
+
+(defn- garbage-keys [^Database db]
+  (->> (.getIndices (.getIndexCatalog (.getQueryState db)))
+       (mapcat (fn [^SecondaryIndex index]
+                 (for [[^IndexTrie trie state] (.getTries index)
+                       :when (instance? IndexTrieState$Garbage state)]
+                   (str (.getKey trie)))))
+       set))
+
+(t/deftest an-index-s-files-on-disk-are-its-tries-once-collected
+  (binding [cat/*file-size-target* 16
+            c/*page-size* 16]
+    (util/with-tmp-dirs #{path}
+      (with-open [node (xtn/start-node {:log [:local {:path (.resolve path "log")}]
+                                        :storage [:local {:path (.resolve path "objects")}]
+                                        :garbage-collector {:enabled? false, :blocks-to-keep 1, :garbage-lifetime (Duration/ofHours 0)}})]
+        (jdbc/execute! node ["CREATE INDEX by_v ON docs (v)"])
+        (await-ready node)
+
+        (doseq [block (range 6)]
+          (execute-on-both! node (fn [table] [(into [:put-docs table] (for [i (range 50)] {:xt/id (+ (* block 50) i), :v (str "user-" i)}))]))
+          (tu/flush-block! node))
+
+        (c/compact-all! node #xt/duration "PT30S")
+
+        (let [db (db/primary-db node)
+              superseded (garbage-keys db)]
+          (t/is (some #(str/starts-with? % "l00-") superseded) "compaction has superseded index L0s")
+
+          (execute-on-both! node (fn [table] [[:put-docs table {:xt/id -1, :v "last"}]]))
+          (tu/flush-block! node)
+          (c/compact-all! node #xt/duration "PT30S")
+          (.gcAll db)
+
+          (t/is (= (catalog-files db) (index-files db)) "the files on disk are the catalog's tries")
+          (t/is (not-any? superseded (garbage-keys db)) "every trie superseded before the latest block is collected, index L0s included")
+
+          (doseq [v ["user-0" "user-49" "last" "nope"]]
+            (t/is (= (matching node :plain "v = ?" [v]) (matching node :docs "v = ?" [v])) v)))))))
+
 (defn- await=
   [expected f]
   (let [deadline (+ (System/currentTimeMillis) 10000)]
@@ -588,6 +745,59 @@
 
         (tu/flush-block! new-leader)
         (t/is (same-rows? new-leader) "and in the index L0 its flush writes")))))
+
+(defn- index-catalog
+  "Every index on the node, whole, by id — states, owed blocks, tries and their Garbage dates — and the collected ids."
+  [^Database db]
+  (let [index-cat (.getIndexCatalog (.getQueryState db))]
+    {:indices (into {} (map (juxt #(.getId (.getDef ^SecondaryIndex %)) identity)) (.getIndices index-cat))
+     :collected (set (.getCollectedIds index-cat))}))
+
+(t/deftest a-follower-restarted-partway-through-an-index-s-life-holds-the-leader-s-index-catalog
+  (binding [cat/*file-size-target* 16
+            c/*page-size* 16]
+    (util/with-tmp-dirs #{path}
+      (let [node-opts {:log [:local {:path (.resolve path "log")}]
+                       :storage [:local {:path (.resolve path "objects")}]
+                       :garbage-collector {:enabled? false, :blocks-to-keep 1, :garbage-lifetime (Duration/ofHours 0)}}
+            open-follower #(-> (xtn/->config node-opts) (.readOnlyDatabases true) (.open))
+            put-block! (fn [node block]
+                         (xt/execute-tx node [(into [:put-docs :docs] (for [i (range 50)] {:xt/id (+ (* block 50) i), :v (str "user-" i)}))])
+                         (tu/flush-block! node))
+            follower-catalog (fn [leader follower]
+                               (c/compact-all! leader #xt/duration "PT30S")
+                               (xt-log/sync-node follower #xt/duration "PT5S")
+                               (let [expected (index-catalog (db/primary-db leader))]
+                                 [expected (await= expected #(index-catalog (db/primary-db follower)))]))]
+
+        (with-open [leader (xtn/start-node node-opts)]
+          (doseq [block (range 3)] (put-block! leader block))
+
+          (with-open [follower (open-follower)]
+            (jdbc/execute! leader ["CREATE INDEX by_v ON docs (v)"])
+            (await-ready leader)
+            (let [[expected actual] (follower-catalog leader follower)]
+              (t/is (= expected actual) "backfilled to Ready")))
+
+          (doseq [block (range 3 6)] (put-block! leader block))
+          (c/compact-all! leader #xt/duration "PT30S")
+
+          (let [db (db/primary-db leader)]
+            (t/is (seq (garbage-keys db)) "compaction has superseded index tries")
+
+            (with-open [follower (open-follower)]
+              (let [[expected actual] (follower-catalog leader follower)]
+                (t/is (= expected actual) "a restarted follower, from the block written while it was down"))
+
+              (jdbc/execute! leader ["DROP INDEX by_v"])
+              (let [[expected actual] (follower-catalog leader follower)]
+                (t/is (= expected actual) "dropped"))
+
+              (put-block! leader 6)
+              (.gcAll db)
+              (t/is (= {:indices {}, :collected 1} (update (index-catalog db) :collected count)))
+              (let [[expected actual] (follower-catalog leader follower)]
+                (t/is (= expected actual) "collected")))))))))
 
 (t/deftest an-index-on-a-populated-table-owes-every-earlier-block-and-is-ready-only-once-all-are-backfilled
   (util/with-tmp-dirs #{path}

@@ -88,6 +88,9 @@ message SecondaryIndexEntry {
 message TableIndices {
     // sorted by id
     repeated SecondaryIndexEntry indices = 1;
+
+    // the table's dropped indices whose every file GC has collected, so their ids are never declared again
+    repeated string collected_ids = 2;
 }
 
 message Block {

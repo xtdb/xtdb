@@ -14,6 +14,9 @@
 -- those deletions to the replica log so followers drop them from their
 -- in-memory catalogs at the same logical position.
 --
+-- The same collector, in the same cycle and on the same grace period, collects each secondary index's garbage tries.
+-- An index's tries become garbage when a compaction replaces them or the index is dropped, as secondary-index.allium has it, and live in its index catalog rather than the trie catalog.
+--
 -- Block-file GC lives in block-gc.allium — block files are consumed only at
 -- startup/catch-up, so they don't need replica-log coordination.
 --
@@ -22,7 +25,8 @@
 --   indexer/GarbageCollector.kt (commitTriesDeleted, triesDeleted)
 --   indexer/LeaderLogProcessor.kt (TriesDeleted apply, block-adopt signal)
 --   indexer/FollowerLogProcessor.kt (TriesDeleted replay)
---   api/log/ReplicaMessage.kt (TriesDeleted)
+--   api/log/ReplicaMessage.kt (TriesDeleted, IndexTriesDeleted)
+--   index/SecondaryIndex.kt (IndexCatalog.garbage, IndexCatalog.withoutGarbage)
 --   api/GarbageCollectorConfig.kt
 
 use "./trie-cat.allium" as trie_cat
@@ -99,6 +103,13 @@ entity TriesDeletedMessage {
     trie_keys: List<String>
 }
 
+-- As TriesDeletedMessage, for one secondary index's garbage tries.
+-- See: api/log/ReplicaMessage.kt (IndexTriesDeleted)
+entity IndexTriesDeletedMessage {
+    index_id: String
+    trie_keys: List<String>
+}
+
 ------------------------------------------------------------
 -- Config
 ------------------------------------------------------------
@@ -108,6 +119,7 @@ config {
     -- Defaults match the implementation.
     enabled: Boolean = true
     blocks_to_keep: Integer = 10
+    -- Shared by a table's tries and a secondary index's.
     garbage_lifetime: Duration = 24.hours
 
     -- Caps the number of trie keys per `TriesDeleted` message so a single
@@ -253,7 +265,7 @@ rule TrieGcLoopRunsCycle {
 }
 
 rule GarbageCollectTries {
-    -- Run one cycle: collect garbage from every table in the table catalog.
+    -- Run one cycle: collect garbage from every table in the table catalog, and from every secondary index holding garbage tries.
     -- Tables are processed concurrently up to `tableParallelism`, with DELETE
     -- operations bounded across the cycle by `deleteParallelism`. Both bounds
     -- are out-of-spec implementation parameters (see TrieGarbageCollector.kt).
@@ -271,6 +283,8 @@ rule GarbageCollectTries {
     ensures:
         for table in table_catalog.all_tables:
             GarbageCollectTable(table, as_of)
+        for index in indices_with_garbage(as_of):
+            GarbageCollectIndex(index, as_of)
 }
 
 -- Returns the system_time of the block at `blocks_to_keep` positions back from
@@ -357,6 +371,57 @@ rule CommitTriesDeletedRule {
         trie_cat/trie_catalog.deleteTries(table, trie_keys)
 }
 
+rule GarbageCollectIndex {
+    -- Per index, as GarbageCollectTable is per table: its garbage tries dated at or before `as_of`, index L0s included, chunk by chunk, each chunk deleted and then committed.
+    -- A dropped index holding no tries, dropped at or before `as_of`, takes one empty chunk: its directory's sweep, and the deletion that collects it.
+    -- Its files lie under its own directory beneath its table's, which the index's file layout names, never built from the table's slug here.
+    when: GarbageCollectIndex(index, as_of)
+
+    let garbage_keys = index_garbage_tries(index, as_of)
+
+    ensures:
+        if garbage_keys.count = 0:
+            DeleteAndCommitIndexChunk(index, garbage_keys)
+        else:
+            for chunk in chunk_by(garbage_keys, config.tries_deleted_chunk_size):
+                DeleteAndCommitIndexChunk(index, chunk)
+}
+
+rule DeleteAndCommitIndexChunkRule {
+    -- DeleteAndCommitChunkRule's order, for an index's files: every DELETE in the chunk, data before meta, then the publish.
+    -- A chunk holding a dropped index's last tries also deletes every file listed under the index's directory before the publish, since that publish collects the index.
+    -- Those are the outputs of a backfill or compaction job in flight at the drop, whose publish changed nothing, so no catalog names them.
+    -- A live index's directory is never swept: a file there that no catalog names stays.
+    when: DeleteAndCommitIndexChunk(index, chunk)
+
+    ensures:
+        for trie_key in chunk:
+            ObjectStoreDelete(index_data_file_path(index, trie_key))
+            ObjectStoreDelete(index_meta_file_path(index, trie_key))
+
+        if index.state = dropped and index.tries.all(t => chunk.any(k => t.key = k)):
+            for path in object_store_list(index_directory(index)):
+                ObjectStoreDelete(path)
+
+        CommitIndexTriesDeleted(index, chunk)
+}
+
+rule CommitIndexTriesDeletedRule {
+    -- CommitTriesDeletedRule's append, on the same persister coroutine and in the same queue of chunks awaiting read-back: a table's and an index's chunks are released in the order they were appended.
+    -- The block-file argument is the same: the index entries in its table-block files snapshot the index catalog, and the removal is applied on read-back, ahead of any block behind it.
+    -- See: indexer/GarbageCollector.kt (commitIndexTriesDeleted, indexTriesDeleted), db.allium LeaderAppliesOwnIndexTriesDeleted.
+    when: CommitIndexTriesDeleted(index, trie_keys)
+
+    ensures:
+        IndexTriesDeletedMessage.created(
+            index_id: index.id,
+            trie_keys: trie_keys
+        )
+
+        -- Applied on the leader's read-back of that record: secondary-index.allium IndexTriesDeletedApplied, which collects a dropped index whose last tries these are.
+        IndexTriesDeletedApplied(index, trie_keys)
+}
+
 ------------------------------------------------------------
 -- Rules: Follower replay
 ------------------------------------------------------------
@@ -379,9 +444,36 @@ rule FollowerReplaysTriesDeleted {
         )
 }
 
+rule FollowerReplaysIndexTriesDeleted {
+    -- As FollowerReplaysTriesDeleted, for an index's tries: idempotent, so never stale.
+    -- See: indexer/FollowerLogProcessor.kt (IndexTriesDeleted handler)
+    when: msg: IndexTriesDeletedMessage.created
+    requires: log_processor.mode = Follower
+
+    ensures:
+        IndexTriesDeletedApplied(parse_index(msg.index_id), msg.trie_keys)
+}
+
 ------------------------------------------------------------
 -- Contracts
 ------------------------------------------------------------
+
+contract WhatTheCollectorDeletes {
+    -- Which files a cycle may delete, tables' and indices' alike.
+
+    @invariant DataL0sAreNeverDeleted
+        -- Every row is in exactly one data L0, and the collector never deletes one, whatever the trie catalog holds.
+        -- Secondary-index backfill reads them, as does the compactor's reset (#3663).
+
+    @invariant IndexL0sAreCollected
+        -- An index's garbage tries are deleted after the grace period, its L0s included: backfill can rebuild an index L0 from the data L0 of its block.
+
+    @invariant DroppedIndexFilesAreCollected
+        -- Every file of a dropped index is deleted after the grace period from its drop, so that a scan already running against it reads files that still exist.
+        -- That covers every file under its directory, whether or not a catalog names it, as of the deletion that collects it.
+        -- Once that deletion is published, the index leaves every node's catalog, keeping only its id.
+        -- A job that writes under the directory after it is swept leaves its output there for good: one selected before the drop that outruns the grace period, or one selected by a node yet to apply the drop.
+}
 
 contract TrieGcDualWriteAtomicity {
     -- Obligations on the leader that appends the trie GC's `TriesDeleted` and applies the removal it carries.
@@ -393,7 +485,7 @@ contract TrieGcDualWriteAtomicity {
         -- Held by log order: the removal is applied on the read-back of the record that publishes it, and a block is produced on the read-back of a boundary behind that record, so every snapshot follows every removal the log already carries.
 
     @invariant DeleteBeforeCommit
-        -- Within one (table, chunk) atomic step: every (data, meta) DELETE must succeed before the corresponding `TriesDeleted` is appended to the replica log, and so before the removal that record's read-back applies.
+        -- Within one (table, chunk) or (index, chunk) atomic step: every (data, meta) DELETE must succeed before the corresponding `TriesDeleted` or `IndexTriesDeleted` is appended to the replica log, and so before the removal that record's read-back applies.
         -- Reversing this order would leave followers thinking deleted files are still live.
 
     @invariant LeaderOnly
@@ -429,6 +521,7 @@ surface TrieGcAdmin {
 
     contracts:
         demands TrieGcDualWriteAtomicity
+        demands WhatTheCollectorDeletes
 
     @guarantee AwaitsFreshCycle
         -- The caller is unblocked only after a trie GC cycle that started at
@@ -455,6 +548,15 @@ surface TrieGcAdmin {
 --   default_garbage_as_of()       — block-time threshold minus garbage_lifetime
 --                                   (TrieGarbageCollector.kt: defaultGarbageAsOf)
 --   parse_table_ref(db, name)     — TableRef.parse (api/.../table/TableRef.kt)
+--   indices_with_garbage(as_of)   — the indices holding garbage tries dated at or before as_of,
+--                                   and the dropped indices holding no tries dropped at or before it
+--                                   (index/SecondaryIndex.kt: IndexCatalog.garbage)
+--   index_garbage_tries(index, as_of) — those tries' keys, L0s included
+--   index_data_file_path(index, key), index_meta_file_path(index, key)
+--                                 — index + trie_key -> ObjectStore key (table/IndexFiles.kt)
+--   index_directory(index)        — the prefix holding every file of the index (table/IndexFiles.kt: indexPath)
+--   object_store_list(prefix)     — every key under prefix (storage/BufferPool.kt: listAllObjects)
+--   parse_index(id)               — the index the catalog holds under id, if any
 --   ObjectStoreDelete(path)       — DELETE one key (storage/ObjectStore.kt)
 
 ------------------------------------------------------------

@@ -106,6 +106,10 @@ class PartitionState private constructor(
     fun indexCompacted(id: UUID, outputs: List<IndexTrie>, inputs: List<Trie.Key>, asOf: Instant) =
         ref.update { it.withIndexCat(it.indexCat.compacted(id, outputs, inputs, asOf)) }
 
+    /** @see IndexCatalog.withoutGarbage */
+    fun deleteIndexTries(id: UUID, keys: Set<Trie.Key>) =
+        ref.update { it.withIndexCat(it.indexCat.withoutGarbage(id, keys)) }
+
     /** @see IndexCatalog.ready */
     fun indexReady(id: UUID) = ref.update { it.withIndexCat(it.indexCat.ready(id)) }
 

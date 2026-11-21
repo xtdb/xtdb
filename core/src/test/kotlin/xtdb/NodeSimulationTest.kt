@@ -134,6 +134,7 @@ class NodeSimulationTest : SimulationTestBase() {
                     // simulation's view of the catalog still converges as the test asserts.
                     partitionState.deleteTries(tableName, trieKeys)
                 },
+                commitIndexTriesDeleted = { indexId, trieKeys -> partitionState.deleteIndexTries(indexId, trieKeys) },
                 blocksToKeep = 2,
                 garbageLifetime = garbageLifetime,
                 enabled = false,

@@ -15,6 +15,7 @@ import xtdb.log.proto.detachDatabase
 import xtdb.log.proto.droppedIndex
 import xtdb.log.proto.copy
 import xtdb.log.proto.indexReady
+import xtdb.log.proto.indexTriesDeleted
 import xtdb.log.proto.noOp
 import xtdb.log.proto.oversizedMessage
 import xtdb.log.proto.replicaLogMessage
@@ -25,6 +26,7 @@ import xtdb.storage.StorageEpoch
 import xtdb.time.InstantUtil.asMicros
 import xtdb.time.InstantUtil.fromMicros
 import xtdb.trie.BlockIndex
+import xtdb.trie.Trie
 import xtdb.trie.TrieKey
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.StringUtil.fromLexHex
@@ -119,6 +121,13 @@ sealed interface ReplicaMessage {
 
                         ReplicaLogMessage.MessageCase.TRIES_DELETED -> msg.triesDeleted.let {
                             TriesDeleted(it.tableName, it.trieKeysList.toSet(), termId = msg.termId, termSeq = termSeq)
+                        }
+
+                        ReplicaLogMessage.MessageCase.INDEX_TRIES_DELETED -> msg.indexTriesDeleted.let {
+                            IndexTriesDeleted(
+                                UUID.fromString(it.indexId), it.trieKeysList.mapTo(HashSet()) { k -> Trie.parseKey(k) },
+                                termId = msg.termId, termSeq = termSeq,
+                            )
                         }
 
                         ReplicaLogMessage.MessageCase.INDEX_BACKFILLED -> msg.indexBackfilled.let {
@@ -289,6 +298,23 @@ sealed interface ReplicaMessage {
             triesDeleted = triesDeleted {
                 tableName = this@TriesDeleted.tableName
                 trieKeys.addAll(this@TriesDeleted.trieKeys)
+            }
+        }
+    }
+
+    /** GC's deletion of [trieKeys], Garbage tries of [indexId] whose files it has deleted. */
+    data class IndexTriesDeleted(
+        val indexId: UUID,
+        val trieKeys: Set<Trie.Key>,
+        override val termId: Long,
+        override val termSeq: Long? = null,
+    ) : ProtobufMessage() {
+        override fun withTermSeq(termSeq: Long) = copy(termSeq = termSeq)
+
+        override fun toLogMessage() = replicaLogMessage {
+            indexTriesDeleted = indexTriesDeleted {
+                indexId = this@IndexTriesDeleted.indexId.toString()
+                trieKeys.addAll(this@IndexTriesDeleted.trieKeys.map { it.toString() }.sorted())
             }
         }
     }
