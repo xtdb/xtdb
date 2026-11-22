@@ -21,6 +21,7 @@ message SourceLogMessage {
         CreateIndex create_index = 7;
         DropIndex drop_index = 8;
         IndexBackfilled index_backfilled = 9;
+        IndexCompacted index_compacted = 10;
     }
 }
 
@@ -44,6 +45,17 @@ message IndexBackfilled {
     int64 block_index = 4;
     // The data file size of the L0 the job wrote, at the block's L0 trie key; absent where it wrote none.
     int64 l0_data_file_size = 5;
+    // Set by the leader as it forwards the message to the replica log: its position on the source log.
+    int64 source_msg_id = 6;
+}
+
+// An index compaction job's outputs, and the input tries they replace.
+message IndexCompacted {
+    int32 storage_version = 1;
+    int32 storage_epoch = 2;
+    string index_id = 3;
+    repeated IndexTrieDetails outputs = 4;
+    repeated string input_trie_keys = 5;
     // Set by the leader as it forwards the message to the replica log: its position on the source log.
     int64 source_msg_id = 6;
 }

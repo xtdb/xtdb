@@ -14,6 +14,7 @@ import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.time.withTimeout
 import xtdb.api.CompactorConfig
 import xtdb.api.log.SourceMessage.IndexBackfilled
+import xtdb.api.log.SourceMessage.IndexCompacted
 import xtdb.api.log.SourceMessage.TriesAdded
 import xtdb.api.log.Watchers
 import xtdb.api.storage.Storage
@@ -23,6 +24,8 @@ import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
 import xtdb.index.IndexCatalog
 import xtdb.index.IndexDef
+import xtdb.index.IndexJob
+import xtdb.index.IndexJobCalculator
 import xtdb.index.IndexState
 import xtdb.index.IndexTrieWriter
 import xtdb.log.proto.TrieDetails
@@ -42,6 +45,7 @@ private val LOGGER = Compactor::class.logger
 private sealed interface QueueKey {
     data class Data(val table: TableRef, val outputTrieKey: TrieKey) : QueueKey
     data class Backfill(val indexId: UUID, val block: BlockIndex) : QueueKey
+    data class IndexCompaction(val indexId: UUID, val inputs: List<Trie.Key>) : QueueKey
 }
 
 private val IndexCatalog.backfillJobs: Map<QueueKey.Backfill, IndexDef>
@@ -50,6 +54,9 @@ private val IndexCatalog.backfillJobs: Map<QueueKey.Backfill, IndexDef>
             (index.state as? IndexState.Building)?.owedBlocks.orEmpty().map { QueueKey.Backfill(index.def.id, it) to index.def }
         }
         .toMap()
+
+private fun IndexCatalog.compactionJobs(fileSizeTarget: FileSize): Map<QueueKey.IndexCompaction, IndexJob> =
+    IndexJobCalculator.availableJobs(this, fileSizeTarget).associateBy { QueueKey.IndexCompaction(it.index.id, it.inputs) }
 
 private sealed interface QueuedJob {
     data object Running : QueuedJob
@@ -96,6 +103,9 @@ interface Compactor : AutoCloseable {
         suspend fun executeBackfill(index: IndexDef, block: BlockIndex): IndexBackfilled
         suspend fun publishBackfill(backfilled: IndexBackfilled)
 
+        suspend fun executeIndexCompaction(job: IndexJob): IndexCompacted
+        suspend fun publishIndexCompaction(compacted: IndexCompacted)
+
         interface Factory {
             fun create(allocator: BufferAllocator, partitionStorage: PartitionStorage, partitionState: PartitionState, watchers: Watchers): Driver
         }
@@ -115,7 +125,7 @@ interface Compactor : AutoCloseable {
 
                         private val trieWriter = PageTrieWriter(al, bp, calculateBlooms = true)
                         private val segMerge = SegmentMerge(al, reeIids, writesRecency)
-                        private val indexTrieWriter = IndexTrieWriter(al, bp)
+                        private val indexTrieWriter = IndexTrieWriter(al, bp, pageSize)
 
                         private fun Job.trieDetails(
                             trieKey: TrieKey,
@@ -189,6 +199,17 @@ interface Compactor : AutoCloseable {
                             watchers.awaitSource(msgId)
                         }
 
+                        override suspend fun executeIndexCompaction(job: IndexJob): IndexCompacted {
+                            val files = IndexFiles(tableCat.snap().slug(job.index.table), job.index.id)
+                            val outputs = indexTrieWriter.compact(files, job.inputs, job.outputs)
+                            return IndexCompacted(Storage.VERSION, bp.epoch, job.index.id, outputs, job.inputs)
+                        }
+
+                        override suspend fun publishIndexCompaction(compacted: IndexCompacted) {
+                            val msgId = log.appendMessage(compacted).msgId
+                            watchers.awaitSource(msgId)
+                        }
+
                         override fun close() {
                             segMerge.close()
                             al.close()
@@ -229,6 +250,9 @@ interface Compactor : AutoCloseable {
             @Volatile
             private var availableBackfills = emptyMap<QueueKey.Backfill, IndexDef>()
 
+            @Volatile
+            private var availableIndexJobs = emptyMap<QueueKey.IndexCompaction, IndexJob>()
+
             private val queuedJobs = mutableMapOf<QueueKey, QueuedJob>()
 
             private val jobTimer: Timer? = meterRegistry?.let {
@@ -249,9 +273,12 @@ interface Compactor : AutoCloseable {
             }
 
             init {
-                // a declaration, and a backfill applied, change the backfill jobs with no block to signal it
-                scope.launch(dispatcher + CoroutineName("backfill jobs watcher")) {
-                    indexCatalog.map { it.backfillJobs.keys }.distinctUntilChanged().collect { signalBlock() }
+                // a declaration, and an index message applied, change the index jobs with no block to signal it
+                scope.launch(dispatcher + CoroutineName("index jobs watcher")) {
+                    indexCatalog
+                        .map { it.backfillJobs.keys + it.compactionJobs(trieCatalog.state.fileSizeTarget).keys }
+                        .distinctUntilChanged()
+                        .collect { signalBlock() }
                 }
             }
 
@@ -264,9 +291,11 @@ interface Compactor : AutoCloseable {
                                 jobCalculator.availableJobs(trieCatalog.state)
                                     .associateBy { QueueKey.Data(it.table, it.outputTrieKey.toString()) }
 
-                            availableBackfills = indexCatalog.value.backfillJobs
+                            val indexCat = indexCatalog.value
+                            availableBackfills = indexCat.backfillJobs
+                            availableIndexJobs = indexCat.compactionJobs(trieCatalog.state.fileSizeTarget)
 
-                            (availableJobs.keys + availableBackfills.keys).forEach { jobKey ->
+                            (availableJobs.keys + availableBackfills.keys + availableIndexJobs.keys).forEach { jobKey ->
                                 if (queuedJobs.putIfAbsent(jobKey, QueuedJob.Running) == null) {
                                     launch(jobsDispatcher + CoroutineName("job: $jobKey")) {
                                         val result = try {
@@ -318,8 +347,16 @@ interface Compactor : AutoCloseable {
                     when (jobKey) {
                         is QueueKey.Data -> runDataJob(jobKey)
                         is QueueKey.Backfill -> runBackfill(jobKey)
+                        is QueueKey.IndexCompaction -> runIndexCompaction(jobKey)
                     }
                 }
+            }
+
+            private suspend fun runIndexCompaction(jobKey: QueueKey.IndexCompaction) {
+                val job = availableIndexJobs[jobKey] ?: return
+
+                LOGGER.debug("compacting index '${job.index.name}' (${job.index.id}) ${job.inputs} -> ${job.outputs}")
+                driver.publishIndexCompaction(driver.executeIndexCompaction(job))
             }
 
             private suspend fun runBackfill(jobKey: QueueKey.Backfill) {

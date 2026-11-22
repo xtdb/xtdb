@@ -4,8 +4,8 @@
             [xtdb.api :as xt]
             [xtdb.log-tables :as log-tables]
             [xtdb.test-util :as tu])
-  (:import (xtdb.api.log ReplicaMessage$BlockUploaded ReplicaMessage$IndexBackfilled ReplicaMessage$IndexReady
-                         SourceMessage$IndexBackfilled)
+  (:import (xtdb.api.log ReplicaMessage$BlockUploaded ReplicaMessage$IndexBackfilled ReplicaMessage$IndexCompacted ReplicaMessage$IndexReady
+                         SourceMessage$IndexBackfilled SourceMessage$IndexCompacted)
            (xtdb.index IndexTrie)
            (xtdb.trie Trie)))
 
@@ -79,3 +79,14 @@
            (render-replica-msg
             (ReplicaMessage$IndexBackfilled. (SourceMessage$IndexBackfilled. (int 6) (int 0) index-id 3 128)
                                              17 0 nil)))))
+
+(deftest test-replica-index-compacted-renders
+  (t/is (= ["index-compacted"
+            {:type :index-compacted, :index-id (str index-id)
+             :outputs ["l01-rc-b03"], :inputs ["l00-rc-b02" "l00-rc-b03"]
+             :source-msg-id 17}]
+           (render-replica-msg
+            (ReplicaMessage$IndexCompacted. (SourceMessage$IndexCompacted. (int 6) (int 0) index-id
+                                                                           [(IndexTrie. (Trie/parseKey "l01-rc-b03") 256)]
+                                                                           [(Trie/parseKey "l00-rc-b02") (Trie/parseKey "l00-rc-b03")])
+                                            17 0 nil)))))

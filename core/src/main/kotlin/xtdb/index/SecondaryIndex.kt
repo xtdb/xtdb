@@ -6,6 +6,7 @@ import xtdb.block.proto.SecondaryIndexEntry
 import xtdb.block.proto.TableIndices
 import xtdb.block.proto.buildingIndex
 import xtdb.block.proto.droppedIndex
+import xtdb.block.proto.garbageIndexTrie
 import xtdb.block.proto.readyIndex
 import xtdb.block.proto.secondaryIndexEntry
 import xtdb.block.proto.tableIndices
@@ -77,11 +78,45 @@ data class IndexTrie(val key: Trie.Key, val dataFileSize: FileSize) {
     }
 }
 
+sealed interface IndexTrieState {
+    /** Read by a probe, and a candidate input to compaction. */
+    data object Live : IndexTrieState
+
+    /** Superseded, at [asOf], by tries holding every entry it holds; read only by a scan already holding it. */
+    data class Garbage(val asOf: Instant) : IndexTrieState
+}
+
 /**
  * [firstFlushedBlock] is the block that was open when the declaration applied: its flush, and every later one,
  * covers this index, and the blocks below it are the ones a backfill has to cover.
+ *
+ * [tries] holds at most one trie per key.
  */
-data class SecondaryIndex(val def: IndexDef, val firstFlushedBlock: BlockIndex, val state: IndexState, val tries: List<IndexTrie>) {
+data class SecondaryIndex(
+    val def: IndexDef, val firstFlushedBlock: BlockIndex, val state: IndexState, val tries: Map<IndexTrie, IndexTrieState>,
+) {
+    val liveTries: List<IndexTrie> get() = tries.filterValues { it == IndexTrieState.Live }.keys.toList()
+
+    /** [this] with [added] Live, skipping any whose key it already holds, in whatever state. */
+    fun withTries(added: Collection<IndexTrie>): SecondaryIndex {
+        val held = tries.keys.mapTo(HashSet()) { it.key }
+        return copy(tries = tries + added.filter { it.key !in held }.associateWith { IndexTrieState.Live })
+    }
+
+    /**
+     * A compaction's [outputs], replacing [inputs] as of [asOf]: the outputs Live, the inputs Garbage.
+     *
+     * A no-op unless every input is still Live here, so a duplicate or late publish, whose inputs another job has
+     * since replaced, can neither resurrect a superseded trie nor retire one twice.
+     */
+    fun compacted(outputs: Collection<IndexTrie>, inputs: Collection<Trie.Key>, asOf: Instant): SecondaryIndex {
+        val live = liveTries.associateBy { it.key }
+        if (!inputs.all { it in live }) return this
+
+        val garbage = IndexTrieState.Garbage(asOf)
+        return copy(tries = tries + inputs.associate { live.getValue(it) to garbage }).withTries(outputs)
+    }
+
     fun toProto(): SecondaryIndexEntry = secondaryIndexEntry {
         definition = def.toProto()
         firstFlushedBlock = this@SecondaryIndex.firstFlushedBlock
@@ -90,7 +125,15 @@ data class SecondaryIndex(val def: IndexDef, val firstFlushedBlock: BlockIndex, 
             IndexState.Ready -> ready = readyIndex { }
             is IndexState.Dropped -> dropped = droppedIndex { asOfMicros = state.asOf.asMicros }
         }
-        tries += this@SecondaryIndex.tries.map { it.toProto() }
+
+        for ((trie, trieState) in this@SecondaryIndex.tries.entries.sortedBy { it.key.key.toString() })
+            when (trieState) {
+                IndexTrieState.Live -> tries += trie.toProto()
+                is IndexTrieState.Garbage -> garbageTries += garbageIndexTrie {
+                    this.trie = trie.toProto()
+                    garbageAsOfMicros = trieState.asOf.asMicros
+                }
+            }
     }
 
     companion object {
@@ -108,7 +151,10 @@ data class SecondaryIndex(val def: IndexDef, val firstFlushedBlock: BlockIndex, 
                         mapOf("index-id" to proto.definition.indexId),
                     )
                 },
-                proto.triesList.map { IndexTrie.fromProto(it) },
+                proto.triesList.associate { IndexTrie.fromProto(it) to IndexTrieState.Live } +
+                        proto.garbageTriesList.associate {
+                            IndexTrie.fromProto(it.trie) to IndexTrieState.Garbage(fromMicros(it.garbageAsOfMicros))
+                        },
             )
     }
 }
@@ -149,7 +195,7 @@ class IndexCatalog private constructor(private val byId: Map<UUID, SecondaryInde
             )
         }
 
-        return IndexCatalog(byId + (def.id to SecondaryIndex(def, openBlock, IndexState.Building(owedBlocks), emptyList())))
+        return IndexCatalog(byId + (def.id to SecondaryIndex(def, openBlock, IndexState.Building(owedBlocks), emptyMap())))
     }
 
     fun dropped(id: UUID, asOf: Instant): IndexCatalog {
@@ -202,10 +248,7 @@ class IndexCatalog private constructor(private val byId: Map<UUID, SecondaryInde
         if (block !in state.owedBlocks) return this
 
         return IndexCatalog(
-            byId + (id to index.copy(
-                state = state.copy(owedBlocks = state.owedBlocks - block),
-                tries = index.tries + listOfNotNull(l0),
-            ))
+            byId + (id to index.copy(state = state.copy(owedBlocks = state.owedBlocks - block)).withTries(listOfNotNull(l0)))
         )
     }
 
@@ -215,8 +258,16 @@ class IndexCatalog private constructor(private val byId: Map<UUID, SecondaryInde
             val index = byId[id]
                 ?: throw Fault("index $id is not in the catalog", "xtdb.index/unknown-index", mapOf("index-id" to id))
 
-            id to index.copy(tries = index.tries + l0)
+            id to index.withTries(listOf(l0))
         })
+
+    /** @see SecondaryIndex.compacted */
+    fun compacted(id: UUID, outputs: Collection<IndexTrie>, inputs: Collection<Trie.Key>, asOf: Instant): IndexCatalog {
+        val index = byId[id]
+            ?: throw Fault("index $id is not in the catalog", "xtdb.index/unknown-index", mapOf("index-id" to id))
+
+        return IndexCatalog(byId + (id to index.compacted(outputs, inputs, asOf)))
+    }
 
     /** The tables an index here is declared on, dropped ones included: each one's block file records its indices. */
     val tables: Set<TableRef> get() = indices.mapTo(HashSet()) { it.def.table }

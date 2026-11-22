@@ -13,12 +13,12 @@
            (xtdb.api.log Log Log$Record SourceMessage SourceMessage$Tx
                          SourceMessage$FlushBlock SourceMessage$TriesAdded
                          SourceMessage$AttachDatabase SourceMessage$DetachDatabase
-                         SourceMessage$CreateIndex SourceMessage$DropIndex SourceMessage$IndexBackfilled
+                         SourceMessage$CreateIndex SourceMessage$DropIndex SourceMessage$IndexBackfilled SourceMessage$IndexCompacted
                          SourceMessage$LegacyTx
                          ReplicaMessage ReplicaMessage$ResolvedTx
                          ReplicaMessage$TriesAdded ReplicaMessage$BlockBoundary
                          ReplicaMessage$BlockUploaded ReplicaMessage$NoOp
-                         ReplicaMessage$IndexReady ReplicaMessage$IndexBackfilled
+                         ReplicaMessage$IndexReady ReplicaMessage$IndexBackfilled ReplicaMessage$IndexCompacted
                          DbOp$Attach DbOp$Detach IndexOp$Create IndexOp$Drop)
            (xtdb.arrow Relation RelationReader VectorReader)
            (xtdb.database Database)
@@ -56,6 +56,7 @@
     SourceMessage$CreateIndex "create-index"
     SourceMessage$DropIndex "drop-index"
     SourceMessage$IndexBackfilled "index-backfilled"
+    SourceMessage$IndexCompacted "index-compacted"
     SourceMessage$LegacyTx "legacy-tx"
     "unknown"))
 
@@ -71,6 +72,12 @@
    :index-id (str (.getIndexId m))
    :block-index (.getBlockIndex m)
    :l0-data-file-size (.getL0DataFileSize m)})
+
+(defn- index-compacted->edn [^SourceMessage$IndexCompacted m]
+  {:type :index-compacted
+   :index-id (str (.getIndexId m))
+   :outputs (mapv (fn [^IndexTrie trie] (str (.getKey trie))) (.getOutputs m))
+   :inputs (mapv str (.getInputs m))})
 
 (defn- source-msg->edn [^SourceMessage msg]
   (pr-str
@@ -118,6 +125,9 @@
      SourceMessage$IndexBackfilled
      (index-backfilled->edn msg)
 
+     SourceMessage$IndexCompacted
+     (index-compacted->edn msg)
+
      SourceMessage$LegacyTx
      {:type :legacy-tx}
 
@@ -143,6 +153,7 @@
     ReplicaMessage$NoOp "no-op"
     ReplicaMessage$IndexReady "index-ready"
     ReplicaMessage$IndexBackfilled "index-backfilled"
+    ReplicaMessage$IndexCompacted "index-compacted"
     "unknown"))
 
 (defn- replica-msg->edn [^ReplicaMessage msg]
@@ -211,6 +222,11 @@
      ReplicaMessage$IndexBackfilled
      (let [^ReplicaMessage$IndexBackfilled m msg]
        (assoc (index-backfilled->edn (.getBackfilled m))
+              :source-msg-id (.getSourceMsgId m)))
+
+     ReplicaMessage$IndexCompacted
+     (let [^ReplicaMessage$IndexCompacted m msg]
+       (assoc (index-compacted->edn (.getCompacted m))
               :source-msg-id (.getSourceMsgId m)))
 
      {:type :unknown})))

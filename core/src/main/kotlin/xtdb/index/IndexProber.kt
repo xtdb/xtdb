@@ -28,9 +28,9 @@ class IndexProbe(val iids: SortedSet<ByteArray>, val triesRead: Long, val pagesR
 object IndexProber {
     /**
      * The candidate IIDs for a value hashing to [hash] in [index]'s column, as of [snapshot]:
-     * the IIDs [index]'s tries hold for it, with every live-tier row whose column hashes to it.
+     * the IIDs [index]'s Live tries hold for it, with every live-tier row whose column hashes to it.
      *
-     * [index] is Ready in [snapshot], so its tries cover every block the snapshot's trie catalog does, and the live tier the rest.
+     * [index] is Ready in [snapshot], so its Live tries cover every block the snapshot's trie catalog does, and the live tier the rest.
      */
     suspend fun probe(al: BufferAllocator, bp: BufferPool, snapshot: Snapshot, index: SecondaryIndex, hash: Long): IndexProbe {
         val table = index.def.table
@@ -38,7 +38,8 @@ object IndexProber {
         val iids = TreeSet(Bytes.COMPARATOR)
         var pagesRead = 0L
 
-        for (trie in index.tries) {
+        val tries = index.liveTries.filter { it.key.partHolds(hash) }
+        for (trie in tries) {
             val dataPath = files.dataFilePath(trie.key.toString())
             val pageIdx = leafPageIdx(al, bp, files, trie.key, hash) ?: continue
 
@@ -54,7 +55,7 @@ object IndexProber {
 
         for (live in snapshot.table(table)) iids.addLiveMatches(live.relation, index.def.column, hash)
 
-        return IndexProbe(iids, index.tries.size.toLong(), pagesRead)
+        return IndexProbe(iids, tries.size.toLong(), pagesRead)
     }
 
     @JvmStatic
@@ -67,7 +68,7 @@ object IndexProber {
 
         return Relation(al, bp.getFooter(metaPath).schema).use { metaRel ->
             bp.getRecordBatch(metaPath, 0).use { metaRel.load(it) }
-            ArrowHashTrie(metaRel["nodes"]).use { trie -> leafPageIdx(key, trie.rootNode, hash, 0) }
+            ArrowHashTrie(metaRel["nodes"]).use { trie -> leafPageIdx(key, trie.rootNode, hash, key.part?.size() ?: 0) }
         }
     }
 

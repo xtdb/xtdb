@@ -125,6 +125,10 @@ sealed interface ReplicaMessage {
                             IndexBackfilled(SourceMessage.IndexBackfilled.fromProto(it), it.sourceMsgId, termId = msg.termId, termSeq = termSeq)
                         }
 
+                        ReplicaLogMessage.MessageCase.INDEX_COMPACTED -> msg.indexCompacted.let {
+                            IndexCompacted(SourceMessage.IndexCompacted.fromProto(it), it.sourceMsgId, termId = msg.termId, termSeq = termSeq)
+                        }
+
                         ReplicaLogMessage.MessageCase.INDEX_READY ->
                             IndexReady(UUID.fromString(msg.indexReady.indexId), termId = msg.termId, termSeq = termSeq)
 
@@ -300,6 +304,20 @@ sealed interface ReplicaMessage {
 
         override fun toLogMessage() = replicaLogMessage {
             indexBackfilled = backfilled.toProto().copy { sourceMsgId = this@IndexBackfilled.sourceMsgId }
+        }
+    }
+
+    /** The leader's forward of [compacted], from [sourceMsgId] on the source log. */
+    data class IndexCompacted(
+        val compacted: SourceMessage.IndexCompacted,
+        val sourceMsgId: MessageId,
+        override val termId: Long,
+        override val termSeq: Long? = null,
+    ) : ProtobufMessage() {
+        override fun withTermSeq(termSeq: Long) = copy(termSeq = termSeq)
+
+        override fun toLogMessage() = replicaLogMessage {
+            indexCompacted = compacted.toProto().copy { sourceMsgId = this@IndexCompacted.sourceMsgId }
         }
     }
 

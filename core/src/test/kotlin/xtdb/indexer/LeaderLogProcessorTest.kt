@@ -613,7 +613,7 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
         lp.srcLogProc.processRecords(listOf(Log.Record(0, 1, Instant.now(), b1)))
         partitionState.awaitIndexState(def.id, IndexState.Ready)
 
-        assertEquals(listOf(IndexTrie(Trie.l0Key(0), 1024)), partitionState.indexCatalog[def.id]?.tries)
+        assertEquals(listOf(IndexTrie(Trie.l0Key(0), 1024)), partitionState.indexCatalog[def.id]?.liveTries)
         assertEquals(
             listOf(
                 ReplicaMessage.IndexBackfilled(b0, sourceMsgId = 0, termId = 1),
@@ -629,6 +629,39 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
                         else -> null
                     }
                 }
+                .toList(),
+        )
+    }
+
+    @Test
+    fun `a compaction is forwarded to the replica log and applied`() = runTest(timeout = 5.seconds) {
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+        val def = IndexDef(UUID.randomUUID(), "by_email", TableRef("public", "users"), "email")
+        val l0s = (0L..1L).map { IndexTrie(Trie.l0Key(it), 1024) }
+        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
+        lateinit var partitionState: PartitionState
+
+        val lp = leaderProc(
+            StandardTestDispatcher(testScheduler), replicaLog = replicaLog, watchers = watchers,
+            initial = createPartitionValue().let { pv ->
+                pv.withIndexCat(pv.indexCat.withIndex(def, 0, emptySet()).withL0s(mapOf(def.id to l0s[0])).withL0s(mapOf(def.id to l0s[1])))
+            },
+            wrapPartitionState = { it.also { partitionState = it } },
+        )
+
+        val l1 = IndexTrie(Trie.Key(1, null, null, 1), 2048)
+        val compacted = SourceMessage.IndexCompacted(Storage.VERSION, 0, def.id, listOf(l1), l0s.map { it.key })
+
+        lp.srcLogProc.processRecords(listOf(Log.Record(0, 0, Instant.now(), compacted)))
+        watchers.awaitSource(0)
+
+        assertEquals(listOf(l1), partitionState.indexCatalog[def.id]?.liveTries)
+        assertEquals(
+            listOf(ReplicaMessage.IndexCompacted(compacted, sourceMsgId = 0, termId = 1)),
+            replicaLog.readRecords(0, 0, replicaLog.latestSubmittedMsgId() + 1)
+                .map { it.message }
+                .filterIsInstance<ReplicaMessage.IndexCompacted>()
+                .map { it.copy(termSeq = null) }
                 .toList(),
         )
     }

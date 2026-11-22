@@ -66,6 +66,12 @@ message DroppedIndex {
     int64 as_of_micros = 1;
 }
 
+// An index trie a compaction has superseded, kept until GC deletes its files.
+message GarbageIndexTrie {
+    xtdb.log.proto.IndexTrieDetails trie = 1;
+    int64 garbage_as_of_micros = 2;
+}
+
 message SecondaryIndexEntry {
     xtdb.log.proto.CreateIndex definition = 1;
     int64 first_flushed_block = 6;
@@ -74,7 +80,9 @@ message SecondaryIndexEntry {
         DroppedIndex dropped = 3;
         ReadyIndex ready = 5;
     }
+    // The index's Live tries.
     repeated xtdb.log.proto.IndexTrieDetails tries = 4;
+    repeated GarbageIndexTrie garbage_tries = 7;
 }
 
 message TableIndices {

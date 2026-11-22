@@ -20,12 +20,14 @@ import xtdb.api.log.SourceMessage
 import xtdb.api.log.Watchers
 import xtdb.api.storage.Storage
 import xtdb.block.proto.block
+import xtdb.block.proto.tableIndices
 import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
 import xtdb.index.IndexCatalog
 import xtdb.index.IndexDef
 import xtdb.index.IndexState
 import xtdb.index.IndexTrie
+import xtdb.index.IndexTrieState
 import xtdb.index.SecondaryIndex
 import xtdb.api.error.Fault
 import xtdb.storage.MemoryStorage
@@ -310,13 +312,13 @@ class FollowerLogProcessorTest {
 
         proc.processRecords(listOf(record(0, indexTx(1, IndexOp.Create(def)))))
         assertEquals(
-            listOf(SecondaryIndex(def, 0, IndexState.Building(emptySet()), emptyList())),
+            listOf(SecondaryIndex(def, 0, IndexState.Building(emptySet()), emptyMap())),
             value.indexCat.indices.toList()
         )
 
         proc.processRecords(listOf(record(1, indexTx(2, IndexOp.Drop(def.id, "by_email")))))
         assertEquals(
-            listOf(SecondaryIndex(def, 0, IndexState.Dropped(Instant.EPOCH.plusSeconds(2)), emptyList())),
+            listOf(SecondaryIndex(def, 0, IndexState.Dropped(Instant.EPOCH.plusSeconds(2)), emptyMap())),
             value.indexCat.indices.toList()
         )
         assertNull(value.indexCat.declared("by_email"))
@@ -351,7 +353,7 @@ class FollowerLogProcessorTest {
         ))
 
         assertEquals(
-            listOf(SecondaryIndex(def, 0, IndexState.Building(emptySet()), listOf(l0))),
+            listOf(SecondaryIndex(def, 0, IndexState.Building(emptySet()), mapOf(l0 to IndexTrieState.Live))),
             value.indexCat.indices.toList()
         )
     }
@@ -363,10 +365,10 @@ class FollowerLogProcessorTest {
         val ready = ReplicaMessage.decode(ReplicaMessage.IndexReady(def.id, termId = TERM).encode())!!
 
         proc.processRecords(listOf(record(0, indexTx(1, IndexOp.Create(def))), record(1, ready)))
-        assertEquals(listOf(SecondaryIndex(def, 0, IndexState.Ready, emptyList())), value.indexCat.indices.toList())
+        assertEquals(listOf(SecondaryIndex(def, 0, IndexState.Ready, emptyMap())), value.indexCat.indices.toList())
 
         proc.processRecords(listOf(record(2, ready)))
-        assertEquals(listOf(SecondaryIndex(def, 0, IndexState.Ready, emptyList())), value.indexCat.indices.toList())
+        assertEquals(listOf(SecondaryIndex(def, 0, IndexState.Ready, emptyMap())), value.indexCat.indices.toList())
     }
 
     @Test
@@ -390,7 +392,7 @@ class FollowerLogProcessorTest {
 
         proc.processRecords(listOf(record(0, backfilled(5, 0, 1024)), record(1, backfilled(6, 1, null, epoch = 0))))
         assertEquals(
-            SecondaryIndex(def, 2, IndexState.Building(setOf(1L)), listOf(IndexTrie(Trie.l0Key(0), 1024))),
+            SecondaryIndex(def, 2, IndexState.Building(setOf(1L)), mapOf(IndexTrie(Trie.l0Key(0), 1024) to IndexTrieState.Live)),
             value.indexCat[def.id],
             "the second carries a storage epoch this node has moved past",
         )
@@ -398,5 +400,51 @@ class FollowerLogProcessorTest {
 
         proc.processRecords(listOf(record(2, backfilled(4, 1, null))))
         assertEquals(IndexState.Building(setOf(1L)), value.indexCat[def.id]?.state, "a record behind the source watermark is stale")
+    }
+
+    @Test
+    fun `a compaction read off the replica log replaces its inputs with its outputs, under the storage guard and the staleness check`() = runTest {
+        val def = IndexDef(UUID.randomUUID(), "by_email", TableRef("public", "users"), "email")
+        val l0s = (0L..2L).map { IndexTrie(Trie.l0Key(it), 1024) }
+        partition.close()
+        partition = TestPartition(
+            allocator, bufferPool,
+            block = block { blockIndex = 2 },
+            indexCat = IndexCatalog.fromProto(
+                mapOf(def.table to tableIndices { indices += SecondaryIndex(def, 0, IndexState.Ready, l0s.associateWith { IndexTrieState.Live }).toProto() })
+            ),
+        )
+        val proc = makeProcessor()
+
+        fun compacted(srcMsgId: Long, inputs: List<IndexTrie>, output: Trie.Key, epoch: Int = 1) =
+            ReplicaMessage.decode(
+                ReplicaMessage.IndexCompacted(
+                    SourceMessage.IndexCompacted(Storage.VERSION, epoch, def.id, listOf(IndexTrie(output, 2048)), inputs.map { it.key }),
+                    srcMsgId, termId = TERM,
+                ).encode()
+            )!!
+
+        proc.processRecords(listOf(
+            record(0, compacted(5, l0s.take(2), Trie.Key(1, null, null, 1))),
+            record(1, compacted(6, l0s.drop(2), Trie.Key(1, null, null, 2), epoch = 0)),
+        ))
+
+        assertEquals(
+            listOf(l0s[2], IndexTrie(Trie.Key(1, null, null, 1), 2048)),
+            value.indexCat[def.id]?.liveTries,
+            "the second carries a storage epoch this node has moved past",
+        )
+        assertEquals(
+            l0s.take(2).toSet(),
+            value.indexCat[def.id]?.tries?.filterValues { it is IndexTrieState.Garbage }?.keys,
+        )
+        assertEquals(6, watchers.latestSourceMsgId)
+
+        proc.processRecords(listOf(record(2, compacted(4, l0s.drop(2), Trie.Key(1, null, null, 2)))))
+        assertEquals(
+            listOf(l0s[2], IndexTrie(Trie.Key(1, null, null, 1), 2048)),
+            value.indexCat[def.id]?.liveTries,
+            "a record behind the source watermark is stale",
+        )
     }
 }

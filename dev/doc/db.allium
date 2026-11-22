@@ -324,8 +324,15 @@ value SecondaryIndexEntry {
     state: building | ready | dropped
     owed_blocks: Set<Integer>?  -- present iff building
     dropped_as_of: Timestamp?   -- present iff dropped
-    -- The index's tries as of the block, its own L0 for the block included.
+    -- The index's Live tries as of the block, its own L0 for the block included.
     tries: List<IndexTrieDetails>
+    -- The tries a compaction has replaced and the collector has not yet deleted, each with the time it was replaced.
+    garbage_tries: List<GarbageIndexTrie>
+}
+
+value GarbageIndexTrie {
+    trie: IndexTrieDetails
+    garbage_as_of: Timestamp
 }
 
 value IndexTrieDetails {
@@ -393,7 +400,7 @@ variant DropIndex : Ddl {
 
 ---- Source Log Messages
 
--- Messages on the source log. Written by clients, by the leader (flush-block), and by the block upload and the compactor (tries-added, index-backfilled).
+-- Messages on the source log. Written by clients, by the leader (flush-block), and by the block upload and the compactor (tries-added, index-backfilled, index-compacted).
 
 entity SourceMessage {
     msg_id: MessageId
@@ -401,7 +408,7 @@ entity SourceMessage {
     kind: TxMessage | LegacyTxMessage | FlushBlockMessage | TriesAddedMessage
          | AttachDbMessage | DetachDbMessage
          | CreateIndexMessage | DropIndexMessage
-         | IndexBackfilledMessage
+         | IndexBackfilledMessage | IndexCompactedMessage
 }
 
 variant TxMessage : SourceMessage {
@@ -465,6 +472,17 @@ variant IndexBackfilledMessage : SourceMessage {
     l0_data_file_size: Integer?
 }
 
+variant IndexCompactedMessage : SourceMessage {
+    -- An index compaction job's outputs and the input tries they replace (secondary-index.allium IndexCompactionWritesOutputs), written by whichever node's compactor ran it.
+    -- The leader forwards these to the replica log.
+    storage_version: Integer
+    storage_epoch: Integer
+    index_id: String
+    -- Only the outputs the job wrote: an output no entry falls in has no file.
+    outputs: List<IndexTrieDetails>
+    inputs: List<String>
+}
+
 ---- Replica Log Messages
 
 -- Messages on the replica log, written by the leader for its term.
@@ -486,7 +504,7 @@ entity ReplicaMessage {
 
     kind: ResolvedTxMessage | BlockBoundaryMessage | BlockUploadedMessage
          | TriesAddedMessage | TriesDeletedMessage | NoOpMessage
-         | IndexBackfilledMessage | IndexReadyMessage | OversizedMessage
+         | IndexBackfilledMessage | IndexCompactedMessage | IndexReadyMessage | OversizedMessage
 }
 
 variant ResolvedTxMessage : ReplicaMessage {
@@ -558,6 +576,18 @@ variant IndexBackfilledMessage : ReplicaMessage {
     index_id: String
     block_index: Integer
     l0_data_file_size: Integer?
+    source_msg_id: MessageId
+}
+
+variant IndexCompactedMessage : ReplicaMessage {
+    -- An index compaction, forwarded by the leader from the source log.
+    -- source_msg_id carries the original source-log position, as on TriesAddedMessage.
+    -- Applied only while every input is Live, so a duplicate or late publish changes nothing (secondary-index.allium IndexCompactionApplied).
+    storage_version: Integer
+    storage_epoch: Integer
+    index_id: String
+    outputs: List<IndexTrieDetails>
+    inputs: List<String>
     source_msg_id: MessageId
 }
 
@@ -1061,6 +1091,24 @@ rule LeaderProcessesIndexBackfilled {
         log_processor.last_resolved_src_msg_id = msg.msg_id
 }
 
+rule LeaderProcessesIndexCompacted {
+    -- Forwarded as tries-added is, whatever its storage version, carrying the source watermark forward.
+    when: SourceIndexCompactedMessageReceived(msg)
+    requires: log_processor.mode = Leader
+
+    ensures:
+        AppendReplicaMessage(IndexCompactedMessage.created(
+            storage_version: msg.storage_version,
+            storage_epoch: msg.storage_epoch,
+            index_id: msg.index_id,
+            outputs: msg.outputs,
+            inputs: msg.inputs,
+            source_msg_id: msg.msg_id
+        ))
+
+        log_processor.last_resolved_src_msg_id = msg.msg_id
+}
+
 -- The trie GC's publish step is a THIRD resolve-side source, alongside the source log and the external source: the GC hands the removal to the leader and awaits it rather than appending itself.
 -- gc.allium owns that rule, including the ordering the append and the removal it publishes have to keep.
 -- Two facts belong here, being properties of this pipeline rather than of the GC:
@@ -1255,6 +1303,19 @@ rule LeaderAppliesOwnIndexBackfilled {
         LeaderChecksIndexReady(record.index_id)
 }
 
+rule LeaderAppliesOwnIndexCompacted {
+    -- The leader reads its own forwarded compaction back and applies it from the RECORD, under the storage guard every node applies, then advances the watermark, as for tries-added.
+    when: ApplyOwnRecord(record)
+    requires: record.kind = IndexCompactedMessage
+
+    ensures:
+        if record.storage_version = storage_format.storage_version
+           and record.storage_epoch = storage_format.storage_epoch:
+            IndexCompactionApplied(record.index_id, record.outputs, record.inputs, record.log_timestamp)
+
+        watchers.notifyMsg(record.source_msg_id)
+}
+
 rule LeaderAppliesOwnIndexReady {
     -- The leader reads its own Ready back and applies it from the RECORD, as every other node applies it.
     when: ApplyOwnRecord(record)
@@ -1437,6 +1498,12 @@ rule HandleReplicaMessage {
                 IndexBackfillApplied(msg.index_id, msg.block_index, msg.l0_data_file_size)
             watchers.notifyMsg(msg.source_msg_id)
 
+        if msg.kind = IndexCompactedMessage:
+            if msg.storage_version = storage_format.storage_version
+               and msg.storage_epoch = storage_format.storage_epoch:
+                IndexCompactionApplied(msg.index_id, msg.outputs, msg.inputs, msg.log_timestamp)
+            watchers.notifyMsg(msg.source_msg_id)
+
         if msg.kind = IndexReadyMessage:
             -- Idempotent, so unconditional.
             IndexReadyApplied(msg.index_id)
@@ -1481,10 +1548,10 @@ rule FollowerHandlesBlockUploaded {
 
 ---- Rules: Compaction Orchestration
 
--- The compactor runs asynchronously, signalled after a block is adopted, and whenever the blocks this node's indices owe change.
--- Job selection and the merge algorithm are compaction.allium's.
--- The compactor writes L1+ tries, and backfilled index L0s, to the SOURCE log, and the leader forwards them to the replica log.
--- Data compaction jobs and backfill jobs share one queue and the compactor's configured job concurrency: with 8 configured, at most 8 run across both.
+-- The compactor runs asynchronously, signalled after a block is adopted, and whenever the jobs this node's indices offer change.
+-- Job selection and the merge algorithm are compaction.allium's for data tries, and secondary-index.allium's for index tries.
+-- The compactor writes L1+ tries, backfilled index L0s and index compaction outputs to the SOURCE log, and the leader forwards them to the replica log.
+-- Data compaction, backfill and index compaction jobs share one queue and the compactor's configured job concurrency: with 8 configured, at most 8 run across all three.
 
 rule CompactorWakesUp {
     when: CompactorSignalled()
@@ -1492,17 +1559,22 @@ rule CompactorWakesUp {
     let jobs = compaction/available_jobs(trie_cat/trie_catalog)
     -- One per block a Building index owes (secondary-index.allium owed_blocks), so selection is deterministic: any node may run any of them, and two nodes running one is harmless.
     let backfills = owed_backfill_blocks()
+    -- secondary-index.allium's index compaction jobs, selected from the index catalog alone, at the data tries' file-size target.
+    let index_jobs = index_compaction_jobs()
 
     ensures:
         for job in jobs:
             StartCompactionJob(job)
         for backfill in backfills:
             StartBackfillJob(backfill.index, backfill.block_index)
+        for index_job in index_jobs:
+            StartIndexCompactionJob(index_job)
 }
 
-rule CompactorWakesOnOwedBlocks {
-    -- A declaration owing blocks, and a backfill applied, change the backfill jobs with no block boundary to signal them.
-    when: OwedBackfillBlocksChanged()
+rule CompactorWakesOnIndexJobs {
+    -- A declaration owing blocks, and an applied backfill or index compaction, change the index jobs with no block boundary to signal them.
+    -- The compactor wakes on the set of jobs changing, not on every change to the index catalog.
+    when: IndexJobsChanged()
 
     ensures: CompactorSignalled()
 }
@@ -1513,6 +1585,14 @@ rule BackfillJobWritesOutput {
 
     ensures:
         IndexBackfilledMessage.created(index_id: index.id, block_index: block_index) appended to database.source_log
+}
+
+rule IndexCompactionJobWritesOutput {
+    -- secondary-index.allium IndexCompactionWritesOutputs: the union of the inputs' entries, written at each output that any entry falls in.
+    when: StartIndexCompactionJob(index_job)
+
+    ensures:
+        IndexCompactedMessage.created(index_id: index_job.index.id, inputs: index_job.inputs) appended to database.source_log
 }
 
 rule CompactionJobWritesOutput {

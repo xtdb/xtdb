@@ -19,6 +19,8 @@ import xtdb.trie.MetadataFileWriter
 import xtdb.trie.Trie
 import xtdb.trie.TrieKey
 import java.lang.Long.compareUnsigned
+import java.nio.ByteBuffer
+import java.util.PriorityQueue
 import java.util.TreeSet
 
 private const val BUCKET_BITS = 2
@@ -29,6 +31,10 @@ private const val MAX_DEPTH = Long.SIZE_BITS / BUCKET_BITS - 1
 /** The bucket [hash] falls in at [depth] of an index trie: the hash's bits from the top, two per level. */
 fun indexBucket(hash: Long, depth: Int): Int =
     ((hash ushr (Long.SIZE_BITS - BUCKET_BITS * (depth + 1))) and (BUCKETS - 1).toLong()).toInt()
+
+/** Whether [hash] falls in this index trie key's part: the buckets [hash] takes from the root down to the trie's own depth. */
+fun Trie.Key.partHolds(hash: Long): Boolean =
+    (part?.toArray() ?: ByteArray(0)).withIndex().all { (depth, bucket) -> indexBucket(hash, depth) == bucket.toInt() }
 
 /**
  * Writes an index's tries: files of `(_hash, _iid)` rows, in unsigned-hash-then-IID order with no pair repeated,
@@ -41,6 +47,10 @@ class IndexTrieWriter @JvmOverloads constructor(
     private val pageLimit: Int = 1024,
 ) {
     private class Entry(val hash: Long, val iid: ByteArray)
+
+    private val entryOrder = Comparator<Entry> { a, b ->
+        compareUnsigned(a.hash, b.hash).takeIf { it != 0 } ?: Bytes.COMPARATOR.compare(a.iid, b.iid)
+    }
 
     /**
      * Writes the L0 for block [blockIdx] of an index on [column], from [rel]'s put rows — null where none of them gives the column a value.
@@ -71,9 +81,72 @@ class IndexTrieWriter @JvmOverloads constructor(
         return writeL0(files, blockIdx, entries)
     }
 
-    private fun entries() = TreeSet<Entry> { a, b ->
-        compareUnsigned(a.hash, b.hash).takeIf { it != 0 } ?: Bytes.COMPARATOR.compare(a.iid, b.iid)
+    /**
+     * Writes an index compaction's [outputs] from the set union of its [inputs]' entries.
+     *
+     * Each output takes the entries whose hash its part prefixes, as [indexBucket] reads a hash, so an output with no
+     * part takes them all; an output no entry falls in isn't written.
+     */
+    suspend fun compact(files: TrieFiles, inputs: List<Trie.Key>, outputs: List<Trie.Key>): List<IndexTrie> {
+        val outputEntries = outputs.associateWith { mutableListOf<Entry>() }
+
+        union(files, inputs) { entry ->
+            outputEntries.entries.firstOrNull { (key, _) -> key.partHolds(entry.hash) }?.value?.add(entry)
+        }
+
+        return outputEntries.mapNotNull { (key, entries) ->
+            if (entries.isEmpty()) null
+            else IndexTrie(key, write(files, key.toString(), entries, key.part?.size() ?: 0))
+        }
     }
+
+    private inner class Cursor(files: TrieFiles, key: Trie.Key) {
+        private val path = files.dataFilePath(key.toString())
+        private var pageCount = -1
+        private var nextPage = 0
+        private var page = emptyList<Entry>()
+        private var idx = 0
+
+        val entry: Entry get() = page[idx]
+
+        suspend fun advance(): Boolean {
+            if (++idx < page.size) return true
+
+            val footer = bp.getFooter(path)
+            if (pageCount < 0) pageCount = footer.recordBatches.size
+
+            while (nextPage < pageCount) {
+                page = Relation(al, footer.schema).use { rel ->
+                    bp.getRecordBatch(path, nextPage++).use { rel.load(it) }
+                    val hashes = rel["_hash"]
+                    val iids = rel["_iid"]
+                    List(rel.rowCount) { Entry(hashes.getLong(it), iids.getBytes(it).toBytes()) }
+                }
+                idx = 0
+                if (page.isNotEmpty()) return true
+            }
+
+            return false
+        }
+    }
+
+    private suspend fun union(files: TrieFiles, inputs: List<Trie.Key>, f: (Entry) -> Unit) {
+        val heap = PriorityQueue<Cursor>(maxOf(inputs.size, 1)) { a, b -> entryOrder.compare(a.entry, b.entry) }
+        for (key in inputs) Cursor(files, key).let { if (it.advance()) heap += it }
+
+        var last: Entry? = null
+        while (heap.isNotEmpty()) {
+            val cursor = heap.poll()
+            val entry = cursor.entry
+            if (last == null || entryOrder.compare(last, entry) != 0) {
+                f(entry)
+                last = entry
+            }
+            if (cursor.advance()) heap += cursor
+        }
+    }
+
+    private fun entries() = TreeSet(entryOrder)
 
     private fun MutableSet<Entry>.addPuts(rel: RelationReader, column: ColumnName) {
         val colRdr = rel["op"].vectorForOrNull("put")?.vectorForOrNull(column) ?: return
@@ -81,17 +154,20 @@ class IndexTrieWriter @JvmOverloads constructor(
 
         for (idx in 0 until rel.rowCount)
             if (!colRdr.isNull(idx))
-                this += Entry(IndexHash.of(colRdr, idx), iidRdr.getBytes(idx).let { buf -> ByteArray(buf.remaining()).also { buf.duplicate().get(it) } })
+                this += Entry(IndexHash.of(colRdr, idx), iidRdr.getBytes(idx).toBytes())
     }
 
     private suspend fun writeL0(files: TrieFiles, blockIdx: BlockIndex, entries: Set<Entry>): IndexTrie? {
         if (entries.isEmpty()) return null
 
         val key = Trie.l0Key(blockIdx)
-        return IndexTrie(key, write(files, key.toString(), entries.toList()))
+        return IndexTrie(key, write(files, key.toString(), entries.toList(), 0))
     }
 
-    private suspend fun write(files: TrieFiles, trieKey: TrieKey, entries: List<Entry>): FileSize =
+    private fun ByteBuffer.toBytes() = ByteArray(remaining()).also { duplicate().get(it) }
+
+    // [startDepth] is the depth of the trie's root in the index's tree: the length of its key's part.
+    private suspend fun write(files: TrieFiles, trieKey: TrieKey, entries: List<Entry>, startDepth: Int): FileSize =
         Relation(al, MetadataFileWriter.metaRelSchema(recencyBranches = false)).use { metaRel ->
             val nodes = metaRel["nodes"]
             val branch = nodes["branch-iid"]
@@ -140,7 +216,7 @@ class IndexTrieWriter @JvmOverloads constructor(
                     return nodeIdx
                 }
 
-                writeNode(0, entries.size, 0)
+                writeNode(0, entries.size, startDepth)
 
                 val dataFileSize = dataWriter.end()
 

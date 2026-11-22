@@ -254,6 +254,12 @@ internal class SourceLogProcessor(
                 txResolver.advanceSrcMsgId(msgId)
                 false
             }
+
+            is SourceMessage.IndexCompacted -> {
+                replicaAppender.append(ControlItem(ReplicaMessage.IndexCompacted(msg, sourceMsgId = msgId, termId = leaderTerm)))
+                txResolver.advanceSrcMsgId(msgId)
+                false
+            }
         }
     }
 

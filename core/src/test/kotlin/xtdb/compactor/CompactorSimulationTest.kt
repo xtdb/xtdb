@@ -22,6 +22,7 @@ import xtdb.SimulationTestUtils.Companion.createPartitionValue
 import xtdb.SimulationTestUtils.Companion.prefix
 import xtdb.SimulationTestUtils.Companion.setLogLevel
 import xtdb.api.log.SourceMessage.IndexBackfilled
+import xtdb.api.log.SourceMessage.IndexCompacted
 import xtdb.api.log.SourceMessage.TriesAdded
 import xtdb.api.log.Watchers
 import xtdb.api.storage.Storage
@@ -35,6 +36,8 @@ import xtdb.database.DatabaseName
 import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
 import xtdb.index.IndexDef
+import xtdb.index.IndexJob
+import xtdb.index.IndexTrie
 import xtdb.log.proto.TrieDetails
 import xtdb.storage.BufferPool
 import xtdb.storage.MemoryStorage
@@ -237,6 +240,12 @@ class CompactorMockDriverFactory(
 
         override suspend fun publishBackfill(backfilled: IndexBackfilled) =
             partitionState.indexBackfilled(backfilled.indexId, backfilled.blockIndex, backfilled.l0)
+
+        override suspend fun executeIndexCompaction(job: IndexJob) =
+            IndexCompacted(Storage.VERSION, 0, job.index.id, job.outputs.map { IndexTrie(it, 1) }, job.inputs)
+
+        override suspend fun publishIndexCompaction(compacted: IndexCompacted) =
+            partitionState.indexCompacted(compacted.indexId, compacted.outputs, compacted.inputs, Instant.now())
 
         // No-op: the mock owns no resources — the real driver closes its allocator + SegmentMerge here.
         override fun close() = Unit

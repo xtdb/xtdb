@@ -13,6 +13,7 @@ import xtdb.log.proto.detachDatabase
 import xtdb.log.proto.dropIndex
 import xtdb.log.proto.flushBlock
 import xtdb.log.proto.indexBackfilled
+import xtdb.log.proto.indexCompacted
 import xtdb.log.proto.sourceLogMessage
 import xtdb.log.proto.triesAdded
 import xtdb.log.proto.tx
@@ -86,6 +87,8 @@ sealed interface SourceMessage {
                             SourceLogMessage.MessageCase.DROP_INDEX -> DropIndex(msg.dropIndex.indexName)
 
                             SourceLogMessage.MessageCase.INDEX_BACKFILLED -> IndexBackfilled.fromProto(msg.indexBackfilled)
+
+                            SourceLogMessage.MessageCase.INDEX_COMPACTED -> IndexCompacted.fromProto(msg.indexCompacted)
 
                             SourceLogMessage.MessageCase.TX -> msg.tx.let {
                                 Tx(
@@ -215,6 +218,34 @@ sealed interface SourceMessage {
                 IndexBackfilled(
                     proto.storageVersion, proto.storageEpoch, UUID.fromString(proto.indexId), proto.blockIndex,
                     if (proto.hasL0DataFileSize()) proto.l0DataFileSize else null,
+                )
+        }
+    }
+
+    /**
+     * An index compaction job's [outputs], replacing its [inputs] in [indexId]'s tree, published by whichever node's compactor ran it.
+     *
+     * [outputs] holds only the outputs the job wrote: an output no entry fell in has no file.
+     */
+    data class IndexCompacted(
+        val storageVersion: Int, val storageEpoch: StorageEpoch,
+        val indexId: UUID, val outputs: List<IndexTrie>, val inputs: List<Trie.Key>,
+    ) : ProtobufMessage() {
+        fun toProto(): xtdb.log.proto.IndexCompacted = indexCompacted {
+            storageVersion = this@IndexCompacted.storageVersion
+            storageEpoch = this@IndexCompacted.storageEpoch
+            indexId = this@IndexCompacted.indexId.toString()
+            outputs += this@IndexCompacted.outputs.map { it.toProto() }
+            inputTrieKeys += this@IndexCompacted.inputs.map { it.toString() }
+        }
+
+        override fun toLogMessage() = sourceLogMessage { indexCompacted = toProto() }
+
+        companion object {
+            fun fromProto(proto: xtdb.log.proto.IndexCompacted) =
+                IndexCompacted(
+                    proto.storageVersion, proto.storageEpoch, UUID.fromString(proto.indexId),
+                    proto.outputsList.map { IndexTrie.fromProto(it) }, proto.inputTrieKeysList.map { Trie.parseKey(it) },
                 )
         }
     }

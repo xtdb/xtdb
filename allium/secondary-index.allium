@@ -4,11 +4,12 @@
 -- Secondary indices on one database: how a user declares one on a column, how it comes to cover every flushed block, how an equality scan uses it, and how it compacts, is collected and is dropped.
 --
 -- STATUS: this spec runs ahead of the implementation.
--- Of what follows, declaring and dropping an index, writing its L0s at block flush and by backfill, publishing Ready and scanning with a Ready index are true of the code yet: an index is declared Building and dropped as below, each block flush writes its L0 as BlockFlushWritesIndexL0s has it, backfill covers each owed block as BackfillWritesIndexL0 has it, the leader publishes Ready as LeaderDeclaresReady has it, its declaration, state and tries persist in its table's block file, and an equality scan probes a Ready index as ScanProbesReadyIndex has it.
--- Nothing yet compacts an index's tries or collects them, and a drop leaves an index's tries live rather than garbage.
+-- Of what follows, declaring and dropping an index, writing its L0s at block flush and by backfill, publishing Ready, compacting its tries and scanning with a Ready index are true of the code yet: an index is declared Building and dropped as below, each block flush writes its L0 as BlockFlushWritesIndexL0s has it, backfill covers each owed block as BackfillWritesIndexL0 has it, the leader publishes Ready as LeaderDeclaresReady has it, its tries compact as IndexCompactionWritesOutputs and IndexCompactionApplied have it, its declaration, state and tries persist in its table's block file, and an equality scan probes a Ready index as ScanProbesReadyIndex has it.
+-- Nothing yet collects an index's garbage tries, and a drop leaves an index's tries live rather than garbage.
 -- The probe takes a number, a string, a boolean or a UUID, and NULL.
 -- It doesn't yet hash a date or timestamp as HashAgreesWithEquality has it, so a scan comparing the column with one reads without the index, as it does for a list, set, struct or interval.
--- Each contract under Obligations on neighbouring specs names a delta that trie-cat.allium, db.allium, compaction.allium or gc.allium takes in the same commit as the code that makes it true; the contract leaves this spec as its delta lands.
+-- Each contract under Obligations on neighbouring specs names a delta that db.allium or gc.allium takes in the same commit as the code that makes it true; the contract leaves this spec as its delta lands.
+-- trie-cat.allium and compaction.allium take none: an index's tries live in the index catalog, not the trie catalog, and this spec selects and merges its compaction jobs; db.allium's compaction orchestration runs them under the compactor's one concurrency limit.
 -- live-index.allium takes no delta: the scan reads the live tier by applying its predicate to the live index's rows.
 --
 -- Scope: one ordinary database, as db.allium scopes it.
@@ -40,6 +41,11 @@
 -- BACKFILL writes the index L0s for the blocks flushed before the declaration, from those blocks' data L0s, as jobs in the compaction pool on any node.
 -- The leader decides when backfill is complete and publishes Ready on the replica log; it runs none of the backfill.
 -- From there the index's tries compact among themselves, by set union, independently of the data tree.
+--
+-- An index's tree has two SIDES, split at its first flushed block: below it, the blocks backfill covers, in any order; from it on, the blocks flushes cover, in order.
+-- Each side compacts on its own, as the current side of the data tree does: L0s levelled into L1, then tiered, partitioned by hash prefix from L2.
+-- A backfilled L0 is levelled only once no block below it is owed, so each side levels its L0s in block order, as the data tree's L0s arrive.
+-- That is what makes a compaction output's key name the same entries whichever node, at whichever log position, selects its job: two nodes writing one key write the same file.
 
 ------------------------------------------------------------
 -- Given
@@ -95,6 +101,8 @@ value TableRef {
 value IndexTrieKey {
     -- Where an index trie sits in its tree.
     -- The tree has levels and, at L2 and above, partitions by hash prefix, mirroring the current side of the data tree.
+    -- A trie at level L holds only entries whose hash takes part's buckets, two bits each from the top, down to depth L - 1.
+    -- block_index places the trie on its index's side: below the first flushed block or not.
     level: Integer
     part: List<Integer>
     block_index: Integer
@@ -139,38 +147,8 @@ contract IndexDeclarationsOnTheLogs {
     -- db.allium's delta.
 
     @invariant IndexTriesTravelLikeTries
-        -- Index compaction output goes to the source log in a message analogous to TriesAdded, and the leader forwards it to the replica log.
         -- The leader's trie GC publishes the index tries it deletes in a message analogous to TriesDeleted.
 
-}
-
-contract IndexTreeCatalog {
-    -- trie-cat.allium's delta.
-
-    @invariant OneTreePerIndex
-        -- Each index holds its own tries, with the nascent / live / garbage states and the current side's insertion strategy: L0 live on arrival, L1 levelled, L2 and above tiered with partition-group completion.
-        -- The data tries take no part in an index's tree, nor its tries in theirs.
-
-    @invariant LateL0sAreNotStale
-        -- Backfill adds index L0s for blocks below ones the index already holds, compacted or not.
-        -- Insertion accepts them, whatever the highest block the index already holds.
-}
-
-contract IndexTreeCompaction {
-    -- compaction.allium's delta.
-
-    @invariant SetUnionMerge
-        -- An index compaction job's output holds exactly the union of its inputs' entries, each (hash, IID) pair once.
-        -- The same pair recurs across inputs whenever an entity keeps a value across blocks.
-
-    @invariant DeterministicIndexJobs
-        -- Index compaction jobs are selected deterministically from the catalog, and their output files are a deterministic function of the job, so any node in the pool can run any of them.
-
-    @invariant OneConcurrencyLimit
-        -- Index compaction jobs share the compactor's configured concurrency with data and backfill jobs: with 8 configured, at most 8 run across all three.
-
-    @invariant DataCompactionIsIrrelevant
-        -- An index's entries are a function of the data L0 sequence alone, so no index job waits for, or reacts to, a data compaction job.
 }
 
 contract IndexTreeCollection {
@@ -222,6 +200,8 @@ entity SecondaryIndex {
     -- The system time of the transaction that dropped it.
     dropped_as_of: Timestamp?
 
+    -- At most one per key.
+    -- The data tries take no part in an index's tree, nor its tries in theirs.
     tries: IndexTrie with index = this
 
     -- Projections
@@ -240,10 +220,17 @@ entity SecondaryIndex {
 
 entity IndexTrie {
     -- One immutable file of an index's tree, holding (hash, IID) entries bucketed by hash prefix.
+    -- Live from the moment it joins its index; garbage once a compaction has replaced it, until the collector deletes it.
     index: SecondaryIndex
     key: IndexTrieKey
-    trie_state: nascent | live | garbage
-    garbage_as_of: Timestamp?
+    data_file_size: Integer
+    trie_state: live | garbage
+    garbage_as_of: Timestamp?  -- present iff garbage
+
+    transitions trie_state {
+        live -> garbage
+        terminal: garbage
+    }
 }
 
 ------------------------------------------------------------
@@ -347,6 +334,7 @@ rule DropRemovesIndex {
 
 rule BlockFlushWritesIndexL0s {
     -- Every index on the flushed table not dropped, Building or Ready, gets one L0 for the block's put rows.
+    -- An L0 joins its index whatever the highest block the index already holds, compacted or not, unless the index already holds a trie at its key.
     -- A block with no put row carrying the column writes none for that index.
     -- The L0s ride in the block upload and are adopted with the block's data tries, so a snapshot's index set covers exactly the blocks its trie catalog does.
     when: BlockProduced(block_index, table)
@@ -377,15 +365,46 @@ rule BackfillWritesIndexL0 {
         index.owed_blocks = without(index.owed_blocks, block_index)
 }
 
-rule IndexCompactionWritesOutput {
-    -- Inputs and output belong to one index; the output's entries are the union of the inputs'.
-    -- Levelling, tiering and partition-group completion follow the current side of the data tree, so an output may first be nascent, and its inputs become garbage once it is live.
-    -- Its output is published like data compaction output, and reaches every node through the replica log.
-    when: IndexCompactionJobRuns(compactor, index, inputs, output_key)
+rule IndexCompactionJobsSelected {
+    -- Selected from the index catalog alone, as a pure function of it, so any node selects the same jobs at the same log position, and two nodes running one job is harmless.
+    -- An index's entries are a function of the data L0s alone, so no index job waits for, or reacts to, a data compaction job.
+    -- Per index not dropped, Building or Ready, and per side of its first flushed block, over its live tries on that side:
+    --   - LEVELLING: the oldest L0, with the newest L1 if that is under the data tries' file-size target, into one L1 at the L0's block.
+    --     On the backfill side, only once no block below the L0 is owed.
+    --   - TIERING: the four oldest tries at one level and part — L1s only once at the file-size target — into four tries a level deeper, one per next hash bucket, at the newest input's block.
+    when: IndexCompactionJobsRequested(compactor)
 
-    ensures: IndexTrie.created(
-        index: index, key: output_key, trie_state: nascent, garbage_as_of: null
-    )
+    ensures:
+        for job in index_compaction_jobs(catalog):
+            IndexCompactionJobRuns(compactor, job.index, job.inputs, job.output_keys)
+}
+
+rule IndexCompactionWritesOutputs {
+    -- Each output holds the union of the inputs' entries whose hash takes its part, each (hash, IID) pair once: the same pair recurs across inputs whenever an entity keeps a value across blocks.
+    -- An output no entry falls in is not written.
+    -- The job publishes its outputs with the inputs they replace as db.allium's IndexCompactedMessage, and every node applies it at the same position on the replica log.
+    when: IndexCompactionJobRuns(compactor, index, inputs, output_keys)
+
+    ensures: IndexCompactionPublished(index: index, outputs: written_outputs(inputs, output_keys), inputs: inputs)
+}
+
+rule IndexCompactionApplied {
+    -- In one write of the index catalog, so a snapshot sees either the inputs live or the outputs live, never neither.
+    -- A publish whose inputs are not all still live — a duplicate, or a late one from a node that selected its job before another job replaced an input — changes nothing, so it can neither resurrect a garbage trie nor retire one twice.
+    -- An output whose key the index already holds is not added again.
+    when: IndexCompactionApplied(replica, index, outputs, inputs, log_timestamp)
+    requires: inputs.all(k => index.live_tries.any(t => t.key = k))
+
+    ensures:
+        for trie in index.tries:
+            if inputs.any(k => trie.key = k):
+                trie.trie_state = garbage
+                trie.garbage_as_of = log_timestamp
+        for output in outputs:
+            if not index.tries.any(t => t.key = output.key):
+                IndexTrie.created(
+                    index: index, key: output.key, data_file_size: output.data_file_size, trie_state: live, garbage_as_of: null
+                )
 }
 
 ---- Readiness
@@ -471,6 +490,15 @@ invariant SupersessionPreservesEntries {
         trie.trie_state = garbage and exists trie.index implies entries_covered_by_live(trie)
 }
 
+invariant AnOutputKeyNamesItsEntries {
+    -- Every job that selects an output key, on any node at any log position, writes the same entries there.
+    -- So a job whose publish is refused, writing its file after another job's publish was applied, rewrites that file as it was.
+    -- What makes it true: each side of an index's tree levels its L0s in block order, and tiers its tries in the order they were written.
+    for a in IndexCompactionJobs:
+        for b in IndexCompactionJobs:
+            a.index = b.index and shared_output_key(a, b) implies same_entries_at_shared_keys(a, b)
+}
+
 ------------------------------------------------------------
 -- Actor Declarations
 ------------------------------------------------------------
@@ -542,10 +570,10 @@ surface IndexMaintenance {
 
     provides:
         BackfillJobRuns(compactor, index, block_index)
-        IndexCompactionJobRuns(compactor, index, inputs, output_key)
+        IndexCompactionJobsRequested(compactor)
+        IndexCompactionJobRuns(compactor, index, inputs, output_keys)
 
     contracts:
-        demands IndexTreeCompaction
         demands IndexTreeCollection
 }
 
@@ -554,9 +582,7 @@ surface IndexReplication {
 
     provides:
         IndexReadyApplied(replica, index)
-
-    contracts:
-        demands IndexTreeCatalog
+        IndexCompactionApplied(replica, index, outputs, inputs, log_timestamp)
 }
 
 ------------------------------------------------------------

@@ -26,6 +26,7 @@ import xtdb.log.proto.TrieDetails
 import xtdb.storage.BufferPool
 import xtdb.time.InstantUtil.asMicros
 import xtdb.trie.BlockIndex
+import xtdb.trie.Trie
 import xtdb.trie.TrieCatalog
 import xtdb.trie.withTries
 import xtdb.types.LogTimestamp
@@ -100,6 +101,10 @@ class PartitionState private constructor(
     /** @see IndexCatalog.backfilled */
     fun indexBackfilled(id: UUID, block: BlockIndex, l0: IndexTrie?) =
         ref.update { it.withIndexCat(it.indexCat.backfilled(id, block, l0)) }
+
+    /** @see IndexCatalog.compacted */
+    fun indexCompacted(id: UUID, outputs: List<IndexTrie>, inputs: List<Trie.Key>, asOf: Instant) =
+        ref.update { it.withIndexCat(it.indexCat.compacted(id, outputs, inputs, asOf)) }
 
     /** @see IndexCatalog.ready */
     fun indexReady(id: UUID) = ref.update { it.withIndexCat(it.indexCat.ready(id)) }

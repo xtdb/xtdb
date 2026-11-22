@@ -3,10 +3,12 @@
             [clojure.test :as t]
             [next.jdbc :as jdbc]
             [xtdb.api :as xt]
+            [xtdb.compactor :as c]
             [xtdb.db-catalog :as db]
             [xtdb.log :as xt-log]
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
+            [xtdb.trie-catalog :as cat]
             [xtdb.util :as util])
   (:import (java.io DataInputStream DataOutputStream)
            (java.net InetAddress Socket)
@@ -293,7 +295,7 @@
               "a restarted node holds the same states")))))
 
 (defn- index-tries
-  "Each index's tries, by name, with the files under its directory."
+  "Each index's Live tries, by name, with the files under its directory."
   [^Database db]
   (let [files (->> (.listAllObjects (.getBufferPool db) (util/->path "tables"))
                    (map (comp str #(.getKey ^ObjectStore$StoredObject %)))
@@ -302,7 +304,7 @@
          (into {} (map (fn [^SecondaryIndex index]
                          (let [index-id (str (.getId (.getDef index)))]
                            [(.getName (.getDef index))
-                            {:tries (mapv #(str (.getKey ^IndexTrie %)) (.getTries index))
+                            {:tries (mapv #(str (.getKey ^IndexTrie %)) (.getLiveTries index))
                              :files (->> files
                                          (filter #(str/includes? % index-id))
                                          (map #(str/replace % index-id "<id>"))
@@ -358,11 +360,15 @@
     (let [node-opts {:log [:local {:path (.resolve path "log")}]
                      :storage [:local {:path (.resolve path "objects")}]}
           expected {:state :ready
-                    :tries ["l00-rc-b00" "l00-rc-b03"]
+                    :tries ["l01-rc-b03"]
                     :files ["tables/public$users/indices/<id>/data/l00-rc-b00.arrow"
                             "tables/public$users/indices/<id>/data/l00-rc-b03.arrow"
+                            "tables/public$users/indices/<id>/data/l01-rc-b00.arrow"
+                            "tables/public$users/indices/<id>/data/l01-rc-b03.arrow"
                             "tables/public$users/indices/<id>/meta/l00-rc-b00.arrow"
-                            "tables/public$users/indices/<id>/meta/l00-rc-b03.arrow"]}
+                            "tables/public$users/indices/<id>/meta/l00-rc-b03.arrow"
+                            "tables/public$users/indices/<id>/meta/l01-rc-b00.arrow"
+                            "tables/public$users/indices/<id>/meta/l01-rc-b03.arrow"]}
           by-email (fn [db]
                      (let [{:keys [tries files]} (get (index-tries db) "by_email")]
                        {:state (:state (first (indices db)))
@@ -390,7 +396,7 @@
         (jdbc/execute! node ["CREATE INDEX by_email ON users (email)"])
 
         (t/is (= expected (await-by-email (db/primary-db node)))
-              "L0s for the blocks whose puts gave the column a value, none for one whose puts didn't or that the table didn't write in, then Ready")
+              "L0s for the blocks whose puts gave the column a value, none for one whose puts didn't or that the table didn't write in, levelled into one L1, then Ready")
 
         (xt-log/sync-node follower #xt/duration "PT5S")
         (t/is (= expected (await-by-email (db/primary-db follower)))
@@ -494,6 +500,32 @@
 
       (t/is (= plain-pages (scan-pages-used node :docs "v = ?" ["user-1234"]))
             "a scan after the drop reads without it"))))
+
+(t/deftest an-equality-scan-returns-the-same-rows-once-the-index-has-compacted-to-l2
+  (binding [cat/*file-size-target* 16
+            c/*page-size* 16]
+    (with-open [node (xtn/start-node {})]
+      (jdbc/execute! node ["CREATE INDEX by_v ON docs (v)"])
+      (await-ready node)
+
+      (doseq [block (range 12)]
+        (execute-on-both! node (fn [table] [(into [:put-docs table] (for [i (range 50)] {:xt/id (+ (* block 50) i), :v (str "user-" (mod (+ (* block 50) i) 70))}))
+                                            [:put-docs table {:xt/id (* block 7), :v (str "moved-" block)}]
+                                            [:delete-docs table (+ (* block 50) 3)]]))
+        (tu/flush-block! node))
+
+      (c/compact-all! node #xt/duration "PT30S")
+
+      (let [live-levels (->> (.getIndices (.getIndexCatalog (.getQueryState (db/primary-db node))))
+                             (mapcat #(.getLiveTries ^SecondaryIndex %))
+                             (map #(.getLevel (.getKey ^IndexTrie %))))]
+        (t/is (seq live-levels))
+        (t/is (every? #(>= (long %) 2) live-levels) "every L0 has compacted into partitioned tries"))
+
+      (doseq [v (concat ["user-0" "user-3" "user-53" "user-69" "user-70" "moved-0" "moved-11" "nope"]
+                        (map #(str "user-" %) (range 0 70 7)))]
+        (t/is (= (matching node :plain "v = ?" [v]) (matching node :docs "v = ?" [v]))
+              (str "param " (pr-str v)))))))
 
 (defn- await=
   [expected f]

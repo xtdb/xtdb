@@ -5,7 +5,11 @@ import xtdb.SimulationTestUtils.Companion.createPartitionValue
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
+import com.carrotsearch.hppc.ByteArrayList
+import xtdb.index.IndexTrie
+import xtdb.trie.Trie
 import java.time.Instant
+import java.util.UUID
 
 class ReplicaMessageTermSeqTest {
 
@@ -21,6 +25,14 @@ class ReplicaMessageTermSeqTest {
             ReplicaMessage.NoOp(termId = 3),
             ReplicaMessage.TriesDeleted("public/foo", setOf("trie"), termId = 3),
             ReplicaMessage.OversizedMessage(1, 0, 0, "payload", termId = 3),
+            ReplicaMessage.IndexCompacted(
+                SourceMessage.IndexCompacted(
+                    1, 0, UUID.fromString("00000000-0000-0000-0000-00000000000a"),
+                    listOf(IndexTrie(Trie.Key(2, null, ByteArrayList.from(1), 7), 1024)),
+                    listOf(Trie.Key(1, null, null, 4), Trie.Key(1, null, null, 7)),
+                ),
+                sourceMsgId = 1, termId = 3,
+            ),
         )
 
         for (msg in msgs) {

@@ -17,6 +17,7 @@ message ReplicaLogMessage {
         OversizedMessage oversized_message = 8;
         IndexReady index_ready = 10;
         IndexBackfilled index_backfilled = 11;
+        IndexCompacted index_compacted = 12;
     }
 
     // The leader term that produced this message, for read-side fencing: followers

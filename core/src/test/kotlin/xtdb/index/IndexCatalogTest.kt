@@ -18,6 +18,8 @@ class IndexCatalogTest {
 
     private fun Fault.errorCode() = data.valAt(errorCodeKey)
 
+    private fun IndexCatalog.roundTripped() = IndexCatalog.fromProto(tables.associateWith { toProto(it) })
+
     @Test
     fun `a catalog round-trips through its tables' block files, each holding its own table's indices, in every state, tries included`() {
         val dropAt = Instant.parse("2026-01-02T03:04:05.123456Z")
@@ -38,11 +40,11 @@ class IndexCatalogTest {
 
         assertEquals(
             setOf(
-                SecondaryIndex(byEmail, 3, IndexState.Building(setOf(0L, 1L, 2L)), byEmailL0s),
-                SecondaryIndex(bySku, 5, IndexState.Dropped(dropAt), listOf(bySkuL0)),
-                SecondaryIndex(byName, 5, IndexState.Ready, emptyList()),
+                SecondaryIndex(byEmail, 3, IndexState.Building(setOf(0L, 1L, 2L)), byEmailL0s.associateWith { IndexTrieState.Live }),
+                SecondaryIndex(bySku, 5, IndexState.Dropped(dropAt), mapOf(bySkuL0 to IndexTrieState.Live)),
+                SecondaryIndex(byName, 5, IndexState.Ready, emptyMap()),
             ),
-            IndexCatalog.fromProto(catalog.tables.associateWith { catalog.toProto(it) }).indices.toSet(),
+            catalog.roundTripped().indices.toSet(),
         )
         assertEquals(
             listOf(bySku.id.toString()),
@@ -131,7 +133,7 @@ class IndexCatalogTest {
             .backfilled(byEmail.id, 1, l0)
             .backfilled(byEmail.id, 0, null)
 
-        assertEquals(SecondaryIndex(byEmail, 3, IndexState.Building(setOf(2L)), listOf(l0)), catalog[byEmail.id])
+        assertEquals(SecondaryIndex(byEmail, 3, IndexState.Building(setOf(2L)), mapOf(l0 to IndexTrieState.Live)), catalog[byEmail.id])
     }
 
     @Test
@@ -163,6 +165,63 @@ class IndexCatalogTest {
     @Test
     fun `a backfill for an index the catalog does not hold faults`() {
         val fault = assertThrows<Fault> { IndexCatalog.EMPTY.backfilled(UUID.randomUUID(), 0, null) }
+        assertEquals(Keyword.intern("xtdb.index", "unknown-index"), fault.errorCode())
+    }
+
+    private fun l1(block: Long) = Trie.Key(1, null, null, block)
+
+    @Test
+    fun `a compaction makes its outputs Live and its inputs Garbage, in one step`() {
+        val byEmail = def("by_email")
+        val asOf = Instant.parse("2026-01-02T03:04:05Z")
+        val l0s = listOf(IndexTrie(Trie.l0Key(0), 10), IndexTrie(Trie.l0Key(1), 20))
+        val out = IndexTrie(l1(1), 25)
+
+        val catalog = IndexCatalog.EMPTY.withIndex(byEmail, 0, emptySet())
+            .withL0s(mapOf(byEmail.id to l0s[0])).withL0s(mapOf(byEmail.id to l0s[1]))
+            .compacted(byEmail.id, listOf(out), l0s.map { it.key }, asOf)
+
+        assertEquals(
+            mapOf(l0s[0] to IndexTrieState.Garbage(asOf), l0s[1] to IndexTrieState.Garbage(asOf), out to IndexTrieState.Live),
+            catalog[byEmail.id]?.tries,
+        )
+        assertEquals(listOf(out), catalog[byEmail.id]?.liveTries)
+        assertEquals(catalog.indices.toSet(), catalog.roundTripped().indices.toSet(), "Garbage tries persist with their dates")
+    }
+
+    @Test
+    fun `a compaction whose inputs are not all still Live changes nothing`() {
+        val byEmail = def("by_email")
+        val l0s = (0L..2L).map { IndexTrie(Trie.l0Key(it), 10) }
+        val catalog = l0s.fold(IndexCatalog.EMPTY.withIndex(byEmail, 0, emptySet())) { cat, l0 -> cat.withL0s(mapOf(byEmail.id to l0)) }
+            .compacted(byEmail.id, listOf(IndexTrie(l1(1), 15)), listOf(l0s[0].key, l0s[1].key), Instant.EPOCH)
+
+        assertEquals(
+            catalog.indices.toList(),
+            catalog
+                .compacted(byEmail.id, listOf(IndexTrie(l1(1), 15)), listOf(l0s[0].key, l0s[1].key), Instant.EPOCH.plusSeconds(1))
+                .compacted(byEmail.id, listOf(IndexTrie(l1(2), 20)), listOf(l0s[1].key, l0s[2].key), Instant.EPOCH.plusSeconds(1))
+                .compacted(byEmail.id, listOf(IndexTrie(l1(9), 20)), listOf(Trie.l0Key(9)), Instant.EPOCH.plusSeconds(1))
+                .indices.toList(),
+            "a duplicate publish, one with an input another job replaced, and one with an input never added",
+        )
+    }
+
+    @Test
+    fun `adding a trie whose key the index already holds changes nothing, whatever its state`() {
+        val byEmail = def("by_email")
+        val l0 = IndexTrie(Trie.l0Key(0), 10)
+        val catalog = IndexCatalog.EMPTY.withIndex(byEmail, 0, emptySet()).withL0s(mapOf(byEmail.id to l0))
+
+        assertEquals(catalog.indices.toList(), catalog.withL0s(mapOf(byEmail.id to IndexTrie(Trie.l0Key(0), 99))).indices.toList())
+
+        val compacted = catalog.compacted(byEmail.id, listOf(IndexTrie(l1(0), 10)), listOf(l0.key), Instant.EPOCH)
+        assertEquals(compacted.indices.toList(), compacted.withL0s(mapOf(byEmail.id to l0)).indices.toList(), "a Garbage trie is not made Live again")
+    }
+
+    @Test
+    fun `a compaction for an index the catalog does not hold faults`() {
+        val fault = assertThrows<Fault> { IndexCatalog.EMPTY.compacted(UUID.randomUUID(), emptyList(), emptyList(), Instant.EPOCH) }
         assertEquals(Keyword.intern("xtdb.index", "unknown-index"), fault.errorCode())
     }
 }

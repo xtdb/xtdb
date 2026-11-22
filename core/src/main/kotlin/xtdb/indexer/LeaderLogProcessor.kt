@@ -224,6 +224,15 @@ internal class LeaderLogProcessor(
                 announceReady(listOfNotNull(partitionState.indexCatalog[backfilled.indexId]))
             }
 
+            is ReplicaMessage.IndexCompacted -> {
+                val compacted = msg.compacted
+                if (compacted.storageVersion == Storage.VERSION && compacted.storageEpoch == bufferPool.epoch)
+                    partitionState.indexCompacted(compacted.indexId, compacted.outputs, compacted.inputs, record.logTimestamp)
+
+                // Below the guard, as for TriesAdded: the compactor awaits this watermark and then recalculates its jobs.
+                watchers.notifyApplied(msg.sourceMsgId)
+            }
+
             is BlockBoundary -> {
                 // Produce only: the catalog refresh, the index roll, the source watermark and the
                 // resolution resume all wait for the `BlockUploaded` this appends to come back.

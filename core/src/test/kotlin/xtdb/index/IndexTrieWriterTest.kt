@@ -1,6 +1,7 @@
 package xtdb.index
 
 import kotlinx.coroutines.runBlocking
+import com.carrotsearch.hppc.ByteArrayList
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
 import org.junit.jupiter.api.AfterEach
@@ -208,5 +209,78 @@ class IndexTrieWriterTest {
     fun `a backfill of a block the table has no data L0 for writes no L0`() {
         assertNull(runBlocking { IndexTrieWriter(al, bp).backfillL0(files, 0, "email") })
         assertEquals(emptyList<Any>(), bp.listAllObjects().toList())
+    }
+
+    private fun leaves(key: Trie.Key): List<ArrowHashTrie.Leaf> = runBlocking {
+        val metaPath = files.metaFilePath(key.toString())
+        Relation(al, bp.getFooter(metaPath).schema).use { metaRel ->
+            bp.getRecordBatch(metaPath, 0).use { metaRel.load(it) }
+            ArrowHashTrie(metaRel["nodes"]).use { hashTrie ->
+                val leaves = mutableListOf<ArrowHashTrie.Leaf>()
+                fun walk(node: HashTrie.Node<ArrowHashTrie.Leaf>?) {
+                    when (node) {
+                        null -> {}
+                        is ArrowHashTrie.Leaf -> leaves += node
+                        is HashTrie.IidBranch -> node.hashChildren.forEach(::walk)
+                        else -> error("unexpected node: $node")
+                    }
+                }
+                walk(hashTrie.rootNode)
+                leaves
+            }
+        }
+    }
+
+    private fun rows(trie: IndexTrie): List<Row> {
+        val depth = trie.key.part?.size() ?: 0
+        return leaves(trie.key).sortedBy { it.dataPageIndex }.flatMap { leaf ->
+            readPage(files.dataFilePath(trie.key.toString()), leaf.dataPageIndex).onEach { row ->
+                assertEquals(leaf.path.toList(), List(leaf.path.size) { indexBucket(row.hash, depth + it).toByte() })
+            }
+        }
+    }
+
+    private fun emails(range: IntRange): Relation.() -> Unit = { for (n in range) put(iid(n), mapOf("email" to "user-$n@example.com")) }
+
+    private fun expectedRows(range: IntRange) =
+        range.map { row(hashOf("user-$it@example.com"), iid(it)) }
+            .sortedWith { a, b -> java.lang.Long.compareUnsigned(a.hash, b.hash).takeIf { it != 0 } ?: a.iid[15].compareTo(b.iid[15]) }
+
+    @Test
+    fun `a compaction writes each entry of its inputs once, reading every page of each`() {
+        val inputs = listOf(writeL0(0, pageLimit = 4, emails(0 until 100))!!, writeL0(1, pageLimit = 4, emails(50 until 150))!!)
+
+        val out = runBlocking {
+            IndexTrieWriter(al, bp, pageLimit = 4).compact(files, inputs.map { it.key }, listOf(Trie.Key(1, null, null, 1)))
+        }.single()
+
+        assertEquals(Trie.Key(1, null, null, 1), out.key)
+        assertEquals(expectedRows(0 until 150), rows(out))
+        assertEquals(bp.listAllObjects(files.dataFilePath(out.key.toString()).parent).single { it.key == files.dataFilePath(out.key.toString()) }.size, out.dataFileSize)
+    }
+
+    @Test
+    fun `a partitioned compaction writes each output the entries in its hash bucket, its tree rooted at its own depth`() {
+        val inputs = (0L until 4L).map { block -> writeL0(block, pageLimit = 4, emails((block * 40).toInt() until (block * 40 + 60).toInt()))!! }
+        val outputs = (0 until 4).map { Trie.Key(2, null, ByteArrayList.from(it.toByte()), 3) }
+
+        val written = runBlocking { IndexTrieWriter(al, bp, pageLimit = 4).compact(files, inputs.map { it.key }, outputs) }
+
+        assertEquals(outputs, written.map { it.key })
+        for (trie in written)
+            assertTrue(rows(trie).all { indexBucket(it.hash, 0).toByte() == trie.key.part!![0] }, "${trie.key} holds only its bucket")
+
+        assertEquals(expectedRows(0 until 180).toSet(), written.flatMap { rows(it) }.toSet())
+        assertEquals(180, written.sumOf { rows(it).size })
+    }
+
+    @Test
+    fun `a partitioned compaction writes no output for a bucket no entry falls in`() {
+        val input = writeL0(0, writeEvents = emails(0..0))!!
+        val outputs = (0 until 4).map { Trie.Key(2, null, ByteArrayList.from(it.toByte()), 0) }
+
+        val written = runBlocking { IndexTrieWriter(al, bp).compact(files, listOf(input.key), outputs) }
+
+        assertEquals(listOf(outputs[indexBucket(hashOf("user-0@example.com"), 0)]), written.map { it.key })
     }
 }
