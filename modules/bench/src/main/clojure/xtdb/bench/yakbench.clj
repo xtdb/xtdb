@@ -38,7 +38,7 @@
     :f #(xt/q % ["select ad$user from ads where ad$updated_at > ?"
                  active-inst])}
    {:id :active-users-by-ad-clicked
-    :f #(xt/q % ["select distinct ad.click$user from ad_clicks where ad.click$created_at > ?"
+    :f #(xt/q % ["select distinct ad$click$user from ad_clicks where ad$click$created_at > ?"
                  active-inst])}
    {:id :favorited-urls
     :f #(xt/q % [(str "select item$url "
@@ -349,14 +349,14 @@
     (let [queries [["subs" "select count(*) from subs where sub$user = ?" [user-id]]
                    ["items" "select count(*) from items where item$feed$feed is not null and item$feed$feed in (select sub$feed$feed from subs where sub$user = ?)" [user-id]]
                    ["user_items" "select count(*) from user_items where user_item$user = ?" [user-id]]
-                   ["ad_clicks" "select count(*) from ad_clicks where ad.click$user = ?" [user-id]]
+                   ["ad_clicks" "select count(*) from ad_clicks where ad$click$user = ?" [user-id]]
                    ["digests" "select count(*) from digests where digest$user = ?" [user-id]]
                    ["skips" "select count(*) from skips where skip$user = ?" [user-id]]
                    ["ads" "select count(*) from ads where ad$user = ?" [user-id]]
                    ["ad_credits"
                     (str "select count(c._id) \n"
                          "from ad_credits c \n"
-                         "join ads a on c.ad.credit$ad = a._id \n"
+                         "join ads a on c.ad$credit$ad = a._id \n"
                          "where a.`ad$user` = ?")
                     [user-id]]]]
 
