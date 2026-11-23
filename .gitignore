@@ -50,7 +50,6 @@ kls_database.db
 .terraform/
 terraform.tfstate
 terraform.tfstate.backup
-.terraform.lock.hcl
 
 # This directory should only contain data not checked in
 src/test/resources/data/
