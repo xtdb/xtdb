@@ -442,6 +442,83 @@ Once all pieces are in place, verify:
 6. Slack posts a timeseries chart and text summary on completion.
 7. `terraform plan` / `terraform apply` in `cloud/metrics/` succeeds.
 
+== Maintaining the nightly run
+
+=== How a change reaches the nightly run
+
+Most of the nightly run deploys itself from the branch it runs against.
+Every run of `run-nightly-benchmark.yml` builds its own `xtdb-bench` image from the branch head, installs the monitoring stack from `cloud/monitoring/`, and deploys the Helm chart from `cloud/helm/` with `cloud/azure/values.yaml`.
+A change to the benchmark code, the Dockerfile, the workflows, the Helm chart or the monitoring dashboards takes effect on the next run after it lands on `main`.
+
+The two Terraform stacks are the exception: nothing applies them for you.
+
+[cols="1,2,2",options="header"]
+|===
+| Directory | What it manages | When to apply
+
+| `cloud/azure/`
+| The AKS cluster, the benchmark storage account and containers, the managed identity and its federated credentials, the Log Analytics workspace.
+| After any change under `cloud/azure/*.tf`.
+
+| `cloud/metrics/`
+| The Azure dashboard, the per-benchmark anomaly-detection Logic Apps and their KQL queries, the Slack action group.
+| After any change under `cloud/metrics/`: adding, retiring or re-scaling a benchmark, or changing a query or a dashboard panel.
+|===
+
+Until someone applies, the live dashboards and alerts run on the old definitions, so an alert can fire, or stay silent, on a query the repo no longer has.
+Apply as part of landing the change, not later.
+
+=== Access
+
+You need the Azure CLI logged into the `XTDB long-run reliability` subscription, with rights over the `cloud-benchmark-resources` and `xtdb-bench-terraform-state` resource groups:
+
+[source,bash]
+----
+az login --scope https://management.azure.com//.default
+az account set --subscription "XTDB long-run reliability"
+----
+
+If you don't have access to the subscription, ask the team in `#xtdb-dev` rather than working around it.
+
+Both stacks keep their state remotely in the `xtdbbenchstate` storage account, so `terraform init` is all the local setup there is.
+Provider versions are pinned by the committed `.terraform.lock.hcl` in each directory; commit it again whenever `terraform init -upgrade` changes it.
+
+=== Applying a change
+
+[source,bash]
+----
+cd modules/bench/cloud/metrics   # or cloud/azure
+terraform init
+export TF_VAR_slack_webhook_url=...   # cloud/metrics only - see below
+terraform plan
+terraform apply
+----
+
+Read the plan before you apply it:
+
+* Expect it to touch only what your change touches.
+  A destroy is right only for a benchmark you've deliberately retired; anything else being destroyed or replaced means the live state has drifted, or the plan isn't the one you think.
+* If the plan carries changes you didn't make, someone else's merged change hasn't been applied yet.
+  Check its commit before you apply it alongside yours.
+* `slack_webhook_url` defaults to empty, and an empty value blanks the Slack URL in the alert relay and in every anomaly Logic App, so alerts stop reaching Slack without any error.
+  If the plan changes a `uri` to `""`, you haven't set `TF_VAR_slack_webhook_url`.
+
+=== GitHub secrets
+
+The workflows read these repository secrets (Settings → Secrets and variables → Actions):
+
+[cols="1,2",options="header"]
+|===
+| Secret | Used for
+
+| `BENCHMARK_AZURE_CLIENT_ID`, `BENCHMARK_AZURE_TENANT_ID`, `BENCHMARK_AZURE_SUBSCRIPTION_ID` | Logging the workflows into Azure (OIDC).
+| `BENCHMARK_AZURE_USER_MANAGED_IDENTITY_CLIENT_ID` | The workload identity the benchmark pods run as.
+| `BENCHMARK_GITHUB_PAT` | Letting the benchmark dispatch the cleanup workflow when it finishes. It expires, so rotate it before it does.
+| `BENCHMARK_SLACK_BOT_TOKEN`, `BENCHMARK_SLACK_CHANNEL_ID` | Posting results to Slack.
+| `BENCHMARK_GRAFANA_ADMIN_PASSWORD` | The Grafana instance the monitoring stack installs.
+| `BENCHMARK_DATASETS_AWS_ACCESS_KEY_ID`, `BENCHMARK_DATASETS_AWS_SECRET_ACCESS_KEY`, `BENCHMARK_DATASETS_AWS_REGION` | Reading the ClickBench dataset from S3.
+|===
+
 == CI and Grafana Dashboard Images
 
 === GitHub Actions
