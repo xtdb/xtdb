@@ -45,10 +45,18 @@ class SingletonListReader(override val name: String, private val elReader: Vecto
         return hash
     }
 
-    override fun valueReader() = object : ValueReader {
+    override fun valueReader() = object : RowValueReader {
         val startIdx = getListStartIndex(0)
         val valueCount = getListCount(0)
         val elValueReader = elReader.valueReader()
+
+        override fun hasNext() = pos < 0
+
+        override var pos = -1
+            set(value) {
+                check(value == 0)
+                field = value
+            }
 
         override val isNull get() = false
         override fun readObject(keyFn: IKeyFn<*>) = getObject(0, keyFn)
