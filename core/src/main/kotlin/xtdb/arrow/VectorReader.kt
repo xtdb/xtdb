@@ -114,7 +114,11 @@ interface VectorReader : ILookup, AutoCloseable {
      */
     fun getTypeId(idx: Int): Byte = unsupported("getTypeId")
 
-    fun valueReader(): ValueReader = ValueReader.ForVector(this)
+    /**
+     * Reads this vector's rows: set [ValueReader.pos] to read a row, or iterate to walk them in order.
+     * Starts before row 0.
+     */
+    fun valueReader(): RowValueReader = ValueReader.ForVector(this)
 
     /**
      * Writes rows `[startIdx, startIdx + len)` of this vector into [out] as part of one page, [len] defaulting

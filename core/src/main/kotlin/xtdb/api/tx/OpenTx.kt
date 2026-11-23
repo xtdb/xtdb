@@ -537,12 +537,15 @@ class OpenTx
             val perRowCheck = vfRdr != null || vtRdr != null
             if (!perRowCheck) checkValidTimes(defaultValidFromMicros, defaultValidToMicros)
 
-            repeat(rowCount) { idx ->
-                val rowValidFrom =
-                    if (vfRdr != null && !vfRdr.isNull(idx)) vfRdr.getLong(idx) else defaultValidFromMicros
+            val vfRows = vfRdr?.valueReader()
+            val vtRows = vtRdr?.valueReader()
 
-                val rowValidTo =
-                    if (vtRdr != null && !vtRdr.isNull(idx)) vtRdr.getLong(idx) else defaultValidToMicros
+            repeat(rowCount) {
+                val vf = vfRows?.next()
+                val vt = vtRows?.next()
+
+                val rowValidFrom = if (vf != null && !vf.isNull) vf.readLong() else defaultValidFromMicros
+                val rowValidTo = if (vt != null && !vt.isNull) vt.readLong() else defaultValidToMicros
 
                 if (perRowCheck) checkValidTimes(rowValidFrom, rowValidTo)
 
@@ -604,12 +607,15 @@ class OpenTx
             val perRowCheck = vfRdr != null || vtRdr != null
             if (!perRowCheck) checkValidTimes(defaultValidFromMicros, defaultValidToMicros)
 
-            repeat(rowCount) { idx ->
-                val rowValidFrom =
-                    if (vfRdr != null && !vfRdr.isNull(idx)) vfRdr.getLong(idx) else defaultValidFromMicros
+            val vfRows = vfRdr?.valueReader()
+            val vtRows = vtRdr?.valueReader()
 
-                val rowValidTo =
-                    if (vtRdr != null && !vtRdr.isNull(idx)) vtRdr.getLong(idx) else defaultValidToMicros
+            repeat(rowCount) {
+                val vf = vfRows?.next()
+                val vt = vtRows?.next()
+
+                val rowValidFrom = if (vf != null && !vf.isNull) vf.readLong() else defaultValidFromMicros
+                val rowValidTo = if (vt != null && !vt.isNull) vt.readLong() else defaultValidToMicros
 
                 if (perRowCheck) checkValidTimes(rowValidFrom, rowValidTo)
 

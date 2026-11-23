@@ -34,12 +34,11 @@
            (org.apache.arrow.vector.types.pojo ArrowType$List ArrowType$Null Field)
            (xtdb.api Authenticator$Method DataSource DataSource$ConnectionBuilder FlightSql FlightSqlConfig ServerConfig Xtdb Xtdb$Config Xtdb$Connection Xtdb$Statement Xtdb$ExecutedTx Xtdb$SubmittedTx)
            xtdb.api.module.XtdbModule
-           (xtdb.arrow Relation Relation$ILoader VectorType)
-           xtdb.arrow.RelationReader
+           (xtdb.arrow Relation Relation$ILoader RelationReader RowValueReader VectorType)
            xtdb.database.Database$Config
            (xtdb.api.error Incorrect)
            xtdb.api.ResultCursor
-           (xtdb.pgwire PgType PgTypes TypCategory)
+           (xtdb.pgwire PgType PgType$CellWriter PgTypes TypCategory)
            xtdb.JsonSerde
            xtdb.JsonLdSerde
            xtdb.NodeBase
@@ -1173,15 +1172,21 @@
         !pending (volatile! [])
         session-params (.getSessionParameters ^Xtdb$Connection (:node-conn @conn-state))
         fallback (fallback-type session-params)
-        serialize-row (fn [^RelationReader rel idx]
-                        (mapv (fn [{:keys [^String col-name pg-type result-format]}]
-                                (let [^PgType pg-type (if (or (nil? pg-type) (identical? pg-type PgType/PG_DEFAULT)) fallback pg-type)
-                                      rdr (.vectorForOrNull rel col-name)]
-                                  (when-not (.isNull rdr idx)
-                                    (if (= :binary result-format)
-                                      (.writeBinary pg-type session-params rdr idx)
-                                      (.writeText pg-type session-params rdr idx)))))
-                              pg-cols))
+        row-serializer (fn [^RelationReader rel]
+                         (let [cols (mapv (fn [{:keys [^String col-name pg-type result-format]}]
+                                            (let [^PgType pg-type (if (or (nil? pg-type) (identical? pg-type PgType/PG_DEFAULT)) fallback pg-type)
+                                                  col (.vectorForOrNull rel col-name)]
+                                              {:rows (.valueReader col)
+                                               :writer (if (= :binary result-format)
+                                                         (.binaryWriter pg-type col)
+                                                         (.textWriter pg-type col))}))
+                                          pg-cols)]
+                           (fn next-row []
+                             (mapv (fn [{:keys [^RowValueReader rows ^PgType$CellWriter writer]}]
+                                     (let [^RowValueReader row (.next rows)]
+                                       (when-not (.isNull row)
+                                         (.write writer session-params row))))
+                                   cols))))
         send-row! (fn [row]
                     (pgio/cmd-write-msg conn pgio/msg-data-row {:vals row})
                     (vswap! !n-rows-out inc))]
@@ -1208,12 +1213,13 @@
                                     :else (let [row-count (.getRowCount rel)
                                                 num-to-send (cond-> row-count
                                                               limit (min (- limit @!n-rows-out)))]
-                                            ;; Send rows up to limit
-                                            (dotimes [idx num-to-send]
-                                              (send-row! (serialize-row rel idx)))
-                                            ;; Buffer any remaining rows for next Execute
-                                            (dotimes [idx (- row-count num-to-send)]
-                                              (vswap! !pending conj (serialize-row rel (+ num-to-send idx))))))))))))
+                                            (let [next-row (row-serializer rel)]
+                                              ;; Send rows up to limit
+                                              (dotimes [_ num-to-send]
+                                                (send-row! (next-row)))
+                                              ;; Buffer any remaining rows for next Execute
+                                              (dotimes [_ (- row-count num-to-send)]
+                                                (vswap! !pending conj (next-row))))))))))))
 
     ;; Save any pending rows and cumulative count back to portal
     (let [cumulative-rows (+ (or total-rows-sent 0) @!n-rows-out)]

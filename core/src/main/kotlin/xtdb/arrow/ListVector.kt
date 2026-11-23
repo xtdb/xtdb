@@ -226,8 +226,11 @@ class ListVector private constructor(
             valueCount
         )
 
-    override fun valueReader() = object : ValueReader {
-        override var pos = 0
+    override fun valueReader() = object : RowValueReader {
+        private val rowCount = valueCount
+        override fun hasNext() = pos + 1 < rowCount
+
+        override var pos = -1
 
         val elValueReader = elVector.valueReader()
 
