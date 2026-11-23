@@ -826,6 +826,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             _sessionParameters.clear()
             defaultTz = initialTz
             awaitToken = null
+            lastSubmittedTx = null
             defaultAccessMode = null
             // _applicationName is deliberately not reset here - it's the connection's own identity, not a GUC.
         }

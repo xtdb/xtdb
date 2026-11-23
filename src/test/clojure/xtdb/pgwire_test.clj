@@ -3483,12 +3483,14 @@ ORDER BY 1,2;")
       (t/is (= "Asia/Tokyo" (show "SHOW TIME ZONE" :timezone)))
       (t/is (= "bar" (show "SHOW foo" :foo)))
       (t/is (some? (show "SHOW AWAIT_TOKEN" :await_token)))
+      (t/is (seq (q conn ["SHOW LATEST_SUBMITTED_TX"])))
 
       (exec conn "DISCARD ALL")
 
       (t/is (= default-tz (show "SHOW TIME ZONE" :timezone)) "time zone back to the startup value")
       (t/is (nil? (show "SHOW foo" :foo)) "SET parameters cleared")
       (t/is (nil? (show "SHOW AWAIT_TOKEN" :await_token)) "await token cleared")
+      (t/is (= [] (q conn ["SHOW LATEST_SUBMITTED_TX"])) "last submitted tx cleared")
 
       (exec conn "BEGIN")
       (exec conn "INSERT INTO docs RECORDS {_id: 1}")
