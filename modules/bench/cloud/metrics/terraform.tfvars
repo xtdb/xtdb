@@ -6,8 +6,6 @@ cluster_law_name    = "xtdb-bench-cluster-law"
 # Action Group (Slack)
 action_group_name       = "xtdb-benchmark-alerts"
 action_group_short_name = "xtdbbench"
-# set via TF_VAR_slack_webhook_url = "https://hooks.slack.com/services/XXX/YYY/ZZZ"
-# slack_webhook_url       = "https://hooks.slack.com/services/XXX/YYY/ZZZ"
 slack_subteam_id    = "SR1A6EW21"
 slack_subteam_label = "@xtdb-team"
 

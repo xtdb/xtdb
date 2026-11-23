@@ -489,7 +489,9 @@ Provider versions are pinned by the committed `.terraform.lock.hcl` in each dire
 ----
 cd modules/bench/cloud/metrics   # or cloud/azure
 terraform init
-export TF_VAR_slack_webhook_url=...   # cloud/metrics only - see below
+# cloud/metrics only: the live alert relay holds the current Slack webhook URL
+export TF_VAR_slack_webhook_url=$(az logic workflow show -g cloud-benchmark-resources -n xtdb-bench-alert-relay \
+  --query 'definition.actions.PostToSlack.inputs.uri' -o tsv)
 terraform plan
 terraform apply
 ----
@@ -500,24 +502,27 @@ Read the plan before you apply it:
   A destroy is right only for a benchmark you've deliberately retired; anything else being destroyed or replaced means the live state has drifted, or the plan isn't the one you think.
 * If the plan carries changes you didn't make, someone else's merged change hasn't been applied yet.
   Check its commit before you apply it alongside yours.
-* `slack_webhook_url` defaults to empty, and an empty value blanks the Slack URL in the alert relay and in every anomaly Logic App, so alerts stop reaching Slack without any error.
-  If the plan changes a `uri` to `""`, you haven't set `TF_VAR_slack_webhook_url`.
+* The plan should show no change to any Logic App's `uri`.
+  One means `TF_VAR_slack_webhook_url` doesn't match the URL the alerts post to today; apply it only if you're deliberately moving them to a new webhook.
 
 === GitHub secrets
 
-The workflows read these repository secrets (Settings → Secrets and variables → Actions):
+The workflows read these repository secrets (Settings → Secrets and variables → Actions).
+GitHub never shows a secret's value again once it's set, so to replace one, go back to where it comes from.
 
-[cols="1,2",options="header"]
+[cols="2,2,2",options="header"]
 |===
-| Secret | Used for
+| Secret | Used for | Where it comes from
 
-| `BENCHMARK_AZURE_CLIENT_ID`, `BENCHMARK_AZURE_TENANT_ID`, `BENCHMARK_AZURE_SUBSCRIPTION_ID` | Logging the workflows into Azure (OIDC).
-| `BENCHMARK_AZURE_USER_MANAGED_IDENTITY_CLIENT_ID` | The workload identity the benchmark pods run as.
-| `BENCHMARK_GITHUB_PAT` | Letting the benchmark dispatch the cleanup workflow when it finishes. It expires, so rotate it before it does.
-| `BENCHMARK_SLACK_BOT_TOKEN`, `BENCHMARK_SLACK_CHANNEL_ID` | Posting results to Slack.
-| `BENCHMARK_GRAFANA_ADMIN_PASSWORD` | The Grafana instance the monitoring stack installs.
-| `BENCHMARK_DATASETS_AWS_ACCESS_KEY_ID`, `BENCHMARK_DATASETS_AWS_SECRET_ACCESS_KEY`, `BENCHMARK_DATASETS_AWS_REGION` | Reading the ClickBench dataset from S3.
+| `BENCHMARK_AZURE_CLIENT_ID`, `BENCHMARK_AZURE_TENANT_ID`, `BENCHMARK_AZURE_SUBSCRIPTION_ID` | Logging the workflows into Azure (OIDC). | The Entra app registration the workflows log in as.
+| `BENCHMARK_AZURE_USER_MANAGED_IDENTITY_CLIENT_ID` | The workload identity the benchmark pods run as. | `terraform output user_assigned_identity_client_id` in `cloud/azure/`.
+| `BENCHMARK_GITHUB_PAT` | Letting the benchmark dispatch the cleanup workflow when it finishes. | A fine-grained PAT with Actions write access to `xtdb/xtdb`. It expires, so replace it before it does.
+| `BENCHMARK_SLACK_BOT_TOKEN`, `BENCHMARK_SLACK_CHANNEL_ID` | Posting results to Slack. | The Slack app's OAuth page, and the channel's details.
+| `BENCHMARK_GRAFANA_ADMIN_PASSWORD` | The Grafana instance the monitoring stack installs. | Any password you choose; nothing else uses it.
+| `BENCHMARK_DATASETS_AWS_ACCESS_KEY_ID`, `BENCHMARK_DATASETS_AWS_SECRET_ACCESS_KEY`, `BENCHMARK_DATASETS_AWS_REGION` | Reading the ClickBench dataset from S3. | An IAM user with read access to the datasets bucket.
 |===
+
+The Slack webhook URL the alerts post to isn't a GitHub secret: it's a Terraform variable of `cloud/metrics/`, read back from the live alert relay as shown above.
 
 == CI and Grafana Dashboard Images
 

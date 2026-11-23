@@ -62,9 +62,10 @@ Each benchmark has its own set of variables:
 ### Notifications
 
 - `action_group_name`, `action_group_short_name` — Action Group identity
-- `slack_webhook_url` — Slack Incoming Webhook (provide via environment, not committed):
+- `slack_webhook_url` (required): the Slack Incoming Webhook URL. Provide it via the environment, never commit it; the live alert relay holds the current value:
   ```bash
-  export TF_VAR_slack_webhook_url="https://hooks.slack.com/services/XXX/YYY/ZZZ"
+  export TF_VAR_slack_webhook_url=$(az logic workflow show -g cloud-benchmark-resources -n xtdb-bench-alert-relay \
+    --query 'definition.actions.PostToSlack.inputs.uri' -o tsv)
   ```
 - `slack_subteam_id`, `slack_subteam_label` — Optional Slack user group mention
 

@@ -27,10 +27,14 @@ variable "action_group_short_name" {
 }
 
 variable "slack_webhook_url" {
-  description = "Slack webhook URL for alerts (optional). If empty, no webhook receiver is created."
+  description = "Slack Incoming Webhook URL the alert relay and anomaly Logic Apps post to"
   type        = string
-  default     = ""
   sensitive   = true
+
+  validation {
+    condition     = startswith(var.slack_webhook_url, "https://hooks.slack.com/")
+    error_message = "slack_webhook_url must be a https://hooks.slack.com/ URL: set TF_VAR_slack_webhook_url, see modules/bench/README.adoc."
+  }
 }
 
 # Optional Slack subteam mention (e.g., <!subteam^S012345|@xtdb-team>)
