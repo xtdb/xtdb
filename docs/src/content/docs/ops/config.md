@@ -3,29 +3,30 @@ title: Configuration
 ---
 
 <details>
-<summary>Changelog (last updated v2.2.1)</summary>
+<summary>Changelog (last updated v2.3.0)</summary>
 
-v2.2.1: the compactor can write a more compact, recency-branched historical format, behind `optIn221`
+v2.3.0: the compactor writes a more compact, recency-branched historical format
 
-: With `compactor.optIn221` on, the compactor writes two changes to historical files — see [Compactor](#compactor):
+: The compactor writes two changes to historical files:
 
   - Compacted historical data files store each entity's `_iid` once per run of its versions, rather than once per version.
     Current-tier files, where an entity usually has one version, stay as they were.
   - A historical file branches on recency within its week, so a query over a recent window reads that window's superseded rows rather than the whole week's.
 
-  It's off by default, and with it off the compactor writes the same files as v2.2, so upgrading from v2.2 needs no extra steps.
+  On v2.2.1 you can opt in early with `XTDB_COMPACTOR_221_OPT_IN=true`.
+  It's off by default there, and with it off the compactor writes the same files as v2.2, so upgrading from v2.2 needs no extra steps.
   Every v2.2.1 node reads files written either way.
 
-  Every node that compacts a database must write the same format, so turning it on takes two rolls:
+  Every node that compacts a database must write the same format, so opting in on v2.2.1 takes two rolls:
 
   1. Roll with the compactor off (`compactor.threads: 0`).
      Where several clusters write to the same database, every one of them finishes this roll before the next step starts anywhere.
-  2. Roll again with the compactor on and `optIn221: true` (or `XTDB_COMPACTOR_221_OPT_IN=true`).
+  2. Roll again with the compactor on and `XTDB_COMPACTOR_221_OPT_IN=true`.
 
   A new cluster can set it from the start.
 
-  Turning it off takes the same two rolls, with `optIn221: false` (and `XTDB_COMPACTOR_221_OPT_IN` unset) in the second; v2.2.1 keeps reading the files it has already written.
-  Earlier releases can't process those files, so rolling back to v2.2 is supported only on a database where `optIn221` has never been on.
+  Opting back out takes the same two rolls, with `XTDB_COMPACTOR_221_OPT_IN` unset in the second; v2.2.1 keeps reading the files it has already written.
+  Earlier releases can't process those files, so rolling back to v2.2 is supported only on a database where `XTDB_COMPACTOR_221_OPT_IN` has never been set.
 
 v2.2: blocks are flushed every 15 minutes
 
@@ -261,11 +262,6 @@ compactor:
   # Defaults to !Env XTDB_COMPACTOR_THREADS # or if that's not specified min(availableProcessors / 2, 1).
   # Set to 0 to disable the compactor.
   threads: 4
-
-  # (v2.2.1+) Write v2.2.1's historical-file format: run-end encode `_iid`, and branch historical files by recency within the file.
-  # Every node compacting a database must agree - see the v2.2.1 changelog entry above before turning it on for an existing cluster.
-  # Defaults to !Env XTDB_COMPACTOR_221_OPT_IN # or if that's not specified false.
-  optIn221: false
 ```
 
 ### Indexer
