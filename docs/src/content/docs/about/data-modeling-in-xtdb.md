@@ -16,7 +16,7 @@ CREATE TABLE orders (order_no PRIMARY KEY, customer);
 ```
 
 Declare the key before anything is written to the table: the first write fixes it, and from then on it can't change.
-A key is a single column.
+A key can also span several columns, identifying a row by all of their values together.
 In a table keyed on another column, `_id` is an ordinary column.
 See [Primary keys](/reference/main/sql/schema#primary-keys-v221) for the rules.
 
@@ -25,6 +25,7 @@ It derives a 16-byte internal ID from each row's key value, and partitions each 
 
 - A UUID key value is used as the internal ID unchanged.
 - Any other key value - a string, an integer, a keyword - is hashed to give its internal ID.
+- A key over several columns takes its internal ID's leading bits from its columns' internal IDs in turn, starting with the first column it declares, and hashes all of their values together for the rest.
 
 So hashed IDs are spread evenly across a table whatever values you choose, while UUIDs are laid out exactly as you generate them.
 That gives you control over where a row is stored, and with it a responsibility to spread your UUIDs evenly.

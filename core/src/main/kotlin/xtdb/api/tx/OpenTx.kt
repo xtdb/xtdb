@@ -512,7 +512,7 @@ class OpenTx
         internal fun writeIid(iid: ByteBuffer) = iidVec.writeBytes(iid)
         internal fun writeIid(iid: ByteArray) = iidVec.writeBytes(iid)
 
-        /** Writes the row's IID: [id] is the value of the row's [primaryKey] column, which is `_id` only on a table keyed on `_id`. */
+        /** Writes the row's IID: [id] is its value in a single-column [primaryKey], which is `_id` only on a table keyed on `_id`. */
         fun writeId(id: Any) = iidVec.writeBytes(id.asIid)
 
         fun writeValidTimeMicros(validFrom: Long, validTo: Long) {
@@ -537,7 +537,7 @@ class OpenTx
         /**
          * Single document put:
          *
-         * - the document must contain the table's [primaryKey] column
+         * - the document must contain every column of the table's [primaryKey]
          *
          * */
         fun writePut(doc: Map<String, *>, validFrom: Instant? = null, validTo: Instant? = null) {
@@ -552,9 +552,9 @@ class OpenTx
         /**
          * Batch put: writes every row in [rel], content from `doc`.
          *
-         * - The relation MUST contain either an `_iid` column or the table's [primaryKey] column, the latter with a value
+         * - The relation MUST contain either an `_iid` column or every column of the table's [primaryKey], the latter with a value
          *   in every row - otherwise `xtdb.tx/missing-id`.
-         *   A key column named `doc` can't sit beside the `doc` column, so a table keyed on `doc` takes `_iid`.
+         *   A key column named `doc` can't sit beside the `doc` column, so a table whose key includes `doc` takes `_iid`.
          * - Per-row valid times come from the rel's `_valid_from` / `_valid_to` columns when present and non-null;
          *   otherwise the [defaultValidFromMicros] / [defaultValidToMicros] defaults apply.
          *
@@ -622,7 +622,7 @@ class OpenTx
          */
         fun endDelete() = endDeletes(1)
 
-        /** Single delete, over the given valid-time range, of the row whose [primaryKey] column holds [id]. */
+        /** Single delete, over the given valid-time range, of the row whose single-column [primaryKey] holds [id]. */
         fun writeDelete(id: Any, validFrom: Instant? = null, validTo: Instant? = null) {
             writeId(id)
             writeValidTimes(validFrom, validTo)
@@ -689,7 +689,7 @@ class OpenTx
          */
         fun endErase() = endErases(1)
 
-        /** Single erase, across all valid time, of the row whose [primaryKey] column holds [id]. */
+        /** Single erase, across all valid time, of the row whose single-column [primaryKey] holds [id]. */
         fun writeErase(id: Any) {
             writeId(id)
             writeValidTimeMicros(MIN_LONG, MAX_LONG)
@@ -711,8 +711,8 @@ class OpenTx
         /**
          * Bulk-patch docs into this table, preserving existing columns where the patched doc doesn't supply a new value.
          *
-         * [docs] carries one row per doc: a `doc` struct column, and either an `_iid` column or the table's
-         * [primaryKey] column, the latter with a value in every row - otherwise `xtdb.tx/missing-id`.
+         * [docs] carries one row per doc: a `doc` struct column, and either an `_iid` column or every column of the
+         * table's [primaryKey], the latter with a value in every row - otherwise `xtdb.tx/missing-id`.
          * [validFromMicros] / [validToMicros] default to [MIN_LONG] / [MAX_LONG] — the start/end of
          * valid time — on the Instant overload, a null on either side means the same thing.
          *

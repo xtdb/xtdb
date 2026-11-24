@@ -60,11 +60,12 @@
         (throw (err/incorrect :xtdb/multiple-primary-keys "A table has at most one PRIMARY KEY"
                               {:primary-keys (keep :primary-key elements)})))
 
-      (when (next primary-key)
-        (throw (err/unsupported :xtdb/composite-primary-key "Multi-column primary keys are not yet supported"
-                                {:columns primary-key})))
+      (when-let [dup (some (fn [[col n]] (when (< 1 n) col)) (frequencies primary-key))]
+        (throw (err/incorrect :xtdb/invalid-primary-key-column
+                              (format "A primary key names column %s more than once" dup)
+                              {:column dup})))
 
-      (when-let [[col] primary-key]
+      (doseq [col primary-key]
         (when (and (sql/forbidden-update-col? col) (not= "_id" col))
           (throw (err/incorrect :xtdb/invalid-primary-key-column
                                 (format "A primary key can't be the system column %s" col)

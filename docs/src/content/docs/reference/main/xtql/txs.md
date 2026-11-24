@@ -71,7 +71,7 @@ Upserts documents into the given table, optionally during the given valid time p
  ]
 ```
 
-A document without the table's [primary key](/reference/main/sql/schema#primary-keys-v221) is an `xtdb.tx/missing-id` error.
+A document missing any column of the table's [primary key](/reference/main/sql/schema#primary-keys-v221) is an `xtdb.tx/missing-id` error.
 For a table that has been written to, `submit-tx` throws it; for one that hasn't, whose key a transaction ahead of this one may still declare, the transaction aborts with it.
 
 #### Examples
