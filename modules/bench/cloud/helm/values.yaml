@@ -112,11 +112,11 @@ git:
 
 resources:
   limits:
-    cpu: "7"
+    cpu: "3"
     memory: "24G"
     ephemeral-storage: 180Gi
   requests:
-    cpu: "7"
+    cpu: "3"
     memory: "24G"
     ephemeral-storage: 180Gi
 
