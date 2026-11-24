@@ -1170,6 +1170,20 @@
     (t/is (thrown-with-msg? Exception #"Aggregates are not allowed in this context"
                             (xt/q tu/*node* "SELECT SUM(salary) FILTER (WHERE COUNT(*) > 0) FROM docs"))))
 
+  (t/testing "a row whose filter predicate is null doesn't pass"
+    (xt/execute-tx tu/*node* [[:sql "INSERT INTO maybeactive RECORDS
+                                 {_id: 1, active: true, v: 10},
+                                 {_id: 2, active: NULL, v: 20},
+                                 {_id: 3, v: 30},
+                                 {_id: 4, active: false, v: 40}"]])
+    (t/is (= [{:cnt 1, :sm 10}]
+             (xt/q tu/*node* "SELECT COUNT(*) FILTER (WHERE active) AS cnt, SUM(v) FILTER (WHERE active) AS sm FROM maybeactive"))
+          "a nullable boolean column")
+
+    (t/is (= [{:cnt 1}]
+             (xt/q tu/*node* "SELECT COUNT(*) FILTER (WHERE v < 25 AND active) AS cnt FROM maybeactive"))
+          "a predicate that is null for some rows"))
+
   (t/testing "`filter` is still usable as an ordinary identifier"
     (xt/execute-tx tu/*node* [[:sql "INSERT INTO filtertest RECORDS {_id: 1, filter: 'kept'}"]])
     (t/is (= [{:filter "kept"}]

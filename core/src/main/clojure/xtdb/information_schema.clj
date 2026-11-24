@@ -630,7 +630,7 @@
 
           ;;TODO reuse relation selector code from trie cursor
           (InformationSchemaCursor. (reduce (fn [^RelationReader rel ^SelectionSpec col-pred]
-                                              (.select rel (.select col-pred allocator rel schema params)))
+                                              (.select rel (.toSelection (.select col-pred allocator rel schema params))))
                                             (-> out-rel
                                                 (->> (filter (comp (set col-names) #(.getName ^VectorReader %))))
                                                 (vr/rel-reader (.getRowCount out-rel))

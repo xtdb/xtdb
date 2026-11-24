@@ -11,6 +11,8 @@ private const val ROWS = 1 shl 20
 private const val INNER_ROWS = ROWS / 4 * 5
 private const val MEGA_ROWS = ROWS / 4
 private const val MEGA_INNER_ROWS = MEGA_ROWS / 4 * 5
+private const val SPARSE_ROWS = ROWS / 16
+private const val SPARSE_INNER_ROWS = SPARSE_ROWS * 50
 
 @State(Scope.Benchmark)
 @BenchmarkMode(Mode.AverageTime)
@@ -29,6 +31,10 @@ open class VectorReadBenchmark {
     private lateinit var selectionNullable: VectorReader
     private lateinit var slice: VectorReader
     private lateinit var sliceNullable: VectorReader
+    private lateinit var masked: VectorReader
+    private lateinit var maskedNullable: VectorReader
+    private lateinit var sparseSelectionNullable: VectorReader
+    private lateinit var sparseMaskedNullable: VectorReader
 
     private lateinit var utf8Direct: VectorReader
     private lateinit var utf8DirectNullable: VectorReader
@@ -65,6 +71,12 @@ open class VectorReadBenchmark {
         )
     }
 
+    private fun rowMask(idxs: IntArray, rowCount: Int): RowMask {
+        val words = LongArray((rowCount + 63) ushr 6)
+        for (idx in idxs) words[idx ushr 6] = words[idx ushr 6] or (1L shl (idx and 63))
+        return RowMask.ofWords(words, rowCount)
+    }
+
     @Setup
     fun setup() {
         al = RootAllocator()
@@ -96,6 +108,16 @@ open class VectorReadBenchmark {
         utf8DirectNullable = utf8FlatNullable
         utf8Selection = utf8Inner.select(idxs)
         utf8SelectionNullable = utf8InnerNullable.select(idxs)
+
+        val mask = rowMask(idxs, INNER_ROWS)
+        masked = MaskedVector(inner, mask)
+        maskedNullable = MaskedVector(innerNullable, mask)
+
+        val sparseInner = longVector(SPARSE_INNER_ROWS, true, rnd)
+        vecs += sparseInner
+        val sparseIdxs = (0 until SPARSE_INNER_ROWS).shuffled(rnd).take(SPARSE_ROWS).sorted().toIntArray()
+        sparseSelectionNullable = sparseInner.select(sparseIdxs)
+        sparseMaskedNullable = MaskedVector(sparseInner, rowMask(sparseIdxs, SPARSE_INNER_ROWS))
 
         val megaFlat = megaVectors(MEGA_ROWS, rnd)
         val megaInner = megaVectors(MEGA_INNER_ROWS, rnd)
@@ -179,6 +201,34 @@ open class VectorReadBenchmark {
 
     @Benchmark
     fun readerSliceNullable() = sumNullableReader(sliceNullable)
+
+    @Benchmark
+    fun masked() = sum(masked)
+
+    @Benchmark
+    fun maskedNullable() = sumNullable(maskedNullable)
+
+    @Benchmark
+    fun readerMasked() = sumReader(masked)
+
+    @Benchmark
+    fun readerMaskedNullable() = sumNullableReader(maskedNullable)
+
+    @Benchmark
+    @OperationsPerInvocation(SPARSE_ROWS)
+    fun sparseSelectionNullable() = sumNullable(sparseSelectionNullable)
+
+    @Benchmark
+    @OperationsPerInvocation(SPARSE_ROWS)
+    fun sparseMaskedNullable() = sumNullable(sparseMaskedNullable)
+
+    @Benchmark
+    @OperationsPerInvocation(SPARSE_ROWS)
+    fun readerSparseSelectionNullable() = sumNullableReader(sparseSelectionNullable)
+
+    @Benchmark
+    @OperationsPerInvocation(SPARSE_ROWS)
+    fun readerSparseMaskedNullable() = sumNullableReader(sparseMaskedNullable)
 
     @Benchmark
     fun megaDirect() = megaDirect.sumOf { sumNullable(it) }

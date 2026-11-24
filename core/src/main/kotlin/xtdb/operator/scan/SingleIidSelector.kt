@@ -4,8 +4,8 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.memory.util.ByteFunctionHelpers
 import xtdb.arrow.RelationReader
+import xtdb.arrow.RowMask
 import xtdb.operator.SelectionSpec
-import java.util.stream.IntStream
 
 class SingleIidSelector(private val iid: ByteArray) : SelectionSpec {
 
@@ -22,11 +22,12 @@ class SingleIidSelector(private val iid: ByteArray) : SelectionSpec {
         readRelation: RelationReader,
         schema: Map<String, Any>,
         params: RelationReader
-    ): IntArray {
+    ): RowMask {
         val ptr = ArrowBufPointer()
         val iidReader = readRelation["_iid"]
         val valueCount = iidReader.valueCount
-        if (valueCount == 0) return IntArray(0)
+        val mask = RowMask.Builder(valueCount)
+        if (valueCount == 0) return mask.build()
 
         var left = 0
         var right = valueCount - 1
@@ -43,6 +44,7 @@ class SingleIidSelector(private val iid: ByteArray) : SelectionSpec {
                 right++
         }
 
-        return IntStream.range(left, right).toArray()
+        for (row in left until right) mask.add(row)
+        return mask.build()
     }
 }

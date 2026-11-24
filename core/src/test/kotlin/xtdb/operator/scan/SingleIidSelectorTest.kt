@@ -50,7 +50,7 @@ class SingleIidSelectorTest {
                     rel.endRow()
                 }
 
-                iidSel.select(al, rel, emptyMap(), RelationReader.from(emptyList(), 0))
+                iidSel.select(al, rel, emptyMap(), RelationReader.from(emptyList(), 0)).toSelection()
             }
 
         assertArrayEquals(IntArray(0), testUuids(), "empty")

@@ -82,7 +82,7 @@
   (util/with-open [out-rel (Relation. allocator ^Map (update-keys derived-table-schema str))]
     (.writeRows out-rel (into-array java.util.Map rows))
     (let [out-rel-view (reduce (fn [^RelationReader rel ^SelectionSpec col-pred]
-                                 (.select rel (.select col-pred allocator rel schema args)))
+                                 (.select rel (.toSelection (.select col-pred allocator rel schema args))))
                                (-> out-rel
                                    (->> (filter (comp (set col-names) #(.getName ^VectorReader %))))
                                    (vr/rel-reader (.getRowCount out-rel))
