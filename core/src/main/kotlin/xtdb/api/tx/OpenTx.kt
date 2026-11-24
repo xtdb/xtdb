@@ -459,7 +459,7 @@ class OpenTx
         internal var declaredPrimaryKey: PrimaryKey? = null
             private set
 
-        /** The key this table's rows are identified by — a put takes its IID from [PrimaryKey.column]. */
+        /** The key this table's rows are identified by — a put takes its IID from [PrimaryKey.iid]. */
         val primaryKey: PrimaryKey get() = declaredPrimaryKey ?: inheritedPrimaryKey
 
         // [tx]'s relation already holds the live index's rows and every predecessor's; the catalog holds the flushed ones.
@@ -541,24 +541,13 @@ class OpenTx
          *
          * */
         fun writePut(doc: Map<String, *>, validFrom: Instant? = null, validTo: Instant? = null) {
-            val pkCol = primaryKey.column
-            writeId(doc[pkCol] ?: throw Incorrect("missing $pkCol", "xtdb.tx/missing-id", mapOf("doc" to doc)))
+            writeIid(primaryKey.iid(doc))
             writeValidTimes(validFrom, validTo)
             putDocWriter.writeObject(doc)
             endPut()
         }
 
-        /**
-         * The IIDs of [rel]'s rows, from its [primaryKey] column, as an `_iid` vector for the caller to close.
-         * Throws `xtdb.tx/missing-id` unless every row has a key value.
-         */
-        internal fun openKeyIids(rel: RelationReader): FixedSizeBinaryVector {
-            val keyRdr = primaryKey.keyVector(rel)
-            return FixedSizeBinaryVector(allocator, "_iid", false, 16).closeOnCatch { iids ->
-                repeat(rel.rowCount) { iids.writeBytes(keyRdr.getObject(it).asIid) }
-                iids
-            }
-        }
+        internal fun openKeyIids(rel: RelationReader): FixedSizeBinaryVector = primaryKey.openIids(allocator, rel)
 
         /**
          * Batch put: writes every row in [rel], content from `doc`.
@@ -583,9 +572,7 @@ class OpenTx
             if (iidRdr != null) {
                 iidVec.append(iidRdr)
             } else {
-                val idRdr = primaryKey.keyVector(rel)
-
-                repeat(rowCount) { idx -> iidVec.writeBytes(idRdr.getObject(idx).asIid) }
+                primaryKey.openIids(allocator, rel).use { iidVec.append(it) }
             }
 
             val vfRdr = rel.vectorForOrNull("_valid_from")
