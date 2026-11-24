@@ -113,7 +113,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
 
                 val tables = msg.loadTableData(allocator)
                 try {
-                    partitionState.commitTx(txKey, tables)
+                    partitionState.commitTx(txKey, tables, msg.tablePrimaryKeys)
                 } finally {
                     tables.closeAll()
                 }

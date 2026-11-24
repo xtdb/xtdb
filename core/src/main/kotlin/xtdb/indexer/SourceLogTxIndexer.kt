@@ -17,6 +17,7 @@ import xtdb.api.error.Unsupported
 import xtdb.api.query.QueryOpts
 import xtdb.api.tx.TxIndexer.TxResult
 import xtdb.api.TableRef
+import xtdb.table.PrimaryKey
 import xtdb.table.fromSchemaAndTable
 import xtdb.trie.InstantMicros
 import xtdb.util.closeOnCatch
@@ -106,23 +107,13 @@ internal class SourceLogTxIndexer(
             val docStartIdx = tableDocsRdr.getListStartIndex(opIdx)
             val docCount = tableDocsRdr.getListCount(opIdx)
 
-            val docStruct = RelationAsStructReader(
-                "doc",
-                RelationReader.from(
-                    ks.filter { it != "_valid_from" && it != "_valid_to" }
-                        .map { docRdr.vectorFor(it).select(docStartIdx, docCount) },
-                    docCount,
-                ),
-            ).withName("doc")
+            val docRel = RelationReader.from(
+                ks.filter { it != "_valid_from" && it != "_valid_to" }
+                    .map { docRdr.vectorFor(it).select(docStartIdx, docCount) },
+                docCount,
+            )
 
             val liveTable = table(table)
-
-            val iidCol = if (!iidsRdr.isNull(opIdx)) {
-                iidRdr.select(iidsRdr.getListStartIndex(opIdx), docCount).withName("_iid")
-            } else {
-                val pkCol = liveTable.primaryKey.column
-                docRdr.vectorForOrNull(pkCol)?.select(docStartIdx, docCount)?.withName(pkCol)
-            }
 
             val rowVfCol = docRdr.vectorForOrNull("_valid_from")
                 ?.also(::assertTimestampColType)
@@ -130,11 +121,6 @@ internal class SourceLogTxIndexer(
             val rowVtCol = docRdr.vectorForOrNull("_valid_to")
                 ?.also(::assertTimestampColType)
                 ?.select(docStartIdx, docCount)?.withName("_valid_to")
-
-            val putRel = RelationReader.from(
-                listOfNotNull(iidCol, docStruct, rowVfCol, rowVtCol),
-                docCount,
-            )
 
             val validFrom = if (validFromRdr.isNull(opIdx)) opts.systemTime else validFromRdr.getLong(opIdx)
             val validTo = if (validToRdr.isNull(opIdx)) Long.MAX_VALUE else validToRdr.getLong(opIdx)
@@ -147,7 +133,20 @@ internal class SourceLogTxIndexer(
                 txOpsRdr = txOpsRdr,
                 data = mapOf("table" to table, "tx-key" to opts.txKey, "tx-op-idx" to opIdx),
             ) {
-                liveTable.writePuts(putRel, validFrom, validTo)
+                // A submitter predating #3811 sends IIDs hashed from `_id`, whatever the table is keyed on.
+                val keyIids =
+                    if (!iidsRdr.isNull(opIdx) && liveTable.primaryKey == PrimaryKey.ID) null
+                    else liveTable.openKeyIids(docRel)
+
+                keyIids.use {
+                    val iidCol = keyIids ?: iidRdr.select(iidsRdr.getListStartIndex(opIdx), docCount).withName("_iid")
+                    val putRel = RelationReader.from(
+                        listOfNotNull(iidCol, RelationAsStructReader("doc", docRel), rowVfCol, rowVtCol),
+                        docCount,
+                    )
+
+                    liveTable.writePuts(putRel, validFrom, validTo)
+                }
             }
         }
 

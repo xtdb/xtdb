@@ -167,17 +167,13 @@ class Database(
         (partitions + listOf(logs, allocator)).closeAll()
     }
 
-    // Only tables this snapshot holds: whatever fixes an unknown table's key may still be ahead of this tx in the log,
-    // so the indexer checks those puts.
+    // Only tables whose key is fixed: a tx still ahead of this one in the log may declare an empty table's key,
+    // so the indexer checks the puts into those.
     private fun requireKnownKeys(ops: List<TxOp>) {
         val puts = ops.filterIsInstance<TxOp.PutDocs>().takeIf { it.isNotEmpty() } ?: return
 
         openSnapshot(currentBasis()).use { snap ->
-            val tables = snap.tableInfo()
-            for (put in puts) {
-                val table = TableRef(put.schema, put.table)
-                if (table in tables) snap.primaryKey(table).keyVector(put.docs)
-            }
+            for (put in puts) snap.fixedPrimaryKey(TableRef(put.schema, put.table))?.keyVector(put.docs)
         }
     }
 

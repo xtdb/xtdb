@@ -14,6 +14,7 @@ import org.apache.kafka.connect.data.Timestamp as ConnectTimestamp
 import org.apache.kafka.connect.sink.SinkRecord
 import xtdb.api.error.Anomaly.Companion.toAnomaly
 import xtdb.api.error.Incorrect
+import xtdb.api.error.Unsupported
 import xtdb.api.tx.OpenTx
 import xtdb.api.tx.TxIndexer
 import xtdb.api.tx.TxIndexer.TxResult
@@ -21,6 +22,7 @@ import xtdb.kafka.connectsrc.proto.DocsIndexerConfig
 import xtdb.kafka.connectsrc.proto.docsIndexerConfig
 import xtdb.kafka.connectsrc.proto.kafkaConnectSourceToken
 import xtdb.api.TableRef
+import xtdb.table.PrimaryKey
 import xtdb.util.asIid
 import java.math.BigDecimal
 import java.nio.ByteBuffer
@@ -91,6 +93,13 @@ class DocsIndexer(internal val table: TableRef) : RecordIndexer {
 
     private fun writeRecord(openTx: OpenTx, rec: SinkRecord) {
         val openTxTable = openTx.table(table.schemaName, table.tableName)
+
+        if (openTxTable.primaryKey != PrimaryKey.ID)
+            throw Unsupported(
+                "the docs indexer writes rows by `_id`, but ${table.schemaAndTable} is keyed on ${openTxTable.primaryKey.columns}",
+                "xtdb.kafka-connect-source/table-not-keyed-on-id",
+                mapOf("table" to table, "primary-key" to openTxTable.primaryKey.columns),
+            )
 
         val id = resolveId(rec)
         val value = rec.value()

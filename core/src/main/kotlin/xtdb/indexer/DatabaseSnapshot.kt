@@ -49,9 +49,12 @@ class DatabaseSnapshot(val partitions: List<Snapshot>) : AutoCloseable {
         if (partitions.size == 1) partitions[0].tableOids
         else partitions.fold(emptyMap()) { acc, snap -> snap.tableOids + acc }
 
-    /** The key [table]'s rows are identified by, from the first partition that has fixed one; else [PrimaryKey.ID]. */
+    /** The key [table]'s rows are identified by, from the first partition that has one declared or recorded; else [PrimaryKey.ID]. */
     fun primaryKey(table: TableRef): PrimaryKey =
         partitions.firstNotNullOfOrNull { it.primaryKey(table) } ?: PrimaryKey.ID
+
+    /** [table]'s key, from the first partition where it can no longer change; null where none holds the table's rows. */
+    fun fixedPrimaryKey(table: TableRef): PrimaryKey? = partitions.firstNotNullOfOrNull { it.fixedPrimaryKey(table) }
 
     /** One [TransactionKey] per partition, in partition-index order. */
     val txBasis: List<TransactionKey?> get() = partitions.map { it.txBasis }

@@ -97,6 +97,7 @@ external entity TrieCatalogSnap {}
 external entity TableCatalogSnap {}
     -- Frozen per-table metadata for everything already flushed: each table's column types and its count of rows ever written.
     -- The historical half of a column's declared type.
+    -- Also each table's primary key, as applied transactions declared it: see db.allium TableMetadata.
 
 external entity DurabilityHandle {}
     -- A per-transaction handle a caller may await, completed once the transaction has been read back and imported into the durable live tables.
@@ -198,6 +199,10 @@ entity StagedTx {
     durability: DurabilityHandle?
 
     tables: StagedTxTable with staged_tx = this
+
+    -- The primary keys this transaction declared, per table.
+    -- Applying it records them in the table catalog; a transaction resolving behind it reads them first.
+    primary_keys: Map<TableRef, List<String>>
 }
 
 entity StagedTxTable {
@@ -248,6 +253,12 @@ entity LiveTableTx {
 
     rows: Set<Row>           -- uncommitted rows in this transaction
     row_count: rows.count
+
+    -- The key this transaction declared for the table; null where it leaves the key as it found it.
+    declared_primary_key: List<String>?
+
+    -- Whether the table has been written to — a put, a delete or an erase — as this transaction sees it: flushed, applied, staged by a predecessor, or its own.
+    has_been_written: Boolean
 }
 
 ------------------------------------------------------------
@@ -432,6 +443,21 @@ rule LogErase {
     })
 }
 
+rule DeclarePrimaryKey {
+    -- CREATE TABLE ... PRIMARY KEY.
+    -- A table's key changes only until it is first written to, because every IID already written to it was derived from the key it has.
+    -- A CREATE TABLE naming the key the table already has declares nothing, rows or no rows, so it raises no DeclarePrimaryKey.
+    -- Until a transaction declares one, a table is keyed on `_id`, so the first write to a table with no declared key fixes it there.
+    --
+    -- The rows and writes after it in this transaction, and in every transaction resolving behind it, are keyed on the declared columns.
+    when: DeclarePrimaryKey(table_tx, columns)
+
+    requires: table_tx.transaction.status = active
+    requires: not table_tx.has_been_written
+
+    ensures: table_tx.declared_primary_key = columns
+}
+
 ------------------------------------------------------------
 -- Rules: Commit and abort (RESOLVE side — stage and append, not apply)
 ------------------------------------------------------------
@@ -460,7 +486,9 @@ rule CommitTransaction {
         let staged_tx = StagedTx.created(
             resolver: resolver,
             tx_key: tx.tx_key,
-            durability: durability
+            durability: durability,
+            -- Each table_tx's declared_primary_key, by table_ref, for those that declared one.
+            primary_keys: declared_primary_keys(tx.table_txs)
         )
         for table_tx in tx.table_txs where table_tx.rows.count > 0:
             StagedTxTable.created(
@@ -534,6 +562,9 @@ rule ApplyResolvedTx {
                     )
             live_table.rows.addAll(staged_table.rows)
 
+        -- Record the keys it declared in the table catalog, in the same write as its rows (db.allium ApplyResolvedTx).
+        TableCatalogKeysRecorded(staged_tx.primary_keys)
+
         -- Advance the DURABLE head. The RESOLVED head passed this transaction at stage time.
         index.latest_completed_tx = staged_tx.tx_key
 
@@ -596,6 +627,7 @@ rule OpenTransactionSnapshot {
     --
     -- A resolving transaction must read all prior transactions whether DURABLE or merely STAGED, plus its own uncommitted writes.
     -- So each TableSnapshot layers, bottom to top: the durable rows, the staged transactions' rows oldest first, and the transaction's own.
+    -- A table's primary key layers the same way: the transaction's own declaration, else the newest staged one, else the table catalog's.
     when: OpenSnapshot(tx)
 
     requires: tx.status = active

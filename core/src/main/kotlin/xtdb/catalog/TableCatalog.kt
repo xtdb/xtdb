@@ -84,7 +84,7 @@ class TableCatalog(private val flow: StateFlow<State>) {
         val vecTypes: Map<ColumnName, VectorType>,
         val rowCount: Long,
         val hlls: Map<ColumnName, HLL>,
-        /** null until something fixes the table's key; a block records a null one as [PrimaryKey.ID]. */
+        /** null until a transaction declares the table's key or a block records it; a block records a null one as [PrimaryKey.ID]. */
         val primaryKey: PrimaryKey?,
     ) {
         /** @see xtdb.indexer.TableSnapshot.contributedType — the historical side of the same memo. */
@@ -138,8 +138,20 @@ class TableCatalog(private val flow: StateFlow<State>) {
 
         fun rowCount(table: TableRef): Long? = tables[table]?.rowCount
 
-        /** null where nothing has fixed [table]'s key yet. */
+        /** null where no transaction has declared [table]'s key and no block has recorded it. */
         fun primaryKey(table: TableRef): PrimaryKey? = tables[table]?.primaryKey
+
+        /**
+         * [this], with each of [primaryKeys] recorded as its table's key.
+         * A table no block has recorded yet gets metadata holding only its key, which the next block's fold keeps.
+         */
+        internal fun withPrimaryKeys(primaryKeys: Map<TableRef, PrimaryKey>): State =
+            if (primaryKeys.isEmpty()) this
+            else copy(
+                tables = tables + primaryKeys.mapValues { (table, pk) ->
+                    (tables[table] ?: TableMeta(emptyMap(), 0, emptyMap(), primaryKey = null)).copy(primaryKey = pk)
+                }
+            )
 
         /** The historical half's contribution — an unknown table has written nothing. */
         fun contributedType(table: TableRef, col: ColumnName): VectorType =

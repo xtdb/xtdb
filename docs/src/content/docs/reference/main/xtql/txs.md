@@ -5,13 +5,14 @@ title: XTQL Transactions (Clojure)
 <details>
 <summary>Changelog (last updated v2.2.1)</summary>
 
-v2.2.1: a `put-docs` into a new table without `:xt/id` aborts its transaction
+v2.2.1: a `put-docs` without its key into a table not yet written to aborts its transaction
 
-: A `put-docs` into a table the node already holds fails at submit; into a new table, the transaction aborts with `xtdb.tx/missing-id` — see [`put-docs`](#put-docs).
+: A `put-docs` document carries the table's [primary key](/reference/main/sql/schema#primary-keys-v221), `:xt/id` unless the table declares another.
+  Into a table that has been written to, a document without it fails at submit; into a table that hasn't, the transaction aborts with `xtdb.tx/missing-id` — see [`put-docs`](#put-docs).
 
   Previously every such document failed at submit, with the error code `missing-id`.
 
-  A client of `submit-tx` putting into a new table no longer sees the error when it submits: check the transaction's outcome, or use `execute-tx`.
+  A client of `submit-tx` putting into a table that hasn't been written to no longer sees the error when it submits: check the transaction's outcome, or use `execute-tx`.
 
 </details>
 
@@ -48,13 +49,14 @@ Upserts documents into the given table, optionally during the given valid time p
 
  ;; -- required
  ;; documents to submit (variadic, 0..n)
- ;; * each must contain `:xt/id`
+ ;; * each must contain the table's primary key -
+ ;;   `:xt/id` unless the table declares another
  & <docs>
  ]
 ```
 
-A document without `:xt/id` is an `xtdb.tx/missing-id` error.
-For a table the node already holds, `submit-tx` throws it; for a new table, the transaction aborts with it.
+A document without the table's [primary key](/reference/main/sql/schema#primary-keys-v221) is an `xtdb.tx/missing-id` error.
+For a table that has been written to, `submit-tx` throws it; for one that hasn't, whose key a transaction ahead of this one may still declare, the transaction aborts with it.
 
 #### Examples
 

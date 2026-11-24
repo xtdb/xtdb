@@ -1507,6 +1507,48 @@ class FlightSqlAdbcTest {
         }
     }
 
+    private val ordersSchema = Schema(listOf(
+        Field("order_no", FieldType.notNullable(Types.MinorType.BIGINT.type), null),
+        Field("n", FieldType.notNullable(Types.MinorType.BIGINT.type), null),
+    ))
+
+    private fun ingestOrders(rows: List<Pair<Long, Long>>) =
+        VectorSchemaRoot.create(ordersSchema, al).use { root ->
+            val keyVec = root.getVector("order_no") as BigIntVector
+            val nVec = root.getVector("n") as BigIntVector
+            rows.forEachIndexed { i, (key, n) -> keyVec.setSafe(i, key); nVec.setSafe(i, n) }
+            root.rowCount = rows.size
+            fsqlClient.executeIngest(root, ingestOpts("orders"), *emptyCallOpts)
+        }
+
+    @Test
+    fun `test FlightSQL bulk ingest into a table keyed on another column upserts on that key`() {
+        val txn = fsqlClient.beginTransaction(*emptyCallOpts)
+        fsqlClient.executeUpdate("CREATE TABLE orders (order_no PRIMARY KEY, n)", txn, *emptyCallOpts)
+        fsqlClient.commit(txn, *emptyCallOpts)
+
+        ingestOrders(listOf(1L to 10L, 2L to 20L))
+        ingestOrders(listOf(1L to 11L))
+
+        assertEquals(
+            listOf(mapOf("order_no" to 1L, "n" to 11L), mapOf("order_no" to 2L, "n" to 20L)),
+            fsqlClient.execute("SELECT order_no, n FROM orders ORDER BY order_no", *emptyCallOpts).readRows()
+        )
+    }
+
+    @Test
+    fun `test FlightSQL bulk ingest without the table's key column is an invalid argument`() {
+        fsqlClient.executeUpdate("CREATE TABLE orders (order_no PRIMARY KEY, n)", *emptyCallOpts)
+
+        usersRoot(listOf(1L to 10L)) { root ->
+            val ex = assertThrows(FlightRuntimeException::class.java) {
+                fsqlClient.executeIngest(root, ingestOpts("orders"), *emptyCallOpts)
+            }
+            assertEquals(CallStatus.INVALID_ARGUMENT.code(), ex.status().code())
+            assertTrue(ex.message?.contains("missing 'order_no'") == true, "got: ${ex.message}")
+        }
+    }
+
     @Test
     fun `test FlightSQL bulk ingest rejects per-call catalog override`() {
         assertIngestRejected(ingestOpts("users", catalog = "some_other_catalog"), "catalog")

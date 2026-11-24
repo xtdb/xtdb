@@ -52,6 +52,7 @@
            (xtdb.indexer DatabaseSnapshot Snapshot)
            xtdb.NodeBase
            xtdb.operator.scan.IScanEmitter
+           (xtdb.table PrimaryKey)
            (xtdb.query DmlCacheKey IQuerySource IQuerySource$Factory IQuerySource$QueryDatabase ParsedStatement PlanCacheKey PlanCacheKey$Explain PreparedQuery SqlStatement$Assert SqlStatement$CreateTable SqlStatement$Delete SqlStatement$Erase SqlStatement$GrantRole SqlStatement$Patch SqlStatement$Put SqlStatement$RevokeRole)
            xtdb.util.RefCounter))
 
@@ -528,12 +529,12 @@
                       (throw t))))))))))))
 
   (prepareTxSql [this sql db-cat opts]
-    (let [[q-tag {:keys [stmt table message user role col-names]}]
+    (let [[q-tag {:keys [stmt table message user role col-names primary-key]}]
           (parse-sql/parse-statement sql {:default-db (.getDefaultDb opts)})]
       (case q-tag
         :grant-role (SqlStatement$GrantRole. user role)
         :revoke-role (SqlStatement$RevokeRole. user role)
-        :create-table (SqlStatement$CreateTable. table (or col-names []))
+        :create-table (SqlStatement$CreateTable. table (or col-names []) (some-> primary-key (PrimaryKey.)))
 
         (let [pq (.prepareRa this stmt db-cat opts)]
           (case q-tag

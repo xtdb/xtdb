@@ -10,6 +10,7 @@ import xtdb.arrow.VectorType
 import xtdb.api.tx.ExternalSourceToken
 import xtdb.indexer.LiveTable.Companion.logRelTypes
 import xtdb.api.TableRef
+import xtdb.table.PrimaryKey
 import xtdb.trie.ColumnName
 import xtdb.util.closeAll
 import xtdb.api.tx.OpenTx
@@ -51,7 +52,11 @@ class ResolvedTx private constructor(
      * resolved behind, which is why the whole value serves read-your-writes while only the range above
      * [rowsFrom] goes to the replica log.
      */
-    class Table(val ref: TableRef, val liveTable: LiveTable, val rowsFrom: Int) : AutoCloseable {
+    class Table(
+        val ref: TableRef, val liveTable: LiveTable, val rowsFrom: Int,
+        /** The key this tx declared for the table; null where it left the key as it found it. */
+        val declaredPrimaryKey: PrimaryKey?,
+    ) : AutoCloseable {
 
         /**
          * How many rows *this* tx wrote — not what the table now holds, which includes every tx it
@@ -70,6 +75,10 @@ class ResolvedTx private constructor(
     }
 
     val allTables: Collection<Table> get() = tables.values
+
+    // Taken at construction: [sealTables] empties [tables], and the apply after it still installs these.
+    val primaryKeys: Map<TableRef, PrimaryKey> =
+        tables.values.mapNotNull { t -> t.declaredPrimaryKey?.let { t.ref to it } }.toMap()
 
     /** This tx's value for [table], for a later tx resolving behind it to derive its own from. */
     fun liveTable(table: TableRef): LiveTable? = tables[table]?.liveTable
@@ -106,6 +115,7 @@ class ResolvedTx private constructor(
             dbOp = dbOp,
             externalSourceToken = externalSourceToken,
             srcMsgId = srcMsgId,
+            primaryKeys = primaryKeys.mapKeys { (ref, _) -> ref.schemaAndTable },
             termId = termId,
         )
     }

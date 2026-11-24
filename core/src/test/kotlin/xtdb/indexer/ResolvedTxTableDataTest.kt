@@ -21,7 +21,7 @@ class ResolvedTxTableDataTest {
             ReplicaMessage.ResolvedTx(
                 txId = 3, systemTime = Instant.EPOCH, committed = true, error = null,
                 tableData = mapOf("public/docs" to rel.toArrowStream(4, 3)),
-                termId = 1,
+                primaryKeys = emptyMap(), termId = 1,
             )
         }
 

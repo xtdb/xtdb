@@ -86,8 +86,7 @@ class OpenTx
 
     internal fun table(table: TableRef): Table =
         tableTxs[table] ?: openTableTx(table).closeOnCatch { tx ->
-            Table(table, tx, partitionState.tableCatalog.snap().primaryKey(table) ?: PrimaryKey.ID)
-                .also { tableTxs[table] = it }
+            Table(table, tx, inheritedPrimaryKey(table)).also { tableTxs[table] = it }
         }
 
     /**
@@ -121,11 +120,16 @@ class OpenTx
                 // holds anything — so at the instant of a throw the table is still `tableTxs`', and the
                 // removal that hands it over cannot itself fail. A committed value and the transient it
                 // came from share a relation, so this order is what keeps them from both closing it.
-                sealed += ResolvedTx.Table(ref, table.tx.commit(), table.tx.startRowIdx)
+                sealed += ResolvedTx.Table(ref, table.tx.commit(), table.tx.startRowIdx, table.declaredPrimaryKey)
                 iter.remove()
             }
             sealed
         }
+
+    private fun inheritedPrimaryKey(ref: TableRef): PrimaryKey =
+        resolvedTxs.asReversed().firstNotNullOfOrNull { it.primaryKeys[ref] }
+            ?: partitionState.tableCatalog.snap().primaryKey(ref)
+            ?: PrimaryKey.ID
 
     /**
      * The value this tx writes [ref] on top of: the newest staged one among the predecessors it resolves
@@ -246,7 +250,7 @@ class OpenTx
             is SqlStatement.GrantRole -> writeRoleMembership(stmt.user, stmt.role, currentTime, user, revoke = false)
             is SqlStatement.RevokeRole -> writeRoleMembership(stmt.user, stmt.role, currentTime, user, revoke = true)
 
-            is SqlStatement.CreateTable -> createTable(stmt.table, stmt.colNames)
+            is SqlStatement.CreateTable -> createTable(stmt.table, stmt.colNames, stmt.primaryKey)
 
             is SqlStatement.DmlQuery -> {
                 val query = stmt.query
@@ -286,14 +290,16 @@ class OpenTx
                                     rel.rowCount,
                                 )
 
-                                val putCols = listOfNotNull(
-                                    rel.vectorFor(target.primaryKey.column),
-                                    RelationAsStructReader("doc", contentRel),
-                                    rel.vectorForOrNull("_valid_from"),
-                                    rel.vectorForOrNull("_valid_to"),
-                                )
+                                target.openKeyIids(contentRel).use { iids ->
+                                    val putCols = listOfNotNull(
+                                        iids,
+                                        RelationAsStructReader("doc", contentRel),
+                                        rel.vectorForOrNull("_valid_from"),
+                                        rel.vectorForOrNull("_valid_to"),
+                                    )
 
-                                target.writePuts(RelationReader.from(putCols, rel.rowCount), currentTimeMicros, MAX_LONG)
+                                    target.writePuts(RelationReader.from(putCols, rel.rowCount), currentTimeMicros, MAX_LONG)
+                                }
                             }
                         }
                     }
@@ -335,9 +341,11 @@ class OpenTx
         }
     }
 
-    private fun createTable(ref: TableRef, colNames: List<String>) {
+    private fun createTable(ref: TableRef, colNames: List<String>, primaryKey: PrimaryKey?) {
         checkNotForbidden(ref)
-        table(ref).declareColumns(colNames)
+        val table = table(ref)
+        table.declareColumns(colNames)
+        primaryKey?.let(table::declarePrimaryKey)
     }
 
     // GRANT/REVOKE arrive as ordinary SQL but are authority-gated and write below the FORBIDDEN_SCHEMAS
@@ -445,9 +453,36 @@ class OpenTx
     inner class Table internal constructor(
         val ref: TableRef,
         internal val tx: LiveTable.Tx,
-        /** The key this table's rows are identified by — a put takes its IID from [PrimaryKey.column]. */
-        val primaryKey: PrimaryKey,
+        private val inheritedPrimaryKey: PrimaryKey,
     ) : AutoCloseable {
+
+        internal var declaredPrimaryKey: PrimaryKey? = null
+            private set
+
+        /** The key this table's rows are identified by — a put takes its IID from [PrimaryKey.column]. */
+        val primaryKey: PrimaryKey get() = declaredPrimaryKey ?: inheritedPrimaryKey
+
+        // [tx]'s relation already holds the live index's rows and every predecessor's; the catalog holds the flushed ones.
+        private fun holdsRows() =
+            tx.relation.rowCount > 0 || (partitionState.tableCatalog.snap().rowCount(ref) ?: 0) > 0
+
+        /**
+         * Keys the table on [primaryKey] from here on.
+         * A table's key changes only until it is first written to: the IIDs already written were derived from the key it has.
+         */
+        internal fun declarePrimaryKey(primaryKey: PrimaryKey) {
+            if (primaryKey == this.primaryKey) return
+
+            if (holdsRows())
+                throw Incorrect(
+                    "Cannot change the primary key of a table that has been written to: ${ref.schemaAndTable}",
+                    "xtdb/primary-key-on-non-empty-table",
+                    mapOf("table" to ref, "primary-key" to primaryKey.columns, "existing-primary-key" to this.primaryKey.columns),
+                )
+
+            declareColumns(primaryKey.columns)
+            declaredPrimaryKey = primaryKey
+        }
 
         private fun checkValidTimes(validFrom: Long, validTo: Long) {
             if (validFrom >= validTo) {
@@ -477,7 +512,7 @@ class OpenTx
         internal fun writeIid(iid: ByteBuffer) = iidVec.writeBytes(iid)
         internal fun writeIid(iid: ByteArray) = iidVec.writeBytes(iid)
 
-        /** Writes the row's entity id. */
+        /** Writes the row's IID: [id] is the value of the row's [primaryKey] column, which is `_id` only on a table keyed on `_id`. */
         fun writeId(id: Any) = iidVec.writeBytes(id.asIid)
 
         fun writeValidTimeMicros(validFrom: Long, validTo: Long) {
@@ -514,10 +549,23 @@ class OpenTx
         }
 
         /**
+         * The IIDs of [rel]'s rows, from its [primaryKey] column, as an `_iid` vector for the caller to close.
+         * Throws `xtdb.tx/missing-id` unless every row has a key value.
+         */
+        internal fun openKeyIids(rel: RelationReader): FixedSizeBinaryVector {
+            val keyRdr = primaryKey.keyVector(rel)
+            return FixedSizeBinaryVector(allocator, "_iid", false, 16).closeOnCatch { iids ->
+                repeat(rel.rowCount) { iids.writeBytes(keyRdr.getObject(it).asIid) }
+                iids
+            }
+        }
+
+        /**
          * Batch put: writes every row in [rel], content from `doc`.
          *
          * - The relation MUST contain either an `_iid` column or the table's [primaryKey] column, the latter with a value
          *   in every row - otherwise `xtdb.tx/missing-id`.
+         *   A key column named `doc` can't sit beside the `doc` column, so a table keyed on `doc` takes `_iid`.
          * - Per-row valid times come from the rel's `_valid_from` / `_valid_to` columns when present and non-null;
          *   otherwise the [defaultValidFromMicros] / [defaultValidToMicros] defaults apply.
          *
@@ -587,7 +635,7 @@ class OpenTx
          */
         fun endDelete() = endDeletes(1)
 
-        /** Single delete of [id] over the given valid-time range. */
+        /** Single delete, over the given valid-time range, of the row whose [primaryKey] column holds [id]. */
         fun writeDelete(id: Any, validFrom: Instant? = null, validTo: Instant? = null) {
             writeId(id)
             writeValidTimes(validFrom, validTo)
@@ -654,7 +702,7 @@ class OpenTx
          */
         fun endErase() = endErases(1)
 
-        /** Single erase of [id] across all valid time, in one call. */
+        /** Single erase, across all valid time, of the row whose [primaryKey] column holds [id]. */
         fun writeErase(id: Any) {
             writeId(id)
             writeValidTimeMicros(MIN_LONG, MAX_LONG)

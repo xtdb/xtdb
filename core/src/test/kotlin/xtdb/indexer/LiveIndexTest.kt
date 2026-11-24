@@ -29,6 +29,10 @@ import xtdb.NodeBase
 import xtdb.NodeBase.Companion.openBase
 import xtdb.TestPartition
 import xtdb.api.TransactionKey
+import xtdb.api.TransactionResult
+import xtdb.api.log.ReplicaMessage
+import xtdb.table.PrimaryKey
+import xtdb.util.useAll
 import xtdb.log.proto.TrieDetails
 import xtdb.block.proto.block
 import xtdb.storage.MemoryStorage
@@ -79,16 +83,18 @@ class LiveIndexTest {
         val liveIndex get() = partition.liveIndex
         val state get() = partition.state
 
-        fun openTx(txId: Long, systemTime: Instant) =
+        fun openTx(txId: Long, systemTime: Instant, resolvedTxs: List<ResolvedTx> = emptyList()) =
             OpenTx(
                 allocator, nodeBase, partition.storage, partition.state, dbName,
-                TransactionKey(txId, systemTime), null
+                TransactionKey(txId, systemTime), null, resolvedTxs = resolvedTxs,
             )
 
         fun commitTx(openTx: OpenTx) {
             openTx.writeTxRow(null, null)
-            openTx.sealTables().associateTo(mutableMapOf()) { it.ref to it.liveTable }
-                .closeAllOnCatch { state.applyTx(openTx.txKey, it) }
+            val sealed = openTx.sealTables()
+            val primaryKeys = sealed.mapNotNull { t -> t.declaredPrimaryKey?.let { t.ref to it } }.toMap()
+            sealed.associateTo(mutableMapOf()) { it.ref to it.liveTable }
+                .closeAllOnCatch { state.applyTx(openTx.txKey, it, primaryKeys) }
         }
 
         override fun close() {
@@ -286,7 +292,7 @@ class LiveIndexTest {
                     rel["_valid_to"].writeLong(Long.MAX_VALUE)
                     rel["op"].vectorFor("put", STRUCT_TYPE, false).endStruct()
                     rel.endRow()
-                    db.state.commitTx(TransactionKey(txId, systemTime), mapOf(table to rel))
+                    db.state.commitTx(TransactionKey(txId, systemTime), mapOf(table to rel), emptyMap())
                 }
 
             import(0, Instant.parse("2020-01-01T00:00:00Z"), 1)
@@ -719,7 +725,7 @@ class LiveIndexTest {
                 val tables = tx.sealTables().associateTo(mutableMapOf()) { it.ref to it.liveTable }
                 assertTrue(tables.isNotEmpty())
 
-                db.state.applyTx(tx.txKey, tables)
+                db.state.applyTx(tx.txKey, tables, emptyMap())
 
                 assertTrue(
                     tables.isEmpty(),
@@ -744,6 +750,84 @@ class LiveIndexTest {
 
                 assertNull(db.liveIndex.state.table(TableRef("public", "docs")), "nothing half-installed")
             }
+        }
+    }
+
+    private val keyedOnA = PrimaryKey(listOf("a"))
+
+    private fun OpenTx.stage() = ResolvedTx.stage(this, txKey.txId, TransactionResult.Committed(txKey), null, null)
+
+    @Test
+    fun `a key declared on the leader reaches its table catalog on apply`() {
+        TestDb().use { db ->
+            db.openTx(0, Instant.parse("2020-01-01T00:00:00Z")).use { tx ->
+                tx.executeSql("CREATE TABLE docs (a, b, PRIMARY KEY (a))")
+                db.commitTx(tx)
+            }
+
+            assertEquals(keyedOnA, db.state.tableCatalog.snap().primaryKey(TableRef("public", "docs")))
+        }
+    }
+
+    @Test
+    fun `a declared key travels on the replica message, so a follower keys the table the same way`() {
+        TestDb().use { leader ->
+            TestDb().use { follower ->
+                leader.openTx(0, Instant.parse("2020-01-01T00:00:00Z")).use { tx ->
+                    tx.executeSql("CREATE TABLE docs (a, b, PRIMARY KEY (a))")
+                    tx.writeTxRow(null, null)
+
+                    tx.stage().use { resolved ->
+                        val msg = ReplicaMessage.decode(resolved.toReplicaMessage(termId = 1).encode()) as ReplicaMessage.ResolvedTx
+                        msg.loadTableData(allocator).useAll { follower.state.commitTx(tx.txKey, it, msg.tablePrimaryKeys) }
+                    }
+                }
+
+                assertEquals(keyedOnA, follower.state.tableCatalog.snap().primaryKey(TableRef("public", "docs")))
+            }
+        }
+    }
+
+    @Test
+    fun `a tx resolving behind a staged declaration keys the table on the declared column`() {
+        TestDb().use { db ->
+            val table = TableRef("public", "docs")
+
+            db.openTx(0, Instant.parse("2020-01-01T00:00:00Z"))
+                .use { tx0 ->
+                    tx0.executeSql("CREATE TABLE docs (a PRIMARY KEY)")
+                    tx0.writeTxRow(null, null)
+                    tx0.stage()
+                }
+                .use { staged ->
+                    db.openTx(1, Instant.parse("2020-01-02T00:00:00Z"), listOf(staged)).use { tx1 ->
+                        assertEquals(keyedOnA, tx1.table(table).primaryKey)
+
+                        db.state.openSnapshot(listOf(staged), tx1).use { snap ->
+                            assertEquals(keyedOnA, snap.primaryKey(table))
+                        }
+                    }
+                }
+        }
+    }
+
+    @Test
+    fun `a key can't be declared behind a predecessor's staged rows`() {
+        TestDb().use { db ->
+            val table = TableRef("public", "docs")
+
+            db.openTx(0, Instant.parse("2020-01-01T00:00:00Z"))
+                .use { tx0 ->
+                    tx0.put(table, UUID.randomUUID())
+                    tx0.writeTxRow(null, null)
+                    tx0.stage()
+                }
+                .use { staged ->
+                    db.openTx(1, Instant.parse("2020-01-02T00:00:00Z"), listOf(staged)).use { tx1 ->
+                        val e = assertThrows<Incorrect> { tx1.executeSql("CREATE TABLE docs (a PRIMARY KEY)") }
+                        assertEquals(Keyword.intern("xtdb", "primary-key-on-non-empty-table"), e.errorCode())
+                    }
+                }
         }
     }
 }
