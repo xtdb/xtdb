@@ -32,6 +32,8 @@ message TableBlock {
     repeated Partition partitions = 5;
     // keyed by the Arrow field name a column's data is written under, as `arrow_schema` is.
     map<string, xtdb.cols.proto.ColumnMeta> columns = 6;
+    // Empty in a block written before the key was recorded, which reads as `_id`.
+    repeated string primary_key = 7;
 }
 
 message TxKey {
