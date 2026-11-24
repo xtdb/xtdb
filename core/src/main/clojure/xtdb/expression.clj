@@ -20,7 +20,7 @@
            (org.apache.commons.codec.binary Hex)
            (xtdb.arrow ListValueReader RelationReader RowMask ValueBox ValueReader Vector VectorReader VectorType VectorType$Listy VectorType$Mono VectorType$Nothing VectorType$Poly VectorType$Struct)
            (xtdb.expression PgFormat)
-           (xtdb.operator ProjectionSpec SelectionSpec)
+           (xtdb.operator ProjectionSpec SelectionSpec SelectionSpec$Factory)
            (xtdb.pgwire PgTypes)
            xtdb.time.Interval
            (xtdb.util StringUtil)))
@@ -2637,16 +2637,21 @@
 (defn- ->predicate-expr [expr]
   {:op :call, :f :boolean, :args [expr]})
 
-(defn ->expression-selection-spec ^SelectionSpec [expr {:keys [var-types param-types]}]
+(defn ->expression-selection-spec ^SelectionSpec$Factory [expr {:keys [var-types param-types]}]
   (let [expr (->predicate-expr expr)]
     ;; analysed here as well as per batch, so that an expression the EE can't compile throws when the spec is built
     (emit-selection expr {:param-types param-types
                           :var-types var-types})
 
-    (reify SelectionSpec
-      (select [_ _al in-rel schema args]
-        (let [{:keys [!selection-fn]} (emit-selection expr {:param-types (->param-types args)
-                                                            :var-types (->var-types in-rel)})]
-          (RowMask/ofWords (rethrowing-anomalies
-                             (@!selection-fn in-rel schema args))
-                           (.getRowCount in-rel)))))))
+    (reify SelectionSpec$Factory
+      (open [_ _al schema args]
+        (let [param-types (->param-types args)]
+          (reify SelectionSpec
+            (select [_ in-rel]
+              (let [{:keys [!selection-fn]} (emit-selection expr {:param-types param-types
+                                                                  :var-types (->var-types in-rel)})]
+                (RowMask/ofWords (rethrowing-anomalies
+                                   (@!selection-fn in-rel schema args))
+                                 (.getRowCount in-rel))))
+
+            (close [_])))))))

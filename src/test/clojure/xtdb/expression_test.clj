@@ -84,8 +84,9 @@
                                                      (into {} (map (fn [^VectorReader col]
                                                                      [(symbol (.getName col))
                                                                       (.getType col)]))))}]
-                  (.getCardinality (.select (expr/->expression-selection-spec (expr/form->expr form input-types) input-types)
-                                            tu/*allocator* in-rel {} arg-rel)))))]
+                  (with-open [selection-spec (-> (expr/->expression-selection-spec (expr/form->expr form input-types) input-types)
+                                                 (.open tu/*allocator* {} arg-rel))]
+                    (.getCardinality (.select selection-spec in-rel))))))]
 
       (t/testing "selector"
         (t/is (= 500 (select-relation '(>= a 500) '{a #xt/type :f64} {})))
@@ -96,25 +97,27 @@
         (t/is (= 500 (select-relation '(>= e ?e) '{e #xt/type :utf8} {:e "0500"})))))))
 
 (t/deftest nil-selection-doesnt-yield-the-row
-  (t/is (= 0
-           (-> (.select (expr/->expression-selection-spec (expr/form->expr '(and true nil) {}) {})
-                        tu/*allocator* (vr/rel-reader [] 1) {} vw/empty-args)
-               (.toSelection)
-               (alength)))))
+  (with-open [selection-spec (-> (expr/->expression-selection-spec (expr/form->expr '(and true nil) {}) {})
+                                 (.open tu/*allocator* {} vw/empty-args))]
+    (t/is (= 0
+             (-> (.select selection-spec (vr/rel-reader [] 1))
+                 (.toSelection)
+                 (alength))))))
 
 (t/deftest selection-masks-exactly-the-selected-rows-across-word-boundaries
   (let [input-types {:var-types '{sel #xt/type [:? :bool]}}
         expr (expr/form->expr 'sel input-types)
-        selection-spec (expr/->expression-selection-spec expr input-types)]
-    (doseq [row-count [0 1 63 64 65 127 128 130]]
-      (let [sels (for [idx (range row-count)]
-                   (when-not (= 5 (mod idx 7))
-                     (zero? (mod idx 3))))
-            expected (keep-indexed (fn [idx sel] (when sel idx)) sels)]
-        (with-open [in-rel (tu/open-rel {:sel sels})]
-          (let [mask (.select selection-spec tu/*allocator* in-rel {} vw/empty-args)]
-            (t/is (= row-count (.getRowCount mask)) (str row-count " rows"))
-            (t/is (= expected (vec (.toSelection mask))) (str row-count " rows"))))))))
+        selection-spec-factory (expr/->expression-selection-spec expr input-types)]
+    (with-open [selection-spec (.open selection-spec-factory tu/*allocator* {} vw/empty-args)]
+      (doseq [row-count [0 1 63 64 65 127 128 130]]
+        (let [sels (for [idx (range row-count)]
+                     (when-not (= 5 (mod idx 7))
+                       (zero? (mod idx 3))))
+              expected (keep-indexed (fn [idx sel] (when sel idx)) sels)]
+          (with-open [in-rel (tu/open-rel {:sel sels})]
+            (let [mask (.select selection-spec in-rel)]
+              (t/is (= row-count (.getRowCount mask)) (str row-count " rows"))
+              (t/is (= expected (vec (.toSelection mask))) (str row-count " rows")))))))))
 
 (defn project
   "Use to test an expression on some example documents. See also, project1.

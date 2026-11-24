@@ -4,14 +4,13 @@ import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.ICursor
 import xtdb.arrow.MaskedRelation
 import xtdb.arrow.RelationReader
+import xtdb.util.closeAll
 import java.util.function.Consumer
 
 class SelectCursor(
     private val al: BufferAllocator,
     private val inCursor: ICursor,
     private val selector: SelectionSpec,
-    private val schema: Map<String, Any>,
-    private val args: RelationReader
 ) : ICursor {
 
     override val cursorType get() = "select"
@@ -21,7 +20,7 @@ class SelectCursor(
 
         while (!advanced) {
             inCursor.tryAdvance { inRel ->
-                val mask = selector.select(al, inRel, schema, args)
+                val mask = selector.select(inRel)
                 when (mask.cardinality) {
                     0 -> {}
 
@@ -41,5 +40,5 @@ class SelectCursor(
         return advanced
     }
 
-    override fun close() = inCursor.close()
+    override fun close() = listOf(selector, inCursor).closeAll()
 }

@@ -28,9 +28,7 @@ class MultiIidSelector(private val iids: SortedSet<ByteArray>) : SelectionSpec {
         return res.build()
     }
 
-    override fun select(
-        allocator: BufferAllocator, readRelation: RelationReader, schema: Map<String, Any>, params: RelationReader
-    ) = select(readRelation, iids)
+    override fun select(readRelation: RelationReader) = select(readRelation, iids)
 
     private val bucketer = Bucketer.DEFAULT
 
@@ -99,4 +97,6 @@ class MultiIidSelector(private val iids: SortedSet<ByteArray>) : SelectionSpec {
 
         return res.build()
     }
+
+    override fun close() = Unit
 }

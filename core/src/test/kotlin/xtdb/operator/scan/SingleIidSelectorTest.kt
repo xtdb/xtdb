@@ -8,7 +8,6 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import xtdb.arrow.IID_TYPE
 import xtdb.arrow.Relation
-import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorWriter
 import xtdb.arrow.VectorType.Companion.IID
 import java.nio.ByteBuffer
@@ -50,7 +49,7 @@ class SingleIidSelectorTest {
                     rel.endRow()
                 }
 
-                iidSel.select(al, rel, emptyMap(), RelationReader.from(emptyList(), 0)).toSelection()
+                iidSel.select(rel).toSelection()
             }
 
         assertArrayEquals(IntArray(0), testUuids(), "empty")

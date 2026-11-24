@@ -22,6 +22,7 @@
            xtdb.pgwire.PgType
            (xtdb.indexer Snapshot TableSnapshot)
            xtdb.operator.SelectionSpec
+           xtdb.operator.SelectionSpec$Factory
            (xtdb.query IQuerySource IQuerySource$QueryCatalog IQuerySource$QueryDatabase)
            xtdb.api.TableRef
            xtdb.table.TableEntry
@@ -629,12 +630,13 @@
                                    (into-array java.util.Map)))
 
           ;;TODO reuse relation selector code from trie cursor
-          (InformationSchemaCursor. (reduce (fn [^RelationReader rel ^SelectionSpec col-pred]
-                                              (.select rel (.toSelection (.select col-pred allocator rel schema params))))
-                                            (-> out-rel
-                                                (->> (filter (comp (set col-names) #(.getName ^VectorReader %))))
-                                                (vr/rel-reader (.getRowCount out-rel))
-                                                (vr/with-absent-cols allocator col-names))
-                                            (vals col-preds))
+          (InformationSchemaCursor. (util/with-open [col-preds (util/safe-update-vals col-preds #(.open ^SelectionSpec$Factory % allocator schema params))]
+                                      (reduce (fn [^RelationReader rel ^SelectionSpec col-pred]
+                                                (.select rel (.toSelection (.select col-pred rel))))
+                                              (-> out-rel
+                                                  (->> (filter (comp (set col-names) #(.getName ^VectorReader %))))
+                                                  (vr/rel-reader (.getRowCount out-rel))
+                                                  (vr/with-absent-cols allocator col-names))
+                                              (vals col-preds)))
                                     out-rel))))))
 

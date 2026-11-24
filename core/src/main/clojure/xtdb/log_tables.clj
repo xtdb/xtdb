@@ -20,7 +20,7 @@
            (xtdb.arrow Relation RelationReader VectorReader)
            (xtdb.database Database)
            (xtdb.log.proto TrieDetails)
-           (xtdb.operator SelectionSpec)
+           (xtdb.operator SelectionSpec SelectionSpec$Factory)
            (xtdb.api TableRef)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -196,11 +196,11 @@
 
 (defn- emit-batch
   "Writes a batch of row maps into a Relation, applies col-preds, and yields to the consumer."
-  [^BufferAllocator allocator derived-table-schema col-names col-preds schema args rows c]
+  [^BufferAllocator allocator derived-table-schema col-names col-preds rows c]
   (util/with-open [out-rel (Relation. allocator ^Map (update-keys derived-table-schema str))]
     (.writeRows out-rel (into-array java.util.Map rows))
     (let [out-rel-view (reduce (fn [^RelationReader rel ^SelectionSpec col-pred]
-                                 (.select rel (.toSelection (.select col-pred allocator rel schema args))))
+                                 (.select rel (.toSelection (.select col-pred rel))))
                                (-> out-rel
                                    (->> (filter (comp (set col-names) #(.getName ^VectorReader %))))
                                    (vr/rel-reader (.getRowCount out-rel))
@@ -233,7 +233,8 @@
                             (case upper-op :<= (inc v), :< v)))
           record-seq (.readRecords log 0 from-msg-id to-msg-id)
           record-iter (.iterator record-seq)
-          decode-tx-ops? (and source? (contains? col-names "tx_ops"))]
+          decode-tx-ops? (and source? (contains? col-names "tx_ops"))
+          col-preds (util/safe-update-vals col-preds #(.open ^SelectionSpec$Factory % allocator schema args))]
 
       (reify ICursor
         (getCursorType [_] "log-table")
@@ -243,6 +244,6 @@
            (when (.hasNext record-iter)
              (let [batch (take-batch record-iter batch-size)
                    rows (records->rows batch source? decode-tx-ops? allocator)]
-               (emit-batch allocator derived-table-schema col-names col-preds schema args rows c)
+               (emit-batch allocator derived-table-schema col-names col-preds rows c)
                true))))
-        (close [_])))))
+        (close [_] (util/close col-preds))))))
