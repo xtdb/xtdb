@@ -14,10 +14,10 @@
             [xtdb.vector.writer :as vw])
   (:import (clojure.lang IReduceInit)
            (java.time.format DateTimeParseException)
-           (org.apache.arrow.memory BufferAllocator)
            (xtdb.api ResultCursor Xtdb$Connection)
            (xtdb.arrow RelationReader)
-           (xtdb.tx TxOp$PatchDocs TxOp$PutDocs TxOp$Sql TxOpts)))
+           (xtdb.tx TxOp$PatchDocs TxOp$PutDocs TxOp$Sql TxOpts)
+           (xtdb.util Iid)))
 
 (defn- coerce-instant
   "Coerces a user-supplied time value to an Instant, surfacing a bad value as an `:incorrect`
@@ -98,20 +98,23 @@
   "Converts one parsed tx-op map to core `TxOp`s. put/patch build native doc ops; delete/erase/sql
   become a single `TxOp.Sql` (indexed as SQL DML, as the pgwire path does) whose arg-rows are one
   multi-row `RelationReader` — a batch, matching how the connection's own DML coalescing works."
-  [^BufferAllocator al {:keys [op table-name docs doc-ids valid-from valid-to sql arg-rows]}]
-  (let [[schema table] (when table-name [(namespace table-name) (name table-name)]) ; nil for :sql
+  [^Xtdb$Connection conn {:keys [op table-name docs doc-ids valid-from valid-to sql arg-rows]}]
+  (let [al (.getAllocator conn)
+        [schema table] (when table-name [(namespace table-name) (name table-name)]) ; nil for :sql
         for-vt (when (or valid-from valid-to) "FOR VALID_TIME FROM ? TO ?")]
     (case op
       :put-docs [(TxOp$PutDocs/openFromRows al schema table docs valid-from valid-to)]
       :patch-docs [(TxOp$PatchDocs/openFromRows al schema table docs valid-from valid-to)]
 
       :delete-docs (when (seq doc-ids)
+                     (.requireRowKeyArity conn schema table doc-ids)
                      (let [dsql (format "DELETE FROM \"%s\".\"%s\" %s WHERE _iid = ?" schema table (or for-vt ""))]
-                       [(TxOp$Sql. dsql (apply vw/open-args al (map #(let [iid (util/->iid %)] (if for-vt [valid-from valid-to iid] [iid])) doc-ids)))]))
+                       [(TxOp$Sql. dsql (apply vw/open-args al (map #(let [iid (Iid/rowKeyIid %)] (if for-vt [valid-from valid-to iid] [iid])) doc-ids)))]))
 
       :erase-docs (when (seq doc-ids)
+                    (.requireRowKeyArity conn schema table doc-ids)
                     (let [esql (format "ERASE FROM \"%s\".\"%s\" WHERE _iid = ?" schema table)]
-                      [(TxOp$Sql. esql (apply vw/open-args al (map (comp vector util/->iid) doc-ids)))]))
+                      [(TxOp$Sql. esql (apply vw/open-args al (map (comp vector #(Iid/rowKeyIid %)) doc-ids)))]))
 
       :sql (cond
              (nil? arg-rows) [(TxOp$Sql. sql nil)]
@@ -126,9 +129,8 @@
   `safe-mapv` (with `util/close`'s recursion into collections) closes any already-built ops if a
   later conversion throws; `expandStaticOps` takes ownership of the list it's handed."
   ^java.util.List [^Xtdb$Connection conn tx-ops opts]
-  (let [al (.getAllocator conn)
-        tz (or (:default-tz opts) (.getDefaultTz conn))]
-    (.expandStaticOps conn (into [] cat (util/safe-mapv #(op->tx-ops al %) tx-ops)) tz)))
+  (let [tz (or (:default-tz opts) (.getDefaultTz conn))]
+    (.expandStaticOps conn (into [] cat (util/safe-mapv #(op->tx-ops conn %) tx-ops)) tz)))
 
 (defn- ->tx-opts ^TxOpts [{:keys [system-time default-tz metadata]}]
   ;; no dbName — a connection is already bound to its database (cf. the JDBC path rejecting :database)

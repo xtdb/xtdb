@@ -29,7 +29,8 @@
            (xtdb JsonSerde)
            (xtdb.api FlightSql FlightSqlConfig Xtdb$Config)
            (xtdb.flight_sql XtdbProducer)
-           (xtdb.arrow Relation)))
+           (xtdb.arrow Relation)
+           (xtdb.util Iid)))
 
 (defmethod xtn/apply-config! :flight-sql [^Xtdb$Config config _ {:keys [host port transaction-idle-timeout prepared-statement-idle-timeout session-idle-timeout session-unclaimed-timeout]}]
   (cond-> (.getFlightSql config)
@@ -174,11 +175,11 @@
 
       :delete-docs (when (seq doc-ids)
                      [{:sql (format "DELETE FROM %s %s WHERE _iid = ?" (table-sql table-name) for-vt)
-                       :arg-rows (mapv (fn [doc-id] (conj (vec vt-args) (util/->iid doc-id))) doc-ids)}])
+                       :arg-rows (mapv (fn [doc-id] (conj (vec vt-args) (Iid/rowKeyIid doc-id))) doc-ids)}])
 
       :erase-docs (when (seq doc-ids)
                     [{:sql (format "ERASE FROM %s WHERE _iid = ?" (table-sql table-name))
-                      :arg-rows (mapv (comp vector util/->iid) doc-ids)}])
+                      :arg-rows (mapv (comp vector #(Iid/rowKeyIid %)) doc-ids)}])
 
       :sql [{:sql sql, :arg-rows arg-rows}])))
 

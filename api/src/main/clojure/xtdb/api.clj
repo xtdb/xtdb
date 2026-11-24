@@ -205,7 +205,7 @@
                                                (namespace table-name) (name table-name)
                                                (for-valid-time-sql valid-from valid-to))])]
     (jdbc/execute-batch! stmt (mapv (fn [doc-id]
-                                      (let [iid (Iid/getAsIid doc-id)]
+                                      (let [iid (Iid/rowKeyIid doc-id)]
                                         (if (or valid-from valid-to)
                                           [valid-from valid-to iid]
                                           [iid])))
@@ -214,7 +214,7 @@
 (defn- erase-docs! [{:keys [table-name doc-ids]} conn]
   (with-open [stmt (jdbc/prepare conn [(format "ERASE FROM \"%s\".\"%s\" WHERE _iid = ?"
                                                (namespace table-name) (name table-name))])]
-    (jdbc/execute-batch! stmt (mapv (comp vector #(Iid/getAsIid %)) doc-ids))))
+    (jdbc/execute-batch! stmt (mapv (comp vector #(Iid/rowKeyIid %)) doc-ids))))
 
 (defn- sql! [{:keys [sql arg-rows]} conn]
   (err/wrap-anomaly {:sql sql, :arg-rows arg-rows}

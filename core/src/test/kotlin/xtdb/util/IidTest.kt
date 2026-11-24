@@ -106,4 +106,22 @@ class IidTest {
     fun `a key has at least one value`() {
         assertThrows<Incorrect> { keyIid(emptyList<Any>()) }
     }
+
+    @Test
+    fun `a row key is a key's values in key order, or a single-column key's value`() = runTest {
+        checkAll(1000, keyValue, keyValue) { a, b ->
+            assertArrayEquals(a.asIid, rowKeyIid(a))
+            assertArrayEquals(a.asIid, rowKeyIid(listOf(a)))
+            assertArrayEquals(keyIid(listOf(a, b)), rowKeyIid(listOf(a, b)))
+        }
+    }
+
+    @Test
+    fun `a row key holds at least one value, and none that can't key a row`() {
+        assertNull(rowKeyIidOrNull(emptyList<Any>()))
+        assertNull(rowKeyIidOrNull(listOf(1L, listOf(2L))))
+        assertNull(rowKeyIidOrNull(listOf(1L, 1.5)))
+        assertNull(rowKeyIidOrNull(1.5))
+        assertThrows<Incorrect> { rowKeyIid(listOf(listOf(1L, 2L))) }
+    }
 }

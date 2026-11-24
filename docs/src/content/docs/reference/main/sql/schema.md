@@ -93,3 +93,4 @@ INSERT INTO order_lines (order_no, line_no, product, qty) VALUES (1001, 2, 'gadg
 * Every write supplies every key column: an `INSERT`, `put-docs` or `patch-docs` missing one is an `xtdb.tx/missing-id` error, or a planning error for an `INSERT ... SELECT`.
 * `UPDATE` can't set any key column.
 * Each key column's value is one of the [ID types](/reference/main/sql/txs#id-types).
+* `delete-docs` and `erase-docs` identify a row by a vector of its key values, in key order — one vector per row: `[:delete-docs :order_lines [1001 1] [1001 2]]` deletes two rows. See [`delete-docs`](/reference/main/xtql/txs#delete-docs).

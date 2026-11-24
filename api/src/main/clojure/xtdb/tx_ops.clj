@@ -34,9 +34,11 @@
 
   (NormalForm/normalTableName table-name))
 
-(defn- expect-key-value [v]
-  (if-not (Iid/getAsIidOrNull v)
-    (throw (err/incorrect :xtdb.tx/invalid-eid "expected the table's key value: a UUID, integer, string or keyword" {:value v}))
+(defn- expect-row-key [v]
+  (if-not (Iid/rowKeyIidOrNull v)
+    (throw (err/incorrect :xtdb.tx/invalid-eid
+                          "expected the row's key: a UUID, integer, string or keyword, or a vector of them in key order for a composite key"
+                          {:value v}))
     v))
 
 (defn- expect-doc [doc]
@@ -110,7 +112,7 @@
                                                      (keyword? table-or-opts) {:from table-or-opts})]
     {:op :delete-docs
      :table-name (expect-table-name table)
-     :doc-ids (mapv expect-key-value doc-ids)
+     :doc-ids (mapv expect-row-key doc-ids)
      :valid-from (some-> valid-from time/expect-instant)
      :valid-to (some-> valid-to time/expect-instant)}))
 
@@ -123,7 +125,7 @@
 (defmethod parse-tx-op :erase-docs [[_ table & doc-ids]]
   {:op :erase-docs
    :table-name (expect-table-name table)
-   :doc-ids (mapv expect-key-value doc-ids)})
+   :doc-ids (mapv expect-row-key doc-ids)})
 
 (defmethod parse-tx-op :assert-exists [_]
   (throw (err/unsupported :xtdb/xtql-dml-removed

@@ -54,6 +54,22 @@ data class PrimaryKey(val columns: List<ColumnName>) {
         repeat(rel.rowCount) { keyVecs.iidAt(it) }
     }
 
+    /**
+     * Throws `xtdb.tx/key-arity` unless each of [rowKeys], as `delete-docs` and `erase-docs` take them, has a value per key column:
+     * a list of them in key order, or — for a single-column key — the one value alone.
+     */
+    fun requireRowKeyArity(rowKeys: List<*>) {
+        for (rowKey in rowKeys) {
+            val arity = (rowKey as? List<*>)?.size ?: 1
+            if (arity != columns.size)
+                throw Incorrect(
+                    "A row of a table keyed on $columns takes ${columns.size} key value(s), in key order, one vector per row: got $rowKey",
+                    "xtdb.tx/key-arity",
+                    mapOf("key" to columns, "row-key" to rowKey)
+                )
+        }
+    }
+
     companion object {
         /** What a table is keyed on unless it declares otherwise. */
         @JvmField

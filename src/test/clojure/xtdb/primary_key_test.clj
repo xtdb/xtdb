@@ -6,7 +6,10 @@
             [xtdb.error :as err]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
-  (:import xtdb.util.Iid))
+  (:import (org.apache.arrow.memory RootAllocator)
+           (xtdb.arrow Vector)
+           (xtdb.tx TxOp$DeleteDocs TxOp$EraseDocs TxOpts)
+           xtdb.util.Iid))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
@@ -322,3 +325,47 @@
       (xt/execute-tx node ["PATCH INTO t RECORDS {a: 1, b: 'y', v: 's'}"])
 
       (t/is (= [{:b "x", :v "r"} {:b "y", :v "s"}] (xt/q node "SELECT b, v FROM t ORDER BY b")) "after a flush"))))
+
+(t/deftest delete-and-erase-docs-take-a-composite-keys-values-as-one-vector-per-row
+  (xt/execute-tx tu/*node* ["CREATE TABLE t (a, b, PRIMARY KEY (a, b))"
+                            [:put-docs :t {:a 1, :b "x"} {:a 1, :b "y"} {:a 2, :b "x"} {:a 2, :b "y"}]])
+
+  (xt/submit-tx tu/*node* [[:delete-docs :t [1 "x"] [2 "y"]]])
+  (xt/execute-tx tu/*node* [[:erase-docs :t [2 "x"]]])
+
+  (t/is (= [{:a 1, :b "x"} {:a 1, :b "y"} {:a 2, :b "y"}]
+           (xt/q tu/*node* "SELECT DISTINCT a, b FROM t FOR ALL VALID_TIME ORDER BY a, b")))
+  (t/is (= [{:a 1, :b "y"}] (xt/q tu/*node* "SELECT a, b FROM t"))))
+
+(t/deftest a-row-key-of-the-wrong-arity-is-rejected-at-submit
+  (xt/execute-tx tu/*node* ["CREATE TABLE t (a, b, PRIMARY KEY (a, b))"
+                            [:put-docs :t {:a 1, :b 2}]
+                            [:put-docs :u {:xt/id 1}]])
+
+  (t/is (anomalous? [:incorrect :xtdb.tx/key-arity] (xt/submit-tx tu/*node* [[:delete-docs :t 1]]))
+        "a single value against a composite key")
+  (t/is (anomalous? [:incorrect :xtdb.tx/key-arity] (xt/execute-tx tu/*node* [[:erase-docs :t [1 2] [1 2 3]]]))
+        "a vector with a value too many")
+  (t/is (anomalous? [:incorrect :xtdb.tx/key-arity] (xt/execute-tx tu/*node* [[:delete-docs :u [1 2]]]))
+        "a vector against a single-column key")
+
+  (t/is (anomalous? [:incorrect :xtdb.tx/invalid-eid] (xt/execute-tx tu/*node* [[:delete-docs :t []]])))
+  (t/is (anomalous? [:incorrect :xtdb.tx/invalid-eid] (xt/execute-tx tu/*node* [[:delete-docs :t [1 [2]]]])))
+
+  (t/is (= [{:a 1, :b 2}] (xt/q tu/*node* "SELECT a, b FROM t")))
+  (t/is (= [{:xt/id 1}] (xt/q tu/*node* "SELECT _id FROM u"))))
+
+(t/deftest tx-op-delete-docs-and-erase-docs-take-row-keys
+  (xt/execute-tx tu/*node* ["CREATE TABLE t (a, b, PRIMARY KEY (a, b))"
+                            [:put-docs :t {:a 1, :b "x"} {:a 2, :b "y"}]])
+
+  (with-open [al (RootAllocator.)]
+    (with-open [del (TxOp$DeleteDocs. "public" "t" nil nil (Vector/fromList al "ids" [[1 "x"]]))
+                erase (TxOp$EraseDocs. "public" "t" (Vector/fromList al "ids" [[2 "y"]]))]
+      (t/is (.getCommitted (.executeTx tu/*node* [del erase] (TxOpts.)))))
+
+    (t/is (= [] (xt/q tu/*node* "SELECT a, b FROM t FOR ALL VALID_TIME WHERE b = 'y'")))
+    (t/is (= [] (xt/q tu/*node* "SELECT a, b FROM t")))
+
+    (with-open [del (TxOp$DeleteDocs. "public" "t" nil nil (Vector/fromList al "ids" [1]))]
+      (t/is (anomalous? [:incorrect :xtdb.tx/key-arity] (.executeTx tu/*node* [del] (TxOpts.)))))))

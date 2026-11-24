@@ -30,6 +30,8 @@ v2.2.1: `delete-docs` and `erase-docs` take the table's key values
 
   Previously they removed the rows whose `:xt/id` had the given values, whatever the table was keyed on.
 
+  In a table keyed on several columns, each document is identified by a vector of its key values, in key order: `[:delete-docs :t [1 2] [3 4]]` deletes two documents.
+
 </details>
 
 Transactions in XTDB are submitted to the [log](/ops/config/log), to be processed asynchronously.
@@ -170,7 +172,19 @@ Deletes documents from the given table, optionally during the given valid time p
 The default valid time behaviour is the same as [put](#put-docs), above.
 
 Each document is identified by its value of the table's [primary key](/reference/main/sql/schema#primary-keys-v221) — its `:xt/id`, unless the table declares another key.
+In a table keyed on several columns, a document is identified by a vector of its key values, in the key's column order.
 A value of a type that can't key a row (see [ID types](/reference/main/sql/txs#id-types)) fails at submit with `xtdb.tx/invalid-eid`.
+
+:::caution
+`delete-docs` and `erase-docs` take one key per document, so a composite key is one vector per document — not one value per key column.
+In a table keyed on `(a, b)`, `[:delete-docs :t [1 2] [3 4]]` deletes two documents, `{:a 1, :b 2}` and `{:a 3, :b 4}`; `[:delete-docs :t 1 2]` deletes neither.
+
+A key with the wrong number of values — a single value for a composite key, or a vector whose length isn't the key's — fails at submit with `xtdb.tx/key-arity` when submitted to an in-process node whose table has been written to.
+Through a remote client (pgwire or FlightSQL) it isn't checked, and identifies no document: the transaction commits, and deletes nothing.
+
+A vector's values identify a document only in the key's column order: in a table keyed on `(a, b)`, `[2 1]` identifies `{:a 2, :b 1}`, not `{:a 1, :b 2}`.
+Values out of order aren't checked anywhere, and identify a different document, or none.
+:::
 
 ``` clojure
 [:delete-docs
@@ -191,7 +205,9 @@ A value of a type that can't key a row (see [ID types](/reference/main/sql/txs#i
   }
 
  ;; -- required
- ;; key values of the documents to delete (variadic, 0..n)
+ ;; keys of the documents to delete (variadic, 0..n)
+ ;; * one per document: its key value, or for a table keyed on
+ ;;   several columns, a vector of its key values in key order
  & <keys>
  ]
 ```
@@ -209,6 +225,13 @@ Examples:
     ``` clojure
     [:delete-docs {:from :my-table, :valid-from #inst "2024-01-01"}
      :foo :bar ...]
+    ```
+
+- from a table keyed on several columns — one vector per document, in key order
+
+    ``` clojure
+    ;; CREATE TABLE orders (customer, order_no, PRIMARY KEY (customer, order_no))
+    [:delete-docs :orders [:alice 1] [:bob 7]]
     ```
 
 - dynamically generated
@@ -230,7 +253,8 @@ Each document is identified by its value of the table's key, as for [`delete-doc
  ;; table to erase documents from
  <table>
 
- ;; key values of the documents to erase (variadic, 0..n)
+ ;; keys of the documents to erase (variadic, 0..n)
+ ;; * one per document, as for `delete-docs`
  & <keys>
  ]
 ```
@@ -241,6 +265,12 @@ Examples:
 
     ``` clojure
     [:erase-docs :my-table :foo]
+    ```
+
+- from a table keyed on several columns
+
+    ``` clojure
+    [:erase-docs :orders [:alice 1] [:bob 7]]
     ```
 
 - dynamically generated

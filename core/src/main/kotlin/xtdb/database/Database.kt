@@ -36,6 +36,7 @@ import xtdb.metadata.PageMetadata
 import xtdb.query.IQuerySource
 import xtdb.storage.BufferPool
 import xtdb.storage.ReadOnlyBufferPool
+import xtdb.table.PrimaryKey
 import xtdb.api.DatabaseName
 import xtdb.api.TableRef
 import xtdb.trie.ColumnName
@@ -170,18 +171,25 @@ class Database(
     // Only tables whose key is fixed: a tx still ahead of this one in the log may declare an empty table's key,
     // so the indexer checks the writes into those.
     private fun requireKnownKeys(ops: List<TxOp>) {
-        val keyedDocs = ops.mapNotNull {
-            when (it) {
-                is TxOp.PutDocs -> TableRef(it.schema, it.table) to it.docs
-                is TxOp.PatchDocs -> TableRef(it.schema, it.table) to it.patches
+        val checks = ops.mapNotNull { op ->
+            when (op) {
+                is TxOp.PutDocs -> TableRef(op.schema, op.table) to { pk: PrimaryKey -> pk.requireKeys(op.docs) }
+                is TxOp.PatchDocs -> TableRef(op.schema, op.table) to { pk: PrimaryKey -> pk.requireKeys(op.patches) }
+                is TxOp.DeleteDocs -> TableRef(op.schema, op.table) to { pk: PrimaryKey -> pk.requireRowKeyArity(op.ids.asList) }
+                is TxOp.EraseDocs -> TableRef(op.schema, op.table) to { pk: PrimaryKey -> pk.requireRowKeyArity(op.ids.asList) }
                 else -> null
             }
         }
-        if (keyedDocs.isEmpty()) return
+        if (checks.isEmpty()) return
 
         openSnapshot(currentBasis()).use { snap ->
-            for ((table, docs) in keyedDocs) snap.fixedPrimaryKey(table)?.requireKeys(docs)
+            for ((table, check) in checks) snap.fixedPrimaryKey(table)?.let(check)
         }
+    }
+
+    /** Throws as `delete-docs` or `erase-docs` of [rowKeys] would at submit, where [table]'s key is fixed — see [PrimaryKey.requireRowKeyArity]. */
+    fun requireRowKeyArity(table: TableRef, rowKeys: List<*>) {
+        openSnapshot(currentBasis()).use { snap -> snap.fixedPrimaryKey(table)?.requireRowKeyArity(rowKeys) }
     }
 
     fun submitTxBlocking(ops: List<TxOp>, opts: TxOpts): Xtdb.SubmittedTx {

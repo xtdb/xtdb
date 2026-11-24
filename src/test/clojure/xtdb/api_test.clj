@@ -711,6 +711,47 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
                          [:erase-docs :u 2]])
   (t/is (= [] (xt/q *conn* "SELECT _id FROM u")) "an `_id`-keyed table is addressed by `_id`"))
 
+(t/deftest delete-and-erase-docs-take-a-composite-keys-values-as-one-vector-per-row
+  (xt/execute-tx *conn* ["CREATE TABLE t (a, b, PRIMARY KEY (a, b))"])
+  (xt/execute-tx *conn* [[:put-docs :t {:a 1, :b "x"} {:a 1, :b "y"} {:a 2, :b "x"} {:a 2, :b "y"} {:a 3, :b "x"}]])
+
+  (xt/execute-tx *conn* [[:delete-docs :t [1 "x"] [2 "y"]]])
+  (t/is (= [{:a 1, :b "y"} {:a 2, :b "x"} {:a 3, :b "x"}] (xt/q *conn* "SELECT a, b FROM t ORDER BY a, b"))
+        "each vector is one row's key")
+
+  (xt/execute-tx *conn* [[:delete-docs {:from :t, :valid-from #inst "2030-01-01"} [1 "y"]]])
+  (t/is (= [{:a 2, :b "x"} {:a 3, :b "x"}]
+           (xt/q *conn* "SELECT a, b FROM t FOR VALID_TIME AS OF TIMESTAMP '2031-01-01Z' ORDER BY a, b")))
+
+  (xt/execute-tx *conn* [[:delete-docs :t ["x" 2]]])
+  (t/is (= [{:a 1, :b "y"} {:a 2, :b "x"} {:a 3, :b "x"}] (xt/q *conn* "SELECT a, b FROM t ORDER BY a, b"))
+        "key parts out of key order address no row")
+
+  (xt/execute-tx *conn* [[:erase-docs :t [2 "x"] [1 "x"]]])
+  (t/is (= [{:a 1, :b "y"} {:a 2, :b "y"} {:a 3, :b "x"}]
+           (xt/q *conn* "SELECT DISTINCT a, b FROM t FOR ALL VALID_TIME ORDER BY a, b")))
+
+  (xt/execute-tx *conn* [[:put-docs :u {:xt/id 1} {:xt/id 2}]])
+  (xt/execute-tx *conn* [[:delete-docs :u [1]]])
+  (t/is (= [{:xt/id 2}] (xt/q *conn* "SELECT _id FROM u"))
+        "a single-column key's one-value vector addresses the row its value does"))
+
+(t/deftest a-row-key-of-the-wrong-arity-is-rejected-where-the-submitter-sees-the-key
+  (xt/execute-tx *conn* ["CREATE TABLE t (a, b, PRIMARY KEY (a, b))"])
+  (xt/execute-tx *conn* [[:put-docs :t {:a 1, :b 2} {:a 3, :b 4}]
+                         [:put-docs :u {:xt/id 1} {:xt/id 2}]])
+
+  (let [ops [[[:delete-docs :t 1 2]] [[:erase-docs :t [1 2 3]]] [[:delete-docs :u [1 2]]]]]
+    (if (= :adbc tu/*server*)
+      (doseq [op ops]
+        (t/is (anomalous? [:incorrect :xtdb.tx/key-arity] (xt/execute-tx *conn* op)) (pr-str op)))
+
+      (do
+        (doseq [op ops] (xt/execute-tx *conn* op))
+        (t/is (= [{:a 1, :b 2} {:a 3, :b 4}] (xt/q *conn* "SELECT a, b FROM t ORDER BY a"))
+              "a remote client can't see the key, so the row key addresses no row")
+        (t/is (= [{:xt/id 1} {:xt/id 2}] (xt/q *conn* "SELECT _id FROM u ORDER BY _id")))))))
+
 (t/deftest test-transit-encoding-of-ast-objects-3019
   (t/is (anomalous? [:incorrect nil #"Not all variables in expression are in scope"]
                     (xt/q *conn*

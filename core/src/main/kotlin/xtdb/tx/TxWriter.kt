@@ -22,8 +22,8 @@ import xtdb.database.DatabaseName
 import xtdb.api.error.Incorrect
 import xtdb.api.SchemaName
 import xtdb.api.TableName
-import xtdb.util.asIid
 import xtdb.util.asIidOrNull
+import xtdb.util.rowKeyIid
 import java.nio.channels.Channels
 import java.time.Instant
 import java.time.ZoneId
@@ -162,10 +162,7 @@ private class DeleteDocsWriter(ops: VectorWriter) : TxOpWriter<TxOp.DeleteDocs> 
 
         tableVec.writeObject("${op.schema}/${op.table}")
 
-        for (idx in 0 until op.ids.valueCount) {
-            val docId = op.ids.getObject(idx)
-            iidWriter.writeBytes(docId.asIid)
-        }
+        for (idx in 0 until op.ids.valueCount) iidWriter.writeBytes(rowKeyIid(op.ids.getObject(idx)))
         iidsVec.endList()
 
         op.validFrom?.let { validFromVec.writeObject(it) } ?: validFromVec.writeNull()
@@ -188,10 +185,7 @@ private class EraseDocsWriter(ops: VectorWriter) : TxOpWriter<TxOp.EraseDocs> {
 
         tableVec.writeObject("${op.schema}/${op.table}")
 
-        for (idx in 0 until op.ids.valueCount) {
-            val docId = op.ids.getObject(idx)
-            iidWriter.writeBytes(docId.asIid)
-        }
+        for (idx in 0 until op.ids.valueCount) iidWriter.writeBytes(rowKeyIid(op.ids.getObject(idx)))
         iidsVec.endList()
 
         eraseVec.endStruct()
