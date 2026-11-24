@@ -118,6 +118,54 @@
               (t/is (= row-count (.getRowCount mask)) (str row-count " rows"))
               (t/is (= expected (vec (.toSelection mask))) (str row-count " rows")))))))))
 
+(t/deftest an-opened-selection-spec-follows-each-batchs-column-types
+  (let [input-types {:var-types '{a #xt/type :i64}}
+        expr (expr/form->expr '(> a 1) input-types)]
+    (with-open [selection-spec (-> (expr/->expression-selection-spec expr input-types)
+                                   (.open tu/*allocator* {} vw/empty-args))]
+      (doseq [[batch expected] [[{:a [1 2 3]} [1 2]]
+                                [{:a [1.5 0.5 2.5]} [0 2]]
+                                [{:a [3 nil 0]} [0]]
+                                [{:a [0 5], :b ["x" "y"]} [1]]
+                                [{:a [0 5], :b [1.5 2.5]} [1]]
+                                [{:a [2 0]} [0]]]]
+        (with-open [in-rel (tu/open-rel batch)]
+          (t/is (= expected (vec (.toSelection (.select selection-spec in-rel))))
+                (pr-str batch)))))))
+
+(t/deftest an-opened-projection-spec-follows-each-batchs-column-types
+  (let [input-types {:var-types '{a #xt/type :i64}}
+        expr (expr/form->expr '(+ a 1) input-types)]
+    (with-open [projection (-> (expr/->expression-projection-spec "out" expr input-types)
+                               (.open tu/*allocator* {} vw/empty-args))]
+      (doseq [[batch expected] [[{:a [1 2]} [2 3]]
+                                [{:a [1.5 0.5]} [2.5 1.5]]
+                                [{:a [3 nil]} [4 nil]]
+                                [{:a [4]} [5]]]]
+        (with-open [in-rel (tu/open-rel batch)
+                    out-vec (.project projection in-rel)]
+          (t/is (= expected (.getAsList out-vec))
+                (pr-str batch)))))))
+
+(t/deftest an-expression-spec-recompiles-only-when-a-column-it-reads-changes-type
+  (let [expr (expr/form->expr '(+ a c) {:var-types '{a #xt/type :i64, c #xt/type :i64}})
+        var-syms (#'expr/->var-syms expr)
+        emit-cache (#'expr/->emit-cache)
+        !compiled-for (atom [])
+        emit (fn [_expr {:keys [var-types]}]
+               (swap! !compiled-for conj var-types))]
+    (doseq [batch [{:a [1], :c [1]}
+                   {:a [1], :c [1], :b ["x"]}
+                   {:a [1], :c [1], :b [1.5]}
+                   {:a [1.5], :c [1], :b [1.5]}
+                   {:a [1.5], :c [1]}]]
+      (with-open [in-rel (tu/open-rel batch)]
+        (#'expr/emit-for-batch emit-cache emit expr var-syms {} in-rel)))
+
+    (t/is (= '[{a #xt/type :i64, c #xt/type :i64}
+               {a #xt/type :f64, c #xt/type :i64}]
+             @!compiled-for))))
+
 (defn project
   "Use to test an expression on some example documents. See also, project1.
 
