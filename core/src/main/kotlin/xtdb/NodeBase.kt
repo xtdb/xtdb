@@ -35,6 +35,7 @@ class NodeBase(
         remotes.values.closeAll()
         memoryCache.close()
         if (closeAllocator) allocator.close()
+        meterRegistry?.run { clear(); close() }
     }
 
     companion object {

@@ -282,3 +282,13 @@ $$"])
 
           (t/testing "trie GC meters"
             (t/is (= 8 (.count ^Timer (.timer (.tag (.find registry "xtdb.gc.tries.delete.timer") "db" "xtdb")))))))))))
+
+(t/deftest closing-the-node-closes-its-meter-registry
+  (let [node (xtn/start-node tu/*node-opts*)
+        registry (.getMeterRegistry (util/node-base node))]
+    (t/is (seq (.getMeters registry)))
+
+    (.close node)
+
+    (t/is (.isClosed registry))
+    (t/is (empty? (.getMeters registry)))))
