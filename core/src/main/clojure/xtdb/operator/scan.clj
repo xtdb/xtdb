@@ -33,7 +33,7 @@
            (xtdb.query IQuerySource$QueryDatabase)
            (xtdb.segment BufferPoolSegment MergePlanner)
            xtdb.api.TableRef
-           (xtdb.trie Bucketer)
+           (xtdb.trie Bucketer IidPrefixFilter)
            (xtdb.util Iid TemporalBounds TemporalDimension)))
 
 (s/def ::db-name string?)
@@ -204,6 +204,35 @@
         (col-selects->iid-set (first pk-cols) key-value->iid selects args-rel))
       (col-selects->iid-set "_iid" iid-value->iid selects args-rel)))
 
+(def ^:private max-prefix-filter-values 256)
+
+(defn selects->prefix-filter
+  "The paths that equalities, or OR-chains of them, on some of the composite key `pk-cols` (in key order) leave the scan, or nil.
+   A column narrows the paths by the bits `Iid/prefixMask` gives it, so a column past the 8th narrows nothing;
+   nor does one with any value no key can have — `a = 7.0` still matches the key 7.
+   nil, too, where the columns' values combine into more than `max-prefix-filter-values` prefixes."
+  ^IidPrefixFilter [pk-cols selects ^RelationReader args-rel]
+  (let [n (count pk-cols)
+        pinned-cols (when (> n 1)
+                      (for [[col-idx pk-col] (map-indexed vector pk-cols)
+                            :let [mask (Iid/prefixMask n col-idx)]
+                            :when (not (zero? mask))
+                            :let [iid-set (col-selects->iid-set pk-col key-value->iid selects args-rel)]
+                            :when iid-set]
+                        {:mask mask
+                         :prefixes (into #{} (map #(bit-and (Iid/iidPrefix ^bytes %) mask)) iid-set)}))]
+    (when (seq pinned-cols)
+      (let [prefixes (reduce (fn [acc {:keys [prefixes]}]
+                               (let [acc (set (for [a acc, p prefixes] (bit-or (long a) (long p))))]
+                                 (if (> (count acc) max-prefix-filter-values)
+                                   (reduced nil)
+                                   acc)))
+                             #{0}
+                             pinned-cols)]
+        (when prefixes
+          (IidPrefixFilter. (unchecked-int (reduce bit-or 0 (map :mask pinned-cols)))
+                            (int-array (map unchecked-int prefixes))))))))
+
 (defn filter-pushdown-bloom-page-idx-pred ^IntPredicate [^PageMetadata page-metadata, pushdown-blooms, ^String col-name]
   (when-let [^MutableRoaringBitmap pushdown-bloom (get pushdown-blooms (symbol col-name))]
     (let [metadata-rdr (.getMetadataLeafReader page-metadata)
@@ -230,7 +259,7 @@
 (defn- ->partition-scan-cursor
   "Everything partition-specific arrives as an argument, so this knows nothing about which partition
    it's been given or how many exist."
-  ^ICursor [{:keys [allocator ^TableRef table col-names col-preds iid-set metadata-pred scan-opts
+  ^ICursor [{:keys [allocator ^TableRef table col-names col-preds path-pred metadata-pred scan-opts
                     schema args ^ScanMetrics metrics]}
             ^PartitionStorage storage ^Snapshot snapshot ^TemporalBounds temporal-bounds]
 
@@ -260,7 +289,7 @@
                                          (long (- (count pages) (count survivors)))
                                          (long (count survivors)))
                               survivors))
-              merge-tasks (MergePlanner/planSync (into (vec !segments) live-segments) (->path-pred iid-set) count-pages)]
+              merge-tasks (MergePlanner/planSync (into (vec !segments) live-segments) path-pred count-pages)]
 
           (ScanCursor. allocator (vec col-names) col-preds
                        temporal-bounds (boolean (:clamp-valid-time? scan-opts))
@@ -371,6 +400,9 @@
                                                (get pushdown-iids '_iid) ; usually patch
                                                (when-not (next pk-cols)
                                                  (get pushdown-iids (symbol (first pk-cols))))) ; any other foreign-key join
+                                   path-pred (if (empty? iid-set)
+                                               (selects->prefix-filter pk-cols selects args)
+                                               (->path-pred iid-set))
                                    col-preds (cond-> col-preds
                                                (not (empty? iid-set))
                                                (assoc "_iid" (if (= 1 (count iid-set))
@@ -406,7 +438,7 @@
 
                                (->partition-scan-cursor
                                 {:allocator allocator, :table table, :col-names col-names,
-                                 :col-preds col-preds, :iid-set iid-set, :metadata-pred metadata-pred,
+                                 :col-preds col-preds, :path-pred path-pred, :metadata-pred metadata-pred,
                                  :scan-opts scan-opts, :schema schema, :args args, :metrics metrics}
                                 storage snapshot temporal-bounds)))))))}))))
 

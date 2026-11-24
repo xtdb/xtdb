@@ -94,3 +94,6 @@ INSERT INTO order_lines (order_no, line_no, product, qty) VALUES (1001, 2, 'gadg
 * `UPDATE` can't set any key column.
 * Each key column's value is one of the [ID types](/reference/main/sql/txs#id-types).
 * `delete-docs` and `erase-docs` identify a row by a vector of its key values, in key order — one vector per row: `[:delete-docs :order_lines [1001 1] [1001 2]]` deletes two rows. See [`delete-docs`](/reference/main/xtql/txs#delete-docs).
+* An equality or an `IN` list on some of the key's columns narrows the pages a query reads, as one on every column does.
+  The first column narrows them as soon as the table spans more than a few pages, and each later column only once the table is larger, so list first the column you filter on most.
+  This is how scans behave today, not a guarantee of how they will.

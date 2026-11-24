@@ -72,7 +72,8 @@ fun prefixMask(n: Int, col: Int): Int {
     return mask
 }
 
-private fun ByteArray.iidPrefix(): Int =
+/** An IID's first 32 bits, big-endian: the bits [prefixMask] divides among a composite key's columns. */
+fun ByteArray.iidPrefix(): Int =
     ((this[0].toInt() and 0xFF) shl 24) or ((this[1].toInt() and 0xFF) shl 16) or
         ((this[2].toInt() and 0xFF) shl 8) or (this[3].toInt() and 0xFF)
 

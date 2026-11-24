@@ -20,6 +20,7 @@
            java.util.SortedSet
            xtdb.arrow.RelationReader
            (xtdb.compactor RecencyPartition)
+           (xtdb.trie Bucketer IidPrefixFilter)
            xtdb.util.Iid))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-allocator tu/with-node)
@@ -551,6 +552,112 @@
             "a partial key narrows the scan to no IID")
       (t/is (< 1 (scan-pages-used "SELECT v FROM u WHERE a = ? AND b = ?" 4 "y"))
             "the same predicates on a table keyed on `_id` have no IID to narrow to"))))
+
+(defn- passes-key? [^IidPrefixFilter prefix-filter key-values]
+  (let [iid (Iid/keyIid key-values)
+        bucketer Bucketer/DEFAULT]
+    (.test prefix-filter (byte-array (map #(.bucketFor bucketer iid (int %)) (range 16))))))
+
+(t/deftest test-prefix-filter-from-part-of-a-composite-key
+  (let [prefix-filter (scan/selects->prefix-filter ["a" "b"] '{"a" (== a 1)} vw/empty-args)]
+    (t/is (every? #(passes-key? prefix-filter [1 %]) ["x" "y" 2 :z]))
+    (t/is (not-any? #(passes-key? prefix-filter [% "x"]) [2 3 4])))
+
+  (let [prefix-filter (scan/selects->prefix-filter ["a" "b"] '{"b" (== "x" b)} vw/empty-args)]
+    (t/is (every? #(passes-key? prefix-filter [% "x"]) [1 2 "y"]))
+    (t/is (not-any? #(passes-key? prefix-filter [1 %]) ["y" "z" 2])))
+
+  (with-open [^RelationReader args-rel (tu/open-args {:c 3})]
+    (let [prefix-filter (scan/selects->prefix-filter ["a" "b" "c"] '{"a" (or (== a 1) (== a 2)), "c" (== c ?c)} args-rel)]
+      (t/is (every? #(passes-key? prefix-filter %) [[1 "x" 3] [2 "y" 3]]))
+      (t/is (not-any? #(passes-key? prefix-filter %) [[3 "x" 3] [1 "x" 4]])
+            "an OR-chain on one column, a param on another")))
+
+  (let [prefix-filter (scan/selects->prefix-filter ["a" "b"] '{"a" (== a 7.0), "b" (== b "x")} vw/empty-args)]
+    (t/is (every? #(passes-key? prefix-filter [% "x"]) [7 8])
+          "a column with a value it can't key drops out, and the rest still filter")
+    (t/is (not (passes-key? prefix-filter [7 "y"]))))
+
+  (t/is (nil? (scan/selects->prefix-filter ["a"] '{"a" (== a 1)} vw/empty-args))
+        "a single-column key")
+
+  (t/is (nil? (scan/selects->prefix-filter ["a" "b"] '{"a" (< a 1)} vw/empty-args))
+        "no equality on a key column")
+
+  (t/is (nil? (scan/selects->prefix-filter ["a" "b"] '{"a" (== a 7.0)} vw/empty-args))
+        "no column it can key")
+
+  (t/is (nil? (scan/selects->prefix-filter (mapv str "abcdefghi") '{"i" (== i 1)} vw/empty-args))
+        "the 9th column owns no prefix bits")
+
+  (let [in-list (fn [col] (cons 'or (for [v (range 17)] (list '== (symbol col) v))))]
+    (t/is (some? (scan/selects->prefix-filter ["a" "b"] {"a" (in-list "a")} vw/empty-args)))
+    (t/is (nil? (scan/selects->prefix-filter ["a" "b"] {"a" (in-list "a"), "b" (in-list "b")} vw/empty-args))
+          "17 x 17 prefixes is past the cap")))
+
+(defn- pages-used [node sql & args]
+  (->> (xt/q node (into [(str "EXPLAIN ANALYZE " sql)] args))
+       (filter #(= :scan (:op %)))
+       first :attributes :scan-pages-used))
+
+(defn- prunes-pages? [node sql & args]
+  (< (apply pages-used node sql args)
+     (with-redefs [scan/selects->prefix-filter (constantly nil)]
+       (apply pages-used node sql args))))
+
+(t/deftest an-equality-on-part-of-a-composite-key-reads-fewer-pages
+  (util/with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:page-limit 16}, :compactor {:threads 0}}))]
+    (xt/execute-tx node ["CREATE TABLE t (a, b, PRIMARY KEY (a, b))"
+                         "CREATE TABLE t3 (a, b, c, PRIMARY KEY (a, b, c))"])
+    (xt/execute-tx node [(into [:put-docs :t] (for [a (range 100), b (range 30)] {:a a, :b b}))
+                         (into [:put-docs :t3] (for [a (range 20), b (range 10), c (range 15)] {:a a, :b b, :c c}))])
+    (tu/flush-block! node)
+
+    (t/is (= (range 30) (sort (map :b (xt/q node ["SELECT b FROM t WHERE a = ?" 4])))))
+    (t/is (prunes-pages? node "SELECT b FROM t WHERE a = ?" 4))
+
+    (t/is (= (range 100) (sort (map :a (xt/q node ["SELECT a FROM t WHERE b = ?" 7])))))
+    (t/is (prunes-pages? node "SELECT a FROM t WHERE b = ?" 7))
+
+    (t/is (= #{[4 7] [4 8] [4 9] [5 7] [5 8] [5 9]}
+             (set (map (juxt :a :b) (xt/q node "SELECT a, b FROM t WHERE a IN (4, 5) AND b IN (7, 8, 9)")))))
+    (t/is (prunes-pages? node "SELECT a, b FROM t WHERE a IN (4, 5) AND b IN (7, 8, 9)"))
+
+    (doseq [[sql n] [["SELECT a, b, c FROM t3 WHERE a = 5" 150]
+                     ["SELECT a, b, c FROM t3 WHERE b = 5" 300]
+                     ["SELECT a, b, c FROM t3 WHERE c = 5" 200]
+                     ["SELECT a, b, c FROM t3 WHERE a = 5 AND c = 7" 10]]]
+      (t/is (= n (count (xt/q node sql))) sql)
+      (t/is (prunes-pages? node sql) sql))))
+
+(t/deftest an-equality-on-part-of-a-composite-key-prunes-compacted-tries
+  (binding [c/*page-size* 16
+            cat/*file-size-target* (* 16 1024)]
+    (util/with-open [node (xtn/start-node tu/*node-opts*)]
+      (xt/execute-tx node ["CREATE TABLE t (a, b, PRIMARY KEY (a, b))"])
+      (doseq [batch (partition-all 300 (for [a (range 100), b (range 30)] {:a a, :b b}))]
+        (xt/execute-tx node [(into [:put-docs :t] batch)])
+        (tu/flush-block! node))
+      (c/compact-all! node #xt/duration "PT10S")
+
+      (t/is (seq (xt/q node "SELECT trie_key FROM xt.trie_stats WHERE table_name = 't' AND level = 2 AND trie_state = 'live'"))
+            "compaction has partitioned the table's tries by path")
+
+      (t/is (= (range 30) (sort (map :b (xt/q node ["SELECT b FROM t WHERE a = ?" 4])))))
+      (t/is (prunes-pages? node "SELECT b FROM t WHERE a = ?" 4))
+
+      (t/is (= (range 100) (sort (map :a (xt/q node ["SELECT a FROM t WHERE b = ?" 7])))))
+      (t/is (prunes-pages? node "SELECT a FROM t WHERE b = ?" 7)))))
+
+(t/deftest an-equality-on-a-composite-key-column-it-cant-key-still-finds-the-row
+  (util/with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:page-limit 16}, :compactor {:threads 0}}))]
+    (xt/execute-tx node ["CREATE TABLE t (a, b, PRIMARY KEY (a, b))"])
+    (xt/execute-tx node [(into [:put-docs :t] (for [a (range 100), b ["x" "y" "z"]] {:a a, :b b}))])
+    (tu/flush-block! node)
+
+    (t/is (= #{"x" "y" "z"} (set (map :b (xt/q node "SELECT b FROM t WHERE a = 7.0")))))
+    (t/is (= [{:a 7}] (xt/q node "SELECT a FROM t WHERE a = 7.0 AND b = 'x'")))
+    (t/is (= [{:a 7}] (xt/q node ["SELECT a FROM t WHERE a = ? AND b = 'x'" 7.0])))))
 
 (t/deftest test-iid-equalities-pin-the-iid-set
   (let [iid1 (util/->iid 1)
