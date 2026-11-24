@@ -6,19 +6,30 @@ XTDB doesn't ask you to declare a schema before you write to it, but a few model
 
 ## Choosing IDs
 
-Every row you write carries an `_id`, and XTDB uses it to tie the versions of a record together.
+Every row you write carries an ID - the value of its table's primary key - and XTDB uses it to tie the versions of a record together.
 You choose the IDs - XTDB doesn't generate them.
 
-XTDB doesn't store your rows in `_id` order.
-It derives a 16-byte internal ID from each `_id`, and partitions each table's data by that internal ID.
+A table's primary key is `_id` unless the table declares another column:
 
-- A UUID `_id` is used as the internal ID unchanged.
-- Any other `_id` - a string, an integer, a keyword - is hashed to give its internal ID.
+```sql
+CREATE TABLE orders (order_no PRIMARY KEY, customer);
+```
+
+Declare the key before anything is written to the table: the first write fixes it, and from then on it can't change.
+A key is a single column.
+In a table keyed on another column, `_id` is an ordinary column.
+See [Primary keys](/reference/main/sql/schema#primary-keys-v221) for the rules.
+
+XTDB doesn't store your rows in ID order.
+It derives a 16-byte internal ID from each row's key value, and partitions each table's data by that internal ID.
+
+- A UUID key value is used as the internal ID unchanged.
+- Any other key value - a string, an integer, a keyword - is hashed to give its internal ID.
 
 So hashed IDs are spread evenly across a table whatever values you choose, while UUIDs are laid out exactly as you generate them.
 That gives you control over where a row is stored, and with it a responsibility to spread your UUIDs evenly.
 
-See [SQL Transactions](/reference/main/sql/txs#id-types) for the types an `_id` can take.
+See [SQL Transactions](/reference/main/sql/txs#id-types) for the types an ID can take.
 
 ### Spread UUIDs evenly
 
@@ -31,7 +42,7 @@ Time-ordered UUIDs are not.
 A version 7 UUID - like a ULID - begins with a millisecond timestamp, so every ID you generate in the same period shares its leading bits.
 
 XTDB already indexes your data by time - system time and valid time - so a time-ordered ID doesn't buy you anything here.
-If an existing system hands you time-ordered UUIDs, either generate a random UUID for `_id` and keep theirs as an ordinary column, or write theirs as a string, which XTDB hashes.
+If an existing system hands you time-ordered UUIDs, either generate a random UUID for the key and keep theirs as an ordinary column, or write theirs as a string, which XTDB hashes.
 
 ### Keep related records together
 

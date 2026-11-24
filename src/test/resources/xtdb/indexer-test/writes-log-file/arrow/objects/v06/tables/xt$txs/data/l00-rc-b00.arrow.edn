@@ -15,15 +15,17 @@
                   "user_metadata" [:? :struct],
                   "error" [:? :transit]}]}]}),
  :batches
- ([{:xt/system-from #xt/zdt "2020-01-03T00:00Z[UTC]",
-    :xt/valid-from #xt/zdt "2020-01-03T00:00Z[UTC]",
+ ([{:xt/system-from #xt/zdt "2020-01-02T00:00Z[UTC]",
+    :xt/valid-from #xt/zdt "2020-01-02T00:00Z[UTC]",
     :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
     :op
     #xt/tagged [:put
-                {:xt/id 2910,
-                 :system-time #xt/zdt "2020-01-03T00:00Z[UTC]",
-                 :committed true}],
-    :xt/iid #bytes "9c66a0ffb21d5a1c2cabef0e786ac679"}
+                {:xt/id 1423,
+                 :system-time #xt/zdt "2020-01-02T00:00Z[UTC]",
+                 :committed false,
+                 :error
+                  #xt/error [:incorrect :xtdb.indexer/invalid-valid-times "Invalid valid times" {:table #xt/table foo, :valid-from #xt/instant "2020-01-01T00:00:00Z", :tx-key #xt/tx-key {:tx-id 1423, :system-time #xt/instant "2020-01-02T00:00:00Z"}, :valid-to #xt/instant "2019-01-01T00:00:00Z", :tx-op-idx 0}]}],
+    :xt/iid #bytes "8bf2748ed899e8616a582dc075499313"}
    {:xt/system-from #xt/zdt "2020-01-01T00:00Z[UTC]",
     :xt/valid-from #xt/zdt "2020-01-01T00:00Z[UTC]",
     :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
@@ -33,14 +35,12 @@
                  :system-time #xt/zdt "2020-01-01T00:00Z[UTC]",
                  :committed true}],
     :xt/iid #bytes "a4e167a76a05add8a8654c169b07b044"}
-   {:xt/system-from #xt/zdt "2020-01-02T00:00Z[UTC]",
-    :xt/valid-from #xt/zdt "2020-01-02T00:00Z[UTC]",
+   {:xt/system-from #xt/zdt "2020-01-03T00:00Z[UTC]",
+    :xt/valid-from #xt/zdt "2020-01-03T00:00Z[UTC]",
     :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
     :op
     #xt/tagged [:put
-                {:xt/id 1487,
-                 :system-time #xt/zdt "2020-01-02T00:00Z[UTC]",
-                 :committed false,
-                 :error
-                  #xt/error [:incorrect :xtdb.indexer/invalid-valid-times "Invalid valid times" {:table #xt/table foo, :valid-from #xt/instant "2020-01-01T00:00:00Z", :tx-key #xt/tx-key {:tx-id 1487, :system-time #xt/instant "2020-01-02T00:00:00Z"}, :valid-to #xt/instant "2019-01-01T00:00:00Z", :tx-op-idx 0}]}],
-    :xt/iid #bytes "a586eb6138484c2785449b2b8c577683"}])}
+                {:xt/id 2790,
+                 :system-time #xt/zdt "2020-01-03T00:00Z[UTC]",
+                 :committed true}],
+    :xt/iid #bytes "ba4cf228fbb16af479245ac69354e592"}])}

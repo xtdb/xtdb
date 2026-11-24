@@ -225,6 +225,24 @@ class FlightSqlAdbcTest {
     }
 
     @Test
+    fun `a prepared CREATE TABLE executes`() {
+        conn.createStatement().use { stmt ->
+            stmt.setSqlQuery("CREATE TABLE orders (_id, amount)")
+            stmt.prepare()
+            assertEquals(emptyList<Field>(), stmt.parameterSchema.fields)
+            stmt.executeUpdate()
+        }
+
+        assertEquals(
+            listOf(mapOf("column_name" to "amount")),
+            fsqlClient.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'amount'",
+                *emptyCallOpts
+            ).readRows()
+        )
+    }
+
+    @Test
     fun `test FlightSQL getTableTypes`() {
         val rows = fsqlClient.getTableTypes(*emptyCallOpts).readRows()
         assertEquals(1, rows.size)
@@ -1471,6 +1489,63 @@ class FlightSqlAdbcTest {
                 ex.message?.contains(descriptionContains) == true,
                 "expected message containing '$descriptionContains', got: ${ex.message}"
             )
+        }
+    }
+
+    @Test
+    fun `test FlightSQL bulk ingest without _id is an invalid argument`() {
+        val schema = Schema(listOf(Field("n", FieldType.notNullable(Types.MinorType.BIGINT.type), null)))
+        VectorSchemaRoot.create(schema, al).use { root ->
+            (root.getVector("n") as BigIntVector).setSafe(0, 1L)
+            root.rowCount = 1
+
+            val ex = assertThrows(FlightRuntimeException::class.java) {
+                fsqlClient.executeIngest(root, ingestOpts("users"), *emptyCallOpts)
+            }
+            assertEquals(CallStatus.INVALID_ARGUMENT.code(), ex.status().code())
+            assertTrue(ex.message?.contains("missing '_id'") == true, "got: ${ex.message}")
+        }
+    }
+
+    private val ordersSchema = Schema(listOf(
+        Field("order_no", FieldType.notNullable(Types.MinorType.BIGINT.type), null),
+        Field("n", FieldType.notNullable(Types.MinorType.BIGINT.type), null),
+    ))
+
+    private fun ingestOrders(rows: List<Pair<Long, Long>>) =
+        VectorSchemaRoot.create(ordersSchema, al).use { root ->
+            val keyVec = root.getVector("order_no") as BigIntVector
+            val nVec = root.getVector("n") as BigIntVector
+            rows.forEachIndexed { i, (key, n) -> keyVec.setSafe(i, key); nVec.setSafe(i, n) }
+            root.rowCount = rows.size
+            fsqlClient.executeIngest(root, ingestOpts("orders"), *emptyCallOpts)
+        }
+
+    @Test
+    fun `test FlightSQL bulk ingest into a table keyed on another column upserts on that key`() {
+        val txn = fsqlClient.beginTransaction(*emptyCallOpts)
+        fsqlClient.executeUpdate("CREATE TABLE orders (order_no PRIMARY KEY, n)", txn, *emptyCallOpts)
+        fsqlClient.commit(txn, *emptyCallOpts)
+
+        ingestOrders(listOf(1L to 10L, 2L to 20L))
+        ingestOrders(listOf(1L to 11L))
+
+        assertEquals(
+            listOf(mapOf("order_no" to 1L, "n" to 11L), mapOf("order_no" to 2L, "n" to 20L)),
+            fsqlClient.execute("SELECT order_no, n FROM orders ORDER BY order_no", *emptyCallOpts).readRows()
+        )
+    }
+
+    @Test
+    fun `test FlightSQL bulk ingest without the table's key column is an invalid argument`() {
+        fsqlClient.executeUpdate("CREATE TABLE orders (order_no PRIMARY KEY, n)", *emptyCallOpts)
+
+        usersRoot(listOf(1L to 10L)) { root ->
+            val ex = assertThrows(FlightRuntimeException::class.java) {
+                fsqlClient.executeIngest(root, ingestOpts("orders"), *emptyCallOpts)
+            }
+            assertEquals(CallStatus.INVALID_ARGUMENT.code(), ex.status().code())
+            assertTrue(ex.message?.contains("missing 'order_no'") == true, "got: ${ex.message}")
         }
     }
 

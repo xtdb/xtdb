@@ -845,7 +845,7 @@
        (testing "error query"
          (send "INSERT INTO foo (id, a) VALUES (1, 2);\n")
          (is (= ["ERROR:  missing '_id'"
-                 "DETAIL:  {\"category\":\"incorrect\",\"code\":\"missing-id\",\"message\":\"missing '_id'\",\"data\":{\"doc\":{\"id\":1,\"a\":2}}}"]
+                 "DETAIL:  {\"category\":\"incorrect\",\"code\":\"xtdb.tx/missing-id\",\"message\":\"missing '_id'\",\"data\":{\"table\":\"#xt/table foo\",\"tx-key\":{\"tx-id\":0,\"system-time\":\"#xt/instant \\\"2020-01-01T00:00:00Z\\\"\"},\"column\":\"_id\",\"tx-op-idx\":0}}"]
                 (read :stderr)))
          ;; to drain the standard stream
          (read))

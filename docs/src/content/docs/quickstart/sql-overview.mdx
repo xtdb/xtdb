@@ -44,7 +44,7 @@ Things to note:
 <ul>
   <li>Tables in XTDB may be created dynamically during `INSERT`, where all columns and types are inferred automatically.</li>
   <li>
-    The only schema requirement is that every table in XTDB requires a user-provided `_id` primary key column, but all other columns are optional and dynamically typed by default.  
+    The only schema requirement is that every row in XTDB carries a user-provided primary key - an `_id` column, unless its table declares another - but all other columns are optional and dynamically typed by default.  
     This means each row in XTDB can offer the flexibility of a document in a document database.
   </li>
   <li>

@@ -9,6 +9,7 @@ import xtdb.arrow.VectorType
 import xtdb.catalog.TableCatalog
 import xtdb.api.TableRef
 import xtdb.table.Oid
+import xtdb.table.PrimaryKey
 import xtdb.trie.ColumnName
 import xtdb.trie.MemoryHashTrie
 import xtdb.trie.TrieCatalog
@@ -53,6 +54,20 @@ class Snapshot internal constructor(
 
         tableInfo
     }
+
+    fun primaryKey(table: TableRef): PrimaryKey? = live.primaryKeys[table] ?: tableCatSnap.primaryKey(table)
+
+    /**
+     * [table]'s key, once the table has been written to and the key can no longer change; null until then, when a
+     * transaction may yet declare another.
+     */
+    fun fixedPrimaryKey(table: TableRef): PrimaryKey? =
+        if (holdsRows(table)) primaryKey(table) ?: PrimaryKey.ID else null
+
+    private fun holdsRows(table: TableRef) =
+        (tableCatSnap.rowCount(table) ?: 0) > 0
+                || (live.durable[table]?.snap?.relation?.rowCount ?: 0) > 0
+                || (live.layered[table]?.relation?.rowCount ?: 0) > 0
 
     /**
      * Where [table]'s files live, as of this snapshot — so the slugs a scan reads by are the ones recorded
@@ -155,6 +170,7 @@ internal class LiveSnap private constructor(
     internal val layered: Map<TableRef, TableSnapshot>,
     // Every column a live segment declares, plus each staged table's declared columns — see [open].
     internal val columnNames: Map<TableRef, Set<ColumnName>>,
+    internal val primaryKeys: Map<TableRef, PrimaryKey>,
 ) {
     internal class Durable(val blockIdx: Long, val snap: TableSnapshot)
 
@@ -204,7 +220,11 @@ internal class LiveSnap private constructor(
             for ((table, snap) in layered) liveColumnNames.getOrPut(table) { linkedSetOf() }.addAll(snap.types.keys)
             for (t in stagedTables) liveColumnNames.getOrPut(t.ref) { linkedSetOf() }.addAll(t.columnTypes.keys)
 
-            LiveSnap(ownTx?.txKey ?: live.latestCompletedTx, durable, layered, liveColumnNames)
+            val primaryKeys = HashMap<TableRef, PrimaryKey>()
+            for (staged in resolvedTxs) primaryKeys.putAll(staged.primaryKeys)
+            ownTx?.tables?.forEach { (ref, tableTx) -> tableTx.declaredPrimaryKey?.let { primaryKeys[ref] = it } }
+
+            LiveSnap(ownTx?.txKey ?: live.latestCompletedTx, durable, layered, liveColumnNames, primaryKeys)
         }
     }
 }

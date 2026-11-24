@@ -320,7 +320,7 @@ internal class ExternalSourceTest : LeaderTermTest() {
     // Both apply paths: a tx this term resolved is applied by `applyTx`, one read back without having been
     // staged by `commitTx`, and these tests drive the former.
     private fun faulting(partitionState: PartitionState) = spyk(partitionState) {
-        every { applyTx(any(), any()) } throws RuntimeException("commit pipeline fault")
-        every { commitTx(any(), any()) } throws RuntimeException("commit pipeline fault")
+        every { applyTx(any(), any(), any()) } throws RuntimeException("commit pipeline fault")
+        every { commitTx(any(), any(), any()) } throws RuntimeException("commit pipeline fault")
     }
 }

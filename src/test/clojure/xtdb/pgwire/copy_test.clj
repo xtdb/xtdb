@@ -71,7 +71,7 @@
         (let [bytes (serde/write-transit-seq [{"xt/id" 3, "v" 3} {"xt/id" 4, "v" 4}] :json)]
           (.writeToCopy copy-in bytes 0 (alength bytes)))
 
-        (t/is (anomalous? [:incorrect :missing-id]
+        (t/is (anomalous? [:incorrect :xtdb.tx/missing-id]
                           (err/wrap-anomaly {}
                             (.endCopy copy-in))))))
 

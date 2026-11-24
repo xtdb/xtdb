@@ -5,9 +5,11 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.modules.PolymorphicModuleBuilder
 import kotlinx.serialization.modules.subclass
 import xtdb.api.error.Incorrect
+import xtdb.api.error.Unsupported
 import xtdb.api.tx.OpenTx
 import xtdb.postgres.proto.DirectMirrorConfig
 import xtdb.postgres.proto.directMirrorConfig
+import xtdb.table.PrimaryKey
 import xtdb.time.InstantUtil.asMicros
 import java.time.ZonedDateTime
 import com.google.protobuf.Any as ProtoAny
@@ -32,6 +34,13 @@ class DirectMirror : PgIndexer {
 
     private fun writeOp(openTx: OpenTx, op: RowOp) {
         val openTxTable = openTx.table(op.schema, op.table)
+
+        if (openTxTable.primaryKey != PrimaryKey.ID)
+            throw Unsupported(
+                "DirectMirror writes rows by `_id`, but ${op.schema}.${op.table} is keyed on ${openTxTable.primaryKey.columns}",
+                "xtdb.postgres/table-not-keyed-on-id",
+                mapOf("schema" to op.schema, "table" to op.table, "primary-key" to openTxTable.primaryKey.columns),
+            )
 
         when (op) {
             is RowOp.Put -> {

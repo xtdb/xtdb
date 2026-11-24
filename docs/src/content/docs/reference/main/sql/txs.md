@@ -6,7 +6,7 @@ For examples on how to submit SQL transactions in each client library, see the [
 
 ## ID types
 
-Every document's `_id` must be one of these types:
+Every document's value for its table's [primary key](/reference/main/sql/schema#primary-keys-v221) - `_id` unless the table declares another - must be one of these types:
 
 | Type | Example | Stored by |
 | --- | --- | --- |
@@ -40,7 +40,7 @@ const selectQuery = rr.Sequence(rr.Optional(colNames, "skip"), "<select query>")
 return rr.Diagram(rr.Stack(insertIntoTable, rr.Choice(0, values, records, selectQuery)))
 ```
 
-- Documents must contain an `_id` column - see [ID types](#id-types).
+- Documents must contain the table's [primary key](/reference/main/sql/schema#primary-keys-v221) column - `_id` unless the table declares another - see [ID types](#id-types).
 - By default, the document will be inserted for valid-time between now and end-of-time.
   This can be overridden by including `_valid_from` and/or `_valid_to` columns in the document.
 - If the document already exists, 'insert' behaves like an upsert - it will overwrite the existing document for the valid-time range specified (or now → end-of-time if not provided).
@@ -62,7 +62,7 @@ return rr.Diagram(rr.Stack(updateTable, rr.Optional(forValidTime, "skip"), rr.Se
 ```
 
 - If the valid-time range is not provided, the effective valid-time range of the update will be from now to the end of time. (SQL:2011 specifies that updates without this clause should be effective for all valid time; the now→end-of-time default is an XTDB deviation.)
-- The `_id` column cannot be updated - instead, users should delete this document and re-insert a new one.
+- The table's primary key column (`_id` unless the table declares another) cannot be updated - instead, users should delete this document and re-insert a new one.
 - The valid-time columns cannot be updated outside of the for-valid-time clause (i.e. not in the `SET` clause).
 
 ### `PATCH`
@@ -80,7 +80,8 @@ return rr.Diagram(rr.Stack(patchTable, rr.Optional(forValidTime, "skip"), record
 ```
 
 - If the valid-time range is not provided, the effective valid-time range of the update will be from now to the end of time.
-- The `_id` column cannot be patched - instead, users should delete this document and re-insert a new one.
+- Each record patches the document its table's [primary key](/reference/main/sql/schema#primary-keys-v221) identifies - `_id` unless the table declares another - so it must contain that key.
+  The key cannot be patched - instead, users should delete this document and re-insert a new one.
 - The valid-time columns cannot be updated outside of the for-valid-time clause (i.e. not in the records themselves).
 - Documents are currently merged at the granularity of individual keys - e.g. if a key is present in the patch document, it will override the same key in the database document; if a key is absent or null, the key from the document already in the database will be preserved.
 

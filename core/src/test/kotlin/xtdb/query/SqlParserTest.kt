@@ -47,6 +47,13 @@ class SqlParserTest {
         assertEquals(listOf("a", "b"), ct.colNames)
     }
 
+    @Test
+    fun `create table's columns include its primary key's, once`() {
+        assertEquals(listOf("a", "b"), (one("CREATE TABLE foo (a PRIMARY KEY, b)") as Dml.CreateTable).colNames)
+        assertEquals(listOf("a", "b"), (one("CREATE TABLE foo (a, b, PRIMARY KEY (a))") as Dml.CreateTable).colNames)
+        assertEquals(listOf("b", "a"), (one("CREATE TABLE foo (b, PRIMARY KEY (a))") as Dml.CreateTable).colNames)
+    }
+
     private val TxOptionValue?.text get() = (this as? TxOptionValue.Expr)?.expr?.text
 
     private fun setTx(sql: String) = (one(sql) as SetTransaction).txOptions

@@ -106,12 +106,12 @@
       :patch-docs [(TxOp$PatchDocs/openFromRows al schema table docs valid-from valid-to)]
 
       :delete-docs (when (seq doc-ids)
-                     (let [dsql (format "DELETE FROM \"%s\".\"%s\" %s WHERE _id = ?" schema table (or for-vt ""))]
-                       [(TxOp$Sql. dsql (apply vw/open-args al (map #(if for-vt [valid-from valid-to %] [%]) doc-ids)))]))
+                     (let [dsql (format "DELETE FROM \"%s\".\"%s\" %s WHERE _iid = ?" schema table (or for-vt ""))]
+                       [(TxOp$Sql. dsql (apply vw/open-args al (map #(let [iid (util/->iid %)] (if for-vt [valid-from valid-to iid] [iid])) doc-ids)))]))
 
       :erase-docs (when (seq doc-ids)
-                    (let [esql (format "ERASE FROM \"%s\".\"%s\" WHERE _id = ?" schema table)]
-                      [(TxOp$Sql. esql (apply vw/open-args al (map vector doc-ids)))]))
+                    (let [esql (format "ERASE FROM \"%s\".\"%s\" WHERE _iid = ?" schema table)]
+                      [(TxOp$Sql. esql (apply vw/open-args al (map (comp vector util/->iid) doc-ids)))]))
 
       :sql (cond
              (nil? arg-rows) [(TxOp$Sql. sql nil)]

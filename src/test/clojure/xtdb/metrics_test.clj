@@ -53,6 +53,8 @@
   (let [node (xtn/start-node tu/*node-opts*)
         conn (jdbc/get-connection node)
         registry (.getMeterRegistry (util/node-base node))]
+    (jdbc/execute! conn ["INSERT INTO foo (_id) VALUES (1)"])
+
     (t/is (thrown? Exception (jdbc/execute! conn ["INSERT INTO foo (a) VALUES (42)"]))
           "presubmit error via pgwire")
 
@@ -73,7 +75,9 @@
 (t/deftest test-transaction-exception-counter-on-submit-tx
   (let [node (xtn/start-node tu/*node-opts*)
         registry (.getMeterRegistry (util/node-base node))]
-    (t/is (anomalous? [:incorrect :missing-id] (xt/submit-tx node ["INSERT INTO foo (a) VALUES (42)"]))
+    (xt/execute-tx node ["INSERT INTO foo (_id) VALUES (1)"])
+
+    (t/is (anomalous? [:incorrect :xtdb.tx/missing-id] (xt/submit-tx node ["INSERT INTO foo (a) VALUES (42)"]))
           "presubmit error via the node (submit-tx)")
 
     (t/is (= 1.0 (.count ^Counter (.counter (.find registry "tx.error")))))
@@ -178,8 +182,10 @@ $$"])
         registry (.getMeterRegistry (util/node-base node))
         tx-error-count #(.count ^Counter (.counter (.find registry "tx.error")))]
 
+    (xt/execute-tx node ["INSERT INTO foo (_id) VALUES (1)"])
+
     (with-open [conn (.connect ^Xtdb node)]
-      (t/is (anomalous? [:incorrect :missing-id]
+      (t/is (anomalous? [:incorrect :xtdb.tx/missing-id]
                         (with-open [stmt (.createStatement conn "INSERT INTO foo (a) VALUES (42)")]
                           (.executeUpdate stmt)))
             "presubmit error expanding an in-process autocommit DML")

@@ -41,6 +41,7 @@ dependencies {
     testImplementation(libs.pgjdbc)
     testImplementation(libs.kotest)
     testImplementation(libs.kotest.props)
+    testImplementation(libs.mockk)
 }
 
 protobuf {

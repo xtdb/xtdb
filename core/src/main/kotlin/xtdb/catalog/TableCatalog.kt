@@ -1,6 +1,7 @@
 package xtdb.catalog
 
 import xtdb.table.FinishedBlock
+import xtdb.table.PrimaryKey
 import xtdb.table.BlockMetadata
 import com.google.protobuf.ByteString
 import kotlinx.coroutines.flow.StateFlow
@@ -70,6 +71,9 @@ private fun Block.asBlockDetails() = BlockDetails(
     secondaryDatabases = secondaryDatabasesMap,
 )
 
+private val TableBlock.primaryKey: PrimaryKey
+    get() = primaryKeyList.takeIf { it.isNotEmpty() }?.let { PrimaryKey(it) } ?: PrimaryKey.ID
+
 /**
  * What one database partition knows about its tables, and the block that knowledge is current to: a read view of
  * the table part of its value, which [xtdb.database.PartitionState] writes.
@@ -79,7 +83,9 @@ class TableCatalog(private val flow: StateFlow<State>) {
     internal data class TableMeta(
         val vecTypes: Map<ColumnName, VectorType>,
         val rowCount: Long,
-        val hlls: Map<ColumnName, HLL>
+        val hlls: Map<ColumnName, HLL>,
+        /** null until a transaction declares the table's key or a block records it; a block records a null one as [PrimaryKey.ID]. */
+        val primaryKey: PrimaryKey?,
     ) {
         /** @see xtdb.indexer.TableSnapshot.contributedType — the historical side of the same memo. */
         val absentContribution by lazy { VectorType.absentContribution(vecTypes) }
@@ -132,6 +138,21 @@ class TableCatalog(private val flow: StateFlow<State>) {
 
         fun rowCount(table: TableRef): Long? = tables[table]?.rowCount
 
+        /** null where no transaction has declared [table]'s key and no block has recorded it. */
+        fun primaryKey(table: TableRef): PrimaryKey? = tables[table]?.primaryKey
+
+        /**
+         * [this], with each of [primaryKeys] recorded as its table's key.
+         * A table no block has recorded yet gets metadata holding only its key, which the next block's fold keeps.
+         */
+        internal fun withPrimaryKeys(primaryKeys: Map<TableRef, PrimaryKey>): State =
+            if (primaryKeys.isEmpty()) this
+            else copy(
+                tables = tables + primaryKeys.mapValues { (table, pk) ->
+                    (tables[table] ?: TableMeta(emptyMap(), 0, emptyMap(), primaryKey = null)).copy(primaryKey = pk)
+                }
+            )
+
         /** The historical half's contribution — an unknown table has written nothing. */
         fun contributedType(table: TableRef, col: ColumnName): VectorType =
             tables[table]?.let { it.vecTypes[col] ?: it.absentContribution } ?: VectorType.Nothing
@@ -183,14 +204,14 @@ class TableCatalog(private val flow: StateFlow<State>) {
          * sets their types (`Nothing ⊔ X = X`). No-op if the table was already loaded from storage.
          */
         internal fun withSeededTable(table: TableRef, colNames: List<ColumnName>): State {
-            val meta = TableMeta(colNames.associateWith { VectorType.Nothing }, 0, emptyMap())
+            val meta = TableMeta(colNames.associateWith { VectorType.Nothing }, 0, emptyMap(), primaryKey = null)
 
             return copy(tables = if (tables.containsKey(table)) tables else tables + (table to meta))
                 .withEntriesFor(listOf(table))
         }
 
         fun refreshed(block: Block?, metadata: Map<TableRef, BlockMetadata>): State {
-            val delta = metadata.mapValues { (_, bm) -> TableMeta(bm.vecTypes, bm.rowCount.toLong(), bm.hllDeltas) }
+            val delta = metadata.mapValues { (_, bm) -> TableMeta(bm.vecTypes, bm.rowCount.toLong(), bm.hllDeltas, primaryKey = null) }
             val newBlock = if (block != null && block.blockIndex == blockIdx) this.block else block?.asBlockDetails()
 
             return State(
@@ -244,11 +265,11 @@ class TableCatalog(private val flow: StateFlow<State>) {
         tableMetadata: Map<TableRef, FinishedBlock>,
         tablePartitions: Map<TableRef, List<Partition>>
     ): Map<TableRef, TableBlock> {
-        val delta = tableMetadata.mapValues { (_, fb) -> TableMeta(fb.vecTypes, fb.rowCount.toLong(), fb.hllDeltas) }
+        val delta = tableMetadata.mapValues { (_, fb) -> TableMeta(fb.vecTypes, fb.rowCount.toLong(), fb.hllDeltas, primaryKey = null) }
 
         return snap().tables.foldIn(delta)
             .mapValues { (table, meta) ->
-                buildTableBlock(meta.vecTypes, meta.rowCount, tablePartitions[table].orEmpty(), meta.hlls)
+                buildTableBlock(meta.vecTypes, meta.rowCount, tablePartitions[table].orEmpty(), meta.hlls, meta.primaryKey)
             }
     }
 
@@ -337,7 +358,8 @@ class TableCatalog(private val flow: StateFlow<State>) {
                 return TableMeta(
                     cols.mapValues { it.value.type.vectorType },
                     tableBlock.rowCount,
-                    cols.mapNotNull { (name, col) -> col.hll?.let { name to it } }.toMap()
+                    cols.mapNotNull { (name, col) -> col.hll?.let { name to it } }.toMap(),
+                    tableBlock.primaryKey,
                 )
             }
 
@@ -346,7 +368,8 @@ class TableCatalog(private val flow: StateFlow<State>) {
                     .let { ByteBuffer.wrap(it).deserializeMessageAsSchemaInterruptibly() }
                     .fields.associate { field -> field.name to field.asType },
                 tableBlock.rowCount,
-                tableBlock.columnNameToHllMap.mapValues { (_, bs) -> toHLL(bs.toByteArray()) }
+                tableBlock.columnNameToHllMap.mapValues { (_, bs) -> toHLL(bs.toByteArray()) },
+                tableBlock.primaryKey,
             )
         }
 
@@ -408,13 +431,14 @@ class TableCatalog(private val flow: StateFlow<State>) {
             }
 
         internal fun mergeTables(old: TableMeta?, delta: TableMeta?): TableMeta {
-            if (old == null && delta == null) return TableMeta(emptyMap(), 0, emptyMap())
+            if (old == null && delta == null) return TableMeta(emptyMap(), 0, emptyMap(), primaryKey = null)
             if (old == null) return delta!!
             if (delta == null) return old
             return TableMeta(
                 vecTypes = mergeVecTypes(old.vecTypes, delta.vecTypes),
                 rowCount = old.rowCount + delta.rowCount,
-                hlls = mergeHlls(old.hlls, delta.hlls)
+                hlls = mergeHlls(old.hlls, delta.hlls),
+                primaryKey = old.primaryKey,
             )
         }
 
@@ -422,7 +446,8 @@ class TableCatalog(private val flow: StateFlow<State>) {
             vecTypes: Map<ColumnName, VectorType>,
             rowCount: Long,
             partitions: List<Partition>,
-            hlls: Map<ColumnName, HLL>
+            hlls: Map<ColumnName, HLL>,
+            primaryKey: PrimaryKey?,
         ): TableBlock {
             val schema = Schema(vecTypes.map { (colName, vecType) -> field(colName, vecType) })
 
@@ -434,6 +459,7 @@ class TableCatalog(private val flow: StateFlow<State>) {
                     this.rowCount = rowCount
                     putAllColumnNameToHll(hlls.mapValues { (_, hll) -> ByteString.copyFrom(hll.duplicate()) })
                     addAllPartitions(partitions)
+                    addAllPrimaryKey((primaryKey ?: PrimaryKey.ID).columns)
                     putAllColumns(vecTypes.mapValues { (name, type) -> ColumnMeta.of(name, type, hlls[name]).toProto() })
                 }
                 .build()

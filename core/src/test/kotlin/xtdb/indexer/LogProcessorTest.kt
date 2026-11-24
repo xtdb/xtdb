@@ -156,7 +156,7 @@ class LogProcessorTest {
         withFreshLogs { sourceLog, replicaLog ->
             TestNode(sourceLog, replicaLog, readOnly = true).use { node ->
                 val seeded = replicaLog.appendMessage(
-                    ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap(), srcMsgId = 1, termId = 1)
+                    ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap(), srcMsgId = 1, primaryKeys = emptyMap(), termId = 1)
                 )
 
                 // Applying a record proves the reader has been round its loop, so it has had every chance to claim that an eligible node would have taken before its first poll.
@@ -175,7 +175,7 @@ class LogProcessorTest {
     fun `a claim tying a term already on the log confers nothing`() = runTest {
         withFreshLogs { sourceLog, replicaLog ->
             val seeded = replicaLog.appendMessage(
-                ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap(), srcMsgId = 1, termId = 1)
+                ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap(), srcMsgId = 1, primaryKeys = emptyMap(), termId = 1)
             )
 
             TestNode(sourceLog, replicaLog, electionDriver = noElectionTimeout()).use { node ->
@@ -255,10 +255,10 @@ class LogProcessorTest {
         withFreshLogs { sourceLog, replicaLog ->
             TestNode(sourceLog, replicaLog, readOnly = true).use { node ->
                 val leader = replicaLog.appendMessage(
-                    ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap(), srcMsgId = 1, termId = 2L)
+                    ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap(), srcMsgId = 1, primaryKeys = emptyMap(), termId = 2L)
                 )
                 val superseded = replicaLog.appendMessage(
-                    ReplicaMessage.ResolvedTx(2, Instant.now(), true, null, emptyMap(), srcMsgId = 2, termId = 1L)
+                    ReplicaMessage.ResolvedTx(2, Instant.now(), true, null, emptyMap(), srcMsgId = 2, primaryKeys = emptyMap(), termId = 1L)
                 )
 
                 awaitReplicaMsg(node, superseded.msgId)
@@ -272,7 +272,7 @@ class LogProcessorTest {
 
     private fun tx(txId: Long, termId: Long, termSeq: Long?) =
         ReplicaMessage.ResolvedTx(
-            txId, Instant.now(), true, null, emptyMap(), srcMsgId = txId, termId = termId, termSeq = termSeq
+            txId, Instant.now(), true, null, emptyMap(), srcMsgId = txId, primaryKeys = emptyMap(), termId = termId, termSeq = termSeq
         )
 
     @Test
@@ -416,7 +416,7 @@ class LogProcessorTest {
     @Test
     fun `a node applies the messages already on the log, then claims`() = runTest {
         withFreshLogs { sourceLog, replicaLog ->
-            replicaLog.appendMessage(ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap(), termId = 1))
+            replicaLog.appendMessage(ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap(), primaryKeys = emptyMap(), termId = 1))
 
             TestNode(sourceLog, replicaLog).use { node ->
                 node.watchers.awaitTx(1)
@@ -472,7 +472,7 @@ class LogProcessorTest {
             val boundarySrcMsgId = sourceLog.latestSubmittedMsgId()
             replicaLog.appendMessage(ReplicaMessage.BlockBoundary(0, boundarySrcMsgId, termId = cutter))
             replicaLog.appendMessage(
-                ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap(), srcMsgId = boundarySrcMsgId, termId = cutter)
+                ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap(), srcMsgId = boundarySrcMsgId, primaryKeys = emptyMap(), termId = cutter)
             )
 
             TestNode(sourceLog, replicaLog).use { node ->
@@ -503,7 +503,7 @@ class LogProcessorTest {
             replicaLog.appendMessage(
                 ReplicaMessage.ResolvedTx(
                     1, Instant.now(), true, null, mapOf("public/docs" to ByteString.copyFrom(byteArrayOf(1, 2, 3))),
-                    srcMsgId = boundarySrcMsgId, termId = cutter
+                    srcMsgId = boundarySrcMsgId, primaryKeys = emptyMap(), termId = cutter
                 )
             )
 
@@ -548,7 +548,7 @@ class LogProcessorTest {
                 val seeded = replicaLog.appendMessage(
                     ReplicaMessage.ResolvedTx(
                         1, Instant.now(), true, null, emptyMap(),
-                        srcMsgId = 1, termId = 1L
+                        srcMsgId = 1, primaryKeys = emptyMap(), termId = 1L
                     )
                 )
 
@@ -594,7 +594,7 @@ class LogProcessorTest {
             val boundarySrcMsgId = sourceLog.latestSubmittedMsgId()
             replicaLog.appendMessage(ReplicaMessage.BlockBoundary(0, boundarySrcMsgId, termId = cutter))
             val held = replicaLog.appendMessage(
-                ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap(), srcMsgId = boundarySrcMsgId, termId = cutter)
+                ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap(), srcMsgId = boundarySrcMsgId, primaryKeys = emptyMap(), termId = cutter)
             )
 
             // The promotion writes the block's files and then cannot announce it, which is the window between
@@ -637,7 +637,7 @@ class LogProcessorTest {
             val boundarySrcMsgId = sourceLog.latestSubmittedMsgId()
             replicaLog.appendMessage(ReplicaMessage.BlockBoundary(0, boundarySrcMsgId, termId = cutter))
             replicaLog.appendMessage(
-                ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap(), srcMsgId = boundarySrcMsgId, termId = cutter)
+                ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap(), srcMsgId = boundarySrcMsgId, primaryKeys = emptyMap(), termId = cutter)
             )
 
             val superseding = 99L
@@ -682,7 +682,7 @@ class LogProcessorTest {
             val boundarySrcMsgId = sourceLog.latestSubmittedMsgId()
             replicaLog.appendMessage(ReplicaMessage.BlockBoundary(0, boundarySrcMsgId, termId = cutter))
             replicaLog.appendMessage(
-                ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap(), srcMsgId = boundarySrcMsgId, termId = cutter)
+                ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap(), srcMsgId = boundarySrcMsgId, primaryKeys = emptyMap(), termId = cutter)
             )
 
             TestNode(sourceLog, replicaLog, logsDriver = { inner ->

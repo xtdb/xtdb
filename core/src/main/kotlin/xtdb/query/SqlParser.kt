@@ -201,7 +201,10 @@ private class ParsedStatementVisitor : SqlBaseVisitor<ParsedStatement>() {
 
     override fun visitCreateTableStatement(ctx: Sql.CreateTableStatementContext): ParsedStatement {
         val tt = ctx.targetTable()
-        val cols = ctx.columnNameList()?.columnName()?.map { identStr(it.identifier()) } ?: emptyList()
+        val elements = ctx.createTableElement()
+        val cols = (elements.filterIsInstance<Sql.TableColumnContext>().map { it.columnName() } +
+                elements.filterIsInstance<Sql.TablePrimaryKeyContext>().flatMap { it.columnNameList().columnName() })
+            .map { identStr(it.identifier()) }.distinct()
         return Dml.CreateTable(ctx, tt.schemaName?.let(::identStr), identStr(tt.tableName), cols)
     }
 

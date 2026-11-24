@@ -393,22 +393,22 @@
                              [:put-docs :xt-docs {:xt/id after-uuid :version 1}]])
     (xt/submit-tx tu/*node* [[:put-docs :xt-docs {:xt/id search-uuid :version 2}]])
 
-    (t/is (nil? (scan/selects->iid-set {} vw/empty-args)))
+    (t/is (nil? (scan/selects->iid-set "_id" {} vw/empty-args)))
 
-    (let [^SortedSet iid-set (scan/selects->iid-set {"_id" (list '== '_id search-uuid)} vw/empty-args)]
+    (let [^SortedSet iid-set (scan/selects->iid-set "_id" {"_id" (list '== '_id search-uuid)} vw/empty-args)]
       (t/is (= 1 (.size iid-set)))
       (t/is (Arrays/equals (util/uuid->bytes search-uuid) ^bytes (.first iid-set))))
 
-    (t/is (nil? (scan/selects->iid-set {"_id" (list '< '_id search-uuid)} vw/empty-args)))
+    (t/is (nil? (scan/selects->iid-set "_id" {"_id" (list '< '_id search-uuid)} vw/empty-args)))
 
     (with-open [^RelationReader args-rel (tu/open-args {:search-uuid #uuid "80000000-0000-0000-0000-000000000000"})]
-      (let [^SortedSet iid-set (scan/selects->iid-set '{"_id" (== _id ?search_uuid)} args-rel)]
+      (let [^SortedSet iid-set (scan/selects->iid-set "_id" '{"_id" (== _id ?search_uuid)} args-rel)]
         (t/is (= 1 (.size iid-set)))
         (t/is (Arrays/equals (util/uuid->bytes search-uuid) ^bytes (.first iid-set)))))
 
     (with-open [^RelationReader args-rel (tu/open-args {:search-uuid [#uuid "00000000-0000-0000-0000-000000000000"
                                                                       #uuid "80000000-0000-0000-0000-000000000000"]})]
-      (t/is (nil? (scan/selects->iid-set '{"_id" (== _id ?search_uuid)} args-rel))))
+      (t/is (nil? (scan/selects->iid-set "_id" '{"_id" (== _id ?search_uuid)} args-rel))))
 
     (let [old-selects->iid-set scan/selects->iid-set]
       (with-redefs [scan/selects->iid-set
@@ -446,14 +446,14 @@
                              [:put-docs :xt-docs {:xt/id uuid4 :v 4}]])
 
     (t/testing "selects->iid-set with OR chain"
-      (let [iid-set (scan/selects->iid-set {"_id" (list 'or
+      (let [iid-set (scan/selects->iid-set "_id" {"_id" (list 'or
                                                         (list '== '_id uuid1)
                                                         (list '== '_id uuid2))}
                                            vw/empty-args)]
         (t/is (= 2 (.size iid-set)) "Should have 2 IIDs for OR with 2 values")))
 
     (t/testing "selects->iid-set with nested OR"
-      (let [iid-set (scan/selects->iid-set {"_id" (list 'or
+      (let [iid-set (scan/selects->iid-set "_id" {"_id" (list 'or
                                                         (list 'or
                                                               (list '== '_id uuid1)
                                                               (list '== '_id uuid2))
@@ -462,13 +462,13 @@
         (t/is (= 3 (.size iid-set)) "Should flatten nested ORs")))
 
     (t/testing "selects->iid-set returns nil for non-equality OR"
-      (t/is (nil? (scan/selects->iid-set {"_id" (list 'or
+      (t/is (nil? (scan/selects->iid-set "_id" {"_id" (list 'or
                                                       (list '== '_id uuid1)
                                                       (list '< '_id uuid2))}
                                          vw/empty-args))))
 
     (t/testing "selects->iid-set returns nil for OR on different columns"
-      (t/is (nil? (scan/selects->iid-set {"_id" (list 'or
+      (t/is (nil? (scan/selects->iid-set "_id" {"_id" (list 'or
                                                       (list '== '_id uuid1)
                                                       (list '== 'other uuid2))}
                                          vw/empty-args))))
@@ -488,20 +488,66 @@
                                                                       (list '== '_id uuid2))}]}]
                                      {:node tu/*node*})))))))))
 
+(t/deftest test-iid-set-keys-on-the-primary-key-column
+  (let [^SortedSet iid-set (scan/selects->iid-set "a" '{"a" (or (== a 1) (== 2 a))} vw/empty-args)]
+    (t/is (= #{(seq (util/->iid 1)) (seq (util/->iid 2))}
+             (set (map seq iid-set)))
+          "equalities on the key column resolve to their values' IIDs"))
+
+  (t/is (nil? (scan/selects->iid-set "a" {"_id" (list '== '_id 1)} vw/empty-args))
+        "an `_id` equality doesn't pin a table keyed on another column"))
+
+(t/deftest test-iid-equalities-pin-the-iid-set
+  (let [iid1 (util/->iid 1)
+        iid2 (util/->iid 2)]
+    (with-open [^RelationReader args-rel (tu/open-args {:iid iid1})]
+      (t/is (= [(seq iid1)]
+               (map seq (scan/selects->iid-set "a" '{"_iid" (== _iid ?iid)} args-rel)))))
+
+    (with-open [^RelationReader args-rel (tu/open-args {:iid1 iid1, :iid2 iid2})]
+      (t/is (= #{(seq iid1) (seq iid2)}
+               (set (map seq (scan/selects->iid-set "a" '{"_iid" (or (== _iid ?iid1) (== ?iid2 _iid))} args-rel))))))
+
+    (with-open [^RelationReader args-rel (tu/open-args {:iid [iid1 iid2]})]
+      (t/is (nil? (scan/selects->iid-set "a" '{"_iid" (== _iid ?iid)} args-rel))
+            "a param bound to several rows"))
+
+    (with-open [^RelationReader args-rel (tu/open-args {:iid (byte-array 4)})]
+      (t/is (nil? (scan/selects->iid-set "a" '{"_iid" (== _iid ?iid)} args-rel))
+            "bytes that can't be an IID"))
+
+    (t/is (nil? (scan/selects->iid-set "a" {"_iid" (list '== '_iid 1)} vw/empty-args))
+          "a value an IID is never equal to")))
+
+(t/deftest test-delete-by-iid-reaches-the-iid-selector
+  (xt/execute-tx tu/*node* ["CREATE TABLE t (a PRIMARY KEY, b)"
+                            "INSERT INTO t (a, b) VALUES (1, 'x'), (2, 'y')"
+                            "INSERT INTO u RECORDS {_id: 1, b: 'x'}, {_id: 2, b: 'y'}"])
+
+  (let [old-selects->iid-set scan/selects->iid-set]
+    (with-redefs [scan/selects->iid-set (fn [& args]
+                                          (doto (apply old-selects->iid-set args)
+                                            (assert "iid-set can't be nil")))]
+      (xt/execute-tx tu/*node* [[:delete-docs :t 1]
+                                [:delete-docs :u 1]])))
+
+  (t/is (= [{:a 2}] (xt/q tu/*node* "SELECT a FROM t")))
+  (t/is (= [{:xt/id 2}] (xt/q tu/*node* "SELECT _id FROM u"))))
+
 (t/deftest test-id-equality-against-an-unresolvable-eid-still-finds-the-row-5987
   (xt/execute-tx tu/*node* ["INSERT INTO docs RECORDS {_id: 7, name: 'seven'}, {_id: 'abc', name: 'abc'}"])
 
   (t/testing "no IID to narrow to"
-    (t/is (nil? (scan/selects->iid-set '{"_id" (== _id (cast 7 #xt/type :i64))} vw/empty-args))
+    (t/is (nil? (scan/selects->iid-set "_id" '{"_id" (== _id (cast 7 #xt/type :i64))} vw/empty-args))
           "an expression we don't evaluate here")
 
-    (t/is (nil? (scan/selects->iid-set {"_id" (list '== '_id 7.0)} vw/empty-args))
+    (t/is (nil? (scan/selects->iid-set "_id" {"_id" (list '== '_id 7.0)} vw/empty-args))
           "no ID can be a double, but = can still match the integer 7")
 
-    (t/is (nil? (scan/selects->iid-set {"_id" (list '== '_id 7N)} vw/empty-args))
+    (t/is (nil? (scan/selects->iid-set "_id" {"_id" (list '== '_id 7N)} vw/empty-args))
           "Iid/getAsIid rejects a BigInt, so we must decline rather than throw")
 
-    (t/is (nil? (scan/selects->iid-set '{"_id" (or (== _id 7) (== _id (cast 8 #xt/type :i64)))} vw/empty-args))
+    (t/is (nil? (scan/selects->iid-set "_id" '{"_id" (or (== _id 7) (== _id (cast 8 #xt/type :i64)))} vw/empty-args))
           "one unresolvable branch poisons the whole OR chain"))
 
   (t/testing "the row comes back anyway"

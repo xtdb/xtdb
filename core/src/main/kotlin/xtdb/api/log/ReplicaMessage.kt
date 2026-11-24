@@ -13,10 +13,12 @@ import xtdb.log.proto.detachDatabase
 import xtdb.log.proto.noOp
 import xtdb.log.proto.oversizedMessage
 import xtdb.log.proto.replicaLogMessage
+import xtdb.log.proto.primaryKey
 import xtdb.log.proto.resolvedTx
 import xtdb.log.proto.triesAdded
 import xtdb.log.proto.triesDeleted
 import xtdb.storage.StorageEpoch
+import xtdb.table.PrimaryKey
 import xtdb.time.InstantUtil.asMicros
 import xtdb.time.InstantUtil.fromMicros
 import xtdb.trie.BlockIndex
@@ -78,6 +80,7 @@ sealed interface ReplicaMessage {
                                 dbOp,
                                 it.externalSourceToken.takeIf { _ -> it.hasExternalSourceToken() }?.toByteArray(),
                                 if (it.hasSrcMsgId()) it.srcMsgId else null,
+                                it.primaryKeysMap.mapValues { (_, pk) -> PrimaryKey(pk.columnsList) },
                                 termId = msg.termId, termSeq = termSeq,
                             )
                         }
@@ -143,6 +146,8 @@ sealed interface ReplicaMessage {
         // their `latestSourceMsgId` in step between block boundaries). Null only on legacy records
         // written before this field existed (see #5586).
         val srcMsgId: MessageId? = null,
+        // Keyed like [tableData]: the tables whose primary key this tx declared.
+        val primaryKeys: Map<String, PrimaryKey>,
         override val termId: Long,
         override val termSeq: Long? = null,
     ) : ProtobufMessage() {
@@ -169,6 +174,8 @@ sealed interface ReplicaMessage {
                 }
                 this@ResolvedTx.externalSourceToken?.let { externalSourceToken = ByteString.copyFrom(it) }
                 this@ResolvedTx.srcMsgId?.let { srcMsgId = it }
+                for ((table, pk) in this@ResolvedTx.primaryKeys)
+                    primaryKeys[table] = primaryKey { columns.addAll(pk.columns) }
             }
         }
     }

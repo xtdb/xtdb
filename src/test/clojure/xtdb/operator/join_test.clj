@@ -1461,6 +1461,18 @@
                                [:rename {:columns {_id bar}} [:scan {:db-name "xtdb", :table #xt/table bar, :columns [_id b]}]]]]
                             {:node node}))))))
 
+(t/deftest iid-pushdown-gives-way-to-build-values-that-cant-key-a-row
+  (util/with-open [node (xtn/start-node)]
+    (xt/execute-tx node [[:put-docs :foo {:xt/id 1, :a 1} {:xt/id 2, :a 2} {:xt/id 3, :a 3}]
+                         [:put-docs :bar {:xt/id 10, :v 1.0} {:xt/id 11, :v 2} {:xt/id 12, :v #xt/date "2020-01-01"}]])
+
+    (let [foo '[:scan {:db-name "xtdb", :table #xt/table foo, :columns [_id a]}]
+          bar '[:scan {:db-name "xtdb", :table #xt/table bar, :columns [v]}]]
+      (doseq [[l r cond] [[foo bar '{_id v}] [bar foo '{v _id}]]]
+        (t/is (= [{:xt/id 1, :a 1, :v 1.0} {:xt/id 2, :a 2, :v 2}]
+                 (tu/query-ra [:sort '{:order-specs [[a]]} [:join {:conditions [cond]} l r]] {:node node}))
+              (str "1.0 equals the key 1: " cond))))))
+
 ;; Regression test for #5153 fix: semi-join IID pushdown for UUID columns
 ;; The bug was that VectorType was being compared against ArrowType (#xt.arrow/type vs #xt/type),
 ;; which never matched, so IID pushdown was disabled for all UUID _id lookups.

@@ -24,7 +24,7 @@
            (org.apache.arrow.adbc.core AdbcConnection AdbcDatabase)
            (xtdb.api DataSource DataSource$ConnectionBuilder TransactionKey)
            xtdb.types.ClojureForm
-           xtdb.util.NormalForm))
+           (xtdb.util Iid NormalForm)))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn ->ClojureForm [form]
@@ -201,19 +201,20 @@
                                     docs))))
 
 (defn- delete-docs! [{:keys [table-name doc-ids valid-from valid-to]} conn]
-  (with-open [stmt (jdbc/prepare conn [(format "DELETE FROM \"%s\".\"%s\" %s WHERE _id = ?"
+  (with-open [stmt (jdbc/prepare conn [(format "DELETE FROM \"%s\".\"%s\" %s WHERE _iid = ?"
                                                (namespace table-name) (name table-name)
                                                (for-valid-time-sql valid-from valid-to))])]
     (jdbc/execute-batch! stmt (mapv (fn [doc-id]
-                                      (if (or valid-from valid-to)
-                                        [valid-from valid-to doc-id]
-                                        [doc-id]))
+                                      (let [iid (Iid/getAsIid doc-id)]
+                                        (if (or valid-from valid-to)
+                                          [valid-from valid-to iid]
+                                          [iid])))
                                     doc-ids))))
 
 (defn- erase-docs! [{:keys [table-name doc-ids]} conn]
-  (with-open [stmt (jdbc/prepare conn [(format "ERASE FROM \"%s\".\"%s\" WHERE _id = ?"
+  (with-open [stmt (jdbc/prepare conn [(format "ERASE FROM \"%s\".\"%s\" WHERE _iid = ?"
                                                (namespace table-name) (name table-name))])]
-    (jdbc/execute-batch! stmt (mapv vector doc-ids))))
+    (jdbc/execute-batch! stmt (mapv (comp vector #(Iid/getAsIid %)) doc-ids))))
 
 (defn- sql! [{:keys [sql arg-rows]} conn]
   (err/wrap-anomaly {:sql sql, :arg-rows arg-rows}

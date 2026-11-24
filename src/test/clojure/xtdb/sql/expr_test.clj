@@ -1758,6 +1758,11 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
     "'from'"               "\"from\""
     "'null'"               "\"null\""
 
+    ;; non-reserved keywords
+    "'filter'" "\"filter\""
+    "'primary'" "\"primary\""
+    "'key'" "\"key\""
+
     ;; multi-alternative lexer keywords
     "'local_date'"         "\"local_date\""
     "'localdate'"          "\"localdate\""

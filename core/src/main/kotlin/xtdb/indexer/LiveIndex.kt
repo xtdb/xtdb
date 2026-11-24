@@ -15,6 +15,7 @@ import xtdb.indexer.LiveTable.Companion.finishBlock
 import xtdb.storage.BufferPool
 import xtdb.api.TableRef
 import xtdb.table.BlockMetadata
+import xtdb.table.PrimaryKey
 import xtdb.table.TableSlug
 import xtdb.table.fromSchemaAndTable
 import xtdb.trie.BlockIndex
@@ -30,6 +31,9 @@ import java.time.Duration
 import java.util.concurrent.atomic.AtomicBoolean
 
 private val LOG = LiveIndex::class.logger
+
+internal val ReplicaMessage.ResolvedTx.tablePrimaryKeys: Map<TableRef, PrimaryKey>
+    get() = primaryKeys.mapKeys { (schemaAndTable, _) -> fromSchemaAndTable(schemaAndTable) }
 
 // Deserialize a replica-log [ReplicaMessage.ResolvedTx]'s per-table IPC bytes back into owned
 // relations, for the follower/transition path which only has the serialized form. The leader skips

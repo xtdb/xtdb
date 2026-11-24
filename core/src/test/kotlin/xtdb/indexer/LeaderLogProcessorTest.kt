@@ -141,7 +141,7 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
         proc.applyReplicaMessage(
             Log.Record(
                 0, 0, Instant.now(),
-                ReplicaMessage.ResolvedTx(0, Instant.now(), true, null, emptyMap(), srcMsgId = null, termId = 0)
+                ReplicaMessage.ResolvedTx(0, Instant.now(), true, null, emptyMap(), srcMsgId = null, primaryKeys = emptyMap(), termId = 0)
             )
         )
 
@@ -157,7 +157,7 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
             proc.applyReplicaMessage(
                 Log.Record(
                     0, 0, Instant.now(),
-                    ReplicaMessage.ResolvedTx(0, Instant.now(), true, null, emptyMap(), srcMsgId = 0, termId = 1)
+                    ReplicaMessage.ResolvedTx(0, Instant.now(), true, null, emptyMap(), srcMsgId = 0, primaryKeys = emptyMap(), termId = 1)
                 )
             )
         }
@@ -217,7 +217,7 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
         proc.applyReplicaMessage(
             record(
                 1,
-                ReplicaMessage.ResolvedTx(7, Instant.now(), true, null, emptyMap(), srcMsgId = 6, termId = 0)
+                ReplicaMessage.ResolvedTx(7, Instant.now(), true, null, emptyMap(), srcMsgId = 6, primaryKeys = emptyMap(), termId = 0)
             )
         )
 

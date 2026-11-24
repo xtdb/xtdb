@@ -173,12 +173,12 @@
       :patch-docs (records-stmts "PATCH INTO" table-name for-vt vt-args docs)
 
       :delete-docs (when (seq doc-ids)
-                     [{:sql (format "DELETE FROM %s %s WHERE _id = ?" (table-sql table-name) for-vt)
-                       :arg-rows (mapv (fn [doc-id] (conj (vec vt-args) doc-id)) doc-ids)}])
+                     [{:sql (format "DELETE FROM %s %s WHERE _iid = ?" (table-sql table-name) for-vt)
+                       :arg-rows (mapv (fn [doc-id] (conj (vec vt-args) (util/->iid doc-id))) doc-ids)}])
 
       :erase-docs (when (seq doc-ids)
-                    [{:sql (format "ERASE FROM %s WHERE _id = ?" (table-sql table-name))
-                      :arg-rows (mapv vector doc-ids)}])
+                    [{:sql (format "ERASE FROM %s WHERE _iid = ?" (table-sql table-name))
+                      :arg-rows (mapv (comp vector util/->iid) doc-ids)}])
 
       :sql [{:sql sql, :arg-rows arg-rows}])))
 

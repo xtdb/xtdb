@@ -2,6 +2,36 @@
 title: XTQL Transactions (Clojure)
 ---
 
+<details>
+<summary>Changelog (last updated v2.2.1)</summary>
+
+v2.2.1: a `put-docs` without its key into a table not yet written to aborts its transaction
+
+: A `put-docs` document carries the table's [primary key](/reference/main/sql/schema#primary-keys-v221), `:xt/id` unless the table declares another.
+  Into a table that has been written to, a document without it fails at submit; into a table that hasn't, the transaction aborts with `xtdb.tx/missing-id` — see [`put-docs`](#put-docs).
+
+  Previously every such document failed at submit, with the error code `missing-id`.
+
+  A client of `submit-tx` putting into a table that hasn't been written to no longer sees the error when it submits: check the transaction's outcome, or use `execute-tx`.
+
+  The key's value is checked in the same places: one of a type that can't key a row (see [ID types](/reference/main/sql/txs#id-types)) fails at submit, or aborts the transaction, with `xtdb/invalid-id`.
+  Previously a `put-docs` failed at submit with `xtdb.tx/invalid-eid` for any `:xt/id` of such a type; in a table keyed on another column, `:xt/id` is now an ordinary column, and takes any value.
+
+v2.2.1: `patch-docs` patches the row identified by the table's key
+
+: A `patch-docs` document carries the table's [primary key](/reference/main/sql/schema#primary-keys-v221), `:xt/id` unless the table declares another, and patches the row that key identifies — see [`patch-docs`](#patch-docs).
+  A document without it fails as a `put-docs` document does.
+
+  Previously every `patch-docs` document had to carry `:xt/id`, which identified its row whatever the table was keyed on.
+
+v2.2.1: `delete-docs` and `erase-docs` take the table's key values
+
+: In a table keyed on another column, `delete-docs` and `erase-docs` remove the rows whose key has the given values — see [`delete-docs`](#delete-docs).
+
+  Previously they removed the rows whose `:xt/id` had the given values, whatever the table was keyed on.
+
+</details>
+
 Transactions in XTDB are submitted to the [log](/ops/config/log), to be processed asynchronously.
 They each consist of an array of [operations](#tx-ops).
 
@@ -35,10 +65,14 @@ Upserts documents into the given table, optionally during the given valid time p
 
  ;; -- required
  ;; documents to submit (variadic, 0..n)
- ;; * each must contain `:xt/id`
+ ;; * each must contain the table's primary key -
+ ;;   `:xt/id` unless the table declares another
  & <docs>
  ]
 ```
+
+A document without the table's [primary key](/reference/main/sql/schema#primary-keys-v221) is an `xtdb.tx/missing-id` error.
+For a table that has been written to, `submit-tx` throws it; for one that hasn't, whose key a transaction ahead of this one may still declare, the transaction aborts with it.
 
 #### Examples
 
@@ -93,10 +127,14 @@ Documents are currently merged at the granularity of individual keys - e.g. if a
 
  ;; -- required
  ;; documents to submit (variadic, 0..n)
- ;; * each must contain `:xt/id`
+ ;; * each must contain the table's primary key -
+ ;;   `:xt/id` unless the table declares another
  & <docs>
  ]
 ```
+
+Each document patches the row its [primary key](/reference/main/sql/schema#primary-keys-v221) identifies.
+A document without the key is an `xtdb.tx/missing-id` error, raised as for [`put-docs`](#put-docs): at submit for a table that has been written to, otherwise by aborting the transaction.
 
 #### Examples
 
@@ -131,6 +169,9 @@ Documents are currently merged at the granularity of individual keys - e.g. if a
 Deletes documents from the given table, optionally during the given valid time period.
 The default valid time behaviour is the same as [put](#put-docs), above.
 
+Each document is identified by its value of the table's [primary key](/reference/main/sql/schema#primary-keys-v221) — its `:xt/id`, unless the table declares another key.
+A value of a type that can't key a row (see [ID types](/reference/main/sql/txs#id-types)) fails at submit with `xtdb.tx/invalid-eid`.
+
 ``` clojure
 [:delete-docs
  ;; -- required
@@ -150,8 +191,8 @@ The default valid time behaviour is the same as [put](#put-docs), above.
   }
 
  ;; -- required
- ;; document ids to delete (variadic, 0..n)
- & <ids>
+ ;; key values of the documents to delete (variadic, 0..n)
+ & <keys>
  ]
 ```
 
@@ -180,6 +221,7 @@ Examples:
 ### `erase-docs`
 
 Irrevocably erases documents from the given table (including through system time), for all valid-time.
+Each document is identified by its value of the table's key, as for [`delete-docs`](#delete-docs).
 
 ``` clojure
 [:erase-docs
@@ -188,8 +230,8 @@ Irrevocably erases documents from the given table (including through system time
  ;; table to erase documents from
  <table>
 
- ;; document ids to erase (variadic, 0..n)
- & <ids>
+ ;; key values of the documents to erase (variadic, 0..n)
+ & <keys>
  ]
 ```
 
