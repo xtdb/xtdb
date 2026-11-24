@@ -9,7 +9,6 @@ import org.junit.jupiter.api.Test
 import xtdb.Bytes
 import xtdb.arrow.IID_TYPE
 import xtdb.arrow.Relation
-import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorWriter
 import xtdb.trie.Bucketer
 import xtdb.arrow.VectorType.Companion.IID
@@ -59,7 +58,7 @@ class MultiIidSelectorTest {
             iids.writeUuid(Uuid.parse("90000000-0000-0000-0000-000000000000"))
             rel.endRow()
 
-            val result = selector.select(al, rel, emptyMap(), RelationReader.from(emptyList(), 0)).toSelection()
+            val result = selector.select(rel).toSelection()
             assertArrayEquals(IntArray(0), result, "empty iid set should match nothing")
         }
     }
@@ -73,7 +72,7 @@ class MultiIidSelectorTest {
 
         Relation(al).use { rel ->
             rel.vectorFor("_iid", IID_TYPE, false)
-            val result = selector.select(al, rel, emptyMap(), RelationReader.from(emptyList(), 0)).toSelection()
+            val result = selector.select(rel).toSelection()
             assertArrayEquals(IntArray(0), result, "empty relation should match nothing")
         }
     }
@@ -94,7 +93,7 @@ class MultiIidSelectorTest {
             iids.writeUuid(Uuid.parse("90000000-0000-0000-0000-000000000000"))
             rel.endRow()
 
-            val result = selector.select(al, rel, emptyMap(), RelationReader.from(emptyList(), 0)).toSelection()
+            val result = selector.select(rel).toSelection()
             assertArrayEquals(intArrayOf(1), result, "should match only the search UUID")
         }
     }
@@ -122,7 +121,7 @@ class MultiIidSelectorTest {
             iids.writeUuid(uuid3)
             rel.endRow()
 
-            val result = selector.select(al, rel, emptyMap(), RelationReader.from(emptyList(), 0)).toSelection()
+            val result = selector.select(rel).toSelection()
             assertArrayEquals(intArrayOf(1, 3, 4), result, "should match all three search UUIDs")
         }
     }
@@ -143,7 +142,7 @@ class MultiIidSelectorTest {
             iids.writeUuid(searchUuid)
             rel.endRow()
 
-            val result = selector.select(al, rel, emptyMap(), RelationReader.from(emptyList(), 0)).toSelection()
+            val result = selector.select(rel).toSelection()
             assertArrayEquals(intArrayOf(0, 1, 2), result, "should match all duplicate occurrences")
         }
     }
@@ -166,7 +165,7 @@ class MultiIidSelectorTest {
             iids.writeUuid(Uuid.parse("30000000-0000-0000-0000-000000000000"))
             rel.endRow()
 
-            val result = selector.select(al, rel, emptyMap(), RelationReader.from(emptyList(), 0)).toSelection()
+            val result = selector.select(rel).toSelection()
             assertArrayEquals(IntArray(0), result, "should match nothing when all IIDs are different")
         }
     }

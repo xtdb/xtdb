@@ -4,6 +4,7 @@
             [xtdb.expression :as expr]
             [xtdb.logical-plan :as lp]
             [xtdb.types :as types]
+            [xtdb.util :as util]
             [xtdb.vector.reader :as vr])
   (:import (xtdb.api ICursor)
            (xtdb.arrow RelationReader)
@@ -82,17 +83,18 @@
                                (fn [query-opts]
                                  (lp/with-tracing :apply-mark-join query-opts
                                    (fn [{:keys [allocator args] :as query-opts}]
-                                     (let [^ICursor dep-cursor (->dependent-cursor query-opts)]
+                                     (util/with-close-on-catch [projection (.open projection-spec allocator {} args)
+                                                                ^ICursor dep-cursor (->dependent-cursor query-opts)]
                                        (reify ICursor
                                          (getCursorType [_] "apply-mark-join")
                                          (getChildCursors [_] [dep-cursor])
 
                                          (tryAdvance [_ c]
                                            (.tryAdvance dep-cursor (fn [in-rel]
-                                                                     (with-open [match-vec (.project projection-spec allocator in-rel {} args)]
+                                                                     (with-open [match-vec (.project projection in-rel)]
                                                                        (.accept c (vr/rel-reader [match-vec]))))))
 
-                                         (close [_] (.close dep-cursor))))))))
+                                         (close [_] (util/close [projection dep-cursor]))))))))
                              ->dependent-cursor)]
 
                        (fn [{:keys [allocator] :as query-opts} independent-cursor]

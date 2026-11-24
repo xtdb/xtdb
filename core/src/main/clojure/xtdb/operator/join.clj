@@ -16,7 +16,7 @@
            (xtdb.api ICursor)
            (xtdb.arrow RelationReader VectorType)
            (xtdb.bloom BloomUtils)
-           (xtdb.operator ProjectionSpec)
+           (xtdb.operator ProjectionSpec$Factory)
            (xtdb.operator.join BuildSide BuildKeyFacts ComparatorFactory DiskHashJoin EveryRowMarkJoin JoinType JoinType$Mark JoinType$Mark$Spec$Compare JoinType$Mark$Spec$Exists JoinType$Mark$Spec$KeyedIn MemoryHashJoin)))
 
 (defmethod lp/ra-expr :cross-join [_]
@@ -299,8 +299,8 @@
 
 (defn- projection-specs->vec-types [projection-specs]
   (->> projection-specs
-       (into {} (map (juxt #(symbol (.getToName ^ProjectionSpec %))
-                           #(.getType ^ProjectionSpec %))))))
+       (into {} (map (juxt #(symbol (.getToName ^ProjectionSpec$Factory %))
+                           #(.getType ^ProjectionSpec$Factory %))))))
 
 (def ^:dynamic *disk-join-threshold-rows*
   (or (some-> (System/getenv "XTDB_JOIN_SPILL_THRESHOLD") parse-long)

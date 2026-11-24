@@ -2,12 +2,14 @@
   (:require [clojure.string :as str]
             [xtdb.error :as err]
             [xtdb.expression.macro :as macro]
+            [xtdb.expression.walk :as walk]
             [xtdb.serde :as serde]
             [xtdb.serde.types :as st]
             [xtdb.time :as time]
             [xtdb.types :as types]
             [xtdb.util :as util])
   (:import (clojure.lang IPersistentMap Keyword MapEntry)
+           (com.github.benmanes.caffeine.cache Cache Caffeine)
            (java.lang NumberFormatException)
            (java.math RoundingMode)
            (java.nio ByteBuffer)
@@ -20,7 +22,7 @@
            (org.apache.commons.codec.binary Hex)
            (xtdb.arrow ListValueReader RelationReader RowMask ValueBox ValueReader Vector VectorReader VectorType VectorType$Listy VectorType$Mono VectorType$Nothing VectorType$Poly VectorType$Struct)
            (xtdb.expression PgFormat)
-           (xtdb.operator ProjectionSpec SelectionSpec)
+           (xtdb.operator ProjectionSpec ProjectionSpec$Factory SelectionSpec SelectionSpec$Factory)
            (xtdb.pgwire PgTypes)
            xtdb.time.Interval
            (xtdb.util StringUtil)))
@@ -2609,44 +2611,73 @@
                         (symbol (.getName col))
                         (.getType col)))))))
 
-(defn- ->var-types [^RelationReader in-rel]
-  (->> in-rel
-       (into {} (map (fn [^VectorReader iv]
-                       [(symbol (.getName iv))
-                        (.getType iv)])))))
+(defn- ->var-syms [expr]
+  (->> (walk/expr-seq expr)
+       (into #{} (keep (fn [{:keys [op variable]}]
+                         (when (= op :variable) variable))))))
 
-(defn ->expression-projection-spec ^xtdb.operator.ProjectionSpec [col-name expr {:keys [var-types param-types]}]
+(defn- ->var-types [var-syms ^RelationReader in-rel]
+  (->> var-syms
+       (into {} (keep (fn [var-sym]
+                        (when-let [iv (.vectorForOrNull in-rel (str var-sym))]
+                          (MapEntry/create var-sym (.getType iv))))))))
+
+(defn- ->emit-cache ^Cache []
+  (-> (Caffeine/newBuilder)
+      (.maximumSize 16)
+      (.build)))
+
+(defn- emit-for-batch [^Cache emit-cache emit expr var-syms param-types in-rel]
+  (.get emit-cache {:var-types (->var-types var-syms in-rel)
+                    :param-types param-types
+                    :zone-id *default-tz*}
+        (fn [{:keys [var-types param-types]}]
+          (emit expr {:param-types param-types, :var-types var-types}))))
+
+(defn ->expression-projection-spec ^ProjectionSpec$Factory [col-name expr {:keys [var-types param-types]}]
   (let [;; HACK - this runs the analyser (we discard the emission) to get the widest possible out-type.
         widest-out-type (-> (emit-projection expr {:param-types param-types
                                                    :var-types var-types})
-                            :return-type)]
+                            :return-type)
+        var-syms (->var-syms expr)
+        emit-cache (->emit-cache)]
 
-    (reify ProjectionSpec
+    (reify ProjectionSpec$Factory
       (getToName [_] (str col-name))
       (getType [_] widest-out-type)
 
-      (project [_ allocator in-rel schema args]
-        (let [{:keys [return-type !projection-fn]} (emit-projection expr {:param-types (->param-types args)
-                                                                          :var-types (->var-types in-rel)})]
-          (util/with-close-on-catch [out-vec (Vector/open allocator (str col-name) return-type)]
-            (rethrowing-anomalies
-              (@!projection-fn in-rel schema args out-vec))
+      (open [_ al schema args]
+        (let [param-types (->param-types args)]
+          (reify ProjectionSpec
+            (project [_ in-rel]
+              (let [{:keys [return-type !projection-fn]} (emit-for-batch emit-cache emit-projection expr var-syms param-types in-rel)]
+                (util/with-close-on-catch [out-vec (Vector/open al (str col-name) return-type)]
+                  (rethrowing-anomalies
+                    (@!projection-fn in-rel schema args out-vec))
 
-            out-vec))))))
+                  out-vec)))
+
+            (close [_])))))))
 
 (defn- ->predicate-expr [expr]
   {:op :call, :f :boolean, :args [expr]})
 
-(defn ->expression-selection-spec ^SelectionSpec [expr {:keys [var-types param-types]}]
-  (let [expr (->predicate-expr expr)]
+(defn ->expression-selection-spec ^SelectionSpec$Factory [expr {:keys [var-types param-types]}]
+  (let [expr (->predicate-expr expr)
+        var-syms (->var-syms expr)
+        emit-cache (->emit-cache)]
     ;; analysed here as well as per batch, so that an expression the EE can't compile throws when the spec is built
     (emit-selection expr {:param-types param-types
                           :var-types var-types})
 
-    (reify SelectionSpec
-      (select [_ _al in-rel schema args]
-        (let [{:keys [!selection-fn]} (emit-selection expr {:param-types (->param-types args)
-                                                            :var-types (->var-types in-rel)})]
-          (RowMask/ofWords (rethrowing-anomalies
-                             (@!selection-fn in-rel schema args))
-                           (.getRowCount in-rel)))))))
+    (reify SelectionSpec$Factory
+      (open [_ _al schema args]
+        (let [param-types (->param-types args)]
+          (reify SelectionSpec
+            (select [_ in-rel]
+              (let [{:keys [!selection-fn]} (emit-for-batch emit-cache emit-selection expr var-syms param-types in-rel)]
+                (RowMask/ofWords (rethrowing-anomalies
+                                   (@!selection-fn in-rel schema args))
+                                 (.getRowCount in-rel))))
+
+            (close [_])))))))

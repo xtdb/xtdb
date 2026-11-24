@@ -40,10 +40,9 @@
     (letfn [(project [form]
               (let [input-types {:var-types {'a #xt/type :f64, 'b #xt/type :f64, 'd #xt/type :i64}, :param-types {}}
                     expr (expr/form->expr form input-types)]
-                (with-open [project-col (.project (expr/->expression-projection-spec "c" expr input-types)
-                                                  tu/*allocator* in-rel
-                                                  {}
-                                                  vw/empty-args)]
+                (with-open [projection (.open (expr/->expression-projection-spec "c" expr input-types)
+                                              tu/*allocator* {} vw/empty-args)
+                            project-col (.project projection in-rel)]
                   (.getAsList project-col))))]
 
       (t/is (= (mapv (comp double +) (range 1000) (range 1000))
@@ -84,8 +83,9 @@
                                                      (into {} (map (fn [^VectorReader col]
                                                                      [(symbol (.getName col))
                                                                       (.getType col)]))))}]
-                  (.getCardinality (.select (expr/->expression-selection-spec (expr/form->expr form input-types) input-types)
-                                            tu/*allocator* in-rel {} arg-rel)))))]
+                  (with-open [selection-spec (-> (expr/->expression-selection-spec (expr/form->expr form input-types) input-types)
+                                                 (.open tu/*allocator* {} arg-rel))]
+                    (.getCardinality (.select selection-spec in-rel))))))]
 
       (t/testing "selector"
         (t/is (= 500 (select-relation '(>= a 500) '{a #xt/type :f64} {})))
@@ -96,25 +96,75 @@
         (t/is (= 500 (select-relation '(>= e ?e) '{e #xt/type :utf8} {:e "0500"})))))))
 
 (t/deftest nil-selection-doesnt-yield-the-row
-  (t/is (= 0
-           (-> (.select (expr/->expression-selection-spec (expr/form->expr '(and true nil) {}) {})
-                        tu/*allocator* (vr/rel-reader [] 1) {} vw/empty-args)
-               (.toSelection)
-               (alength)))))
+  (with-open [selection-spec (-> (expr/->expression-selection-spec (expr/form->expr '(and true nil) {}) {})
+                                 (.open tu/*allocator* {} vw/empty-args))]
+    (t/is (= 0
+             (-> (.select selection-spec (vr/rel-reader [] 1))
+                 (.toSelection)
+                 (alength))))))
 
 (t/deftest selection-masks-exactly-the-selected-rows-across-word-boundaries
   (let [input-types {:var-types '{sel #xt/type [:? :bool]}}
         expr (expr/form->expr 'sel input-types)
-        selection-spec (expr/->expression-selection-spec expr input-types)]
-    (doseq [row-count [0 1 63 64 65 127 128 130]]
-      (let [sels (for [idx (range row-count)]
-                   (when-not (= 5 (mod idx 7))
-                     (zero? (mod idx 3))))
-            expected (keep-indexed (fn [idx sel] (when sel idx)) sels)]
-        (with-open [in-rel (tu/open-rel {:sel sels})]
-          (let [mask (.select selection-spec tu/*allocator* in-rel {} vw/empty-args)]
-            (t/is (= row-count (.getRowCount mask)) (str row-count " rows"))
-            (t/is (= expected (vec (.toSelection mask))) (str row-count " rows"))))))))
+        selection-spec-factory (expr/->expression-selection-spec expr input-types)]
+    (with-open [selection-spec (.open selection-spec-factory tu/*allocator* {} vw/empty-args)]
+      (doseq [row-count [0 1 63 64 65 127 128 130]]
+        (let [sels (for [idx (range row-count)]
+                     (when-not (= 5 (mod idx 7))
+                       (zero? (mod idx 3))))
+              expected (keep-indexed (fn [idx sel] (when sel idx)) sels)]
+          (with-open [in-rel (tu/open-rel {:sel sels})]
+            (let [mask (.select selection-spec in-rel)]
+              (t/is (= row-count (.getRowCount mask)) (str row-count " rows"))
+              (t/is (= expected (vec (.toSelection mask))) (str row-count " rows")))))))))
+
+(t/deftest an-opened-selection-spec-follows-each-batchs-column-types
+  (let [input-types {:var-types '{a #xt/type :i64}}
+        expr (expr/form->expr '(> a 1) input-types)]
+    (with-open [selection-spec (-> (expr/->expression-selection-spec expr input-types)
+                                   (.open tu/*allocator* {} vw/empty-args))]
+      (doseq [[batch expected] [[{:a [1 2 3]} [1 2]]
+                                [{:a [1.5 0.5 2.5]} [0 2]]
+                                [{:a [3 nil 0]} [0]]
+                                [{:a [0 5], :b ["x" "y"]} [1]]
+                                [{:a [0 5], :b [1.5 2.5]} [1]]
+                                [{:a [2 0]} [0]]]]
+        (with-open [in-rel (tu/open-rel batch)]
+          (t/is (= expected (vec (.toSelection (.select selection-spec in-rel))))
+                (pr-str batch)))))))
+
+(t/deftest an-opened-projection-spec-follows-each-batchs-column-types
+  (let [input-types {:var-types '{a #xt/type :i64}}
+        expr (expr/form->expr '(+ a 1) input-types)]
+    (with-open [projection (-> (expr/->expression-projection-spec "out" expr input-types)
+                               (.open tu/*allocator* {} vw/empty-args))]
+      (doseq [[batch expected] [[{:a [1 2]} [2 3]]
+                                [{:a [1.5 0.5]} [2.5 1.5]]
+                                [{:a [3 nil]} [4 nil]]
+                                [{:a [4]} [5]]]]
+        (with-open [in-rel (tu/open-rel batch)
+                    out-vec (.project projection in-rel)]
+          (t/is (= expected (.getAsList out-vec))
+                (pr-str batch)))))))
+
+(t/deftest an-expression-spec-recompiles-only-when-a-column-it-reads-changes-type
+  (let [expr (expr/form->expr '(+ a c) {:var-types '{a #xt/type :i64, c #xt/type :i64}})
+        var-syms (#'expr/->var-syms expr)
+        emit-cache (#'expr/->emit-cache)
+        !compiled-for (atom [])
+        emit (fn [_expr {:keys [var-types]}]
+               (swap! !compiled-for conj var-types))]
+    (doseq [batch [{:a [1], :c [1]}
+                   {:a [1], :c [1], :b ["x"]}
+                   {:a [1], :c [1], :b [1.5]}
+                   {:a [1.5], :c [1], :b [1.5]}
+                   {:a [1.5], :c [1]}]]
+      (with-open [in-rel (tu/open-rel batch)]
+        (#'expr/emit-for-batch emit-cache emit expr var-syms {} in-rel)))
+
+    (t/is (= '[{a #xt/type :i64, c #xt/type :i64}
+               {a #xt/type :f64, c #xt/type :i64}]
+             @!compiled-for))))
 
 (defn project
   "Use to test an expression on some example documents. See also, project1.
@@ -364,8 +414,9 @@
                                            #(.getType ^VectorReader %)))))
         input-types {:var-types var-types, :param-types {}}
         expr (expr/form->expr form input-types)]
-    (with-open [out-ivec (.project (expr/->expression-projection-spec "out" expr input-types)
-                                   tu/*allocator* rel {} vw/empty-args)]
+    (with-open [projection (.open (expr/->expression-projection-spec "out" expr input-types)
+                                  tu/*allocator* {} vw/empty-args)
+                out-ivec (.project projection rel)]
       {:res (.toList out-ivec #xt/key-fn :kebab-case-keyword)
        :res-type (.getType out-ivec)})))
 
@@ -1954,8 +2005,9 @@
                                       (.writeUndefined)
                                       (.writeUndefined))]
                                    2)
-              s (.project (ProjectionSpec$Star. "s" #xt/type [:struct {"a" :nothing}])
-                          tu/*allocator* inner {} vw/empty-args)
+              star (.open (ProjectionSpec$Star. "s" #xt/type [:struct {"a" :nothing}])
+                          tu/*allocator* {} vw/empty-args)
+              s (.project star inner)
               out (Vector/open tu/*allocator* "s" #xt/type [:struct {"a" :nothing}])]
 
     (t/is (= #xt/type [:struct {"a" :nothing}] (.getType s))

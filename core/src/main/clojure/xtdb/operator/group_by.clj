@@ -21,6 +21,7 @@
            (xtdb.arrow.agg AggregateSpec AggregateSpec$Factory Average Count GroupMapper GroupMapper$Mapper GroupMapper$Null RowCount StdDevPop StdDevSamp Sum VarWidthMinMax VariancePop VarianceSamp)
            (xtdb.expression.map IndexHasher RelationMapBuilder)
            xtdb.operator.SelectionSpec
+           xtdb.operator.SelectionSpec$Factory
            xtdb.operator.ExternalSorter
            xtdb.operator.distinct.DistinctRelationMap
            xtdb.types.LeastUpperBound))
@@ -573,17 +574,17 @@
     (util/close in-cursor)
     (util/close group-mapper)))
 
-(defn- wrap-filter [^AggregateSpec inner, ^SelectionSpec mask-spec, ^BufferAllocator allocator, schema, args]
+(defn- wrap-filter [^AggregateSpec inner, ^SelectionSpec mask-spec]
   (reify AggregateSpec
     ;; the incoming mask always sets every row - this is only ever applied outermost, so that
     ;; `COUNT(DISTINCT x) FILTER (...)` takes distinct values of the rows that passed the filter.
     (aggregate [_ in-rel group-mapping _mask]
-      (.aggregate inner in-rel group-mapping (.select mask-spec allocator in-rel schema args)))
+      (.aggregate inner in-rel group-mapping (.select mask-spec in-rel)))
 
     (openFinishedVector [_] (.openFinishedVector inner))
 
     Closeable
-    (close [_] (util/close inner))))
+    (close [_] (util/close [mask-spec inner]))))
 
 (defmethod lp/emit-expr :group-by [{:keys [opts relation]} {:keys [param-types] :as args}]
   (let [{:keys [columns]} opts
@@ -644,12 +645,13 @@
 
            :->cursor (fn [{:keys [allocator args schema]} in-cursor]
                        (util/with-close-on-catch [agg-specs (LinkedList.)]
-                         (doseq [{:keys [^AggregateSpec$Factory factory mask-spec]} agg-infos]
-                           (let [built (.build factory allocator (or args vw/empty-args))]
-                             (.add agg-specs
-                                   (if mask-spec
-                                     (wrap-filter built mask-spec allocator schema (or args vw/empty-args))
-                                     built))))
+                         (doseq [{:keys [^AggregateSpec$Factory factory ^SelectionSpec$Factory mask-spec]} agg-infos]
+                           (let [args (or args vw/empty-args)]
+                             (util/with-close-on-catch [built (.build factory allocator args)]
+                               (.add agg-specs
+                                     (if mask-spec
+                                       (wrap-filter built (.open mask-spec allocator schema args))
+                                       built)))))
 
                          (GroupByCursor. allocator in-cursor
                                          (->group-mapper allocator (select-keys vec-types group-cols))

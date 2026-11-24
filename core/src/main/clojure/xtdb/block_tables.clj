@@ -16,7 +16,7 @@
            (xtdb.catalog TableCatalog)
            (xtdb.database Database)
            (xtdb.log.proto TrieDetails)
-           (xtdb.operator SelectionSpec)
+           (xtdb.operator SelectionSpec SelectionSpec$Factory)
            (xtdb.storage BufferPool)
            (xtdb.api TableRef)
            (xtdb.time InstantUtil)
@@ -78,11 +78,11 @@
       (persistent! acc))))
 
 (defn- emit-batch
-  [^BufferAllocator allocator derived-table-schema col-names col-preds schema args rows c]
+  [^BufferAllocator allocator derived-table-schema col-names col-preds rows c]
   (util/with-open [out-rel (Relation. allocator ^Map (update-keys derived-table-schema str))]
     (.writeRows out-rel (into-array java.util.Map rows))
     (let [out-rel-view (reduce (fn [^RelationReader rel ^SelectionSpec col-pred]
-                                 (.select rel (.toSelection (.select col-pred allocator rel schema args))))
+                                 (.select rel (.toSelection (.select col-pred rel))))
                                (-> out-rel
                                    (->> (filter (comp (set col-names) #(.getName ^VectorReader %))))
                                    (vr/rel-reader (.getRowCount out-rel))
@@ -141,7 +141,8 @@
 
     (let [[^long from-idx ^long to-idx] (range-bounds->from-to bounds)
           ^BufferPool buffer-pool (.getBufferPool db)
-          idx (volatile! from-idx)]
+          idx (volatile! from-idx)
+          col-preds (util/safe-update-vals col-preds #(.open ^SelectionSpec$Factory % allocator schema args))]
 
       (reify ICursor
         (getCursorType [_] "block-table")
@@ -156,9 +157,9 @@
                              (do (vswap! idx (fn [^long v] (+ v i)))
                                  (persistent! acc))))]
                (when (seq batch)
-                 (emit-batch allocator derived-table-schema col-names col-preds schema args batch c)
+                 (emit-batch allocator derived-table-schema col-names col-preds batch c)
                  true)))))
-        (close [_])))))
+        (close [_] (util/close col-preds))))))
 
 ;;; xt.table_block_files
 
@@ -205,7 +206,8 @@
           rows (if table-block
                  [(table-block->row (str table-name) block-idx table-block)]
                  [])
-          done? (volatile! false)]
+          done? (volatile! false)
+          col-preds (util/safe-update-vals col-preds #(.open ^SelectionSpec$Factory % allocator schema args))]
 
       (reify ICursor
         (getCursorType [_] "table-block-file")
@@ -214,9 +216,9 @@
           (boolean
            (when (and (seq rows) (not @done?))
              (vreset! done? true)
-             (emit-batch allocator derived-table-schema col-names col-preds schema args rows c)
+             (emit-batch allocator derived-table-schema col-names col-preds rows c)
              true)))
-        (close [_])))))
+        (close [_] (util/close col-preds))))))
 
 ;;; xt.table_block_file_tries
 
@@ -260,7 +262,8 @@
           rows (if table-block
                  (trie-details->rows (str table-name) block-idx-hex (:partitions table-block))
                  [])
-          iter (.iterator ^Iterable rows)]
+          iter (.iterator ^Iterable rows)
+          col-preds (util/safe-update-vals col-preds #(.open ^SelectionSpec$Factory % allocator schema args))]
 
       (reify ICursor
         (getCursorType [_] "table-block-file-tries")
@@ -269,9 +272,9 @@
           (boolean
            (when (.hasNext iter)
              (let [batch (take-batch iter batch-size)]
-               (emit-batch allocator derived-table-schema col-names col-preds schema args batch c)
+               (emit-batch allocator derived-table-schema col-names col-preds batch c)
                true))))
-        (close [_])))))
+        (close [_] (util/close col-preds))))))
 
 ;;; dispatch
 

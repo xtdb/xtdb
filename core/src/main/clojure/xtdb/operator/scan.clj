@@ -29,6 +29,7 @@
            (xtdb.indexer DatabaseSnapshot Snapshot Snapshot$Source TableSnapshot)
            (xtdb.database PartitionStorage)
            (xtdb.metadata MetadataPredicate PageMetadata)
+           (xtdb.operator SelectionSpec$Factory)
            (xtdb.operator.scan MultiIidSelector ScanCursor ScanMetrics SingleIidSelector)
            (xtdb.query IQuerySource$QueryDatabase)
            (xtdb.segment BufferPoolSegment MergePlanner)
@@ -79,10 +80,11 @@
                           default)
                :now (-> (expr/current-time) (time/instant->micros))
                :expr (let [param-types (expr/->param-types args)
-                           projection (expr/->expression-projection-spec "_temporal_expression"
-                                                                         (expr/form->expr (list 'cast_tstz arg) {:param-types param-types})
-                                                                         {:param-types param-types})]
-                       (util/with-open [res (.project projection alloc vw/empty-args {} args)]
+                           projection-spec (expr/->expression-projection-spec "_temporal_expression"
+                                                                              (expr/form->expr (list 'cast_tstz arg) {:param-types param-types})
+                                                                              {:param-types param-types})]
+                       (util/with-open [projection (.open projection-spec alloc {} args)
+                                        res (.project projection vw/empty-args)]
                          (if-let [inst-like (.getObject res 0)]
                            (do
                              (time/expect-instant inst-like)
@@ -206,7 +208,7 @@
   "Everything partition-specific arrives as an argument, so this knows nothing about which partition
    it's been given or how many exist."
   ^ICursor [{:keys [allocator ^TableRef table col-names col-preds iid-set metadata-pred scan-opts
-                    schema args ^ScanMetrics metrics]}
+                    ^ScanMetrics metrics]}
             ^PartitionStorage storage ^Snapshot snapshot ^TemporalBounds temporal-bounds]
 
   (let [metadata-mgr (.getMetadataManager storage)
@@ -240,7 +242,6 @@
           (ScanCursor. allocator (vec col-names) col-preds
                        temporal-bounds (boolean (:clamp-valid-time? scan-opts))
                        !segments (.iterator ^Iterable merge-tasks)
-                       schema args
                        metrics))))))
 
 (defn scan-vec-types [snaps, scan-cols]
@@ -344,11 +345,10 @@
                              (let [iid-set (or (selects->iid-set selects args)
                                                (get pushdown-iids '_iid) ; usually patch
                                                (get pushdown-iids '_id)) ; any other foreign-key join
-                                   col-preds (cond-> col-preds
-                                               (not (empty? iid-set))
-                                               (assoc "_iid" (if (= 1 (count iid-set))
-                                                               (SingleIidSelector. (first iid-set))
-                                                               (MultiIidSelector. iid-set))))
+                                   iid-selector (when-not (empty? iid-set)
+                                                  (if (= 1 (count iid-set))
+                                                    (SingleIidSelector. (first iid-set))
+                                                    (MultiIidSelector. iid-set)))
                                    metadata-pred (expr.meta/->metadata-selector allocator (cons 'and metadata-args) vec-types args)
                                    metadata-pred (reify MetadataPredicate
                                                    (build [_ page-metadata]
@@ -377,11 +377,13 @@
                                    temporal-bounds (->temporal-bounds allocator args scan-opts
                                                                       (get-in system-time-basis [db-name 0]))]
 
-                               (->partition-scan-cursor
-                                {:allocator allocator, :table table, :col-names col-names,
-                                 :col-preds col-preds, :iid-set iid-set, :metadata-pred metadata-pred,
-                                 :scan-opts scan-opts, :schema schema, :args args, :metrics metrics}
-                                storage snapshot temporal-bounds)))))))}))))
+                               (util/with-close-on-catch [col-preds (cond-> (util/safe-update-vals col-preds #(.open ^SelectionSpec$Factory % allocator schema args))
+                                                                      iid-selector (assoc "_iid" iid-selector))]
+                                 (->partition-scan-cursor
+                                  {:allocator allocator, :table table, :col-names col-names,
+                                   :col-preds col-preds, :iid-set iid-set, :metadata-pred metadata-pred,
+                                   :scan-opts scan-opts, :metrics metrics}
+                                  storage snapshot temporal-bounds))))))))}))))
 
 (defmethod lp/emit-expr :scan [scan-expr {:keys [^IScanEmitter scan-emitter dbs scan-vec-types, param-types]}]
   (.emitScan scan-emitter dbs scan-expr scan-vec-types param-types))

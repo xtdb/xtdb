@@ -161,6 +161,22 @@
              xs)
       (persistent! !res))))
 
+(defn safe-update-vals
+  "Like `update-vals`, but closes the values already built if `f` throws."
+  [m f]
+  (persistent!
+   (reduce-kv (fn [acc k v]
+                (try
+                  (assoc! acc k (f v))
+                  (catch Throwable t
+                    (try
+                      (close (persistent! acc))
+                      (catch Throwable s
+                        (.addSuppressed t s)))
+                    (throw t))))
+              (transient {})
+              m)))
+
 (defn uuid->bytes ^bytes [^UUID uuid]
   (let [bb (doto (ByteBuffer/allocate 16)
              (.putLong (.getMostSignificantBits uuid))

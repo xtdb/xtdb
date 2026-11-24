@@ -27,5 +27,5 @@
            :explain {:predicate (pr-str predicate)}
            :vec-types inner-vec-types
            :->cursor (fn [{:keys [allocator args schema]} in-cursor]
-                       (-> (SelectCursor. allocator in-cursor selector schema args)
+                       (-> (SelectCursor. allocator in-cursor (.open selector allocator schema args))
                            (coalesce/->coalescing-cursor allocator)))})))))
