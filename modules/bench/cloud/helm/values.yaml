@@ -63,7 +63,7 @@ xtdbConfig:
   # Core environment variables
   kafkaBootstrapServers: xtdb-benchmark-kafka.cloud-benchmark.svc.cluster.local:9092
   logTopic: xtdb-log
-  jdkOptions: "-Xmx3000m -Xms3000m -XX:MaxDirectMemorySize=5000m -XX:MaxMetaspaceSize=500m --enable-native-access=ALL-UNNAMED -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/dumps -XX:+ExitOnOutOfMemoryError"
+  jdkOptions: "-Xmx10g -Xms10g -XX:MaxDirectMemorySize=10g -XX:MaxMetaspaceSize=500m --enable-native-access=ALL-UNNAMED -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/dumps -XX:+ExitOnOutOfMemoryError"
   loggingLevel: info
   reeIids: true
   withinFileRecencyBranching: true
@@ -77,8 +77,8 @@ dumpUpload:
   # The sidecar installs nothing; `az` peaks around 150Mi
   resources:
     requests:
-      memory: "256Mi"
-      cpu: "50m"
+      memory: "768Mi"
+      cpu: "200m"
     limits:
       memory: "768Mi"
       cpu: "200m"
@@ -112,12 +112,12 @@ git:
 
 resources:
   limits:
-    cpu: "2000m"
-    memory: "10G"
+    cpu: "7"
+    memory: "24G"
     ephemeral-storage: 180Gi
   requests:
-    cpu: "1750m"
-    memory: "10G"
+    cpu: "7"
+    memory: "24G"
     ephemeral-storage: 180Gi
 
 # Kafka deployment using official apache/kafka image

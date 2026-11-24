@@ -61,8 +61,10 @@ spec:
         resources:
           requests:
             memory: "256Mi"
+            cpu: "100m"
           limits:
             memory: "256Mi"
+            cpu: "100m"
       containers:
         - name: xtdb-node
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
