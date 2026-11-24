@@ -167,6 +167,20 @@ class Database(
         (partitions + listOf(logs, allocator)).closeAll()
     }
 
+    // Only tables this snapshot holds: whatever fixes an unknown table's key may still be ahead of this tx in the log,
+    // so the indexer checks those puts.
+    private fun requireKnownKeys(ops: List<TxOp>) {
+        val puts = ops.filterIsInstance<TxOp.PutDocs>().takeIf { it.isNotEmpty() } ?: return
+
+        openSnapshot(currentBasis()).use { snap ->
+            val tables = snap.tableInfo()
+            for (put in puts) {
+                val table = TableRef(put.schema, put.table)
+                if (table in tables) snap.primaryKey(table).keyVector(put.docs)
+            }
+        }
+    }
+
     fun submitTxBlocking(ops: List<TxOp>, opts: TxOpts): Xtdb.SubmittedTx {
         if (config.externalSource != null)
             throw Incorrect(
@@ -184,6 +198,9 @@ class Database(
             user = opts.user,
             userMetadata = opts.userMetadata?.let { serializeUserMetadata(allocator, it) }
         )
+
+        requireKnownKeys(ops)
+
         val meta = sourceLog.appendMessageBlocking(txMsg)
         return Xtdb.SubmittedTx(meta.msgId)
     }

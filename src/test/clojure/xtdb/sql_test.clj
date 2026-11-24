@@ -2694,7 +2694,7 @@ SELECT PERIOD(DATE '2022-12-31', TIMESTAMP '2023-01-02') CONTAINS (DATE '2023-01
 
   (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo RECORDS {_id: 1, x: 2}"]])
 
-  (t/is (anomalous? [:incorrect :missing-id]
+  (t/is (anomalous? [:incorrect :xtdb.tx/missing-id]
                     (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo RECORDS {id: 1, x: 2}"]])))
 
   (t/is (= [{:x 2, :xt/id 1}]
@@ -2713,7 +2713,7 @@ SELECT PERIOD(DATE '2022-12-31', TIMESTAMP '2023-01-02') CONTAINS (DATE '2023-01
   (t/is (= [{:xt/id 2, :x 3} {:xt/id 3, :x 4.0} {:xt/id 4, :x 5} {:xt/id 5, :x 6.0} {:xt/id 7, :x "8"}]
            (xt/q tu/*node* "SELECT * FROM bar ORDER BY _id")))
 
-  (t/is (anomalous? [:incorrect :missing-id]
+  (t/is (anomalous? [:incorrect :xtdb.tx/missing-id]
                     (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo RECORDS ?"
                                                [{:id 2, :x 3}]]]))))
 

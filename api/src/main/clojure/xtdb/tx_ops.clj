@@ -45,8 +45,7 @@
   (when-not (map? doc)
     (throw (err/incorrect :xtdb.tx/expected-doc "expected doc map" {:doc doc})))
 
-  (expect-eid (or (:xt/id doc) (get doc "_id")
-                  (throw (err/incorrect :missing-id "expected :xt/id or \"_id\" in doc" {:doc doc}))))
+  (some-> (or (:xt/id doc) (get doc "_id")) expect-eid)
 
   doc)
 

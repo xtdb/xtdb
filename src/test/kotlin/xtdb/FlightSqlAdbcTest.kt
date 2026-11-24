@@ -1493,6 +1493,21 @@ class FlightSqlAdbcTest {
     }
 
     @Test
+    fun `test FlightSQL bulk ingest without _id is an invalid argument`() {
+        val schema = Schema(listOf(Field("n", FieldType.notNullable(Types.MinorType.BIGINT.type), null)))
+        VectorSchemaRoot.create(schema, al).use { root ->
+            (root.getVector("n") as BigIntVector).setSafe(0, 1L)
+            root.rowCount = 1
+
+            val ex = assertThrows(FlightRuntimeException::class.java) {
+                fsqlClient.executeIngest(root, ingestOpts("users"), *emptyCallOpts)
+            }
+            assertEquals(CallStatus.INVALID_ARGUMENT.code(), ex.status().code())
+            assertTrue(ex.message?.contains("missing '_id'") == true, "got: ${ex.message}")
+        }
+    }
+
+    @Test
     fun `test FlightSQL bulk ingest rejects per-call catalog override`() {
         assertIngestRejected(ingestOpts("users", catalog = "some_other_catalog"), "catalog")
     }

@@ -115,7 +115,7 @@ See [Bulk ingest](/adbc/reference#bulk-ingest) in the reference for the full mod
 ## Error handling
 
 Catch `adbc_driver_flightsql.DatabaseError` (a `ProgrammingError` in the ADBC DBAPI sense) and read the gRPC status message from it directly.
-Rejected modes return a descriptive `INVALID_ARGUMENT`; some other failures (a missing `_id`) are not yet mapped and surface as `INTERNAL`, with the cause still in the message.
+Rejected modes and rows missing `_id` return a descriptive `INVALID_ARGUMENT`.
 
 ```python
 import pyarrow as pa
@@ -137,8 +137,7 @@ with flight_sql.connect("grpc://localhost:3000") as conn:
             # "Ingest failed: INVALID_ARGUMENT: ingest mode 'replace' is not supported …"
 
         try:
-            # Missing _id column. Currently surfaces as INTERNAL, not
-            # INVALID_ARGUMENT (see the reference's error-mapping note).
+            # Missing _id column: INVALID_ARGUMENT.
             no_id = pa.table({"name": ["Bob"]})
             cur.adbc_ingest("users", no_id, mode="create_append")
         except DatabaseError as e:

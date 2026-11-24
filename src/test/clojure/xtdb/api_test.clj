@@ -27,10 +27,6 @@
                     (-> (xt/submit-tx *conn* [[:pot :docs {:xt/id :foo}]])
                         (util/rethrowing-cause))))
 
-  (t/is (anomalous? [:incorrect :missing-id]
-                    (-> (xt/submit-tx *conn* [[:put-docs :docs {}]])
-                        (util/rethrowing-cause))))
-
   (t/is (anomalous? [:incorrect :xtdb/date-out-of-range]
                     (-> (xt/submit-tx *conn* [[:put-docs :docs {:xt/id 1, :d LocalDate/MAX}]])
                         (util/rethrowing-cause)))))
@@ -427,7 +423,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
   (t/is (anomalous? [:unsupported :xtdb.sql/recursive-ctes]
                     (xt/q *conn* "WITH RECURSIVE r (n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM r) SELECT * FROM r")))
 
-  (t/is (anomalous? [:incorrect :missing-id]
+  (t/is (anomalous? [:incorrect :xtdb.tx/missing-id]
                     (xt/execute-tx *conn* [[:sql "INSERT INTO docs (foo) VALUES (1)"]])))
 
   (t/is (anomalous? [:conflict :xtdb/assert-failed]

@@ -121,7 +121,7 @@ internal class SourceLogTxIndexer(
                 iidRdr.select(iidsRdr.getListStartIndex(opIdx), docCount).withName("_iid")
             } else {
                 val pkCol = liveTable.primaryKey.column
-                docRdr.vectorFor(pkCol).select(docStartIdx, docCount).withName(pkCol)
+                docRdr.vectorForOrNull(pkCol)?.select(docStartIdx, docCount)?.withName(pkCol)
             }
 
             val rowVfCol = docRdr.vectorForOrNull("_valid_from")

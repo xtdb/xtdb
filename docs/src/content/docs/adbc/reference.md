@@ -6,6 +6,12 @@ description: The ADBC surface XTDB supports, in-process and over FlightSQL, with
 <details>
 <summary>Changelog (last updated v2.2.1)</summary>
 
+v2.2.1: a bulk ingest with rows missing `_id` is an `INVALID_ARGUMENT`
+
+: See [Bulk ingest](#bulk-ingest).
+
+  Previously it surfaced as gRPC `INTERNAL`.
+
 v2.2.1: DML and `SET` run when a FlightSQL client sends them as a query
 
 : The Python dbapi's `cursor.execute` and an ad-hoc `execute` from any ADBC driver run them, answering an empty result — see [Statements](#statements).
@@ -154,7 +160,7 @@ Further constraints:
 - A temporal `_valid_from` / `_valid_to` column must be a `timestamp`, not a `date`.
 - A per-call catalog override is rejected (the connection-scoped catalog is the only source of truth); a per-call schema override is honoured, defaulting to `public`.
 
-Mode rejections return a descriptive gRPC `INVALID_ARGUMENT`. Other ingest-time failures are not yet uniformly mapped: a missing `_id` surfaces as gRPC `INTERNAL`, so match on the message, not the status code, until that mapping is tightened.
+Mode rejections and rows missing `_id` return a descriptive gRPC `INVALID_ARGUMENT`.
 
 ## Transactions
 

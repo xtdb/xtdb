@@ -2,6 +2,19 @@
 title: XTQL Transactions (Clojure)
 ---
 
+<details>
+<summary>Changelog (last updated v2.2.1)</summary>
+
+v2.2.1: a `put-docs` into a new table without `:xt/id` aborts its transaction
+
+: A `put-docs` into a table the node already holds fails at submit; into a new table, the transaction aborts with `xtdb.tx/missing-id` — see [`put-docs`](#put-docs).
+
+  Previously every such document failed at submit, with the error code `missing-id`.
+
+  A client of `submit-tx` putting into a new table no longer sees the error when it submits: check the transaction's outcome, or use `execute-tx`.
+
+</details>
+
 Transactions in XTDB are submitted to the [log](/ops/config/log), to be processed asynchronously.
 They each consist of an array of [operations](#tx-ops).
 
@@ -39,6 +52,9 @@ Upserts documents into the given table, optionally during the given valid time p
  & <docs>
  ]
 ```
+
+A document without `:xt/id` is an `xtdb.tx/missing-id` error.
+For a table the node already holds, `submit-tx` throws it; for a new table, the transaction aborts with it.
 
 #### Examples
 

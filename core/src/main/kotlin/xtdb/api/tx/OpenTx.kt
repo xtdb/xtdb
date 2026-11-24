@@ -516,7 +516,8 @@ class OpenTx
         /**
          * Batch put: writes every row in [rel], content from `doc`.
          *
-         * - The relation MUST contain either an `_iid` column or the table's [primaryKey] column.
+         * - The relation MUST contain either an `_iid` column or the table's [primaryKey] column, the latter with a value
+         *   in every row - otherwise `xtdb.tx/missing-id`.
          * - Per-row valid times come from the rel's `_valid_from` / `_valid_to` columns when present and non-null;
          *   otherwise the [defaultValidFromMicros] / [defaultValidToMicros] defaults apply.
          *
@@ -534,7 +535,7 @@ class OpenTx
             if (iidRdr != null) {
                 iidVec.append(iidRdr)
             } else {
-                val idRdr = rel[primaryKey.column]
+                val idRdr = primaryKey.keyVector(rel)
 
                 repeat(rowCount) { idx -> iidVec.writeBytes(idRdr.getObject(idx).asIid) }
             }
