@@ -109,8 +109,7 @@ class ScanCursor(
     }
 
     override fun close() {
-        bufferedRels.apply { closeAll(); clear() }
+        (bufferedRels + ownedSegments).closeAll()
         bufferedRels.clear()
-        ownedSegments.closeAll()
     }
 }
