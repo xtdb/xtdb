@@ -40,8 +40,10 @@
   (xt/execute-tx tu/*node* ["INSERT INTO t (doc, b) VALUES (1, 'x')"])
   (xt/execute-tx tu/*node* [[:put-docs :t {:doc 2, :b "y"}]])
   (xt/execute-tx tu/*node* ["UPDATE t SET b = 'z' WHERE doc = 1"])
+  (xt/execute-tx tu/*node* [[:patch-docs :t {:doc 2, :c "v"}]])
+  (xt/execute-tx tu/*node* ["PATCH INTO t RECORDS {doc: 1, c: 'w'}"])
 
-  (t/is (= [{:doc 1, :b "z"} {:doc 2, :b "y"}] (xt/q tu/*node* "SELECT doc, b FROM t ORDER BY doc"))))
+  (t/is (= [{:doc 1, :b "z", :c "w"} {:doc 2, :b "y", :c "v"}] (xt/q tu/*node* "SELECT doc, b, c FROM t ORDER BY doc"))))
 
 (t/deftest a-key-changes-only-until-the-table-is-written-to
   (xt/execute-tx tu/*node* ["CREATE TABLE t (a PRIMARY KEY)"])
@@ -131,6 +133,43 @@
 
   (t/is (anomalous? [:incorrect :xtdb/invalid-id]
                     (xt/submit-tx tu/*node* [[:put-docs :t {:xt/id {:x 1}}]]))
+        "at submit, once the key is fixed"))
+
+(t/deftest patch-docs-patches-the-row-its-key-identifies
+  (xt/execute-tx tu/*node* ["CREATE TABLE t (a PRIMARY KEY, b, c)"])
+  (xt/execute-tx tu/*node* [[:put-docs :t {:a 1, :b "x", :xt/id "one"} {:a 2, :b "y"}]])
+  (xt/execute-tx tu/*node* [[:patch-docs :t {:a 1, :c "z", :xt/id "uno"}]
+                            [:patch-docs :t {:a 2, :c "v"} {:a 3, :c "w", :xt/id #xt/date "2020-01-01"}]])
+
+  (t/is (= [{:a 1, :b "x", :c "z", :xt/id "uno"} {:a 2, :b "y", :c "v"} {:a 3, :c "w", :xt/id #xt/date "2020-01-01"}]
+           (xt/q tu/*node* "SELECT a, b, c, _id FROM t ORDER BY a"))))
+
+(t/deftest sql-patch-patches-the-row-its-key-identifies
+  (xt/execute-tx tu/*node* ["CREATE TABLE t (a PRIMARY KEY, b, c)"])
+  (xt/execute-tx tu/*node* ["INSERT INTO t (a, b) VALUES (1, 'x'), (2, 'y')"])
+  (xt/execute-tx tu/*node* ["PATCH INTO t RECORDS {a: 1, c: 'z'}, {a: 3, c: 'w'}"])
+
+  (t/is (= [{:a 1, :b "x", :c "z"} {:a 2, :b "y"} {:a 3, :c "w"}]
+           (xt/q tu/*node* "SELECT a, b, c FROM t ORDER BY a"))))
+
+(t/deftest a-patch-keys-on-a-declaration-earlier-in-its-transaction
+  (xt/execute-tx tu/*node* ["CREATE TABLE t (a PRIMARY KEY, b)"
+                            [:put-docs :t {:a 1, :b "x"}]
+                            [:patch-docs :t {:a 1, :c "z"}]])
+
+  (t/is (= [{:a 1, :b "x", :c "z"}] (xt/q tu/*node* "SELECT a, b, c FROM t"))))
+
+(t/deftest a-patch-missing-the-key-is-rejected
+  (xt/execute-tx tu/*node* ["CREATE TABLE t (a PRIMARY KEY)"])
+
+  (t/is (anomalous? [:incorrect :xtdb.tx/missing-id]
+                    (xt/execute-tx tu/*node* [[:patch-docs :t {:xt/id 1}]]))
+        "by the indexer, while the table's key may yet change")
+
+  (xt/execute-tx tu/*node* [[:put-docs :t {:a 1}]])
+
+  (t/is (anomalous? [:incorrect :xtdb.tx/missing-id]
+                    (xt/submit-tx tu/*node* [[:patch-docs :t {:xt/id 1}]]))
         "at submit, once the key is fixed"))
 
 (t/deftest select-star-lists-the-key-column-first

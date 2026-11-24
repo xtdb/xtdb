@@ -23,6 +23,7 @@ import xtdb.api.error.Incorrect
 import xtdb.api.SchemaName
 import xtdb.api.TableName
 import xtdb.util.asIid
+import xtdb.util.asIidOrNull
 import java.nio.channels.Channels
 import java.time.Instant
 import java.time.ZoneId
@@ -107,7 +108,7 @@ private class PutDocsWriter(ops: VectorWriter) : TxOpWriter<TxOp.PutDocs> {
 
 private class PatchDocsWriter(ops: VectorWriter) : TxOpWriter<TxOp.PatchDocs> {
     private val patchVec = ops.vectorFor("patch-docs", STRUCT_TYPE, false)
-    private val iidsVec = patchVec.vectorFor("iids", LIST_TYPE, false)
+    private val iidsVec = patchVec.vectorFor("iids", LIST_TYPE, true)
     private val iidWriter = iidsVec.getListElements(IID_TYPE, false)
     private val docsVec = patchVec.vectorFor("documents", UNION_TYPE, false)
     private val validFromVec = patchVec.vectorFor("_valid_from", INSTANT_TYPE, true)
@@ -124,12 +125,17 @@ private class PatchDocsWriter(ops: VectorWriter) : TxOpWriter<TxOp.PatchDocs> {
 
         val tableDocWriter = tableDocsWriter.getListElements(STRUCT_TYPE, false)
 
-        val idVec = op.patches["_id"]
-        for (idx in 0 until op.patches.rowCount) {
-            val eid = idVec.getObject(idx)
-            iidWriter.writeBytes(eid.asIid)
+        // A node predating #3811 patches by these alone, so without them it patches nothing.
+        val idIids = op.patches.vectorForOrNull("_id")?.let { idVec ->
+            List(op.patches.rowCount) { idx -> idVec.getObject(idx).asIidOrNull ?: return@let null }
         }
-        iidsVec.endList()
+
+        if (idIids == null) {
+            iidsVec.writeNull()
+        } else {
+            idIids.forEach(iidWriter::writeBytes)
+            iidsVec.endList()
+        }
 
         tableDocWriter.append(RelationAsStructReader("patches", op.patches))
         tableDocsWriter.endList()

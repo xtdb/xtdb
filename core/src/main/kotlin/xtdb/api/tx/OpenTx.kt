@@ -722,10 +722,10 @@ class OpenTx
         }
 
         /**
-         * Bulk-patch docs into this table, keyed by `_iid`, preserving existing columns where
-         * the patched doc doesn't supply a new value.
+         * Bulk-patch docs into this table, preserving existing columns where the patched doc doesn't supply a new value.
          *
-         * [docs] carries one row per doc, columns `_iid` (fixed-size binary) and `doc` (struct).
+         * [docs] carries one row per doc: a `doc` struct column, and either an `_iid` column or the table's
+         * [primaryKey] column, the latter with a value in every row - otherwise `xtdb.tx/missing-id`.
          * [validFromMicros] / [validToMicros] default to [MIN_LONG] / [MAX_LONG] — the start/end of
          * valid time — on the Instant overload, a null on either side means the same thing.
          *
@@ -734,6 +734,18 @@ class OpenTx
         fun patchDocs(docs: RelationReader, validFromMicros: Long, validToMicros: Long) {
             checkNotForbidden(ref)
 
+            val iidRdr = docs.vectorForOrNull("_iid")
+            if (iidRdr != null) {
+                patchDocsByIid(RelationReader.from(listOf(iidRdr, docs["doc"])), validFromMicros, validToMicros)
+                return
+            }
+
+            openKeyIids(docs).use { iids ->
+                patchDocsByIid(RelationReader.from(listOf(iids, docs["doc"])), validFromMicros, validToMicros)
+            }
+        }
+
+        private fun patchDocsByIid(docs: RelationReader, validFromMicros: Long, validToMicros: Long) {
             val prepareOpts = PrepareOpts(
                 currentTime = txKey.systemTime, defaultDb = dbName,
                 argFields = docs.schema.fields,

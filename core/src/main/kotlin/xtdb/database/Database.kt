@@ -168,12 +168,19 @@ class Database(
     }
 
     // Only tables whose key is fixed: a tx still ahead of this one in the log may declare an empty table's key,
-    // so the indexer checks the puts into those.
+    // so the indexer checks the writes into those.
     private fun requireKnownKeys(ops: List<TxOp>) {
-        val puts = ops.filterIsInstance<TxOp.PutDocs>().takeIf { it.isNotEmpty() } ?: return
+        val keyedDocs = ops.mapNotNull {
+            when (it) {
+                is TxOp.PutDocs -> TableRef(it.schema, it.table) to it.docs
+                is TxOp.PatchDocs -> TableRef(it.schema, it.table) to it.patches
+                else -> null
+            }
+        }
+        if (keyedDocs.isEmpty()) return
 
         openSnapshot(currentBasis()).use { snap ->
-            for (put in puts) snap.fixedPrimaryKey(TableRef(put.schema, put.table))?.requireKeys(put.docs)
+            for ((table, docs) in keyedDocs) snap.fixedPrimaryKey(table)?.requireKeys(docs)
         }
     }
 

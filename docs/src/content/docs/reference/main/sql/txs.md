@@ -80,7 +80,8 @@ return rr.Diagram(rr.Stack(patchTable, rr.Optional(forValidTime, "skip"), record
 ```
 
 - If the valid-time range is not provided, the effective valid-time range of the update will be from now to the end of time.
-- The `_id` column cannot be patched - instead, users should delete this document and re-insert a new one.
+- Each record patches the document its table's [primary key](/reference/main/sql/schema#primary-keys-v221) identifies - `_id` unless the table declares another - so it must contain that key.
+  The key cannot be patched - instead, users should delete this document and re-insert a new one.
 - The valid-time columns cannot be updated outside of the for-valid-time clause (i.e. not in the records themselves).
 - Documents are currently merged at the granularity of individual keys - e.g. if a key is present in the patch document, it will override the same key in the database document; if a key is absent or null, the key from the document already in the database will be preserved.
 

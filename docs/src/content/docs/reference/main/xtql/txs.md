@@ -17,6 +17,13 @@ v2.2.1: a `put-docs` without its key into a table not yet written to aborts its 
   The key's value is checked in the same places: one of a type that can't key a row (see [ID types](/reference/main/sql/txs#id-types)) fails at submit, or aborts the transaction, with `xtdb/invalid-id`.
   Previously a `put-docs` failed at submit with `xtdb.tx/invalid-eid` for any `:xt/id` of such a type; in a table keyed on another column, `:xt/id` is now an ordinary column, and takes any value.
 
+v2.2.1: `patch-docs` patches the row identified by the table's key
+
+: A `patch-docs` document carries the table's [primary key](/reference/main/sql/schema#primary-keys-v221), `:xt/id` unless the table declares another, and patches the row that key identifies — see [`patch-docs`](#patch-docs).
+  A document without it fails as a `put-docs` document does.
+
+  Previously every `patch-docs` document had to carry `:xt/id`, which identified its row whatever the table was keyed on.
+
 </details>
 
 Transactions in XTDB are submitted to the [log](/ops/config/log), to be processed asynchronously.
@@ -114,10 +121,14 @@ Documents are currently merged at the granularity of individual keys - e.g. if a
 
  ;; -- required
  ;; documents to submit (variadic, 0..n)
- ;; * each must contain `:xt/id`
+ ;; * each must contain the table's primary key -
+ ;;   `:xt/id` unless the table declares another
  & <docs>
  ]
 ```
+
+Each document patches the row its [primary key](/reference/main/sql/schema#primary-keys-v221) identifies.
+A document without the key is an `xtdb.tx/missing-id` error, raised as for [`put-docs`](#put-docs): at submit for a table that has been written to, otherwise by aborting the transaction.
 
 #### Examples
 

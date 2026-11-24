@@ -5,6 +5,7 @@
             [xtdb.arrow-edn-test :as aet]
             [xtdb.db-catalog :as db]
             [xtdb.node :as xtn]
+            [xtdb.serde :as serde]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
             [xtdb.tx-ops :as tx-ops]
@@ -123,6 +124,18 @@
                                                  :documents #xt/tagged [:public/foo [{:xt/id 1, :v 2}
                                                                                      {:xt/id 3, :x "hello"}]]}]]}])
                (tu/->clj (.getAsMaps rel)))))))
+
+(t/deftest patch-docs-carry-iids-only-where-every-doc-has-a-valid-id
+  (doseq [docs [[{:xt/id 1, :v 2} {:a 3}]
+                [{:xt/id 1, :v 2} {:xt/id #xt/date "2020-01-01"}]]]
+    (let [actual-bytes (tu/serialize-tx-ops tu/*allocator*
+                                             [(tx-ops/parse-tx-op (into [:patch-docs :foo] docs))]
+                                             {:default-db "xtdb", :default-tz #xt/zone "Europe/London"})]
+      (with-open [rel (Relation/openFromArrowStream tu/*allocator* actual-bytes)]
+        (t/is (= (tu/->clj [{:default-tz "Europe/London"
+                             :tx-ops [(serde/read-tagged [:patch-docs {:documents (serde/read-tagged [:public/foo docs])}])]}])
+                 (tu/->clj (.getAsMaps rel)))
+              (pr-str docs))))))
 
 (t/deftest test-memory-log-epochs
   (util/with-tmp-dirs #{local-disk-path}

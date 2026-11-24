@@ -77,10 +77,18 @@ internal class SourceLogTxIndexer(
 
     internal inner class ForTx(private val txOpsRdr: VectorReader, private val opts: TxOpts) {
 
+        // IIDs in the log are hashed from `_id`, whatever the table is keyed on.
+        private inline fun <R> OpenTx.Table.withIids(
+            iidsRdr: VectorReader, opIdx: Int, docRel: RelationReader, block: (VectorReader) -> R,
+        ): R =
+            if (!iidsRdr.isNull(opIdx) && primaryKey == PrimaryKey.ID)
+                block(iidsRdr.listElements.select(iidsRdr.getListStartIndex(opIdx), docRel.rowCount).withName("_iid"))
+            else
+                openKeyIids(docRel).use(block)
+
         private fun OpenTx.applyPutDocs(opIdx: Int) {
             val putLeg = txOpsRdr.vectorFor("put-docs")
             val iidsRdr = putLeg.vectorFor("iids")
-            val iidRdr = iidsRdr.listElements
             val docsRdr = putLeg.vectorFor("documents")
             val validFromRdr = putLeg.vectorFor("_valid_from")
             val validToRdr = putLeg.vectorFor("_valid_to")
@@ -133,13 +141,7 @@ internal class SourceLogTxIndexer(
                 txOpsRdr = txOpsRdr,
                 data = mapOf("table" to table, "tx-key" to opts.txKey, "tx-op-idx" to opIdx),
             ) {
-                // A submitter predating #3811 sends IIDs hashed from `_id`, whatever the table is keyed on.
-                val keyIids =
-                    if (!iidsRdr.isNull(opIdx) && liveTable.primaryKey == PrimaryKey.ID) null
-                    else liveTable.openKeyIids(docRel)
-
-                keyIids.use {
-                    val iidCol = keyIids ?: iidRdr.select(iidsRdr.getListStartIndex(opIdx), docCount).withName("_iid")
+                liveTable.withIids(iidsRdr, opIdx, docRel) { iidCol ->
                     val putRel = RelationReader.from(
                         listOfNotNull(iidCol, RelationAsStructReader("doc", docRel), rowVfCol, rowVtCol),
                         docCount,
@@ -213,7 +215,6 @@ internal class SourceLogTxIndexer(
         private fun OpenTx.applyPatchDocs(opIdx: Int) {
             val patchLeg = txOpsRdr.vectorFor("patch-docs")
             val iidsRdr = patchLeg.vectorFor("iids")
-            val iidRdr = iidsRdr.listElements
             val docsRdr = patchLeg.vectorFor("documents")
             val validFromRdr = patchLeg.vectorFor("_valid_from")
             val validToRdr = patchLeg.vectorFor("_valid_to")
@@ -244,19 +245,24 @@ internal class SourceLogTxIndexer(
                 val validTo: InstantMicros =
                     if (validToRdr.isNull(opIdx)) Long.MAX_VALUE else validToRdr.getLong(opIdx)
 
-                val docs = RelationReader.from(
-                    listOf(
-                        iidRdr.select(iidsRdr.getListStartIndex(opIdx), iidsRdr.getListCount(opIdx)).withName("_iid"),
-                        docRdr.select(tableDocsRdr.getListStartIndex(opIdx), tableDocsRdr.getListCount(opIdx))
-                            .withName("doc"),
-                    )
-                )
+                val docStartIdx = tableDocsRdr.getListStartIndex(opIdx)
+                val docCount = tableDocsRdr.getListCount(opIdx)
+                val liveTable = table(tableRef)
 
-                tracer.withSpan("xtdb.transaction.patch-docs") { span ->
-                    span?.tag("db", dbName)
-                    span?.tag("schema", tableRef.schemaName)
-                    span?.tag("table", tableRef.tableName)
-                    table(tableRef).patchDocs(docs, validFrom, validTo)
+                val docRel = RelationReader.from(ks.map { docRdr.vectorFor(it).select(docStartIdx, docCount) }, docCount)
+
+                liveTable.withIids(iidsRdr, opIdx, docRel) { iidCol ->
+                    val docs = RelationReader.from(
+                        listOf(iidCol, docRdr.select(docStartIdx, docCount).withName("doc")),
+                        docCount,
+                    )
+
+                    tracer.withSpan("xtdb.transaction.patch-docs") { span ->
+                        span?.tag("db", dbName)
+                        span?.tag("schema", tableRef.schemaName)
+                        span?.tag("table", tableRef.tableName)
+                        liveTable.patchDocs(docs, validFrom, validTo)
+                    }
                 }
             }
         }
