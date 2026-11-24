@@ -11,12 +11,17 @@ on:
         description: 'Number of simulation test iterations to run'
         required: true
         type: string
+      timeout_minutes:
+        description: 'Job timeout, in minutes'
+        required: false
+        type: number
+        default: 60
 
 jobs:
   property-test:
     name: Property Test
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: ${{ inputs.timeout_minutes }}
     permissions:
       contents: read
       checks: write

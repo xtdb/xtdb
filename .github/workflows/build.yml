@@ -170,6 +170,7 @@ jobs:
   integration-test:
     name: Integration Test
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     permissions:
       contents: read
       checks: write
@@ -249,6 +250,7 @@ jobs:
     with:
       iteration_count: "100"
       simulation_iteration_count: "100"
+      timeout_minutes: 25
     permissions:
       contents: read
       checks: write
