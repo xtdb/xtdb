@@ -1,6 +1,6 @@
 # Pre-built custom JRE — see docker/builder.Dockerfile and the repo-root docker-bake.hcl.
-# Bump the default (and the matching TAG in the bake file) when build-logic/jlink/ or the JDK base image changes.
-ARG BUILDER_IMAGE=ghcr.io/xtdb/xtdb-builder:20261030-1
+# This can be built via the “Build xtdb-builder image” workflow.
+ARG BUILDER_IMAGE=ghcr.io/xtdb/xtdb-builder:20261124-2
 FROM ${BUILDER_IMAGE} AS jlink
 
 # Runtime
