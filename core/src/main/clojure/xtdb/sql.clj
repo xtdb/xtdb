@@ -3340,6 +3340,9 @@
                        (wrap-predicates predicate))
                    [])))
 
+  (visitCreateTableStatement [_ _]
+    (->QueryExpr [:table {:rows []}] []))
+
   (visitShowVariableStatement [this ctx] (.accept (.showVariable ctx) this))
 
   (visitShowTransactionIsolationLevel [_ _]

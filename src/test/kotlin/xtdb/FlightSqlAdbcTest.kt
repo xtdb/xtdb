@@ -225,6 +225,24 @@ class FlightSqlAdbcTest {
     }
 
     @Test
+    fun `a prepared CREATE TABLE executes`() {
+        conn.createStatement().use { stmt ->
+            stmt.setSqlQuery("CREATE TABLE orders (_id, amount)")
+            stmt.prepare()
+            assertEquals(emptyList<Field>(), stmt.parameterSchema.fields)
+            stmt.executeUpdate()
+        }
+
+        assertEquals(
+            listOf(mapOf("column_name" to "amount")),
+            fsqlClient.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'amount'",
+                *emptyCallOpts
+            ).readRows()
+        )
+    }
+
+    @Test
     fun `test FlightSQL getTableTypes`() {
         val rows = fsqlClient.getTableTypes(*emptyCallOpts).readRows()
         assertEquals(1, rows.size)
