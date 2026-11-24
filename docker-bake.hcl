@@ -64,17 +64,14 @@ target "bench" {
 
 // xtdb-builder — a pre-built multi-arch image containing a custom JRE, used as the
 // `jlink` stage of docker/Dockerfile so CD doesn't re-run `./gradlew buildCustomJre`
-// (5+ minutes under arm64 emulation) on every build. Bump BUILDER_TAG (and the
-// BUILDER_IMAGE default in docker/Dockerfile) when build-logic/jlink/ or the JDK base
-// image changes.
-
-variable "BUILDER_TAG" {
-  default = "20261124-1"
-}
+// (5+ minutes under arm64 emulation) on every build. .github/workflows/builder.yml
+// takes the tag as a workflow_dispatch input and passes it with
+// `--set builder.tags=...`, rather than storing one here that someone has to
+// remember to bump. For a manual build, pass a tag the same way. Bump the
+// BUILDER_IMAGE default in docker/Dockerfile once the new tag is confirmed pushed.
 
 target "builder" {
   context = "."
   dockerfile = "docker/builder.Dockerfile"
   platforms = ["linux/amd64", "linux/arm64"]
-  tags = ["ghcr.io/xtdb/xtdb-builder:${BUILDER_TAG}"]
 }

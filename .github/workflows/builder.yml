@@ -2,6 +2,11 @@ name: Build xtdb-builder image
 
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag for ghcr.io/xtdb/xtdb-builder, e.g. 20261124-1"
+        required: true
+        type: string
 
 jobs:
   build-builder:
@@ -31,4 +36,6 @@ jobs:
           source: .
           files: docker-bake.hcl
           targets: builder
+          set: |
+            builder.tags=ghcr.io/xtdb/xtdb-builder:${{ inputs.tag }}
           push: ${{ github.event_name != 'pull_request' }}
