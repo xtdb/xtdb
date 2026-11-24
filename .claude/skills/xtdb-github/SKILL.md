@@ -40,6 +40,14 @@ Applies to docs-only and meta/repo-admin work too (1.x work is the only category
 Two board fields, once the card exists:
 
 - **`Status` is set automatically on item creation**, so you don't set it when you file — but you MUST set it when you pick the card up, per [Starting work on a card](#starting-work-on-a-card).
+- **An issue's 2.x `Status` and its own issue status are one value.**
+  GitHub syncs a project option with the issue status of the same name, in both directions, so setting either moves the other.
+  - **The sync matches on the option's name**, so you MUST NOT rename `Backlog`, `Todo`, `In progress` or `In review`.
+  - **`✅ Awaiting demo` has no issue status.**
+    Closing an issue sets its status to `Done`, which moves nothing on the board.
+  - **PRs have no issue status**, so a PR's card moves only on the board.
+  - **GitHub's own automations move the card too.**
+    Assigning someone sets `Todo`, linking a draft PR sets `In progress`, and linking a ready or open PR sets `In review`.
 - **You MUST NOT back-date a closed card into `✅ Awaiting demo`.**
   It asserts the work still needs demoing when it has most likely already been through one.
 - **You SHOULD set `Stream` where the right category is obvious, and MUST NOT invent one.**
@@ -60,7 +68,7 @@ On this one, you MUST swap in project `42` and its IDs from [Cached IDs](#cached
   It's on top of the 2.x board, not instead of it, and what goes on as the card is the same: the issue, or the standalone PR.
   Where you can't tell whether a change is end-user-visible, you MUST ask; a parent on the client board makes a sub-issue a candidate, not a given.
 - **`Status` tracks the client's deployments, not our development.**
-  - While the work is open, the card's status follows its 2.x `Status`: `💭 Backlog` there is `Backlog` here, and anything from `🔖 Selected` onwards is `Selected`.
+  - While the work is open, the card's status follows its 2.x `Status`: `Backlog` there is `Backlog` here, and anything from `Todo` onwards is `Selected`.
     When you change the 2.x `Status`, you MUST make the matching move here.
   - When the card closes on `main`, you MUST move it to `Awaiting test-env deploy`.
   - You can't see the client's deployments, so a card moves past that only when you're told what they've deployed, per [A deployment moves every card it contains](#a-deployment-moves-every-card-it-contains).
@@ -227,13 +235,14 @@ Two edits, and they're the whole of it:
   The assignee is whoever is currently responsible for moving the item forward (see [The assignee owns progression](#the-assignee-owns-progression) below), so `@me` iff you're *about to work on it*.
   An issue or PR you're filing but not starting immediately stays unassigned.
   `gh issue edit N --add-assignee @me` / `gh pr edit N --add-assignee @me`.
-- **Set board `Status` to `🏗 In progress`.**
+- **Set board `Status` to `In progress`.**
+  Assigning has already moved an issue to `Todo`, so this is the move that takes it the rest of the way, and the sync carries it to the issue status.
   `gh project item-edit --id <item-id> --project-id PVT_kwDOBNKmUs4AJUwS --field-id PVTSSF_lADOBNKmUs4AJUwSzgFuIbk --single-select-option-id 1ef0eeb9`
   Get `<item-id>` from `gh project item-list 13 --owner xtdb --format json`, matching on the issue number — it's the *project item's* id, not the issue's.
   Where the card is also on the [client project board](#the-client-project-board), this is the move that takes it to `Selected` there too.
 
 The board is where everybody else sees who is on what, and for anyone outside your session it's the only place they can see it.
-An unassigned card sitting in `🔖 Selected` while somebody is halfway through the work is how two people start the same thing.
+An unassigned card sitting in `Todo` while somebody is halfway through the work is how two people start the same thing.
 
 The chalk skills do both of these for you — see [Using chalk](#using-chalk).
 
@@ -270,10 +279,10 @@ The open milestone is *not* cached because it changes with each release (see the
 - Project (number): `13`, owner `xtdb`
 - Project (node ID): `PVT_kwDOBNKmUs4AJUwS`
 - `Status` field ID: `PVTSSF_lADOBNKmUs4AJUwSzgFuIbk`
-  - `🔖 Selected`: `a9f1d437`
-  - `💭 Backlog`: `41a95590`
-  - `🏗 In progress`: `1ef0eeb9`
-  - `👀 Awaiting merge`: `34b2f44b`
+  - `Todo`: `a9f1d437`
+  - `Backlog`: `41a95590`
+  - `In progress`: `1ef0eeb9`
+  - `In review`: `34b2f44b`
   - `✅ Awaiting demo`: `3fbaabb5`
 - `Stream` field ID: `PVTSSF_lADOBNKmUs4AJUwSzgTHM3Q`
   - `Long-run reliability`: `c7d77520`
@@ -292,6 +301,16 @@ The client project board's IDs:
   - `Selected`: `17322c07`
   - `Awaiting test-env deploy`: `10fe088c`
   - `Awaiting prod deploy`: `62df88c7`
+
+Issue statuses (org-level, a fixed set; read as `Issue.status`, set with `setIssueStatus(issueId, statusId)`):
+
+- `Backlog`: `IS_kgAC`
+- `Todo`: `IS_kgAD`
+- `In progress`: `IS_kgAE`
+- `In review`: `IS_kgAI`
+- `Done`: `IS_kgAF`
+- `Not planned`: `IS_kgAG`
+- `Duplicate`: `IS_kgAH`
 
 Issue types (org-level, set on the issue itself rather than the project board):
 
