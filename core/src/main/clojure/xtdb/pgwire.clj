@@ -109,7 +109,7 @@
 
         (when-not (.isShutdown thread-pool)
           (log/trace "Closing thread pool")
-          (.shutdownNow thread-pool)
+          (run! util/try-close (.shutdownNow thread-pool))
           (when-not (.awaitTermination thread-pool 5 TimeUnit/SECONDS)
             (log/error "Could not shutdown thread pool gracefully" {:port port})))
 
@@ -1765,7 +1765,11 @@
               (try
                 ;; execute, not submit: submit buries an escaping throwable in a Future
                 ;; nobody reads, which is why #5850 produced no logs at all.
-                (.execute thread-pool ^Runnable (fn [] (connect server conn-socket)))
+                ;; Closeable so that `close` can close the socket of a connection still
+                ;; queued when it shuts the pool down.
+                (.execute thread-pool (reify
+                                        Runnable (run [_] (connect server conn-socket))
+                                        Closeable (close [_] (util/try-close conn-socket))))
                 (catch RejectedExecutionException _
                   ;; At capacity. Closing is the only honest answer — a queued socket the
                   ;; client eventually abandons sits in CLOSE_WAIT forever, holding an fd

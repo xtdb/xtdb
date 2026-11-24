@@ -27,7 +27,7 @@
            (java.time Clock Instant LocalDate LocalDateTime LocalTime OffsetDateTime ZoneId ZoneOffset ZonedDateTime)
            (java.time.temporal Temporal)
            (java.util Arrays Calendar List Map TimeZone)
-           (java.util.concurrent CountDownLatch Executor TimeUnit)
+           (java.util.concurrent CountDownLatch Executor ThreadPoolExecutor TimeUnit)
            (org.postgresql.util PGobject PSQLException)
            (xtdb.arrow Relation)
            (xtdb.pgwire PgType)
@@ -595,6 +595,23 @@
 
       (.close server)
       (check-server-resources-freed server))))
+
+(deftest closing-the-server-closes-connections-still-waiting-for-a-handler
+  (with-open [server (serve {:num-threads 1})]
+    (binding [*server* server, *port* (:port server)]
+      (logging/with-log-level 'xtdb.pgwire :off
+        (with-open [held (jdbc-conn)]
+          (ping held)
+          (let [queued (future
+                         (try
+                           (with-open [_ (jdbc-conn {"socketTimeout" 10})] :connected)
+                           (catch PSQLException _ :refused)))
+                ^ThreadPoolExecutor pool (:thread-pool server)]
+            (while (.isEmpty (.getQueue pool)) (Thread/sleep 10))
+
+            (.close server)
+
+            (is (= :refused (deref queued 2000 :timeout)))))))))
 
 (deftest concurrent-conns-close-midway-test
   (with-open [server (serve {:num-threads 2 :accept-so-timeout 10})]
