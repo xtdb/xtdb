@@ -309,12 +309,12 @@
     (.getExplainAnalyze opts) (assoc :explain-analyze? true)))
 
 (defn- ->plan-key ^PlanCacheKey
-  [parsed-query {:keys [default-db db-names tx-scoped? decorrelate? explain? explain-analyze? arg-fields]} table-info]
+  [parsed-query {:keys [default-db db-names tx-scoped? decorrelate? explain? explain-analyze? arg-fields]} table-info table-pks]
   (PlanCacheKey. parsed-query default-db db-names (boolean tx-scoped?)
                  (if (nil? decorrelate?) true (boolean decorrelate?))
                  (cond explain? PlanCacheKey$Explain/PLAN
                        explain-analyze? PlanCacheKey$Explain/ANALYZE)
-                 arg-fields table-info))
+                 arg-fields table-info table-pks))
 
 (defn- plan-key->opts [^PlanCacheKey k]
   (let [explain (.getExplain k)]
@@ -325,7 +325,8 @@
      :explain? (= PlanCacheKey$Explain/PLAN explain)
      :explain-analyze? (= PlanCacheKey$Explain/ANALYZE explain)
      :arg-fields (.getArgFields k)
-     :table-info (.getTableInfo k)}))
+     :table-info (.getTableInfo k)
+     :table-pks (.getTablePks k)}))
 
 (defn- load-plan [^PlanCacheKey k]
   (let [plan (plan-query (.getAst k) (plan-key->opts k))
@@ -348,7 +349,7 @@
                            (.build))})))
 
 (defprotocol PQuerySource
-  (-plan-query [q-src parsed-query query-opts table-info]))
+  (-plan-query [q-src parsed-query query-opts table-info table-pks]))
 
 (defrecord QuerySource [^BufferAllocator allocator
                         ^IScanEmitter scan-emitter
@@ -357,8 +358,8 @@
                         ^LoadingCache plan-cache
                         ^LoadingCache dml-cache]
   PQuerySource
-  (-plan-query [_ parsed-query query-opts table-info]
-    (.get plan-cache (->plan-key parsed-query query-opts table-info)))
+  (-plan-query [_ parsed-query query-opts table-info table-pks]
+    (.get plan-cache (->plan-key parsed-query query-opts table-info table-pks)))
 
   IQuerySource
   (prepareQuery [this query db-cat query-opts]
@@ -384,7 +385,7 @@
               (open-snaps [dbs min-basis]
                 (into {} (.openSnapshots db-cat dbs min-basis)))
 
-              ;; `{[db-name table-ref] {:cols #{…}, :oid n}}`, projected from the snapshots the operation
+              ;; `{[db-name table-ref] {:cols #{…}, :oid n, :pk PrimaryKey}}`, projected from the snapshots the operation
               ;; is already holding — so the schema a query is planned against, the oids `::regclass`
               ;; resolves through, and the rows the scan reads all come from one snapshot per database.
               (->table-info [snaps]
@@ -393,10 +394,11 @@
                                         (let [oids (.tableOids snap)]
                                           (->> (.tableInfo snap)
                                                (map (fn [[table-ref cols]]
-                                                      [[db-name table-ref] {:cols (set cols), :oid (get oids table-ref)}])))))))))
+                                                      [[db-name table-ref] {:cols (set cols), :oid (get oids table-ref)
+                                                                            :pk (.primaryKey snap table-ref)}])))))))))
 
               (plan-query* [table-info]
-                (-plan-query this parsed-query query-opts (update-vals table-info :cols)))]
+                (-plan-query this parsed-query query-opts (update-vals table-info :cols) (update-vals table-info :pk)))]
 
         (let [!table-info (atom (util/with-open [snaps (open-snaps (resolve-dbs) prepare-min-basis)]
                                   (->table-info snaps)))]

@@ -17,6 +17,7 @@
   (:import (java.nio ByteBuffer)
            (java.nio.file Files)
            (java.nio.file.attribute FileAttribute)
+           (xtdb.table PrimaryKey)
 ))
 
 (t/use-fixtures :each tu/with-allocator tu/with-mock-clock tu/with-node)
@@ -2421,6 +2422,21 @@
   (xt/submit-tx tu/*node* [[:sql "DELETE FROM table WHERE col = 'val'"]])
 
   (t/is (empty? (xt/q tu/*node* "SELECT * FROM table"))))
+
+(t/deftest test-dml-plans-key-on-the-tables-primary-key
+  (let [opts {:table-info {#xt/table docs #{"_id" "a" "b"}}
+              :table-pks {["xtdb" #xt/table docs] (PrimaryKey. ["a"])}}]
+    (t/is (anomalous? [:incorrect nil #"INSERT does not contain mandatory a column"]
+                      (sql/plan "INSERT INTO docs (_id, b) VALUES (1, 2)" opts)))
+
+    (t/is (some? (sql/plan "INSERT INTO docs (a, b) VALUES (1, 2)" opts))
+          "a row carrying the key column needs no `_id`")
+
+    (t/is (anomalous? [:incorrect nil #"Cannot UPDATE a column"]
+                      (sql/plan "UPDATE docs SET a = 2" opts)))
+
+    (t/is (some #{'(_iid a)} (tree-seq coll? seq (sql/plan "PATCH INTO docs RECORDS {a: 1, b: 2}" opts)))
+          "PATCH addresses each record by the IID of its key column")))
 
 (t/deftest test-c-style-escapes-3415
   (t/is (= ["A" "A" "A" "" "%" "😁" "\n" "'"]

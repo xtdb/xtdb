@@ -17,6 +17,7 @@ data class PrimaryKey(val columns: List<ColumnName>) {
 
     companion object {
         /** What a table is keyed on unless it declares otherwise. */
+        @JvmField
         val ID = PrimaryKey(listOf("_id"))
     }
 }

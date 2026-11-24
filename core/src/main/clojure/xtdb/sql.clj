@@ -30,6 +30,7 @@
            (xtdb.antlr Sql$DirectlyExecutableStatementContext Sql$DynamicParameterContext Sql$XtqlQueryContext Sql$GroupByClauseContext Sql$HavingClauseContext Sql$JoinSpecificationContext Sql$JoinTypeContext Sql$ObjectNameAndValueContext Sql$OrderByClauseContext Sql$QualifiedRenameColumnContext Sql$QuerySpecificationContext Sql$QueryTailContext Sql$RenameColumnContext Sql$RowValueListContext Sql$SearchedWhenClauseContext Sql$SelectClauseContext Sql$SetClauseContext Sql$SimpleWhenClauseContext Sql$SortSpecificationContext Sql$SortSpecificationListContext Sql$WhenOperandContext Sql$WhereClauseContext Sql$WithTimeZoneContext SqlLexer SqlVisitor)
            (xtdb.arrow RelationReader VectorReader)
            (xtdb.query DmlCacheKey ParsedStatement$Dml SqlParser SqlPlanner)
+           (xtdb.table PrimaryKey)
            (xtdb.xtql QueryWithParams)
            xtdb.api.TableRef
            xtdb.util.StringUtil))
@@ -2460,9 +2461,13 @@
   (error-string [_]
     (format "Column count mismatch on %s set operation: lhs column count %s, rhs column count %s" operation-type lhs-count rhs-count)))
 
-(defrecord InsertWithoutXtId []
+(defrecord InsertWithoutXtId [pk-col]
   PlanError
-  (error-string [_] "INSERT does not contain mandatory _id column"))
+  (error-string [_] (format "INSERT does not contain mandatory %s column" pk-col)))
+
+(defn- table-pk-col
+  [{:keys [table-pks default-db]} table]
+  (symbol (.getColumn ^PrimaryKey (get table-pks [default-db table] PrimaryKey/ID))))
 
 (defrecord InvalidParamIndex [arg-count param-idx]
   PlanError
@@ -3155,9 +3160,10 @@
 
   (visitInsertStatement [_ ctx]
     (let [{:keys [col-syms] :as insert-plan} (-> (.insertColumnsAndSource ctx)
-                                                 (.accept (->QueryPlanVisitor env scope)))]
-      (when-not (contains? (set col-syms) '_id)
-        (add-err! env (->InsertWithoutXtId)))
+                                                 (.accept (->QueryPlanVisitor env scope)))
+          pk-col (table-pk-col env (table/->ref (identifier-sym (.targetTable ctx))))]
+      (when-not (contains? (set col-syms) pk-col)
+        (add-err! env (->InsertWithoutXtId pk-col)))
 
       (doseq [col (into #{} (filter forbidden-insert-col?) col-syms)]
         (add-err! env (->ForbiddenColumnInsert col)))
@@ -3173,16 +3179,16 @@
                                     :table table
                                     :valid-from vf-expr
                                     :valid-to vt-expr
-                                    :patch-rel (.accept (.patchSource ctx) this)})
+                                    :patch-rel (.accept (.patchSource ctx) (assoc this :pk-col (table-pk-col env table)))})
                    '[_iid _valid_from _valid_to doc])))
 
-  (visitPatchRecords [_ ctx]
+  (visitPatchRecords [{:keys [pk-col]} ctx]
     (let [{:keys [plan col-syms]} (-> (.recordsValueConstructor ctx)
                                       (.accept (->QueryPlanVisitor env scope))
                                       (remove-ns-qualifiers env))]
       (if-let [forbidden-cols (seq (filter forbidden-patch-col? col-syms))]
         (add-err! env (->ForbiddenColumnPatch forbidden-cols))
-        (->QueryExpr [:project {:projections ['{_iid (_iid _id)}
+        (->QueryExpr [:project {:projections [{'_iid (list '_iid pk-col)}
                                               {'doc (into {} (map (juxt keyword identity)) col-syms)}]}
                       plan]
                      '[_iid doc]))))
@@ -3218,7 +3224,7 @@
 
           _ (doseq [forbidden-col (->> set-clauses
                                        (into #{} (comp (map (comp key first))
-                                                       (filter forbidden-update-col?))))]
+                                                       (filter (some-fn forbidden-update-col? #{(table-pk-col env table)})))))]
               (add-err! env (->ForbiddenColumnUpdate forbidden-col)))
 
           set-clauses-cols (set (mapv ffirst set-clauses))
@@ -3466,13 +3472,14 @@
   "The half of an env derived from the statement and the catalog, and so shareable between runs of the same
   statement against the same catalog. Anything mutable belongs in `skeleton->env` instead, or runs will share it."
   ([ast] (->env-skeleton ast {}))
-  ([ast {:keys [table-info default-db db-names tx-scoped? arg-fields], :or {default-db "xtdb"}}]
+  ([ast {:keys [table-info table-pks default-db db-names tx-scoped? arg-fields], :or {default-db "xtdb"}}]
    (let [db-names (or db-names [default-db])
          table-info (xform-table-info table-info db-names default-db)]
      {:default-db default-db
       :tx-scoped? tx-scoped?
       :dynamic-param-idxs (->dynamic-param-idxs ast)
       :table-info table-info
+      :table-pks table-pks
       :table-chains (->table-chains (keys table-info) db-names default-db)
       :arg-fields arg-fields})))
 

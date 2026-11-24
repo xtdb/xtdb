@@ -274,9 +274,10 @@ class OpenTx
                                 // UPDATE/DELETE, INSERT ... WHERE false) must not register a table — only CREATE TABLE does
                                 if (rel.rowCount == 0) return@forEachRemaining
 
-                                // INSERT/UPDATE plans emit `_id` + flat content cols + optional temporal,
+                                // INSERT/UPDATE plans emit the key column + flat content cols + optional temporal,
                                 // not the canonical `_iid` + `doc` shape `logPuts` expects.
                                 // Package content cols into a `doc` struct here.
+                                val target = table(stmt.table)
                                 val tempColNames =
                                     setOf("_iid", "_system_from", "_system_to", "_valid_from", "_valid_to")
 
@@ -286,14 +287,13 @@ class OpenTx
                                 )
 
                                 val putCols = listOfNotNull(
-                                    rel.vectorFor("_id"),
+                                    rel.vectorFor(target.primaryKey.column),
                                     RelationAsStructReader("doc", contentRel),
                                     rel.vectorForOrNull("_valid_from"),
                                     rel.vectorForOrNull("_valid_to"),
                                 )
 
-                                table(stmt.table)
-                                    .writePuts(RelationReader.from(putCols, rel.rowCount), currentTimeMicros, MAX_LONG)
+                                target.writePuts(RelationReader.from(putCols, rel.rowCount), currentTimeMicros, MAX_LONG)
                             }
                         }
                     }
