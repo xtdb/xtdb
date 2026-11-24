@@ -14,9 +14,11 @@ import org.apache.arrow.memory.BufferAllocator
 import xtdb.database.Database
 import xtdb.query.IQuerySource
 import xtdb.util.requiringResolve
+import java.net.InetAddress
 import java.net.URL
 import java.security.MessageDigest
 import xtdb.api.error.Forbidden
+import xtdb.api.error.Incorrect
 import xtdb.api.error.Unsupported
 import java.time.InstantSource
 
@@ -70,18 +72,23 @@ interface Authenticator : AutoCloseable {
         val user: String? = null,
         val remoteAddress: String? = null
     ) {
+        @Transient
+        private val addressBlock = remoteAddress?.let(AddressBlock::parse)
+
         companion object {
             // Rules are matched in order; the first whose constraints all hold wins.
             // A null constraint matches anything. Null result => no rule matched => reject the connection.
             // An unknown (null) remoteAddress can't be checked against a rule that names one, so it rejects there
             // rather than skipping on to a looser rule further down.
+            // A remoteAddress that isn't an IP literal is treated as unknown.
             @JvmStatic
             fun methodFor(rules: List<MethodRule>, user: String?, remoteAddress: String?): Method? {
+                val callerAddress = remoteAddress?.let(::parseIpLiteral)
                 for (rule in rules) {
                     if (rule.user != null && rule.user != user) continue
-                    if (rule.remoteAddress == null) return rule.method
-                    if (remoteAddress == null) return null
-                    if (rule.remoteAddress == remoteAddress) return rule.method
+                    val block = rule.addressBlock ?: return rule.method
+                    if (callerAddress == null) return null
+                    if (block.contains(callerAddress)) return rule.method
                 }
                 return null
             }
@@ -187,5 +194,54 @@ class SingleRootUserAuthenticator(private val password: String?) : Authenticator
             return Principal.Static(user)
         }
         throw Forbidden(errorCode = "xtdb.authn/failed", message = "password authentication failed for user: $user")
+    }
+}
+
+private val IPV4_LITERAL = Regex("""[0-9]{1,3}(\.[0-9]{1,3}){3}""")
+private val IPV6_LITERAL = Regex("""[0-9A-Fa-f:][0-9A-Fa-f:.]*:[0-9A-Fa-f:.]*(%[\w.-]+)?""")
+private val PREFIX_LENGTH = Regex("""[0-9]{1,3}""")
+
+// InetAddress.getByName resolves anything it doesn't parse as a literal through the name service, and it only
+// tries the literal parse when the string starts with a hex digit or a colon - so `x:1` is a DNS lookup.
+private fun parseIpLiteral(s: String): InetAddress? =
+    if (IPV4_LITERAL.matches(s) || IPV6_LITERAL.matches(s)) runCatching { InetAddress.getByName(s) }.getOrNull()
+    else null
+
+private class AddressBlock(private val network: ByteArray, private val prefixLength: Int) {
+    fun contains(address: InetAddress): Boolean {
+        val bytes = address.address
+        if (bytes.size != network.size) return false
+
+        val fullBytes = prefixLength / 8
+        for (i in 0 until fullBytes) if (bytes[i] != network[i]) return false
+
+        val remainingBits = prefixLength % 8
+        if (remainingBits == 0) return true
+        val mask = (0xFF shl (8 - remainingBits)) and 0xFF
+        return (bytes[fullBytes].toInt() and mask) == (network[fullBytes].toInt() and mask)
+    }
+
+    companion object {
+        fun parse(remoteAddress: String): AddressBlock {
+            fun malformed(): Nothing = throw Incorrect(
+                "remoteAddress must be an IP address or CIDR block: $remoteAddress",
+                errorCode = "xtdb.authn/invalid-remote-address",
+                data = mapOf("remote-address" to remoteAddress),
+            )
+
+            val address = remoteAddress.substringBefore('/')
+            // A zone id would be resolved against this host's interfaces, then ignored when matching.
+            if ('%' in address) malformed()
+            val network = parseIpLiteral(address)?.address ?: malformed()
+            val maxPrefix = network.size * 8
+
+            val prefixLength =
+                if ('/' !in remoteAddress) maxPrefix
+                else remoteAddress.substringAfter('/')
+                    .takeIf(PREFIX_LENGTH::matches)?.toInt()?.takeIf { it <= maxPrefix }
+                    ?: malformed()
+
+            return AddressBlock(network, prefixLength)
+        }
     }
 }

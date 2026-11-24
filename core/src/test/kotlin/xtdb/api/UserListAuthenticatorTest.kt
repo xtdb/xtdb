@@ -9,6 +9,7 @@ import xtdb.api.Authenticator.Method.PASSWORD
 import xtdb.api.Authenticator.Method.TRUST
 import xtdb.api.Authenticator.MethodRule
 import xtdb.api.error.Forbidden
+import xtdb.api.error.Incorrect
 
 class UserListAuthenticatorTest {
 
@@ -66,6 +67,57 @@ class UserListAuthenticatorTest {
         assertEquals(TRUST, authn.methodFor("alice", "10.0.0.6"))
         assertEquals(PASSWORD, authn.methodFor("bob", null))
         assertEquals(TRUST, authn.methodFor("carol", null))
+    }
+
+    @Test
+    fun `a rule naming a CIDR block matches every caller inside it`() {
+        val authn = UserListAuthenticator(
+            users,
+            listOf(
+                MethodRule(TRUST, remoteAddress = "10.0.0.0/8"),
+                MethodRule(TRUST, remoteAddress = "172.16.0.0/12"),
+                MethodRule(PASSWORD),
+            ),
+        )
+
+        assertEquals(TRUST, authn.methodFor("alice", "10.1.2.3"))
+        assertEquals(PASSWORD, authn.methodFor("alice", "11.0.0.1"))
+        assertEquals(TRUST, authn.methodFor("alice", "172.31.255.255"))
+        assertEquals(PASSWORD, authn.methodFor("alice", "172.32.0.0"))
+    }
+
+    @Test
+    fun `IPv6 rules match the caller's address whichever form either is written in`() {
+        val authn = UserListAuthenticator(
+            users,
+            listOf(
+                MethodRule(TRUST, remoteAddress = "::1"),
+                MethodRule(TRUST, remoteAddress = "fd00::/8"),
+                MethodRule(PASSWORD),
+            ),
+        )
+
+        assertEquals(TRUST, authn.methodFor("alice", "0:0:0:0:0:0:0:1"))
+        assertEquals(TRUST, authn.methodFor("alice", "fd12:3456:0:0:0:0:0:1"))
+        assertEquals(PASSWORD, authn.methodFor("alice", "fe80:0:0:0:0:0:0:1"))
+    }
+
+    @Test
+    fun `an IPv4 rule doesn't match an IPv6 caller`() {
+        val authn = UserListAuthenticator(users, listOf(MethodRule(TRUST, remoteAddress = "0.0.0.0/0"), MethodRule(PASSWORD)))
+
+        assertEquals(TRUST, authn.methodFor("alice", "192.168.0.1"))
+        assertEquals(PASSWORD, authn.methodFor("alice", "0:0:0:0:0:0:0:1"))
+    }
+
+    @Test
+    fun `a malformed remoteAddress fails when the rule is built`() {
+        for (addr in listOf(
+            "10.0.0.0/33", "10.0.0.0/x", "10.0.0.0/", "10.0.0.0/-0", "10.0.0.0/+8", "::1/129",
+            "not-an-address", "10.1", "x:1", "localhost:5432", "fe80::1%1",
+        )) {
+            assertThrows<Incorrect>(addr) { MethodRule(TRUST, remoteAddress = addr) }
+        }
     }
 
     @Test

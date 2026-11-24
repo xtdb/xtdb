@@ -137,7 +137,8 @@ See the [ADBC reference](/adbc/reference#authentication).
 **Rule Parameters**
 : - `user` (optional): Match specific username
 
-    - `remoteAddress` (optional): Match IP address or CIDR block (IPv4 or IPv6)
+    - `remoteAddress` (optional): Match IP address or CIDR block (IPv4 or IPv6), e.g. `10.0.0.0/8` or `fd00::/8`.
+      A value that is neither fails node startup.
     - `method` (required): Authentication method to use
 
 **Available Methods**
