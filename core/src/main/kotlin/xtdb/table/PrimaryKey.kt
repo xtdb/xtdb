@@ -2,13 +2,12 @@ package xtdb.table
 
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.error.Incorrect
-import xtdb.api.error.Unsupported
 import xtdb.arrow.FixedSizeBinaryVector
 import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorReader
 import xtdb.trie.ColumnName
-import xtdb.util.asIid
 import xtdb.util.closeOnCatch
+import xtdb.util.keyIid
 
 /** The columns whose values identify a row of a table, in key order. */
 data class PrimaryKey(val columns: List<ColumnName>) {
@@ -16,20 +15,13 @@ data class PrimaryKey(val columns: List<ColumnName>) {
         require(columns.isNotEmpty()) { "a primary key names at least one column" }
     }
 
-    private fun compositeUnsupported() = Unsupported(
-        "multi-column primary keys are not yet supported", "xtdb/composite-primary-key", mapOf("columns" to columns)
-    )
-
-    private fun iidOf(keyValues: List<Any>): ByteArray =
-        (keyValues.singleOrNull() ?: throw compositeUnsupported()).asIid
-
     /**
      * The IID of the row [doc] describes, from its key columns' values.
      * Throws `xtdb.tx/missing-id` unless [doc] has a value in every key column,
      * `xtdb/invalid-id` for a value of a type that can't key a row.
      */
     fun iid(doc: Map<String, *>): ByteArray =
-        iidOf(columns.map { col -> doc[col] ?: throw Incorrect("missing $col", "xtdb.tx/missing-id", mapOf("doc" to doc)) })
+        keyIid(columns.map { col -> doc[col] ?: throw Incorrect("missing $col", "xtdb.tx/missing-id", mapOf("doc" to doc)) })
 
     private fun keyVectors(rel: RelationReader): List<VectorReader> =
         columns.map { col ->
@@ -39,7 +31,7 @@ data class PrimaryKey(val columns: List<ColumnName>) {
             keyVec
         }
 
-    private fun List<VectorReader>.iidAt(idx: Int): ByteArray = iidOf(map { it.getObject(idx)!! })
+    private fun List<VectorReader>.iidAt(idx: Int): ByteArray = keyIid(map { it.getObject(idx) })
 
     /**
      * The IIDs of [rel]'s rows, from its key columns, as an `_iid` vector for the caller to close.
