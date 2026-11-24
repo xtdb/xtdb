@@ -3,9 +3,9 @@ title: Storage
 ---
 
 <details>
-<summary>Changelog (last updated v2.3)</summary>
+<summary>Changelog (last updated v2.2.1)</summary>
 
-v2.3: size the memory cache smaller than the disk cache
+v2.2.1: size the memory cache smaller than the disk cache
 
 : With remote storage, the memory cache keeps files mapped between queries, and each file it holds keeps its disk-cache copy from being evicted — see [Remote](#remote).
 
@@ -14,7 +14,7 @@ v2.3: size the memory cache smaller than the disk cache
 
   If your `memoryCache` is configured larger than your `diskCache`, make it smaller; at the defaults the disk cache is usually the larger.
 
-v2.3: disk-cache entries are keyed by the store they came from
+v2.2.1: disk-cache entries are keyed by the store they came from
 
 : The disk cache keys its entries by the object store they were read from or written to — see [Disk cache](#disk-cache).
 
