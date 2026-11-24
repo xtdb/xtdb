@@ -31,7 +31,7 @@ class SingletonListReader(override val name: String, private val elReader: Vecto
         return RowCopier { idx ->
             check(idx == 0)
 
-            elCopier.copyRange(0, valueCount)
+            elCopier.copyRange(0, elReader.valueCount)
             dest.endList()
             idx
         }
@@ -39,7 +39,7 @@ class SingletonListReader(override val name: String, private val elReader: Vecto
 
     override fun hashCode(idx: Int, hasher: Hasher): Int {
         var hash = 0
-        for (i in 0 until valueCount) {
+        for (i in 0 until elReader.valueCount) {
             hash = ByteFunctionHelpers.combineHash(hash, elReader.hashCode(i, hasher))
         }
         return hash
