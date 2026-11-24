@@ -15,35 +15,33 @@
                   "user_metadata" [:? :struct],
                   "error" [:? :transit]}]}]}),
  :batches
- ([{:xt/system-from #xt/zdt "2020-01-05T00:00Z[UTC]",
-    :xt/valid-from #xt/zdt "2020-01-05T00:00Z[UTC]",
-    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
-    :op
-    #xt/tagged [:put
-                {:xt/id 7908,
-                 :system-time #xt/zdt "2020-01-05T00:00Z[UTC]",
-                 :committed true}],
-    :xt/iid #bytes "029f1c8329290556261e3a3b236512b9"}
-   {:xt/system-from #xt/zdt "2020-01-06T00:00Z[UTC]",
-    :xt/valid-from #xt/zdt "2020-01-06T00:00Z[UTC]",
-    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
-    :op
-    #xt/tagged [:put
-                {:xt/id 8659,
-                 :system-time #xt/zdt "2020-01-06T00:00Z[UTC]",
-                 :committed false,
-                 :error
-                  #xt/error [:incorrect :xtdb.indexer/invalid-valid-times "Invalid valid times" {:table #xt/table foo, :valid-from #xt/instant "2020-01-01T00:00:00Z", :tx-key #xt/tx-key {:tx-id 8659, :system-time #xt/instant "2020-01-06T00:00:00Z"}, :valid-to #xt/instant "2019-01-01T00:00:00Z", :tx-op-idx 0}]}],
-    :xt/iid #bytes "10107469032d528025dcba96920127e9"}
-   {:xt/system-from #xt/zdt "2020-01-03T00:00Z[UTC]",
+ ([{:xt/system-from #xt/zdt "2020-01-03T00:00Z[UTC]",
     :xt/valid-from #xt/zdt "2020-01-03T00:00Z[UTC]",
     :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
     :op
     #xt/tagged [:put
-                {:xt/id 4614,
+                {:xt/id 4510,
                  :system-time #xt/zdt "2020-01-03T00:00Z[UTC]",
                  :committed true}],
-    :xt/iid #bytes "62f17d0708b354d21d21be3ba0bcc03c"}
+    :xt/iid #bytes "119a35d72da7d7cfff80594611889629"}
+   {:xt/system-from #xt/zdt "2020-01-05T00:00Z[UTC]",
+    :xt/valid-from #xt/zdt "2020-01-05T00:00Z[UTC]",
+    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
+    :op
+    #xt/tagged [:put
+                {:xt/id 7700,
+                 :system-time #xt/zdt "2020-01-05T00:00Z[UTC]",
+                 :committed true}],
+    :xt/iid #bytes "750badeb95b994fff9f6db60c5c4b4d3"}
+   {:xt/system-from #xt/zdt "2020-01-04T00:00Z[UTC]",
+    :xt/valid-from #xt/zdt "2020-01-04T00:00Z[UTC]",
+    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
+    :op
+    #xt/tagged [:put
+                {:xt/id 5581,
+                 :system-time #xt/zdt "2020-01-04T00:00Z[UTC]",
+                 :committed true}],
+    :xt/iid #bytes "8476a0248b8eabcc3f4d62a3c009b4bf"}
    {:xt/system-from #xt/zdt "2020-01-01T00:00Z[UTC]",
     :xt/valid-from #xt/zdt "2020-01-01T00:00Z[UTC]",
     :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
@@ -53,15 +51,17 @@
                  :system-time #xt/zdt "2020-01-01T00:00Z[UTC]",
                  :committed true}],
     :xt/iid #bytes "a4e167a76a05add8a8654c169b07b044"}
-   {:xt/system-from #xt/zdt "2020-01-04T00:00Z[UTC]",
-    :xt/valid-from #xt/zdt "2020-01-04T00:00Z[UTC]",
+   {:xt/system-from #xt/zdt "2020-01-06T00:00Z[UTC]",
+    :xt/valid-from #xt/zdt "2020-01-06T00:00Z[UTC]",
     :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
     :op
     #xt/tagged [:put
-                {:xt/id 5789,
-                 :system-time #xt/zdt "2020-01-04T00:00Z[UTC]",
-                 :committed true}],
-    :xt/iid #bytes "c0f777f8b38325ce9970fcb4810695bd"}
+                {:xt/id 8451,
+                 :system-time #xt/zdt "2020-01-06T00:00Z[UTC]",
+                 :committed false,
+                 :error
+                  #xt/error [:incorrect :xtdb.indexer/invalid-valid-times "Invalid valid times" {:table #xt/table foo, :valid-from #xt/instant "2020-01-01T00:00:00Z", :tx-key #xt/tx-key {:tx-id 8451, :system-time #xt/instant "2020-01-06T00:00:00Z"}, :valid-to #xt/instant "2019-01-01T00:00:00Z", :tx-op-idx 0}]}],
+    :xt/iid #bytes "b2a82b83a782262099be811af8a9f45f"}
    {:xt/system-from #xt/zdt "2020-01-02T00:00Z[UTC]",
     :xt/valid-from #xt/zdt "2020-01-02T00:00Z[UTC]",
     :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",

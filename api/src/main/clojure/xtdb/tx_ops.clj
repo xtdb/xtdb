@@ -2,7 +2,7 @@
   (:require [clojure.string :as str]
             [xtdb.error :as err]
             [xtdb.time :as time])
-  (:import xtdb.util.NormalForm))
+  (:import (xtdb.util Iid NormalForm)))
 
 (defmulti parse-tx-op
   (fn [tx-op]
@@ -26,8 +26,6 @@
 (defmethod parse-tx-op ::default [[op]]
   (throw (err/incorrect :xtql/unknown-tx-op "Unknown tx-op" {:op op})))
 
-(def ^:private eid? (some-fn uuid? integer? string? keyword?))
-
 (def ^:private table? keyword?)
 
 (defn- expect-table-name [table-name]
@@ -36,10 +34,10 @@
 
   (NormalForm/normalTableName table-name))
 
-(defn- expect-eid [eid]
-  (if-not (eid? eid)
-    (throw (err/incorrect :xtdb.tx/invalid-eid "expected :xt/id or \"_id\""))
-    eid))
+(defn- expect-key-value [v]
+  (if-not (Iid/getAsIidOrNull v)
+    (throw (err/incorrect :xtdb.tx/invalid-eid "expected the table's key value: a UUID, integer, string or keyword" {:value v}))
+    v))
 
 (defn- expect-doc [doc]
   (when-not (map? doc)
@@ -112,7 +110,7 @@
                                                      (keyword? table-or-opts) {:from table-or-opts})]
     {:op :delete-docs
      :table-name (expect-table-name table)
-     :doc-ids (mapv expect-eid doc-ids)
+     :doc-ids (mapv expect-key-value doc-ids)
      :valid-from (some-> valid-from time/expect-instant)
      :valid-to (some-> valid-to time/expect-instant)}))
 
@@ -125,7 +123,7 @@
 (defmethod parse-tx-op :erase-docs [[_ table & doc-ids]]
   {:op :erase-docs
    :table-name (expect-table-name table)
-   :doc-ids (mapv expect-eid doc-ids)})
+   :doc-ids (mapv expect-key-value doc-ids)})
 
 (defmethod parse-tx-op :assert-exists [_]
   (throw (err/unsupported :xtdb/xtql-dml-removed

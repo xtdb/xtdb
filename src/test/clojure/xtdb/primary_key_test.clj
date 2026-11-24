@@ -135,6 +135,23 @@
                     (xt/submit-tx tu/*node* [[:put-docs :t {:xt/id {:x 1}}]]))
         "at submit, once the key is fixed"))
 
+(t/deftest delete-and-erase-docs-address-the-row-its-key-identifies
+  (xt/execute-tx tu/*node* ["CREATE TABLE t (a PRIMARY KEY, b)"
+                            [:put-docs :t {:a 1, :b "x", :xt/id 2} {:a 2, :b "y"} {:a 3, :b "z"}]])
+
+  (xt/submit-tx tu/*node* [[:delete-docs :t 2]])
+  (xt/execute-tx tu/*node* [[:erase-docs :t 3]])
+
+  (t/is (= [{:a 1, :b "x"}] (xt/q tu/*node* "SELECT a, b FROM t FOR ALL VALID_TIME WHERE a <> 2")))
+  (t/is (= [{:a 1}] (xt/q tu/*node* "SELECT a FROM t"))))
+
+(t/deftest a-delete-by-a-value-that-cant-key-a-row-is-rejected
+  (t/is (anomalous? [:incorrect :xtdb.tx/invalid-eid]
+                    (xt/execute-tx tu/*node* [[:delete-docs :t 1.5]])))
+
+  (t/is (anomalous? [:incorrect :xtdb.tx/invalid-eid]
+                    (xt/execute-tx tu/*node* [[:erase-docs :t 7N]]))))
+
 (t/deftest patch-docs-patches-the-row-its-key-identifies
   (xt/execute-tx tu/*node* ["CREATE TABLE t (a PRIMARY KEY, b, c)"])
   (xt/execute-tx tu/*node* [[:put-docs :t {:a 1, :b "x", :xt/id "one"} {:a 2, :b "y"}]])

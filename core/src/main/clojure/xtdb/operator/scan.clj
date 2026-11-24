@@ -130,20 +130,26 @@
         (= pk-sym (nth eid-select 2))
         (second eid-select)))
 
-(defn- resolve-eid-to-iid
-  "nil where we can't prove the eid resolves to a single IID, so the caller must not narrow the scan.
-   A value of a type no ID can have is one of those: `_id = 7.0` still matches an integer ID of 7."
-  ^bytes [eid ^RelationReader args-rel]
+(defn- resolve-select-value
+  "nil where the select isn't on exactly one value — a param bound to several rows, say — so the caller must not narrow the scan."
+  [v ^RelationReader args-rel]
   (cond
-    (and (s/valid? ::lp/value eid) (util/valid-iid? eid))
-    (util/->iid eid)
+    (s/valid? ::lp/value v) v
 
-    (s/valid? ::lp/param eid)
-    (when-let [eid-rdr (.vectorForOrNull args-rel (name eid))]
-      (when (= 1 (.getValueCount eid-rdr))
-        (let [eid-val (.getObject eid-rdr 0)]
-          (when (util/valid-iid? eid-val)
-            (util/->iid eid-val)))))))
+    (s/valid? ::lp/param v)
+    (when-let [rdr (.vectorForOrNull args-rel (name v))]
+      (when (= 1 (.getValueCount rdr))
+        (.getObject rdr 0)))))
+
+(defn- key-value->iid
+  "nil for a value of a type no ID can have: `_id = 7.0` still matches an integer ID of 7, so it mustn't narrow the scan."
+  ^bytes [v]
+  (when (util/valid-iid? v)
+    (util/->iid v)))
+
+(defn- iid-value->iid ^bytes [v]
+  (when (and (bytes? v) (= 16 (alength ^bytes v)))
+    v))
 
 (defn- flatten-or
   [expr]
@@ -164,21 +170,25 @@
                      (every? some? eids))
             eids))))))
 
-(defn selects->iid-set
-  "The IIDs that `selects` on the single-column primary key `pk-col` pin the scan to, or nil."
-  ^SortedSet [^String pk-col selects ^RelationReader args-rel]
-  (when-let [eid-select (get selects pk-col)]
-    (when-let [eids (let [pk-sym (symbol pk-col)]
-                      (cond
-                        (= '== (first eid-select))
-                        (some-> (eid-select->eid pk-sym eid-select) vector)
+(defn- col-selects->iid-set ^SortedSet [^String col ->iid selects ^RelationReader args-rel]
+  (when-let [select (get selects col)]
+    (when-let [vs (let [col-sym (symbol col)]
+                    (cond
+                      (= '== (first select))
+                      (some-> (eid-select->eid col-sym select) vector)
 
-                        (= 'or (first eid-select))
-                        (extract-id-eqs-from-or pk-sym eid-select)))]
-      (let [iids (mapv #(resolve-eid-to-iid % args-rel) eids)]
+                      (= 'or (first select))
+                      (extract-id-eqs-from-or col-sym select)))]
+      (let [iids (mapv #(some-> (resolve-select-value % args-rel) ->iid) vs)]
         (when (every? some? iids)
           (doto (TreeSet. Bytes/COMPARATOR)
             (.addAll iids)))))))
+
+(defn selects->iid-set
+  "The IIDs that `selects` on the single-column primary key `pk-col`, or on `_iid` itself, pin the scan to, or nil."
+  ^SortedSet [^String pk-col selects ^RelationReader args-rel]
+  (or (col-selects->iid-set pk-col key-value->iid selects args-rel)
+      (col-selects->iid-set "_iid" iid-value->iid selects args-rel)))
 
 (defn filter-pushdown-bloom-page-idx-pred ^IntPredicate [^PageMetadata page-metadata, pushdown-blooms, ^String col-name]
   (when-let [^MutableRoaringBitmap pushdown-bloom (get pushdown-blooms (symbol col-name))]

@@ -24,6 +24,12 @@ v2.2.1: `patch-docs` patches the row identified by the table's key
 
   Previously every `patch-docs` document had to carry `:xt/id`, which identified its row whatever the table was keyed on.
 
+v2.2.1: `delete-docs` and `erase-docs` take the table's key values
+
+: In a table keyed on another column, `delete-docs` and `erase-docs` remove the rows whose key has the given values — see [`delete-docs`](#delete-docs).
+
+  Previously they removed the rows whose `:xt/id` had the given values, whatever the table was keyed on.
+
 </details>
 
 Transactions in XTDB are submitted to the [log](/ops/config/log), to be processed asynchronously.
@@ -163,6 +169,9 @@ A document without the key is an `xtdb.tx/missing-id` error, raised as for [`put
 Deletes documents from the given table, optionally during the given valid time period.
 The default valid time behaviour is the same as [put](#put-docs), above.
 
+Each document is identified by its value of the table's [primary key](/reference/main/sql/schema#primary-keys-v221) — its `:xt/id`, unless the table declares another key.
+A value of a type that can't key a row (see [ID types](/reference/main/sql/txs#id-types)) fails at submit with `xtdb.tx/invalid-eid`.
+
 ``` clojure
 [:delete-docs
  ;; -- required
@@ -182,8 +191,8 @@ The default valid time behaviour is the same as [put](#put-docs), above.
   }
 
  ;; -- required
- ;; document ids to delete (variadic, 0..n)
- & <ids>
+ ;; key values of the documents to delete (variadic, 0..n)
+ & <keys>
  ]
 ```
 
@@ -212,6 +221,7 @@ Examples:
 ### `erase-docs`
 
 Irrevocably erases documents from the given table (including through system time), for all valid-time.
+Each document is identified by its value of the table's key, as for [`delete-docs`](#delete-docs).
 
 ``` clojure
 [:erase-docs
@@ -220,8 +230,8 @@ Irrevocably erases documents from the given table (including through system time
  ;; table to erase documents from
  <table>
 
- ;; document ids to erase (variadic, 0..n)
- & <ids>
+ ;; key values of the documents to erase (variadic, 0..n)
+ & <keys>
  ]
 ```
 

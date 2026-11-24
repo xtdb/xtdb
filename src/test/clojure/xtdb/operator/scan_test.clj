@@ -497,6 +497,43 @@
   (t/is (nil? (scan/selects->iid-set "a" {"_id" (list '== '_id 1)} vw/empty-args))
         "an `_id` equality doesn't pin a table keyed on another column"))
 
+(t/deftest test-iid-equalities-pin-the-iid-set
+  (let [iid1 (util/->iid 1)
+        iid2 (util/->iid 2)]
+    (with-open [^RelationReader args-rel (tu/open-args {:iid iid1})]
+      (t/is (= [(seq iid1)]
+               (map seq (scan/selects->iid-set "a" '{"_iid" (== _iid ?iid)} args-rel)))))
+
+    (with-open [^RelationReader args-rel (tu/open-args {:iid1 iid1, :iid2 iid2})]
+      (t/is (= #{(seq iid1) (seq iid2)}
+               (set (map seq (scan/selects->iid-set "a" '{"_iid" (or (== _iid ?iid1) (== ?iid2 _iid))} args-rel))))))
+
+    (with-open [^RelationReader args-rel (tu/open-args {:iid [iid1 iid2]})]
+      (t/is (nil? (scan/selects->iid-set "a" '{"_iid" (== _iid ?iid)} args-rel))
+            "a param bound to several rows"))
+
+    (with-open [^RelationReader args-rel (tu/open-args {:iid (byte-array 4)})]
+      (t/is (nil? (scan/selects->iid-set "a" '{"_iid" (== _iid ?iid)} args-rel))
+            "bytes that can't be an IID"))
+
+    (t/is (nil? (scan/selects->iid-set "a" {"_iid" (list '== '_iid 1)} vw/empty-args))
+          "a value an IID is never equal to")))
+
+(t/deftest test-delete-by-iid-reaches-the-iid-selector
+  (xt/execute-tx tu/*node* ["CREATE TABLE t (a PRIMARY KEY, b)"
+                            "INSERT INTO t (a, b) VALUES (1, 'x'), (2, 'y')"
+                            "INSERT INTO u RECORDS {_id: 1, b: 'x'}, {_id: 2, b: 'y'}"])
+
+  (let [old-selects->iid-set scan/selects->iid-set]
+    (with-redefs [scan/selects->iid-set (fn [& args]
+                                          (doto (apply old-selects->iid-set args)
+                                            (assert "iid-set can't be nil")))]
+      (xt/execute-tx tu/*node* [[:delete-docs :t 1]
+                                [:delete-docs :u 1]])))
+
+  (t/is (= [{:a 2}] (xt/q tu/*node* "SELECT a FROM t")))
+  (t/is (= [{:xt/id 2}] (xt/q tu/*node* "SELECT _id FROM u"))))
+
 (t/deftest test-id-equality-against-an-unresolvable-eid-still-finds-the-row-5987
   (xt/execute-tx tu/*node* ["INSERT INTO docs RECORDS {_id: 7, name: 'seven'}, {_id: 'abc', name: 'abc'}"])
 
