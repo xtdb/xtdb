@@ -53,14 +53,12 @@ val defaultJvmArgs = listOf(
 
 val sixGBJvmArgs = listOf(
     "-Xmx2g",
-    "-Xms2g",
     "-XX:MaxDirectMemorySize=3g",
     "-XX:MaxMetaspaceSize=1g"
 )
 
 val twelveGBJvmArgs = listOf(
     "-Xmx5g",
-    "-Xms5g",
     "-XX:MaxDirectMemorySize=6g",
     "-XX:MaxMetaspaceSize=1g"
 )
@@ -239,10 +237,12 @@ allprojects {
 
         }
 
+        val heavyTestJvmArgs = if (project == rootProject || project.path == ":xtdb-core") twelveGBJvmArgs else sixGBJvmArgs
+
         tasks.register("integration-test", Test::class) {
             testClassesDirs = tasks.test.get().testClassesDirs
             classpath = tasks.test.get().classpath
-            jvmArgs(defaultJvmArgs + twelveGBJvmArgs)
+            jvmArgs(defaultJvmArgs + heavyTestJvmArgs)
             useJUnitPlatform {
                 includeTags("integration")
             }
@@ -260,7 +260,7 @@ allprojects {
         tasks.register("property-test", Test::class) {
             testClassesDirs = tasks.test.get().testClassesDirs
             classpath = tasks.test.get().classpath
-            jvmArgs(defaultJvmArgs + twelveGBJvmArgs)
+            jvmArgs(defaultJvmArgs + heavyTestJvmArgs)
 
             val iterations = project.findProperty("iterations")?.toString() ?: "100"
             systemProperty("xtdb.property-test-iterations", iterations)
