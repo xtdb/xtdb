@@ -22,6 +22,7 @@ class ScanCursor(
     private val al: BufferAllocator,
 
     private val colNames: List<ColumnName>, private val colPreds: Map<ColumnName, SelectionSpec>,
+    private val iidSelector: SelectionSpec?,
     private val temporalBounds: TemporalBounds, private val clampValidTime: Boolean,
 
     private val ownedSegments: List<Segment<*>>,
@@ -41,18 +42,20 @@ class ScanCursor(
             AsOfResolver(temporalBounds, clampValidTime)
         else PolygonResolver(temporalBounds, clampValidTime)
 
-    private fun RelationReader.maybeSelect(iidPred: SelectionSpec?, path: ByteArray) =
-        when (iidPred) {
-            null -> this
-            is MultiIidSelector -> select(iidPred.select(al, this, path).toSelection())
-            else -> select(iidPred.select(al, this, this@ScanCursor.schema, this@ScanCursor.args).toSelection())
+    private fun RelationReader.maybeSelect(path: ByteArray): RelationReader {
+        val mask = when (val iidSelector = iidSelector ?: colPreds["_iid"]) {
+            null -> return this
+            is MultiIidSelector -> iidSelector.select(al, this, path)
+            else -> iidSelector.select(al, this, this@ScanCursor.schema, this@ScanCursor.args)
         }
+
+        return select(mask.toSelection())
+    }
 
     private val bufferedRels: Queue<RelationReader> = LinkedList()
 
     private fun bufferTask(task: MergeTask) {
         task.use {
-            val iidPred = colPreds["_iid"]
             val taskPath = task.path
             val resolver = openResolver()
 
@@ -63,7 +66,7 @@ class ScanCursor(
             // before iid-selection and bitemporal resolution whittle them down to the emitted rows
             metrics.addRowsRead(loadedPages.sumOf { it.rowCount.toLong() })
 
-            val leafReaders = loadedPages.map { it.maybeSelect(iidPred, taskPath) }
+            val leafReaders = loadedPages.map { it.maybeSelect(taskPath) }
 
             val pointers = leafReaders.mapIndexedNotNull { idx, leafReader ->
                 EventRowPointer(leafReader, taskPath).takeIf { it.isValid() }?.let { LeafPointer(it, idx) }

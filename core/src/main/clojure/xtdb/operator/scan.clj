@@ -205,7 +205,7 @@
 (defn- ->partition-scan-cursor
   "Everything partition-specific arrives as an argument, so this knows nothing about which partition
    it's been given or how many exist."
-  ^ICursor [{:keys [allocator ^TableRef table col-names col-preds iid-set metadata-pred scan-opts
+  ^ICursor [{:keys [allocator ^TableRef table col-names col-preds iid-selector iid-set metadata-pred scan-opts
                     schema args ^ScanMetrics metrics]}
             ^PartitionStorage storage ^Snapshot snapshot ^TemporalBounds temporal-bounds]
 
@@ -237,7 +237,7 @@
                               survivors))
               merge-tasks (MergePlanner/planSync (into (vec !segments) live-segments) (->path-pred iid-set) count-pages)]
 
-          (ScanCursor. allocator (vec col-names) col-preds
+          (ScanCursor. allocator (vec col-names) col-preds iid-selector
                        temporal-bounds (boolean (:clamp-valid-time? scan-opts))
                        !segments (.iterator ^Iterable merge-tasks)
                        schema args
@@ -344,11 +344,10 @@
                              (let [iid-set (or (selects->iid-set selects args)
                                                (get pushdown-iids '_iid) ; usually patch
                                                (get pushdown-iids '_id)) ; any other foreign-key join
-                                   col-preds (cond-> col-preds
-                                               (not (empty? iid-set))
-                                               (assoc "_iid" (if (= 1 (count iid-set))
-                                                               (SingleIidSelector. (first iid-set))
-                                                               (MultiIidSelector. iid-set))))
+                                   iid-selector (when-not (empty? iid-set)
+                                                  (if (= 1 (count iid-set))
+                                                    (SingleIidSelector. (first iid-set))
+                                                    (MultiIidSelector. iid-set)))
                                    metadata-pred (expr.meta/->metadata-selector allocator (cons 'and metadata-args) vec-types args)
                                    metadata-pred (reify MetadataPredicate
                                                    (build [_ page-metadata]
@@ -379,7 +378,7 @@
 
                                (->partition-scan-cursor
                                 {:allocator allocator, :table table, :col-names col-names,
-                                 :col-preds col-preds, :iid-set iid-set, :metadata-pred metadata-pred,
+                                 :col-preds col-preds, :iid-selector iid-selector, :iid-set iid-set, :metadata-pred metadata-pred,
                                  :scan-opts scan-opts, :schema schema, :args args, :metrics metrics}
                                 storage snapshot temporal-bounds)))))))}))))
 
