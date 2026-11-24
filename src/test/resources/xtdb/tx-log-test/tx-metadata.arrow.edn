@@ -4,7 +4,7 @@
                [:union
                 {"put-docs"
                  [:struct
-                  {"iids" [:list [:fixed-size-binary 16]],
+                  {"iids" [:? :list :null],
                    "documents"
                    [:union
                     {"public/transfers"
@@ -33,8 +33,7 @@
    :default-tz "Europe/London",
    :tx-ops
    [#xt/tagged [:put-docs
-                {:iids [#bytes "a4e167a76a05add8a8654c169b07b044"],
-                 :documents
+                {:documents
                  #xt/tagged [:public/transfers
                              [{:xt/id 0,
                                :src "the bank",

@@ -52,6 +52,7 @@
            (xtdb.indexer DatabaseSnapshot Snapshot)
            xtdb.NodeBase
            xtdb.operator.scan.IScanEmitter
+           (xtdb.table PrimaryKey)
            (xtdb.query DmlCacheKey IQuerySource IQuerySource$Factory IQuerySource$QueryDatabase ParsedStatement PlanCacheKey PlanCacheKey$Explain PreparedQuery SqlStatement$Assert SqlStatement$CreateTable SqlStatement$Delete SqlStatement$Erase SqlStatement$GrantRole SqlStatement$Patch SqlStatement$Put SqlStatement$RevokeRole)
            xtdb.util.RefCounter))
 
@@ -309,12 +310,12 @@
     (.getExplainAnalyze opts) (assoc :explain-analyze? true)))
 
 (defn- ->plan-key ^PlanCacheKey
-  [parsed-query {:keys [default-db db-names tx-scoped? decorrelate? explain? explain-analyze? arg-fields]} table-info]
+  [parsed-query {:keys [default-db db-names tx-scoped? decorrelate? explain? explain-analyze? arg-fields]} table-info table-pks]
   (PlanCacheKey. parsed-query default-db db-names (boolean tx-scoped?)
                  (if (nil? decorrelate?) true (boolean decorrelate?))
                  (cond explain? PlanCacheKey$Explain/PLAN
                        explain-analyze? PlanCacheKey$Explain/ANALYZE)
-                 arg-fields table-info))
+                 arg-fields table-info table-pks))
 
 (defn- plan-key->opts [^PlanCacheKey k]
   (let [explain (.getExplain k)]
@@ -325,11 +326,13 @@
      :explain? (= PlanCacheKey$Explain/PLAN explain)
      :explain-analyze? (= PlanCacheKey$Explain/ANALYZE explain)
      :arg-fields (.getArgFields k)
-     :table-info (.getTableInfo k)}))
+     :table-info (.getTableInfo k)
+     :table-pks (.getTablePks k)}))
 
 (defn- load-plan [^PlanCacheKey k]
   (let [plan (plan-query (.getAst k) (plan-key->opts k))
-        conformed-plan (conform-plan plan)
+        conformed-plan (-> (conform-plan plan)
+                           (lp/mark-pk-joins (.getTablePks k)))
 
         {:keys [ordered-outer-projection warnings param-count], :or {param-count 0}, :as plan-meta} (meta plan)]
 
@@ -348,7 +351,7 @@
                            (.build))})))
 
 (defprotocol PQuerySource
-  (-plan-query [q-src parsed-query query-opts table-info]))
+  (-plan-query [q-src parsed-query query-opts table-info table-pks]))
 
 (defrecord QuerySource [^BufferAllocator allocator
                         ^IScanEmitter scan-emitter
@@ -357,8 +360,8 @@
                         ^LoadingCache plan-cache
                         ^LoadingCache dml-cache]
   PQuerySource
-  (-plan-query [_ parsed-query query-opts table-info]
-    (.get plan-cache (->plan-key parsed-query query-opts table-info)))
+  (-plan-query [_ parsed-query query-opts table-info table-pks]
+    (.get plan-cache (->plan-key parsed-query query-opts table-info table-pks)))
 
   IQuerySource
   (prepareQuery [this query db-cat query-opts]
@@ -384,7 +387,7 @@
               (open-snaps [dbs min-basis]
                 (into {} (.openSnapshots db-cat dbs min-basis)))
 
-              ;; `{[db-name table-ref] {:cols #{…}, :oid n}}`, projected from the snapshots the operation
+              ;; `{[db-name table-ref] {:cols #{…}, :oid n, :pk PrimaryKey}}`, projected from the snapshots the operation
               ;; is already holding — so the schema a query is planned against, the oids `::regclass`
               ;; resolves through, and the rows the scan reads all come from one snapshot per database.
               (->table-info [snaps]
@@ -393,10 +396,11 @@
                                         (let [oids (.tableOids snap)]
                                           (->> (.tableInfo snap)
                                                (map (fn [[table-ref cols]]
-                                                      [[db-name table-ref] {:cols (set cols), :oid (get oids table-ref)}])))))))))
+                                                      [[db-name table-ref] {:cols (set cols), :oid (get oids table-ref)
+                                                                            :pk (.primaryKey snap table-ref)}])))))))))
 
               (plan-query* [table-info]
-                (-plan-query this parsed-query query-opts (update-vals table-info :cols)))]
+                (-plan-query this parsed-query query-opts (update-vals table-info :cols) (update-vals table-info :pk)))]
 
         (let [!table-info (atom (util/with-open [snaps (open-snaps (resolve-dbs) prepare-min-basis)]
                                   (->table-info snaps)))]
@@ -526,12 +530,12 @@
                       (throw t))))))))))))
 
   (prepareTxSql [this sql db-cat opts]
-    (let [[q-tag {:keys [stmt table message user role col-names]}]
+    (let [[q-tag {:keys [stmt table message user role col-names primary-key]}]
           (parse-sql/parse-statement sql {:default-db (.getDefaultDb opts)})]
       (case q-tag
         :grant-role (SqlStatement$GrantRole. user role)
         :revoke-role (SqlStatement$RevokeRole. user role)
-        :create-table (SqlStatement$CreateTable. table (or col-names []))
+        :create-table (SqlStatement$CreateTable. table (or col-names []) (some-> primary-key (PrimaryKey.)))
 
         (let [pq (.prepareRa this stmt db-cat opts)]
           (case q-tag
@@ -546,9 +550,9 @@
 
   (preparePatchDocsQuery [this table valid-from valid-to db-cat opts]
     (let [default-db (.getDefaultDb opts)
-          table-info (-> (util/with-open [^DatabaseSnapshot snap (.openSnapshot (.databaseOrThrow db-cat default-db) nil)]
-                           (.tableInfo snap))
-                         (sql/xform-table-info [default-db] default-db))
+          table-info (util/with-open [^DatabaseSnapshot snap (.openSnapshot (.databaseOrThrow db-cat default-db) nil)]
+                       (sql/xform-table-info (.tableInfo snap) {[default-db table] (.primaryKey snap table)}
+                                             [default-db] default-db))
           plan (-> (sql/plan-patch {:table-info table-info}
                                    {:db-name default-db
                                     :table table

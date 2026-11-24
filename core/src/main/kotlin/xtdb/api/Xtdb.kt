@@ -1135,6 +1135,12 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                 out
             }
 
+        // `@InternalApi` rather than `internal` because xtdb.adbc (Clojure) calls it: it submits delete-docs/erase-docs as `_iid` DML, which carries no arity for submit to check.
+        /** @suppress */
+        @InternalApi
+        fun requireRowKeyArity(schema: SchemaName, table: TableName, rowKeys: List<*>) =
+            db(dbName).requireRowKeyArity(TableRef(schema, table), rowKeys)
+
         fun executeTxOp(op: TxOp) {
             // auto-execute only when no explicit tx is open; an open tx (from beginTx) buffers even under autoCommit.
             if (autoCommit && tx == null) {

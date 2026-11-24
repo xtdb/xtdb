@@ -36,6 +36,7 @@ import xtdb.metadata.PageMetadata
 import xtdb.query.IQuerySource
 import xtdb.storage.BufferPool
 import xtdb.storage.ReadOnlyBufferPool
+import xtdb.table.PrimaryKey
 import xtdb.api.DatabaseName
 import xtdb.api.TableRef
 import xtdb.trie.ColumnName
@@ -167,6 +168,30 @@ class Database(
         (partitions + listOf(logs, allocator)).closeAll()
     }
 
+    // Only tables whose key is fixed: a tx still ahead of this one in the log may declare an empty table's key,
+    // so the indexer checks the writes into those.
+    private fun requireKnownKeys(ops: List<TxOp>) {
+        val checks = ops.mapNotNull { op ->
+            when (op) {
+                is TxOp.PutDocs -> TableRef(op.schema, op.table) to { pk: PrimaryKey -> pk.requireKeys(op.docs) }
+                is TxOp.PatchDocs -> TableRef(op.schema, op.table) to { pk: PrimaryKey -> pk.requireKeys(op.patches) }
+                is TxOp.DeleteDocs -> TableRef(op.schema, op.table) to { pk: PrimaryKey -> pk.requireRowKeyArity(op.ids.asList) }
+                is TxOp.EraseDocs -> TableRef(op.schema, op.table) to { pk: PrimaryKey -> pk.requireRowKeyArity(op.ids.asList) }
+                else -> null
+            }
+        }
+        if (checks.isEmpty()) return
+
+        openSnapshot(currentBasis()).use { snap ->
+            for ((table, check) in checks) snap.fixedPrimaryKey(table)?.let(check)
+        }
+    }
+
+    /** Throws as `delete-docs` or `erase-docs` of [rowKeys] would at submit, where [table]'s key is fixed — see [PrimaryKey.requireRowKeyArity]. */
+    fun requireRowKeyArity(table: TableRef, rowKeys: List<*>) {
+        openSnapshot(currentBasis()).use { snap -> snap.fixedPrimaryKey(table)?.requireRowKeyArity(rowKeys) }
+    }
+
     fun submitTxBlocking(ops: List<TxOp>, opts: TxOpts): Xtdb.SubmittedTx {
         if (config.externalSource != null)
             throw Incorrect(
@@ -184,6 +209,9 @@ class Database(
             user = opts.user,
             userMetadata = opts.userMetadata?.let { serializeUserMetadata(allocator, it) }
         )
+
+        requireKnownKeys(ops)
+
         val meta = sourceLog.appendMessageBlocking(txMsg)
         return Xtdb.SubmittedTx(meta.msgId)
     }

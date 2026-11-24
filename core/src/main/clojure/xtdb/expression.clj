@@ -24,7 +24,7 @@
            (xtdb.operator MaskSpec ProjectionSpec SelectionSpec)
            (xtdb.pgwire PgTypes)
            xtdb.time.Interval
-           (xtdb.util StringUtil)))
+           (xtdb.util Iid StringUtil)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -800,7 +800,7 @@
                                (reverse emitted-args))]
                    (build-args-then-call [] [])))}))
 
-(declare codegen-concat codegen-format)
+(declare codegen-concat codegen-format codegen-composite-iid)
 
 (defmethod codegen-expr :call [{:keys [f args] :as expr} opts]
   (let [emitted-args (for [arg args]
@@ -811,6 +811,7 @@
           :or (codegen-or emitted-args)
           :concat (codegen-concat expr)
           :format (codegen-format expr)
+          :_composite_iid (codegen-composite-iid expr)
           (codegen-call* expr))
 
         (update :children (fnil into []) emitted-args)
@@ -1168,10 +1169,10 @@
     buf-or-bytes
     (ByteBuffer/wrap ^bytes buf-or-bytes)))
 
-(defmethod codegen-call [:_iid :i64] [_]
+(defmethod codegen-call [:_iid :int] [_]
   {:return-type #xt/type [:fixed-size-binary 16]
    :->call-code (fn [[id]]
-                  `(resolve-buf (util/->iid ~id)))})
+                  `(resolve-buf (util/->iid (long ~id))))})
 
 (defmethod codegen-call [:_iid :utf8] [_]
   {:return-type #xt/type [:fixed-size-binary 16]
@@ -1558,6 +1559,24 @@
                                                       `(resolve-utf8-buf
                                                          (PgFormat/pgFormat (resolve-string ~fmt-code)
                                                                             [~@resolved-args])))))
+                             (reverse emitted-args))]
+                 (build-args-then-call [])))})
+
+(defn- codegen-composite-iid [{:keys [emitted-args]}]
+  {:return-type (if (some (comp types/nullable-vec-type? :return-type) emitted-args)
+                  #xt/type [:? :fixed-size-binary 16]
+                  #xt/type [:fixed-size-binary 16])
+   :continue (fn continue-composite-iid [handle-emitted-expr]
+               (let [build-args-then-call
+                     (reduce (fn step [build-next-arg {continue-this-arg :continue}]
+                               (fn continue-building-args [emitted-args]
+                                 (continue-this-arg (fn [arg-type emitted-arg]
+                                                      (if (= arg-type #xt/type :null)
+                                                        (handle-emitted-expr #xt/type :null nil)
+                                                        (build-next-arg (conj emitted-args emitted-arg)))))))
+                             (fn call-with-built-args [emitted-args]
+                               (handle-emitted-expr #xt/type [:fixed-size-binary 16]
+                                                    `(resolve-buf (Iid/compositeIid [~@(map (fn [arg] `(buf->bytes ~arg)) emitted-args)]))))
                              (reverse emitted-args))]
                  (build-args-then-call [])))})
 

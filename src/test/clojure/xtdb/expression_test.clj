@@ -19,7 +19,7 @@
            (xtdb.arrow NullVector RelationReader Vector VectorReader)
            (xtdb.operator ProjectionSpec$Star)
            (xtdb.time Interval)
-           (xtdb.util StringUtil)))
+           (xtdb.util Iid StringUtil)))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -2497,3 +2497,26 @@
                           {})
                 (mapv #(.scale ^BigDecimal %))))
         "an element type equal to the source's still takes the cast's precision and scale"))
+
+(t/deftest test-iid-of-a-narrow-integer-is-its-as-iid
+  (doseq [v [(int -42) (short 7) (byte 1)]]
+    (t/is (= (vec (Iid/getAsIid v)) (some-> (project1 '(_iid a) {:a v}) expr/resolve-bytes vec))
+          (str (class v)))))
+
+(t/deftest test-iid-of-several-values-is-their-key-iid
+  (letfn [(iid [form doc] (some-> (project1 form doc) expr/resolve-bytes vec))]
+    (t/is (= (vec (Iid/keyIid [1 "x" #uuid "00000000-0000-0000-0000-000000000001" :k]))
+             (iid '(_iid a b c d) {:a 1, :b "x", :c #uuid "00000000-0000-0000-0000-000000000001", :d :k})))
+
+    (t/is (= (vec (Iid/keyIid [1])) (iid '(_iid a) {:a 1})))
+
+    (t/is (nil? (iid '(_iid a b) {:a 1, :b nil})))))
+
+(t/deftest test-iid-of-several-values-is-null-where-one-is
+  (with-open [rel (tu/open-rel {:a [1 1], :b ["x" nil]})]
+    (t/is (= [(vec (Iid/keyIid [1 "x"])) nil]
+             (mapv #(some-> % expr/resolve-bytes vec) (:res (run-projection rel '(_iid a b))))))
+
+    (let [input-types {:var-types {'a #xt/type :i64, 'b #xt/type [:? :utf8]}, :param-types {}}]
+      (t/is (= #xt/type [:? :fixed-size-binary 16]
+               (.getType (expr/->expression-projection-spec "out" (expr/form->expr '(_iid a b) input-types) input-types)))))))

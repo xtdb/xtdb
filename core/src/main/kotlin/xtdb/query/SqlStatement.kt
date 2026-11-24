@@ -1,6 +1,7 @@
 package xtdb.query
 
 import xtdb.api.TableRef
+import xtdb.table.PrimaryKey
 
 /**
  * A parsed transactional SQL statement, ready to apply.
@@ -23,5 +24,5 @@ sealed interface SqlStatement {
     data class GrantRole(val user: String, val role: String) : SqlStatement
     data class RevokeRole(val user: String, val role: String) : SqlStatement
 
-    data class CreateTable(val table: TableRef, val colNames: List<String>) : SqlStatement
+    data class CreateTable(val table: TableRef, val colNames: List<String>, val primaryKey: PrimaryKey?) : SqlStatement
 }

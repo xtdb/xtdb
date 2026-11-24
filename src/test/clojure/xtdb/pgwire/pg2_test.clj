@@ -314,7 +314,7 @@
     (t/is (= [{:_id 1, :value 1}] (insert-and-query "table_c" {:xt/id 1, "value" 1})))
     (t/is (thrown-with-msg? org.pg.error.PGErrorResponse #"missing-id" (insert-and-query "table_d" {"xt/id" 1, "value" 1})))
     (t/is (= [{:_id 1, :value 1}] (insert-and-query "table_e" {:xt/id 1, :value 1})))
-    (t/is (thrown-with-msg? org.pg.error.PGErrorResponse #"missing-id" (insert-and-query "table_f" {:xt/db 1, :value 1})))
+    (t/is (thrown-with-msg? org.pg.error.PGErrorResponse #"forbidden-columns" (insert-and-query "table_f" {:xt/db 1, :value 1})))
     (t/is (= [{:_id 1, :value 1}] (insert-and-query "table_g" {:_id 1, :value 1})))))
 
 ;; - pgwire

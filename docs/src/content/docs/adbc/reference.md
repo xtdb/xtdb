@@ -6,6 +6,18 @@ description: The ADBC surface XTDB supports, in-process and over FlightSQL, with
 <details>
 <summary>Changelog (last updated v2.2.1)</summary>
 
+v2.2.1: bulk ingest keys rows on the table's primary key
+
+: A table that declares a primary key other than `_id` takes its rows keyed on that column - see [Bulk ingest](#bulk-ingest).
+
+  Previously every table was keyed on `_id`, so every ingested row needed one; a table that declares no key still does.
+
+v2.2.1: a bulk ingest with rows missing `_id` is an `INVALID_ARGUMENT`
+
+: See [Bulk ingest](#bulk-ingest).
+
+  Previously it surfaced as gRPC `INTERNAL`.
+
 v2.2.1: DML and `SET` run when a FlightSQL client sends them as a query
 
 : The Python dbapi's `cursor.execute` and an ad-hoc `execute` from any ADBC driver run them, answering an empty result — see [Statements](#statements).
@@ -142,7 +154,7 @@ Because XTDB creates tables on demand, the ingest modes either coincide or don't
 | Mode | Behaviour |
 |------|-----------|
 | `create` | Accepted. Table is auto-created if missing. |
-| `append` | Accepted. Upserts on `_id`. |
+| `append` | Accepted. Upserts on the table's primary key. |
 | `create_append` | Accepted (the common case). |
 | `replace` | **Rejected** (`INVALID_ARGUMENT`). Would require an explicit `ERASE` step. |
 | `create` with fail-if-exists | **Rejected.** XTDB auto-creates; "fail if exists" can't be honoured without an existence check. |
@@ -150,11 +162,13 @@ Because XTDB creates tables on demand, the ingest modes either coincide or don't
 
 Further constraints:
 
-- Every row must have an `_id` column. Rows without one are rejected; materialise an `_id` client-side before ingesting if your source Arrow lacks one.
+- Every row must have the table's [primary key](/reference/main/sql/schema#primary-keys-v221) column: `_id`, unless the table declares another before its first write.
+  Rows without one are rejected.
+  If your source Arrow has a column that identifies each row, declare it as the key with `CREATE TABLE`; otherwise materialise an `_id` client-side before ingesting.
 - A temporal `_valid_from` / `_valid_to` column must be a `timestamp`, not a `date`.
 - A per-call catalog override is rejected (the connection-scoped catalog is the only source of truth); a per-call schema override is honoured, defaulting to `public`.
 
-Mode rejections return a descriptive gRPC `INVALID_ARGUMENT`. Other ingest-time failures are not yet uniformly mapped: a missing `_id` surfaces as gRPC `INTERNAL`, so match on the message, not the status code, until that mapping is tightened.
+Mode rejections and rows missing the key column return a descriptive gRPC `INVALID_ARGUMENT`.
 
 ## Transactions
 

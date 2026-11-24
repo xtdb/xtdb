@@ -10,7 +10,8 @@ import xtdb.database.DatabaseName
  * trees for the same SQL are two keys. `SqlParser`'s text-keyed tree cache is what makes repeated SQL
  * reach one tree, and an eviction there is a miss here too.
  *
- * [tableInfo] is the schema the plan was built against, so a plan never outlives the catalog it assumed.
+ * [tableInfo] is the schema the plan was built against, and [tablePks] the key of each of its tables, so a
+ * plan never outlives the catalog it assumed.
  */
 data class PlanCacheKey(
     val ast: Any,
@@ -21,6 +22,7 @@ data class PlanCacheKey(
     val explain: Explain?,
     val argFields: List<Field>?,
     val tableInfo: Any?,
+    val tablePks: Any?,
 ) {
     enum class Explain { PLAN, ANALYZE }
 }

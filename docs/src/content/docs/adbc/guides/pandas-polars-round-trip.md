@@ -24,7 +24,7 @@ The [runnable companion script](https://github.com/xtdb/xtdb/tree/main/docs/src/
 
 A small events table that stress-tests type fidelity:
 
-- `_id`: required; XTDB's document key.
+- `_id`: required; the table's key, since `events` declares no other [primary key](/reference/main/sql/schema#primary-keys-v221).
 - `ts`: `TIMESTAMP WITH TIME ZONE`.
   psycopg hands this back as a tz-aware `datetime`; ADBC hands it back as `timestamp[us, tz=UTC]`, Arrow-native, no intermediate decode.
 - `severity`: string, stored as a small-cardinality column.

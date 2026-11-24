@@ -88,6 +88,7 @@
 
 (defn emit-join-children [join-expr args]
   (-> join-expr
+      (assoc :pk-cols (get-in join-expr [:opts :pk-cols]))
       (update :left #(lp/emit-expr % args))
       (update :right #(lp/emit-expr % args))))
 
@@ -183,11 +184,17 @@
               build-col (.vectorForOrNull build-rel (str build-col-name))
               ^MutableRoaringBitmap pushdown-bloom (nth pushdown-blooms col-idx)
               ^SortedSet col-pushdown-iids (nth pushdown-iids col-idx)
-              iid-col? (= "_iid" (name build-col-name))]
+              iid-col? (= "_iid" (name build-col-name))
+              !keyable? (volatile! true)]
           (dotimes [build-idx (.getRowCount build-rel)]
-            (when (and col-pushdown-iids (not (.isNull build-col build-idx)))
+            (when (and col-pushdown-iids @!keyable? (not (.isNull build-col build-idx)))
               (let [v (.getObject build-col build-idx)]
-                (.add col-pushdown-iids (if iid-col? v (util/->iid v)))))
+                (cond
+                  iid-col? (.add col-pushdown-iids v)
+                  (util/valid-iid? v) (.add col-pushdown-iids (util/->iid v))
+                  ;; 1.0 can't key a row but equals the key 1, so no IID set is sound - and an empty one narrows nothing
+                  :else (do (vreset! !keyable? false)
+                            (.clear col-pushdown-iids)))))
             (.add pushdown-bloom ^ints (BloomUtils/bloomHashes build-col build-idx))))))))
 
 (defn- ->child-cursors [build-plan-side build-cursor probe-cursors]
@@ -333,7 +340,7 @@
                                   :param-types param-types})))))
 
 (defn- emit-join-expr {:style/indent 2}
-  [{:keys [condition mark-condition mark-key left right]}
+  [{:keys [condition mark-condition mark-key left right pk-cols]}
    {:keys [param-types]}
    {build-plan-side :build-side
     :keys [merge-vec-types-fn join-type
@@ -433,7 +440,7 @@
                                                   (vec (repeatedly (count build-key-col-names) #(MutableRoaringBitmap.))))
                                 pushdown-iids (->> probe-key-col-names
                                                    (mapv (fn [col-name]
-                                                           (when (#{"_id" "_iid"} (name col-name))
+                                                           (when (or (= "_iid" (name col-name)) (contains? pk-cols col-name))
                                                              (TreeSet. Bytes/COMPARATOR)))))
                                 cmp-factory (->cmp-factory {:build-vec-types build-vec-types
                                                             :probe-vec-types probe-vec-types
@@ -666,7 +673,7 @@
   (let [condition-ids-to-remove (set (map :condition-id conditions-to-remove))]
     (remove #(contains? condition-ids-to-remove (:condition-id %)) conditions)))
 
-(defn build-plan-for-next-sub-graph [conditions relations args]
+(defn build-plan-for-next-sub-graph [conditions relations args pk-cols]
   (loop [plan (first relations)
          rels (rest relations)
          conditions conditions
@@ -693,6 +700,7 @@
           (recur
            (emit-inner-join-expr
             {:condition adjusted-join-conditions
+             :pk-cols pk-cols
              :left plan
              :right join-candidate}
             args)
@@ -745,7 +753,7 @@
                           sub-graph-unused-rels
                           sub-graph-unused-conditions
                           sub-graph-join-order]}
-                  (build-plan-for-next-sub-graph conditions relations args)]
+                  (build-plan-for-next-sub-graph conditions relations args (:pk-cols opts))]
               (recur
                 (conj sub-graph-plans sub-graph-plan)
                 sub-graph-unused-rels
@@ -761,6 +769,7 @@
       (assoc
        (emit-inner-join-expr
         {:condition (mapv :condition unused-join-conditions)
+         :pk-cols (:pk-cols opts)
          :left
          (reduce (fn [full-plan sub-graph-plan]
                    (emit-cross-join

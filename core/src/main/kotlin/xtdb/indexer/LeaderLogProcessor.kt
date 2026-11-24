@@ -102,7 +102,7 @@ internal class LeaderLogProcessor(
     private fun applyResolvedTx(msg: ReplicaMessage.ResolvedTx) {
         val txKey = TransactionKey(msg.txId, msg.systemTime)
 
-        msg.loadTableData(al).useAll { tables -> partitionState.commitTx(txKey, tables) }
+        msg.loadTableData(al).useAll { tables -> partitionState.commitTx(txKey, tables, msg.tablePrimaryKeys) }
 
         val result =
             if (msg.committed) TransactionResult.Committed(txKey)
@@ -125,7 +125,7 @@ internal class LeaderLogProcessor(
 
     private fun applyResolvedTx(tx: ResolvedTx) {
         try {
-            tx.sealTables().closeAllOnCatch { partitionState.applyTx(tx.txKey, it) }
+            tx.sealTables().closeAllOnCatch { partitionState.applyTx(tx.txKey, it, tx.primaryKeys) }
 
             watchers.notifyApplied(tx.srcMsgId, tx.txResult, tx.externalSourceToken)
 

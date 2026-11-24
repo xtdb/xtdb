@@ -28,6 +28,7 @@ import xtdb.types.LogTimestamp
 import xtdb.util.mapState
 import xtdb.util.trace
 import xtdb.util.closeAllOnCatch
+import xtdb.table.PrimaryKey
 import xtdb.table.fromSchemaAndTable
 import xtdb.trie.TrieKey
 import xtdb.util.closeAll
@@ -111,7 +112,9 @@ class PartitionState private constructor(
      * The leader's path for a transaction it resolved itself; one it reads back without having staged —
      * a promoted leader catching up — arrives as a deserialised relation and goes through [commitTx].
      */
-    fun applyTx(txKey: TransactionKey, tables: MutableMap<TableRef, LiveTable>) = snapLock.withWriteLock {
+    fun applyTx(
+        txKey: TransactionKey, tables: MutableMap<TableRef, LiveTable>, primaryKeys: Map<TableRef, PrimaryKey>,
+    ) = snapLock.withWriteLock {
         var live = ref.value.live
         val displaced = mutableListOf<LiveTable>()
 
@@ -122,7 +125,7 @@ class PartitionState private constructor(
         live = live.withLatestCompletedTx(txKey)
 
         val next = live
-        ref.update { it.withTableCat(it.tableCat.withEntriesFor(tables.keys)).withLive(next) }
+        ref.update { it.withTableCat(it.tableCat.withEntriesFor(tables.keys).withPrimaryKeys(primaryKeys)).withLive(next) }
         tables.clear()
 
         displaced.closeAll()
@@ -130,7 +133,9 @@ class PartitionState private constructor(
 
     // Promote a committed tx into the live tables from the replica message's deserialised table data
     // (see `loadTableData`) — a follower, or a leader catching up. The caller owns [tables] and closes them afterwards.
-    fun commitTx(txKey: TransactionKey, tables: Map<TableRef, RelationReader>) = snapLock.withWriteLock {
+    fun commitTx(
+        txKey: TransactionKey, tables: Map<TableRef, RelationReader>, primaryKeys: Map<TableRef, PrimaryKey>,
+    ) = snapLock.withWriteLock {
         val systemTimeMicros = txKey.systemTime.asMicros
 
         val before = ref.value.live
@@ -143,7 +148,7 @@ class PartitionState private constructor(
             }
 
             val next = live.withLatestCompletedTx(txKey)
-            ref.update { it.withTableCat(it.tableCat.withEntriesFor(tables.keys)).withLive(next) }
+            ref.update { it.withTableCat(it.tableCat.withEntriesFor(tables.keys).withPrimaryKeys(primaryKeys)).withLive(next) }
         }
 
         tables.keys.mapNotNull { before.tables[it] }.closeAll()

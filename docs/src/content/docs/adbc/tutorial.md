@@ -113,7 +113,7 @@ with conn.cursor() as cur:
 
 XTDB auto-creates the `trades` table.
 The table name you pass becomes the target, and XTDB infers the schema from the data, so no `CREATE TABLE` is required first (you can still declare one explicitly if you want).
-Every row must have an `_id` column: XTDB's document model requires it.
+Every row must have the table's primary key column - `_id` here, since `trades` declares no other [primary key](/reference/main/sql/schema#primary-keys-v221).
 
 Verify the round-trip:
 

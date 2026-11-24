@@ -14,7 +14,7 @@ class ReplicaMessageTermSeqTest {
     @Test
     fun `every message kind carries its term position through the codec`() {
         val msgs = listOf(
-            ReplicaMessage.ResolvedTx(1, Instant.EPOCH, true, null, emptyMap(), srcMsgId = 1, termId = 3),
+            ReplicaMessage.ResolvedTx(1, Instant.EPOCH, true, null, emptyMap(), srcMsgId = 1, primaryKeys = emptyMap(), termId = 3),
             ReplicaMessage.TriesAdded(1, 0, emptyList(), sourceMsgId = 1, termId = 3),
             ReplicaMessage.BlockBoundary(0, 1, termId = 3),
             ReplicaMessage.BlockUploaded(1, 0, 0, 1, emptyList(), termId = 3),

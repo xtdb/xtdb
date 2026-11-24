@@ -17,6 +17,8 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import xtdb.api.error.Anomaly
 import xtdb.api.error.Incorrect
+import xtdb.api.error.Unsupported
+import xtdb.table.PrimaryKey
 import xtdb.api.TableRef
 import xtdb.api.tx.OpenTx
 import xtdb.api.tx.TxIndexer
@@ -121,5 +123,28 @@ class DocsIndexerTest {
         assertSame(interrupt, assertThrows<InterruptedException> {
             runBlocking { indexer.indexRecords(listOf(recWithKey("k1")), txIndexer) }
         })
+    }
+
+    @Test
+    fun `a table keyed on another column is rejected rather than written by _id`() {
+        val openTxTable = mockk<OpenTx.Table>()
+        every { openTxTable.primaryKey } returns PrimaryKey(listOf("a"))
+
+        val openTx = mockk<OpenTx>()
+        every { openTx.table(any(), any()) } returns openTxTable
+
+        val txIndexer = mockk<TxIndexer>()
+        coEvery { txIndexer.submitTx(any(), any(), any()) } coAnswers {
+            @Suppress("UNCHECKED_CAST")
+            (arg<Any>(2) as suspend (OpenTx) -> TxResult)(openTx)
+            error("writer should have thrown")
+        }
+
+        val indexer = DocsIndexer.Factory(table = "events").open() as DocsIndexer
+
+        val e = assertThrows<Unsupported> {
+            runBlocking { indexer.indexRecords(listOf(recWithKey("k1")), txIndexer) }
+        }
+        assertEquals(Keyword.intern("xtdb.kafka-connect-source", "table-not-keyed-on-id"), e.errorCode)
     }
 }

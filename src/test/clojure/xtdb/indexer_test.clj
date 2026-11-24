@@ -71,7 +71,7 @@
 (def magic-last-tx-id
   "This value will change if you vary the structure of log entries, such
   as adding new legs to the tx-ops vector, as in memory the tx-id is a byte offset."
-  4039)
+  3967)
 
 (t/deftest can-build-block-as-arrow-ipc-file-format
   (binding [c/*ignore-signal-block?* true]
@@ -639,3 +639,16 @@ INSERT INTO docs (_id, _valid_from, _valid_to)
     (xt/execute-tx tu/*node* [[:sql "UPDATE counter SET v = v + 1 WHERE _id = 1"]])
 
     (t/is (= [{:v n}] (xt/q tu/*node* "SELECT c.v FROM counter c")))))
+
+(t/deftest put-docs-without-the-tables-key-is-rejected
+  (t/is (anomalous? [:incorrect :xtdb.tx/missing-id]
+                    (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1} {:v 2}]]))
+        "the indexer aborts a put into a table it doesn't know yet")
+
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1}]])
+
+  (t/is (anomalous? [:incorrect :xtdb.tx/missing-id]
+                    (xt/submit-tx tu/*node* [[:put-docs :docs {:v 2}]]))
+        "a put into a table whose key is known fails at submit")
+
+  (t/is (= [{:xt/id 1}] (xt/q tu/*node* "SELECT * FROM docs"))))

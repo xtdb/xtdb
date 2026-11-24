@@ -50,6 +50,13 @@ message ResolvedTx {
     // Set when this tx came from the source log; absent for ext-source txs whose tx_id is an
     // independent counter rather than a source-log msgId.
     int64 src_msg_id = 9 [features.field_presence = EXPLICIT];
+
+    // Keyed like table_data: the tables whose primary key this tx declared.
+    map<string, PrimaryKey> primary_keys = 10;
+}
+
+message PrimaryKey {
+    repeated string columns = 1;
 }
 
 message BlockBoundary {
