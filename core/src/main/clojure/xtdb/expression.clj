@@ -1168,10 +1168,10 @@
     buf-or-bytes
     (ByteBuffer/wrap ^bytes buf-or-bytes)))
 
-(defmethod codegen-call [:_iid :i64] [_]
+(defmethod codegen-call [:_iid :int] [_]
   {:return-type #xt/type [:fixed-size-binary 16]
    :->call-code (fn [[id]]
-                  `(resolve-buf (util/->iid ~id)))})
+                  `(resolve-buf (util/->iid (long ~id))))})
 
 (defmethod codegen-call [:_iid :utf8] [_]
   {:return-type #xt/type [:fixed-size-binary 16]

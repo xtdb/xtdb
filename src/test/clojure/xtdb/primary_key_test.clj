@@ -169,6 +169,15 @@
   (t/is (= [{:a 1, :b "x", :c "z"} {:a 2, :b "y"} {:a 3, :c "w"}]
            (xt/q tu/*node* "SELECT a, b, c FROM t ORDER BY a"))))
 
+(t/deftest a-planned-sql-patch-keys-a-narrow-integer-as-patch-docs-does
+  (xt/execute-tx tu/*node* ["CREATE TABLE t (a PRIMARY KEY, b, c)"])
+  (xt/execute-tx tu/*node* [[:put-docs :t {:a (int 1), :b "x"} {:a (short 2), :b "y"} {:a (byte 3), :b "z"}]])
+  (xt/execute-tx tu/*node* ["PATCH INTO t RECORDS {a: CAST(1 AS INT), c: 'p'}, {a: CAST(2 AS SMALLINT), c: 'q'}"])
+  (xt/execute-tx tu/*node* [[:patch-docs :t {:a (byte 3), :c "r"}]])
+
+  (t/is (= [{:a 1, :b "x", :c "p"} {:a 2, :b "y", :c "q"} {:a 3, :b "z", :c "r"}]
+           (xt/q tu/*node* "SELECT a, b, c FROM t ORDER BY a"))))
+
 (t/deftest a-patch-keys-on-a-declaration-earlier-in-its-transaction
   (xt/execute-tx tu/*node* ["CREATE TABLE t (a PRIMARY KEY, b)"
                             [:put-docs :t {:a 1, :b "x"}]

@@ -19,7 +19,7 @@
            (xtdb.arrow NullVector RelationReader Vector VectorReader)
            (xtdb.operator ProjectionSpec$Star)
            (xtdb.time Interval)
-           (xtdb.util StringUtil)))
+           (xtdb.util Iid StringUtil)))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -2497,3 +2497,9 @@
                           {})
                 (mapv #(.scale ^BigDecimal %))))
         "an element type equal to the source's still takes the cast's precision and scale"))
+
+(t/deftest test-iid-of-a-narrow-integer-is-its-as-iid
+  (doseq [v [(int -42) (short 7) (byte 1)]]
+    (t/is (= (vec (Iid/getAsIid v)) (some-> (project1 '(_iid a) {:a v}) expr/resolve-bytes vec))
+          (str (class v)))))
+
