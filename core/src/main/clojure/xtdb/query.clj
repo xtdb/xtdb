@@ -331,7 +331,8 @@
 
 (defn- load-plan [^PlanCacheKey k]
   (let [plan (plan-query (.getAst k) (plan-key->opts k))
-        conformed-plan (conform-plan plan)
+        conformed-plan (-> (conform-plan plan)
+                           (lp/mark-pk-joins (.getTablePks k)))
 
         {:keys [ordered-outer-projection warnings param-count], :or {param-count 0}, :as plan-meta} (meta plan)]
 

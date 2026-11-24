@@ -1519,3 +1519,33 @@
           (t/is (= 3 (:row-count scan-op))
                 (format "scan should only read 3 rows with IID pushdown for %s _id, not full table scan (got %d)"
                         (name id-type) (:row-count scan-op))))))))
+
+(t/deftest a-join-pushes-iids-to-a-table-keyed-on-another-column
+  (util/with-open [node (xtn/start-node)]
+    (xt/execute-tx node ["CREATE TABLE customer (custkey, name, PRIMARY KEY (custkey))"])
+    (xt/execute-tx node [(into [:put-docs :customer] (for [i (range 100)] {:custkey i, :name (str "c" i)}))
+                         [:put-docs :orders {:xt/id 1, :custkey 3, :cname "c3"} {:xt/id 2, :custkey 5, :cname "c5"} {:xt/id 3, :custkey 5, :cname "c5"}]])
+
+    (letfn [(customer-scan [q]
+              (->> (xt/q node (str "EXPLAIN ANALYZE " q))
+                   (filter #(= "public.customer" (get-in % [:attributes :scan-source])))
+                   first))]
+      (doseq [[q expected] [["SELECT c.custkey FROM customer c WHERE c.custkey IN (SELECT custkey FROM orders)"
+                             #{{:custkey 3} {:custkey 5}}]
+                            ["SELECT c.ck FROM (SELECT custkey AS ck, name FROM customer) c WHERE c.ck IN (SELECT custkey FROM orders)"
+                             #{{:ck 3} {:ck 5}}]
+                            ["SELECT c.custkey, c.n FROM (SELECT custkey, COUNT(*) AS n FROM customer GROUP BY custkey) c WHERE c.custkey IN (SELECT custkey FROM orders)"
+                             #{{:custkey 3, :n 1} {:custkey 5, :n 1}}]]]
+        (t/is (= expected (set (xt/q node q))) q)
+
+        (let [{:keys [pushdowns row-count]} (customer-scan q)]
+          (t/is (= [{:column "custkey", :iids {:count 2}}] (mapv #(select-keys % [:column :iids]) pushdowns)) q)
+          (t/is (= 2 row-count) q)))
+
+      (doseq [[q expected] [["SELECT c.custkey FROM customer c WHERE c.name IN (SELECT cname FROM orders)"
+                             #{{:custkey 3} {:custkey 5}}]
+                            ["SELECT c.ck FROM (SELECT custkey + 0 AS ck FROM customer) c WHERE c.ck IN (SELECT custkey FROM orders)"
+                             #{{:ck 3} {:ck 5}}]]]
+        (t/is (= expected (set (xt/q node q))) q)
+        (t/is (every? (comp nil? :iids) (:pushdowns (customer-scan q)))
+              (str "a column that isn't the key builds no IID set: " q))))))
