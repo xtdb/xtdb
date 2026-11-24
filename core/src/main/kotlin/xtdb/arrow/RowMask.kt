@@ -46,7 +46,7 @@ class RowMask private constructor(private val words: LongArray, val rowCount: In
      *
      * [refinement] is over this mask's set rows: its bit `k` decides the `k`th of them.
      */
-    fun refine(refinement: RowMask): RowMask {
+    fun andThen(refinement: RowMask): RowMask {
         require(refinement.rowCount == cardinality) {
             "refinement is over ${refinement.rowCount} rows, mask sets $cardinality"
         }

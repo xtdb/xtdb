@@ -87,7 +87,7 @@ class RowMaskTest {
 
     private fun checkRefines(rowCount: Int, outer: (Int) -> Boolean, refinement: (Int) -> Boolean) {
         val mask = rowMask(rowCount, outer)
-        val refined = mask.refine(rowMask(mask.cardinality, refinement))
+        val refined = mask.andThen(rowMask(mask.cardinality, refinement))
         val expected = mask.toSelection().filterIndexed { k, _ -> refinement(k) }
 
         refined.rowCount shouldBe rowCount
@@ -119,7 +119,7 @@ class RowMaskTest {
     @Test
     fun `a refinement must cover exactly the set rows`() {
         val mask = rowMask(10) { it % 2 == 0 }
-        shouldThrow<IllegalArgumentException> { mask.refine(rowMask(10) { true }) }
+        shouldThrow<IllegalArgumentException> { mask.andThen(rowMask(10) { true }) }
     }
 
     private fun built(rowCount: Int, rows: List<Int>): RowMask =

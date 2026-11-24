@@ -36,7 +36,7 @@ class MaskedRelation private constructor(private val inner: RelationReader, inte
          */
         @JvmStatic
         fun of(rel: RelationReader, mask: RowMask): MaskedRelation = when (rel) {
-            is MaskedRelation -> MaskedRelation(rel.inner, rel.mask.refine(mask))
+            is MaskedRelation -> MaskedRelation(rel.inner, rel.mask.andThen(mask))
             else -> MaskedRelation(rel, mask)
         }
     }
