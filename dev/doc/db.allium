@@ -326,6 +326,10 @@ value Snapshot {
 
 value TableMetadata {
     row_count: Integer?
+    -- The columns identifying the table's rows, in key order.
+    -- Absent until a transaction declares it or a block records it; an absent key is `_id`, and a block records it as such.
+    -- It changes only until the table is first written to, so a transaction reading the key of a table that has been written to reads the key every later transaction will use.
+    primary_key: List<String>?
 }
 
 value DbOp {
@@ -424,6 +428,7 @@ variant ResolvedTxMessage : ReplicaMessage {
     error: Throwable?                         -- the abort reason, null if committed
     db_op: DbOp?                              -- an attach or detach side-effect, if any
     table_data: Map<String, Bytes>            -- the resolved row data per table
+    primary_keys: Map<String, List<String>>   -- keyed like table_data: the tables whose primary key this transaction declared
     external_source_token: ExternalSourceToken?
 
     -- The leader's RESOLVE-side source watermark when this record was produced: for a source-log transaction its own position, for an external-source one the leader's current source-log position, so that followers keep their durable watermark in step between block boundaries.
@@ -1456,7 +1461,7 @@ deferred TakeResolvedHead
   -- Removal precedes validation deliberately; see LeaderAppliesOwnTx.
   -- See: live-index.allium ApplyResolvedTx
 deferred ApplyResolvedTx
-  -- Apply on read-back: import the head's rows into the durable live tables, advance the DURABLE head to it, and complete its durability handle.
+  -- Apply on read-back: import the head's rows into the durable live tables, record the primary keys it declared in the table catalog in the same write, advance the DURABLE head to it, and complete its durability handle.
   -- See: live-index.allium ApplyResolvedTx
 deferred ProduceBlock
   -- Produce the block a boundary cut: finish the live index's block, build and upload the per-table block files and the block file, and append the upload under this term.
@@ -1465,7 +1470,8 @@ deferred AdoptBlock
   -- Adopt a block a confirmation names: add its L0 tries to the trie catalog, refresh the table catalog onto the block, and roll the live index onto the block behind it, in one write of the partition's value.
   -- See: Adopting a block, above.
 deferred ApplyResolvedTxFromRecord
-  -- Apply a resolved transaction this term did not resolve: import the record's rows into the durable live tables, advance the DURABLE head to it, and report it to the watchers from the record.
+  -- Apply a resolved transaction this term did not resolve: import the record's rows into the durable live tables, record the record's primary_keys in the table catalog in the same write, advance the DURABLE head to it, and report it to the watchers from the record.
+  -- The keys travel on the record so that a follower, and a node replaying the log after a restart, key a table as its leader did before any block records it.
 deferred FoldIntoTermPosition
   -- Fold one record into this node's highest term read and its position within that term, and return the verdict: fenced, discarded, voided or admitted.
   -- See: log-processor-lifecycle.allium, Rules: fold a record into the term position

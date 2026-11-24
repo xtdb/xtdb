@@ -59,7 +59,7 @@ directlyExecutableStatement
     | GRANT roleName=identifier TO userName=identifier # GrantRoleStatement
     | REVOKE roleName=identifier FROM userName=identifier # RevokeRoleStatement
 
-    | CREATE (OR ALTER)? TABLE targetTable ('(' columnNameList ')')? # CreateTableStatement
+    | CREATE (OR ALTER)? TABLE targetTable ('(' createTableElement (',' createTableElement)* ')')? # CreateTableStatement
     ;
 
 discardTarget
@@ -166,6 +166,7 @@ nonReservedKeyword
     | COPY | FORMAT
     | ATTACH | DETACH | DATABASE | LEVEL
     | FILTER
+    | PRIMARY | KEY
     | TABLE
     | METADATA
     | SYNC
@@ -182,6 +183,11 @@ nonReservedKeyword
     ;
 
 columnName : identifier ;
+
+createTableElement
+    : PRIMARY KEY '(' columnNameList ')' # TablePrimaryKey
+    | columnName (PRIMARY KEY)? # TableColumn
+    ;
 
 columnLabel
     : identifier

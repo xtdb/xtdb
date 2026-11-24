@@ -33,8 +33,8 @@
            (xtdb.query IQuerySource$QueryDatabase)
            (xtdb.segment BufferPoolSegment MergePlanner)
            xtdb.api.TableRef
-           (xtdb.trie Bucketer)
-           (xtdb.util TemporalBounds TemporalDimension)))
+           (xtdb.trie Bucketer IidPrefixFilter)
+           (xtdb.util Iid TemporalBounds TemporalDimension)))
 
 (s/def ::db-name string?)
 (s/def ::table ::table/ref)
@@ -123,27 +123,33 @@
   (with-open [snap (.openSnapshot snap-src nil)]
     (update-vals (.getTableInfo snap) set)))
 
-(defn- eid-select->eid [eid-select]
-  (cond (= '_id (second eid-select))
+(defn- eid-select->eid [pk-sym eid-select]
+  (cond (= pk-sym (second eid-select))
         (nth eid-select 2)
 
-        (= '_id (nth eid-select 2))
+        (= pk-sym (nth eid-select 2))
         (second eid-select)))
 
-(defn- resolve-eid-to-iid
-  "nil where we can't prove the eid resolves to a single IID, so the caller must not narrow the scan.
-   A value of a type no ID can have is one of those: `_id = 7.0` still matches an integer ID of 7."
-  ^bytes [eid ^RelationReader args-rel]
+(defn- resolve-select-value
+  "nil where the select isn't on exactly one value — a param bound to several rows, say — so the caller must not narrow the scan."
+  [v ^RelationReader args-rel]
   (cond
-    (and (s/valid? ::lp/value eid) (util/valid-iid? eid))
-    (util/->iid eid)
+    (s/valid? ::lp/value v) v
 
-    (s/valid? ::lp/param eid)
-    (when-let [eid-rdr (.vectorForOrNull args-rel (name eid))]
-      (when (= 1 (.getValueCount eid-rdr))
-        (let [eid-val (.getObject eid-rdr 0)]
-          (when (util/valid-iid? eid-val)
-            (util/->iid eid-val)))))))
+    (s/valid? ::lp/param v)
+    (when-let [rdr (.vectorForOrNull args-rel (name v))]
+      (when (= 1 (.getValueCount rdr))
+        (.getObject rdr 0)))))
+
+(defn- key-value->iid
+  "nil for a value of a type no ID can have: `_id = 7.0` still matches an integer ID of 7, so it mustn't narrow the scan."
+  ^bytes [v]
+  (when (util/valid-iid? v)
+    (util/->iid v)))
+
+(defn- iid-value->iid ^bytes [v]
+  (when (and (bytes? v) (= 16 (alength ^bytes v)))
+    v))
 
 (defn- flatten-or
   [expr]
@@ -152,32 +158,80 @@
     [expr]))
 
 (defn- extract-id-eqs-from-or
-  [expr]
+  [pk-sym expr]
   (when (and (sequential? expr) (= 'or (first expr)))
     (let [clauses (flatten-or expr)]
       (when (seq clauses)
         (let [eids (for [clause clauses
                          :when (and (sequential? clause)
                                     (= '== (first clause)))]
-                     (eid-select->eid clause))]
+                     (eid-select->eid pk-sym clause))]
           (when (and (= (count eids) (count clauses))
                      (every? some? eids))
             eids))))))
 
-(defn selects->iid-set ^SortedSet [selects ^RelationReader args-rel]
-  (when-let [eid-select (get selects "_id")]
-    (when-let [eids (cond
-                      ;; Single equality: (== _id value)
-                      (= '== (first eid-select))
-                      (some-> (eid-select->eid eid-select) vector)
+(defn- col-selects->iid-set ^SortedSet [^String col ->iid selects ^RelationReader args-rel]
+  (when-let [select (get selects col)]
+    (when-let [vs (let [col-sym (symbol col)]
+                    (cond
+                      (= '== (first select))
+                      (some-> (eid-select->eid col-sym select) vector)
 
-                      ;; OR chain: (or (== _id v1) (== _id v2) ...)
-                      (= 'or (first eid-select))
-                      (extract-id-eqs-from-or eid-select))]
-      (let [iids (mapv #(resolve-eid-to-iid % args-rel) eids)]
+                      (= 'or (first select))
+                      (extract-id-eqs-from-or col-sym select)))]
+      (let [iids (mapv #(some-> (resolve-select-value % args-rel) ->iid) vs)]
         (when (every? some? iids)
           (doto (TreeSet. Bytes/COMPARATOR)
             (.addAll iids)))))))
+
+(defn- composite-key-selects->iid-set ^SortedSet [pk-cols selects ^RelationReader args-rel]
+  (let [key-values (mapv (fn [^String pk-col]
+                           (let [select (get selects pk-col)]
+                             (when (= '== (first select))
+                               (some-> (eid-select->eid (symbol pk-col) select)
+                                       (resolve-select-value args-rel)))))
+                         pk-cols)]
+    (when (every? util/valid-iid? key-values)
+      (doto (TreeSet. Bytes/COMPARATOR)
+        (.add (Iid/keyIid key-values))))))
+
+(defn selects->iid-set
+  "The IIDs that `selects` on the primary key `pk-cols` (in key order), or on `_iid` itself, pin the scan to, or nil.
+   A composite key is pinned only by an equality on every one of its columns."
+  ^SortedSet [pk-cols selects ^RelationReader args-rel]
+  (or (if (next pk-cols)
+        (composite-key-selects->iid-set pk-cols selects args-rel)
+        (col-selects->iid-set (first pk-cols) key-value->iid selects args-rel))
+      (col-selects->iid-set "_iid" iid-value->iid selects args-rel)))
+
+(def ^:private max-prefix-filter-values 256)
+
+(defn selects->prefix-filter
+  "The paths that equalities, or OR-chains of them, on some of the composite key `pk-cols` (in key order) leave the scan, or nil.
+   A column narrows the paths by the bits `Iid/prefixMask` gives it, so a column past the 8th narrows nothing;
+   nor does one with any value no key can have — `a = 7.0` still matches the key 7.
+   nil, too, where the columns' values combine into more than `max-prefix-filter-values` prefixes."
+  ^IidPrefixFilter [pk-cols selects ^RelationReader args-rel]
+  (let [n (count pk-cols)
+        pinned-cols (when (> n 1)
+                      (for [[col-idx pk-col] (map-indexed vector pk-cols)
+                            :let [mask (Iid/prefixMask n col-idx)]
+                            :when (not (zero? mask))
+                            :let [iid-set (col-selects->iid-set pk-col key-value->iid selects args-rel)]
+                            :when iid-set]
+                        {:mask mask
+                         :prefixes (into #{} (map #(bit-and (Iid/iidPrefix ^bytes %) mask)) iid-set)}))]
+    (when (seq pinned-cols)
+      (let [prefixes (reduce (fn [acc {:keys [prefixes]}]
+                               (let [acc (set (for [a acc, p prefixes] (bit-or (long a) (long p))))]
+                                 (if (> (count acc) max-prefix-filter-values)
+                                   (reduced nil)
+                                   acc)))
+                             #{0}
+                             pinned-cols)]
+        (when prefixes
+          (IidPrefixFilter. (unchecked-int (reduce bit-or 0 (map :mask pinned-cols)))
+                            (int-array (map unchecked-int prefixes))))))))
 
 (defn filter-pushdown-bloom-page-idx-pred ^IntPredicate [^PageMetadata page-metadata, pushdown-blooms, ^String col-name]
   (when-let [^MutableRoaringBitmap pushdown-bloom (get pushdown-blooms (symbol col-name))]
@@ -205,7 +259,7 @@
 (defn- ->partition-scan-cursor
   "Everything partition-specific arrives as an argument, so this knows nothing about which partition
    it's been given or how many exist."
-  ^ICursor [{:keys [allocator ^TableRef table col-names col-preds iid-set metadata-pred scan-opts
+  ^ICursor [{:keys [allocator ^TableRef table col-names col-preds path-pred metadata-pred scan-opts
                     schema args ^ScanMetrics metrics]}
             ^PartitionStorage storage ^Snapshot snapshot ^TemporalBounds temporal-bounds]
 
@@ -235,7 +289,7 @@
                                          (long (- (count pages) (count survivors)))
                                          (long (count survivors)))
                               survivors))
-              merge-tasks (MergePlanner/planSync (into (vec !segments) live-segments) (->path-pred iid-set) count-pages)]
+              merge-tasks (MergePlanner/planSync (into (vec !segments) live-segments) path-pred count-pages)]
 
           (ScanCursor. allocator (vec col-names) col-preds
                        temporal-bounds (boolean (:clamp-valid-time? scan-opts))
@@ -341,9 +395,14 @@
                                                                                 (fn [s] {:iids s}))
                                                                    str)))})
                            (fn [{:keys [allocator]}]
-                             (let [iid-set (or (selects->iid-set selects args)
+                             (let [pk-cols (.getColumns (.primaryKey db-snapshot table))
+                                   iid-set (or (selects->iid-set pk-cols selects args)
                                                (get pushdown-iids '_iid) ; usually patch
-                                               (get pushdown-iids '_id)) ; any other foreign-key join
+                                               (when-not (next pk-cols)
+                                                 (get pushdown-iids (symbol (first pk-cols))))) ; any other foreign-key join
+                                   path-pred (if (empty? iid-set)
+                                               (selects->prefix-filter pk-cols selects args)
+                                               (->path-pred iid-set))
                                    col-preds (cond-> col-preds
                                                (not (empty? iid-set))
                                                (assoc "_iid" (if (= 1 (count iid-set))
@@ -379,7 +438,7 @@
 
                                (->partition-scan-cursor
                                 {:allocator allocator, :table table, :col-names col-names,
-                                 :col-preds col-preds, :iid-set iid-set, :metadata-pred metadata-pred,
+                                 :col-preds col-preds, :path-pred path-pred, :metadata-pred metadata-pred,
                                  :scan-opts scan-opts, :schema schema, :args args, :metrics metrics}
                                 storage snapshot temporal-bounds)))))))}))))
 

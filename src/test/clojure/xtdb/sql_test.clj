@@ -17,6 +17,7 @@
   (:import (java.nio ByteBuffer)
            (java.nio.file Files)
            (java.nio.file.attribute FileAttribute)
+           (xtdb.table PrimaryKey)
 ))
 
 (t/use-fixtures :each tu/with-allocator tu/with-mock-clock tu/with-node)
@@ -2436,6 +2437,32 @@
 
   (t/is (empty? (xt/q tu/*node* "SELECT * FROM table"))))
 
+(t/deftest test-dml-plans-key-on-the-tables-primary-key
+  (let [opts {:table-info {#xt/table docs #{"_id" "a" "b"}}
+              :table-pks {["xtdb" #xt/table docs] (PrimaryKey. ["a"])}}]
+    (t/is (anomalous? [:incorrect nil #"INSERT does not contain mandatory a column"]
+                      (sql/plan "INSERT INTO docs (_id, b) VALUES (1, 2)" opts)))
+
+    (t/is (some? (sql/plan "INSERT INTO docs (a, b) VALUES (1, 2)" opts))
+          "a row carrying the key column needs no `_id`")
+
+    (t/is (anomalous? [:incorrect nil #"Cannot UPDATE a column"]
+                      (sql/plan "UPDATE docs SET a = 2" opts)))
+
+    (t/is (some #{'(_iid a)} (tree-seq coll? seq (sql/plan "PATCH INTO docs RECORDS {a: 1, b: 2}" opts)))
+          "PATCH addresses each record by the IID of its key column")))
+
+(t/deftest test-dml-plans-key-on-every-column-of-a-composite-key
+  (let [opts {:table-info {#xt/table docs #{"_id" "a" "b" "c"}}
+              :table-pks {["xtdb" #xt/table docs] (PrimaryKey. ["a" "b"])}}]
+    (t/is (anomalous? [:incorrect nil #"INSERT does not contain mandatory b column"]
+                      (sql/plan "INSERT INTO docs (a, c) VALUES (1, 2)" opts)))
+
+    (t/is (some? (sql/plan "INSERT INTO docs (a, b) VALUES (1, 2)" opts)))
+
+    (t/is (anomalous? [:incorrect nil #"Cannot UPDATE b column"]
+                      (sql/plan "UPDATE docs SET b = 2" opts)))))
+
 (t/deftest test-c-style-escapes-3415
   (t/is (= ["A" "A" "A" "" "%" "😁" "\n" "'"]
            (->> (xt/q tu/*node* "VALUES E'\\x41', E'\\101', E'\\U00000041', E'', E'%', E'\\U0001F601', E'\\n', E'\\''")
@@ -2692,7 +2719,7 @@ SELECT PERIOD(DATE '2022-12-31', TIMESTAMP '2023-01-02') CONTAINS (DATE '2023-01
 
   (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo RECORDS {_id: 1, x: 2}"]])
 
-  (t/is (anomalous? [:incorrect :missing-id]
+  (t/is (anomalous? [:incorrect :xtdb.tx/missing-id]
                     (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo RECORDS {id: 1, x: 2}"]])))
 
   (t/is (= [{:x 2, :xt/id 1}]
@@ -2711,7 +2738,7 @@ SELECT PERIOD(DATE '2022-12-31', TIMESTAMP '2023-01-02') CONTAINS (DATE '2023-01
   (t/is (= [{:xt/id 2, :x 3} {:xt/id 3, :x 4.0} {:xt/id 4, :x 5} {:xt/id 5, :x 6.0} {:xt/id 7, :x "8"}]
            (xt/q tu/*node* "SELECT * FROM bar ORDER BY _id")))
 
-  (t/is (anomalous? [:incorrect :missing-id]
+  (t/is (anomalous? [:incorrect :xtdb.tx/missing-id]
                     (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo RECORDS ?"
                                                [{:id 2, :x 3}]]]))))
 

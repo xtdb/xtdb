@@ -171,6 +171,12 @@
              {:op :call, :f :str
               :args [arg]})}))
 
+(defmethod macroexpand1-call :_iid [{:keys [args] :as expr}]
+  (if (next args)
+    {:op :call, :f :_composite_iid
+     :args (mapv (fn [arg] {:op :call, :f :_iid, :args [arg]}) args)}
+    expr))
+
 (defn macroexpand-expr [expr]
   (loop [{:keys [op] :as expr} expr]
     (if-not (= :call op)

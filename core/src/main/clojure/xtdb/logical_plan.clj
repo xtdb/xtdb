@@ -11,7 +11,8 @@
            java.time.temporal.Temporal
            java.util.Date
            org.apache.arrow.memory.BufferAllocator
-           xtdb.api.ICursor))
+           xtdb.api.ICursor
+           xtdb.table.PrimaryKey))
 
 (defn ->col-sym
   ([n]
@@ -1549,6 +1550,67 @@
                   (r/topdown (r/adhoc-tp r/id-tp (instrument-rules [#'rewrite-equals-predicates-in-join-as-equi-join-map])))
                   (r/innermost (r/mono-tp (instrument-rules [#'merge-joins-to-mega-join])))
                   (r/node))))))))
+
+(def ^:private hash-join-ops
+  #{:join :left-outer-join :full-outer-join :semi-join :anti-join :single-join :mark-join :mega-join})
+
+(defn mark-pk-joins
+  "Marks each hash join in the conformed `plan` with `:pk-cols`: the columns of its inputs, under the names the join sees,
+   that carry the single-column primary key of a table scanned beneath it - no column carries a composite key alone.
+   `table-pks` is `{[db-name table-ref] PrimaryKey}`, `[_id]` for a table it doesn't name.
+
+   A column passes up through a rename or a projection under its new name, through a group-by only as a grouping column,
+   and through every other operator unchanged."
+  [plan table-pks]
+  (letfn [(mark-children [expr]
+            (reduce (fn [[expr pk-cols] k]
+                      (if-let [child (get expr k)]
+                        (let [[child child-pk-cols] (if (vector? child)
+                                                      (let [marked (mapv mark child)]
+                                                        [(mapv first marked) (into #{} (mapcat second) marked)])
+                                                      (mark child))]
+                          [(assoc expr k child) (into pk-cols child-pk-cols)])
+                        [expr pk-cols]))
+                    [expr #{}]
+                    [:relation :relations :left :right :independent-relation :dependent-relation :bound-relation]))
+
+          (mark [{:keys [op opts] :as expr}]
+            (case op
+              :scan (let [{:keys [db-name table columns]} opts
+                          pk-cols (.getColumns ^PrimaryKey (get table-pks [db-name table] PrimaryKey/ID))
+                          scan-cols (map (fn [[tag arg]] (case tag :column arg, :select (key (first arg)))) columns)]
+                      [expr (if (next pk-cols)
+                              #{}
+                              (into #{} (filter #{(symbol (first pk-cols))}) scan-cols))])
+
+              :rename (let [[expr pk-cols] (mark-children expr)
+                            {:keys [prefix columns]} opts]
+                        [expr (into #{} (map (fn [col]
+                                               (cond-> (get columns col col)
+                                                 prefix (->> name (symbol (name prefix))))))
+                                    pk-cols)])
+
+              :project (let [[expr pk-cols] (mark-children expr)
+                             {:keys [projections append-columns?]} opts]
+                         [expr (into (if append-columns? pk-cols #{})
+                                     (keep (fn [[tag arg]]
+                                             (case tag
+                                               :column (pk-cols arg)
+                                               :rename (let [[to from] (first arg)]
+                                                         (when (pk-cols from) to))
+                                               nil)))
+                                     projections)])
+
+              :group-by (let [[expr pk-cols] (mark-children expr)]
+                          [expr (into #{} (keep (fn [[tag arg]] (when (= :group-by tag) (pk-cols arg))))
+                                      (:columns opts))])
+
+              (let [[expr pk-cols] (mark-children expr)]
+                [(cond-> expr
+                   (hash-join-ops op) (assoc-in [:opts :pk-cols] pk-cols))
+                 pk-cols])))]
+
+    (first (mark plan))))
 
 (defn validate-plan [plan]
   (when-not (s/valid? ::logical-plan plan)
