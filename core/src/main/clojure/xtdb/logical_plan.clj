@@ -1556,7 +1556,7 @@
 
 (defn mark-pk-joins
   "Marks each hash join in the conformed `plan` with `:pk-cols`: the columns of its inputs, under the names the join sees,
-   that carry the primary key of a table scanned beneath it.
+   that carry the single-column primary key of a table scanned beneath it - no column carries a composite key alone.
    `table-pks` is `{[db-name table-ref] PrimaryKey}`, `[_id]` for a table it doesn't name.
 
    A column passes up through a rename or a projection under its new name, through a group-by only as a grouping column,
@@ -1577,9 +1577,11 @@
           (mark [{:keys [op opts] :as expr}]
             (case op
               :scan (let [{:keys [db-name table columns]} opts
-                          pk-col (symbol (.getColumn ^PrimaryKey (get table-pks [db-name table] PrimaryKey/ID)))
+                          pk-cols (.getColumns ^PrimaryKey (get table-pks [db-name table] PrimaryKey/ID))
                           scan-cols (map (fn [[tag arg]] (case tag :column arg, :select (key (first arg)))) columns)]
-                      [expr (into #{} (filter #{pk-col}) scan-cols)])
+                      [expr (if (next pk-cols)
+                              #{}
+                              (into #{} (filter #{(symbol (first pk-cols))}) scan-cols))])
 
               :rename (let [[expr pk-cols] (mark-children expr)
                             {:keys [prefix columns]} opts]

@@ -20,10 +20,6 @@ data class PrimaryKey(val columns: List<ColumnName>) {
         "multi-column primary keys are not yet supported", "xtdb/composite-primary-key", mapOf("columns" to columns)
     )
 
-    /** The key's single column; a multi-column key is [Unsupported]. */
-    val column: ColumnName
-        get() = columns.singleOrNull() ?: throw compositeUnsupported()
-
     private fun iidOf(keyValues: List<Any>): ByteArray =
         (keyValues.singleOrNull() ?: throw compositeUnsupported()).asIid
 

@@ -1,10 +1,12 @@
 (ns xtdb.logical-plan-test
-  (:require [clojure.test :as t]
+  (:require [clojure.spec.alpha :as s]
+            [clojure.test :as t]
             [xtdb.api :as xt]
             [xtdb.logical-plan :as lp]
             [xtdb.sql :as sql]
             xtdb.sql-test
-            [xtdb.test-util :as tu]))
+            [xtdb.test-util :as tu])
+  (:import xtdb.table.PrimaryKey))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
@@ -271,3 +273,16 @@
   (t/is (= [{:a 4} {:a 3}]
            (xt/q tu/*node* ["SELECT a FROM docs ORDER BY a DESC OFFSET ? LIMIT ?" 1 2]))
         "params"))
+
+(t/deftest only-a-single-column-key-marks-a-join
+  (letfn [(join-pk-cols [^PrimaryKey pk]
+            (let [table-pks {["xtdb" #xt/table docs] pk}
+                  plan (sql/plan "SELECT d.a FROM docs d WHERE d.a IN (SELECT x FROM other)"
+                                 {:table-info {#xt/table docs #{"_id" "a" "b"}, #xt/table other #{"_id" "x"}}
+                                  :table-pks table-pks})]
+              (->> (lp/child-exprs (lp/mark-pk-joins (s/conform ::lp/logical-plan plan) table-pks))
+                   (keep (comp :pk-cols :opts))
+                   (into #{} cat))))]
+    (t/is (seq (join-pk-cols (PrimaryKey. ["a"]))))
+    (t/is (empty? (join-pk-cols (PrimaryKey. ["a" "b"])))
+          "no column carries a composite key alone")))

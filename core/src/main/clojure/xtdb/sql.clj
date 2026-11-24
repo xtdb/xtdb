@@ -2465,9 +2465,9 @@
   PlanError
   (error-string [_] (format "INSERT does not contain mandatory %s column" pk-col)))
 
-(defn- table-pk-col
+(defn- table-pk-cols
   [{:keys [table-pks default-db]} table]
-  (symbol (.getColumn ^PrimaryKey (get table-pks [default-db table] PrimaryKey/ID))))
+  (mapv symbol (.getColumns ^PrimaryKey (get table-pks [default-db table] PrimaryKey/ID))))
 
 (defrecord InvalidParamIndex [arg-count param-idx]
   PlanError
@@ -3161,8 +3161,9 @@
   (visitInsertStatement [_ ctx]
     (let [{:keys [col-syms] :as insert-plan} (-> (.insertColumnsAndSource ctx)
                                                  (.accept (->QueryPlanVisitor env scope)))
-          pk-col (table-pk-col env (table/->ref (identifier-sym (.targetTable ctx))))]
-      (when-not (contains? (set col-syms) pk-col)
+          pk-cols (table-pk-cols env (table/->ref (identifier-sym (.targetTable ctx))))]
+      (doseq [pk-col pk-cols
+              :when (not (contains? (set col-syms) pk-col))]
         (add-err! env (->InsertWithoutXtId pk-col)))
 
       (doseq [col (into #{} (filter forbidden-insert-col?) col-syms)]
@@ -3179,16 +3180,16 @@
                                     :table table
                                     :valid-from vf-expr
                                     :valid-to vt-expr
-                                    :patch-rel (.accept (.patchSource ctx) (assoc this :pk-col (table-pk-col env table)))})
+                                    :patch-rel (.accept (.patchSource ctx) (assoc this :pk-cols (table-pk-cols env table)))})
                    '[_iid _valid_from _valid_to doc])))
 
-  (visitPatchRecords [{:keys [pk-col]} ctx]
+  (visitPatchRecords [{:keys [pk-cols]} ctx]
     (let [{:keys [plan col-syms]} (-> (.recordsValueConstructor ctx)
                                       (.accept (->QueryPlanVisitor env scope))
                                       (remove-ns-qualifiers env))]
       (if-let [forbidden-cols (seq (filter forbidden-patch-col? col-syms))]
         (add-err! env (->ForbiddenColumnPatch forbidden-cols))
-        (->QueryExpr [:project {:projections [{'_iid (list '_iid pk-col)}
+        (->QueryExpr [:project {:projections [{'_iid (list* '_iid pk-cols)}
                                               {'doc (into {} (map (juxt keyword identity)) col-syms)}]}
                       plan]
                      '[_iid doc]))))
@@ -3224,7 +3225,7 @@
 
           _ (doseq [forbidden-col (->> set-clauses
                                        (into #{} (comp (map (comp key first))
-                                                       (filter (some-fn forbidden-patch-col? #{(table-pk-col env table)})))))]
+                                                       (filter (some-fn forbidden-patch-col? (set (table-pk-cols env table)))))))]
               (add-err! env (->ForbiddenColumnUpdate forbidden-col)))
 
           set-clauses-cols (set (mapv ffirst set-clauses))

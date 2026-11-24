@@ -185,9 +185,11 @@
             (.addAll iids)))))))
 
 (defn selects->iid-set
-  "The IIDs that `selects` on the single-column primary key `pk-col`, or on `_iid` itself, pin the scan to, or nil."
-  ^SortedSet [^String pk-col selects ^RelationReader args-rel]
-  (or (col-selects->iid-set pk-col key-value->iid selects args-rel)
+  "The IIDs that `selects` on the primary key `pk-cols` (in key order), or on `_iid` itself, pin the scan to, or nil.
+   Only a single-column key's selects pin IIDs; a composite key's pin none."
+  ^SortedSet [pk-cols selects ^RelationReader args-rel]
+  (or (when-not (next pk-cols)
+        (col-selects->iid-set (first pk-cols) key-value->iid selects args-rel))
       (col-selects->iid-set "_iid" iid-value->iid selects args-rel)))
 
 (defn filter-pushdown-bloom-page-idx-pred ^IntPredicate [^PageMetadata page-metadata, pushdown-blooms, ^String col-name]
@@ -352,10 +354,11 @@
                                                                                 (fn [s] {:iids s}))
                                                                    str)))})
                            (fn [{:keys [allocator]}]
-                             (let [pk-col (.getColumn (.primaryKey db-snapshot table))
-                                   iid-set (or (selects->iid-set pk-col selects args)
+                             (let [pk-cols (.getColumns (.primaryKey db-snapshot table))
+                                   iid-set (or (selects->iid-set pk-cols selects args)
                                                (get pushdown-iids '_iid) ; usually patch
-                                               (get pushdown-iids (symbol pk-col))) ; any other foreign-key join
+                                               (when-not (next pk-cols)
+                                                 (get pushdown-iids (symbol (first pk-cols))))) ; any other foreign-key join
                                    col-preds (cond-> col-preds
                                                (not (empty? iid-set))
                                                (assoc "_iid" (if (= 1 (count iid-set))

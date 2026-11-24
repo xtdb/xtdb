@@ -2438,6 +2438,17 @@
     (t/is (some #{'(_iid a)} (tree-seq coll? seq (sql/plan "PATCH INTO docs RECORDS {a: 1, b: 2}" opts)))
           "PATCH addresses each record by the IID of its key column")))
 
+(t/deftest test-dml-plans-key-on-every-column-of-a-composite-key
+  (let [opts {:table-info {#xt/table docs #{"_id" "a" "b" "c"}}
+              :table-pks {["xtdb" #xt/table docs] (PrimaryKey. ["a" "b"])}}]
+    (t/is (anomalous? [:incorrect nil #"INSERT does not contain mandatory b column"]
+                      (sql/plan "INSERT INTO docs (a, c) VALUES (1, 2)" opts)))
+
+    (t/is (some? (sql/plan "INSERT INTO docs (a, b) VALUES (1, 2)" opts)))
+
+    (t/is (anomalous? [:incorrect nil #"Cannot UPDATE b column"]
+                      (sql/plan "UPDATE docs SET b = 2" opts)))))
+
 (t/deftest test-c-style-escapes-3415
   (t/is (= ["A" "A" "A" "" "%" "😁" "\n" "'"]
            (->> (xt/q tu/*node* "VALUES E'\\x41', E'\\101', E'\\U00000041', E'', E'%', E'\\U0001F601', E'\\n', E'\\''")
