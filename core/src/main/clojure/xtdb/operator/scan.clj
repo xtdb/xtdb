@@ -34,7 +34,7 @@
            (xtdb.segment BufferPoolSegment MergePlanner)
            xtdb.api.TableRef
            (xtdb.trie Bucketer)
-           (xtdb.util TemporalBounds TemporalDimension)))
+           (xtdb.util Iid TemporalBounds TemporalDimension)))
 
 (s/def ::db-name string?)
 (s/def ::table ::table/ref)
@@ -184,11 +184,23 @@
           (doto (TreeSet. Bytes/COMPARATOR)
             (.addAll iids)))))))
 
+(defn- composite-key-selects->iid-set ^SortedSet [pk-cols selects ^RelationReader args-rel]
+  (let [key-values (mapv (fn [^String pk-col]
+                           (let [select (get selects pk-col)]
+                             (when (= '== (first select))
+                               (some-> (eid-select->eid (symbol pk-col) select)
+                                       (resolve-select-value args-rel)))))
+                         pk-cols)]
+    (when (every? util/valid-iid? key-values)
+      (doto (TreeSet. Bytes/COMPARATOR)
+        (.add (Iid/keyIid key-values))))))
+
 (defn selects->iid-set
   "The IIDs that `selects` on the primary key `pk-cols` (in key order), or on `_iid` itself, pin the scan to, or nil.
-   Only a single-column key's selects pin IIDs; a composite key's pin none."
+   A composite key is pinned only by an equality on every one of its columns."
   ^SortedSet [pk-cols selects ^RelationReader args-rel]
-  (or (when-not (next pk-cols)
+  (or (if (next pk-cols)
+        (composite-key-selects->iid-set pk-cols selects args-rel)
         (col-selects->iid-set (first pk-cols) key-value->iid selects args-rel))
       (col-selects->iid-set "_iid" iid-value->iid selects args-rel)))
 

@@ -19,7 +19,8 @@
            java.util.Date
            java.util.SortedSet
            xtdb.arrow.RelationReader
-           (xtdb.compactor RecencyPartition)))
+           (xtdb.compactor RecencyPartition)
+           xtdb.util.Iid))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-allocator tu/with-node)
 
@@ -495,10 +496,61 @@
           "equalities on the key column resolve to their values' IIDs"))
 
   (t/is (nil? (scan/selects->iid-set ["a"] {"_id" (list '== '_id 1)} vw/empty-args))
-        "an `_id` equality doesn't pin a table keyed on another column")
+        "an `_id` equality doesn't pin a table keyed on another column"))
 
-  (t/is (nil? (scan/selects->iid-set ["a" "b"] {"a" (list '== 'a 1), "b" (list '== 'b 2)} vw/empty-args))
-        "equalities on a composite key's columns pin no IIDs"))
+(t/deftest test-iid-set-keys-on-every-column-of-a-composite-key
+  (let [key-iids (fn [key-values] [(seq (Iid/keyIid key-values))])]
+    (t/is (= (key-iids [1 "x"])
+             (map seq (scan/selects->iid-set ["a" "b"] '{"a" (== a 1), "b" (== "x" b)} vw/empty-args)))
+          "literals, either side of the equality")
+
+    (t/is (= (key-iids ["x" 1])
+             (map seq (scan/selects->iid-set ["b" "a"] '{"a" (== a 1), "b" (== b "x")} vw/empty-args)))
+          "the key's values in key order")
+
+    (with-open [^RelationReader args-rel (tu/open-args {:a 1, :b "x"})]
+      (t/is (= (key-iids [1 "x"])
+               (map seq (scan/selects->iid-set ["a" "b"] '{"a" (== ?a a), "b" (== b ?b)} args-rel)))
+            "params, either side of the equality"))
+
+    (with-open [^RelationReader args-rel (tu/open-args {:a [1 2], :b "x"})]
+      (t/is (nil? (scan/selects->iid-set ["a" "b"] '{"a" (== a ?a), "b" (== b ?b)} args-rel))
+            "a param bound to several rows")))
+
+  (t/is (nil? (scan/selects->iid-set ["a" "b"] '{"a" (== a 1)} vw/empty-args))
+        "a partial key")
+
+  (t/is (nil? (scan/selects->iid-set ["a" "b"] '{"a" (== a 1), "b" (< b "x")} vw/empty-args))
+        "a range on one of the key's columns")
+
+  (t/is (nil? (scan/selects->iid-set ["a" "b"] '{"a" (== a 7.0), "b" (== b "x")} vw/empty-args))
+        "no key value can be a double, but = can still match the integer 7")
+
+  (t/is (nil? (scan/selects->iid-set ["a" "b"] '{"a" (or (== a 1) (== a 2)), "b" (== b "x")} vw/empty-args))
+        "an OR-chain on one of the key's columns"))
+
+(t/deftest a-full-key-equality-on-a-composite-key-reads-only-its-rows-page
+  (util/with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:page-limit 16}, :compactor {:threads 0}}))]
+    (xt/execute-tx node ["CREATE TABLE t (a, b, v, PRIMARY KEY (a, b))"])
+    (let [rows (for [a (range 100), b ["x" "y" "z"]] {:a a, :b b, :v (str a b)})]
+      (xt/execute-tx node [(into [:put-docs :t] rows)
+                           (into [:put-docs :u] (map #(assoc % :xt/id (:v %))) rows)]))
+    (tu/flush-block! node)
+
+    (letfn [(scan-pages-used [sql & args]
+              (->> (xt/q node (into [(str "EXPLAIN ANALYZE " sql)] args))
+                   (filter #(= :scan (:op %)))
+                   first :attributes :scan-pages-used))]
+      (t/is (= [{:v "4y"}] (xt/q node ["SELECT v FROM t WHERE a = ? AND b = ?" 4 "y"])))
+      (t/is (= [{:v "4y"}] (xt/q node "SELECT v FROM t WHERE 'y' = b AND a = 4")))
+
+      (t/is (= 1 (scan-pages-used "SELECT v FROM t WHERE a = ? AND b = ?" 4 "y")))
+      (t/is (= 1 (scan-pages-used "SELECT v FROM t WHERE 'y' = b AND a = 4")))
+
+      (t/is (< 1 (scan-pages-used "SELECT v FROM t WHERE a = ?" 4))
+            "a partial key narrows the scan to no IID")
+      (t/is (< 1 (scan-pages-used "SELECT v FROM u WHERE a = ? AND b = ?" 4 "y"))
+            "the same predicates on a table keyed on `_id` have no IID to narrow to"))))
 
 (t/deftest test-iid-equalities-pin-the-iid-set
   (let [iid1 (util/->iid 1)
