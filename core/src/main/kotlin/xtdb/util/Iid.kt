@@ -9,20 +9,21 @@ import java.util.UUID
 
 private val messageDigest = ThreadLocal.withInitial { MessageDigest.getInstance("SHA-256") }
 
-val Any?.asIid: ByteArray
+/** [asIid], or null for a value of a type that can't key a row. */
+val Any?.asIidOrNull: ByteArray?
     get() = when (this) {
         is UUID -> this.asBytes
-        else -> {
-            val eidBytes = when (this) {
-                is String -> "s$this".toByteArray()
-                is Keyword -> "k$this".toByteArray()
-                is Int, is Long, is Short, is Byte -> "i$this".toByteArray()
-                else -> throw Incorrect(
-                    "Invalid ID type: ${this?.javaClass?.name}",
-                    "xtdb/invalid-id",
-                    mapOf("type" to this?.javaClass?.name, "eid" to this)
-                )
-            }
-            messageDigest.get().digest(eidBytes).copyOfRange(0, 16)
-        }
+        is String -> "s$this".sha256Iid()
+        is Keyword -> "k$this".sha256Iid()
+        is Int, is Long, is Short, is Byte -> "i$this".sha256Iid()
+        else -> null
     }
+
+private fun String.sha256Iid(): ByteArray = messageDigest.get().digest(toByteArray()).copyOfRange(0, 16)
+
+val Any?.asIid: ByteArray
+    get() = asIidOrNull ?: throw Incorrect(
+        "Invalid ID type: ${this?.javaClass?.name}",
+        "xtdb/invalid-id",
+        mapOf("type" to this?.javaClass?.name, "eid" to this)
+    )
