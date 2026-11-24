@@ -78,7 +78,7 @@ interface Compactor : AutoCloseable {
         }
 
         companion object {
-            // TODO(#6263): `writesRecency` goes with withinFileRecencyBranching
+            // TODO(#6263): `writesRecency` goes once recency branching is unconditional
             @JvmStatic
             @JvmOverloads
             fun real(pageSize: Int, recencyPartition: RecencyPartition?, reeIids: Boolean = false, writesRecency: Boolean = false) =

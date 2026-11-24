@@ -58,12 +58,10 @@
     skip-txs (.skipTxs skip-txs)
     (some? enabled?) (.enabled enabled?)))
 
-(defmethod apply-config! :compactor [^Xtdb$Config config _ {:keys [threads ree-iids? within-file-recency-branching?]}]
+(defmethod apply-config! :compactor [^Xtdb$Config config _ {:keys [threads opt-in-221?]}]
   (cond-> (.getCompactor config)
     (some? threads) (.threads threads)
-    (some? ree-iids?) (.reeIids ree-iids?)
-    ;; TODO(#6263): goes with withinFileRecencyBranching
-    (some? within-file-recency-branching?) (.withinFileRecencyBranching within-file-recency-branching?)))
+    (some? opt-in-221?) (.optIn221 opt-in-221?)))
 
 (defmethod apply-config! :skip-dbs [^Xtdb$Config config _ skip-dbs]
   (when skip-dbs

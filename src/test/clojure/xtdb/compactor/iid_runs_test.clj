@@ -44,8 +44,8 @@
 
 (t/deftest compaction-writes-historical-iids-as-runs-when-configured
   (tu/with-tmp-dirs #{plain-dir encoded-dir}
-    (let [plain (compact! plain-dir {:ree-iids? false})
-          encoded (compact! encoded-dir {:ree-iids? true})]
+    (let [plain (compact! plain-dir {:opt-in-221? false})
+          encoded (compact! encoded-dir {:opt-in-221? true})]
 
       (t/is (= {:current {:encoded? false, :rows 20, :runs 20}
                 :historical {:encoded? false, :rows 40, :runs 40}}

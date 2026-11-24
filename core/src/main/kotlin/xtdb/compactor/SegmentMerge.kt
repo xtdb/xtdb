@@ -129,7 +129,7 @@ private val IID_RUNS = Encoding.RunEnd(RunEndWidth.I32)
 internal class SegmentMerge(
     private val al: BufferAllocator,
     private val reeIids: Boolean = false,
-    // TODO(#6263): goes with withinFileRecencyBranching
+    // TODO(#6263): goes once recency branching is unconditional
     private val writesRecency: Boolean = false
 ) : AutoCloseable {
 
@@ -242,11 +242,11 @@ internal class SegmentMerge(
             RecencyPartitioning.Partition ->
                 outWriters.PartitionedOutWriter(
                     ::schemaFor, recencyPartition,
-                    // TODO(#6263): goes with withinFileRecencyBranching
+                    // TODO(#6263): goes once recency branching is unconditional
                     historicalRecency = if (writesRecency) RecencyColumn.COMPUTED else RecencyColumn.ABSENT
                 )
             is RecencyPartitioning.Preserve -> {
-                // TODO(#6263): `writesRecency` goes with withinFileRecencyBranching
+                // TODO(#6263): `writesRecency` goes once recency branching is unconditional
                 val recencyColumn =
                     if (writesRecency && recencyPartitioning.recency != null && segments.all { it.schema.fields.any { f -> f.name == Trie.RECENCY_COL } })
                         RecencyColumn.CARRIED

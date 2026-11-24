@@ -364,13 +364,13 @@ class YamlSerdeTest {
     }
 
     @Test
-    fun testCompactorReeIids() {
+    fun testCompactorOptIn221() {
         val input = """
         compactor:
-          reeIids: true
+          optIn221: true
         """.trimIndent()
 
-        assertEquals(true, nodeConfig(input).compactor.reeIids)
+        assertEquals(true, nodeConfig(input).compactor.optIn221)
     }
 
     @Test

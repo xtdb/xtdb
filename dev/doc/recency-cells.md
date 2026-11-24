@@ -1,6 +1,6 @@
 # Recency cells in historical files
 
-With `compactor.withinFileRecencyBranching` on (#6042; #6263 makes it unconditional and removes the flag), a historical file is a set of time slices of its week — *cells* — each an ordinary IID trie.
+With `compactor.optIn221` on (#6042; #6263 makes recency branching unconditional), a historical file is a set of time slices of its week — *cells* — each an ordinary IID trie.
 This page shows what such a file looks like, how the compactor chooses its cells, and what a query reads from it.
 It assumes you know the IID trie and its pages; the rules themselves are in [`compaction.allium`](compaction.allium) and `RecencyCells.kt`.
 

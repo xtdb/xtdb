@@ -213,8 +213,8 @@
     (binding [c/*page-size* 8
               cat/*file-size-target* (* 1024 16)
               c/*ignore-signal-block?* true]
-      ;; TODO(#6263): the opt-in goes with withinFileRecencyBranching
-      (util/with-open [node (tu/->local-node {:node-dir node-dir, :within-file-recency-branching? true})]
+      ;; TODO(#6263): recency branching won't need the opt-in
+      (util/with-open [node (tu/->local-node {:node-dir node-dir, :opt-in-221? true})]
         (doseq [block (partition-all 6 (range 24))]
           (doseq [tick block
                   :let [tick-at (.plusHours start tick)]]

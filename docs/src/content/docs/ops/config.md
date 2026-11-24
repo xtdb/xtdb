@@ -5,28 +5,13 @@ title: Configuration
 <details>
 <summary>Changelog (last updated v2.2.1)</summary>
 
-v2.2.1: the compactor can run-end encode `_iid`, behind `reeIids`
+v2.2.1: the compactor can write a more compact, recency-branched historical format, behind `optIn221`
 
-: With `compactor.reeIids` on, compacted historical data files store each entity's `_iid` once per run of its versions, rather than once per version — see [Compactor](#compactor).
-  Current-tier files, where an entity usually has one version, stay as they were.
+: With `compactor.optIn221` on, the compactor writes two changes to historical files — see [Compactor](#compactor):
 
-  It's off by default, and with it off the compactor writes the same files as v2.2, so upgrading from v2.2 needs no extra steps.
-  Every v2.2.1 node reads files written either way.
-
-  Every node that compacts a database must write the same format, so turning it on takes two rolls:
-
-  1. Roll with the compactor off (`compactor.threads: 0`).
-     Where several clusters write to the same database, every one of them finishes this roll before the next step starts anywhere.
-  2. Roll again with the compactor on and `reeIids: true` (or `XTDB_REE_IIDS=true`).
-
-  A new cluster can set it from the start.
-
-  Turning it off takes the same two rolls, with `reeIids: false` (and `XTDB_REE_IIDS` unset) in the second; v2.2.1 keeps reading the files it has already written.
-  Earlier releases can't process those files, so rolling back to v2.2 is supported only on a database where `reeIids` has never been on.
-
-v2.2.1: the compactor can branch historical files by recency, behind `withinFileRecencyBranching`
-
-: With `compactor.withinFileRecencyBranching` on, a historical file branches on recency within its week, so a query over a recent window reads that window's superseded rows rather than the whole week's — see [Compactor](#compactor).
+  - Compacted historical data files store each entity's `_iid` once per run of its versions, rather than once per version.
+    Current-tier files, where an entity usually has one version, stay as they were.
+  - A historical file branches on recency within its week, so a query over a recent window reads that window's superseded rows rather than the whole week's.
 
   It's off by default, and with it off the compactor writes the same files as v2.2, so upgrading from v2.2 needs no extra steps.
   Every v2.2.1 node reads files written either way.
@@ -35,12 +20,12 @@ v2.2.1: the compactor can branch historical files by recency, behind `withinFile
 
   1. Roll with the compactor off (`compactor.threads: 0`).
      Where several clusters write to the same database, every one of them finishes this roll before the next step starts anywhere.
-  2. Roll again with the compactor on and `withinFileRecencyBranching: true` (or `XTDB_WITHIN_FILE_RECENCY_BRANCHING=true`).
+  2. Roll again with the compactor on and `optIn221: true` (or `XTDB_COMPACTOR_221_OPT_IN=true`).
 
   A new cluster can set it from the start.
 
-  Turning it off takes the same two rolls, with `withinFileRecencyBranching: false` (and `XTDB_WITHIN_FILE_RECENCY_BRANCHING` unset) in the second; v2.2.1 keeps reading the files it has already written.
-  Earlier releases can't process those files, so rolling back to v2.2 is supported only on a database where `withinFileRecencyBranching` has never been on.
+  Turning it off takes the same two rolls, with `optIn221: false` (and `XTDB_COMPACTOR_221_OPT_IN` unset) in the second; v2.2.1 keeps reading the files it has already written.
+  Earlier releases can't process those files, so rolling back to v2.2 is supported only on a database where `optIn221` has never been on.
 
 v2.2: blocks are flushed every 15 minutes
 
@@ -277,15 +262,10 @@ compactor:
   # Set to 0 to disable the compactor.
   threads: 4
 
-  # (v2.2.1+) Run-end encode `_iid` in compacted historical data files.
+  # (v2.2.1+) Write v2.2.1's historical-file format: run-end encode `_iid`, and branch historical files by recency within the file.
   # Every node compacting a database must agree - see the v2.2.1 changelog entry above before turning it on for an existing cluster.
-  # Defaults to !Env XTDB_REE_IIDS # or if that's not specified false.
-  reeIids: false
-
-  # (v2.2.1+) Branch historical files by recency within the file.
-  # Every node compacting a database must agree - see the v2.2.1 changelog entry above before turning it on for an existing cluster.
-  # Defaults to !Env XTDB_WITHIN_FILE_RECENCY_BRANCHING # or if that's not specified false.
-  withinFileRecencyBranching: false
+  # Defaults to !Env XTDB_COMPACTOR_221_OPT_IN # or if that's not specified false.
+  optIn221: false
 ```
 
 ### Indexer

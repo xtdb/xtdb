@@ -1,5 +1,5 @@
 {:schema
- #xt/schema ({"_iid" [:fixed-size-binary 16]}
+ #xt/schema ({"_iid" [:ree [:fixed-size-binary 16]]}
              {"_system_from" :instant}
              {"_valid_from" :instant}
              {"_valid_to" :instant}

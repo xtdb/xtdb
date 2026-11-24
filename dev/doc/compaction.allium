@@ -107,11 +107,11 @@ entity CompactionJob {
 ------------------------------------------------------------
 
 config {
-    -- TODO(#6263): goes with withinFileRecencyBranching
     -- See: api/CompactorConfig.kt
-    -- `compactor.withinFileRecencyBranching`, or env `XTDB_WITHIN_FILE_RECENCY_BRANCHING`.
-    -- Whether this node's compactor writes `_recency` into its historical outputs.
-    within_file_recency_branching: Boolean = false
+    -- `compactor.optIn221`, or env `XTDB_COMPACTOR_221_OPT_IN`.
+    -- Whether this node's compactor writes v2.2.1's historical-file format: `_recency` in its historical outputs, and `_iid` run-end encoded.
+    -- TODO(#6263): recency branching won't need the opt-in.
+    opt_in_221: Boolean = false
 }
 
 ------------------------------------------------------------
@@ -137,11 +137,11 @@ config {
 --   L0 → L1C/L1H: recency is calculated for each event through bitemporal resolution.
 --     Events with recency = ∞ go to the current output file.
 --     Events with finite recency are routed to historical output files, partitioned into weekly buckets.
---     With `within_file_recency_branching` on, every row of a historical output file carries the recency computed for it in a `_recency` column; current output files carry none.
+--     With `opt_in_221` on, every row of a historical output file carries the recency computed for it in a `_recency` column; current output files carry none.
 --   All other compactions: recency from the input file's trie key is preserved into a single output file.
 --     Recency is never recomputed above L1H.
---     With `within_file_recency_branching` on, a historical output carries `_recency` through only when every input file carries it; otherwise it carries none.
---   With `within_file_recency_branching` off, no output file carries `_recency`.
+--     With `opt_in_221` on, a historical output carries `_recency` through only when every input file carries it; otherwise it carries none.
+--   With `opt_in_221` off, no output file carries `_recency`.
 --
 -- At the end of each merge task (i.e. for each IID path prefix), accumulated rows are flushed to a temporary file on disk.
 -- This bounds the memory usage of the compactor.
@@ -163,10 +163,9 @@ config {
 --
 -- == IID layout ==
 --
--- When the compactor is configured to run-end encode IIDs, `_iid` in every historical output data file is run-end encoded.
+-- With `opt_in_221` on, `_iid` in every historical output data file is run-end encoded.
 -- A historical output file is one with a recency: a weekly `r<date>` file, including a Preserve-recency merge whose recency is non-null.
 -- A current output file (recency null, `rc`) always stores `_iid` as a plain 16-byte fixed-size binary column.
--- The setting is off by default.
 -- The encoding is int32 run-ends over 16-byte fixed-size binary values, with one run per consecutive equal IID within a page.
 -- Both stages write `_iid` this way.
 -- A row extends its output's last run when it carries the same IID as that run.
@@ -174,7 +173,7 @@ config {
 -- Stage 2's re-partitioning by IID never splits a run, because a run is one IID.
 -- Leaves it coalesces into one page never share an IID, so their runs carry over unchanged.
 -- Page metadata is computed over the IIDs the runs encode, so a meta file is identical whether or not its data file's `_iid` is encoded.
--- With the setting off, `_iid` is a plain 16-byte fixed-size binary column.
+-- With `opt_in_221` off, `_iid` is a plain 16-byte fixed-size binary column.
 --
 -- == Upload ==
 --
@@ -190,20 +189,20 @@ contract OutputSegmentLayout {
     -- See: compactor/OutWriter.kt, compactor/SegmentMerge.kt, trie/PageTrieWriter.kt, trie/RecencyCells.kt, trie/StreamingIidTrie.kt, trie/MetadataFileWriter.kt
 
     @invariant HistoricalRowsCarryComputedRecency
-        -- With `within_file_recency_branching` on, a job that partitions by recency (L0 → L1C + L1H) writes, for every row of each historical (L1H) output, the recency the merge computes for that row into a `_recency` column.
+        -- With `opt_in_221` on, a job that partitions by recency (L0 → L1C + L1H) writes, for every row of each historical (L1H) output, the recency the merge computes for that row into a `_recency` column.
         -- Its current (L1C) output carries no `_recency` column.
 
     @invariant RecencyCarriedOnlyWhenEveryInputCarriesIt
-        -- With `within_file_recency_branching` on, a job over historical inputs that preserves recency (L1H → L2H and up) copies `_recency` through only when every input file carries it.
+        -- With `opt_in_221` on, a job over historical inputs that preserves recency (L1H → L2H and up) copies `_recency` through only when every input file carries it.
         -- Otherwise its output carries none.
         -- Recency is never recomputed above L1H.
 
     @invariant NoRecencyWrittenWhenBranchingOff
-        -- With `within_file_recency_branching` off, no output file carries `_recency`: an L0 → L1C + L1H job writes none, and a historical merge drops it even when every input carries it.
+        -- With `opt_in_221` off, no output file carries `_recency`: an L0 → L1C + L1H job writes none, and a historical merge drops it even when every input carries it.
         -- The output is then identical to that of a compactor that never writes `_recency`.
 
     @invariant FilesReadableWhateverTheSetting
-        -- Every node reads files with and without `_recency`, whatever its `within_file_recency_branching` setting.
+        -- Every node reads files with and without `_recency`, whatever its `opt_in_221` setting.
 
     @invariant RecencyCellLayout
         -- A file whose data carries `_recency` branches on recency once, at the IID path its part fixes, into time cells of one width.
@@ -233,7 +232,7 @@ contract OutputSegmentLayout {
         -- A file whose data carries no `_recency` records none.
 
     @invariant OutputDeterministic
-        -- Every output file, including its recency column and its trie, is a deterministic function of the job and the `within_file_recency_branching` setting.
+        -- Every output file, including its recency column and its trie, is a deterministic function of the job and the `opt_in_221` setting.
         -- Every node compacting a database has the same setting, so every node that runs the job writes identical files.
 }
 

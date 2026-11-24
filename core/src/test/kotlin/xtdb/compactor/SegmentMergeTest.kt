@@ -159,7 +159,7 @@ class SegmentMergeTest {
         }
     }
 
-    // TODO(#6263): goes with withinFileRecencyBranching
+    // TODO(#6263): goes once recency branching is unconditional
     @Test
     fun `partitioning by recency splits superseded events into weekly files`() = withSegments { segments ->
         SegmentMerge(al, writesRecency = false).use { segMerge ->
@@ -349,7 +349,7 @@ class SegmentMergeTest {
             }
         }
 
-    // TODO(#6263): goes with withinFileRecencyBranching
+    // TODO(#6263): goes once recency branching is unconditional
     @Test
     fun `not writing recency, a historical merge drops it even when every input carries it`() =
         withSegments(recencies = listOf(2024, 2025)) { segments ->

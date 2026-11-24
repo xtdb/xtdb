@@ -105,8 +105,8 @@
       (binding [c/*page-size* 8
                 cat/*file-size-target* (* 1024 16)
                 c/*ignore-signal-block?* true]
-        ;; TODO(#6263): the opt-in goes with withinFileRecencyBranching
-        (with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-block 400, :within-file-recency-branching? true})]
+        ;; TODO(#6263): recency branching won't need the opt-in
+        (with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-block 400, :opt-in-221? true})]
           (load-history! node)
           (tu/flush-block! node)
 
@@ -153,9 +153,7 @@
       (binding [c/*page-size* 8
                 cat/*file-size-target* (* 1024 16)
                 c/*ignore-signal-block?* true]
-        ;; TODO(#6263): the opt-in goes with withinFileRecencyBranching
-        (with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-block 400
-                                           :ree-iids? true, :within-file-recency-branching? true})]
+        (with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-block 400, :opt-in-221? true})]
           (load-history! node)
           (tu/flush-block! node)
           (c/compact-all! node #xt/duration "PT30S")
@@ -175,8 +173,8 @@
       (binding [c/*page-size* 8
                 cat/*file-size-target* (* 1024 16)
                 c/*ignore-signal-block?* true]
-        ;; TODO(#6263): the opt-in goes with withinFileRecencyBranching
-        (with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-block 400, :within-file-recency-branching? true})]
+        ;; TODO(#6263): recency branching won't need the opt-in
+        (with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-block 400, :opt-in-221? true})]
           (load-history! node)
           (xt/execute-tx node [(into [:delete-docs :docs] (range 0 5))]
                          {:system-time (.plusHours start 140)})
