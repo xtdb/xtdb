@@ -45,8 +45,6 @@
   (when-not (map? doc)
     (throw (err/incorrect :xtdb.tx/expected-doc "expected doc map" {:doc doc})))
 
-  (some-> (or (:xt/id doc) (get doc "_id")) expect-eid)
-
   doc)
 
 (defmethod parse-tx-op :sql [[_ sql & arg-rows]]

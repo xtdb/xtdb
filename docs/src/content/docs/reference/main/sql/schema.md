@@ -10,6 +10,7 @@ v2.2.1: `CREATE TABLE` declares a table's primary key
 : A table can be keyed on a column other than `_id`, declared with `PRIMARY KEY` before anything is written to the table — see [Primary keys](#primary-keys-v221).
 
   Previously every table was keyed on `_id`, and a table that declares no key still is.
+  In a table keyed on another column, `_id` is an ordinary optional column.
 
   `PRIMARY` and `KEY` are keywords, so `quote_ident('primary')` and `quote_ident('key')` quote them, as `quote_ident` quotes XTDB's other keywords.
 
@@ -73,3 +74,5 @@ An equality on the key column is looked up directly, as one on `_id` is for a ta
   Once anything has been written to it - a put, a delete or an erase, including one before any declaration, which keys the table on `_id` - a `CREATE TABLE` declaring a different key aborts its transaction with `xtdb/primary-key-on-non-empty-table`.
   Re-declaring the key the table already has is allowed.
 * A declaration applies to the writes after it in the same transaction.
+* In a table keyed on another column, `_id` is an ordinary column: a row needn't have one, it can hold a value of any type, and `UPDATE` can set it.
+* `SELECT *` lists the key column first.

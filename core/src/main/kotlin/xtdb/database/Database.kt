@@ -173,7 +173,7 @@ class Database(
         val puts = ops.filterIsInstance<TxOp.PutDocs>().takeIf { it.isNotEmpty() } ?: return
 
         openSnapshot(currentBasis()).use { snap ->
-            for (put in puts) snap.fixedPrimaryKey(TableRef(put.schema, put.table))?.keyVector(put.docs)
+            for (put in puts) snap.fixedPrimaryKey(TableRef(put.schema, put.table))?.requireKeys(put.docs)
         }
     }
 

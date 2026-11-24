@@ -5,6 +5,7 @@ import xtdb.api.error.Unsupported
 import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorReader
 import xtdb.trie.ColumnName
+import xtdb.util.asIid
 
 /** The columns whose values identify a row of a table, in key order. */
 data class PrimaryKey(val columns: List<ColumnName>) {
@@ -24,6 +25,15 @@ data class PrimaryKey(val columns: List<ColumnName>) {
         if (keyVec == null || (0 until rel.rowCount).any(keyVec::isNull))
             throw Incorrect("missing '$column'", "xtdb.tx/missing-id", mapOf("column" to column))
         return keyVec
+    }
+
+    /**
+     * Throws as indexing [rel] would: `xtdb.tx/missing-id` unless every row has a key value,
+     * `xtdb/invalid-id` for a value of a type that can't key a row.
+     */
+    fun requireKeys(rel: RelationReader) {
+        val keyVec = keyVector(rel)
+        repeat(rel.rowCount) { keyVec.getObject(it).asIid }
     }
 
     companion object {

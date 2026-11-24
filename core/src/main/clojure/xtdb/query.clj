@@ -549,9 +549,9 @@
 
   (preparePatchDocsQuery [this table valid-from valid-to db-cat opts]
     (let [default-db (.getDefaultDb opts)
-          table-info (-> (util/with-open [^DatabaseSnapshot snap (.openSnapshot (.databaseOrThrow db-cat default-db) nil)]
-                           (.tableInfo snap))
-                         (sql/xform-table-info [default-db] default-db))
+          table-info (util/with-open [^DatabaseSnapshot snap (.openSnapshot (.databaseOrThrow db-cat default-db) nil)]
+                       (sql/xform-table-info (.tableInfo snap) {[default-db table] (.primaryKey snap table)}
+                                             [default-db] default-db))
           plan (-> (sql/plan-patch {:table-info table-info}
                                    {:db-name default-db
                                     :table table

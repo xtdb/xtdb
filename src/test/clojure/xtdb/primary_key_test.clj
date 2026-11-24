@@ -1,5 +1,7 @@
 (ns xtdb.primary-key-test
   (:require [clojure.test :as t]
+            [next.jdbc :as jdbc]
+            [next.jdbc.result-set :as jdbc-rs]
             [xtdb.api :as xt]
             [xtdb.error :as err]
             [xtdb.test-util :as tu]
@@ -101,6 +103,47 @@
 
   (t/is (anomalous? [:incorrect :xtdb.tx/missing-id]
                     (xt/submit-tx tu/*node* [[:put-docs :t {:xt/id 2}]]))))
+
+(t/deftest id-is-an-ordinary-column-on-a-table-keyed-elsewhere
+  (xt/execute-tx tu/*node* ["CREATE TABLE t (a PRIMARY KEY)"])
+  (xt/execute-tx tu/*node* [[:put-docs :t {:a 1, :xt/id #xt/date "2020-01-01"}]
+                            [:put-docs :t {:a 2, :xt/id {:x 1}}]
+                            [:put-docs :t {:a 3}]])
+  (xt/execute-tx tu/*node* ["INSERT INTO t (a, _id) VALUES (4, 4.5)"])
+  (xt/execute-tx tu/*node* ["UPDATE t SET _id = 3.5 WHERE a = 3"])
+
+  (t/is (= [{:a 1, :xt/id #xt/date "2020-01-01"} {:a 2, :xt/id {:x 1}} {:a 3, :xt/id 3.5} {:a 4, :xt/id 4.5}]
+           (xt/q tu/*node* "SELECT a, _id FROM t ORDER BY a"))))
+
+(t/deftest a-self-join-on-id-in-a-table-keyed-elsewhere
+  (xt/execute-tx tu/*node* ["CREATE TABLE t (a PRIMARY KEY)"])
+  (xt/execute-tx tu/*node* [[:put-docs :t {:a 1, :xt/id #xt/date "2020-01-01"} {:a 2, :xt/id {:x 1}} {:a 3, :xt/id 3}]])
+
+  (t/is (= [{:a1 1, :a2 1} {:a1 2, :a2 2} {:a1 3, :a2 3}]
+           (xt/q tu/*node* "SELECT t1.a AS a1, t2.a AS a2 FROM t t1 JOIN t t2 ON t1._id = t2._id ORDER BY t1.a"))))
+
+(t/deftest an-id-of-a-type-that-cant-key-a-row-is-rejected
+  (t/is (anomalous? [:incorrect :xtdb/invalid-id]
+                    (xt/execute-tx tu/*node* [[:put-docs :t {:xt/id #xt/date "2020-01-01"}]]))
+        "by the indexer, while the table's key may yet change")
+
+  (xt/execute-tx tu/*node* [[:put-docs :t {:xt/id 1}]])
+
+  (t/is (anomalous? [:incorrect :xtdb/invalid-id]
+                    (xt/submit-tx tu/*node* [[:put-docs :t {:xt/id {:x 1}}]]))
+        "at submit, once the key is fixed"))
+
+(t/deftest select-star-lists-the-key-column-first
+  (xt/execute-tx tu/*node* ["CREATE TABLE t (b PRIMARY KEY, a)"])
+  (xt/execute-tx tu/*node* [[:put-docs :t {:b 1, :a 2, :xt/id 3}]
+                            [:put-docs :u {:xt/id 1, :a 2}]])
+
+  (with-open [conn (jdbc/get-connection tu/*node*)]
+    (t/is (= [:b :_id :a]
+             (first (jdbc/execute! conn ["SELECT * FROM t"] {:builder-fn jdbc-rs/as-unqualified-arrays}))))
+
+    (t/is (= [:_id :a]
+             (first (jdbc/execute! conn ["SELECT * FROM u"] {:builder-fn jdbc-rs/as-unqualified-arrays}))))))
 
 (t/deftest a-declared-key-survives-a-restart
   (let [node-dir (util/->path "target/a-declared-key-survives-a-restart")]

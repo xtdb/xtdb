@@ -183,11 +183,17 @@
               build-col (.vectorForOrNull build-rel (str build-col-name))
               ^MutableRoaringBitmap pushdown-bloom (nth pushdown-blooms col-idx)
               ^SortedSet col-pushdown-iids (nth pushdown-iids col-idx)
-              iid-col? (= "_iid" (name build-col-name))]
+              iid-col? (= "_iid" (name build-col-name))
+              !keyable? (volatile! true)]
           (dotimes [build-idx (.getRowCount build-rel)]
-            (when (and col-pushdown-iids (not (.isNull build-col build-idx)))
+            (when (and col-pushdown-iids @!keyable? (not (.isNull build-col build-idx)))
               (let [v (.getObject build-col build-idx)]
-                (.add col-pushdown-iids (if iid-col? v (util/->iid v)))))
+                (cond
+                  iid-col? (.add col-pushdown-iids v)
+                  (util/valid-iid? v) (.add col-pushdown-iids (util/->iid v))
+                  ;; 1.0 can't key a row but equals the key 1, so no IID set is sound - and an empty one narrows nothing
+                  :else (do (vreset! !keyable? false)
+                            (.clear col-pushdown-iids)))))
             (.add pushdown-bloom ^ints (BloomUtils/bloomHashes build-col build-idx))))))))
 
 (defn- ->child-cursors [build-plan-side build-cursor probe-cursors]

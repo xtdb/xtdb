@@ -3224,7 +3224,7 @@
 
           _ (doseq [forbidden-col (->> set-clauses
                                        (into #{} (comp (map (comp key first))
-                                                       (filter (some-fn forbidden-update-col? #{(table-pk-col env table)})))))]
+                                                       (filter (some-fn forbidden-patch-col? #{(table-pk-col env table)})))))]
               (add-err! env (->ForbiddenColumnUpdate forbidden-col)))
 
           set-clauses-cols (set (mapv ffirst set-clauses))
@@ -3368,18 +3368,14 @@
       (->QueryExpr [:table {:rows [(into {} arg-row)]}]
                    (vec (keys arg-row))))))
 
-(defn xform-table-info [table-info db-names default-db]
+(defn xform-table-info [table-info table-pks db-names default-db]
   ;; this fn turned up in a profiler the last time I checked, particularly for low-latency queries.
   ;; plenty happening here that can be cached.
-  (letfn [(xform-cols [cns]
-            (->> cns
-                 (map ->col-sym)
-                 (sort-by identity (fn [s1 s2]
-                                     (cond
-                                       (= '_id s1) -1
-                                       (= '_id s2) 1
-                                       :else (compare s1 s2))))
-                 ->insertion-ordered-set))
+  (letfn [(xform-cols [cns ^PrimaryKey pk]
+            (let [col-syms (into #{} (map ->col-sym) cns)
+                  key-cols (->> (.getColumns pk)
+                                (into [] (comp (map ->col-sym) (filter col-syms))))]
+              (->insertion-ordered-set (concat key-cols (sort (remove (set key-cols) col-syms))))))
           ;; the caller's `table-info` is keyed by a bare ref/symbol, scoped to the default db -
           ;; canonicalise to the `[db-name table-ref]` qualified key that `info-schema/table-info` uses.
           (qualify [k]
@@ -3389,9 +3385,10 @@
               :else [default-db (table/->ref k)]))]
     (into {}
           (concat (for [[qualified cns] (info-schema/table-info db-names)]
-                    [qualified (xform-cols cns)])
-                  (for [[k cns] table-info]
-                    [(qualify k) (xform-cols cns)])))))
+                    [qualified (xform-cols cns PrimaryKey/ID)])
+                  (for [[k cns] table-info
+                        :let [qualified (qualify k)]]
+                    [qualified (xform-cols cns (get table-pks qualified PrimaryKey/ID))])))))
 
 (def ^:private ^Cache table-chains-cache
   (-> (Caffeine/newBuilder)
@@ -3474,7 +3471,7 @@
   ([ast] (->env-skeleton ast {}))
   ([ast {:keys [table-info table-pks default-db db-names tx-scoped? arg-fields], :or {default-db "xtdb"}}]
    (let [db-names (or db-names [default-db])
-         table-info (xform-table-info table-info db-names default-db)]
+         table-info (xform-table-info table-info table-pks db-names default-db)]
      {:default-db default-db
       :tx-scoped? tx-scoped?
       :dynamic-param-idxs (->dynamic-param-idxs ast)

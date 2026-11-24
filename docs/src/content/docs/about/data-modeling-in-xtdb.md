@@ -17,6 +17,7 @@ CREATE TABLE orders (order_no PRIMARY KEY, customer);
 
 Declare the key before anything is written to the table: the first write fixes it, and from then on it can't change.
 A key is a single column.
+In a table keyed on another column, `_id` is an ordinary column.
 See [Primary keys](/reference/main/sql/schema#primary-keys-v221) for the rules.
 
 XTDB doesn't store your rows in ID order.

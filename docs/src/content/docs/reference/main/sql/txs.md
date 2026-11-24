@@ -6,7 +6,7 @@ For examples on how to submit SQL transactions in each client library, see the [
 
 ## ID types
 
-Every document's `_id` must be one of these types:
+Every document's value for its table's [primary key](/reference/main/sql/schema#primary-keys-v221) - `_id` unless the table declares another - must be one of these types:
 
 | Type | Example | Stored by |
 | --- | --- | --- |

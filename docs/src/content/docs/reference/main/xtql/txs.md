@@ -14,6 +14,9 @@ v2.2.1: a `put-docs` without its key into a table not yet written to aborts its 
 
   A client of `submit-tx` putting into a table that hasn't been written to no longer sees the error when it submits: check the transaction's outcome, or use `execute-tx`.
 
+  The key's value is checked in the same places: one of a type that can't key a row (see [ID types](/reference/main/sql/txs#id-types)) fails at submit, or aborts the transaction, with `xtdb/invalid-id`.
+  Previously a `put-docs` failed at submit with `xtdb.tx/invalid-eid` for any `:xt/id` of such a type; in a table keyed on another column, `:xt/id` is now an ordinary column, and takes any value.
+
 </details>
 
 Transactions in XTDB are submitted to the [log](/ops/config/log), to be processed asynchronously.
