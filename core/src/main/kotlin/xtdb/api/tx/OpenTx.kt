@@ -33,6 +33,7 @@ import xtdb.api.TableRef
 import xtdb.time.InstantUtil.asMicros
 import xtdb.time.InstantUtil.fromMicros
 import xtdb.time.microsAsInstant
+import xtdb.table.PrimaryKey
 import xtdb.trie.Trie
 import xtdb.types.ClojureForm
 import xtdb.util.asIid
@@ -85,7 +86,8 @@ class OpenTx
 
     internal fun table(table: TableRef): Table =
         tableTxs[table] ?: openTableTx(table).closeOnCatch { tx ->
-            Table(table, tx).also { tableTxs[table] = it }
+            Table(table, tx, partitionState.tableCatalog.snap().primaryKey(table) ?: PrimaryKey.ID)
+                .also { tableTxs[table] = it }
         }
 
     /**
@@ -440,7 +442,12 @@ class OpenTx
      *
      * In any event, you must write all the batch's row data before calling the corresponding `end` methods.
      */
-    inner class Table internal constructor(val ref: TableRef, internal val tx: LiveTable.Tx) : AutoCloseable {
+    inner class Table internal constructor(
+        val ref: TableRef,
+        internal val tx: LiveTable.Tx,
+        /** The key this table's rows are identified by — a put takes its IID from [PrimaryKey.column]. */
+        val primaryKey: PrimaryKey,
+    ) : AutoCloseable {
 
         private fun checkValidTimes(validFrom: Long, validTo: Long) {
             if (validFrom >= validTo) {
@@ -495,11 +502,12 @@ class OpenTx
         /**
          * Single document put:
          *
-         * - the document must contain an `_id` key
+         * - the document must contain the table's [primaryKey] column
          *
          * */
         fun writePut(doc: Map<String, *>, validFrom: Instant? = null, validTo: Instant? = null) {
-            writeId(doc["_id"] ?: throw Incorrect("missing _id", "xtdb.tx/missing-id", mapOf("doc" to doc)))
+            val pkCol = primaryKey.column
+            writeId(doc[pkCol] ?: throw Incorrect("missing $pkCol", "xtdb.tx/missing-id", mapOf("doc" to doc)))
             writeValidTimes(validFrom, validTo)
             putDocWriter.writeObject(doc)
             endPut()
@@ -508,7 +516,7 @@ class OpenTx
         /**
          * Batch put: writes every row in [rel], content from `doc`.
          *
-         * - The relation MUST contain either an `_iid` or an `_id` column.
+         * - The relation MUST contain either an `_iid` column or the table's [primaryKey] column.
          * - Per-row valid times come from the rel's `_valid_from` / `_valid_to` columns when present and non-null;
          *   otherwise the [defaultValidFromMicros] / [defaultValidToMicros] defaults apply.
          *
@@ -526,7 +534,7 @@ class OpenTx
             if (iidRdr != null) {
                 iidVec.append(iidRdr)
             } else {
-                val idRdr = rel["_id"]
+                val idRdr = rel[primaryKey.column]
 
                 repeat(rowCount) { idx -> iidVec.writeBytes(idRdr.getObject(idx).asIid) }
             }

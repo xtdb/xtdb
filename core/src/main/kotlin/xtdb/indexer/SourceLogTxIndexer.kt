@@ -115,10 +115,13 @@ internal class SourceLogTxIndexer(
                 ),
             ).withName("doc")
 
+            val liveTable = table(table)
+
             val iidCol = if (!iidsRdr.isNull(opIdx)) {
                 iidRdr.select(iidsRdr.getListStartIndex(opIdx), docCount).withName("_iid")
             } else {
-                docRdr.vectorFor("_id").select(docStartIdx, docCount).withName("_id")
+                val pkCol = liveTable.primaryKey.column
+                docRdr.vectorFor(pkCol).select(docStartIdx, docCount).withName(pkCol)
             }
 
             val rowVfCol = docRdr.vectorForOrNull("_valid_from")
@@ -136,7 +139,6 @@ internal class SourceLogTxIndexer(
             val validFrom = if (validFromRdr.isNull(opIdx)) opts.systemTime else validFromRdr.getLong(opIdx)
             val validTo = if (validToRdr.isNull(opIdx)) Long.MAX_VALUE else validToRdr.getLong(opIdx)
 
-            val liveTable = table(table)
             crashLogger.withCrashLog(
                 "error putting documents",
                 table = table,

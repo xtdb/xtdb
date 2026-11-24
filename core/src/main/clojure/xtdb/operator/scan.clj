@@ -123,11 +123,11 @@
   (with-open [snap (.openSnapshot snap-src nil)]
     (update-vals (.getTableInfo snap) set)))
 
-(defn- eid-select->eid [eid-select]
-  (cond (= '_id (second eid-select))
+(defn- eid-select->eid [pk-sym eid-select]
+  (cond (= pk-sym (second eid-select))
         (nth eid-select 2)
 
-        (= '_id (nth eid-select 2))
+        (= pk-sym (nth eid-select 2))
         (second eid-select)))
 
 (defn- resolve-eid-to-iid
@@ -152,28 +152,29 @@
     [expr]))
 
 (defn- extract-id-eqs-from-or
-  [expr]
+  [pk-sym expr]
   (when (and (sequential? expr) (= 'or (first expr)))
     (let [clauses (flatten-or expr)]
       (when (seq clauses)
         (let [eids (for [clause clauses
                          :when (and (sequential? clause)
                                     (= '== (first clause)))]
-                     (eid-select->eid clause))]
+                     (eid-select->eid pk-sym clause))]
           (when (and (= (count eids) (count clauses))
                      (every? some? eids))
             eids))))))
 
-(defn selects->iid-set ^SortedSet [selects ^RelationReader args-rel]
-  (when-let [eid-select (get selects "_id")]
-    (when-let [eids (cond
-                      ;; Single equality: (== _id value)
-                      (= '== (first eid-select))
-                      (some-> (eid-select->eid eid-select) vector)
+(defn selects->iid-set
+  "The IIDs that `selects` on the single-column primary key `pk-col` pin the scan to, or nil."
+  ^SortedSet [^String pk-col selects ^RelationReader args-rel]
+  (when-let [eid-select (get selects pk-col)]
+    (when-let [eids (let [pk-sym (symbol pk-col)]
+                      (cond
+                        (= '== (first eid-select))
+                        (some-> (eid-select->eid pk-sym eid-select) vector)
 
-                      ;; OR chain: (or (== _id v1) (== _id v2) ...)
-                      (= 'or (first eid-select))
-                      (extract-id-eqs-from-or eid-select))]
+                        (= 'or (first eid-select))
+                        (extract-id-eqs-from-or pk-sym eid-select)))]
       (let [iids (mapv #(resolve-eid-to-iid % args-rel) eids)]
         (when (every? some? iids)
           (doto (TreeSet. Bytes/COMPARATOR)
@@ -341,9 +342,10 @@
                                                                                 (fn [s] {:iids s}))
                                                                    str)))})
                            (fn [{:keys [allocator]}]
-                             (let [iid-set (or (selects->iid-set selects args)
+                             (let [pk-col (.getColumn (.primaryKey db-snapshot table))
+                                   iid-set (or (selects->iid-set pk-col selects args)
                                                (get pushdown-iids '_iid) ; usually patch
-                                               (get pushdown-iids '_id)) ; any other foreign-key join
+                                               (get pushdown-iids (symbol pk-col))) ; any other foreign-key join
                                    col-preds (cond-> col-preds
                                                (not (empty? iid-set))
                                                (assoc "_iid" (if (= 1 (count iid-set))

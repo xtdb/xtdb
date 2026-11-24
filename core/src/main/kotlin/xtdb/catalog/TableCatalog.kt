@@ -138,6 +138,9 @@ class TableCatalog(private val flow: StateFlow<State>) {
 
         fun rowCount(table: TableRef): Long? = tables[table]?.rowCount
 
+        /** null where nothing has fixed [table]'s key yet. */
+        fun primaryKey(table: TableRef): PrimaryKey? = tables[table]?.primaryKey
+
         /** The historical half's contribution — an unknown table has written nothing. */
         fun contributedType(table: TableRef, col: ColumnName): VectorType =
             tables[table]?.let { it.vecTypes[col] ?: it.absentContribution } ?: VectorType.Nothing

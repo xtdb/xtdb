@@ -4,6 +4,7 @@ import xtdb.api.TransactionKey
 import xtdb.api.TableRef
 import xtdb.trie.ColumnName
 import xtdb.table.Oid
+import xtdb.table.PrimaryKey
 import xtdb.database.Database
 import xtdb.util.closeAll
 import java.time.Instant
@@ -47,6 +48,10 @@ class DatabaseSnapshot(val partitions: List<Snapshot>) : AutoCloseable {
     fun tableOids(): Map<TableRef, Oid> =
         if (partitions.size == 1) partitions[0].tableOids
         else partitions.fold(emptyMap()) { acc, snap -> snap.tableOids + acc }
+
+    /** The key [table]'s rows are identified by, from the first partition that has fixed one; else [PrimaryKey.ID]. */
+    fun primaryKey(table: TableRef): PrimaryKey =
+        partitions.firstNotNullOfOrNull { it.primaryKey(table) } ?: PrimaryKey.ID
 
     /** One [TransactionKey] per partition, in partition-index order. */
     val txBasis: List<TransactionKey?> get() = partitions.map { it.txBasis }

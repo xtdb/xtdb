@@ -9,6 +9,7 @@ import xtdb.arrow.VectorType
 import xtdb.catalog.TableCatalog
 import xtdb.api.TableRef
 import xtdb.table.Oid
+import xtdb.table.PrimaryKey
 import xtdb.trie.ColumnName
 import xtdb.trie.MemoryHashTrie
 import xtdb.trie.TrieCatalog
@@ -53,6 +54,9 @@ class Snapshot internal constructor(
 
         tableInfo
     }
+
+    /** The key [table]'s rows are identified by, as of this snapshot; null where nothing has fixed it yet. */
+    fun primaryKey(table: TableRef): PrimaryKey? = tableCatSnap.primaryKey(table)
 
     /**
      * Where [table]'s files live, as of this snapshot — so the slugs a scan reads by are the ones recorded
