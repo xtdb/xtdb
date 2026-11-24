@@ -1,6 +1,7 @@
 package xtdb.arrow
 
 import java.lang.Long.bitCount
+import java.lang.Long.expand
 import java.lang.Long.numberOfTrailingZeros
 
 /**
@@ -42,29 +43,44 @@ class RowMask private constructor(private val words: LongArray, val rowCount: In
     }
 
     /**
-     * The rows of this mask that [refinement] keeps, over this mask's [rowCount] rows.
+     * Composes two masks: [refinement] filters the rows this mask kept, and the result is the one mask over this mask's own [rowCount] rows that keeps what both did.
+     * It's how a filter over a filter stays one mask deep, as in [MaskedRelation.of].
      *
-     * [refinement] is over this mask's set rows: its bit `k` decides the `k`th of them.
+     * [refinement] is over this mask's set rows, so its [rowCount] MUST be this mask's [cardinality]: its bit `k` keeps or drops this mask's `k`th set row.
+     * As selections, `andThen(r).toSelection()` is `toSelection()` indexed by `r.toSelection()`, the way two selections compose.
      */
     fun andThen(refinement: RowMask): RowMask {
         require(refinement.rowCount == cardinality) {
             "refinement is over ${refinement.rowCount} rows, mask sets $cardinality"
         }
 
+        val refWords = refinement.words
         val out = LongArray(words.size)
+        // the set rows in the words before `w`: word `w`'s `n` set rows, lowest first, are decided by refinement bits `k until k + n`
         var k = 0
         for (w in words.indices) {
-            var word = words[w]
-            var kept = 0L
-            // walks this word's set rows lowest first, `k` counting set rows across words:
-            // the `k`th set row is kept where bit `k` of the refinement is set
-            while (word != 0L) {
-                val lowest = word and -word
-                if ((refinement.words[k ushr 6] ushr (k and 63)) and 1L != 0L) kept = kept or lowest
-                k++
-                word = word xor lowest
-            }
-            out[w] = kept
+            val word = words[w]
+            val n = bitCount(word)
+            // nothing to keep, and `out[w]` is already 0.
+            // Skipping before the read also matters: after a multiple of 64 set rows, `k ushr 6` is one past the refinement's last word.
+            if (n == 0) continue
+
+            // `bits` gets refinement bits `k until k + n` down to its low `n` bits.
+            // They start `shift` bits into refinement word `k ushr 6`, and may run off its top:
+            // - where `shift + n > 64`, the rest are the low bits of the next refinement word, shifted up to sit above the `64 - shift` taken from this one.
+            // - that branch implies `shift > 0` (`n` is at most 64), so the shift is never `shl 64`, which the JVM takes mod 64 as `shl 0`.
+            val shift = k and 63
+            var bits = refWords[k ushr 6] ushr shift
+            if (shift + n > 64) bits = bits or (refWords[(k ushr 6) + 1] shl (64 - shift))
+
+            // `expand(bits, word)` (PDEP) deposits the low bits of `bits`, lowest first, into `word`'s set positions, and clears the rest.
+            // So `word`'s `i`th set row survives exactly where bit `i` of `bits` - refinement bit `k + i` - is set.
+            // e.g. over 8 bits, `expand(0b0000_0101, 0b0110_1010)`:
+            // - `word`'s set positions are 1, 3, 5, 6, and the low four bits of `bits`, lowest first, are 1, 0, 1, 0
+            // - so positions 1 and 5 survive: `0b0010_0010`
+            // It reads only the low `bitCount(word)` bits, so the refinement bits past `k + n` needn't be masked off.
+            out[w] = expand(bits, word)
+            k += n
         }
         return RowMask(out, rowCount)
     }

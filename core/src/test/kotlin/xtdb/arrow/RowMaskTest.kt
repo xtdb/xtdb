@@ -2,7 +2,12 @@ package xtdb.arrow
 
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
+import io.kotest.property.Arb
+import io.kotest.property.arbitrary.*
+import io.kotest.property.checkAll
+import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
+import xtdb.arrow.VectorIndirection.Companion.selection
 
 internal fun rowMask(rowCount: Int, set: (Int) -> Boolean): RowMask {
     val words = LongArray((rowCount + 63) ushr 6)
@@ -85,14 +90,16 @@ class RowMaskTest {
         shouldThrow<IllegalArgumentException> { RowMask.ofWords(LongArray(0), -1) }
     }
 
+    private fun checkRefines(mask: RowMask, refinement: RowMask) {
+        val refined = mask.andThen(refinement)
+
+        refined.rowCount shouldBe mask.rowCount
+        refined.toSelection().toList() shouldBe selection(mask.toSelection()).select(refinement.toSelection()).toList()
+    }
+
     private fun checkRefines(rowCount: Int, outer: (Int) -> Boolean, refinement: (Int) -> Boolean) {
         val mask = rowMask(rowCount, outer)
-        val refined = mask.andThen(rowMask(mask.cardinality, refinement))
-        val expected = mask.toSelection().filterIndexed { k, _ -> refinement(k) }
-
-        refined.rowCount shouldBe rowCount
-        refined.cardinality shouldBe expected.size
-        refined.toSelection().toList() shouldBe expected
+        checkRefines(mask, rowMask(mask.cardinality, refinement))
     }
 
     @Test
@@ -114,6 +121,60 @@ class RowMaskTest {
         checkRefines(150, { it % 5 == 0 }, { false })
         checkRefines(150, { it % 5 == 0 }, { true })
         checkRefines(150, { false }, { true })
+    }
+
+    @Test
+    fun `refining a full word whose set rows straddle two refinement words`() {
+        checkRefines(192, { it < 10 || it in 64 until 128 }, { it % 3 != 0 })
+        checkRefines(192, { it < 10 || it in 64 until 128 }, { it == 63 || it == 64 })
+        checkRefines(192, { it < 10 || it in 64 until 128 || it == 130 }, { it == 73 || it == 74 })
+    }
+
+    @Test
+    fun `refining past the last refinement word, over empty mask words`() {
+        checkRefines(0, { true }, { true })
+        checkRefines(200, { it < 64 }, { true })
+        checkRefines(200, { it in 64 until 128 }, { it % 2 == 0 })
+    }
+
+    private val words = Arb.choice(
+        Arb.of(0L, -1L),
+        Arb.long(),
+        Arb.bind(Arb.long(), Arb.long(), Long::and),
+        Arb.bind(Arb.long(), Arb.long(), Long::or),
+    )
+
+    private fun maskOf(words: List<Long>, rowCount: Int): RowMask {
+        val ws = LongArray((rowCount + 63) ushr 6) { words.getOrElse(it) { 0L } }
+        if (rowCount and 63 != 0) ws[ws.lastIndex] = ws.last() and ((1L shl (rowCount and 63)) - 1)
+        return RowMask.ofWords(ws, rowCount)
+    }
+
+    private fun RowMask.downToWholeWordsSet(): RowMask {
+        val ws = LongArray(wordCount, ::word)
+        var excess = cardinality and 63
+        for (w in ws.indices.reversed()) {
+            while (excess > 0 && ws[w] != 0L) {
+                ws[w] = ws[w] and ws[w].takeHighestOneBit().inv()
+                excess--
+            }
+        }
+        return RowMask.ofWords(ws, rowCount)
+    }
+
+    @Test
+    fun `refining any mask agrees with composing the two selections`() = runTest {
+        checkAll(
+            Arb.list(words, 0..6),
+            Arb.choice(Arb.of(1, 63, 64), Arb.int(1..64)),
+            Arb.boolean(),
+            Arb.list(words, 0..6),
+        ) { maskWords, lastWordRows, wholeWordsSet, refinementWords ->
+            val rowCount = if (maskWords.isEmpty()) 0 else (maskWords.size - 1) * 64 + lastWordRows
+            val mask = maskOf(maskWords, rowCount).let { if (wholeWordsSet) it.downToWholeWordsSet() else it }
+
+            checkRefines(mask, maskOf(refinementWords, mask.cardinality))
+        }
     }
 
     @Test
