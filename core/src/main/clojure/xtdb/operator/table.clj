@@ -110,7 +110,8 @@
                                                                                projection-spec (expr/->expression-projection-spec "_scalar" expr input-types)]
                                                                            (.add type-set (.getType projection-spec))
                                                                            (MapEntry/create k (fn write-expr! [{:keys [allocator args]} ^VectorWriter out-col]
-                                                                                                (util/with-open [out-vec (.project projection-spec allocator (vr/rel-reader [] 1) schema args)]
+                                                                                                (util/with-open [projection (.open projection-spec allocator schema args)
+                                                                                                                 out-vec (.project projection (vr/rel-reader [] 1))]
                                                                                                   (.writeObject out-col (.getObject out-vec 0))))))))))))]
 
                                        {:ks (set (keys out-row))

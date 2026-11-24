@@ -1,18 +1,15 @@
 package xtdb.operator
 
-import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.ICursor
 import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorReader
+import xtdb.util.closeAll
 import xtdb.util.useAll
 import java.util.function.Consumer
 
 class ProjectCursor(
-    private val al: BufferAllocator,
     private val inCursor: ICursor,
     private val specs: List<ProjectionSpec>,
-    private val schema: Map<String, Any>,
-    private val args: RelationReader,
 ) : ICursor {
 
     override val cursorType get() = "project"
@@ -22,7 +19,7 @@ class ProjectCursor(
         inCursor.tryAdvance { inRel ->
             mutableListOf<VectorReader>().useAll { closeCols ->
                 val outCols = specs.map { spec ->
-                    spec.project(al, inRel, schema, args)
+                    spec.project(inRel)
                         .also {
                             if (spec !is ProjectionSpec.Identity && spec !is ProjectionSpec.Rename)
                                 closeCols.add(it)
@@ -33,5 +30,5 @@ class ProjectCursor(
             }
         }
 
-    override fun close() = inCursor.close()
+    override fun close() = (specs + inCursor).closeAll()
 }

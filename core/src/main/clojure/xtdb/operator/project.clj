@@ -3,10 +3,11 @@
             [clojure.string :as str]
             [xtdb.expression :as expr]
             [xtdb.logical-plan :as lp]
-            [xtdb.types :as types])
+            [xtdb.types :as types]
+            [xtdb.util :as util])
   (:import (org.apache.arrow.vector.types.pojo Field)
            (xtdb.arrow VectorType)
-           (xtdb.operator ProjectCursor ProjectionSpec ProjectionSpec$Identity ProjectionSpec$LocalRowNumber ProjectionSpec$Rename ProjectionSpec$RowNumber ProjectionSpec$Star)))
+           (xtdb.operator ProjectCursor ProjectionSpec$Factory ProjectionSpec$Identity ProjectionSpec$LocalRowNumber ProjectionSpec$Rename ProjectionSpec$RowNumber ProjectionSpec$Star)))
 
 (s/def ::append-columns? boolean?)
 
@@ -44,11 +45,17 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(defn ->identity-projection-spec ^ProjectionSpec [col-name col-type]
+(defn ->identity-projection-spec ^ProjectionSpec$Factory [col-name col-type]
   (ProjectionSpec$Identity. (str col-name) col-type))
 
-(defn ->project-cursor [{:keys [allocator args schema]} in-cursor projection-specs]
-  (ProjectCursor. allocator in-cursor projection-specs schema args))
+(defn- open-projection-specs [{:keys [allocator args schema]} projection-specs]
+  (util/safe-mapv #(.open ^ProjectionSpec$Factory % allocator schema args) projection-specs))
+
+(defn ->project-cursor
+  "Takes ownership of `in-cursor`, closing it if opening the specs throws."
+  [opts in-cursor projection-specs]
+  (util/with-close-on-catch [in-cursor in-cursor]
+    (ProjectCursor. in-cursor (open-projection-specs opts projection-specs))))
 
 (defmethod lp/emit-expr :project [{:keys [relation], {:keys [projections append-columns?]} :opts} {:keys [param-types] :as args}]
   (let [emitted-child-relation (lp/emit-expr relation args)]
@@ -87,8 +94,8 @@
                                                       (let [[to-name from-name] (first arg)]
                                                         [to-name from-name]))))))]
               (let [out-vec-types (->> projection-specs
-                                       (into {} (map (juxt #(symbol (.getToName ^ProjectionSpec %))
-                                                           #(.getType ^ProjectionSpec %)))))]
+                                       (into {} (map (juxt #(symbol (.getToName ^ProjectionSpec$Factory %))
+                                                           #(.getType ^ProjectionSpec$Factory %)))))]
                 {:op :project
                  :children [inner-rel]
                  :explain {:project (pr-str (into [] (map second) projections))
@@ -97,7 +104,7 @@
                  :stats (:stats emitted-child-relation)
                  :col-mapping col-mapping
                  :->cursor (fn [opts in-cursor]
-                             (->project-cursor opts in-cursor projection-specs))}))))
+                             (ProjectCursor. in-cursor (open-projection-specs opts projection-specs)))}))))
         (lp/with-col-mapping))))
 (defmethod lp/emit-expr :map [{:keys [opts] :as op} args]
   (lp/emit-expr (assoc op :op :project :opts (assoc opts :append-columns? true)) args))

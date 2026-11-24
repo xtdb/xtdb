@@ -40,10 +40,9 @@
     (letfn [(project [form]
               (let [input-types {:var-types {'a #xt/type :f64, 'b #xt/type :f64, 'd #xt/type :i64}, :param-types {}}
                     expr (expr/form->expr form input-types)]
-                (with-open [project-col (.project (expr/->expression-projection-spec "c" expr input-types)
-                                                  tu/*allocator* in-rel
-                                                  {}
-                                                  vw/empty-args)]
+                (with-open [projection (.open (expr/->expression-projection-spec "c" expr input-types)
+                                              tu/*allocator* {} vw/empty-args)
+                            project-col (.project projection in-rel)]
                   (.getAsList project-col))))]
 
       (t/is (= (mapv (comp double +) (range 1000) (range 1000))
@@ -367,8 +366,9 @@
                                            #(.getType ^VectorReader %)))))
         input-types {:var-types var-types, :param-types {}}
         expr (expr/form->expr form input-types)]
-    (with-open [out-ivec (.project (expr/->expression-projection-spec "out" expr input-types)
-                                   tu/*allocator* rel {} vw/empty-args)]
+    (with-open [projection (.open (expr/->expression-projection-spec "out" expr input-types)
+                                  tu/*allocator* {} vw/empty-args)
+                out-ivec (.project projection rel)]
       {:res (.toList out-ivec #xt/key-fn :kebab-case-keyword)
        :res-type (.getType out-ivec)})))
 
@@ -1957,8 +1957,9 @@
                                       (.writeUndefined)
                                       (.writeUndefined))]
                                    2)
-              s (.project (ProjectionSpec$Star. "s" #xt/type [:struct {"a" :nothing}])
-                          tu/*allocator* inner {} vw/empty-args)
+              star (.open (ProjectionSpec$Star. "s" #xt/type [:struct {"a" :nothing}])
+                          tu/*allocator* {} vw/empty-args)
+              s (.project star inner)
               out (Vector/open tu/*allocator* "s" #xt/type [:struct {"a" :nothing}])]
 
     (t/is (= #xt/type [:struct {"a" :nothing}] (.getType s))

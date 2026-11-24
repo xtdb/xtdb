@@ -20,7 +20,7 @@
            (org.apache.commons.codec.binary Hex)
            (xtdb.arrow ListValueReader RelationReader RowMask ValueBox ValueReader Vector VectorReader VectorType VectorType$Listy VectorType$Mono VectorType$Nothing VectorType$Poly VectorType$Struct)
            (xtdb.expression PgFormat)
-           (xtdb.operator ProjectionSpec SelectionSpec SelectionSpec$Factory)
+           (xtdb.operator ProjectionSpec ProjectionSpec$Factory SelectionSpec SelectionSpec$Factory)
            (xtdb.pgwire PgTypes)
            xtdb.time.Interval
            (xtdb.util StringUtil)))
@@ -2615,24 +2615,29 @@
                        [(symbol (.getName iv))
                         (.getType iv)])))))
 
-(defn ->expression-projection-spec ^xtdb.operator.ProjectionSpec [col-name expr {:keys [var-types param-types]}]
+(defn ->expression-projection-spec ^ProjectionSpec$Factory [col-name expr {:keys [var-types param-types]}]
   (let [;; HACK - this runs the analyser (we discard the emission) to get the widest possible out-type.
         widest-out-type (-> (emit-projection expr {:param-types param-types
                                                    :var-types var-types})
                             :return-type)]
 
-    (reify ProjectionSpec
+    (reify ProjectionSpec$Factory
       (getToName [_] (str col-name))
       (getType [_] widest-out-type)
 
-      (project [_ allocator in-rel schema args]
-        (let [{:keys [return-type !projection-fn]} (emit-projection expr {:param-types (->param-types args)
-                                                                          :var-types (->var-types in-rel)})]
-          (util/with-close-on-catch [out-vec (Vector/open allocator (str col-name) return-type)]
-            (rethrowing-anomalies
-              (@!projection-fn in-rel schema args out-vec))
+      (open [_ al schema args]
+        (let [param-types (->param-types args)]
+          (reify ProjectionSpec
+            (project [_ in-rel]
+              (let [{:keys [return-type !projection-fn]} (emit-projection expr {:param-types param-types
+                                                                                :var-types (->var-types in-rel)})]
+                (util/with-close-on-catch [out-vec (Vector/open al (str col-name) return-type)]
+                  (rethrowing-anomalies
+                    (@!projection-fn in-rel schema args out-vec))
 
-            out-vec))))))
+                  out-vec)))
+
+            (close [_])))))))
 
 (defn- ->predicate-expr [expr]
   {:op :call, :f :boolean, :args [expr]})
