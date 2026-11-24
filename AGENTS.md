@@ -60,11 +60,12 @@ That commentary belongs in the commit body and the PR, which are read once aroun
 | `allium/database-lifecycle.allium` | The lifecycle of a database on one node — how it becomes a member of the node's set, how it stops being one, and what resolves by name in between. Node-level; treats a running database as opaque. |
 | `allium/log-processor-lifecycle.allium` | Per-database leader election — the Following/Leading state machine, the ordered steps a promotion runs, the term fence that keeps one confirmed leader per database, and the obligations the replica log has to meet for a term to mean anything. |
 | `allium/memory-hash-trie.allium` | The immutable in-memory hash trie indexing rows by IID within a `LiveTable` — bucketing, leaf ordering, log compaction, splitting. |
+| `allium/secondary-index.allium` | Secondary indices on a column — declaration and drop, the Building/Ready lifecycle, flush-time index L0s and backfill, index compaction and GC, and the equality scan's candidate-IID contract. |
 | `dev/doc/db.allium` | The processing model of one database end to end — submit → log processing → block flush → query, the source/replica log message types, the block and table catalogs, and the compaction message flow. |
 | `dev/doc/tx.allium` | The connection-level transaction model sitting above `db.allium` — begin/buffer/commit, access-mode resolution, read basis, and pgwire/ADBC frontend parity. |
 | `dev/doc/trie-cat.allium` | The trie catalog — per-table inventory of immutable trie snapshots, the nascent/live/garbage state machine, and supersession by compaction output. |
 | `dev/doc/compaction.allium` | Coordination-free compaction — deterministic job selection and the merge algorithm. The message flow around it lives in `db.allium`. |
-| `dev/doc/gc.allium` | Trie garbage collection — leader-only, signalled at block boundaries, deleting superseded data/meta files and publishing those deletions atomically to the replica log. |
+| `dev/doc/gc.allium` | Trie garbage collection — leader-only, signalled at block boundaries, deleting superseded data/meta files of tables' and secondary indices' tries and publishing those deletions atomically to the replica log. |
 | `dev/doc/block-gc.allium` | Garbage collection of superseded block-catalog and per-table block files — leader-only, and needs no replica-log coordination because block files are read only at startup/catch-up. |
 
 ## Definition of Done (Session Completion)

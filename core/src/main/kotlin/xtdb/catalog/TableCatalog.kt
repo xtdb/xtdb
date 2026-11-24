@@ -17,6 +17,7 @@ import xtdb.arrow.VectorType.Companion.asType
 import xtdb.arrow.VectorType.Companion.field
 import xtdb.block.proto.Block
 import xtdb.block.proto.Partition
+import xtdb.index.IndexCatalog
 import xtdb.block.proto.TableBlock
 import xtdb.block.proto.block
 import xtdb.block.proto.txKey
@@ -83,6 +84,10 @@ class TableCatalog(private val flow: StateFlow<State>) {
     ) {
         /** @see xtdb.indexer.TableSnapshot.contributedType — the historical side of the same memo. */
         val absentContribution by lazy { VectorType.absentContribution(vecTypes) }
+
+        companion object {
+            val EMPTY = TableMeta(emptyMap(), 0, emptyMap())
+        }
     }
 
     /**
@@ -235,21 +240,36 @@ class TableCatalog(private val flow: StateFlow<State>) {
 
     /**
      * The per-table block files for a block contributing [tableMetadata], with [tablePartitions] as their
-     * trie layout — one for every table this catalog knows, not only those in [tableMetadata].
+     * trie layout — one for every table this catalog knows, not only those in [tableMetadata], and one for every
+     * table [indexCatalog] has an index on, carrying that table's indices.
+     *
+     * A table that only [indexCatalog] names gets an index-only file, which carries no table metadata, so
+     * [loadState] leaves it out of the catalog's tables as an adopt does.
      *
      * Computes the fold that block causes and installs none of it: [refresh] is what installs it, once the
      * block is durable and adopted. The two must not both do it, because [mergeTables] sums row counts.
      */
     fun buildTableBlocks(
         tableMetadata: Map<TableRef, FinishedBlock>,
-        tablePartitions: Map<TableRef, List<Partition>>
+        tablePartitions: Map<TableRef, List<Partition>>,
+        indexCatalog: IndexCatalog,
     ): Map<TableRef, TableBlock> {
         val delta = tableMetadata.mapValues { (_, fb) -> TableMeta(fb.vecTypes, fb.rowCount.toLong(), fb.hllDeltas) }
+        val tables = snap().tables.foldIn(delta)
+        val indexedTables = indexCatalog.tables
 
-        return snap().tables.foldIn(delta)
-            .mapValues { (table, meta) ->
-                buildTableBlock(meta.vecTypes, meta.rowCount, tablePartitions[table].orEmpty(), meta.hlls)
-            }
+        return (tables.keys + indexedTables).associateWith { table ->
+            val meta = tables[table]
+
+            (meta ?: TableMeta.EMPTY)
+                .let { buildTableBlock(it.vecTypes, it.rowCount, tablePartitions[table].orEmpty(), it.hlls) }
+                .toBuilder()
+                .apply {
+                    if (table in indexedTables) secondaryIndices = indexCatalog.toProto(table)
+                    if (meta == null) indexOnly = true
+                }
+                .build()
+        }
     }
 
     fun buildBlock(
@@ -297,13 +317,21 @@ class TableCatalog(private val flow: StateFlow<State>) {
                 State(details, emptyMap(), details?.tables.orEmpty().associateBy { it.table })
             }
 
-        /** [initialState], with each recorded table's metadata loaded from [bufferPool]. */
+        /** The per-table block file of each table [block] records, read from [bufferPool]. */
         @JvmStatic
-        fun loadState(bufferPool: BufferPool, block: Block?): State {
-            val state = initialState(block)
-            val blockIndex = state.blockIdx ?: return state
-            return state.copy(tables = loadTablesFromStorage(bufferPool, state.recordedEntries, blockIndex))
+        fun loadTableBlocks(bufferPool: BufferPool, block: Block?): Map<TableRef, TableBlock> {
+            val blockIndex = block?.blockIndex ?: return emptyMap()
+            return block.tableEntries().associate { entry ->
+                entry.table to TableBlock.parseFrom(bufferPool.getByteArray(tableBlockPath(entry.slug, blockIndex)))
+            }
         }
+
+        /** [initialState], with the metadata of each table [tableBlocks] holds a written table's file for. */
+        @JvmStatic
+        fun loadState(block: Block?, tableBlocks: Map<TableRef, TableBlock>): State =
+            initialState(block).copy(
+                tables = tableBlocks.filterValues { !it.indexOnly }.mapValues { (_, tableBlock) -> parseTableBlock(tableBlock) }
+            )
 
         private val blocksPath = "blocks".asPath
 
@@ -349,16 +377,6 @@ class TableCatalog(private val flow: StateFlow<State>) {
                 tableBlock.columnNameToHllMap.mapValues { (_, bs) -> toHLL(bs.toByteArray()) }
             )
         }
-
-        internal fun loadTablesFromStorage(
-            bufferPool: BufferPool, entries: List<TableEntry>, blockIndex: BlockIndex
-        ): Map<TableRef, TableMeta> =
-            entries.associate { entry ->
-                entry.table to
-                        parseTableBlock(
-                            TableBlock.parseFrom(bufferPool.getByteArray(tableBlockPath(entry.slug, blockIndex)))
-                        )
-            }
 
         /** Folds a block's per-table deltas into the accumulated catalog. */
         private fun Map<TableRef, TableMeta>.foldIn(delta: Map<TableRef, TableMeta>) =
@@ -408,7 +426,7 @@ class TableCatalog(private val flow: StateFlow<State>) {
             }
 
         internal fun mergeTables(old: TableMeta?, delta: TableMeta?): TableMeta {
-            if (old == null && delta == null) return TableMeta(emptyMap(), 0, emptyMap())
+            if (old == null && delta == null) return TableMeta.EMPTY
             if (old == null) return delta!!
             if (delta == null) return old
             return TableMeta(

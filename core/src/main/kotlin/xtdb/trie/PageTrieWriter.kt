@@ -8,7 +8,7 @@ import xtdb.arrow.VectorReader
 import xtdb.compactor.PageTree
 import xtdb.compactor.PageTree.Companion.asTree
 import xtdb.log.proto.TrieMetadata
-import xtdb.table.TableSlug
+import xtdb.table.TrieFiles
 import xtdb.util.useAll
 import java.util.TreeMap
 
@@ -105,17 +105,17 @@ class PageTrieWriter(
      * @param part the IID levels every row in the input shares; null where it pins none
      */
     suspend fun writePageTree(
-        table: TableSlug, trieKey: TrieKey,
+        files: TrieFiles, trieKey: TrieKey,
         loader: Relation.Loader, inputPages: List<PageTree.Leaf>,
         pageSize: Int, part: ByteArray?
     ): Pair<FileSize, TrieMetadata> =
-        DataFileWriter(al, bp, table, trieKey, loader.schema).use { dataFileWriter ->
+        DataFileWriter(al, bp, files, trieKey, loader.schema).use { dataFileWriter ->
             val dataRel = dataFileWriter.dataRel
 
             val startPtr = ArrowBufPointer()
             val endPtr = ArrowBufPointer()
 
-            MetadataFileWriter(al, bp, table, trieKey, dataFileWriter.dataRel, calculateBlooms)
+            MetadataFileWriter(al, bp, files, trieKey, dataFileWriter.dataRel, calculateBlooms)
                 .use { metaFileWriter ->
                     Relation(al, loader.schema).use { inRel ->
                         val iidReader = inRel["_iid"]

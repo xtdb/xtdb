@@ -436,7 +436,7 @@ class LogProcessorTest {
             // a claim landing between the boundary and its upload is what moves the fence past `cutter`, and under self-election it lands there routinely
             replicaLog.appendMessage(ReplicaMessage.NoOp(termId = successor))
             val staleUpload = replicaLog.appendMessage(
-                ReplicaMessage.BlockUploaded(Storage.VERSION, 0, 0, 0, emptyList(), termId = cutter)
+                ReplicaMessage.BlockUploaded(Storage.VERSION, 0, 0, 0, emptyList(), emptyMap(), termId = cutter)
             )
 
             TestNode(sourceLog, replicaLog, readOnly = true).use { node ->
@@ -450,7 +450,7 @@ class LogProcessorTest {
                 )
 
                 val reUpload = replicaLog.appendMessage(
-                    ReplicaMessage.BlockUploaded(Storage.VERSION, 0, 0, 0, emptyList(), termId = successor)
+                    ReplicaMessage.BlockUploaded(Storage.VERSION, 0, 0, 0, emptyList(), emptyMap(), termId = successor)
                 )
 
                 awaitReplicaMsg(node, reUpload.msgId)
@@ -615,7 +615,7 @@ class LogProcessorTest {
                 // Whoever leads next produces the same block, which the re-opened follower is still holding.
                 val reUpload = replicaLog.appendMessage(
                     ReplicaMessage.BlockUploaded(
-                        Storage.VERSION, 0, 0, boundarySrcMsgId, emptyList(), termId = cutter + 1, termSeq = 1
+                        Storage.VERSION, 0, 0, boundarySrcMsgId, emptyList(), emptyMap(), termId = cutter + 1, termSeq = 1
                     )
                 )
 
@@ -660,7 +660,7 @@ class LogProcessorTest {
                 // The rival produces the same block; the block this node holds has to survive the resignation
                 // to close on it, or the upload reaches a role with nothing to match it against.
                 val reUpload = replicaLog.appendMessage(
-                    ReplicaMessage.BlockUploaded(Storage.VERSION, 0, 0, boundarySrcMsgId, emptyList(), termId = superseding)
+                    ReplicaMessage.BlockUploaded(Storage.VERSION, 0, 0, boundarySrcMsgId, emptyList(), emptyMap(), termId = superseding)
                 )
 
                 awaitReplicaMsg(node, reUpload.msgId)

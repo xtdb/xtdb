@@ -21,13 +21,14 @@
            (xtdb.table TableSlug)
            (xtdb.catalog TableCatalog)
            (xtdb.database DatabasePartition PartitionState PartitionValue)
+           (xtdb.index IndexCatalog)
            (xtdb.trie TrieCatalog$State)
            (xtdb.api TableRef)))
 
 (t/use-fixtures :once tu/with-allocator)
 
 (defn- ->partition-state ^PartitionState [trie-cat-state]
-  (PartitionState. (PartitionValue/loaded trie-cat-state (TableCatalog/initialState nil))))
+  (PartitionState. (PartitionValue/loaded trie-cat-state (TableCatalog/initialState nil) IndexCatalog/EMPTY)))
 
 (defn- primary-partition-state ^PartitionState [node]
   (.getState ^DatabasePartition (first (.getPartitions (db/primary-db node)))))

@@ -8,7 +8,7 @@ import java.lang.Integer.rotateLeft
 import java.nio.ByteBuffer
 
 abstract class Hasher {
-    fun hash(value: Double): Int = hash(doubleToRawLongBits(value))
+    open fun hash(value: Double): Int = hash(doubleToRawLongBits(value))
     open fun hash(value: Long): Int = hash(longToBytes(value))
     open fun hash(value: ByteBuffer): Int = hash(value.toByteArray())
     open fun hash(buf: ArrowBuf, offset: Int, length: Int): Int = hash(buf.toByteArray(offset, length))

@@ -21,11 +21,11 @@ import xtdb.log.proto.TemporalMetadata
 import xtdb.log.proto.TrieMetadata
 import xtdb.metadata.ColumnMetadata
 import xtdb.storage.BufferPool
-import xtdb.table.TableSlug
+import xtdb.table.TrieFiles
 
 class MetadataFileWriter(
     al: BufferAllocator, private val bp: BufferPool,
-    private val slug: TableSlug, private val trieKey: TrieKey,
+    private val files: TrieFiles, private val trieKey: TrieKey,
     private val dataRel: RelationReader,
     calculateBlooms: Boolean
 ) : AutoCloseable {
@@ -147,7 +147,7 @@ class MetadataFileWriter(
     }
 
     suspend fun end(): TrieMetadata {
-        bp.openArrowWriter(slug.metaFilePath(trieKey), metaRel)
+        bp.openArrowWriter(files.metaFilePath(trieKey), metaRel)
             .use { metaFileWriter ->
                 metaFileWriter.writePage()
                 metaFileWriter.end()

@@ -13,6 +13,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -32,6 +33,10 @@ import xtdb.api.log.SourceMessage
 import xtdb.api.log.Watchers
 import xtdb.api.storage.Storage
 import xtdb.database.Database
+import xtdb.database.PartitionState
+import xtdb.index.IndexDef
+import xtdb.index.IndexState
+import xtdb.index.IndexTrie
 import xtdb.log.proto.TrieDetails
 import xtdb.log.proto.trieMetadata
 import xtdb.table.fromSchemaAndTable
@@ -39,6 +44,7 @@ import xtdb.trie.Trie
 import java.time.Instant
 import java.time.InstantSource
 import java.time.ZoneId
+import java.util.UUID
 import kotlin.time.Duration.Companion.seconds
 import xtdb.api.tx.ExternalSource
 import xtdb.api.tx.TxIndexer
@@ -182,7 +188,7 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
 
     private fun uploaded(blockIdx: Long, latestProcessedMsgId: Long) =
         ReplicaMessage.BlockUploaded(
-            Storage.VERSION, 0, blockIdx, latestProcessedMsgId, emptyList(), termId = 1
+            Storage.VERSION, 0, blockIdx, latestProcessedMsgId, emptyList(), emptyMap(), termId = 1
         )
 
     @Test
@@ -537,4 +543,126 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
         assertNull(watchers.exception, "a resignation must not poison the watchers")
     }
 
+
+    private suspend fun PartitionState.awaitIndexState(id: UUID, state: IndexState) =
+        value.first { it.indexCat[id]?.state == state }
+
+    @Test
+    fun `an index declared on a table with no flushed rows is published Ready, and read back as Ready`() = runTest(timeout = 5.seconds) {
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+        val def = IndexDef(UUID.randomUUID(), "by_email", TableRef("public", "users"), "email")
+        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
+        lateinit var partitionState: PartitionState
+
+        val lp = leaderProc(
+            StandardTestDispatcher(testScheduler), replicaLog = replicaLog, watchers = watchers,
+            wrapPartitionState = { it.also { partitionState = it } },
+        )
+
+        lp.srcLogProc.processRecords(listOf(Log.Record(0, 0, Instant.now(), SourceMessage.CreateIndex(def))))
+
+        partitionState.awaitIndexState(def.id, IndexState.Ready)
+
+        assertEquals(
+            listOf(ReplicaMessage.IndexReady(def.id, termId = 1)),
+            replicaLog.readRecords(0, 0, replicaLog.latestSubmittedMsgId() + 1)
+                .map { it.message }.filterIsInstance<ReplicaMessage.IndexReady>().map { it.copy(termSeq = null) }.toList(),
+            "published once, under the leader's term"
+        )
+    }
+
+    @Test
+    fun `a new term publishes Ready for an index left complete, and not for one still owing blocks`() = runTest(timeout = 5.seconds) {
+        val complete = IndexDef(UUID.randomUUID(), "by_email", TableRef("public", "users"), "email")
+        val owing = IndexDef(UUID.randomUUID(), "by_sku", TableRef("public", "orders"), "sku")
+        lateinit var partitionState: PartitionState
+
+        leaderProc(
+            StandardTestDispatcher(testScheduler),
+            initial = createPartitionValue().let { pv ->
+                pv.withIndexCat(pv.indexCat.withIndex(complete, 0, emptySet()).withIndex(owing, 2, setOf(0L, 1L)))
+            },
+            wrapPartitionState = { it.also { partitionState = it } },
+        )
+
+        partitionState.awaitIndexState(complete.id, IndexState.Ready)
+
+        assertEquals(IndexState.Building(setOf(0L, 1L)), partitionState.indexCatalog[owing.id]?.state)
+    }
+
+    @Test
+    fun `backfills are forwarded and applied, and the one leaving the index owing nothing publishes Ready behind it`() = runTest(timeout = 5.seconds) {
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+        val def = IndexDef(UUID.randomUUID(), "by_email", TableRef("public", "users"), "email")
+        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
+        lateinit var partitionState: PartitionState
+
+        val lp = leaderProc(
+            StandardTestDispatcher(testScheduler), replicaLog = replicaLog, watchers = watchers,
+            initial = createPartitionValue().let { pv -> pv.withIndexCat(pv.indexCat.withIndex(def, 2, setOf(0L, 1L))) },
+            wrapPartitionState = { it.also { partitionState = it } },
+        )
+
+        val b0 = SourceMessage.IndexBackfilled(Storage.VERSION, 0, def.id, 0, 1024)
+        val b1 = SourceMessage.IndexBackfilled(Storage.VERSION, 0, def.id, 1, null)
+
+        lp.srcLogProc.processRecords(listOf(Log.Record(0, 0, Instant.now(), b0)))
+        watchers.awaitSource(0)
+        assertEquals(IndexState.Building(setOf(1L)), partitionState.indexCatalog[def.id]?.state, "one backfill applied, one block still owed")
+
+        lp.srcLogProc.processRecords(listOf(Log.Record(0, 1, Instant.now(), b1)))
+        partitionState.awaitIndexState(def.id, IndexState.Ready)
+
+        assertEquals(listOf(IndexTrie(Trie.l0Key(0), 1024)), partitionState.indexCatalog[def.id]?.liveTries)
+        assertEquals(
+            listOf(
+                ReplicaMessage.IndexBackfilled(b0, sourceMsgId = 0, termId = 1),
+                ReplicaMessage.IndexBackfilled(b1, sourceMsgId = 1, termId = 1),
+                ReplicaMessage.IndexReady(def.id, termId = 1),
+            ),
+            replicaLog.readRecords(0, 0, replicaLog.latestSubmittedMsgId() + 1)
+                .map { it.message }
+                .mapNotNull {
+                    when (it) {
+                        is ReplicaMessage.IndexBackfilled -> it.copy(termSeq = null)
+                        is ReplicaMessage.IndexReady -> it.copy(termSeq = null)
+                        else -> null
+                    }
+                }
+                .toList(),
+        )
+    }
+
+    @Test
+    fun `a compaction is forwarded to the replica log and applied`() = runTest(timeout = 5.seconds) {
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+        val def = IndexDef(UUID.randomUUID(), "by_email", TableRef("public", "users"), "email")
+        val l0s = (0L..1L).map { IndexTrie(Trie.l0Key(it), 1024) }
+        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
+        lateinit var partitionState: PartitionState
+
+        val lp = leaderProc(
+            StandardTestDispatcher(testScheduler), replicaLog = replicaLog, watchers = watchers,
+            initial = createPartitionValue().let { pv ->
+                pv.withIndexCat(pv.indexCat.withIndex(def, 0, emptySet()).withL0s(mapOf(def.id to l0s[0])).withL0s(mapOf(def.id to l0s[1])))
+            },
+            wrapPartitionState = { it.also { partitionState = it } },
+        )
+
+        val l1 = IndexTrie(Trie.Key(1, null, null, 1), 2048)
+        val compacted = SourceMessage.IndexCompacted(Storage.VERSION, 0, def.id, listOf(l1), l0s.map { it.key })
+
+        lp.srcLogProc.processRecords(listOf(Log.Record(0, 0, Instant.now(), compacted)))
+        watchers.awaitSource(0)
+
+        assertEquals(listOf(l1), partitionState.indexCatalog[def.id]?.liveTries)
+        assertEquals(
+            listOf(ReplicaMessage.IndexCompacted(compacted, sourceMsgId = 0, termId = 1)),
+            replicaLog.readRecords(0, 0, replicaLog.latestSubmittedMsgId() + 1)
+                .map { it.message }
+                .filterIsInstance<ReplicaMessage.IndexCompacted>()
+                .map { it.copy(termSeq = null) }
+                .toList(),
+        )
+    }
 }

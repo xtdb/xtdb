@@ -435,6 +435,27 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         fun detachDb(dbName: DatabaseName): ExecutedTx =
             dbCat.primary.let { awaitTx(it.sendDetachDbMessage(dbName).msgId, it.name).record(it.name) }
 
+        /**
+         * Declares a secondary index named [indexName] on [table]'s [column] in this connection's database.
+         *
+         * The transaction aborts if the database already holds an index of that name.
+         * Neither the table nor the column has to exist yet.
+         * Names are taken exactly as given, as [attachDb] and [TableRef] take theirs, without SQL's folding of an unquoted identifier: pass the column as stored (`firstname` for a SQL `firstName`), or the index matches no scan.
+         * Throws `xtdb/index-on-system-column` for `_iid`, `_valid_from`, `_valid_to`, `_system_from` or `_system_to`, which no document holds.
+         *
+         * As with [attachDb], the declaration is its own transaction, submitted and awaited at once: a transaction open on this connection neither blocks it nor includes it.
+         */
+        fun createIndex(indexName: String, table: TableRef, column: String): ExecutedTx =
+            awaitTx(db(dbName).sendCreateIndexMessage(indexName, table, column).msgId).record(dbName)
+
+        /**
+         * Drops the secondary index named [indexName] from this connection's database; the transaction aborts if there is none.
+         *
+         * As with [detachDb], the drop is its own transaction, submitted and awaited at once: a transaction open on this connection neither blocks it nor includes it.
+         */
+        fun dropIndex(indexName: String): ExecutedTx =
+            awaitTx(db(dbName).sendDropIndexMessage(indexName).msgId).record(dbName)
+
         private fun TransactionResult.toExecutedTx() =
             ExecutedTx(
                 txKey.txId, txKey.systemTime,

@@ -265,6 +265,7 @@ contract BlockGcLeaderOnly {
         -- per known table rather than only for the tables that took rows in
         -- that block (db.allium, upload step 3), so a table's newest
         -- per-table block file never lags the database's current index.
+        -- A table no block has written joins them at the first block after an index is declared on it, and stays: an index leaves its table's file only for its id to stay there, collected.
         --
         -- DeleteGarbageRule's threshold is absolute, so without this a table
         -- that had gone quiet for more than `blocks_to_keep` blocks would

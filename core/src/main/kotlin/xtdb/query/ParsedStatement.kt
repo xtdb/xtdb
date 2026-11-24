@@ -3,6 +3,7 @@ package xtdb.query
 import org.antlr.v4.runtime.ParserRuleContext
 import org.antlr.v4.runtime.misc.Interval
 import xtdb.antlr.Sql
+import xtdb.api.TableRef
 
 /**
  * A directly-executable SQL statement, classified from the parse tree without planning.
@@ -107,6 +108,13 @@ sealed interface ParsedStatement {
     data class AttachDatabase(override val ast: Sql.DirectlyExecutableStatementContext, val dbName: String, val configYaml: String?) : ParsedStatement
     data class DetachDatabase(override val ast: Sql.DirectlyExecutableStatementContext, val dbName: String) : ParsedStatement
 
+    data class CreateIndex(
+        override val ast: Sql.DirectlyExecutableStatementContext,
+        val indexName: String, val table: TableRef, val column: String
+    ) : ParsedStatement
+
+    data class DropIndex(override val ast: Sql.DirectlyExecutableStatementContext, val indexName: String) : ParsedStatement
+
     /**
      * Double-dispatch over the statement variants.
      *
@@ -144,6 +152,8 @@ sealed interface ParsedStatement {
         is Execute -> visitor.visitExecute(this)
         is AttachDatabase -> visitor.visitAttachDatabase(this)
         is DetachDatabase -> visitor.visitDetachDatabase(this)
+        is CreateIndex -> visitor.visitCreateIndex(this)
+        is DropIndex -> visitor.visitDropIndex(this)
     }
 
     interface Visitor<R> {
@@ -179,5 +189,7 @@ sealed interface ParsedStatement {
         fun visitExecute(stmt: Execute): R = visitOther(stmt)
         fun visitAttachDatabase(stmt: AttachDatabase): R = visitOther(stmt)
         fun visitDetachDatabase(stmt: DetachDatabase): R = visitOther(stmt)
+        fun visitCreateIndex(stmt: CreateIndex): R = visitOther(stmt)
+        fun visitDropIndex(stmt: DropIndex): R = visitOther(stmt)
     }
 }

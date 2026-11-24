@@ -60,6 +60,9 @@ directlyExecutableStatement
     | REVOKE roleName=identifier FROM userName=identifier # RevokeRoleStatement
 
     | CREATE (OR ALTER)? TABLE targetTable ('(' columnNameList ')')? # CreateTableStatement
+
+    | CREATE INDEX indexName=identifier ON targetTable '(' columnName ')' # CreateIndexStatement
+    | DROP INDEX indexName=identifier # DropIndexStatement
     ;
 
 discardTarget
@@ -165,6 +168,7 @@ nonReservedKeyword
     | URI | OID
     | COPY | FORMAT
     | ATTACH | DETACH | DATABASE | LEVEL
+    | INDEX | DROP
     | FILTER
     | TABLE
     | METADATA

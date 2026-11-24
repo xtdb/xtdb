@@ -134,6 +134,7 @@ class NodeSimulationTest : SimulationTestBase() {
                     // simulation's view of the catalog still converges as the test asserts.
                     partitionState.deleteTries(tableName, trieKeys)
                 },
+                commitIndexTriesDeleted = { indexId, trieKeys -> partitionState.deleteIndexTries(indexId, trieKeys) },
                 blocksToKeep = 2,
                 garbageLifetime = garbageLifetime,
                 enabled = false,
@@ -189,10 +190,10 @@ class NodeSimulationTest : SimulationTestBase() {
                 tables = tableCatalog.resolveTables(listOf(table)),
                 secondaryDatabases = null,
                 termId = 0,
-                boundaryTermSeq = null
+                boundaryTermSeq = null,
             )
             sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
-            db.partitionState.adoptBlock(block, emptyList(), Instant.now())
+            db.partitionState.adoptBlock(block, emptyList(), emptyMap(), Instant.now())
         }
 
         assertEquals(l1Tries, trieCatalog.state.listAllTrieKeys(table), "l1s present in trie catalog")
@@ -249,10 +250,10 @@ class NodeSimulationTest : SimulationTestBase() {
                 tables = tableCatalog.resolveTables(listOf(table)),
                 secondaryDatabases = null,
                 termId = 0,
-                boundaryTermSeq = null
+                boundaryTermSeq = null,
             )
             sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
-            db.partitionState.adoptBlock(block, emptyList(), Instant.now())
+            db.partitionState.adoptBlock(block, emptyList(), emptyMap(), Instant.now())
         }
 
         assertEquals(l1Tries, trieCatalog.state.listAllTrieKeys(table), "l1s present initially")
@@ -328,10 +329,10 @@ class NodeSimulationTest : SimulationTestBase() {
                 tables = tableCatalog.resolveTables(listOf(table)),
                 secondaryDatabases = null,
                 termId = 0,
-                boundaryTermSeq = null
+                boundaryTermSeq = null,
             )
             sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
-            db.partitionState.adoptBlock(block, emptyList(), Instant.now())
+            db.partitionState.adoptBlock(block, emptyList(), emptyMap(), Instant.now())
         }
 
         val expectedNewL2Tries = listOf("l02-rc-p0-b07", "l02-rc-p1-b07", "l02-rc-p2-b07", "l02-rc-p3-b07")
@@ -401,10 +402,10 @@ class NodeSimulationTest : SimulationTestBase() {
                     tables = db.tableCatalog.resolveTables(listOf(table)),
                     secondaryDatabases = null,
                     termId = 0,
-                    boundaryTermSeq = null
+                    boundaryTermSeq = null,
                 )
                 sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
-                db.partitionState.adoptBlock(block, emptyList(), Instant.now())
+                db.partitionState.adoptBlock(block, emptyList(), emptyMap(), Instant.now())
             }
         }
 
@@ -475,10 +476,10 @@ class NodeSimulationTest : SimulationTestBase() {
                     tables = db.tableCatalog.resolveTables(listOf(table)),
                     secondaryDatabases = null,
                     termId = 0,
-                    boundaryTermSeq = null
+                    boundaryTermSeq = null,
                 )
                 sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
-                db.partitionState.adoptBlock(block, emptyList(), Instant.now())
+                db.partitionState.adoptBlock(block, emptyList(), emptyMap(), Instant.now())
             }
         }
 
@@ -572,10 +573,10 @@ class NodeSimulationTest : SimulationTestBase() {
                 tables = tableCatalog.resolveTables(listOf(table)),
                 secondaryDatabases = null,
                 termId = 0,
-                boundaryTermSeq = null
+                boundaryTermSeq = null,
             )
             sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
-            db.partitionState.adoptBlock(block, emptyList(), Instant.now())
+            db.partitionState.adoptBlock(block, emptyList(), emptyMap(), Instant.now())
         }
 
         compactorForDb.compactAllSync(null)
@@ -625,10 +626,10 @@ class NodeSimulationTest : SimulationTestBase() {
                     tables = db.tableCatalog.resolveTables(listOf(table)),
                     secondaryDatabases = null,
                     termId = 0,
-                    boundaryTermSeq = null
+                    boundaryTermSeq = null,
                 )
                 sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
-                db.partitionState.adoptBlock(block, emptyList(), Instant.now())
+                db.partitionState.adoptBlock(block, emptyList(), emptyMap(), Instant.now())
             }
         }
 
@@ -717,10 +718,10 @@ class NodeSimulationTest : SimulationTestBase() {
                     tables = db.tableCatalog.resolveTables(listOf(table)),
                     secondaryDatabases = null,
                     termId = 0,
-                    boundaryTermSeq = null
+                    boundaryTermSeq = null,
                 )
                 sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
-                db.partitionState.adoptBlock(block, emptyList(), Instant.now())
+                db.partitionState.adoptBlock(block, emptyList(), emptyMap(), Instant.now())
             }
         }
 

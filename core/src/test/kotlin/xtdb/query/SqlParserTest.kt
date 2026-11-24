@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import xtdb.api.TableRef
 import xtdb.api.error.Incorrect
 import xtdb.query.ParsedStatement.*
 
@@ -144,6 +145,22 @@ class SqlParserTest {
         assertEquals("mydb", (one("ATTACH DATABASE mydb") as AttachDatabase).dbName)
         assertEquals("k: v", (one("ATTACH DATABASE mydb WITH 'k: v'") as AttachDatabase).configYaml)
         assertEquals("mydb", (one("DETACH DATABASE mydb") as DetachDatabase).dbName)
+    }
+
+    @Test
+    fun `create index carries its name, table and column`() {
+        val create = one("CREATE INDEX by_email ON users (email)") as CreateIndex
+        assertEquals("by_email", create.indexName)
+        assertEquals(TableRef("public", "users"), create.table)
+        assertEquals("email", create.column)
+
+        assertEquals(TableRef("crm", "users"), (one("CREATE INDEX by_email ON crm.users (email)") as CreateIndex).table)
+        assertEquals("by_email", (one("DROP INDEX by_email") as DropIndex).indexName)
+    }
+
+    @Test
+    fun `index and drop stay usable as identifiers`() {
+        assertTrue(one("SELECT index, drop FROM foo") is Query)
     }
 
     @Test

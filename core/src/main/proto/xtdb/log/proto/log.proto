@@ -18,7 +18,46 @@ message SourceLogMessage {
         AttachDatabase attach_database = 3;
         DetachDatabase detach_database = 4;
         Tx tx = 6;
+        CreateIndex create_index = 7;
+        DropIndex drop_index = 8;
+        IndexBackfilled index_backfilled = 9;
+        IndexCompacted index_compacted = 10;
     }
+}
+
+message CreateIndex {
+    string index_id = 1;
+    string index_name = 2;
+    string schema_name = 3;
+    string table_name = 4;
+    string column_name = 5;
+}
+
+message DropIndex {
+    string index_name = 1;
+}
+
+// A backfill job's cover of one block its index owes.
+message IndexBackfilled {
+    int32 storage_version = 1;
+    int32 storage_epoch = 2;
+    string index_id = 3;
+    int64 block_index = 4;
+    // The data file size of the L0 the job wrote, at the block's L0 trie key; absent where it wrote none.
+    int64 l0_data_file_size = 5;
+    // Set by the leader as it forwards the message to the replica log: its position on the source log.
+    int64 source_msg_id = 6;
+}
+
+// An index compaction job's outputs, and the input tries they replace.
+message IndexCompacted {
+    int32 storage_version = 1;
+    int32 storage_epoch = 2;
+    string index_id = 3;
+    repeated IndexTrieDetails outputs = 4;
+    repeated string input_trie_keys = 5;
+    // Set by the leader as it forwards the message to the replica log: its position on the source log.
+    int64 source_msg_id = 6;
 }
 
 message Tx {
@@ -37,6 +76,13 @@ message BlockUploaded {
     int64 latest_processed_msg_id = 4;
     repeated TrieDetails tries = 5;
     bytes external_source_token = 6;
+    // the block's index L0s, keyed by index id: at most one per index
+    map<string, IndexTrieDetails> index_tries = 7;
+}
+
+message IndexTrieDetails {
+    string trie_key = 1;
+    int64 data_file_size = 2;
 }
 
 message FlushBlock {

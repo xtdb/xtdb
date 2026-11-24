@@ -9,11 +9,14 @@ import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.IndexerConfig
 import xtdb.api.TableRef
 import xtdb.api.TransactionKey
+import xtdb.api.log.IndexOp
 import xtdb.api.tx.OpenTx
 import xtdb.arrow.RelationReader
 import xtdb.block.proto.Block
 import xtdb.catalog.TableCatalog
 import xtdb.catalog.TableCatalog.Companion.latestBlock
+import xtdb.index.IndexCatalog
+import xtdb.index.IndexTrie
 import xtdb.indexer.LiveIndex
 import xtdb.indexer.LiveTable
 import xtdb.indexer.LiveSnap
@@ -22,6 +25,8 @@ import xtdb.indexer.Snapshot
 import xtdb.log.proto.TrieDetails
 import xtdb.storage.BufferPool
 import xtdb.time.InstantUtil.asMicros
+import xtdb.trie.BlockIndex
+import xtdb.trie.Trie
 import xtdb.trie.TrieCatalog
 import xtdb.trie.withTries
 import xtdb.types.LogTimestamp
@@ -39,6 +44,7 @@ import xtdb.util.safelyOpening
 import xtdb.util.withReadLock
 import xtdb.util.withWriteLock
 import java.time.Instant
+import java.util.UUID
 import java.util.concurrent.locks.StampedLock
 
 private val LOG = PartitionState::class.logger
@@ -64,6 +70,8 @@ class PartitionState private constructor(
     val trieCatalog = TrieCatalog(ref.mapState { it.trieCat })
     val liveIndexOrNull: LiveIndex? = openLiveIndex?.invoke(ref.mapState { it.live })
     val liveIndex: LiveIndex get() = liveIndexOrNull ?: error("no live-index")
+    val indexCatalog: IndexCatalog get() = ref.value.indexCat
+    internal val indexCatalogFlow: StateFlow<IndexCatalog> = ref.mapState { it.indexCat }
 
     private val snapLock = StampedLock()
 
@@ -90,6 +98,21 @@ class PartitionState private constructor(
     fun deleteTries(table: TableRef, garbageTrieKeys: Set<TrieKey>) =
         ref.update { it.withTrieCat(it.trieCat.withoutTries(table, garbageTrieKeys)) }
 
+    /** @see IndexCatalog.backfilled */
+    fun indexBackfilled(id: UUID, block: BlockIndex, l0: IndexTrie?) =
+        ref.update { it.withIndexCat(it.indexCat.backfilled(id, block, l0)) }
+
+    /** @see IndexCatalog.compacted */
+    fun indexCompacted(id: UUID, outputs: List<IndexTrie>, inputs: List<Trie.Key>, asOf: Instant) =
+        ref.update { it.withIndexCat(it.indexCat.compacted(id, outputs, inputs, asOf)) }
+
+    /** @see IndexCatalog.withoutGarbage */
+    fun deleteIndexTries(id: UUID, keys: Set<Trie.Key>) =
+        ref.update { it.withIndexCat(it.indexCat.withoutGarbage(id, keys)) }
+
+    /** @see IndexCatalog.ready */
+    fun indexReady(id: UUID) = ref.update { it.withIndexCat(it.indexCat.ready(id)) }
+
     /** @see TrieCatalog.State.withL0Reset */
     fun resetToL0(tableToL0Entries: Map<TableRef, Any?>) =
         ref.update { it.withTrieCat(it.trieCat.withL0Reset(tableToL0Entries)) }
@@ -110,8 +133,10 @@ class PartitionState private constructor(
      *
      * The leader's path for a transaction it resolved itself; one it reads back without having staged —
      * a promoted leader catching up — arrives as a deserialised relation and goes through [commitTx].
+     *
+     * [indexOp] is the committed transaction's, applied in the same write.
      */
-    fun applyTx(txKey: TransactionKey, tables: MutableMap<TableRef, LiveTable>) = snapLock.withWriteLock {
+    fun applyTx(txKey: TransactionKey, tables: MutableMap<TableRef, LiveTable>, indexOp: IndexOp?) = snapLock.withWriteLock {
         var live = ref.value.live
         val displaced = mutableListOf<LiveTable>()
 
@@ -122,7 +147,10 @@ class PartitionState private constructor(
         live = live.withLatestCompletedTx(txKey)
 
         val next = live
-        ref.update { it.withTableCat(it.tableCat.withEntriesFor(tables.keys)).withLive(next) }
+        ref.update {
+            it.withTableCat(it.tableCat.withEntriesFor(tables.keys)).withLive(next)
+                .withIndexCat(it.indexCat.applying(indexOp, txKey, next.blockIdx, it.tableCat))
+        }
         tables.clear()
 
         displaced.closeAll()
@@ -130,7 +158,7 @@ class PartitionState private constructor(
 
     // Promote a committed tx into the live tables from the replica message's deserialised table data
     // (see `loadTableData`) — a follower, or a leader catching up. The caller owns [tables] and closes them afterwards.
-    fun commitTx(txKey: TransactionKey, tables: Map<TableRef, RelationReader>) = snapLock.withWriteLock {
+    fun commitTx(txKey: TransactionKey, tables: Map<TableRef, RelationReader>, indexOp: IndexOp?) = snapLock.withWriteLock {
         val systemTimeMicros = txKey.systemTime.asMicros
 
         val before = ref.value.live
@@ -143,24 +171,27 @@ class PartitionState private constructor(
             }
 
             val next = live.withLatestCompletedTx(txKey)
-            ref.update { it.withTableCat(it.tableCat.withEntriesFor(tables.keys)).withLive(next) }
+            ref.update {
+                it.withTableCat(it.tableCat.withEntriesFor(tables.keys)).withLive(next)
+                    .withIndexCat(it.indexCat.applying(indexOp, txKey, next.blockIdx, it.tableCat))
+            }
         }
 
         tables.keys.mapNotNull { before.tables[it] }.closeAll()
     }
 
     /**
-     * Adopt [block], in one write of the partition's value: register the L0 [tries] it carries, refresh the table
-     * catalog onto it, roll the live index onto the block behind it, and drop the live snapshot, which holds the
-     * finished block's tables. Those tables, and the partition's hold on the live snapshot, are released after that
-     * write; a query still holding either keeps it until it closes.
+     * Adopt [block], in one write of the partition's value: register the L0 [tries] it carries, and its index L0s
+     * ([indexTries], keyed by index id), refresh the table catalog onto it, roll the live index onto the block behind
+     * it, and drop the live snapshot, which holds the finished block's tables. Those tables, and the partition's hold
+     * on the live snapshot, are released after that write; a query still holding either keeps it until it closes.
      *
      * The caller MUST have made [block] durable first, because this is what moves the node past it — and
      * MUST call it once per block, the refresh's fold summing row counts.
      *
      * [logTimestamp] is the replica record's, dating the supersession the tries cause.
      */
-    fun adoptBlock(block: Block, tries: List<TrieDetails>, logTimestamp: LogTimestamp) {
+    fun adoptBlock(block: Block, tries: List<TrieDetails>, indexTries: Map<UUID, IndexTrie>, logTimestamp: LogTimestamp) {
         val finished = ref.value
         val metadata = finished.live.blockMetadata()
 
@@ -171,6 +202,7 @@ class PartitionState private constructor(
 
                 ref.update { v ->
                     v.withTrieCat(v.trieCat.withTries(tries, logTimestamp))
+                        .withIndexCat(v.indexCat.withL0s(indexTries))
                         .withTableCat(v.tableCat.refreshed(block, metadata))
                         .withLive(v.live.nextBlock())
                         .withLiveSnap(null)
@@ -187,12 +219,26 @@ class PartitionState private constructor(
         liveIndexOrNull?.afterNextBlock()
     }
 
+    // A table with flushed rows owes every block below [openBlock], since which of them it wrote in isn't recorded; one without owes none.
+    private fun IndexCatalog.applying(
+        indexOp: IndexOp?, txKey: TransactionKey, openBlock: BlockIndex, tableCat: TableCatalog.State,
+    ) =
+        when (indexOp) {
+            is IndexOp.Create -> {
+                val tableFlushed = (tableCat.rowCount(indexOp.def.table) ?: 0) > 0
+                withIndex(indexOp.def, openBlock, if (tableFlushed) (0 until openBlock).toSet() else emptySet())
+            }
+
+            is IndexOp.Drop -> dropped(indexOp.id, txKey.systemTime)
+            null -> this
+        }
+
     private fun LiveSnap.freshEnough(minSystemTime: Instant?) =
         minSystemTime == null || txBasis?.systemTime?.let { !it.isBefore(minSystemTime) } == true
 
     private fun PartitionValue.snapshotOver(liveSnap: LiveSnap): Snapshot {
         liveSnap.retain()
-        return Snapshot(trieCat, tableCat, liveSnap)
+        return Snapshot(trieCat, tableCat, indexCat, liveSnap)
     }
 
     /**
@@ -221,7 +267,7 @@ class PartitionState private constructor(
     // The read lock spans the whole capture, not just the read of the value: it holds off block adoption and the
     // installs, which close the live tables the capture is slicing.
     fun openSnapshot(resolvedTxs: List<ResolvedTx>, ownTx: OpenTx): Snapshot =
-        snapLock.withReadLock { ref.value.let { Snapshot.open(allocator, it.trieCat, it.tableCat, it.live, resolvedTxs, ownTx) } }
+        snapLock.withReadLock { ref.value.let { Snapshot.open(allocator, it.trieCat, it.tableCat, it.indexCat, it.live, resolvedTxs, ownTx) } }
 
     // The live snapshot and the live tables of [this], once a write has replaced it.
     private fun PartitionValue.releaseLive() =
@@ -252,14 +298,18 @@ class PartitionState private constructor(
             bufferPool: BufferPool,
             indexerConfig: IndexerConfig = IndexerConfig(),
         ): PartitionState {
-            val tableCatState = TableCatalog.loadState(bufferPool, bufferPool.latestBlock)
+            val latestBlock = bufferPool.latestBlock
+            val tableBlocks = TableCatalog.loadTableBlocks(bufferPool, latestBlock)
+            val tableCatState = TableCatalog.loadState(latestBlock, tableBlocks)
                 // xt.txs and xt.role_membership are data-backed, so they're absent from the catalog
                 // until the first transaction / GRANT. Seed them (as empty CREATE TABLEs) so they're
                 // always resolvable - the columns mirror `OpenTx.writeTxRow` / the GRANT path.
                 .withSeededTable(TableRef("xt", "txs"), listOf("_id", "system_time", "committed", "user_metadata", "error"))
                 .withSeededTable(TableRef("xt", "role_membership"), listOf("user", "role"))
 
-            return open(allocator, PartitionValue.loaded(trieCatalogFactory.open(bufferPool, tableCatState), tableCatState), indexerConfig)
+            val indexCat = IndexCatalog.fromProto(tableBlocks.mapValues { (_, tableBlock) -> tableBlock.secondaryIndices })
+
+            return open(allocator, PartitionValue.loaded(trieCatalogFactory.open(bufferPool, tableCatState), tableCatState, indexCat), indexerConfig)
         }
 
         /** A partition starting from [initial], with a live index over it. */

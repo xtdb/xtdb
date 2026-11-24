@@ -13,12 +13,17 @@
            (xtdb.api.log Log Log$Record SourceMessage SourceMessage$Tx
                          SourceMessage$FlushBlock SourceMessage$TriesAdded
                          SourceMessage$AttachDatabase SourceMessage$DetachDatabase
+                         SourceMessage$CreateIndex SourceMessage$DropIndex SourceMessage$IndexBackfilled SourceMessage$IndexCompacted
                          SourceMessage$LegacyTx
                          ReplicaMessage ReplicaMessage$ResolvedTx
                          ReplicaMessage$TriesAdded ReplicaMessage$BlockBoundary
-                         ReplicaMessage$BlockUploaded ReplicaMessage$NoOp)
+                         ReplicaMessage$BlockUploaded ReplicaMessage$NoOp
+                         ReplicaMessage$IndexReady ReplicaMessage$IndexBackfilled ReplicaMessage$IndexCompacted
+                         ReplicaMessage$IndexTriesDeleted
+                         DbOp$Attach DbOp$Detach IndexOp$Create IndexOp$Drop)
            (xtdb.arrow Relation RelationReader VectorReader)
            (xtdb.database Database)
+           (xtdb.index IndexTrie)
            (xtdb.log.proto TrieDetails)
            (xtdb.operator SelectionSpec)
            (xtdb.api TableRef)))
@@ -49,6 +54,10 @@
     SourceMessage$TriesAdded "tries-added"
     SourceMessage$AttachDatabase "attach-database"
     SourceMessage$DetachDatabase "detach-database"
+    SourceMessage$CreateIndex "create-index"
+    SourceMessage$DropIndex "drop-index"
+    SourceMessage$IndexBackfilled "index-backfilled"
+    SourceMessage$IndexCompacted "index-compacted"
     SourceMessage$LegacyTx "legacy-tx"
     "unknown"))
 
@@ -58,6 +67,18 @@
            :trie-key (.getTrieKey td)
            :data-file-size (.getDataFileSize td)})
         tries))
+
+(defn- index-backfilled->edn [^SourceMessage$IndexBackfilled m]
+  {:type :index-backfilled
+   :index-id (str (.getIndexId m))
+   :block-index (.getBlockIndex m)
+   :l0-data-file-size (.getL0DataFileSize m)})
+
+(defn- index-compacted->edn [^SourceMessage$IndexCompacted m]
+  {:type :index-compacted
+   :index-id (str (.getIndexId m))
+   :outputs (mapv (fn [^IndexTrie trie] (str (.getKey trie))) (.getOutputs m))
+   :inputs (mapv str (.getInputs m))})
 
 (defn- source-msg->edn [^SourceMessage msg]
   (pr-str
@@ -90,6 +111,24 @@
      {:type :detach-database
       :db-name (.getDbName ^SourceMessage$DetachDatabase msg)}
 
+     SourceMessage$CreateIndex
+     (let [index-def (.getDef ^SourceMessage$CreateIndex msg)]
+       {:type :create-index
+        :index-id (str (.getId index-def))
+        :index-name (.getName index-def)
+        :table (str (.getTable index-def))
+        :column (.getColumn index-def)})
+
+     SourceMessage$DropIndex
+     {:type :drop-index
+      :index-name (.getIndexName ^SourceMessage$DropIndex msg)}
+
+     SourceMessage$IndexBackfilled
+     (index-backfilled->edn msg)
+
+     SourceMessage$IndexCompacted
+     (index-compacted->edn msg)
+
      SourceMessage$LegacyTx
      {:type :legacy-tx}
 
@@ -113,6 +152,10 @@
     ReplicaMessage$BlockBoundary "block-boundary"
     ReplicaMessage$BlockUploaded "block-uploaded"
     ReplicaMessage$NoOp "no-op"
+    ReplicaMessage$IndexReady "index-ready"
+    ReplicaMessage$IndexBackfilled "index-backfilled"
+    ReplicaMessage$IndexCompacted "index-compacted"
+    ReplicaMessage$IndexTriesDeleted "index-tries-deleted"
     "unknown"))
 
 (defn- replica-msg->edn [^ReplicaMessage msg]
@@ -126,14 +169,22 @@
                 :committed (.getCommitted m)
                 :error (some-> (.getError m) str)
                 :table-names (vec (keys (.getTableData m)))}
-         (.getDbOp m) (assoc :db-op (let [op (.getDbOp m)]
-                                      (condp instance? op
-                                        xtdb.api.log.DbOp$Attach
-                                        {:op :attach
-                                         :db-name (.getDbName ^xtdb.api.log.DbOp$Attach op)}
-                                        xtdb.api.log.DbOp$Detach
-                                        {:op :detach
-                                         :db-name (.getDbName ^xtdb.api.log.DbOp$Detach op)})))))
+         (.getDdl m) (merge (let [op (.getDdl m)]
+                              (condp instance? op
+                                DbOp$Attach
+                                {:db-op {:op :attach
+                                         :db-name (.getDbName ^DbOp$Attach op)}}
+                                DbOp$Detach
+                                {:db-op {:op :detach
+                                         :db-name (.getDbName ^DbOp$Detach op)}}
+                                IndexOp$Create
+                                {:index-op {:op :create
+                                            :index-id (str (.getId (.getDef ^IndexOp$Create op)))
+                                            :index-name (.getName ^IndexOp$Create op)}}
+                                IndexOp$Drop
+                                {:index-op {:op :drop
+                                            :index-id (str (.getId ^IndexOp$Drop op))
+                                            :index-name (.getName ^IndexOp$Drop op)}})))))
 
      ReplicaMessage$TriesAdded
      (let [^ReplicaMessage$TriesAdded m msg]
@@ -156,10 +207,35 @@
         :latest-processed-msg-id (.getLatestProcessedMsgId m)
         :storage-version (.getStorageVersion m)
         :storage-epoch (.getStorageEpoch m)
-        :tries (trie-details->edn (.getTries m))})
+        :tries (trie-details->edn (.getTries m))
+        :index-tries (into (sorted-map)
+                           (map (fn [[index-id ^IndexTrie trie]]
+                                  [(str index-id) {:trie-key (str (.getKey trie))
+                                                   :data-file-size (.getDataFileSize trie)}]))
+                           (.getIndexTries m))})
 
      ReplicaMessage$NoOp
      {:type :no-op}
+
+     ReplicaMessage$IndexReady
+     {:type :index-ready
+      :index-id (str (.getIndexId ^ReplicaMessage$IndexReady msg))}
+
+     ReplicaMessage$IndexBackfilled
+     (let [^ReplicaMessage$IndexBackfilled m msg]
+       (assoc (index-backfilled->edn (.getBackfilled m))
+              :source-msg-id (.getSourceMsgId m)))
+
+     ReplicaMessage$IndexCompacted
+     (let [^ReplicaMessage$IndexCompacted m msg]
+       (assoc (index-compacted->edn (.getCompacted m))
+              :source-msg-id (.getSourceMsgId m)))
+
+     ReplicaMessage$IndexTriesDeleted
+     (let [^ReplicaMessage$IndexTriesDeleted m msg]
+       {:type :index-tries-deleted
+        :index-id (str (.getIndexId m))
+        :trie-keys (vec (sort (map str (.getTrieKeys m))))})
 
      {:type :unknown})))
 

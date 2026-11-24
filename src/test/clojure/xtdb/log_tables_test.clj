@@ -1,7 +1,14 @@
 (ns xtdb.log-tables-test
-  (:require [clojure.test :as t :refer [deftest]]
+  (:require [clojure.edn :as edn]
+            [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
-            [xtdb.test-util :as tu]))
+            [xtdb.log-tables :as log-tables]
+            [xtdb.test-util :as tu])
+  (:import (xtdb.api.log ReplicaMessage$BlockUploaded ReplicaMessage$IndexBackfilled ReplicaMessage$IndexCompacted
+                         ReplicaMessage$IndexReady ReplicaMessage$IndexTriesDeleted
+                         SourceMessage$IndexBackfilled SourceMessage$IndexCompacted)
+           (xtdb.index IndexTrie)
+           (xtdb.trie Trie)))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-allocator tu/with-node)
 
@@ -45,3 +52,51 @@
 
     (t/testing "tx_ops contains decoded operations"
       (t/is (re-find #"put-docs" (:tx-ops (first tx-rows)))))))
+
+(defn- render-replica-msg [msg]
+  [(#'log-tables/replica-msg-type msg)
+   (edn/read-string (#'log-tables/replica-msg->edn msg))])
+
+(def ^:private index-id #uuid "6e1f3c2a-0000-4000-8000-000000000001")
+
+(deftest test-replica-block-uploaded-renders-index-tries
+  (t/is (= ["block-uploaded"
+            {:type :block-uploaded, :block-index 3, :latest-processed-msg-id 42
+             :storage-version 6, :storage-epoch 0, :tries []
+             :index-tries {(str index-id) {:trie-key "l00-rc-b03", :data-file-size 128}}}]
+           (render-replica-msg
+            (ReplicaMessage$BlockUploaded. (int 6) (int 0) 3 42 []
+                                           {index-id (IndexTrie. (Trie/parseKey "l00-rc-b03") 128)}
+                                           nil 0 nil)))))
+
+(deftest test-replica-index-ready-renders
+  (t/is (= ["index-ready" {:type :index-ready, :index-id (str index-id)}]
+           (render-replica-msg (ReplicaMessage$IndexReady. index-id 0 nil)))))
+
+(deftest test-replica-index-backfilled-renders
+  (t/is (= ["index-backfilled"
+            {:type :index-backfilled, :index-id (str index-id)
+             :block-index 3, :l0-data-file-size 128, :source-msg-id 17}]
+           (render-replica-msg
+            (ReplicaMessage$IndexBackfilled. (SourceMessage$IndexBackfilled. (int 6) (int 0) index-id 3 128)
+                                             17 0 nil)))))
+
+(deftest test-replica-index-compacted-renders
+  (t/is (= ["index-compacted"
+            {:type :index-compacted, :index-id (str index-id)
+             :outputs ["l01-rc-b03"], :inputs ["l00-rc-b02" "l00-rc-b03"]
+             :source-msg-id 17}]
+           (render-replica-msg
+            (ReplicaMessage$IndexCompacted. (SourceMessage$IndexCompacted. (int 6) (int 0) index-id
+                                                                           [(IndexTrie. (Trie/parseKey "l01-rc-b03") 256)]
+                                                                           [(Trie/parseKey "l00-rc-b02") (Trie/parseKey "l00-rc-b03")])
+                                            17 0 nil)))))
+
+(deftest test-replica-index-tries-deleted-renders
+  (t/is (= ["index-tries-deleted"
+            {:type :index-tries-deleted, :index-id (str index-id)
+             :trie-keys ["l00-rc-b02" "l00-rc-b03"]}]
+           (render-replica-msg
+            (ReplicaMessage$IndexTriesDeleted. index-id
+                                               #{(Trie/parseKey "l00-rc-b03") (Trie/parseKey "l00-rc-b02")}
+                                               0 nil)))))

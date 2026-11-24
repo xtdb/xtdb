@@ -12,17 +12,17 @@ import java.nio.file.Path
  * forward verbatim from block to block, so renaming a table changes its name and leaves this alone.
  * Deriving one from a name is therefore only correct for a table that has no recorded slug — see [of].
  */
-data class TableSlug(val slug: String) {
+data class TableSlug(val slug: String) : TrieFiles {
 
     val tablePath: Path get() = tablesDir.resolve(slug)
 
     fun dataFileDir(): Path = tablePath.resolve("data")
 
-    fun dataFilePath(trieKey: TrieKey): Path = dataFileDir().resolve("$trieKey.arrow")
+    override fun dataFilePath(trieKey: TrieKey): Path = dataFileDir().resolve("$trieKey.arrow")
 
     fun metaFileDir(): Path = tablePath.resolve("meta")
 
-    fun metaFilePath(trieKey: TrieKey): Path = metaFileDir().resolve("$trieKey.arrow")
+    override fun metaFilePath(trieKey: TrieKey): Path = metaFileDir().resolve("$trieKey.arrow")
 
     companion object {
         @JvmStatic

@@ -15,6 +15,10 @@ message ReplicaLogMessage {
         NoOp no_op = 5;
         TriesDeleted tries_deleted = 6;
         OversizedMessage oversized_message = 8;
+        IndexReady index_ready = 10;
+        IndexBackfilled index_backfilled = 11;
+        IndexCompacted index_compacted = 12;
+        IndexTriesDeleted index_tries_deleted = 13;
     }
 
     // The leader term that produced this message, for read-side fencing: followers
@@ -28,8 +32,18 @@ message ReplicaLogMessage {
     int64 term_seq = 9;
 }
 
+// The leader's decision that an index covers every block before its declaration.
+message IndexReady {
+    string index_id = 1;
+}
+
 message TriesDeleted {
     string table_name = 1;
+    repeated string trie_keys = 2;
+}
+
+message IndexTriesDeleted {
+    string index_id = 1;
     repeated string trie_keys = 2;
 }
 
@@ -40,9 +54,11 @@ message ResolvedTx {
     bytes error = 4;
     map<string, bytes> table_data = 5;
 
-    oneof db_op {
+    oneof ddl {
         AttachDatabase attach_database = 6;
         DetachDatabase detach_database = 7;
+        CreateIndex create_index = 10;
+        DroppedIndex drop_index = 11;
     }
 
     bytes external_source_token = 8;
@@ -50,6 +66,11 @@ message ResolvedTx {
     // Set when this tx came from the source log; absent for ext-source txs whose tx_id is an
     // independent counter rather than a source-log msgId.
     int64 src_msg_id = 9 [features.field_presence = EXPLICIT];
+}
+
+message DroppedIndex {
+    string index_id = 1;
+    string index_name = 2;
 }
 
 message BlockBoundary {

@@ -3,6 +3,8 @@ package xtdb.api.log
 import com.google.protobuf.ByteString
 import xtdb.api.tx.ExternalSourceToken
 import xtdb.database.Database
+import xtdb.index.IndexDef
+import xtdb.index.IndexTrie
 import xtdb.types.MessageId
 import xtdb.log.proto.ReplicaLogMessage
 import xtdb.log.proto.TrieDetails
@@ -10,6 +12,10 @@ import xtdb.log.proto.attachDatabase
 import xtdb.log.proto.blockBoundary
 import xtdb.log.proto.blockUploaded
 import xtdb.log.proto.detachDatabase
+import xtdb.log.proto.droppedIndex
+import xtdb.log.proto.copy
+import xtdb.log.proto.indexReady
+import xtdb.log.proto.indexTriesDeleted
 import xtdb.log.proto.noOp
 import xtdb.log.proto.oversizedMessage
 import xtdb.log.proto.replicaLogMessage
@@ -20,6 +26,7 @@ import xtdb.storage.StorageEpoch
 import xtdb.time.InstantUtil.asMicros
 import xtdb.time.InstantUtil.fromMicros
 import xtdb.trie.BlockIndex
+import xtdb.trie.Trie
 import xtdb.trie.TrieKey
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.StringUtil.fromLexHex
@@ -30,6 +37,7 @@ import xtdb.util.writeTransit
 import java.nio.ByteBuffer
 import java.nio.file.Path
 import java.time.Instant
+import java.util.UUID
 
 sealed interface ReplicaMessage {
 
@@ -60,11 +68,15 @@ sealed interface ReplicaMessage {
 
                     when (msg.messageCase) {
                         ReplicaLogMessage.MessageCase.RESOLVED_TX -> msg.resolvedTx.let {
-                            val dbOp = when (it.dbOpCase) {
-                                xtdb.log.proto.ResolvedTx.DbOpCase.ATTACH_DATABASE ->
+                            val ddl = when (it.ddlCase) {
+                                xtdb.log.proto.ResolvedTx.DdlCase.ATTACH_DATABASE ->
                                     it.attachDatabase.let { a -> DbOp.Attach(a.dbName, Database.Config.fromProto(a.config)) }
-                                xtdb.log.proto.ResolvedTx.DbOpCase.DETACH_DATABASE ->
+                                xtdb.log.proto.ResolvedTx.DdlCase.DETACH_DATABASE ->
                                     DbOp.Detach(it.detachDatabase.dbName)
+                                xtdb.log.proto.ResolvedTx.DdlCase.CREATE_INDEX ->
+                                    IndexOp.Create(IndexDef.fromProto(it.createIndex))
+                                xtdb.log.proto.ResolvedTx.DdlCase.DROP_INDEX ->
+                                    it.dropIndex.let { d -> IndexOp.Drop(UUID.fromString(d.indexId), d.indexName) }
                                 else -> null
                             }
                             ResolvedTx(
@@ -75,7 +87,7 @@ sealed interface ReplicaMessage {
                                     if (bs.isEmpty()) null else readTransit(bs, MSGPACK) as Throwable
                                 },
                                 it.tableDataMap,
-                                dbOp,
+                                ddl,
                                 it.externalSourceToken.takeIf { _ -> it.hasExternalSourceToken() }?.toByteArray(),
                                 if (it.hasSrcMsgId()) it.srcMsgId else null,
                                 termId = msg.termId, termSeq = termSeq,
@@ -97,6 +109,7 @@ sealed interface ReplicaMessage {
                         ReplicaLogMessage.MessageCase.BLOCK_UPLOADED -> msg.blockUploaded.let {
                             BlockUploaded(
                                 it.storageVersion, it.storageEpoch, it.blockIndex, it.latestProcessedMsgId, it.triesList,
+                                it.indexTriesMap.entries.associate { (id, trie) -> UUID.fromString(id) to IndexTrie.fromProto(trie) },
                                 it.externalSourceToken.takeIf { _ -> it.hasExternalSourceToken() }?.toByteArray(),
                                 termId = msg.termId, termSeq = termSeq,
                             )
@@ -109,6 +122,24 @@ sealed interface ReplicaMessage {
                         ReplicaLogMessage.MessageCase.TRIES_DELETED -> msg.triesDeleted.let {
                             TriesDeleted(it.tableName, it.trieKeysList.toSet(), termId = msg.termId, termSeq = termSeq)
                         }
+
+                        ReplicaLogMessage.MessageCase.INDEX_TRIES_DELETED -> msg.indexTriesDeleted.let {
+                            IndexTriesDeleted(
+                                UUID.fromString(it.indexId), it.trieKeysList.mapTo(HashSet()) { k -> Trie.parseKey(k) },
+                                termId = msg.termId, termSeq = termSeq,
+                            )
+                        }
+
+                        ReplicaLogMessage.MessageCase.INDEX_BACKFILLED -> msg.indexBackfilled.let {
+                            IndexBackfilled(SourceMessage.IndexBackfilled.fromProto(it), it.sourceMsgId, termId = msg.termId, termSeq = termSeq)
+                        }
+
+                        ReplicaLogMessage.MessageCase.INDEX_COMPACTED -> msg.indexCompacted.let {
+                            IndexCompacted(SourceMessage.IndexCompacted.fromProto(it), it.sourceMsgId, termId = msg.termId, termSeq = termSeq)
+                        }
+
+                        ReplicaLogMessage.MessageCase.INDEX_READY ->
+                            IndexReady(UUID.fromString(msg.indexReady.indexId), termId = msg.termId, termSeq = termSeq)
 
                         ReplicaLogMessage.MessageCase.OVERSIZED_MESSAGE -> msg.oversizedMessage.let {
                             OversizedMessage(
@@ -136,7 +167,7 @@ sealed interface ReplicaMessage {
         val committed: Boolean,
         val error: Throwable?,
         val tableData: Map<String, ByteString>,
-        val dbOp: DbOp? = null,
+        val ddl: Ddl? = null,
         val externalSourceToken: ExternalSourceToken? = null,
         // The source-log watermark when this record was produced: for a source-log tx, its own
         // msgId; for an ext-source tx, the leader's current source-log position (so followers keep
@@ -155,7 +186,7 @@ sealed interface ReplicaMessage {
                 this.committed = this@ResolvedTx.committed
                 this.error = this@ResolvedTx.error?.let { ByteString.copyFrom(writeTransit(it, MSGPACK)) } ?: ByteString.EMPTY
                 this.tableData.putAll(this@ResolvedTx.tableData)
-                when (val op = this@ResolvedTx.dbOp) {
+                when (val op = this@ResolvedTx.ddl) {
                     is DbOp.Attach -> attachDatabase = attachDatabase {
                         this.dbName = op.dbName
                         this.config = op.config.serializedConfig
@@ -163,6 +194,13 @@ sealed interface ReplicaMessage {
 
                     is DbOp.Detach -> detachDatabase = detachDatabase {
                         this.dbName = op.dbName
+                    }
+
+                    is IndexOp.Create -> createIndex = op.def.toProto()
+
+                    is IndexOp.Drop -> dropIndex = droppedIndex {
+                        indexId = op.id.toString()
+                        indexName = op.name
                     }
 
                     null -> {}
@@ -212,6 +250,8 @@ sealed interface ReplicaMessage {
         val storageVersion: Int, val storageEpoch: StorageEpoch,
         val blockIndex: BlockIndex, val latestProcessedMsgId: MessageId,
         val tries: List<TrieDetails>,
+        /** The block's index L0s, keyed by index id. */
+        val indexTries: Map<UUID, IndexTrie>,
         val externalSourceToken: ExternalSourceToken? = null,
         override val termId: Long,
         override val termSeq: Long? = null,
@@ -225,6 +265,7 @@ sealed interface ReplicaMessage {
                 this.blockIndex = this@BlockUploaded.blockIndex
                 this.latestProcessedMsgId = this@BlockUploaded.latestProcessedMsgId
                 tries.addAll(this@BlockUploaded.tries)
+                this@BlockUploaded.indexTries.forEach { (id, trie) -> indexTries[id.toString()] = trie.toProto() }
                 this@BlockUploaded.externalSourceToken?.let { this.externalSourceToken = ByteString.copyFrom(it) }
             }
         }
@@ -258,6 +299,64 @@ sealed interface ReplicaMessage {
                 tableName = this@TriesDeleted.tableName
                 trieKeys.addAll(this@TriesDeleted.trieKeys)
             }
+        }
+    }
+
+    /** GC's deletion of [trieKeys], Garbage tries of [indexId] whose files it has deleted. */
+    data class IndexTriesDeleted(
+        val indexId: UUID,
+        val trieKeys: Set<Trie.Key>,
+        override val termId: Long,
+        override val termSeq: Long? = null,
+    ) : ProtobufMessage() {
+        override fun withTermSeq(termSeq: Long) = copy(termSeq = termSeq)
+
+        override fun toLogMessage() = replicaLogMessage {
+            indexTriesDeleted = indexTriesDeleted {
+                indexId = this@IndexTriesDeleted.indexId.toString()
+                trieKeys.addAll(this@IndexTriesDeleted.trieKeys.map { it.toString() }.sorted())
+            }
+        }
+    }
+
+    /** The leader's forward of [backfilled], from [sourceMsgId] on the source log. */
+    data class IndexBackfilled(
+        val backfilled: SourceMessage.IndexBackfilled,
+        val sourceMsgId: MessageId,
+        override val termId: Long,
+        override val termSeq: Long? = null,
+    ) : ProtobufMessage() {
+        override fun withTermSeq(termSeq: Long) = copy(termSeq = termSeq)
+
+        override fun toLogMessage() = replicaLogMessage {
+            indexBackfilled = backfilled.toProto().copy { sourceMsgId = this@IndexBackfilled.sourceMsgId }
+        }
+    }
+
+    /** The leader's forward of [compacted], from [sourceMsgId] on the source log. */
+    data class IndexCompacted(
+        val compacted: SourceMessage.IndexCompacted,
+        val sourceMsgId: MessageId,
+        override val termId: Long,
+        override val termSeq: Long? = null,
+    ) : ProtobufMessage() {
+        override fun withTermSeq(termSeq: Long) = copy(termSeq = termSeq)
+
+        override fun toLogMessage() = replicaLogMessage {
+            indexCompacted = compacted.toProto().copy { sourceMsgId = this@IndexCompacted.sourceMsgId }
+        }
+    }
+
+    /** The leader's decision that [indexId] covers every block before its declaration. */
+    data class IndexReady(
+        val indexId: UUID,
+        override val termId: Long,
+        override val termSeq: Long? = null,
+    ) : ProtobufMessage() {
+        override fun withTermSeq(termSeq: Long) = copy(termSeq = termSeq)
+
+        override fun toLogMessage() = replicaLogMessage {
+            indexReady = indexReady { indexId = this@IndexReady.indexId.toString() }
         }
     }
 

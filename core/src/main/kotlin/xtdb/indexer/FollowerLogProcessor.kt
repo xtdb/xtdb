@@ -95,11 +95,16 @@ class FollowerLogProcessor @JvmOverloads constructor(
             when (this) {
                 is ReplicaMessage.ResolvedTx -> txId <= watchers.latestTxId
                 is ReplicaMessage.TriesAdded -> sourceMsgId <= watchers.latestSourceMsgId
+                is ReplicaMessage.IndexBackfilled -> sourceMsgId <= watchers.latestSourceMsgId
+                is ReplicaMessage.IndexCompacted -> sourceMsgId <= watchers.latestSourceMsgId
                 is ReplicaMessage.BlockBoundary -> blockIndex <= (tableCatalog.snap().blockIdx ?: -1)
                 is ReplicaMessage.BlockUploaded -> blockIndex <= (tableCatalog.snap().blockIdx ?: -1)
                 is ReplicaMessage.NoOp -> srcMsgId != null && srcMsgId <= watchers.latestSourceMsgId
-                // `deleteTries` is set-removal — idempotent — so replay is always safe.
+                // Both are set-removal — idempotent — so replay is always safe.
                 is ReplicaMessage.TriesDeleted -> false
+                is ReplicaMessage.IndexTriesDeleted -> false
+                // `ready` is a no-op on an index already Ready, so replay is always safe.
+                is ReplicaMessage.IndexReady -> false
 
                 is ReplicaMessage.OversizedMessage ->
                     error("oversized message reached the staleness check unresolved")
@@ -113,13 +118,13 @@ class FollowerLogProcessor @JvmOverloads constructor(
 
                 val tables = msg.loadTableData(allocator)
                 try {
-                    partitionState.commitTx(txKey, tables)
+                    partitionState.commitTx(txKey, tables, (msg.ddl as? IndexOp)?.takeIf { msg.committed })
                 } finally {
                     tables.closeAll()
                 }
 
                 if (msg.committed) {
-                    when (val dbOp = msg.dbOp) {
+                    when (val dbOp = msg.ddl as? DbOp) {
                         is DbOp.Attach -> if (dbCatalog != null) {
                             try {
                                 dbCatalog.attach(dbOp.dbName, dbOp.config)
@@ -157,6 +162,22 @@ class FollowerLogProcessor @JvmOverloads constructor(
                 watchers.notifyApplied(msg.sourceMsgId)
             }
 
+            is ReplicaMessage.IndexBackfilled -> {
+                val backfilled = msg.backfilled
+                if (backfilled.storageVersion == Storage.VERSION && backfilled.storageEpoch == bufferPool.epoch)
+                    partitionState.indexBackfilled(backfilled.indexId, backfilled.blockIndex, backfilled.l0)
+
+                watchers.notifyApplied(msg.sourceMsgId)
+            }
+
+            is ReplicaMessage.IndexCompacted -> {
+                val compacted = msg.compacted
+                if (compacted.storageVersion == Storage.VERSION && compacted.storageEpoch == bufferPool.epoch)
+                    partitionState.indexCompacted(compacted.indexId, compacted.outputs, compacted.inputs, record.logTimestamp)
+
+                watchers.notifyApplied(msg.sourceMsgId)
+            }
+
             is ReplicaMessage.BlockBoundary -> blockBoundaryTimer.timed {
                 pendingBlock = PendingBlock(record.msgId, msg, maxBufferedRecords)
                 LOG.debug("[$dbName] block boundary b${msg.blockIndex.asLexHex}: source=${msg.latestProcessedMsgId}, replica=${record.msgId} — waiting for BlockUploaded...")
@@ -172,6 +193,10 @@ class FollowerLogProcessor @JvmOverloads constructor(
             is ReplicaMessage.TriesDeleted -> triesDeletedTimer.timed {
                 partitionState.deleteTries(fromSchemaAndTable(msg.tableName), msg.trieKeys)
             }
+
+            is ReplicaMessage.IndexTriesDeleted -> partitionState.deleteIndexTries(msg.indexId, msg.trieKeys)
+
+            is ReplicaMessage.IndexReady -> partitionState.indexReady(msg.indexId)
 
             is ReplicaMessage.OversizedMessage -> error(
                 "OversizedMessage should be resolved by the replica tail, never reaching processRecord directly. msgId=${record.msgId}, payload=${msg.path}"
@@ -208,7 +233,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
         val bufferedRecords = blockUploadedTimer.timed {
             val block = parseFrom(bufferPool.getByteArray(blockFilePath(pending.blockIdx)))
 
-            partitionState.adoptBlock(block, msg.tries, record.logTimestamp)
+            partitionState.adoptBlock(block, msg.tries, msg.indexTries, record.logTimestamp)
             compactor.signalBlock()
 
             // Ahead of the drain below, whose records carry later source positions — behind it, this one would go backwards and trip the watchers' monotonicity check.

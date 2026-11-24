@@ -94,6 +94,7 @@
 (defrecord JobCalculator []
   Compactor$JobCalculator
   (availableJobs [_ trie-cat-state]
-    (->> (.getTables trie-cat-state)
-         (into [] (mapcat (fn [table]
-                            (compaction-jobs table (.tableState trie-cat-state table) trie-cat-state)))))))
+    (let [opts {:file-size-target (.getFileSizeTarget trie-cat-state)}]
+      (->> (.getTables trie-cat-state)
+           (into [] (mapcat (fn [table]
+                              (compaction-jobs table (.tableState trie-cat-state table) opts))))))))

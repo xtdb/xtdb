@@ -12,18 +12,30 @@ import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import xtdb.TestPartition
+import xtdb.api.TableRef
+import xtdb.api.log.IndexOp
 import xtdb.api.log.Log
 import xtdb.api.log.ReplicaMessage
+import xtdb.api.log.SourceMessage
 import xtdb.api.log.Watchers
 import xtdb.api.storage.Storage
 import xtdb.block.proto.block
+import xtdb.block.proto.tableIndices
 import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
+import xtdb.index.IndexCatalog
+import xtdb.index.IndexDef
+import xtdb.index.IndexState
+import xtdb.index.IndexTrie
+import xtdb.index.IndexTrieState
+import xtdb.index.SecondaryIndex
 import xtdb.api.error.Fault
 import xtdb.storage.MemoryStorage
+import xtdb.trie.Trie
 import xtdb.util.closeAll
 import java.nio.ByteBuffer
 import java.time.Instant
+import java.util.UUID
 
 private fun FollowerLogProcessor.processRecords(records: List<Log.Record<ReplicaMessage>>) =
     records.forEach { handleRecord(it) }
@@ -119,7 +131,7 @@ class FollowerLogProcessorTest {
             proc.processRecords(listOf(
                 record(0, ReplicaMessage.BlockBoundary(0, 0, termId = TERM)),
                 record(1, ReplicaMessage.ResolvedTx(7, Instant.now(), true, null, emptyMap(), srcMsgId = 1, termId = TERM)),
-                record(2, ReplicaMessage.BlockUploaded(Storage.VERSION, 1, 0, 0, emptyList(), termId = TERM)),
+                record(2, ReplicaMessage.BlockUploaded(Storage.VERSION, 1, 0, 0, emptyList(), emptyMap(), termId = TERM)),
             ))
 
             assertEquals(0L, value.tableCat.blockIdx, "the block closed, so the follower stopped buffering")
@@ -138,7 +150,7 @@ class FollowerLogProcessorTest {
         val proc = makeProcessor(pendingBlock = inherited)
 
         proc.handleRecord(
-            record(2, ReplicaMessage.BlockUploaded(Storage.VERSION, 1, 0, 0, emptyList(), termId = TERM))
+            record(2, ReplicaMessage.BlockUploaded(Storage.VERSION, 1, 0, 0, emptyList(), emptyMap(), termId = TERM))
         )
 
         assertNull(proc.pendingBlock)
@@ -175,7 +187,7 @@ class FollowerLogProcessorTest {
             record(0, ReplicaMessage.ResolvedTx(500, Instant.now(), true, null, emptyMap(), srcMsgId = 500, termId = TERM)),
             record(1, ReplicaMessage.TriesAdded(1, 1, emptyList(), sourceMsgId = 600, termId = TERM)),
             record(2, ReplicaMessage.BlockBoundary(1, 700, termId = TERM)),
-            record(3, ReplicaMessage.BlockUploaded(1, 1, 1, 800, emptyList(), termId = TERM)),
+            record(3, ReplicaMessage.BlockUploaded(1, 1, 1, 800, emptyList(), emptyMap(), termId = TERM)),
             // at the boundary — skipped too
             record(4, ReplicaMessage.ResolvedTx(1000, Instant.now(), true, null, emptyMap(), srcMsgId = 1000, termId = TERM)),
         ))
@@ -200,7 +212,7 @@ class FollowerLogProcessorTest {
         proc.processRecords(listOf(
             record(0, ReplicaMessage.ResolvedTx(txId, Instant.now(), true, null, emptyMap(), termId = TERM)),
             record(1, ReplicaMessage.BlockBoundary(0, txId, termId = TERM)),
-            record(2, ReplicaMessage.BlockUploaded(Storage.VERSION, 1, 0, txId, emptyList(), termId = TERM)),
+            record(2, ReplicaMessage.BlockUploaded(Storage.VERSION, 1, 0, txId, emptyList(), emptyMap(), termId = TERM)),
         ))
 
         assertEquals(0L, value.tableCat.blockIdx,
@@ -233,7 +245,7 @@ class FollowerLogProcessorTest {
         proc.processRecords(listOf(
             record(0, ReplicaMessage.ResolvedTx(0, Instant.now(), true, null, emptyMap(), srcMsgId = null, termId = TERM)),
             record(1, ReplicaMessage.BlockBoundary(0, -1, termId = TERM)),
-            record(2, ReplicaMessage.BlockUploaded(Storage.VERSION, 1, 0, -1, emptyList(), termId = TERM)),
+            record(2, ReplicaMessage.BlockUploaded(Storage.VERSION, 1, 0, -1, emptyList(), emptyMap(), termId = TERM)),
         ))
 
         val after = value
@@ -269,7 +281,7 @@ class FollowerLogProcessorTest {
             record(0, ReplicaMessage.BlockBoundary(0, 0, termId = TERM)),
             record(1, ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap(), termId = TERM)),
             record(2, ReplicaMessage.ResolvedTx(2, Instant.now(), true, null, emptyMap(), termId = TERM)),
-            record(3, ReplicaMessage.BlockUploaded(Storage.VERSION, 1, 0, 0, emptyList(), termId = TERM)),
+            record(3, ReplicaMessage.BlockUploaded(Storage.VERSION, 1, 0, 0, emptyList(), emptyMap(), termId = TERM)),
         ))
 
         fun timerCount(msgType: String) = registry.find("xtdb.replica.process.timer")
@@ -286,5 +298,157 @@ class FollowerLogProcessorTest {
         val bufferedRecords = registry.find("xtdb.replica.block.buffered.records").tag("db", "test").summary()
         assertEquals(1L, bufferedRecords?.count())
         assertEquals(2.0, bufferedRecords?.totalAmount(), "the two records held between boundary and upload")
+    }
+
+    private fun indexTx(txId: Long, ddl: IndexOp, committed: Boolean = true): ReplicaMessage =
+        ReplicaMessage.ResolvedTx(
+            txId, Instant.EPOCH.plusSeconds(txId), committed, null, emptyMap(), ddl, srcMsgId = txId, termId = TERM
+        ).let { ReplicaMessage.decode(it.encode())!! }
+
+    @Test
+    fun `a declaration read off the replica log is applied as a Building index, a drop marks it Dropped, and an empty deletion collects it`() = runTest {
+        val proc = makeProcessor()
+        val def = IndexDef(UUID.randomUUID(), "by_email", TableRef("public", "users"), "email")
+
+        proc.processRecords(listOf(record(0, indexTx(1, IndexOp.Create(def)))))
+        assertEquals(
+            listOf(SecondaryIndex(def, 0, IndexState.Building(emptySet()), emptyMap())),
+            value.indexCat.indices.toList()
+        )
+
+        proc.processRecords(listOf(record(1, indexTx(2, IndexOp.Drop(def.id, "by_email")))))
+        assertEquals(
+            listOf(SecondaryIndex(def, 0, IndexState.Dropped(Instant.EPOCH.plusSeconds(2)), emptyMap())),
+            value.indexCat.indices.toList()
+        )
+        assertNull(value.indexCat.declared("by_email"))
+
+        proc.processRecords(listOf(record(2, ReplicaMessage.IndexTriesDeleted(def.id, emptySet(), termId = TERM))))
+        assertEquals(emptyList<SecondaryIndex>(), value.indexCat.indices.toList())
+        assertEquals(setOf(def.id), value.indexCat.collectedIds)
+    }
+
+    @Test
+    fun `an aborted transaction's index declaration is not applied`() = runTest {
+        val proc = makeProcessor()
+        val def = IndexDef(UUID.randomUUID(), "by_email", TableRef("public", "users"), "email")
+
+        proc.processRecords(listOf(record(0, indexTx(1, IndexOp.Create(def), committed = false))))
+
+        assertEquals(emptyList<SecondaryIndex>(), value.indexCat.indices.toList())
+    }
+
+    @Test
+    fun `an upload's index L0s, decoded off the replica log, join their indices as the block is adopted`() = runTest {
+        val proc = makeProcessor()
+        val def = IndexDef(UUID.randomUUID(), "by_email", TableRef("public", "users"), "email")
+        val l0 = IndexTrie(Trie.l0Key(0), 1024)
+
+        writeBlockFile(0)
+
+        proc.processRecords(listOf(
+            record(0, indexTx(1, IndexOp.Create(def))),
+            record(1, ReplicaMessage.BlockBoundary(0, 1, termId = TERM)),
+            record(
+                2,
+                ReplicaMessage.BlockUploaded(Storage.VERSION, 1, 0, 1, emptyList(), mapOf(def.id to l0), termId = TERM)
+                    .let { ReplicaMessage.decode(it.encode())!! }
+            ),
+        ))
+
+        assertEquals(
+            listOf(SecondaryIndex(def, 0, IndexState.Building(emptySet()), mapOf(l0 to IndexTrieState.Live))),
+            value.indexCat.indices.toList()
+        )
+    }
+
+    @Test
+    fun `Ready read off the replica log marks the index Ready, and a replay of it changes nothing`() = runTest {
+        val proc = makeProcessor()
+        val def = IndexDef(UUID.randomUUID(), "by_email", TableRef("public", "users"), "email")
+        val ready = ReplicaMessage.decode(ReplicaMessage.IndexReady(def.id, termId = TERM).encode())!!
+
+        proc.processRecords(listOf(record(0, indexTx(1, IndexOp.Create(def))), record(1, ready)))
+        assertEquals(listOf(SecondaryIndex(def, 0, IndexState.Ready, emptyMap())), value.indexCat.indices.toList())
+
+        proc.processRecords(listOf(record(2, ready)))
+        assertEquals(listOf(SecondaryIndex(def, 0, IndexState.Ready, emptyMap())), value.indexCat.indices.toList())
+    }
+
+    @Test
+    fun `a backfill read off the replica log strikes its block and adds its L0, under the storage guard and the staleness check`() = runTest {
+        val def = IndexDef(UUID.randomUUID(), "by_email", TableRef("public", "users"), "email")
+        partition.close()
+        partition = TestPartition(
+            allocator, bufferPool,
+            block = block { blockIndex = 1 },
+            indexCat = IndexCatalog.EMPTY.withIndex(def, 2, setOf(0L, 1L)),
+        )
+        val proc = makeProcessor()
+
+        fun backfilled(srcMsgId: Long, block: Long, l0DataFileSize: Long?, epoch: Int = 1) =
+            ReplicaMessage.decode(
+                ReplicaMessage.IndexBackfilled(
+                    SourceMessage.IndexBackfilled(Storage.VERSION, epoch, def.id, block, l0DataFileSize),
+                    srcMsgId, termId = TERM,
+                ).encode()
+            )!!
+
+        proc.processRecords(listOf(record(0, backfilled(5, 0, 1024)), record(1, backfilled(6, 1, null, epoch = 0))))
+        assertEquals(
+            SecondaryIndex(def, 2, IndexState.Building(setOf(1L)), mapOf(IndexTrie(Trie.l0Key(0), 1024) to IndexTrieState.Live)),
+            value.indexCat[def.id],
+            "the second carries a storage epoch this node has moved past",
+        )
+        assertEquals(6, watchers.latestSourceMsgId)
+
+        proc.processRecords(listOf(record(2, backfilled(4, 1, null))))
+        assertEquals(IndexState.Building(setOf(1L)), value.indexCat[def.id]?.state, "a record behind the source watermark is stale")
+    }
+
+    @Test
+    fun `a compaction read off the replica log replaces its inputs with its outputs, under the storage guard and the staleness check`() = runTest {
+        val def = IndexDef(UUID.randomUUID(), "by_email", TableRef("public", "users"), "email")
+        val l0s = (0L..2L).map { IndexTrie(Trie.l0Key(it), 1024) }
+        partition.close()
+        partition = TestPartition(
+            allocator, bufferPool,
+            block = block { blockIndex = 2 },
+            indexCat = IndexCatalog.fromProto(
+                mapOf(def.table to tableIndices { indices += SecondaryIndex(def, 0, IndexState.Ready, l0s.associateWith { IndexTrieState.Live }).toProto() })
+            ),
+        )
+        val proc = makeProcessor()
+
+        fun compacted(srcMsgId: Long, inputs: List<IndexTrie>, output: Trie.Key, epoch: Int = 1) =
+            ReplicaMessage.decode(
+                ReplicaMessage.IndexCompacted(
+                    SourceMessage.IndexCompacted(Storage.VERSION, epoch, def.id, listOf(IndexTrie(output, 2048)), inputs.map { it.key }),
+                    srcMsgId, termId = TERM,
+                ).encode()
+            )!!
+
+        proc.processRecords(listOf(
+            record(0, compacted(5, l0s.take(2), Trie.Key(1, null, null, 1))),
+            record(1, compacted(6, l0s.drop(2), Trie.Key(1, null, null, 2), epoch = 0)),
+        ))
+
+        assertEquals(
+            listOf(l0s[2], IndexTrie(Trie.Key(1, null, null, 1), 2048)),
+            value.indexCat[def.id]?.liveTries,
+            "the second carries a storage epoch this node has moved past",
+        )
+        assertEquals(
+            l0s.take(2).toSet(),
+            value.indexCat[def.id]?.tries?.filterValues { it is IndexTrieState.Garbage }?.keys,
+        )
+        assertEquals(6, watchers.latestSourceMsgId)
+
+        proc.processRecords(listOf(record(2, compacted(4, l0s.drop(2), Trie.Key(1, null, null, 2)))))
+        assertEquals(
+            listOf(l0s[2], IndexTrie(Trie.Key(1, null, null, 1), 2048)),
+            value.indexCat[def.id]?.liveTries,
+            "a record behind the source watermark is stale",
+        )
     }
 }

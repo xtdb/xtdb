@@ -14,6 +14,7 @@ import xtdb.api.TransactionKey
 import xtdb.api.TransactionResult
 import xtdb.api.error.Fault
 import xtdb.api.log.DbOp
+import xtdb.api.log.IndexOp
 import xtdb.api.log.Log
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.ReplicaMessage.BlockBoundary
@@ -23,6 +24,8 @@ import xtdb.api.tx.ExternalSource
 import xtdb.database.Database
 import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
+import xtdb.index.IndexState
+import xtdb.index.SecondaryIndex
 import xtdb.types.MessageId
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.closeAllOnCatch
@@ -102,7 +105,7 @@ internal class LeaderLogProcessor(
     private fun applyResolvedTx(msg: ReplicaMessage.ResolvedTx) {
         val txKey = TransactionKey(msg.txId, msg.systemTime)
 
-        msg.loadTableData(al).useAll { tables -> partitionState.commitTx(txKey, tables) }
+        msg.loadTableData(al).useAll { tables -> partitionState.commitTx(txKey, tables, (msg.ddl as? IndexOp)?.takeIf { msg.committed }) }
 
         val result =
             if (msg.committed) TransactionResult.Committed(txKey)
@@ -125,7 +128,7 @@ internal class LeaderLogProcessor(
 
     private fun applyResolvedTx(tx: ResolvedTx) {
         try {
-            tx.sealTables().closeAllOnCatch { partitionState.applyTx(tx.txKey, it) }
+            tx.sealTables().closeAllOnCatch { partitionState.applyTx(tx.txKey, it, tx.ddl as? IndexOp) }
 
             watchers.notifyApplied(tx.srcMsgId, tx.txResult, tx.externalSourceToken)
 
@@ -138,7 +141,7 @@ internal class LeaderLogProcessor(
         }
     }
 
-    private fun applyDbOp(dbOp: DbOp?) {
+    private fun applyDbOp(dbOp: DbOp) {
         // Only the primary carries a catalog, and a secondary's log can hold dbOps all the same: it was
         // some other cluster's primary before it was attached here, and those are that cluster's to apply.
         val dbCatalog = dbCatalog ?: return
@@ -146,8 +149,14 @@ internal class LeaderLogProcessor(
         when (dbOp) {
             is DbOp.Attach -> dbCatalog.attach(dbOp.dbName, dbOp.config)
             is DbOp.Detach -> dbCatalog.detach(dbOp.dbName)
-            null -> {}
         }
+    }
+
+    // No record of what's been announced: applying Ready twice is harmless, so a new term may republish its predecessor's.
+    private suspend fun announceReady(indices: Collection<SecondaryIndex>) {
+        for (index in indices)
+            if ((index.state as? IndexState.Building)?.complete == true)
+                replicaAppender.append(ControlItem(ReplicaMessage.IndexReady(index.def.id, termId = leaderTerm)))
     }
 
     suspend fun applyReplicaMessage(record: Log.Record<ReplicaMessage>) {
@@ -172,7 +181,7 @@ internal class LeaderLogProcessor(
                 // Ahead of the tx itself, so a caller that submitted an attach can use the database as
                 // soon as its transaction returns — and once, whichever way the tx below is applied.
                 // Nothing to guard on `committed`: a refused dbOp resolves to an abort carrying no dbOp.
-                applyDbOp(msg.dbOp)
+                (msg.ddl as? DbOp)?.let(::applyDbOp)
 
                 // Below this term: a previous leader's, replayed from the block this term inherited, so never resolved here.
                 if (msg.termId < leaderTerm) {
@@ -189,6 +198,9 @@ internal class LeaderLogProcessor(
                         applyResolvedTx(tx)
                     }
                 }
+
+                (msg.ddl as? IndexOp.Create)?.takeIf { msg.committed }
+                    ?.let { announceReady(listOfNotNull(partitionState.indexCatalog[it.def.id])) }
             }
 
             is ReplicaMessage.TriesAdded -> {
@@ -198,6 +210,26 @@ internal class LeaderLogProcessor(
                 // Below the guard, not above it: the compactor awaits this watermark and then
                 // recalculates jobs off the catalog, so notifying first would have it re-select the
                 // job it has just published.
+                watchers.notifyApplied(msg.sourceMsgId)
+            }
+
+            is ReplicaMessage.IndexBackfilled -> {
+                val backfilled = msg.backfilled
+                if (backfilled.storageVersion == Storage.VERSION && backfilled.storageEpoch == bufferPool.epoch)
+                    partitionState.indexBackfilled(backfilled.indexId, backfilled.blockIndex, backfilled.l0)
+
+                // Below the guard, as for TriesAdded: the compactor awaits this watermark and then recalculates its jobs.
+                watchers.notifyApplied(msg.sourceMsgId)
+
+                announceReady(listOfNotNull(partitionState.indexCatalog[backfilled.indexId]))
+            }
+
+            is ReplicaMessage.IndexCompacted -> {
+                val compacted = msg.compacted
+                if (compacted.storageVersion == Storage.VERSION && compacted.storageEpoch == bufferPool.epoch)
+                    partitionState.indexCompacted(compacted.indexId, compacted.outputs, compacted.inputs, record.logTimestamp)
+
+                // Below the guard, as for TriesAdded: the compactor awaits this watermark and then recalculates its jobs.
                 watchers.notifyApplied(msg.sourceMsgId)
             }
 
@@ -219,6 +251,10 @@ internal class LeaderLogProcessor(
 
             is ReplicaMessage.TriesDeleted -> gc.triesDeleted(msg)
 
+            is ReplicaMessage.IndexTriesDeleted -> gc.indexTriesDeleted(msg)
+
+            is ReplicaMessage.IndexReady -> partitionState.indexReady(msg.indexId)
+
             is ReplicaMessage.OversizedMessage -> error(
                 "[$dbName] OversizedMessage at ${record.msgId} reached apply unresolved (payload=${msg.path})"
             )
@@ -238,6 +274,7 @@ internal class LeaderLogProcessor(
             try {
                 launch { gc.runGc() }
                 launch(CoroutineName("$dbName-replica-appender")) { replicaAppender.run() }
+                announceReady(partitionState.indexCatalog.indices)
                 launch(CoroutineName("$dbName-source-tail")) { sourceLog.tailAll(afterSourceMessageId, srcLogProc) }
 
                 extSrcProc?.let { extSrcProc -> launch(CoroutineName("$dbName-ext-source")) { extSrcProc.run() } }
