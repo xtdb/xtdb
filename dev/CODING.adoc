@@ -308,7 +308,7 @@ A change that looks trivial to its author sits low in the matrix, never outside 
 
 Run the review over the whole change before proposing it for landing — raising its PR, or handing a ship over to be committed to `main` — rather than commit by commit as it is built.
 Whether the findings block it or are merely noted is a judgement call on their severity and the cost to address: fix what's cheap and clearly right, and raise the rest rather than sitting on it.
-Where the change goes through plan mode, the review MUST appear as an explicit step in the plan, ahead of the step that proposes it for landing — a `chalk:pr` step, or the finish step for a ship — and alongside the chill step.
+Where the change goes through plan mode, the review MUST appear as an explicit step in the plan, ahead of the step that proposes it for landing — a `chalk:pr` step, or the finish step for a ship.
 
 The review MUST cover the diff's comments as well as its code, against the `chalk:code-comments` skill (see <<_comments,Comments>>), and MUST report a failing comment as a deletion rather than a rewrite.
 Deleting one costs nothing at review time and never happens afterwards.
