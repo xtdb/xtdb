@@ -10,7 +10,7 @@ providerConfig:
   serviceAccountAnnotations:
     azure.workload.identity/client-id: "<user_assigned_managed_identity_client_id>"
   nodeSelector:
-    node_pool: xtdbteste4
+    node_pool: xtdbtestf4
   # We mount and use the below YAML for configuring the XTDB nodes and their modules.
   # The !Env values are set by Environment Variables
   # See the XTDB configuration documentation for options: https://docs.xtdb.com/ops/config.html
