@@ -2177,13 +2177,13 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
   (t/is (= "foo\nbar" (sql/plan-expr "$$foo\nbar$$")))
 
   (t/testing "no matching end tag"
-    (t/is (anomalous? [:incorrect nil #"no viable alternative"]
+    (t/is (anomalous? [:incorrect nil #"missing DM_END_TAG at '<EOF>'"]
                       (sql/plan-expr "$$foo")))
 
-    (t/is (anomalous? [:incorrect nil #"no viable alternative"]
+    (t/is (anomalous? [:incorrect nil #"missing DM_END_TAG at '<EOF>'"]
                       (sql/plan-expr "$tag$foo")))
 
-    (t/is (anomalous? [:incorrect nil #"no viable alternative"]
+    (t/is (anomalous? [:incorrect nil #"missing DM_END_TAG at '<EOF>'"]
                       (sql/plan-expr "$tag$foo$tagg$")))))
 
 (t/deftest test-where-commas

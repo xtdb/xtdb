@@ -238,8 +238,7 @@ fieldDefinition : fieldName=identifier dataType ;
 // Alternative order is precedence, tightest first, following PostgreSQL's operator precedence table:
 // predicates, then comparisons, then IS, NOT, AND, OR.
 expr
-    : commonValueExpr NOT? 'BETWEEN' (ASYMMETRIC | SYMMETRIC)? commonValueExpr 'AND' commonValueExpr # BetweenPredicate
-    | expr NOT? 'IN' inPredicateValue # InPredicate
+    : expr NOT? 'IN' inPredicateValue # InPredicate
     | expr 'NOT'? ('LIKE' | 'ILIKE') likePattern=commonValueExpr ('ESCAPE' likeEscape=commonValueExpr)? # LikePredicate
     | expr 'NOT'? 'LIKE_REGEX' xqueryPattern=commonValueExpr ('FLAG' xqueryOptionFlag=commonValueExpr)? # LikeRegexPredicate
     | expr postgresRegexOperator xqueryPattern=commonValueExpr # PostgresRegexPredicate
@@ -274,8 +273,10 @@ expr
     | expr 'AND' expr #AndExpr
     | expr 'OR' expr #OrExpr
 
-    | commonValueExpr #CommonValueExpr0
+    | commonValueExpr betweenTail? #CommonValueExpr0
     ;
+
+betweenTail : NOT? 'BETWEEN' (ASYMMETRIC | SYMMETRIC)? commonValueExpr 'AND' commonValueExpr ;
 
 // SQL:2011's <common value expression>: no boolean or predicate operator at its top level, so that
 // `BETWEEN`'s bounds and `LIKE`'s pattern can't swallow a following `AND`.
@@ -740,7 +741,7 @@ subquery : '(' queryExpression ')' ;
 
 predicatePart2
     : compOp expr # ComparisonPredicatePart2
-    | NOT? 'BETWEEN' (ASYMMETRIC | SYMMETRIC)? commonValueExpr 'AND' commonValueExpr # BetweenPredicatePart2
+    | betweenTail # BetweenPredicatePart2
     | NOT? 'IN' inPredicateValue # InPredicatePart2
     | 'NOT'? ('LIKE' | 'ILIKE') likePattern=commonValueExpr ('ESCAPE' likeEscape=commonValueExpr)? # LikePredicatePart2
     | 'NOT'? 'LIKE_REGEX' xqueryPattern=commonValueExpr ('FLAG' xqueryOptionFlag=commonValueExpr)? # LikeRegexPredicatePart2

@@ -1367,7 +1367,11 @@
 (defrecord ExprPlanVisitor [env scope]
   SqlVisitor
   (visitSearchCondition [this ctx] (list* 'and (mapv (partial accept-visitor this) (.expr ctx))))
-  (visitCommonValueExpr0 [this ctx] (-> (.commonValueExpr ctx) (.accept this)))
+  (visitCommonValueExpr0 [this ctx]
+    (let [expr (-> (.commonValueExpr ctx) (.accept this))]
+      (if-let [between-tail (.betweenTail ctx)]
+        (.accept between-tail (assoc this :pt1 expr))
+        expr)))
   (visitWrappedExpr [this ctx] (-> (.expr ctx) (.accept this)))
 
   (visitLiteralExpr [this ctx] (-> (.literal ctx) (.accept this)))
@@ -1627,20 +1631,11 @@
         (list 'not distinct-expr)
         distinct-expr)))
 
-  (visitBetweenPredicate [this ctx]
-    (let [between-expr (list (cond
-                               (.SYMMETRIC ctx) 'between-symmetric
-                               (.ASYMMETRIC ctx) 'between
-                               :else 'between)
-                             (-> (.commonValueExpr ctx 0) (.accept this))
-                             (-> (.commonValueExpr ctx 1) (.accept this))
-                             (-> (.commonValueExpr ctx 2) (.accept this)))]
-      (if (.NOT ctx)
-        (list 'not between-expr)
-        between-expr)))
+  (visitBetweenPredicatePart2 [this ctx] (-> (.betweenTail ctx) (.accept this)))
 
-  (visitBetweenPredicatePart2 [{:keys [pt1] :as this} ctx]
-    (let [between-expr (list (cond
+  (visitBetweenTail [{:keys [pt1] :as this} ctx]
+    (let [this (dissoc this :pt1)
+          between-expr (list (cond
                                (.SYMMETRIC ctx) 'between-symmetric
                                (.ASYMMETRIC ctx) 'between
                                :else 'between)
