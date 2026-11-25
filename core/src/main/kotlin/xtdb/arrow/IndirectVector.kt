@@ -85,16 +85,26 @@ class IndirectVector(private val inner: VectorReader, private val sel: VectorInd
 
     override fun valueReader(): RowValueReader {
         val inner = inner.valueReader()
+        val rows = sel.iterator()
         return object : RowValueReader, ValueReader by inner {
-            val sel = this@IndirectVector.sel
-            private val rowCount = sel.valueCount()
-            override fun hasNext() = pos + 1 < rowCount
+            private var logical = -1
 
-            override var pos: Int = -1
+            override var pos: Int
+                get() = logical
                 set(value) {
-                    field = value
-                    inner.pos = sel[value]
+                    logical = value
+                    rows.seek(value)
+                    inner.pos = rows.nextInt()
                 }
+
+            override fun hasNext() = rows.hasNext()
+
+            override fun next(): RowValueReader {
+                if (!hasNext()) throw NoSuchElementException()
+                logical++
+                inner.pos = rows.nextInt()
+                return this
+            }
         }
     }
 

@@ -10,7 +10,14 @@ interface VectorIndirection {
     fun select(idxs: IntArray) = IntArray(idxs.size) { getIndex(idxs[it]) }
     fun select(startIdx: Int, len: Int) = IntArray(len) { getIndex(startIdx + it) }
 
-    operator fun iterator(): IntIterator
+    abstract class Iterator : IntIterator() {
+        /**
+         * Positions the iterator so that the next [nextInt] returns the index for logical row [idx].
+         */
+        abstract fun seek(idx: Int)
+    }
+
+    operator fun iterator(): Iterator
 
     companion object {
         @JvmStatic
@@ -23,12 +30,16 @@ interface VectorIndirection {
 
             override fun toString(): String = "(Selection {idxs=${this.idxs.contentToString()}})"
 
-            override operator fun iterator(): IntIterator =
-                object : IntIterator() {
+            override operator fun iterator(): VectorIndirection.Iterator =
+                object : VectorIndirection.Iterator() {
                     private val idxs = this@Selection.idxs
                     private var idx = 0
                     override fun hasNext() = idx < idxs.size
                     override fun nextInt() = idxs[idx++]
+
+                    override fun seek(idx: Int) {
+                        this.idx = idx
+                    }
                 }
 
             override fun equals(other: Any?) = when {
