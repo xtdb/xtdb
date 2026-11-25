@@ -68,7 +68,6 @@ class MaskedVector(private val inner: VectorReader, private val mask: RowMask) :
     override fun openSlice(al: BufferAllocator) = MaskedVector(inner.openSlice(al), mask)
 
     override fun select(idxs: IntArray) = selected().select(idxs)
-    override fun select(startIdx: Int, len: Int) = selected().select(startIdx, len)
 
     override fun rowCopier(dest: VectorWriter) = selected().rowCopier(dest)
 

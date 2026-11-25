@@ -65,7 +65,6 @@ interface RelationReader : ILookup, Seqable, Counted, AutoCloseable {
             .closeAllOnCatch { vectors -> Relation(al, vectors, rowCount) }
 
     fun select(idxs: IntArray): RelationReader = from(vectors.map { it.select(idxs) }, idxs.size)
-    fun select(startIdx: Int, len: Int): RelationReader = from(vectors.map { it.select(startIdx, len) }, len)
 
     fun rowCopier(dest: RelationWriter): RowCopier {
         val colNames = vectors.mapTo(mutableSetOf()) { it.name } + dest.vectors.map { it.name }

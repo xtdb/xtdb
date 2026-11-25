@@ -4,11 +4,8 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
-import xtdb.InternalApi
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.VectorIndirection.Companion.Selection
-import xtdb.arrow.VectorIndirection.Companion.Slice
-import xtdb.arrow.VectorIndirection.Companion.selection
 import xtdb.arrow.agg.VectorSummer
 import xtdb.util.Hasher
 import java.nio.ByteBuffer
@@ -65,20 +62,10 @@ class IndirectVector(private val inner: VectorReader, private val sel: VectorInd
             }
         )
 
-    @InternalApi
-    override fun write(out: PageOutput, startIdx: Int, len: Int) {
-        if (sel !is Slice) unsupported("write over a selection")
-
-        inner.write(out, sel.startIdx + startIdx, len)
-    }
-
     override fun openSlice(al: BufferAllocator) = IndirectVector(inner.openSlice(al), sel)
 
     override fun select(idxs: IntArray): VectorReader =
         inner.select(sel.select(idxs))
-
-    override fun select(startIdx: Int, len: Int): VectorReader =
-        IndirectVector(inner, selection(sel.select(startIdx, len)))
 
     override fun rowCopier(dest: VectorWriter): RowCopier {
         val innerCopier = inner.rowCopier(dest)

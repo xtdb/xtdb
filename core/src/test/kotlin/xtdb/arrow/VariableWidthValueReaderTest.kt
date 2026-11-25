@@ -69,9 +69,6 @@ class VariableWidthValueReaderTest {
         "direct" to vec,
         "select(IntArray)" to vec.select(IntArray(150) { (it * 37) % rowCount }),
         "sorted select(IntArray)" to vec.select(IntArray(100) { it * 2 }),
-        "select(start, len)" to vec.select(60, 90),
-        "slice of a selection" to vec.select(IntArray(150) { (it * 11) % rowCount }).select(30, 100),
-        "selection of a slice" to vec.select(10, 150).select(IntArray(80) { (it * 13) % 150 }),
     )
 
     @Test
@@ -125,7 +122,6 @@ class VariableWidthValueReaderTest {
                 mapOf(
                     "direct" to vec,
                     "reversed selection" to vec.select(IntArray(rowCount) { rowCount - 1 - it }),
-                    "slice" to vec.select(0, rowCount),
                 ).forEach { (shape, rdr) ->
                     val what = "$label, $shape"
                     val expected = ValueReader.ForVector(rdr)

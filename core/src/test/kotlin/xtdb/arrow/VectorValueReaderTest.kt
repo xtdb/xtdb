@@ -80,9 +80,7 @@ class VectorValueReaderTest {
 
     private fun checkSelections(vec: VectorReader, label: String) {
         checkAgainstGetObject(vec.select(intArrayOf(4, 0, 2, 2)), "$label, select(IntArray)")
-        checkAgainstGetObject(vec.select(1, 3), "$label, select(start, len)")
         checkAgainstGetObject(vec.select(intArrayOf(4, 0, 2)).select(intArrayOf(2, 1)), "$label, nested select")
-        checkAgainstGetObject(vec.select(1, 3).select(1, 2), "$label, nested slice")
     }
 
     @Test
@@ -170,7 +168,6 @@ class VectorValueReaderTest {
 
             check(vec, rows, "direct")
             check(vec.select(intArrayOf(2, 0, 0)), listOf(rows[2], rows[0], rows[0]), "select(IntArray)")
-            check(vec.select(1, 2), rows.subList(1, 3), "select(start, len)")
         }
     }
 
@@ -180,7 +177,6 @@ class VectorValueReaderTest {
         SingletonListReader("col", RelationAsStructReader("docs", docs)).use { vec ->
             checkAgainstGetObject(vec, "direct")
             checkAgainstGetObject(vec.select(intArrayOf(0, 0)), "select(IntArray)")
-            checkAgainstGetObject(vec.select(0, 1), "select(start, len)")
 
             assertEquals(listOf(List(3) { mapOf("fooBar" to it.toLong()) }), vec.valueReader().asSequence().map { it.snapshot() }.toList())
         }

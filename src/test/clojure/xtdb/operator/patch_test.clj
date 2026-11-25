@@ -130,6 +130,19 @@
                 [{:xt/id 2, :a 6, :b 8} (time/->zdt #inst "2020-01-08") nil]]
                (q "SELECT *, _valid_from, _valid_to FROM bar FOR ALL VALID_TIME ORDER BY _id, _valid_from"))))))
 
+(t/deftest successive-patches-to-one-table-in-one-tx
+  (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id 1, :a 1} {:xt/id 2, :a 2}]])
+
+  (xt/execute-tx tu/*node* ["PATCH INTO foo RECORDS {_id: 1, b: 3}"
+                            "PATCH INTO foo RECORDS {_id: 2, c: 4}, {_id: 3, c: 5}"])
+
+  (t/is (= [{:xt/id 1, :a 1, :xt/valid-from (time/->zdt #inst "2020-01-01"), :xt/valid-to (time/->zdt #inst "2020-01-02")}
+            {:xt/id 1, :a 1, :b 3, :xt/valid-from (time/->zdt #inst "2020-01-02")}
+            {:xt/id 2, :a 2, :xt/valid-from (time/->zdt #inst "2020-01-01"), :xt/valid-to (time/->zdt #inst "2020-01-02")}
+            {:xt/id 2, :a 2, :c 4, :xt/valid-from (time/->zdt #inst "2020-01-02")}
+            {:xt/id 3, :c 5, :xt/valid-from (time/->zdt #inst "2020-01-02")}]
+           (xt/q tu/*node* "SELECT *, _valid_from, _valid_to FROM foo FOR ALL VALID_TIME ORDER BY _id, _valid_from"))))
+
 (t/deftest patch-with-forbidden-columns-fails-4120
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO docs RECORDS {_id: 1}"]])
 

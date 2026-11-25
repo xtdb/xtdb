@@ -30,7 +30,7 @@ class ArrowStreamTest {
         for (startIdx in 0..rel.rowCount) {
             for (len in 0..rel.rowCount - startIdx) {
                 withClue("rows [$startIdx, ${startIdx + len})") {
-                    reload(rel, startIdx, len) shouldBe rel.select(startIdx, len).asMaps
+                    reload(rel, startIdx, len) shouldBe rel.select(IntArray(len) { startIdx + it }).asMaps
                 }
             }
         }

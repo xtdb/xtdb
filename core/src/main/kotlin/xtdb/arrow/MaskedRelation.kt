@@ -22,9 +22,6 @@ class MaskedRelation private constructor(private val inner: RelationReader, inte
         return inner.select(IntArray(idxs.size) { rows[idxs[it]] })
     }
 
-    override fun select(startIdx: Int, len: Int): RelationReader =
-        inner.select(mask.selection.copyOfRange(startIdx, startIdx + len))
-
     override fun openSlice(al: BufferAllocator): RelationReader =
         inner.openSlice(al).closeOnCatch { MaskedRelation(it, mask) }
 

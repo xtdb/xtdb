@@ -63,7 +63,7 @@ class OpenTxTest {
     }
 
     @Test
-    fun `batch puts and deletes over a slice take each row's id and valid times, defaulting null and absent ones`() {
+    fun `batch puts and deletes over a selection take each row's id and valid times, defaulting null and absent ones`() {
         fun t(day: Int) = Instant.parse("2021-01-%02dT00:00:00Z".format(day)).asMicros
         val defaultVf = t(1) - 1
         val ids = listOf(0L, "one", 2L, UUID(0, 3), "four")
@@ -82,8 +82,8 @@ class OpenTxTest {
         try {
             withOpenTx("my_db") { tx ->
                 val table = tx.table(tableName = "docs")
-                table.writePuts(RelationReader.from(putCols).select(1, 3), defaultVf, Long.MAX_VALUE)
-                table.writeDeletes(RelationReader.from(deleteCols).select(2, 2), defaultVf, Long.MAX_VALUE)
+                table.writePuts(RelationReader.from(putCols).select(intArrayOf(1, 2, 3)), defaultVf, Long.MAX_VALUE)
+                table.writeDeletes(RelationReader.from(deleteCols).select(intArrayOf(2, 3)), defaultVf, Long.MAX_VALUE)
 
                 val rel = table.tx.relation
                 val iidVec = rel["_iid"]

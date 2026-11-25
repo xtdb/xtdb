@@ -490,7 +490,6 @@ class RunEndEncodedVectorTest {
                 assertEquals(3, slice.runCount)
             }
 
-            assertEquals(listOf(20L, 30L), vec.select(3, 2).asList)
             assertEquals(listOf(30L, 10L), vec.select(intArrayOf(4, 1)).asList)
         }
     }

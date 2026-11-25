@@ -17,7 +17,6 @@ import xtdb.arrow.Relation
 import xtdb.arrow.RunEndEncodedVector
 import xtdb.arrow.Vector
 import xtdb.arrow.VectorIndirection.Companion.selection
-import xtdb.arrow.VectorIndirection.Companion.slice
 import xtdb.arrow.VectorReader
 import xtdb.arrow.VectorType
 import xtdb.arrow.VectorType.Companion.DATE_DAY
@@ -185,7 +184,6 @@ class VectorHashesTest {
                 val n = vec.valueCount
                 if (n > 0) {
                     assertMatchesPerRow(IndirectVector(vec, selection(IntArray(n + 1) { (n - it).coerceAtMost(n - 1) })), al, "$label selection")
-                    assertMatchesPerRow(IndirectVector(vec, slice(1, n - 1)), al, "$label slice")
                     assertMatchesPerRow(vec.withName("renamed"), al, "$label renamed")
                 }
             }

@@ -87,7 +87,6 @@ class MaskedVectorTest {
         val sel = intArrayOf(n - 1, 0, n / 2, n / 2).filter { it in 0..<n }.toIntArray()
         assertEquals(al.hashes(expected, sel), al.hashes(masked, sel), "$what, hashTo over a selection")
         assertEquals(expected.select(sel).asList, masked.select(sel).asList, "$what, select(IntArray)")
-        assertEquals(expected.select(n / 3, n / 3).asList, masked.select(n / 3, n / 3).asList, "$what, select(start, len)")
     }
 
     @Test
@@ -147,7 +146,6 @@ class MaskedVectorTest {
             val mask = rowMask(inner.valueCount) { it % 3 != 0 }
 
             checkAgrees(al, MaskedVector(inner, mask), vec.select(outer.toSelection()).select(mask.toSelection()), "nested")
-            checkAgrees(al, MaskedVector(inner, mask), MaskedVector(inner, mask).select(0, mask.cardinality), "nested, slice")
         }
     }
 
