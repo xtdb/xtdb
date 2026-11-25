@@ -365,6 +365,16 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
                 3 [(time/->zdt #inst "2020-01-03") nil]}
                (q-all))))))
 
+(t/deftest successive-puts-to-one-table-in-one-tx-keep-their-own-valid-times
+  (xt/execute-tx *conn* [[:put-docs {:into :foo, :valid-from #inst "2021-01-01"} {:xt/id 1}]
+                         [:put-docs {:into :foo, :valid-from #inst "2022-01-01", :valid-to #inst "2023-01-01"}
+                          {:xt/id 2} {:xt/id 3}]])
+
+  (t/is (= [{:xt/id 1, :xt/valid-from (time/->zdt #inst "2021-01-01")}
+            {:xt/id 2, :xt/valid-from (time/->zdt #inst "2022-01-01"), :xt/valid-to (time/->zdt #inst "2023-01-01")}
+            {:xt/id 3, :xt/valid-from (time/->zdt #inst "2022-01-01"), :xt/valid-to (time/->zdt #inst "2023-01-01")}]
+           (xt/q *conn* "SELECT _id, _valid_from, _valid_to FROM foo FOR ALL VALID_TIME ORDER BY _id"))))
+
 (deftest test-insert-from-other-table-with-as-of-now
   (xt/submit-tx *conn*
                 ["INSERT INTO posts (_id, user_id, body, _valid_from)

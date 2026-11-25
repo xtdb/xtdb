@@ -469,6 +469,7 @@ class OpenTx
 
         internal fun writeIid(iid: ByteBuffer) = iidVec.writeBytes(iid)
         internal fun writeIid(iid: ByteArray) = iidVec.writeBytes(iid)
+        internal fun writeIids(iids: VectorReader, startIdx: Int, count: Int) = iidVec.appendRange(iids, startIdx, count)
 
         /** Writes the row's entity id. */
         fun writeId(id: Any) = iidVec.writeBytes(id.asIid)
@@ -487,15 +488,18 @@ class OpenTx
                 if (validTo != null) validTo.asMicros else MAX_LONG
             )
 
-        private fun writeValidTimes(
-            vfRdr: VectorReader?, vtRdr: VectorReader?, rowCount: Int,
+        internal fun writeValidTimes(
+            vfRdr: VectorReader?, vtRdr: VectorReader?, startIdx: Int, rowCount: Int,
             defaultValidFromMicros: Long, defaultValidToMicros: Long
         ) {
             val perRowCheck = vfRdr != null || vtRdr != null
             if (!perRowCheck) checkValidTimes(defaultValidFromMicros, defaultValidToMicros)
 
-            val vfRows = vfRdr?.valueReader()
-            val vtRows = vtRdr?.valueReader()
+            // a fresh reader sits before row 0, a position no seek can express
+            fun VectorReader.rows() = valueReader().also { if (startIdx > 0) it.pos = startIdx - 1 }
+
+            val vfRows = vfRdr?.rows()
+            val vtRows = vtRdr?.rows()
 
             repeat(rowCount) {
                 val vf = vfRows?.next()
@@ -556,7 +560,7 @@ class OpenTx
             }
 
             writeValidTimes(
-                rel.vectorForOrNull("_valid_from"), rel.vectorForOrNull("_valid_to"), rowCount,
+                rel.vectorForOrNull("_valid_from"), rel.vectorForOrNull("_valid_to"), 0, rowCount,
                 defaultValidFromMicros, defaultValidToMicros
             )
 
@@ -609,7 +613,7 @@ class OpenTx
             iidVec.append(rel.vectorFor("_iid"))
 
             writeValidTimes(
-                rel.vectorForOrNull("_valid_from"), rel.vectorForOrNull("_valid_to"), rowCount,
+                rel.vectorForOrNull("_valid_from"), rel.vectorForOrNull("_valid_to"), 0, rowCount,
                 defaultValidFromMicros, defaultValidToMicros
             )
 

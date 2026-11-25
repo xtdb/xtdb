@@ -7,6 +7,7 @@ import xtdb.Metrics.withSpan
 import xtdb.NodeBase
 import xtdb.api.TransactionKey
 import xtdb.arrow.*
+import xtdb.arrow.Vector.Companion.openVector
 import xtdb.api.DatabaseName
 import xtdb.database.PartitionState
 import xtdb.api.error.Anomaly
@@ -19,6 +20,7 @@ import xtdb.api.tx.TxIndexer.TxResult
 import xtdb.api.TableRef
 import xtdb.table.fromSchemaAndTable
 import xtdb.trie.InstantMicros
+import xtdb.util.asIid
 import xtdb.util.closeOnCatch
 import java.time.Instant
 import java.time.ZoneId
@@ -45,6 +47,9 @@ private fun assertTimestampColType(rdr: VectorReader) {
         )
     }
 }
+
+private fun VectorReader.openRange(al: BufferAllocator, name: String, startIdx: Int, count: Int): Vector =
+    al.openVector(name, type).closeOnCatch { it.apply { appendRange(this@openRange, startIdx, count) } }
 
 internal class SourceLogTxIndexer(
     private val allocator: BufferAllocator,
@@ -106,32 +111,12 @@ internal class SourceLogTxIndexer(
             val docStartIdx = tableDocsRdr.getListStartIndex(opIdx)
             val docCount = tableDocsRdr.getListCount(opIdx)
 
-            val docStruct = RelationAsStructReader(
-                "doc",
-                RelationReader.from(
-                    ks.filter { it != "_valid_from" && it != "_valid_to" }
-                        .map { docRdr.vectorFor(it).select(docStartIdx, docCount) },
-                    docCount,
-                ),
-            ).withName("doc")
+            val docCols = ks.filter { it != "_valid_from" && it != "_valid_to" }.associateWith { docRdr.vectorFor(it) }
 
-            val iidCol = if (!iidsRdr.isNull(opIdx)) {
-                iidRdr.select(iidsRdr.getListStartIndex(opIdx), docCount).withName("_iid")
-            } else {
-                docRdr.vectorFor("_id").select(docStartIdx, docCount).withName("_id")
-            }
+            val idRdr = if (iidsRdr.isNull(opIdx)) docRdr.vectorFor("_id") else null
 
-            val rowVfCol = docRdr.vectorForOrNull("_valid_from")
-                ?.also(::assertTimestampColType)
-                ?.select(docStartIdx, docCount)?.withName("_valid_from")
-            val rowVtCol = docRdr.vectorForOrNull("_valid_to")
-                ?.also(::assertTimestampColType)
-                ?.select(docStartIdx, docCount)?.withName("_valid_to")
-
-            val putRel = RelationReader.from(
-                listOfNotNull(iidCol, docStruct, rowVfCol, rowVtCol),
-                docCount,
-            )
+            val rowVfRdr = docRdr.vectorForOrNull("_valid_from")?.also { assertTimestampColType(it) }
+            val rowVtRdr = docRdr.vectorForOrNull("_valid_to")?.also { assertTimestampColType(it) }
 
             val validFrom = if (validFromRdr.isNull(opIdx)) opts.systemTime else validFromRdr.getLong(opIdx)
             val validTo = if (validToRdr.isNull(opIdx)) Long.MAX_VALUE else validToRdr.getLong(opIdx)
@@ -145,7 +130,21 @@ internal class SourceLogTxIndexer(
                 txOpsRdr = txOpsRdr,
                 data = mapOf("table" to table, "tx-key" to opts.txKey, "tx-op-idx" to opIdx),
             ) {
-                liveTable.writePuts(putRel, validFrom, validTo)
+                if (docCount == 0) return@withCrashLog
+
+                if (idRdr != null)
+                    repeat(docCount) { liveTable.writeIid(idRdr.getObject(docStartIdx + it).asIid) }
+                else
+                    liveTable.writeIids(iidRdr, iidsRdr.getListStartIndex(opIdx), docCount)
+
+                liveTable.writeValidTimes(rowVfRdr, rowVtRdr, docStartIdx, docCount, validFrom, validTo)
+
+                val putDocWriter = liveTable.putDocWriter
+                for ((k, col) in docCols)
+                    putDocWriter.vectorFor(k, col.arrowType, col.nullable).appendRange(col, docStartIdx, docCount)
+                repeat(docCount) { putDocWriter.endStruct() }
+
+                liveTable.endPuts(docCount)
             }
         }
 
@@ -172,16 +171,12 @@ internal class SourceLogTxIndexer(
             ) {
                 val validFrom = if (validFromRdr.isNull(opIdx)) opts.systemTime else validFromRdr.getLong(opIdx)
                 val validTo = if (validToRdr.isNull(opIdx)) Long.MAX_VALUE else validToRdr.getLong(opIdx)
-                openTxTable.writeDeletes(
-                    RelationReader.from(
-                        listOf(
-                            iidRdr.select(iidsRdr.getListStartIndex(opIdx), iidsRdr.getListCount(opIdx))
-                                .withName("_iid"),
-                        )
-                    ),
-                    validFrom,
-                    validTo,
-                )
+                val iidCount = iidsRdr.getListCount(opIdx)
+                if (iidCount == 0) return@withCrashLog
+
+                openTxTable.writeIids(iidRdr, iidsRdr.getListStartIndex(opIdx), iidCount)
+                openTxTable.writeValidTimes(null, null, 0, iidCount, validFrom, validTo)
+                openTxTable.endDeletes(iidCount)
             }
         }
 
@@ -203,9 +198,12 @@ internal class SourceLogTxIndexer(
                 txOpsRdr = txOpsRdr,
                 data = mapOf("table" to table, "tx-key" to opts.txKey, "tx-op-idx" to opIdx),
             ) {
-                liveTable.writeErases(
-                    iidRdr.select(iidsRdr.getListStartIndex(opIdx), iidsRdr.getListCount(opIdx))
-                )
+                val iidCount = iidsRdr.getListCount(opIdx)
+                if (iidCount == 0) return@withCrashLog
+
+                liveTable.writeIids(iidRdr, iidsRdr.getListStartIndex(opIdx), iidCount)
+                repeat(iidCount) { liveTable.writeValidTimeMicros(Long.MIN_VALUE, Long.MAX_VALUE) }
+                liveTable.endErases(iidCount)
             }
         }
 
@@ -243,19 +241,20 @@ internal class SourceLogTxIndexer(
                 val validTo: InstantMicros =
                     if (validToRdr.isNull(opIdx)) Long.MAX_VALUE else validToRdr.getLong(opIdx)
 
-                val docs = RelationReader.from(
-                    listOf(
-                        iidRdr.select(iidsRdr.getListStartIndex(opIdx), iidsRdr.getListCount(opIdx)).withName("_iid"),
-                        docRdr.select(tableDocsRdr.getListStartIndex(opIdx), tableDocsRdr.getListCount(opIdx))
-                            .withName("doc"),
-                    )
-                )
+                val iidCount = iidsRdr.getListCount(opIdx)
 
-                tracer.withSpan("xtdb.transaction.patch-docs") { span ->
-                    span?.tag("db", dbName)
-                    span?.tag("schema", tableRef.schemaName)
-                    span?.tag("table", tableRef.tableName)
-                    table(tableRef).patchDocs(docs, validFrom, validTo)
+                iidRdr.openRange(allocator, "_iid", iidsRdr.getListStartIndex(opIdx), iidCount).use { iids ->
+                    docRdr.openRange(allocator, "doc", tableDocsRdr.getListStartIndex(opIdx), tableDocsRdr.getListCount(opIdx))
+                        .use { docVec ->
+                            val docs = RelationReader.from(listOf(iids, docVec), iidCount)
+
+                            tracer.withSpan("xtdb.transaction.patch-docs") { span ->
+                                span?.tag("db", dbName)
+                                span?.tag("schema", tableRef.schemaName)
+                                span?.tag("table", tableRef.tableName)
+                                table(tableRef).patchDocs(docs, validFrom, validTo)
+                            }
+                        }
                 }
             }
         }
