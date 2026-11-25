@@ -35,39 +35,39 @@ The builder content depends only on:
 * the JDK base image (`eclipse-temurin:25-jdk-alpine` in `docker/builder.Dockerfile`)
 * `build-logic/jlink/` (the jlink module list and gradle wrapper inputs)
 
-When either changes, bump the tag and rebuild (from the repo root):
+=== When to bump it
 
-. Pick a new tag, e.g. `YYYYMMDD-N`.
-. Update `BUILDER_TAG` in `docker-bake.hcl` (repo root) *and* the `BUILDER_IMAGE` default in `docker/Dockerfile` to match.
-. Authenticate to ghcr.io (see below).
-. `docker buildx bake builder --push`
-. Commit the bumped tag.
+Any of these is a reason to cut a new builder image:
 
-Drop `--push` to build locally without publishing.
-Multi-arch push needs a buildx builder with both `linux/amd64` and `linux/arm64` — `docker buildx create --use --bootstrap` (with QEMU installed) is enough.
+* `build-logic/jlink/` changes (a module added or removed from the custom JRE).
+* We deliberately move to a newer JDK feature release.
+* The upstream base image ships a fix we need — most often a CVE in the JDK itself (e.g. a fix landing in a new `eclipse-temurin:25-jdk-alpine` patch tag).
+  Check the https://github.com/adoptium/temurin25-binaries/releases[Temurin release notes] (or the CVE advisory) for the patch version that carries the fix, so the tag you bump to is confirmed fixed rather than just newer.
 
-Alternatively, run the `Builder image` GitHub Action (`.github/workflows/builder.yml`, manually triggered) to build and push from CI instead of locally — it carries the same `ghcr.io` login and QEMU/buildx setup as `docker.yml`, so it needs no local multi-arch builder or elevated `gh` token scopes.
+=== Bumping and rebuilding
 
-=== One-time setup: ghcr.io auth via `gh`
+Pick a new tag, e.g. `YYYYMMDD-N`.
 
-The simplest way to authenticate is to reuse the OAuth token from the GitHub CLI rather than minting a separate PAT.
-Pair it with a Docker https://docs.docker.com/engine/reference/commandline/login/#credential-stores[credential store] (e.g. `pass` or `secretservice` on Linux, `osxkeychain` on macOS) so the token isn't sat in `~/.docker/config.json` in plaintext.
+. Run the https://github.com/xtdb/xtdb/actions/workflows/builder.yml[Build xtdb-builder image] action (manually triggered), passing the new tag (e.g. `20261124-2`) as its input, to build and push the image from CI.
+. Once it's confirmed pushed, update the `BUILDER_IMAGE` default in `docker/Dockerfile` to match and commit it.
 
-. Grant the `gh` token the package scopes (one-off):
+If the fix needs to reach an already-released line as well as `main`, make the same `BUILDER_IMAGE` change on that maintenance branch (see link:../dev/RELEASING.adoc#older-line-patches[patch releases on an older line]) — bumping the builder image doesn't retag or rebuild the XTDB images that `FROM` it on its own.
+
+=== Propagating to published images
+
+The builder image bump only takes effect once something rebuilds `docker/Dockerfile` `FROM` it:
+
+. Run the https://github.com/xtdb/xtdb/actions/workflows/edge.yml[XTDB Edge] action (manually triggered) against `main` (and any maintenance branch you bumped) to push new `edge`-tagged images built on the new builder.
+. Sanity-check the published image picked up the fix:
 +
 [source,bash]
 ----
-gh auth refresh -h github.com -s write:packages,read:packages
+docker pull ghcr.io/xtdb/xtdb:edge
+docker run --rm --entrypoint java ghcr.io/xtdb/xtdb:edge -version
 ----
-
-. Set up a credential store per the Docker docs above, then log in (the token goes straight into the store):
 +
-[source,bash]
-----
-gh auth token | docker login ghcr.io -u "$(gh api user --jq .login)" --password-stdin
-----
-
-The `gh` OAuth token is long-lived, so this only needs redoing if you `gh auth logout` or rotate scopes — in which case `docker logout ghcr.io` and repeat the login.
+and confirm the reported version matches the fixed one.
+. A full release still needs the normal link:../dev/RELEASING.adoc[release process] to get the fix onto a versioned tag rather than just `edge`.
 
 == Docker compose setup
 
