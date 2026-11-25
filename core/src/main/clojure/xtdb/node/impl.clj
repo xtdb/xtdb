@@ -206,16 +206,17 @@
             opts)})
 
 (defn- ->conn-metrics ^ConnectionMetrics [metrics-registry]
-  (ConnectionMetrics. (metrics/add-timer metrics-registry "query.timer"
-                                         {:description "indicates the timings for queries"})
-                      (metrics/add-counter metrics-registry "query.error")
-                      (metrics/add-counter metrics-registry "tx.error")
-                      (metrics/add-timer metrics-registry "node.tx.await"
-                                         {:description "Time spent in executeTx waiting for the indexer to catch up to a just-submitted tx (sync-path indexer await)."})
-                      (metrics/add-timer metrics-registry "node.tx.submit"
-                                         {:description "Time spent in submitTx (async-path log append + ack), across all frontends."})
-                      (metrics/add-timer metrics-registry "node.tx.execute"
-                                         {:description "Time spent in executeTx (sync-path log append + indexer await), across all frontends."})))
+  (when metrics-registry
+    (ConnectionMetrics. (metrics/add-timer metrics-registry "query.timer"
+                                           {:description "indicates the timings for queries"})
+                        (metrics/add-counter metrics-registry "query.error")
+                        (metrics/add-counter metrics-registry "tx.error")
+                        (metrics/add-timer metrics-registry "node.tx.await"
+                                           {:description "Time spent in executeTx waiting for the indexer to catch up to a just-submitted tx (sync-path indexer await)."})
+                        (metrics/add-timer metrics-registry "node.tx.submit"
+                                           {:description "Time spent in submitTx (async-path log append + ack), across all frontends."})
+                        (metrics/add-timer metrics-registry "node.tx.execute"
+                                           {:description "Time spent in executeTx (sync-path log append + indexer await), across all frontends."}))))
 
 (defmethod ig/init-key :xtdb/node [_ {:keys [^NodeBase base] :as deps}]
   (let [metrics-registry (.getMeterRegistry base)]

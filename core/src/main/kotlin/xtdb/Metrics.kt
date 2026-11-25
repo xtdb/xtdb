@@ -13,6 +13,7 @@ import io.netty.util.internal.PlatformDependent
 import org.apache.arrow.memory.AllocationListener
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
+import xtdb.util.closeAll
 import xtdb.util.info
 import xtdb.util.logger
 import java.lang.management.BufferPoolMXBean
@@ -23,17 +24,24 @@ object Metrics {
     private val LOG = Metrics::class.logger
 
     @JvmStatic
-    fun openRegistry(nodeId: String): MeterRegistry =
-        PrometheusMeterRegistry(PrometheusConfig.DEFAULT).also { reg ->
+    fun openRegistry(nodeId: String): MeterRegistry {
+        val binders = listOf(
+            ClassLoaderMetrics(), JvmMemoryMetrics(), JvmHeapPressureMetrics(),
+            JvmGcMetrics(), ProcessorMetrics(), JvmThreadMetrics(),
+        )
+
+        // JvmGcMetrics and JvmHeapPressureMetrics listen on the JVM-global GC MXBeans,
+        // which would otherwise keep a closed registry reachable for the life of the JVM.
+        return object : PrometheusMeterRegistry(PrometheusConfig.DEFAULT) {
+            override fun close() {
+                binders.filterIsInstance<AutoCloseable>().closeAll()
+                super.close()
+            }
+        }.also { reg ->
             LOG.info("tagging all metrics with node-id: $nodeId")
             reg.config().commonTags(listOf(Tag.of("node-id", nodeId)))
 
-            ClassLoaderMetrics().bindTo(reg)
-            JvmMemoryMetrics().bindTo(reg)
-            JvmHeapPressureMetrics().bindTo(reg)
-            JvmGcMetrics().bindTo(reg)
-            ProcessorMetrics().bindTo(reg)
-            JvmThreadMetrics().bindTo(reg)
+            binders.forEach { it.bindTo(reg) }
 
             Gauge.builder("jvm.memory.netty.bytes") { PlatformDependent.usedDirectMemory().toDouble() }
                 .baseUnit("bytes")
@@ -47,6 +55,7 @@ object Metrics {
                         .register(reg)
                 }
         }
+    }
 
     private fun <T : Any> Gauge.Builder<T>.withTags(tags: Array<out Pair<String, String>>) = apply {
         for ((k, v) in tags) tag(k, v)
