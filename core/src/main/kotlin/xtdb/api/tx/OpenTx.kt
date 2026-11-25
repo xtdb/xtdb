@@ -487,6 +487,30 @@ class OpenTx
                 if (validTo != null) validTo.asMicros else MAX_LONG
             )
 
+        private fun writeValidTimes(
+            vfRdr: VectorReader?, vtRdr: VectorReader?, rowCount: Int,
+            defaultValidFromMicros: Long, defaultValidToMicros: Long
+        ) {
+            val perRowCheck = vfRdr != null || vtRdr != null
+            if (!perRowCheck) checkValidTimes(defaultValidFromMicros, defaultValidToMicros)
+
+            val vfRows = vfRdr?.valueReader()
+            val vtRows = vtRdr?.valueReader()
+
+            repeat(rowCount) {
+                val vf = vfRows?.next()
+                val vt = vtRows?.next()
+
+                val rowValidFrom = if (vf != null && !vf.isNull) vf.readLong() else defaultValidFromMicros
+                val rowValidTo = if (vt != null && !vt.isNull) vt.readLong() else defaultValidToMicros
+
+                if (perRowCheck) checkValidTimes(rowValidFrom, rowValidTo)
+
+                validFromVec.writeLong(rowValidFrom)
+                validToVec.writeLong(rowValidTo)
+            }
+        }
+
         private fun endOps(count: Int) = tx.endOps(count)
 
         fun endPuts(count: Int) = endOps(count)
@@ -531,27 +555,10 @@ class OpenTx
                 repeat(rowCount) { idx -> iidVec.writeBytes(idRdr.getObject(idx).asIid) }
             }
 
-            val vfRdr = rel.vectorForOrNull("_valid_from")
-            val vtRdr = rel.vectorForOrNull("_valid_to")
-
-            val perRowCheck = vfRdr != null || vtRdr != null
-            if (!perRowCheck) checkValidTimes(defaultValidFromMicros, defaultValidToMicros)
-
-            val vfRows = vfRdr?.valueReader()
-            val vtRows = vtRdr?.valueReader()
-
-            repeat(rowCount) {
-                val vf = vfRows?.next()
-                val vt = vtRows?.next()
-
-                val rowValidFrom = if (vf != null && !vf.isNull) vf.readLong() else defaultValidFromMicros
-                val rowValidTo = if (vt != null && !vt.isNull) vt.readLong() else defaultValidToMicros
-
-                if (perRowCheck) checkValidTimes(rowValidFrom, rowValidTo)
-
-                validFromVec.writeLong(rowValidFrom)
-                validToVec.writeLong(rowValidTo)
-            }
+            writeValidTimes(
+                rel.vectorForOrNull("_valid_from"), rel.vectorForOrNull("_valid_to"), rowCount,
+                defaultValidFromMicros, defaultValidToMicros
+            )
 
             putDocWriter.append(rel["doc"])
 
@@ -601,27 +608,10 @@ class OpenTx
 
             iidVec.append(rel.vectorFor("_iid"))
 
-            val vfRdr = rel.vectorForOrNull("_valid_from")
-            val vtRdr = rel.vectorForOrNull("_valid_to")
-
-            val perRowCheck = vfRdr != null || vtRdr != null
-            if (!perRowCheck) checkValidTimes(defaultValidFromMicros, defaultValidToMicros)
-
-            val vfRows = vfRdr?.valueReader()
-            val vtRows = vtRdr?.valueReader()
-
-            repeat(rowCount) {
-                val vf = vfRows?.next()
-                val vt = vtRows?.next()
-
-                val rowValidFrom = if (vf != null && !vf.isNull) vf.readLong() else defaultValidFromMicros
-                val rowValidTo = if (vt != null && !vt.isNull) vt.readLong() else defaultValidToMicros
-
-                if (perRowCheck) checkValidTimes(rowValidFrom, rowValidTo)
-
-                validFromVec.writeLong(rowValidFrom)
-                validToVec.writeLong(rowValidTo)
-            }
+            writeValidTimes(
+                rel.vectorForOrNull("_valid_from"), rel.vectorForOrNull("_valid_to"), rowCount,
+                defaultValidFromMicros, defaultValidToMicros
+            )
 
             endDeletes(rowCount)
         }
