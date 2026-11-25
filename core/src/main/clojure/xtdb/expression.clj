@@ -454,6 +454,8 @@
                         (f nn-type (read-value-code nn-type reader-sym)))
 
                       `(case (.getLeg ~reader-sym ~@args)
+                         ;; https://ask.clojure.org/index.php/13407/method-large-compiling-expression-unfortunate-clause-hashes
+                         :wont-ever-be-this (throw (IllegalStateException.))
                          ~@(->> inner-types
                                 (mapcat (fn [^VectorType$Mono vec-type]
                                           [(types/arrow-type->leg (.getArrowType vec-type))
@@ -538,6 +540,8 @@
                                                (write-value-code return-type box-sym (get legs return-type) code)))
 
                                   (case (.getLeg ~box-sym)
+                                    ;; https://ask.clojure.org/index.php/13407/method-large-compiling-expression-unfortunate-clause-hashes
+                                    :wont-ever-be-this (throw (IllegalStateException.))
                                     ~@(->> (for [[ret-type leg] legs]
                                              [leg (f ret-type (read-value-code ret-type box-sym))])
                                            (apply concat))))))))

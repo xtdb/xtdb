@@ -3747,3 +3747,9 @@ UNION ALL
 
   (t/is (= [{:xt/id 1, :diff 10, :rdiff -10} {:xt/id 2, :diff -30, :rdiff 30}]
            (xt/q tu/*node* "SELECT _id, d - DATE '2023-05-01' AS diff, DATE '2023-05-01' - d AS rdiff FROM docs ORDER BY _id"))))
+
+(t/deftest least-over-two-polymorphic-columns-exceeds-method-size-limit
+  (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 :a 1 :b 2} {:xt/id 2 :a 1.0 :b 2.0}]])
+
+  (t/is (= [{:xt/id 1, :v 1} {:xt/id 2, :v 1.0}]
+           (xt/q tu/*node* "SELECT _id, LEAST(a, b) AS v FROM docs ORDER BY _id"))))
