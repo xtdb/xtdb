@@ -4,19 +4,19 @@
             [xtdb.expression.list :as list-expr]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
-  (:import (xtdb.arrow ListExpression Vector)))
+  (:import (xtdb.arrow ListExpression Vector VectorType)))
 
 (t/use-fixtures :each tu/with-allocator)
 
 (t/deftest compile-list-expr-test
   (letfn [(run-test [form opts]
             (let [expr (expr/form->expr form opts)
-                  {:keys [->list-expr vec-type]} (list-expr/compile-list-expr expr {})
+                  {:keys [->list-expr ^VectorType vec-type]} (list-expr/compile-list-expr expr {})
                   ^ListExpression res (->list-expr {} {})]
               {:vec-type vec-type
                :size (some-> res (.getSize))
                :value (when res
-                        (util/with-open [out-vec (Vector/open tu/*allocator* "$data$" vec-type)]
+                        (util/with-open [out-vec (Vector/open tu/*allocator* vec-type)]
                           (.writeTo res out-vec 0 (.getSize res))
                           (vec (.getAsList out-vec))))}))]
     (t/is (= {:vec-type #xt/type :i64
@@ -63,10 +63,10 @@
 
 (t/deftest testing-write-to
   (let [expr (expr/form->expr '[1 2 3 4 5 6 7 8 9 10] {})
-        {:keys [->list-expr vec-type]} (list-expr/compile-list-expr expr {})
+        {:keys [->list-expr ^VectorType vec-type]} (list-expr/compile-list-expr expr {})
         ^ListExpression list-expr (->list-expr {} {})
         run-write-test (fn [start count]
-                         (util/with-open [out-vec (Vector/open tu/*allocator* "$data$" vec-type)]
+                         (util/with-open [out-vec (Vector/open tu/*allocator* vec-type)]
                            (.writeTo list-expr out-vec start count)
                            (vec (.getAsList out-vec))))]
 

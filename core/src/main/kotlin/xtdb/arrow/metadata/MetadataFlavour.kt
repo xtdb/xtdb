@@ -48,10 +48,10 @@ sealed interface MetadataFlavour {
     }
 
     interface Struct : MetadataFlavour {
-        val vectors: Iterable<VectorReader>
+        val children: Map<String, VectorReader>
 
         /**
-         * The mask over the rows of [vectors] that their metadata is taken under, given [mask] over this struct's rows:
+         * The mask over the rows of [children] that their metadata is taken under, given [mask] over this struct's rows:
          * the rows [mask] selects where this struct isn't null.
          */
         fun childMask(mask: RowMask): RowMask =

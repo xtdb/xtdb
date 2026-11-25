@@ -2609,11 +2609,9 @@
        (throw (err/incorrect :xtdb.expression/illegal-argument-exception (ex-message e#) {::err/cause e#})))))
 
 (defn ->param-types [^RelationReader args]
-  (->> args
-       (into {} (map (fn [^VectorReader col]
-                       (MapEntry/create
-                        (symbol (.getName col))
-                        (.getType col)))))))
+  (->> (.getCols args)
+       (into {} (map (fn [[^String col-name ^VectorReader col]]
+                       (MapEntry/create (symbol col-name) (.getType col)))))))
 
 (defn- ->var-syms [expr]
   (->> (walk/expr-seq expr)
@@ -2638,7 +2636,7 @@
         (fn [{:keys [var-types param-types]}]
           (emit expr {:param-types param-types, :var-types var-types}))))
 
-(defn ->expression-projection-spec ^ProjectionSpec$Factory [col-name expr {:keys [var-types param-types]}]
+(defn ->expression-projection-spec ^ProjectionSpec$Factory [expr {:keys [var-types param-types]}]
   (let [;; HACK - this runs the analyser (we discard the emission) to get the widest possible out-type.
         widest-out-type (-> (emit-projection expr {:param-types param-types
                                                    :var-types var-types})
@@ -2647,15 +2645,14 @@
         emit-cache (->emit-cache)]
 
     (reify ProjectionSpec$Factory
-      (getToName [_] (str col-name))
       (getType [_] widest-out-type)
 
       (open [_ al schema args]
         (let [param-types (->param-types args)]
           (reify ProjectionSpec
             (project [_ in-rel]
-              (let [{:keys [return-type !projection-fn]} (emit-for-batch emit-cache emit-projection expr var-syms param-types in-rel)]
-                (util/with-close-on-catch [out-vec (Vector/open al (str col-name) return-type)]
+              (let [{:keys [^VectorType return-type !projection-fn]} (emit-for-batch emit-cache emit-projection expr var-syms param-types in-rel)]
+                (util/with-close-on-catch [out-vec (Vector/open al return-type)]
                   (rethrowing-anomalies
                     (@!projection-fn in-rel schema args out-vec))
 

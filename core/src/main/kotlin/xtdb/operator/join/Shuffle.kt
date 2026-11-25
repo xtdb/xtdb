@@ -36,9 +36,9 @@ class Shuffle private constructor(
 
     private val dataRowCopier = inDataRel.rowCopier(outDataRel)
     private val hasher = inDataRel.hasher(hashColNames)
-    private val hashes = IntVector.open(al, HASH_COL_NAME, false)
-    private val hashScratch = IntVector.open(al, "hash-scratch", false)
-    private val hashCopier = RelationReader.from(listOf(hashes)).rowCopier(hashRel)
+    private val hashes = IntVector.open(al, false)
+    private val hashScratch = IntVector.open(al, false)
+    private val hashCopier = RelationReader.from(mapOf(HASH_COL_NAME to hashes)).rowCopier(hashRel)
 
     fun shuffle() {
         val selections = Array(partCount) { IntArrayList(approxRowsPerPart) }

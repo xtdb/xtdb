@@ -15,12 +15,6 @@ import java.nio.ByteBuffer
 sealed class ExtensionVector : MonoVector() {
     protected abstract val inner: MonoVector
 
-    override var name
-        get() = inner.name
-        set(value) {
-            inner.name = value
-        }
-
     final override var nullable: Boolean
         get() = inner.nullable
         set(value) {
@@ -28,6 +22,7 @@ sealed class ExtensionVector : MonoVector() {
         }
 
     final override val vectors get() = inner.vectors
+    override val childFields get() = inner.childFields
 
     override var valueCount: Int
         get() = inner.valueCount

@@ -75,3 +75,12 @@ interface VectorWriter : VectorReader, AutoCloseable {
     fun appendRange(r: VectorReader, startIdx: Int, length: Int) =
         r.rowCopier(this).copyRange(startIdx, length)
 }
+
+/** Appends each row of [rel] as one struct row, the columns as its children. */
+internal fun VectorWriter.appendStructRows(rel: RelationReader) {
+    val copiers = rel.cols.map { (name, v) -> v.rowCopier(vectorFor(name, v.arrowType, v.nullable)) }
+    repeat(rel.rowCount) { idx ->
+        copiers.forEach { it.copyRow(idx) }
+        endStruct()
+    }
+}

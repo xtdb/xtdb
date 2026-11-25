@@ -13,8 +13,8 @@ import java.time.ZoneOffset
 @ExtendWith(AllocatorResolver::class)
 class TemporalMetadataCalculatorTest {
 
-    private fun BufferAllocator.instants(name: String, vararg micros: Long) =
-        TimestampTzVector(this, name, false, TimeUnit.MICROSECOND, ZoneOffset.UTC)
+    private fun BufferAllocator.instants(vararg micros: Long) =
+        TimestampTzVector(this, false, TimeUnit.MICROSECOND, ZoneOffset.UTC)
             .apply { micros.forEach { writeLong(it) } }
 
     private fun seeded() = TemporalMetadata.newBuilder()
@@ -24,9 +24,9 @@ class TemporalMetadataCalculatorTest {
 
     @Test
     fun `update folds each column's min and max into the builder`(al: BufferAllocator) {
-        al.instants("_valid_from", 30, -10, 20).use { vf ->
-            al.instants("_valid_to", 100, Long.MAX_VALUE, 50).use { vt ->
-                al.instants("_system_from", 7, 3, 5).use { sf ->
+        al.instants(30, -10, 20).use { vf ->
+            al.instants(100, Long.MAX_VALUE, 50).use { vt ->
+                al.instants(7, 3, 5).use { sf ->
                     val tm = seeded()
                         .setMinValidFrom(0).setMaxSystemFrom(9)
                         .update(vf, vt, sf)
@@ -45,9 +45,9 @@ class TemporalMetadataCalculatorTest {
 
     @Test
     fun `update over empty vectors leaves the builder unchanged`(al: BufferAllocator) {
-        al.instants("_valid_from").use { vf ->
-            al.instants("_valid_to").use { vt ->
-                al.instants("_system_from").use { sf ->
+        al.instants().use { vf ->
+            al.instants().use { vt ->
+                al.instants().use { sf ->
                     val before = seeded().setMinValidFrom(4).setMaxValidTo(8).build()
 
                     assertEquals(before, before.toBuilder().update(vf, vt, sf).build())

@@ -169,17 +169,11 @@
    (xt-log/sync-node node timeout)))
 
 (defn open-vec
-  (^xtdb.arrow.Vector [^Field field]
-   (Vector/open *allocator* field))
+  (^xtdb.arrow.Vector [^List rows]
+   (Vector/fromList *allocator* rows))
 
-  (^xtdb.arrow.Vector [col-name-or-field ^List rows]
-   (cond
-     (string? col-name-or-field) (Vector/fromList *allocator* ^String col-name-or-field rows)
-     (instance? Field col-name-or-field) (Vector/fromList *allocator* ^Field col-name-or-field rows)
-     :else (throw (err/incorrect ::invalid-vec {:col-name-or-field col-name-or-field}))))
-
-  (^xtdb.arrow.Vector [col-name vec-type rows]
-   (Vector/fromList *allocator* col-name vec-type rows)))
+  (^xtdb.arrow.Vector [^VectorType vec-type ^List rows]
+   (Vector/fromList *allocator* vec-type rows)))
 
 (defn open-rel
   (^xtdb.arrow.Relation [] (Relation. *allocator*))

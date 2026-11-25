@@ -40,7 +40,7 @@
     (letfn [(project [form]
               (let [input-types {:var-types {'a #xt/type :f64, 'b #xt/type :f64, 'd #xt/type :i64}, :param-types {}}
                     expr (expr/form->expr form input-types)]
-                (with-open [projection (.open (expr/->expression-projection-spec "c" expr input-types)
+                (with-open [projection (.open (expr/->expression-projection-spec expr input-types)
                                               tu/*allocator* {} vw/empty-args)
                             project-col (.project projection in-rel)]
                   (.getAsList project-col))))]
@@ -79,10 +79,9 @@
     (letfn [(select-relation [form var-types args-map]
               (with-open [arg-rel (tu/open-args args-map)]
                 (let [input-types {:var-types var-types,
-                                   :param-types (->> arg-rel
-                                                     (into {} (map (fn [^VectorReader col]
-                                                                     [(symbol (.getName col))
-                                                                      (.getType col)]))))}]
+                                   :param-types (->> (.getCols arg-rel)
+                                                     (into {} (map (fn [[col-name ^VectorReader col]]
+                                                                     [(symbol col-name) (.getType col)]))))}]
                   (with-open [selection-spec (-> (expr/->expression-selection-spec (expr/form->expr form input-types) input-types)
                                                  (.open tu/*allocator* {} arg-rel))]
                     (.getCardinality (.select selection-spec in-rel))))))]
@@ -99,7 +98,7 @@
   (with-open [selection-spec (-> (expr/->expression-selection-spec (expr/form->expr '(and true nil) {}) {})
                                  (.open tu/*allocator* {} vw/empty-args))]
     (t/is (= 0
-             (-> (.select selection-spec (vr/rel-reader [] 1))
+             (-> (.select selection-spec (vr/keyed-rel-reader {} 1))
                  (.toSelection)
                  (alength))))))
 
@@ -136,7 +135,7 @@
 (t/deftest an-opened-projection-spec-follows-each-batchs-column-types
   (let [input-types {:var-types '{a #xt/type :i64}}
         expr (expr/form->expr '(+ a 1) input-types)]
-    (with-open [projection (-> (expr/->expression-projection-spec "out" expr input-types)
+    (with-open [projection (-> (expr/->expression-projection-spec expr input-types)
                                (.open tu/*allocator* {} vw/empty-args))]
       (doseq [[batch expected] [[{:a [1 2]} [2 3]]
                                 [{:a [1.5 0.5]} [2.5 1.5]]
@@ -409,12 +408,12 @@
                           (extract "TIMEZONE_MINUTE" ld)))))))
 
 (defn run-projection [^RelationReader rel form]
-  (let [var-types (->> rel
-                       (into {} (map (juxt #(symbol (.getName ^VectorReader %))
-                                           #(.getType ^VectorReader %)))))
+  (let [var-types (->> (.getCols rel)
+                       (into {} (map (fn [[col-name ^VectorReader col]]
+                                       [(symbol col-name) (.getType col)]))))
         input-types {:var-types var-types, :param-types {}}
         expr (expr/form->expr form input-types)]
-    (with-open [projection (.open (expr/->expression-projection-spec "out" expr input-types)
+    (with-open [projection (.open (expr/->expression-projection-spec expr input-types)
                                   tu/*allocator* {} vw/empty-args)
                 out-ivec (.project projection rel)]
       {:res (.toList out-ivec #xt/key-fn :kebab-case-keyword)
@@ -474,7 +473,7 @@
                           (project1 '(- a -9223372036854775807) {:a 9223372036854775807}))))
 
 (defn- project-mono-value [f-sym val vec-type]
-  (with-open [rel (vr/rel-reader [(tu/open-vec "s" vec-type [val])])]
+  (with-open [rel (vr/keyed-rel-reader {"s" (tu/open-vec vec-type [val])} 1)]
     (-> (run-projection rel (list f-sym 's))
         :res
         first)))
@@ -1729,98 +1728,98 @@
               (run-projection rel '(nil? x))]))))
 
 (t/deftest test-mixing-timestamp-types
-  (letfn [(->ts-vec [col-name time-unit, ^long value]
-            (doto (tu/open-vec col-name (types/->type [:timestamp-tz time-unit "UTC"]) [])
+  (letfn [(->ts-vec [time-unit, ^long value]
+            (doto (tu/open-vec (types/->type [:timestamp-tz time-unit "UTC"]) [])
               (.writeLong value)))
 
-          (->dur-vec [col-name ^TimeUnit time-unit, ^long value]
-            (doto (tu/open-vec col-name (types/->type [:duration time-unit]) [])
+          (->dur-vec [^TimeUnit time-unit, ^long value]
+            (doto (tu/open-vec (types/->type [:duration time-unit]) [])
               (.writeLong value)))
 
           (test-projection [f-sym ->x-vec ->y-vec]
             (with-open [^Vector x-vec (->x-vec)
                         ^Vector y-vec (->y-vec)]
-              (run-projection (vr/rel-reader [x-vec y-vec])
+              (run-projection (vr/keyed-rel-reader {"x" x-vec, "y" y-vec} 1)
                               (list f-sym 'x 'y))))]
 
     (t/testing "ts/dur"
       (t/is (= {:res [(time/->zdt #inst "2021-01-01T00:02:03Z")]
                 :res-type #xt/type [:timestamp-tz :second "UTC"]}
                (test-projection '+
-                                #(->ts-vec "x" :second (.getEpochSecond (time/->instant #inst "2021")))
-                                #(->dur-vec "y" :second 123))))
+                                #(->ts-vec :second (.getEpochSecond (time/->instant #inst "2021")))
+                                #(->dur-vec :second 123))))
 
       (t/is (= {:res [(time/->zdt #inst "2021-01-01T00:00:00.123Z")]
                 :res-type #xt/type [:timestamp-tz :milli "UTC"]}
                (test-projection '+
-                                #(->ts-vec "x" :second (.getEpochSecond (time/->instant #inst "2021")))
-                                #(->dur-vec "y" :milli 123))))
+                                #(->ts-vec :second (.getEpochSecond (time/->instant #inst "2021")))
+                                #(->dur-vec :milli 123))))
 
       (t/is (= {:res [(ZonedDateTime/parse "1970-01-01T00:02:34.000001234Z[UTC]")]
                 :res-type #xt/type [:timestamp-tz :nano "UTC"]}
                (test-projection '+
-                                #(->dur-vec "x" :second 154)
-                                #(->ts-vec "y" :nano 1234))))
+                                #(->dur-vec :second 154)
+                                #(->ts-vec :nano 1234))))
 
       (t/is (thrown-with-msg? RuntimeException  #"data exception - overflow error"
                               (test-projection '+
-                                               #(->ts-vec "x" :milli (- Long/MAX_VALUE 500))
-                                               #(->dur-vec "y" :second 1))))
+                                               #(->ts-vec :milli (- Long/MAX_VALUE 500))
+                                               #(->dur-vec :second 1))))
 
       (t/is (= {:res [(time/->zdt #inst "2020-12-31T23:59:59.998Z")]
                 :res-type #xt/type [:timestamp-tz :micro "UTC"]}
                (test-projection '-
-                                #(->ts-vec "x" :micro (time/instant->micros (time/->instant #inst "2021")))
-                                #(->dur-vec "y" :milli 2)))))
+                                #(->ts-vec :micro (time/instant->micros (time/->instant #inst "2021")))
+                                #(->dur-vec :milli 2)))))
 
     (t/is (t/is (= {:res [(Duration/parse "PT23H59M59.999S")]
                     :res-type #xt/type [:duration :milli]}
                    (test-projection '-
-                                    #(->ts-vec "x" :milli (.toEpochMilli (time/->instant #inst "2021-01-02")))
-                                    #(->ts-vec "y" :milli (.toEpochMilli (time/->instant #inst "2021-01-01T00:00:00.001Z")))))))
+                                    #(->ts-vec :milli (.toEpochMilli (time/->instant #inst "2021-01-02")))
+                                    #(->ts-vec :milli (.toEpochMilli (time/->instant #inst "2021-01-01T00:00:00.001Z")))))))
 
     (t/testing "durations"
-      (letfn [(->bigint-vec [^String col-name, ^long value]
-                (tu/open-vec col-name [value]))
+      (letfn [(->bigint-vec [^long value]
+                (tu/open-vec [value]))
 
-              (->float8-vec [^String col-name, ^double value]
-                (tu/open-vec col-name [value]))]
+              (->float8-vec [^double value]
+                (tu/open-vec [value]))]
 
         (t/is (= {:res [(Duration/parse "PT0.002001S")]
                   :res-type #xt/type [:duration :micro]}
                  (test-projection '+
-                                  #(->dur-vec "x" :micro 1)
-                                  #(->dur-vec "y" :milli 2))))
+                                  #(->dur-vec :micro 1)
+                                  #(->dur-vec :milli 2))))
 
         (t/is (= {:res [(Duration/parse "PT-1.999S")]
                   :res-type #xt/type [:duration :milli]}
                  (test-projection '-
-                                  #(->dur-vec "x" :milli 1)
-                                  #(->dur-vec "y" :second 2))))
+                                  #(->dur-vec :milli 1)
+                                  #(->dur-vec :second 2))))
 
         (t/is (= {:res [(Duration/parse "PT0.002S")]
                   :res-type #xt/type [:duration :milli]}
                  (test-projection '*
-                                  #(->dur-vec "x" :milli 1)
-                                  #(->bigint-vec "y" 2))))
+                                  #(->dur-vec :milli 1)
+                                  #(->bigint-vec 2))))
 
         (t/is (= {:res [(Duration/parse "PT10S")]
                   :res-type #xt/type [:duration :second]}
                  (test-projection '*
-                                  #(->bigint-vec "x" 2)
-                                  #(->dur-vec "y" :second 5))))
+                                  #(->bigint-vec 2)
+                                  #(->dur-vec :second 5))))
 
         (t/is (= {:res [(Duration/parse "PT0.000012S")]
                   :res-type #xt/type [:duration :micro]}
                  (test-projection '*
-                                  #(->float8-vec "x" 2.4)
-                                  #(->dur-vec "y" :micro 5))))
+                                  #(->float8-vec 2.4)
+                                  #(->dur-vec :micro 5))))
 
         (t/is (= {:res [(Duration/parse "PT3S")]
                   :res-type #xt/type [:duration :second]}
                  (test-projection '/
-                                  #(->dur-vec "x" :second 10)
-                                  #(->bigint-vec "y" 3))))))))
+                                  #(->dur-vec :second 10)
+                                  #(->bigint-vec 3))))))))
 
 (t/deftest cast-duration-test
   (letfn [(run-cast [s col-type]
@@ -1975,7 +1974,7 @@
       (t/is (= [nil true] (:res (run-projection rel '(== xs []))))))))
 
 (t/deftest a-null-struct-row-never-reaches-its-valueless-field-5948
-  (with-open [rel (vr/rel-reader [(tu/open-vec "s" #xt/type [:struct {"a" :nothing}] [nil])])]
+  (with-open [rel (vr/keyed-rel-reader {"s" (tu/open-vec #xt/type [:struct {"a" :nothing}] [nil])} 1)]
     (t/is (= #xt/type [:? :struct {"a" :nothing}]
              (.getType (.vectorForOrNull rel "s")))
           "the field's type is the lattice bottom, which is what makes this test cover anything")
@@ -1998,17 +1997,15 @@
     (t/is (= [true] (:res (run-projection rel '(== s s))))
           "struct comparison recurses into the field, so the bottom is reached one level down")))
 
-;; `RelationAsStructReader.valueReader()` has no `pos`, so an expression can only ever see a copy -
-;; which is why the read below goes through `rowCopier` rather than reading the view directly.
 (t/deftest a-star-struct-cannot-carry-the-bottom-to-a-read-5948
-  (with-open [inner (vr/rel-reader [(doto (NullVector. "a" false 0)
-                                      (.writeUndefined)
-                                      (.writeUndefined))]
-                                   2)
-              star (.open (ProjectionSpec$Star. "s" #xt/type [:struct {"a" :nothing}])
+  (with-open [inner (vr/keyed-rel-reader {"a" (doto (NullVector. false 0)
+                                                (.writeUndefined)
+                                                (.writeUndefined))}
+                                         2)
+              star (.open (ProjectionSpec$Star. #xt/type [:struct {"a" :nothing}])
                           tu/*allocator* {} vw/empty-args)
               s (.project star inner)
-              out (Vector/open tu/*allocator* "s" #xt/type [:struct {"a" :nothing}])]
+              out (Vector/open tu/*allocator* #xt/type [:struct {"a" :nothing}])]
 
     (t/is (= #xt/type [:struct {"a" :nothing}] (.getType s))
           "the premise: rows present, child still at the bottom")
@@ -2021,7 +2018,7 @@
     (t/is (= #xt/type [:struct {"a" :null}] (.getType out))
           "copying is what heals it - the child's rowCopier writes a real null")
 
-    (let [rel (vr/rel-reader [out] 2)]
+    (let [rel (vr/keyed-rel-reader {"s" out} 2)]
       (t/is (= [nil nil] (:res (run-projection rel '(== s s))))
             "3VL: the only field is null on both sides, so the comparison is unknown")
       (t/is (= [nil nil] (:res (run-projection rel '(. s a))))))))
@@ -2170,9 +2167,10 @@
                                           (+ (. x b) (nth (. x c) 1))]})))))
 
 (t/deftest absent-handling-2944
-  (with-open [rel (vr/rel-reader [(tu/open-vec "x" #xt/type [:struct {"maybe-float" [:? :f64],
-                                                                        "maybe-str" [:? :utf8]}]
-                                               [{}])])]
+  (with-open [rel (vr/keyed-rel-reader {"x" (tu/open-vec #xt/type [:struct {"maybe-float" [:? :f64],
+                                                                             "maybe-str" [:? :utf8]}]
+                                                    [{}])}
+                                       1)]
 
     (t/is (= {:res [nil], :res-type #xt/type [:? :f64]}
              (run-projection rel '(+ 42.0 (. x maybe-float)))))
@@ -2191,7 +2189,7 @@
         la-zdt-micros (-> la-zdt (.truncatedTo ChronoUnit/MICROS))]
     (binding [expr/*clock* (InstantSource/fixed inst)]
       (letfn [(project-fn [form]
-                (run-projection (vr/rel-reader [] 1) form))]
+                (run-projection (vr/keyed-rel-reader {} 1) form))]
         (binding [expr/*default-tz* utc-tz]
           (t/testing "UTC"
             (t/is (= {:res [utc-zdt-micros]
@@ -2223,7 +2221,7 @@
           (t/testing "LA"
             (t/is (= {:res [la-zdt-micros]
                       :res-type #xt/type [:timestamp-tz :micro "America/Los_Angeles"]}
-                     (run-projection (vr/rel-reader [] 1) '(current-timestamp)))
+                     (run-projection (vr/keyed-rel-reader {} 1) '(current-timestamp)))
                   "current-timestamp")
 
             ;; these two are where we may differ from the spec, due to Type's Date and Time types not supporting a TZ.
@@ -2257,7 +2255,7 @@
           (t/testing "timestamp precision"
             (t/is (= {:res [(-> la-zdt (.minusNanos 45))]
                       :res-type #xt/type [:timestamp-tz :nano "America/Los_Angeles"]}
-                     (run-projection (vr/rel-reader [] 1) '(current-timestamp 7)))
+                     (run-projection (vr/keyed-rel-reader {} 1) '(current-timestamp 7)))
                   "current-timestamp")
 
             (t/is (= {:res [(-> la-zdt-micros (.truncatedTo ChronoUnit/SECONDS) (.toLocalDateTime))]

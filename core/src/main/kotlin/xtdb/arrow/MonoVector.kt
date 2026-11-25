@@ -11,7 +11,6 @@ import java.math.BigDecimal
 
 sealed class MonoVector : Vector(), VectorReader, VectorWriter {
 
-    abstract override var name: String
     abstract override var nullable: Boolean
 
     abstract override var valueCount: Int; internal set
@@ -59,13 +58,7 @@ sealed class MonoVector : Vector(), VectorReader, VectorWriter {
         // if it's a NullVector coming in, don't promote - we can just set ourselves to nullable. #4675
         when {
             targetType != arrowType && targetType != NULL_TYPE -> {
-                // the DUV inherits this field's name; this mono becomes a leg, so it must take its
-                // type-derived leg name *before* the union resolves legs by name - otherwise a field
-                // keyed like a type-leg (e.g. "utf8") collides with the leg being added. #5714
-                val fieldName = name
-                this@MonoVector.name = arrowType.toLeg()
-
-                DenseUnionVector(al, fieldName, listOf(this), valueCount)
+                DenseUnionVector(al, listOf(arrowType.toLeg()), listOf(this), valueCount)
                     .apply {
                         repeat(this.valueCount) { idx ->
                             typeBuffer.writeByte(0)

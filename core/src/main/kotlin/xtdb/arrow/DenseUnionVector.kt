@@ -25,7 +25,7 @@ import org.apache.arrow.vector.complex.DenseUnionVector as ArrowDenseUnionVector
 
 class DenseUnionVector private constructor(
     private val allocator: BufferAllocator,
-    override var name: String, legVectors: List<Vector> = emptyList(),
+    legNames: List<String> = emptyList(), legVectors: List<Vector> = emptyList(),
     internal val typeBuffer: ExtensibleBuffer = ExtensibleBuffer(allocator),
     internal val offsetBuffer: ExtensibleBuffer = ExtensibleBuffer(allocator),
     override var valueCount: Int = 0
@@ -33,9 +33,9 @@ class DenseUnionVector private constructor(
 
     @JvmOverloads
     constructor(
-        al: BufferAllocator, name: String, legVectors: List<Vector> = emptyList(), valueCount: Int = 0
+        al: BufferAllocator, legNames: List<String> = emptyList(), legVectors: List<Vector> = emptyList(), valueCount: Int = 0
     ) : this(
-        al, name, legVectors,
+        al, legNames, legVectors,
         ExtensibleBuffer(al), ExtensibleBuffer(al),
         valueCount
     )
@@ -49,9 +49,16 @@ class DenseUnionVector private constructor(
     override val arrowType = UNION_TYPE
     override val type get() = fromLegs(vectors.map { it.type })
 
+    init {
+        require(legNames.size == legVectors.size) { "a union names each of its legs" }
+    }
+
+    /** A leg is named by the union that holds it: its type id indexes both lists. */
+    private val names = legNames.toMutableList()
     private val legVectors = legVectors.toMutableList()
 
     override val vectors: Iterable<Vector> get() = legVectors
+    override val childFields get() = legVectors.mapIndexed { typeId, leg -> leg.toField(names[typeId]) }
 
     internal class LegReader(
         override val valueCount: Int,
@@ -59,10 +66,9 @@ class DenseUnionVector private constructor(
         private val closeBuffers: Boolean,
         val typeId: Byte, val inner: VectorReader, val nested: Boolean = false
     ) : VectorReader {
-        override val name get() = inner.name
         override val nullable get() = inner.nullable
         override val arrowType: ArrowType get() = inner.arrowType
-        override val field get() = inner.field
+        override fun toField(name: String) = inner.toField(name)
         override val childFields get() = inner.childFields
         override val type: VectorType get() = inner.type
 
@@ -258,8 +264,10 @@ class DenseUnionVector private constructor(
     }
 
     override fun getObject(idx: Int, keyFn: IKeyFn<*>): Any? {
-        val leg = leg(idx) ?: error("no leg for index $idx")
-        val legName = leg.name
+        val typeId = getTypeId(idx).toInt()
+        check(typeId >= 0) { "no leg for index $idx" }
+        val legName = names[typeId]
+        val leg = legVectors[typeId]
         val value = leg.getObject(getOffset(idx), keyFn)
 
         return if (legName == leg.arrowType.toLeg()) value else TaggedValue(legName.kw, value)
@@ -275,32 +283,27 @@ class DenseUnionVector private constructor(
 
     override fun writeValue0(v: ValueReader) = throw UnsupportedOperationException()
 
-    override fun getLeg(idx: Int) = leg(idx)?.name
+    override fun getLeg(idx: Int) = getTypeId(idx).takeIf { it >= 0 }?.let { names[it.toInt()] }
 
-    override val legNames get() = legVectors.mapTo(mutableSetOf()) { it.name }
+    override val legNames: Set<String> get() = names.toCollection(linkedSetOf())
 
     override fun vectorForOrNull(name: String): VectorWriter? {
-        for (i in legVectors.indices) {
-            val leg = legVectors[i]
-            if (leg.name == name) return LegVector(i.toByte(), leg)
-        }
-
-        return null
+        val typeId = names.indexOf(name)
+        return if (typeId < 0) null else LegVector(typeId.toByte(), legVectors[typeId])
     }
 
     private fun legVectorFor(name: String, arrowType: ArrowType, nullable: Boolean): LegVector {
-        for (i in legVectors.indices) {
-            val leg = legVectors[i]
-            if (leg.name == name) {
-                if (leg.arrowType != arrowType) throw Unsupported("cannot promote DUV leg")
-                leg.nullable = leg.nullable || nullable
+        val existing = names.indexOf(name)
+        if (existing >= 0) {
+            val leg = legVectors[existing]
+            if (leg.arrowType != arrowType) throw Unsupported("cannot promote DUV leg")
+            leg.nullable = leg.nullable || nullable
 
-                return LegVector(i.toByte(), leg)
-            }
+            return LegVector(existing.toByte(), leg)
         }
 
         val typeId = legVectors.size.toByte()
-        val legVec = allocator.openVector(name, arrowType, nullable).also { legVectors.add(it) }
+        val legVec = allocator.openVector(arrowType, nullable).also { names.add(name); legVectors.add(it) }
         return LegVector(typeId, legVec)
     }
 
@@ -311,7 +314,6 @@ class DenseUnionVector private constructor(
 
     override fun valueReader(): RowValueReader {
         val legReaders = Array(legVectors.size) { legVectors[it].valueReader() }
-        val legNames = Array(legVectors.size) { legVectors[it].name }
         val absentReader = ValueReader.ForVector(this)
 
         return object : RowValueReader {
@@ -329,7 +331,7 @@ class DenseUnionVector private constructor(
                         leg = null
                         legReader = absentReader.also { it.pos = value }
                     } else {
-                        leg = legNames[typeId]
+                        leg = names[typeId]
                         legReader = legReaders[typeId].also { it.pos = getOffset(value) }
                     }
                 }
@@ -388,7 +390,7 @@ class DenseUnionVector private constructor(
                 }
 
                 object : RowCopier {
-                    val pairs = src.legVectors.map { it to legVectorFor(it.name, it.arrowType, it.nullable) }
+                    val pairs = src.legVectors.mapIndexed { typeId, leg -> leg to legVectorFor(src.names[typeId], leg.arrowType, leg.nullable) }
                     val destTypeIds = ByteArray(pairs.size) { pairs[it].second.typeId }
                     val copiers = pairs.map { (srcLeg, destLeg) -> LegCopier(srcLeg, destLeg) }
 
@@ -503,8 +505,8 @@ class DenseUnionVector private constructor(
     override fun unloadPage(target: Field, unloader: ConformingUnloader) {
         if (target.type !is ArrowType.Union) return unloader.copy(this, target)
 
-        val targetLegIdxs = legVectors.map { leg ->
-            target.children.indexOfFirst { it.name == leg.name }.also { if (it < 0) unloader.notInTarget(leg, target) }
+        val targetLegIdxs = legVectors.mapIndexed { typeId, leg ->
+            target.children.indexOfFirst { it.name == names[typeId] }.also { if (it < 0) unloader.notInTarget(names[typeId], leg, target) }
         }
 
         unloader.nodes.add(ArrowFieldNode(valueCount.toLong(), -1))
@@ -550,7 +552,7 @@ class DenseUnionVector private constructor(
             if (legStarts[typeId] < 0) legStarts[typeId] = offset
 
             check(offset == legStarts[typeId] + legLens[typeId]) {
-                "non-contiguous DUV leg offsets: leg ${legVectors[typeId].name}, row $idx"
+                "non-contiguous DUV leg offsets: leg ${names[typeId]}, row $idx"
             }
 
             legLens[typeId]++
@@ -593,7 +595,7 @@ class DenseUnionVector private constructor(
         typeBuffer.loadBuffer(vec.typeBuffer, vc.toLong())
         offsetBuffer.loadBuffer(vec.offsetBuffer, vc.toLong() * Int.SIZE_BYTES)
 
-        legVectors.forEach { it.loadFromArrow(vec.getChild(it.name)) }
+        legVectors.forEachIndexed { typeId, leg -> leg.loadFromArrow(vec.getChild(names[typeId])) }
 
         valueCount = vc
     }
@@ -602,7 +604,7 @@ class DenseUnionVector private constructor(
         val legSlices = openAll { legVectors.safeMap { it.openSlice(al) } }
         val typeSlice = open { typeBuffer.openSlice(al) }
         val offsetSlice = open { offsetBuffer.openSlice(al) }
-        DenseUnionVector(al, name, legSlices.toList(), typeSlice, offsetSlice, valueCount)
+        DenseUnionVector(al, names, legSlices.toList(), typeSlice, offsetSlice, valueCount)
     }
 
     override fun maybePromote(al: BufferAllocator, targetType: ArrowType, targetNullable: Boolean) = apply {

@@ -17,7 +17,7 @@ class MemoryHashTrieTest {
     @BeforeEach
     fun setUp() {
         allocator = RootAllocator()
-        iidReader = IntVector.open(allocator, "_iid", true)
+        iidReader = IntVector.open(allocator, true)
     }
 
     @AfterEach

@@ -11,10 +11,9 @@ class MaskedRelation private constructor(private val inner: RelationReader, inte
 
     override val rowCount: Int get() = mask.cardinality
 
-    private val cols: Map<String, VectorReader> =
-        inner.vectors.associateByTo(linkedMapOf(), { it.name }) { MaskedVector(it, mask) }
+    override val cols: Map<String, VectorReader> =
+        inner.cols.mapValuesTo(linkedMapOf()) { MaskedVector(it.value, mask) }
 
-    override val vectors: Collection<VectorReader> get() = cols.values
     override fun vectorForOrNull(name: String) = cols[name]
 
     override fun select(idxs: IntArray): RelationReader {

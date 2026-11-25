@@ -23,7 +23,7 @@ class VectorTest {
 
     @Test
     fun `doesn't promote if source is a null-vec #4675`(al: BufferAllocator) {
-        LongVector(al, "i64", true).use { vec ->
+        LongVector(al, true).use { vec ->
             val maybePromoted = vec.maybePromote(al, NULL_TYPE, true)
             assertSame(vec, maybePromoted)
         }
@@ -44,10 +44,10 @@ class VectorTest {
     @ParameterizedTest
     @MethodSource("copiedValues")
     fun `writeValue copies each row from another vector's value reader`(type: VectorType, values: List<Any>, al: BufferAllocator) {
-        al.openVector("src", type).use { src ->
+        al.openVector(type).use { src ->
             values.forEach { src.writeObject(it) }
 
-            al.openVector("dest", type).use { dest ->
+            al.openVector(type).use { dest ->
                 val rdr = src.valueReader()
                 for (idx in values.indices) {
                     rdr.pos = idx

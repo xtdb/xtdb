@@ -159,7 +159,7 @@ private fun FlightStream.readParams(allocator: BufferAllocator): Relation? {
         Relation(allocator, fields).use { batch ->
             val copier = batch.rowCopier(acc)
             while (next()) {
-                batch.vectors.zip(root.fieldVectors).forEach { (vec, arrowVec) -> vec.loadFromArrow(arrowVec) }
+                batch.cols.values.zip(root.fieldVectors).forEach { (vec, arrowVec) -> vec.loadFromArrow(arrowVec) }
                 batch.rowCount = root.rowCount
                 copier.copyRange(0, batch.rowCount)
             }

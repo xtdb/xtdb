@@ -28,17 +28,17 @@ sealed class Variance(
         override fun aggregate(inRel: RelationReader, groupMapping: GroupMapping, mask: RowMask) {
             val inVec = inRel.vectorForOrNull(fromName) ?: return
 
-            DoubleVector(al, "x2", nullable = true)
+            DoubleVector(al, nullable = true)
                 .closeOnCatch { inVec.squareInto(it) }
                 .use { x2Vec ->
                     sumxAgg.aggregate(inRel, groupMapping, mask)
-                    sumx2Agg.aggregate(RelationReader.from(listOf(x2Vec), inRel.rowCount), groupMapping, mask)
+                    sumx2Agg.aggregate(RelationReader.from(mapOf("x2" to x2Vec), inRel.rowCount), groupMapping, mask)
                     countAgg.aggregate(inRel, groupMapping, mask)
                 }
         }
 
         override fun openFinishedVector(): Vector {
-            val outVec = al.openVector(colName, type) as DoubleVector
+            val outVec = al.openVector(type) as DoubleVector
 
             sumxAgg.openFinishedVector().use { sumxVec ->
                 sumx2Agg.openFinishedVector().use { sumx2Vec ->

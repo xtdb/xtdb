@@ -323,7 +323,7 @@
     (fn [parent _]
       (binding [order-by/*block-size* 10]
         (with-open [rel (tu/open-rel {"v" (vec (range 25))})
-                    group-mapping (tu/open-vec "group-mapping" #xt/type :i32 (vec (repeat 25 (int 0))))]
+                    group-mapping (tu/open-vec #xt/type :i32 (vec (repeat 25 (int 0))))]
           (with-open [^AggregateSpec spec (.build (group-by/->aggregate-factory {:f :percentile_cont
                                                                                  :from-name 'v
                                                                                  :from-type #xt/type :i64

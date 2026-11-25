@@ -11,7 +11,7 @@ interface RelationWriter : RelationReader {
 
     override var rowCount: Int
 
-    override val vectors: Collection<VectorWriter>
+    override val cols: Map<String, VectorWriter>
     override fun vectorForOrNull(name: String): VectorWriter?
     override fun vectorFor(name: String) = vectorForOrNull(name) ?: error("missing vector: $name")
     fun vectorFor(name: String, arrowType: ArrowType, nullable: Boolean): VectorWriter = unsupported("vectorFor/2")
@@ -21,7 +21,7 @@ interface RelationWriter : RelationReader {
     fun endRow() = endRows(1)
 
     fun append(rel: RelationReader) {
-        rel.vectors.forEach { vectorFor(it.name, it.arrowType, it.nullable).append(it) }
+        rel.cols.forEach { (name, v) -> vectorFor(name, v.arrowType, v.nullable).append(v) }
         rowCount += rel.rowCount
     }
 
@@ -54,12 +54,12 @@ interface RelationWriter : RelationReader {
      * Resets the row count and all vectors, leaving the buffers allocated.
      */
     fun clear() {
-        vectors.forEach { it.clear() }
+        cols.values.forEach { it.clear() }
         rowCount = 0
     }
 
     override fun close() {
-        vectors.closeAll()
+        cols.values.closeAll()
         rowCount = 0
     }
 }

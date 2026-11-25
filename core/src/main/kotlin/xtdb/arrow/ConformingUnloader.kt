@@ -55,8 +55,8 @@ internal class ConformingUnloader(private val al: BufferAllocator) : AutoCloseab
 
     fun empty(target: Field) = generated(al.openVector(target)).unloadPage(nodes, buffers)
 
-    fun notInTarget(vec: VectorReader, target: Any): Nothing =
-        throw Fault("a page's '${vec.name}' (${vec.arrowType}) isn't in its declared type $target", "xtdb/page-outside-declared-type")
+    fun notInTarget(name: String, vec: VectorReader, target: Any): Nothing =
+        throw Fault("a page's '$name' (${vec.arrowType}) isn't in its declared type $target", "xtdb/page-outside-declared-type")
 
     private fun unloadBuffer(len: Int, write: ExtensibleBuffer.(Int) -> Unit) =
         generated(ExtensibleBuffer(al)).apply { repeat(len) { write(it) } }.unloadBuffer(buffers)

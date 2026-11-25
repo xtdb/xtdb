@@ -38,12 +38,12 @@ class MapVectorTest {
         val m3 = mapOf(3 to "!")
 
         val children = linkedMapOf<String, Vector>(
-            "key" to IntVector.open(allocator, "key", false),
-            "value" to Utf8Vector(allocator, "value", true)
+            "key" to IntVector.open(allocator, false),
+            "value" to Utf8Vector(allocator, true)
         )
 
-        val struct = StructVector(allocator, "struct", false, children)
-        val list = ListVector(allocator, "entries", false, struct)
+        val struct = StructVector(allocator, false, children)
+        val list = ListVector(allocator, false, struct)
         MapVector(list, true).use { mapVec ->
             mapVec.writeObject(m1)
             mapVec.writeObject(m2)
@@ -60,17 +60,17 @@ class MapVectorTest {
         val m3 = mapOf(3 to "!")
 
         val children = linkedMapOf<String, Vector>(
-            "key" to IntVector.open(allocator, "key", false),
-            "value" to Utf8Vector(allocator, "value", true)
+            "key" to IntVector.open(allocator, false),
+            "value" to Utf8Vector(allocator, true)
         )
 
-        val struct = StructVector(allocator, "entries", false, children)
-        val list = ListVector(allocator, "map", false, struct)
+        val struct = StructVector(allocator, false, children)
+        val list = ListVector(allocator, false, struct)
         val map = MapVector(list, true)
 
         val buf = ByteArrayOutputStream()
 
-        Relation(allocator, listOf(map), 0).use { rel ->
+        Relation(allocator, linkedMapOf<String, Vector>("map" to map), 0).use { rel ->
             rel.startUnload(Channels.newChannel(buf)).use { unloader ->
                 map.writeObject(m1)
                 rel.endRow()

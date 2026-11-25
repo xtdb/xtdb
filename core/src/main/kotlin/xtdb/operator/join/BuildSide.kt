@@ -22,8 +22,8 @@ class BuildSide(
     val inMemoryThreshold: Long = 100_000,
 ) : AutoCloseable {
     val dataRel = Relation(al, vecTypes)
-    private val hashCol = IntVector.open(al, "hashes", false)
-    private val hashScratch = IntVector.open(al, "hash-scratch", false)
+    private val hashCol = IntVector.open(al, false)
+    private val hashScratch = IntVector.open(al, false)
 
     var buildMap: BuildSideMap? = null; private set
 
@@ -108,7 +108,7 @@ class BuildSide(
                 val buildRel = dataRel.select(idxs)
                 val probeRel =
                     RelationReader
-                        .from(nullColNames.map { NullVector(it, true, 1) })
+                        .from(nullColNames.associateWith { NullVector(true, 1) })
                         .select(IntArray(idxs.size))
 
                 if (joinType.outerJoinType == JoinType.OuterJoinType.LEFT_FLIPPED)

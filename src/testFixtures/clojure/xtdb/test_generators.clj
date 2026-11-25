@@ -149,10 +149,8 @@
          (assoc :xt/id id)))))
 
 (defn typed-vector-vs-gen [element-gen min-length max-length]
-  (gen/let [vector-name non-blank-string-gen
-            vs (gen/vector element-gen min-length max-length)]
-    {:vec-name vector-name
-     :vs vs
+  (gen/let [vs (gen/vector element-gen min-length max-length)]
+    {:vs vs
      :type element-gen}))
 
 (defn single-type-vector-vs-gen
@@ -176,21 +174,16 @@
 
 (def two-distinct-single-type-vecs-gen
   (gen/let [vec1 (single-type-vector-vs-gen 1 100)
-            vec2 (gen/such-that #(and (not= (:type %) (:type vec1))
-                                      (not= (:vec-name %) (:vec-name vec1)))
+            vec2 (gen/such-that #(not= (:type %) (:type vec1))
                                 (single-type-vector-vs-gen 1 100)
                                 100)]
     [vec1 vec2]))
 
-(def two-distinct-duvs-gen
-  (gen/let [duv1 (dense-union-vector-vs-gen 1 100)
-            duv2 (gen/such-that #(not= (:vec-name %) (:vec-name duv1))
-                                (dense-union-vector-vs-gen 1 100)
-                                100)]
-    [duv1 duv2]))
+(def two-duvs-gen
+  (gen/tuple (dense-union-vector-vs-gen 1 100) (dense-union-vector-vs-gen 1 100)))
 
-(defn vec-gen->arrow-vec [^BufferAllocator allocator {:keys [^String vec-name ^List vs]}]
-  (Vector/fromList allocator vec-name vs))
+(defn vec-gen->arrow-vec [^BufferAllocator allocator {:keys [^List vs]}]
+  (Vector/fromList allocator vs))
 
 (defprotocol ValueGenerator
   (vec-type->value-generator [vec-type]))

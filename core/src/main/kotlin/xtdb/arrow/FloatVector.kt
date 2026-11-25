@@ -11,15 +11,15 @@ import xtdb.util.Hasher
 
 class FloatVector private constructor(
     override val al: BufferAllocator,
-    override var name: String, override var valueCount: Int,
+    override var valueCount: Int,
     override var validityBuffer: BitBuffer?, override val dataBuffer: ExtensibleBuffer
 ) : NumericVector(), MetadataFlavour.Number {
 
     override val byteWidth = Float.SIZE_BYTES
     override val arrowType: ArrowType = F32_TYPE
 
-    constructor(al: BufferAllocator, name: String, nullable: Boolean)
-            : this(al, name, 0, if (nullable) BitBuffer(al) else null, ExtensibleBuffer(al))
+    constructor(al: BufferAllocator, nullable: Boolean)
+            : this(al, 0, if (nullable) BitBuffer(al) else null, ExtensibleBuffer(al))
 
     override fun getFloat(idx: Int) = getFloat0(idx)
 
@@ -49,7 +49,7 @@ class FloatVector private constructor(
     override fun hashCode0(idx: Int, hasher: Hasher): Int = hasher.hash(getFloat(idx).toDouble())
 
     override fun openSlice(al: BufferAllocator) =
-        FloatVector(al, name, valueCount, validityBuffer?.openSlice(al), dataBuffer.openSlice(al))
+        FloatVector(al, valueCount, validityBuffer?.openSlice(al), dataBuffer.openSlice(al))
 
     override fun doublesTo(out: DoubleArrayList, sel: IntArray?) = out.addDoubles(valueCount, sel) { dataBuffer.getFloat(it).toDouble() }
 }

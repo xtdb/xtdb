@@ -26,7 +26,7 @@ internal fun TimeUnit.toDuration(value: Long): Duration = when (this) {
 
 class DurationVector private constructor(
     override val al: BufferAllocator,
-    override var name: String, override var valueCount: Int,
+    override var valueCount: Int,
     val unit: TimeUnit = MICROSECOND,
     override var validityBuffer: BitBuffer?, override val dataBuffer: ExtensibleBuffer
 ) : FixedWidthVector(), MetadataFlavour.Duration {
@@ -35,8 +35,8 @@ class DurationVector private constructor(
     override val arrowType = ArrowType.Duration(unit)
 
     constructor(
-        al: BufferAllocator, name: String, nullable: Boolean, unit: TimeUnit
-    ) : this(al, name, 0, unit, if (nullable) BitBuffer(al) else null, ExtensibleBuffer(al))
+        al: BufferAllocator, nullable: Boolean, unit: TimeUnit
+    ) : this(al, 0, unit, if (nullable) BitBuffer(al) else null, ExtensibleBuffer(al))
 
     override fun getLong(idx: Int) = getLong0(idx)
     override fun writeLong(v: Long) = writeLong0(v)
@@ -95,7 +95,7 @@ class DurationVector private constructor(
     override fun hashCode0(idx: Int, hasher: Hasher) = hasher.hash(getMetaDouble(idx))
 
     override fun openSlice(al: BufferAllocator) =
-        DurationVector(al, name, valueCount, unit, validityBuffer?.openSlice(al), dataBuffer.openSlice(al))
+        DurationVector(al, valueCount, unit, validityBuffer?.openSlice(al), dataBuffer.openSlice(al))
 
     override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) =
         doubleHashes(this, out, sel, hasher) { it.addDoubles(valueCount, sel) { idx -> if (isNull(idx)) 0.0 else getMetaDouble(idx) } }

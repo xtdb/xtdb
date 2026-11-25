@@ -45,8 +45,8 @@
                             {:var-types {left-vec (.getType left-col)
                                          right-vec (.getType right-col)}
                              :param-types param-types})]
-    (f (vr/rel-reader [(.withName left-col (str left-vec))])
-       (vr/rel-reader [(.withName right-col (str right-vec))])
+    (f (vr/keyed-rel-reader {(str left-vec) left-col} (.getValueCount left-col))
+       (vr/keyed-rel-reader {(str right-vec) right-col} (.getValueCount right-col))
        pg-class-schema-hack
        params)))
 

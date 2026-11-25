@@ -11,15 +11,15 @@ import xtdb.util.Hasher
 
 class ShortVector private constructor(
     override val al: BufferAllocator,
-    override var name: String, override var valueCount: Int,
+    override var valueCount: Int,
     override var validityBuffer: BitBuffer?, override val dataBuffer: ExtensibleBuffer
 ) : IntegerVector(), MetadataFlavour.Number {
 
     override val arrowType: ArrowType = I16_TYPE
     override val byteWidth = Short.SIZE_BYTES
 
-    constructor(al: BufferAllocator, name: String, nullable: Boolean)
-            : this(al, name, 0, if (nullable) BitBuffer(al) else null, ExtensibleBuffer(al))
+    constructor(al: BufferAllocator, nullable: Boolean)
+            : this(al, 0, if (nullable) BitBuffer(al) else null, ExtensibleBuffer(al))
 
     override fun getShort(idx: Int) = getShort0(idx)
     override fun writeShort(v: Short) = writeShort0(v)
@@ -41,7 +41,7 @@ class ShortVector private constructor(
     override fun hashCode0(idx: Int, hasher: Hasher) = hasher.hash(getShort(idx).toDouble())
 
     override fun openSlice(al: BufferAllocator) =
-        ShortVector(al, name, valueCount, validityBuffer?.openSlice(al), dataBuffer.openSlice(al))
+        ShortVector(al, valueCount, validityBuffer?.openSlice(al), dataBuffer.openSlice(al))
 
     override fun doublesTo(out: DoubleArrayList, sel: IntArray?) = out.addDoubles(valueCount, sel) { dataBuffer.getShort(it).toDouble() }
 }

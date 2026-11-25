@@ -43,12 +43,12 @@ open class VectorReadBenchmark {
     private lateinit var megaSelection: List<VectorReader>
 
     private fun longVector(rows: Int, nullable: Boolean, rnd: Random) =
-        LongVector(al, "v", nullable).apply {
+        LongVector(al, nullable).apply {
             repeat(rows) { if (nullable && rnd.nextInt(10) == 0) writeNull() else writeLong(rnd.nextLong()) }
         }
 
     private fun utf8Vector(rows: Int, nullable: Boolean, rnd: Random) =
-        Utf8Vector(al, "v", nullable).apply {
+        Utf8Vector(al, nullable).apply {
             repeat(rows) {
                 if (nullable && rnd.nextInt(10) == 0) writeNull()
                 else writeBytes(ByteArray(1 + rnd.nextInt(16)) { 'a'.code.toByte() })
@@ -61,10 +61,10 @@ open class VectorReadBenchmark {
         }
 
         return listOf(
-            LongVector(al, "v", true).fill { writeLong(rnd.nextLong()) },
-            TimestampLocalVector(al, "v", true, MICROSECOND).fill { writeLong(rnd.nextLong()) },
-            DurationVector(al, "v", true, MICROSECOND).fill { writeLong(rnd.nextLong()) },
-            DateMilliVector(al, "v", true).fill { writeLong(rnd.nextLong()) },
+            LongVector(al, true).fill { writeLong(rnd.nextLong()) },
+            TimestampLocalVector(al, true, MICROSECOND).fill { writeLong(rnd.nextLong()) },
+            DurationVector(al, true, MICROSECOND).fill { writeLong(rnd.nextLong()) },
+            DateMilliVector(al, true).fill { writeLong(rnd.nextLong()) },
         )
     }
 

@@ -20,11 +20,11 @@ import java.util.UUID
 class ConformingUnloadTest {
 
     private fun RelationReader.fieldOrAbsent(name: String) =
-        vectorForOrNull(name)?.field ?: Field(name, FieldType.nullable(NULL_TYPE), null)
+        vectorForOrNull(name)?.toField(name) ?: Field(name, FieldType.nullable(NULL_TYPE), null)
 
     // the declared type of each column across both pages, as XTDB's own type merge has it
     private fun mergedSchema(a: RelationReader, b: RelationReader) =
-        Schema((a.vectors + b.vectors).map { it.name }.distinct().map { name ->
+        Schema((a.cols.keys + b.cols.keys).map { name ->
             MergeFields.mergeFields(listOf(a.fieldOrAbsent(name), b.fieldOrAbsent(name)))
                 .let { Field(name, it.fieldType, it.children) }
         })

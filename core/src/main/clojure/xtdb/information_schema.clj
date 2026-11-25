@@ -634,8 +634,7 @@
                                       (reduce (fn [^RelationReader rel ^SelectionSpec col-pred]
                                                 (.select rel (.toSelection (.select col-pred rel))))
                                               (-> out-rel
-                                                  (->> (filter (comp (set col-names) #(.getName ^VectorReader %))))
-                                                  (vr/rel-reader (.getRowCount out-rel))
+                                                  (vr/select-cols (set col-names))
                                                   (vr/with-absent-cols allocator col-names))
                                               (vals col-preds)))
                                     out-rel))))))

@@ -15,7 +15,7 @@ class RowCount(override val colName: FieldName, val hasZeroRow: Boolean) : Aggre
     override val type: VectorType = I64
 
     override fun build(al: BufferAllocator, args: RelationReader): AggregateSpec {
-        val outVec = LongVector(al, colName, false)
+        val outVec = LongVector(al, false)
 
         return object : AggregateSpec {
 

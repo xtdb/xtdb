@@ -11,6 +11,9 @@ import xtdb.arrow.VectorType.Companion.BOOL
 import xtdb.arrow.VectorType.Companion.I64
 import xtdb.arrow.VectorType.Companion.INSTANT
 import xtdb.arrow.VectorType.Companion.TRANSIT
+import xtdb.arrow.Vector.Companion.openVector
+import xtdb.arrow.VectorType.Companion.listTypeOf
+import xtdb.arrow.VectorType.Companion.structOf
 import xtdb.authz.RoleMembership
 import xtdb.database.DatabaseName
 import xtdb.database.PartitionState
@@ -279,19 +282,21 @@ class OpenTx
                                     setOf("_iid", "_system_from", "_system_to", "_valid_from", "_valid_to")
 
                                 val contentRel = RelationReader.from(
-                                    rel.vectors.filter { it.name !in tempColNames },
+                                    rel.cols.filterKeys { it !in tempColNames },
                                     rel.rowCount,
                                 )
 
-                                val putCols = listOfNotNull(
-                                    rel.vectorFor("_id"),
-                                    RelationAsStructReader("doc", contentRel),
-                                    rel.vectorForOrNull("_valid_from"),
-                                    rel.vectorForOrNull("_valid_to"),
-                                )
+                                contentRel.openAsStruct(allocator).use { docVec ->
+                                    val putCols = listOfNotNull(
+                                        "_id" to rel.vectorFor("_id"),
+                                        "doc" to docVec,
+                                        rel.vectorForOrNull("_valid_from")?.let { "_valid_from" to it },
+                                        rel.vectorForOrNull("_valid_to")?.let { "_valid_to" to it },
+                                    ).toMap(linkedMapOf())
 
-                                table(stmt.table)
-                                    .writePuts(RelationReader.from(putCols, rel.rowCount), currentTimeMicros, MAX_LONG)
+                                    table(stmt.table)
+                                        .writePuts(RelationReader.from(putCols, rel.rowCount), currentTimeMicros, MAX_LONG)
+                                }
                             }
                         }
                     }
@@ -406,7 +411,7 @@ class OpenTx
                     )
                 }
             } else {
-                val argCount = args.vectors.size
+                val argCount = args.cols.size
                 if (argCount != paramCount) {
                     throw Incorrect(
                         "Parameter error: $argCount provided, $paramCount expected",
@@ -685,16 +690,19 @@ class OpenTx
                 queryCatalog, prepareOpts,
             )
 
-            val patchArgs = RelationReader.from(
-                listOf(SingletonListReader("?patch_docs", RelationAsStructReader("patch_doc", docs)))
-            )
-
             val qOpts = QueryOpts(txKey.systemTime, tracer = tracer)
 
-            // openQuery takes ownership of the sliced args and closes them when the cursor closes —
-            // no separate `.use` on the slice here, or it'd double-free.
-            pq.openQuery(patchArgs.openSlice(allocator), qOpts).use { cursor ->
-                cursor.forEachRemaining { rel -> writePuts(rel, validFromMicros, validToMicros) }
+            allocator.openVector(listTypeOf(structOf(docs.cols.mapValues { it.value.type }))).use { patchDocsVec ->
+                patchDocsVec.getListElements(STRUCT_TYPE, false).appendStructRows(docs)
+                patchDocsVec.endList()
+
+                val patchArgs = RelationReader.from(mapOf("?patch_docs" to patchDocsVec))
+
+                // openQuery takes ownership of the sliced args and closes them when the cursor closes —
+                // no separate `.use` on the slice here, or it'd double-free.
+                pq.openQuery(patchArgs.openSlice(allocator), qOpts).use { cursor ->
+                    cursor.forEachRemaining { rel -> writePuts(rel, validFromMicros, validToMicros) }
+                }
             }
         }
 

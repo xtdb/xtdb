@@ -17,7 +17,7 @@ interface GroupMapper : AutoCloseable {
     fun finish(): RelationReader
 
     class Null(al: BufferAllocator) : GroupMapper {
-        private val groupMapping = al.openVector("group-mapping", I32)
+        private val groupMapping = al.openVector(I32)
 
         override fun groupMapping(inRelation: RelationReader): GroupMapping {
             groupMapping.clear()
@@ -28,13 +28,13 @@ interface GroupMapper : AutoCloseable {
             return groupMapping
         }
 
-        override fun finish(): RelationReader = RelationReader.from(emptyList(), 1)
+        override fun finish(): RelationReader = RelationReader.from(emptyMap(), 1)
 
         override fun close() = groupMapping.close()
     }
 
     class Mapper(al: BufferAllocator, private val relMap: DistinctRelationMap) : GroupMapper {
-        private val groupMapping = al.openVector("group-mapping", I32)
+        private val groupMapping = al.openVector(I32)
 
         override fun groupMapping(inRelation: RelationReader): GroupMapping {
             groupMapping.clear()

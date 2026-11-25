@@ -11,11 +11,10 @@ import xtdb.util.Hasher
 import java.nio.ByteBuffer
 
 class IndirectVector(private val inner: VectorReader, private val sel: VectorIndirection) : VectorReader, LongLongVectorReader {
-    override val name: String get() = inner.name
     override val valueCount: Int get() = sel.valueCount()
     override val nullable: Boolean get() = inner.nullable
     override val arrowType: ArrowType get() = inner.arrowType
-    override val field: Field get() = inner.field
+    override fun toField(name: String) = inner.toField(name)
     override val childFields: List<Field> get() = inner.childFields
     override val type: VectorType get() = inner.type
 

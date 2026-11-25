@@ -37,7 +37,7 @@ class ApplyCursor(
                 }
 
                 val sel = idxs.toArray()
-                val cols = inRel.vectors.map { it.select(sel) } + depOutWriter.vectors
+                val cols = inRel.cols.mapValues { it.value.select(sel) } + depOutWriter.cols
                 c.accept(RelationReader.from(cols, sel.size))
             }
         }

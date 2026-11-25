@@ -37,6 +37,6 @@ class IndexHasher(private val rel: RelationReader, private val hashCols: List<Ve
 
     companion object {
         fun RelationReader.hasher(hashColNames: List<ColumnName>? = null) =
-            IndexHasher(this, hashColNames?.map { this[it] } ?: vectors.toList())
+            IndexHasher(this, hashColNames?.map { this[it] } ?: cols.values.toList())
     }
 }

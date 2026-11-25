@@ -32,10 +32,11 @@ class DenseUnionVectorTest {
     @Test
     fun testDenseUnionVector() {
         DenseUnionVector(
-            allocator, "duv",
+            allocator,
+            listOf("i32", "utf8"),
             listOf(
-                IntVector.open(allocator, "i32", false),
-                Utf8Vector(allocator, "utf8", true)
+                IntVector.open(allocator, false),
+                Utf8Vector(allocator, true)
             )
         ).use { duv ->
             val i32Leg = duv.vectorFor("i32")
@@ -60,10 +61,11 @@ class DenseUnionVectorTest {
     @Test
     fun `a bytes leg's metadata hashes the union rows a selection picks from that leg, in selection order`() {
         DenseUnionVector(
-            allocator, "duv",
+            allocator,
+            listOf("i32", "utf8"),
             listOf(
-                IntVector.open(allocator, "i32", false),
-                Utf8Vector(allocator, "utf8", true)
+                IntVector.open(allocator, false),
+                Utf8Vector(allocator, true)
             )
         ).use { duv ->
             val i32Leg = duv.vectorFor("i32")
@@ -78,7 +80,7 @@ class DenseUnionVectorTest {
             val bytes = duv.metadataFlavours.filterIsInstance<MetadataFlavour.Bytes>().single()
 
             fun hashes(hasher: Hasher, sel: IntArray?) =
-                IntVector.open(allocator, "out", false).use { out ->
+                IntVector.open(allocator, false).use { out ->
                     bytes.hashTo(out, hasher, sel)
                     out.asList
                 }
@@ -93,10 +95,11 @@ class DenseUnionVectorTest {
     @Test
     fun `value reader follows each row's leg`() {
         DenseUnionVector(
-            allocator, "duv",
+            allocator,
+            listOf("i32", "utf8"),
             listOf(
-                IntVector.open(allocator, "i32", false),
-                Utf8Vector(allocator, "utf8", true)
+                IntVector.open(allocator, false),
+                Utf8Vector(allocator, true)
             )
         ).use { duv ->
             val i32Leg = duv.vectorFor("i32")
@@ -167,7 +170,7 @@ class DenseUnionVectorTest {
 
     @Test
     fun `a leg's value reader positions across other legs' rows and absent rows`() {
-        DenseUnionVector(allocator, "duv").use { duv ->
+        DenseUnionVector(allocator).use { duv ->
             val structLeg = duv.vectorFor("struct", STRUCT_TYPE, true)
             structLeg.writeObject(mapOf("a" to 1L))
             repeat(2000) { duv.writeObject(it.toLong()) }
@@ -207,15 +210,16 @@ class DenseUnionVectorTest {
 
     @Test
     fun `scalar into DUV #3609`() {
-        IntVector.open(allocator, "my-int", false).use { myIntVec ->
+        IntVector.open(allocator, false).use { myIntVec ->
             myIntVec.writeInt(32)
             myIntVec.writeInt(64)
 
             DenseUnionVector(
-                allocator, "dest",
+                allocator,
+                listOf("utf8", "i32"),
                 listOf(
-                    Utf8Vector(allocator, "utf8", false),
-                    IntVector.open(allocator, "i32", true)
+                    Utf8Vector(allocator, false),
+                    IntVector.open(allocator, true)
                 )
             ).use { destVec ->
                 myIntVec.rowCopier(destVec).run {
@@ -230,14 +234,15 @@ class DenseUnionVectorTest {
 
     @Test
     fun `nullable mono into DUV`() {
-        DoubleVector(allocator, "dbl", true).use { dblVec ->
+        DoubleVector(allocator, true).use { dblVec ->
             dblVec.writeDouble(3.14)
             dblVec.writeNull()
             dblVec.writeDouble(2.71)
 
             DenseUnionVector(
-                allocator, "dest",
-                listOf(DoubleVector(allocator, "f64", true))
+                allocator,
+                listOf("f64"),
+                listOf(DoubleVector(allocator, true))
             ).use { destVec ->
                 dblVec.rowCopier(destVec).run {
                     copyRow(0)
@@ -253,14 +258,15 @@ class DenseUnionVectorTest {
 
     @Test
     fun `from null into duv vector`() {
-        NullVector("v1").use { nullVector ->
+        NullVector().use { nullVector ->
             nullVector.writeNull()
             nullVector.writeNull()
             nullVector.writeNull()
 
             DenseUnionVector(
-                allocator, "v2",
-                listOf(LongVector(allocator, "i64", true))
+                allocator,
+                listOf("i64"),
+                listOf(LongVector(allocator, true))
             ).use { copy ->
                 val copier = nullVector.rowCopier(copy)
                 copier.copyRow(0)
@@ -276,10 +282,11 @@ class DenseUnionVectorTest {
     @Test
     fun `from nullable duv vector to mono vector`() {
         DenseUnionVector(
-            allocator, "v1",
+            allocator,
+            listOf("null", "i32"),
             listOf(
-                NullVector("null"),
-                IntVector.open(allocator, "i32", false),
+                NullVector(),
+                IntVector.open(allocator, false),
             )
         ).use { duv ->
             val intLeg = duv.vectorFor("i32")
@@ -290,7 +297,7 @@ class DenseUnionVectorTest {
 
             assertEquals(3, duv.valueCount)
 
-            IntVector.open(allocator, "mono", true).use { mono ->
+            IntVector.open(allocator, true).use { mono ->
                 duv.rowCopier(mono).run {
                     copyRow(0)
                     copyRow(1)
@@ -303,13 +310,14 @@ class DenseUnionVectorTest {
         }
 
         DenseUnionVector(
-            allocator, "v1",
+            allocator,
+            listOf("null", "struct"),
             listOf(
-                NullVector("null"),
-                StructVector(allocator, "struct", false,
+                NullVector(),
+                StructVector(allocator, false,
                     linkedMapOf(
-                        "a" to IntVector.open(allocator, "i32", false),
-                        "b" to IntVector.open(allocator, "i32", false)
+                        "a" to IntVector.open(allocator, false),
+                        "b" to IntVector.open(allocator, false)
                     )
                 ),
             )
@@ -325,10 +333,10 @@ class DenseUnionVectorTest {
 
             assertEquals(3, duv.valueCount)
 
-            StructVector(allocator, "mono", true,
+            StructVector(allocator, true,
                 linkedMapOf(
-                    "a" to IntVector.open(allocator, "i32", false),
-                    "b" to IntVector.open(allocator, "i32", false)
+                    "a" to IntVector.open(allocator, false),
+                    "b" to IntVector.open(allocator, false)
                 )
             ).use { mono ->
                 duv.rowCopier(mono).run {
@@ -343,12 +351,12 @@ class DenseUnionVectorTest {
         }
 
         DenseUnionVector(
-            allocator, "v1",
+            allocator,
+            listOf("null", "list"),
             listOf(
-                NullVector("null"),
-                ListVector(allocator, "list", false, IntVector.open(allocator, "i32", false))
-            ),
-        )
+                NullVector(),
+                ListVector(allocator, false, IntVector.open(allocator, false))
+            ))
         .use { duv ->
             val obj1 = listOf(1, 2)
             val obj2 = emptyList<Int>()
@@ -361,7 +369,7 @@ class DenseUnionVectorTest {
 
             assertEquals(3, duv.valueCount)
 
-            ListVector(allocator, "list", false, IntVector.open(allocator, "i32", false)).use { mono ->
+            ListVector(allocator, false, IntVector.open(allocator, false)).use { mono ->
                 duv.rowCopier(mono).run {
                     copyRow(0)
                     copyRow(1)
@@ -377,10 +385,11 @@ class DenseUnionVectorTest {
     @Test
     fun `copy whole DUV into empty DUV`() {
         DenseUnionVector(
-            allocator, "src",
+            allocator,
+            listOf("i32", "utf8"),
             listOf(
-                IntVector.open(allocator, "i32", false),
-                Utf8Vector(allocator, "utf8", true)
+                IntVector.open(allocator, false),
+                Utf8Vector(allocator, true)
             )
         ).use { src ->
             src.vectorFor("i32").writeInt(12)
@@ -389,10 +398,11 @@ class DenseUnionVectorTest {
             src.vectorFor("utf8").writeNull()
 
             DenseUnionVector(
-                allocator, "dest",
+                allocator,
+                listOf("i32", "utf8"),
                 listOf(
-                    IntVector.open(allocator, "i32", false),
-                    Utf8Vector(allocator, "utf8", true)
+                    IntVector.open(allocator, false),
+                    Utf8Vector(allocator, true)
                 )
             ).use { dest ->
                 src.rowCopier(dest).copyRange(0, src.valueCount)
@@ -408,10 +418,11 @@ class DenseUnionVectorTest {
     @Test
     fun `copy whole DUV into DUV with existing rows`() {
         DenseUnionVector(
-            allocator, "src",
+            allocator,
+            listOf("i32", "utf8"),
             listOf(
-                IntVector.open(allocator, "i32", false),
-                Utf8Vector(allocator, "utf8", true)
+                IntVector.open(allocator, false),
+                Utf8Vector(allocator, true)
             )
         ).use { src ->
             src.vectorFor("i32").writeInt(12)
@@ -419,10 +430,11 @@ class DenseUnionVectorTest {
             src.vectorFor("i32").writeInt(34)
 
             DenseUnionVector(
-                allocator, "dest",
+                allocator,
+                listOf("i32", "utf8"),
                 listOf(
-                    IntVector.open(allocator, "i32", false),
-                    Utf8Vector(allocator, "utf8", true)
+                    IntVector.open(allocator, false),
+                    Utf8Vector(allocator, true)
                 )
             ).use { dest ->
                 dest.vectorFor("utf8").writeObject("existing")
@@ -454,7 +466,7 @@ class DenseUnionVectorTest {
     private val arbRow: Arb<Any?> = Arb.choice(arbScalar, arbDoc(2), Arb.constant(Undefined))
 
     private fun openDuv(rows: List<Any?>) =
-        DenseUnionVector(allocator, "docs").apply {
+        DenseUnionVector(allocator).apply {
             for (row in rows) if (row === Undefined) writeUndefined() else writeObject(row)
         }
 
@@ -514,11 +526,12 @@ class DenseUnionVectorTest {
     @Test
     fun `getAsLong and readAsLong read each row through its own integer leg`() {
         DenseUnionVector(
-            allocator, "duv",
+            allocator,
+            listOf("i16", "i32", "i64"),
             listOf(
-                ShortVector(allocator, "i16", false),
-                IntVector.open(allocator, "i32", false),
-                LongVector(allocator, "i64", false)
+                ShortVector(allocator, false),
+                IntVector.open(allocator, false),
+                LongVector(allocator, false)
             )
         ).use { duv ->
             duv.vectorFor("i16").writeShort(-12)
@@ -540,10 +553,11 @@ class DenseUnionVectorTest {
     @Test
     fun `getAsDouble and readAsDouble read each row through its own floating-point leg`() {
         DenseUnionVector(
-            allocator, "duv",
+            allocator,
+            listOf("f32", "f64"),
             listOf(
-                FloatVector(allocator, "f32", false),
-                DoubleVector(allocator, "f64", false)
+                FloatVector(allocator, false),
+                DoubleVector(allocator, false)
             )
         ).use { duv ->
             duv.vectorFor("f32").writeFloat(1.5f)

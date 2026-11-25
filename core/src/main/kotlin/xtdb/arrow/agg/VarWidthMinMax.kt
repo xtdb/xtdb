@@ -38,7 +38,7 @@ class VarWidthMinMax(
         }
 
         override fun openFinishedVector(): Vector {
-            val outVec = al.openVector(colName, type)
+            val outVec = al.openVector(type)
 
             for (winner in winners) {
                 if (winner == null) outVec.writeNull()

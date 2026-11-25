@@ -31,9 +31,9 @@ class AggregateTest {
 
     @Test
     fun `Sum aggregates integer values`() {
-        Vector.fromList(allocator, "values", I32, listOf(10, 20, 30, 40)).use { valuesVec ->
-            Vector.fromList(allocator, "group-mapping", I32, listOf(0, 0, 1, 1)).use { groupMapping ->
-                val inRel = RelationReader.from(listOf(valuesVec), 4)
+        Vector.fromList(allocator, I32, listOf(10, 20, 30, 40)).use { valuesVec ->
+            Vector.fromList(allocator, I32, listOf(0, 0, 1, 1)).use { groupMapping ->
+                val inRel = RelationReader.from(mapOf("values" to valuesVec), 4)
                 val sumFactory = Sum("values", "sum", I32, false)
                 sumFactory.build(allocator, RelationReader.DUAL).use { sumAgg ->
                     sumAgg.aggregate(inRel, groupMapping, RowMask.all(inRel.rowCount))
@@ -49,9 +49,9 @@ class AggregateTest {
 
     @Test
     fun `Sum handles nulls`() {
-        Vector.fromList(allocator, "values", maybe(I32), listOf(10, null, 30)).use { valuesVec ->
-            Vector.fromList(allocator, "group-mapping", I32, listOf(0, 0, 0)).use { groupMapping ->
-                val inRel = RelationReader.from(listOf(valuesVec), 3)
+        Vector.fromList(allocator, maybe(I32), listOf(10, null, 30)).use { valuesVec ->
+            Vector.fromList(allocator, I32, listOf(0, 0, 0)).use { groupMapping ->
+                val inRel = RelationReader.from(mapOf("values" to valuesVec), 3)
                 val sumFactory = Sum("values", "sum", I32, false)
                 sumFactory.build(allocator, RelationReader.DUAL).use { sumAgg ->
                     sumAgg.aggregate(inRel, groupMapping, RowMask.all(inRel.rowCount))
@@ -66,9 +66,9 @@ class AggregateTest {
 
     @Test
     fun `Average calculates mean of values`() {
-        Vector.fromList(allocator, "values", F64, listOf(10.0, 20.0, 30.0, 40.0)).use { valuesVec ->
-            Vector.fromList(allocator, "group-mapping", I32, listOf(0, 0, 1, 1)).use { groupMapping ->
-                val inRel = RelationReader.from(listOf(valuesVec), 4)
+        Vector.fromList(allocator, F64, listOf(10.0, 20.0, 30.0, 40.0)).use { valuesVec ->
+            Vector.fromList(allocator, I32, listOf(0, 0, 1, 1)).use { groupMapping ->
+                val inRel = RelationReader.from(mapOf("values" to valuesVec), 4)
                 val avgFactory = Average("values", valuesVec.type, "avg", false)
                 avgFactory.build(allocator, RelationReader.DUAL).use { avgAgg ->
                     avgAgg.aggregate(inRel, groupMapping, RowMask.all(inRel.rowCount))
@@ -84,9 +84,9 @@ class AggregateTest {
 
     @Test
     fun `Variance population calculates variance`() {
-        Vector.fromList(allocator, "values", F64, listOf(10.0, 20.0, 30.0, 40.0)).use { valuesVec ->
-            Vector.fromList(allocator, "group-mapping", I32, listOf(0, 0, 1, 1)).use { groupMapping ->
-                val inRel = RelationReader.from(listOf(valuesVec), 4)
+        Vector.fromList(allocator, F64, listOf(10.0, 20.0, 30.0, 40.0)).use { valuesVec ->
+            Vector.fromList(allocator, I32, listOf(0, 0, 1, 1)).use { groupMapping ->
+                val inRel = RelationReader.from(mapOf("values" to valuesVec), 4)
                 val varFactory = VariancePop("values", "var", false)
                 varFactory.build(allocator, RelationReader.DUAL).use { varAgg ->
                     varAgg.aggregate(inRel, groupMapping, RowMask.all(inRel.rowCount))
@@ -102,9 +102,9 @@ class AggregateTest {
 
     @Test
     fun `Variance sample calculates sample variance`() {
-        Vector.fromList(allocator, "values", F64, listOf(10.0, 20.0, 30.0)).use { valuesVec ->
-            Vector.fromList(allocator, "group-mapping", I32, listOf(0, 0, 0)).use { groupMapping ->
-                val inRel = RelationReader.from(listOf(valuesVec), 3)
+        Vector.fromList(allocator, F64, listOf(10.0, 20.0, 30.0)).use { valuesVec ->
+            Vector.fromList(allocator, I32, listOf(0, 0, 0)).use { groupMapping ->
+                val inRel = RelationReader.from(mapOf("values" to valuesVec), 3)
                 val varFactory = VarianceSamp("values", "var", false)
                 varFactory.build(allocator, RelationReader.DUAL).use { varAgg ->
                     varAgg.aggregate(inRel, groupMapping, RowMask.all(inRel.rowCount))
@@ -119,9 +119,9 @@ class AggregateTest {
 
     @Test
     fun `StdDev population calculates standard deviation`() {
-        Vector.fromList(allocator, "values", F64, listOf(10.0, 20.0, 30.0, 40.0)).use { valuesVec ->
-            Vector.fromList(allocator, "group-mapping", I32, listOf(0, 0, 1, 1)).use { groupMapping ->
-                val inRel = RelationReader.from(listOf(valuesVec), 4)
+        Vector.fromList(allocator, F64, listOf(10.0, 20.0, 30.0, 40.0)).use { valuesVec ->
+            Vector.fromList(allocator, I32, listOf(0, 0, 1, 1)).use { groupMapping ->
+                val inRel = RelationReader.from(mapOf("values" to valuesVec), 4)
                 val stdDevFactory = StdDevPop("values", "std-dev", false)
                 stdDevFactory.build(allocator, RelationReader.DUAL).use { stdDevAgg ->
                     stdDevAgg.aggregate(inRel, groupMapping, RowMask.all(inRel.rowCount))
@@ -137,9 +137,9 @@ class AggregateTest {
 
     @Test
     fun `StdDev sample calculates sample standard deviation`() {
-        Vector.fromList(allocator, "values", F64, listOf(10.0, 20.0, 30.0)).use { valuesVec ->
-            Vector.fromList(allocator, "group-mapping", I32, listOf(0, 0, 0)).use { groupMapping ->
-                val inRel = RelationReader.from(listOf(valuesVec), 3)
+        Vector.fromList(allocator, F64, listOf(10.0, 20.0, 30.0)).use { valuesVec ->
+            Vector.fromList(allocator, I32, listOf(0, 0, 0)).use { groupMapping ->
+                val inRel = RelationReader.from(mapOf("values" to valuesVec), 3)
                 val stdDevFactory = StdDevSamp("values", "std-dev", false)
                 stdDevFactory.build(allocator, RelationReader.DUAL).use { stdDevAgg ->
                     stdDevAgg.aggregate(inRel, groupMapping, RowMask.all(inRel.rowCount))
@@ -154,9 +154,9 @@ class AggregateTest {
 
     @Test
     fun `Variance handles nulls correctly`() {
-        Vector.fromList(allocator, "values", maybe(F64), listOf(10.0, null, 30.0)).use { valuesVec ->
-            Vector.fromList(allocator, "group-mapping", I32, listOf(0, 0, 0)).use { groupMapping ->
-                val inRel = RelationReader.from(listOf(valuesVec), 3)
+        Vector.fromList(allocator, maybe(F64), listOf(10.0, null, 30.0)).use { valuesVec ->
+            Vector.fromList(allocator, I32, listOf(0, 0, 0)).use { groupMapping ->
+                val inRel = RelationReader.from(mapOf("values" to valuesVec), 3)
                 val varFactory = VariancePop("values", "var", false)
                 varFactory.build(allocator, RelationReader.DUAL).use { varAgg ->
                     varAgg.aggregate(inRel, groupMapping, RowMask.all(inRel.rowCount))
@@ -172,10 +172,10 @@ class AggregateTest {
     @Test
     fun `Sum aggregates decimal values`() {
         val decimalType = scalar(ArrowType.Decimal(10, 2, 128))
-        Vector.fromList(allocator, "values", decimalType,
+        Vector.fromList(allocator, decimalType,
             listOf(BigDecimal("10.50"), BigDecimal("20.25"), BigDecimal("30.75"), BigDecimal("40.00"))).use { valuesVec ->
-            Vector.fromList(allocator, "group-mapping", I32, listOf(0, 0, 1, 1)).use { groupMapping ->
-                val inRel = RelationReader.from(listOf(valuesVec), 4)
+            Vector.fromList(allocator, I32, listOf(0, 0, 1, 1)).use { groupMapping ->
+                val inRel = RelationReader.from(mapOf("values" to valuesVec), 4)
                 val sumFactory = Sum("values", "sum", decimalType, false)
                 sumFactory.build(allocator, RelationReader.DUAL).use { sumAgg ->
                     sumAgg.aggregate(inRel, groupMapping, RowMask.all(inRel.rowCount))
@@ -192,10 +192,10 @@ class AggregateTest {
     @Test
     fun `Average calculates mean of decimal values`() {
         val decimalType = scalar(ArrowType.Decimal(10, 2, 128))
-        Vector.fromList(allocator, "values", decimalType,
+        Vector.fromList(allocator, decimalType,
             listOf(BigDecimal("10.00"), BigDecimal("20.00"), BigDecimal("30.00"), BigDecimal("40.00"))).use { valuesVec ->
-            Vector.fromList(allocator, "group-mapping", I32, listOf(0, 0, 1, 1)).use { groupMapping ->
-                val inRel = RelationReader.from(listOf(valuesVec), 4)
+            Vector.fromList(allocator, I32, listOf(0, 0, 1, 1)).use { groupMapping ->
+                val inRel = RelationReader.from(mapOf("values" to valuesVec), 4)
                 val avgFactory = Average("values", valuesVec.type, "avg", false)
                 avgFactory.build(allocator, RelationReader.DUAL).use { avgAgg ->
                     avgAgg.aggregate(inRel, groupMapping, RowMask.all(inRel.rowCount))
@@ -212,9 +212,9 @@ class AggregateTest {
     @Test
     fun `Sum excludes rows the mask does not set`() {
         val mask = RowMask.ofWords(longArrayOf(0b0101L), 4)
-        Vector.fromList(allocator, "values", I32, listOf(10, 20, 30, 40)).use { valuesVec ->
-            Vector.fromList(allocator, "group-mapping", I32, listOf(0, 0, 1, 1)).use { groupMapping ->
-                val inRel = RelationReader.from(listOf(valuesVec), 4)
+        Vector.fromList(allocator, I32, listOf(10, 20, 30, 40)).use { valuesVec ->
+            Vector.fromList(allocator, I32, listOf(0, 0, 1, 1)).use { groupMapping ->
+                val inRel = RelationReader.from(mapOf("values" to valuesVec), 4)
                 val sumFactory = Sum("values", "sum", I32, false)
                 sumFactory.build(allocator, RelationReader.DUAL).use { sumAgg ->
                     sumAgg.aggregate(inRel, groupMapping, mask)
@@ -231,9 +231,9 @@ class AggregateTest {
     @Test
     fun `Sum reads NULL for a group the mask excludes entirely`() {
         val mask = RowMask.ofWords(longArrayOf(0b011L), 3)
-        Vector.fromList(allocator, "values", I32, listOf(10, 20, 30)).use { valuesVec ->
-            Vector.fromList(allocator, "group-mapping", I32, listOf(0, 0, 1)).use { groupMapping ->
-                val inRel = RelationReader.from(listOf(valuesVec), 3)
+        Vector.fromList(allocator, I32, listOf(10, 20, 30)).use { valuesVec ->
+            Vector.fromList(allocator, I32, listOf(0, 0, 1)).use { groupMapping ->
+                val inRel = RelationReader.from(mapOf("values" to valuesVec), 3)
                 val sumFactory = Sum("values", "sum", I32, false)
                 sumFactory.build(allocator, RelationReader.DUAL).use { sumAgg ->
                     sumAgg.aggregate(inRel, groupMapping, mask)

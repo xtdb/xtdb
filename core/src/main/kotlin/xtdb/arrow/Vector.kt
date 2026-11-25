@@ -48,12 +48,11 @@ fun FieldType.copy(
 
 sealed class Vector : VectorReader, VectorWriter {
 
-    abstract override var name: String
     abstract override var nullable: Boolean
     abstract override val arrowType: ArrowType
     abstract val vectors: Iterable<Vector>
 
-    override val childFields get() = vectors.map { it.field }
+    override val childFields: List<Field> get() = emptyList()
 
     abstract override var valueCount: Int; internal set
 
@@ -122,128 +121,132 @@ sealed class Vector : VectorReader, VectorWriter {
     override fun toString() = VectorReader.toString(this)
 
     companion object {
+        /** Opens an empty vector of [field]'s layout; [field]'s own name is the parent's to keep, so it's ignored here. */
         @JvmStatic
         @JvmName("open")
-        fun BufferAllocator.openVector(field: Field): Vector =
-            field.children.safeMap { openVector(it) }.closeAllOnCatch { children ->
-                openVector(field.name, field.type, field.isNullable, children)
-            }
+        fun BufferAllocator.openVector(field: Field): Vector = openVector(field.type, field.isNullable, field.children)
 
         @JvmStatic
         @JvmName("open")
-        fun BufferAllocator.openVector(name: FieldName, type: VectorType) = openVector(name ofType type)
+        fun BufferAllocator.openVector(type: VectorType): Vector = openVector(type.toField(""))
 
         @JvmStatic
         @JvmName("open")
         fun BufferAllocator.openVector(
-            name: FieldName,
             arrowType: ArrowType,
             nullable: Boolean,
-            children: List<Vector> = emptyList()
+            children: List<Field> = emptyList()
+        ): Vector =
+            children.safeMap { openVector(it) }.closeAllOnCatch { childVecs ->
+                openVector(arrowType, nullable, children.map { it.name }, childVecs)
+            }
+
+        private fun BufferAllocator.openVector(
+            arrowType: ArrowType, nullable: Boolean, childNames: List<String>, childVecs: List<Vector>
         ): Vector {
             val al = this
 
             return arrowType.accept(object : ArrowTypeVisitor<Vector> {
-                override fun visit(type: Null) = NullVector(name, nullable)
+                override fun visit(type: Null) = NullVector(nullable)
 
                 override fun visit(type: Struct) =
-                    StructVector(al, name, nullable, children.associateByTo(linkedMapOf()) { it.name })
+                    StructVector(al, nullable, childNames.zip(childVecs).toMap(linkedMapOf()))
 
                 override fun visit(type: ArrowType.List) =
-                    ListVector(al, name, nullable, children.firstOrNull() ?: NullVector($$"$data$", false))
+                    ListVector(al, nullable, childVecs.firstOrNull() ?: NullVector(false))
 
                 override fun visit(type: LargeList) = TODO("Not yet implemented")
 
                 override fun visit(type: FixedSizeList) =
-                    FixedSizeListVector(al, name, nullable, type.listSize, children.firstOrNull() ?: NullVector($$"$data$", false))
+                    FixedSizeListVector(al, nullable, type.listSize, childVecs.firstOrNull() ?: NullVector(false))
 
                 override fun visit(type: ListView) = TODO("Not yet implemented")
                 override fun visit(type: LargeListView) = TODO("Not yet implemented")
 
                 override fun visit(type: Union) = when (type.mode!!) {
                     UnionMode.Sparse -> TODO("Not yet implemented")
-                    UnionMode.Dense -> DenseUnionVector(al, name, children, 0)
+                    UnionMode.Dense -> DenseUnionVector(al, childNames, childVecs, 0)
                 }
 
                 override fun visit(type: ArrowType.Map): MapVector {
-                    val structVec = children.first()
-                    return MapVector(ListVector(al, name, nullable, structVec), type.keysSorted)
+                    val structVec = childVecs.first()
+                    return MapVector(ListVector(al, nullable, structVec), type.keysSorted)
                 }
 
-                override fun visit(type: Bool) = BitVector(al, name, nullable)
+                override fun visit(type: Bool) = BitVector(al, nullable)
 
                 override fun visit(type: ArrowType.Int): Vector = when (type.bitWidth) {
-                    8 -> ByteVector(al, name, nullable)
-                    16 -> ShortVector(al, name, nullable)
-                    32 -> IntVector.open(al, name, nullable)
-                    64 -> LongVector(al, name, nullable)
+                    8 -> ByteVector(al, nullable)
+                    16 -> ShortVector(al, nullable)
+                    32 -> IntVector.open(al, nullable)
+                    64 -> LongVector(al, nullable)
                     else -> error("invalid bit-width: ${type.bitWidth}")
                 }
 
                 override fun visit(type: FloatingPoint): Vector = when (type.precision!!) {
                     HALF -> error("half precision not supported")
-                    SINGLE -> FloatVector(al, name, nullable)
-                    DOUBLE -> DoubleVector(al, name, nullable)
+                    SINGLE -> FloatVector(al, nullable)
+                    DOUBLE -> DoubleVector(al, nullable)
                 }
 
-                override fun visit(type: Decimal) = DecimalVector(al, name, nullable, type)
+                override fun visit(type: Decimal) = DecimalVector(al, nullable, type)
 
-                override fun visit(type: Utf8) = Utf8Vector(al, name, nullable)
+                override fun visit(type: Utf8) = Utf8Vector(al, nullable)
                 override fun visit(type: Utf8View) = TODO("Not yet implemented")
                 override fun visit(type: LargeUtf8) = TODO("Not yet implemented")
 
-                override fun visit(type: Binary) = VarBinaryVector(al, name, nullable)
+                override fun visit(type: Binary) = VarBinaryVector(al, nullable)
                 override fun visit(type: BinaryView) = TODO("Not yet implemented")
                 override fun visit(type: LargeBinary) = TODO("Not yet implemented")
-                override fun visit(type: FixedSizeBinary) = FixedSizeBinaryVector(al, name, nullable, type.byteWidth)
+                override fun visit(type: FixedSizeBinary) = FixedSizeBinaryVector(al, nullable, type.byteWidth)
 
                 override fun visit(type: Date): Vector = when (type.unit!!) {
-                    DAY -> DateDayVector(al, name, nullable)
-                    DateUnit.MILLISECOND -> DateMilliVector(al, name, nullable)
+                    DAY -> DateDayVector(al, nullable)
+                    DateUnit.MILLISECOND -> DateMilliVector(al, nullable)
                 }
 
                 override fun visit(type: Time): Vector = when (type.unit!!) {
-                    SECOND, MILLISECOND -> Time32Vector(al, name, nullable, type.unit)
-                    MICROSECOND, NANOSECOND -> Time64Vector(al, name, nullable, type.unit)
+                    SECOND, MILLISECOND -> Time32Vector(al, nullable, type.unit)
+                    MICROSECOND, NANOSECOND -> Time64Vector(al, nullable, type.unit)
                 }
 
                 override fun visit(type: Timestamp): Vector =
-                    if (type.timezone == null) TimestampLocalVector(al, name, nullable, type.unit)
-                    else TimestampTzVector(al, name, nullable, type.unit, ZoneId.of(type.timezone))
+                    if (type.timezone == null) TimestampLocalVector(al, nullable, type.unit)
+                    else TimestampTzVector(al, nullable, type.unit, ZoneId.of(type.timezone))
 
                 override fun visit(type: Interval): Vector = when (type.unit!!) {
-                    YEAR_MONTH -> IntervalYearMonthVector(al, name, nullable)
-                    DAY_TIME -> IntervalDayTimeVector(al, name, nullable)
-                    MONTH_DAY_NANO -> IntervalMonthDayNanoVector(al, name, nullable)
+                    YEAR_MONTH -> IntervalYearMonthVector(al, nullable)
+                    DAY_TIME -> IntervalDayTimeVector(al, nullable)
+                    MONTH_DAY_NANO -> IntervalMonthDayNanoVector(al, nullable)
                 }
 
-                override fun visit(type: Duration) = DurationVector(al, name, nullable, type.unit)
+                override fun visit(type: Duration) = DurationVector(al, nullable, type.unit)
 
                 override fun visit(type: RunEndEncoded): Vector {
-                    require(children.size == 2) { "run-end encoded fields have exactly two children" }
-                    val runEnds = children[0]
+                    require(childVecs.size == 2) { "run-end encoded fields have exactly two children" }
+                    val runEnds = childVecs[0]
                     require(runEnds is IntegerVector) { "run-ends must be a signed integer vector, got ${runEnds.arrowType}" }
-                    return RunEndEncodedVector(name, runEnds, children[1])
+                    return RunEndEncodedVector(runEnds, childVecs[1])
                 }
 
                 override fun visit(type: ExtensionType): Vector = when (type) {
-                    KeywordType -> KeywordVector(Utf8Vector(al, name, nullable))
-                    UuidType -> UuidVector(FixedSizeBinaryVector(al, name, nullable, 16))
-                    UriType -> UriVector(Utf8Vector(al, name, nullable))
-                    TransitType -> TransitVector(VarBinaryVector(al, name, nullable))
-                    IntervalMDMType -> IntervalMonthDayMicroVector(IntervalMonthDayNanoVector(al, name, nullable))
+                    KeywordType -> KeywordVector(Utf8Vector(al, nullable))
+                    UuidType -> UuidVector(FixedSizeBinaryVector(al, nullable, 16))
+                    UriType -> UriVector(Utf8Vector(al, nullable))
+                    TransitType -> TransitVector(VarBinaryVector(al, nullable))
+                    IntervalMDMType -> IntervalMonthDayMicroVector(IntervalMonthDayNanoVector(al, nullable))
                     TsTzRangeType -> TsTzRangeVector(
-                        FixedSizeListVector(al, name, nullable, 2, children.firstOrNull() ?: NullVector($$"$data$", false))
+                        FixedSizeListVector(al, nullable, 2, childVecs.firstOrNull() ?: NullVector(false))
                     )
 
                     SetType ->
                         SetVector(
-                            ListVector(al, name, nullable, children.firstOrNull() ?: NullVector($$"$data$", false))
+                            ListVector(al, nullable, childVecs.firstOrNull() ?: NullVector(false))
                         )
 
-                    OidType -> OidVector(IntVector.open(al, name, nullable))
-                    RegClassType -> RegClassVector(IntVector.open(al, name, nullable))
-                    RegProcType -> RegProcVector(IntVector.open(al, name, nullable))
+                    OidType -> OidVector(IntVector.open(al, nullable))
+                    RegClassType -> RegClassVector(IntVector.open(al, nullable))
+                    RegProcType -> RegProcVector(IntVector.open(al, nullable))
 
                     else -> error("unknown extension: $type")
                 }
@@ -253,18 +256,18 @@ sealed class Vector : VectorReader, VectorWriter {
         @JvmStatic
         fun fromArrow(vec: ValueVector): Vector {
             val vector =
-                if (vec is ArrowNullVector) NullVector(vec.name, vec.field.isNullable)
+                if (vec is ArrowNullVector) NullVector(vec.field.isNullable)
                 else vec.allocator.openVector(vec.field)
 
             return vector.closeOnCatch { it.apply { loadFromArrow(vec) } }
         }
 
         @JvmStatic
-        fun fromList(al: BufferAllocator, colName: FieldName, type: VectorType, values: List<*>) =
-            al.openVector(colName, type).closeOnCatch { it.writeValues(al, values) }
+        fun fromList(al: BufferAllocator, type: VectorType, values: List<*>) =
+            al.openVector(type).closeOnCatch { it.writeValues(al, values) }
 
         @JvmStatic
-        fun fromList(al: BufferAllocator, name: ColumnName, values: List<*>) =
-            fromList(al, name, VectorType.Null, values)
+        fun fromList(al: BufferAllocator, values: List<*>) =
+            fromList(al, VectorType.Null, values)
     }
 }

@@ -22,11 +22,10 @@ class MaskedVector(private val inner: VectorReader, private val mask: RowMask) :
 
     private fun selected() = inner.select(rows)
 
-    override val name: String get() = inner.name
     override val valueCount: Int get() = mask.cardinality
     override val nullable: Boolean get() = inner.nullable
     override val arrowType: ArrowType get() = inner.arrowType
-    override val field: Field get() = inner.field
+    override fun toField(name: String) = inner.toField(name)
     override val childFields: List<Field> get() = inner.childFields
     override val type: VectorType get() = inner.type
 

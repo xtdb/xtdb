@@ -27,9 +27,9 @@ class DistinctRelationMap(
     private val accRel = Relation(allocator, vecTypes)
     private val keyCols = keyColumnNames.map { accRel[it] }
 
-    private val hashColumn = IntVector.open(allocator, "xt/join-hash", false)
-    private val batchHashes = IntVector.open(allocator, "xt/batch-hashes", false)
-    private val batchHashScratch = IntVector.open(allocator, "xt/batch-hash-scratch", false)
+    private val hashColumn = IntVector.open(allocator, false)
+    private val batchHashes = IntVector.open(allocator, false)
+    private val batchHashScratch = IntVector.open(allocator, false)
 
     private var buildHashTrie =
         MutableMemoryHashTrie.builder(hashColumn)
@@ -61,7 +61,7 @@ class DistinctRelationMap(
     @Suppress("NAME_SHADOWING")
     fun buildFromRelation(inRel: RelationReader, hashes: IntVector): RelationMapBuilder {
         val inKeyCols = keyColumnNames.map { inRel[it] }
-        val inRel = if (storeFullBuildRel) inRel else RelationReader.from(inKeyCols)
+        val inRel = if (storeFullBuildRel) inRel else RelationReader.from(keyColumnNames.zip(inKeyCols).toMap(linkedMapOf()), inRel.rowCount)
 
         val comparator = keyCols.zip(inKeyCols)
             .map { (buildCol, inCol) -> comparatorFactory.buildEqui(buildCol, inCol) }

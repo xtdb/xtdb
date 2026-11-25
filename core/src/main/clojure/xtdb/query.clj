@@ -131,9 +131,9 @@
     result))
 
 (defn ->arg-types [^RelationReader args]
-  (->> args
-       (into {} (map (fn [^VectorReader col]
-                       (MapEntry/create (symbol (.getName col)) (.getType col)))))))
+  (->> (.getCols args)
+       (into {} (map (fn [[^String col-name ^VectorReader col]]
+                       (MapEntry/create (symbol col-name) (.getType col)))))))
 
 (defn expr->value [expr {:keys [^RelationReader args]}]
   (if (symbol? expr)

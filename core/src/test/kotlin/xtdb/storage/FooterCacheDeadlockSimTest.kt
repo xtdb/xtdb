@@ -56,9 +56,9 @@ class FooterCacheDeadlockSimTest : SimulationTestBase() {
         MemoryCache.Factory().open(al).use { memoryCache ->
             RemoteBufferPool(al, this, memoryCache.openForDatabase(storageUri), DiskCache(diskPath.createDirectories(), 1L shl 30).openForDatabase(storageUri), null, 0)
                 .use { pool ->
-                    for (k in keys) IntVector.open(al, "foo", false).use { v ->
+                    for (k in keys) IntVector.open(al, false).use { v ->
                         v.writeInt(1)
-                        pool.openArrowWriter(k, Relation(al, listOf(v), 1)).use { w -> w.writePage(); w.endSync() }
+                        pool.openArrowWriter(k, Relation(al, linkedMapOf("v" to v), 1)).use { w -> w.writePage(); w.endSync() }
                     }
                 }
         }

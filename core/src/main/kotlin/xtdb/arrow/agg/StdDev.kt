@@ -17,7 +17,7 @@ sealed class StdDev(override val colName: FieldName, private val varianceFactory
             varianceAgg.aggregate(inRel, groupMapping, mask)
 
         override fun openFinishedVector(): Vector =
-            DoubleVector(al, colName, nullable = true).closeOnCatch { outVec ->
+            DoubleVector(al, nullable = true).closeOnCatch { outVec ->
                 varianceAgg.openFinishedVector().use { it.sqrtInto(outVec) }
             }
 

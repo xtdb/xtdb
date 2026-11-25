@@ -13,20 +13,20 @@ import java.math.BigDecimal
 @ExtendWith(AllocatorResolver::class)
 class UnionLegCopyTest {
 
-    private fun weirdDecimal(al: BufferAllocator, name: String) =
-        DecimalVector(al, name, false, ArrowType.Decimal(38, 2, 128))
+    private fun weirdDecimal(al: BufferAllocator) =
+        DecimalVector(al, false, ArrowType.Decimal(38, 2, 128))
 
     private fun oddLegDuv(al: BufferAllocator): DenseUnionVector {
-        val duv = DenseUnionVector(al, "c", listOf(weirdDecimal(al, "weird")))
+        val duv = DenseUnionVector(al, listOf("weird"), listOf(weirdDecimal(al)))
         duv.vectorFor("weird").writeObject(BigDecimal("1.25"))
         return duv
     }
 
     @Test
     fun `struct copy of a union child with an odd-named decimal leg`(al: BufferAllocator) {
-        StructVector(al, "s", false, linkedMapOf("c" to oddLegDuv(al))).use { src ->
+        StructVector(al, false, linkedMapOf("c" to oddLegDuv(al))).use { src ->
             src.endStruct()
-            StructVector(al, "d", false).use { dest ->
+            StructVector(al, false).use { dest ->
                 dest.writeValue(src.valueReader().also { it.pos = 0 })
                 val row = dest.asList.single() as Map<*, *>
                 assertEquals(listOf(BigDecimal("1.25")), row.values.toList())
@@ -36,9 +36,9 @@ class UnionLegCopyTest {
 
     @Test
     fun `list copy of union elements with an odd-named decimal leg`(al: BufferAllocator) {
-        ListVector(al, "l", false, oddLegDuv(al)).use { src ->
+        ListVector(al, false, oddLegDuv(al)).use { src ->
             src.endList()
-            ListVector(al, "d", false, DenseUnionVector(al, "\$data\$", listOf(weirdDecimal(al, "weird")))).use { dest ->
+            ListVector(al, false, DenseUnionVector(al, listOf("weird"), listOf(weirdDecimal(al)))).use { dest ->
                 dest.writeValue(src.valueReader().also { it.pos = 0 })
                 assertEquals(listOf(listOf(TaggedValue(Keyword.intern("weird"), BigDecimal("1.25")))), dest.asList)
             }

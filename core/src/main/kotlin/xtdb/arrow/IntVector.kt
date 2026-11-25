@@ -12,7 +12,7 @@ import xtdb.util.closeOnCatch
 
 class IntVector private constructor(
     override val al: BufferAllocator,
-    override var name: String, override var valueCount: Int,
+    override var valueCount: Int,
     override var validityBuffer: BitBuffer?, override val dataBuffer: ExtensibleBuffer
 ) : IntegerVector(), MetadataFlavour.Number {
 
@@ -28,11 +28,11 @@ class IntVector private constructor(
 
         @JvmStatic
         @JvmOverloads
-        fun open(al: BufferAllocator, name: String, nullable: Boolean, valueCount: Int = 0): IntVector =
+        fun open(al: BufferAllocator, nullable: Boolean, valueCount: Int = 0): IntVector =
             openDataBuffer(al, valueCount).closeOnCatch { dataBuffer ->
                 val validityBuffer = if (nullable) openValidityBuffer(al, valueCount) else null
                 validityBuffer.closeOnCatch {
-                    IntVector(al, name, valueCount, validityBuffer, dataBuffer)
+                    IntVector(al, valueCount, validityBuffer, dataBuffer)
                 }
             }
     }
@@ -89,7 +89,7 @@ class IntVector private constructor(
         dataBuffer.openSlice(al).closeOnCatch { dataBuffer ->
             val validityBuffer = this.validityBuffer?.openSlice(al)
             validityBuffer.closeOnCatch {
-                IntVector(al, name, valueCount, validityBuffer, dataBuffer)
+                IntVector(al, valueCount, validityBuffer, dataBuffer)
             }
         }
 

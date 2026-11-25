@@ -63,24 +63,24 @@ class FixedWidthValueReaderTest {
     }
 
     private val vectors: Map<String, (BufferAllocator, Boolean) -> FixedWidthVector> = mapOf(
-        "long" to { al, n -> LongVector(al, "v", n) },
-        "int" to { al, n -> IntVector.open(al, "v", n) },
-        "short" to { al, n -> ShortVector(al, "v", n) },
-        "byte" to { al, n -> ByteVector(al, "v", n) },
-        "double" to { al, n -> DoubleVector(al, "v", n) },
-        "float" to { al, n -> FloatVector(al, "v", n) },
-        "decimal" to { al, n -> DecimalVector(al, "v", n, ArrowType.Decimal(38, 2, 128)) },
-        "date-day" to { al, n -> DateDayVector(al, "v", n) },
-        "date-milli" to { al, n -> DateMilliVector(al, "v", n) },
-        "time32" to { al, n -> Time32Vector(al, "v", n, TimeUnit.SECOND) },
-        "time64" to { al, n -> Time64Vector(al, "v", n, TimeUnit.NANOSECOND) },
-        "timestamp" to { al, n -> TimestampLocalVector(al, "v", n, TimeUnit.MICROSECOND) },
-        "timestamp-tz" to { al, n -> TimestampTzVector(al, "v", n, TimeUnit.MICROSECOND, ZoneId.of("Europe/London")) },
-        "duration" to { al, n -> DurationVector(al, "v", n, TimeUnit.MICROSECOND) },
-        "fixed-size-binary" to { al, n -> FixedSizeBinaryVector(al, "v", n, 16) },
-        "interval-year-month" to { al, n -> IntervalYearMonthVector(al, "v", n) },
-        "interval-day-time" to { al, n -> IntervalDayTimeVector(al, "v", n) },
-        "interval-month-day-nano" to { al, n -> IntervalMonthDayNanoVector(al, "v", n) },
+        "long" to { al, n -> LongVector(al, n) },
+        "int" to { al, n -> IntVector.open(al, n) },
+        "short" to { al, n -> ShortVector(al, n) },
+        "byte" to { al, n -> ByteVector(al, n) },
+        "double" to { al, n -> DoubleVector(al, n) },
+        "float" to { al, n -> FloatVector(al, n) },
+        "decimal" to { al, n -> DecimalVector(al, n, ArrowType.Decimal(38, 2, 128)) },
+        "date-day" to { al, n -> DateDayVector(al, n) },
+        "date-milli" to { al, n -> DateMilliVector(al, n) },
+        "time32" to { al, n -> Time32Vector(al, n, TimeUnit.SECOND) },
+        "time64" to { al, n -> Time64Vector(al, n, TimeUnit.NANOSECOND) },
+        "timestamp" to { al, n -> TimestampLocalVector(al, n, TimeUnit.MICROSECOND) },
+        "timestamp-tz" to { al, n -> TimestampTzVector(al, n, TimeUnit.MICROSECOND, ZoneId.of("Europe/London")) },
+        "duration" to { al, n -> DurationVector(al, n, TimeUnit.MICROSECOND) },
+        "fixed-size-binary" to { al, n -> FixedSizeBinaryVector(al, n, 16) },
+        "interval-year-month" to { al, n -> IntervalYearMonthVector(al, n) },
+        "interval-day-time" to { al, n -> IntervalDayTimeVector(al, n) },
+        "interval-month-day-nano" to { al, n -> IntervalMonthDayNanoVector(al, n) },
     )
 
     private fun outcome(read: () -> Any?): Any? =
@@ -162,7 +162,7 @@ class FixedWidthValueReaderTest {
     @Test
     fun `a validity buffer shorter than a word reads its nulls`(al: BufferAllocator) {
         val rows = 10
-        LongVector(al, "v", true).use { vec ->
+        LongVector(al, true).use { vec ->
             al.buffer(2).use { validity ->
                 al.buffer(rows * 8L).use { data ->
                     validity.setZero(0, validity.capacity())
@@ -184,7 +184,7 @@ class FixedWidthValueReaderTest {
 
     @Test
     fun `a value reader reads its rows while the vector grows under it`(al: BufferAllocator) {
-        LongVector(al, "v", true).use { vec ->
+        LongVector(al, true).use { vec ->
             repeat(10) { if (it == 4) vec.writeNull() else vec.writeLong(it.toLong()) }
 
             val rows = vec.valueReader()
@@ -201,7 +201,7 @@ class FixedWidthValueReaderTest {
 
     @Test
     fun `a seek reads the vector as it is now, after writes since the reader was made`(al: BufferAllocator) {
-        LongVector(al, "v", true).use { vec ->
+        LongVector(al, true).use { vec ->
             repeat(10) { vec.writeLong(it.toLong()) }
 
             val row = vec.valueReader()
@@ -220,7 +220,7 @@ class FixedWidthValueReaderTest {
             assertEquals(71L to false, row.readLong() to row.isNull, "an appended row, past the reader's row count")
         }
 
-        LongVector(al, "v", false).use { vec ->
+        LongVector(al, false).use { vec ->
             repeat(10) { vec.writeLong(it.toLong()) }
 
             val row = vec.valueReader()

@@ -5,6 +5,7 @@ import clojure.lang.PersistentArrayMap
 import clojure.lang.RT
 import clojure.lang.Var
 import org.apache.arrow.memory.BufferAllocator
+import xtdb.arrow.LIST_ELS_NAME
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorReader
@@ -44,7 +45,7 @@ class CrashLogger @JvmOverloads constructor(
 
     private fun writeTxOpsToArrow(path: Path, txOpsRdr: VectorReader) {
         txOpsRdr.openDirectSlice(allocator).closeOnCatch { slicedVec ->
-            Relation(allocator, listOf(slicedVec), txOpsRdr.valueCount).use { txOpsRel ->
+            Relation(allocator, linkedMapOf(LIST_ELS_NAME to slicedVec), txOpsRdr.valueCount).use { txOpsRel ->
                 bufferPool.openArrowWriter(path, txOpsRel).use { writer ->
                     writer.writePage()
                     writer.endSync()

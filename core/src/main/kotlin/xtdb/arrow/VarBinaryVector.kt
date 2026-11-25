@@ -10,14 +10,14 @@ import java.nio.ByteBuffer
 
 class VarBinaryVector private constructor(
     override val al: BufferAllocator,
-    override var name: String, override var valueCount: Int,
+    override var valueCount: Int,
     override var validityBuffer: BitBuffer?,
     override val offsetBuffer: ExtensibleBuffer,
     override val dataBuffer: ExtensibleBuffer
 ) : VariableWidthVector(), MetadataFlavour.Bytes {
 
-    constructor(al: BufferAllocator, name: String, nullable: Boolean) :
-            this(al, name, 0, if (nullable) BitBuffer(al) else null, ExtensibleBuffer(al), ExtensibleBuffer(al))
+    constructor(al: BufferAllocator, nullable: Boolean) :
+            this(al, 0, if (nullable) BitBuffer(al) else null, ExtensibleBuffer(al), ExtensibleBuffer(al))
 
     override var lastOffset = if (valueCount == 0) 0 else offsetBuffer.getInt(valueCount)
 
@@ -35,7 +35,7 @@ class VarBinaryVector private constructor(
 
     override fun openSlice(al: BufferAllocator) =
         VarBinaryVector(
-            al, name, valueCount,
+            al, valueCount,
             validityBuffer?.openSlice(al), offsetBuffer.openSlice(al), dataBuffer.openSlice(al)
         )
 

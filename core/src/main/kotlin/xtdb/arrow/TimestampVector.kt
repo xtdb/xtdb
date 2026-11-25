@@ -26,7 +26,7 @@ private fun TimeUnit.toInstant(value: Long) = when (this) {
 
 class TimestampLocalVector private constructor(
     override val al: BufferAllocator,
-    override var name: String, val unit: TimeUnit = MICROSECOND,
+    val unit: TimeUnit = MICROSECOND,
     override var validityBuffer: BitBuffer?, override val dataBuffer: ExtensibleBuffer,
     override var valueCount: Int
 ) : FixedWidthVector(), MetadataFlavour.DateTime {
@@ -34,8 +34,8 @@ class TimestampLocalVector private constructor(
     override val arrowType = ArrowType.Timestamp(unit, null)
     override val byteWidth = Long.SIZE_BYTES
 
-    constructor(al: BufferAllocator, name: String, nullable: Boolean, unit: TimeUnit) :
-            this(al, name, unit, if (nullable) BitBuffer(al) else null, ExtensibleBuffer(al), 0)
+    constructor(al: BufferAllocator, nullable: Boolean, unit: TimeUnit) :
+            this(al, unit, if (nullable) BitBuffer(al) else null, ExtensibleBuffer(al), 0)
 
     override fun getLong(idx: Int) = getLong0(idx)
     override fun writeLong(v: Long) = writeLong0(v)
@@ -64,7 +64,7 @@ class TimestampLocalVector private constructor(
     override fun hashCode0(idx: Int, hasher: Hasher) = hasher.hash(getMetaDouble(idx))
 
     override fun openSlice(al: BufferAllocator) =
-        TimestampLocalVector(al, name, unit, validityBuffer?.openSlice(al), dataBuffer.openSlice(al), valueCount)
+        TimestampLocalVector(al, unit, validityBuffer?.openSlice(al), dataBuffer.openSlice(al), valueCount)
 
     override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) =
         doubleHashes(this, out, sel, hasher) { it.addDoubles(valueCount, sel) { idx -> if (isNull(idx)) 0.0 else getMetaDouble(idx) } }
@@ -72,7 +72,6 @@ class TimestampLocalVector private constructor(
 
 class TimestampTzVector private constructor(
     override val al: BufferAllocator,
-    override var name: String,
     val unit: TimeUnit = MICROSECOND, val zone: ZoneId = UTC,
     override var validityBuffer: BitBuffer?, override val dataBuffer: ExtensibleBuffer,
     override var valueCount: Int
@@ -81,8 +80,8 @@ class TimestampTzVector private constructor(
     override val arrowType = ArrowType.Timestamp(unit, zone.toString())
     override val byteWidth = Long.SIZE_BYTES
 
-    constructor(al: BufferAllocator, name: String, nullable: Boolean, unit: TimeUnit, zone: ZoneId)
-            : this(al, name, unit, zone, if (nullable) BitBuffer(al) else null, ExtensibleBuffer(al), 0)
+    constructor(al: BufferAllocator, nullable: Boolean, unit: TimeUnit, zone: ZoneId)
+            : this(al, unit, zone, if (nullable) BitBuffer(al) else null, ExtensibleBuffer(al), 0)
 
     override fun getLong(idx: Int) = getLong0(idx)
     override fun writeLong(v: Long) = writeLong0(v)
@@ -124,7 +123,7 @@ class TimestampTzVector private constructor(
 
     override fun openSlice(al: BufferAllocator) =
         TimestampTzVector(
-            al, name, unit, zone, validityBuffer?.openSlice(al),
+            al, unit, zone, validityBuffer?.openSlice(al),
             dataBuffer.openSlice(al), valueCount
         )
 

@@ -21,7 +21,7 @@
   ([^Vector src-vec ^BufferAllocator al]
    (copy-vector src-vec al 0 (.getValueCount src-vec)))
   ([^Vector src-vec ^BufferAllocator al start-idx end-idx]
-   (util/with-close-on-catch [out-vec (Vector/open al (.getField src-vec))]
+   (util/with-close-on-catch [out-vec (Vector/open al (.toField src-vec "src"))]
      (let [copier (.rowCopier src-vec out-vec)]
        (doseq [i (range start-idx end-idx)]
          (.copyRow copier i))
@@ -75,7 +75,7 @@
 (t/deftest ^:property copy-two-duvs
   (tu/run-property-test
    {:num-tests tu/property-test-iterations}
-   (prop/for-all [[vec-gen1 vec-gen2] tg/two-distinct-duvs-gen]
+   (prop/for-all [[vec-gen1 vec-gen2] tg/two-duvs-gen]
                  (with-open [^Vector src-vec1 (tg/vec-gen->arrow-vec tu/*allocator* vec-gen1)
                              ^Vector src-vec2 (tg/vec-gen->arrow-vec tu/*allocator* vec-gen2)
                              ^Vector duv (merge-vectors-into-duv tu/*allocator* [src-vec1 src-vec2])]

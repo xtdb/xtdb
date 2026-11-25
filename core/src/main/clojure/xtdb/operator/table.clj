@@ -107,11 +107,11 @@
                                                                          ;; the EE doesn't yet have an efficient means to do so...
                                                                          (let [input-types (assoc opts :param-types param-types)
                                                                                expr (expr/form->expr v input-types)
-                                                                               projection-spec (expr/->expression-projection-spec "_scalar" expr input-types)]
+                                                                               projection-spec (expr/->expression-projection-spec expr input-types)]
                                                                            (.add type-set (.getType projection-spec))
                                                                            (MapEntry/create k (fn write-expr! [{:keys [allocator args]} ^VectorWriter out-col]
                                                                                                 (util/with-open [projection (.open projection-spec allocator schema args)
-                                                                                                                 out-vec (.project projection (vr/rel-reader [] 1))]
+                                                                                                                 out-vec (.project projection (vr/keyed-rel-reader {} 1))]
                                                                                                   (.writeObject out-col (.getObject out-vec 0))))))))))))]
 
                                        {:ks (set (keys out-row))
@@ -148,14 +148,14 @@
         {:keys [vec-type ->list-expr]} (expr-list/compile-list-expr expr input-types)
         out-vec-types (-> {out-col vec-type}
                           (restrict-cols table-opts))
-        out-type (get out-vec-types out-col)]
+        ^VectorType out-type (get out-vec-types out-col)]
     {:vec-types out-vec-types
      :->out-rel (fn [{:keys [^BufferAllocator allocator, ^RelationReader args]}]
-                  (util/with-close-on-catch [out-vec (Vector/open allocator (str out-col) out-type)]
+                  (util/with-close-on-catch [out-vec (Vector/open allocator out-type)]
                     (let [^ListExpression list-expr (->list-expr schema args)]
                       (when list-expr
                         (.writeTo list-expr out-vec 0 (.getSize list-expr)))
-                      (Relation. allocator ^List (vector out-vec) (.getValueCount out-vec)))))}))
+                      (Relation. allocator (doto (java.util.LinkedHashMap.) (.put (str out-col) out-vec)) (.getValueCount out-vec)))))}))
 
 (defn- emit-arg-table [param table-opts {:keys [param-types]}]
   (let [^VectorType param-type (or (get param-types param)
@@ -186,11 +186,11 @@
                         el-struct-rdr (cond-> el-rdr
                                               (instance? ArrowType$Union (.getArrowType el-rdr)) (.vectorFor "struct"))]
 
-                    (util/with-close-on-catch [slices (ArrayList.)]
+                    (util/with-close-on-catch [slices (java.util.LinkedHashMap.)]
                       (doseq [k (.getKeyNames el-struct-rdr)
                               :when (contains? vec-types (symbol k))]
-                        (.add slices (.openSlice (.vectorFor el-struct-rdr k) allocator)))
-                      (vr/rel-reader (vec slices) (.getValueCount el-rdr)))))}))
+                        (.put slices k (.openSlice (.vectorFor el-struct-rdr k) allocator)))
+                      (vr/keyed-rel-reader slices (.getValueCount el-rdr)))))}))
 
 (defmethod lp/emit-expr :table [{:keys [opts]} emit-opts]
   (let [{:keys [rows column param]} opts

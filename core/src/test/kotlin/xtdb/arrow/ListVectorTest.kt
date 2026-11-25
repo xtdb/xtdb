@@ -27,7 +27,7 @@ class ListVectorTest {
 
     @Test
     fun `a slice appends after the lists it already holds`() {
-        ListVector(allocator, "list", false, NullVector($$"$data$")).use { listVec ->
+        ListVector(allocator, false, NullVector()).use { listVec ->
             listVec.writeObject(listOf(1, 2))
             listVec.writeObject(listOf(3))
 
@@ -43,21 +43,21 @@ class ListVectorTest {
 
     @Test
     fun `promotes el-vector`() {
-        ListVector(allocator, "list", false, NullVector($$"$data$")).use { listVec ->
+        ListVector(allocator, false, NullVector()).use { listVec ->
             listVec.writeObject(listOf(1, 2, 3))
             listVec.writeObject(listOf(4, 5, "6"))
             assertEquals(listOf(listOf(1, 2, 3), listOf(4, 5, "6")), listVec.asList)
 
             assertEquals(
                 "list" ofType listTypeOf(fromLegs(VectorType.I32, VectorType.UTF8)),
-                listVec.field
+                listVec.toField("list")
             )
         }
     }
 
     @Test
     fun `promotes el-vector with a null already written`() {
-        ListVector(allocator, "list", false, NullVector("\$data\$")).use { listVec ->
+        ListVector(allocator, false, NullVector()).use { listVec ->
             listVec.writeObject(listOf(null))
             listVec.writeObject(listOf(1, 2, 3))
 
@@ -69,7 +69,7 @@ class ListVectorTest {
     // this to keep their `.size` gate exact - so promotion here is not a local change (#5948).
     @Test
     fun `a bottom el-type and a non-empty list cannot coexist`() {
-        ListVector(allocator, "list", false, NullVector($$"$data$", false)).use { listVec ->
+        ListVector(allocator, false, NullVector(false)).use { listVec ->
             listVec.writeObject(emptyList<Any>())
             assertEquals(listTypeOf(VectorType.Nothing), listVec.type)
 
@@ -80,7 +80,7 @@ class ListVectorTest {
 
     @Test
     fun `an empty list's batch survives Arrow's unloader without moving the shared empty buffer`() {
-        Relation(allocator, listOf(ListVector(allocator, "l", false, NullVector($$"$data$"))), 0).use { rel ->
+        Relation(allocator, linkedMapOf<String, Vector>("l" to ListVector(allocator, false, NullVector())), 0).use { rel ->
             rel.openAsRoot(allocator).use { root ->
                 VectorUnloader(root).recordBatch.use { rb -> rb.buffers.forEach { it.nioBuffer() } }
             }
