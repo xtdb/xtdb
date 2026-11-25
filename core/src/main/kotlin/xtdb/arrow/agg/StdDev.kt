@@ -2,6 +2,7 @@ package xtdb.arrow.agg
 
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.arrow.*
+import xtdb.arrow.VectorIndirection.Mask
 import xtdb.arrow.VectorType.Companion.F64
 import xtdb.arrow.VectorType.Companion.maybe
 import xtdb.util.closeOnCatch
@@ -13,7 +14,7 @@ sealed class StdDev(override val colName: FieldName, private val varianceFactory
     override fun build(al: BufferAllocator, args: RelationReader) = object : AggregateSpec {
         private val varianceAgg = varianceFactory.build(al, args)
 
-        override fun aggregate(inRel: RelationReader, groupMapping: GroupMapping, mask: RowMask) =
+        override fun aggregate(inRel: RelationReader, groupMapping: GroupMapping, mask: Mask) =
             varianceAgg.aggregate(inRel, groupMapping, mask)
 
         override fun openFinishedVector(): Vector =

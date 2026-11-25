@@ -20,7 +20,7 @@
            (org.apache.arrow.vector PeriodDuration)
            (org.apache.arrow.vector.types.pojo ArrowType$Decimal)
            (org.apache.commons.codec.binary Hex)
-           (xtdb.arrow ListValueReader RelationReader RowMask ValueBox ValueReader Vector VectorReader VectorType VectorType$Listy VectorType$Mono VectorType$Nothing VectorType$Poly VectorType$Struct)
+           (xtdb.arrow ListValueReader RelationReader ValueBox ValueReader Vector VectorIndirection$Mask VectorReader VectorType VectorType$Listy VectorType$Mono VectorType$Nothing VectorType$Poly VectorType$Struct)
            (xtdb.expression PgFormat)
            (xtdb.operator ProjectionSpec ProjectionSpec$Factory SelectionSpec SelectionSpec$Factory)
            (xtdb.pgwire PgTypes)
@@ -2677,7 +2677,7 @@
           (reify SelectionSpec
             (select [_ in-rel]
               (let [{:keys [!selection-fn]} (emit-for-batch emit-cache emit-selection expr var-syms param-types in-rel)]
-                (RowMask/ofWords (rethrowing-anomalies
+                (VectorIndirection$Mask/ofWords (rethrowing-anomalies
                                    (@!selection-fn in-rel schema args))
                                  (.getRowCount in-rel))))
 

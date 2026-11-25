@@ -4,6 +4,7 @@ import io.kotest.matchers.shouldBe
 import org.apache.arrow.memory.BufferAllocator
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
+import xtdb.arrow.VectorIndirection.Mask
 import xtdb.arrow.VectorType.Companion.structOf
 import xtdb.arrow.VectorType.Companion.I64
 import xtdb.arrow.Vector.Companion.openVector
@@ -42,7 +43,7 @@ class RenamedRelationTest {
             renamed.select(intArrayOf(0, 2)).colNames shouldBe listOf("b")
             renamed.openSlice(al).use { it.colNames shouldBe listOf("b") }
             renamed.openDirectSlice(al).use { it.colNames shouldBe listOf("b") }
-            MaskedRelation.of(renamed, RowMask.all(3)).colNames shouldBe listOf("b")
+            renamed.select(Mask.all(3)).colNames shouldBe listOf("b")
         }
     }
 

@@ -4,7 +4,7 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ArrowBufPointer
 import xtdb.arrow.FixedSizeBinaryVector
 import xtdb.arrow.RelationReader
-import xtdb.arrow.RowMask
+import xtdb.arrow.VectorIndirection.Mask
 import xtdb.arrow.VectorReader
 import xtdb.operator.SelectionSpec
 import xtdb.trie.Bucketer
@@ -15,8 +15,8 @@ class MultiIidSelector(private val iids: SortedSet<ByteArray>) : SelectionSpec {
     private val haystackPtr = ArrowBufPointer()
     private val needlePtr = ArrowBufPointer()
 
-    private fun select(readRelation: RelationReader, iids: SortedSet<ByteArray>): RowMask {
-        val res = RowMask.Builder(readRelation.rowCount)
+    private fun select(readRelation: RelationReader, iids: SortedSet<ByteArray>): Mask {
+        val res = Mask.Builder(readRelation.rowCount)
         val iidReader = readRelation["_iid"]
 
         repeat(readRelation.rowCount) { rowIdx ->
@@ -49,11 +49,11 @@ class MultiIidSelector(private val iids: SortedSet<ByteArray>) : SelectionSpec {
         return left
     }
 
-    fun select(allocator: BufferAllocator, readRelation: RelationReader, path: ByteArray): RowMask {
+    fun select(allocator: BufferAllocator, readRelation: RelationReader, path: ByteArray): Mask {
         val iids = bucketer.filterIidsForPath(this.iids, path)
 
         val iidReader = readRelation["_iid"]
-        val res = RowMask.Builder(iidReader.valueCount)
+        val res = Mask.Builder(iidReader.valueCount)
 
         FixedSizeBinaryVector(allocator, false, 16).use { needlesVec ->
             for (iid in iids) needlesVec.writeBytes(iid)

@@ -4,6 +4,7 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.arrow.*
 import xtdb.arrow.Vector.Companion.openVector
+import xtdb.arrow.VectorIndirection.Mask
 import xtdb.arrow.VectorType.Companion.F64
 import xtdb.arrow.VectorType.Companion.maybe
 import xtdb.util.closeOnCatch
@@ -28,7 +29,7 @@ class Average(val fromName: FieldName, fromType: VectorType, override val colNam
         private val sumAgg = Sum(fromName, "sum", sumOutType, hasZeroRow).build(al, args)
         private val countAgg = Count(fromName, "count", hasZeroRow).build(al, args)
 
-        override fun aggregate(inRel: RelationReader, groupMapping: GroupMapping, mask: RowMask) {
+        override fun aggregate(inRel: RelationReader, groupMapping: GroupMapping, mask: Mask) {
             sumAgg.aggregate(inRel, groupMapping, mask)
             countAgg.aggregate(inRel, groupMapping, mask)
         }

@@ -3,7 +3,7 @@ package xtdb.operator.scan
 import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.memory.util.ByteFunctionHelpers
 import xtdb.arrow.RelationReader
-import xtdb.arrow.RowMask
+import xtdb.arrow.VectorIndirection.Mask
 import xtdb.operator.SelectionSpec
 
 class SingleIidSelector(private val iid: ByteArray) : SelectionSpec {
@@ -16,11 +16,11 @@ class SingleIidSelector(private val iid: ByteArray) : SelectionSpec {
 
     private operator fun ByteArray.compareTo(pointer: ArrowBufPointer) = - (pointer.compareTo(this))
 
-    override fun select(readRelation: RelationReader): RowMask {
+    override fun select(readRelation: RelationReader): Mask {
         val ptr = ArrowBufPointer()
         val iidReader = readRelation["_iid"]
         val valueCount = iidReader.valueCount
-        val mask = RowMask.Builder(valueCount)
+        val mask = Mask.Builder(valueCount)
         if (valueCount == 0) return mask.build()
 
         var left = 0

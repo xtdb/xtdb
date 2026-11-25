@@ -2,8 +2,8 @@ package xtdb.arrow.metadata
 
 import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.arrow.IntVector
-import xtdb.arrow.RowMask
 import xtdb.arrow.UNION_TYPE
+import xtdb.arrow.VectorIndirection.Mask
 import xtdb.arrow.VectorReader
 import xtdb.arrow.VectorType
 import xtdb.util.Hasher
@@ -18,7 +18,7 @@ sealed interface MetadataFlavour {
     sealed interface Numeric : MetadataFlavour {
         fun getMetaDouble(idx: Int): Double
 
-        fun minMaxInto(minMax: DoubleMinMax, mask: RowMask) =
+        fun minMaxInto(minMax: DoubleMinMax, mask: Mask) =
             repeat(valueCount) { if (mask.isSet(it) && !isNull(it)) minMax.applyMinMax(getMetaDouble(it)) }
     }
 
@@ -54,33 +54,33 @@ sealed interface MetadataFlavour {
          * The mask over the rows of [children] that their metadata is taken under, given [mask] over this struct's rows:
          * the rows [mask] selects where this struct isn't null.
          */
-        fun childMask(mask: RowMask): RowMask =
+        fun childMask(mask: Mask): Mask =
             if (!nullable) mask
-            else RowMask.Builder(mask.rowCount).also { rows ->
+            else Mask.Builder(mask.rowCount).also { rows ->
                 for (idx in 0 until mask.rowCount) if (mask.isSet(idx) && !isNull(idx)) rows.add(idx)
             }.build()
     }
 
     companion object {
         internal fun MetadataFlavour.translatingRows(
-            translateMask: (RowMask) -> RowMask, translateSel: (IntArray) -> IntArray
+            translateMask: (Mask) -> Mask, translateSel: (IntArray) -> IntArray
         ): MetadataFlavour {
             val f = this
             return when (f) {
                 is Number -> object : Number by f {
-                    override fun minMaxInto(minMax: DoubleMinMax, mask: RowMask) = f.minMaxInto(minMax, translateMask(mask))
+                    override fun minMaxInto(minMax: DoubleMinMax, mask: Mask) = f.minMaxInto(minMax, translateMask(mask))
                 }
 
                 is DateTime -> object : DateTime by f {
-                    override fun minMaxInto(minMax: DoubleMinMax, mask: RowMask) = f.minMaxInto(minMax, translateMask(mask))
+                    override fun minMaxInto(minMax: DoubleMinMax, mask: Mask) = f.minMaxInto(minMax, translateMask(mask))
                 }
 
                 is Duration -> object : Duration by f {
-                    override fun minMaxInto(minMax: DoubleMinMax, mask: RowMask) = f.minMaxInto(minMax, translateMask(mask))
+                    override fun minMaxInto(minMax: DoubleMinMax, mask: Mask) = f.minMaxInto(minMax, translateMask(mask))
                 }
 
                 is TimeOfDay -> object : TimeOfDay by f {
-                    override fun minMaxInto(minMax: DoubleMinMax, mask: RowMask) = f.minMaxInto(minMax, translateMask(mask))
+                    override fun minMaxInto(minMax: DoubleMinMax, mask: Mask) = f.minMaxInto(minMax, translateMask(mask))
                 }
 
                 is Bytes -> object : Bytes by f {
@@ -89,7 +89,7 @@ sealed interface MetadataFlavour {
                 }
 
                 is Struct -> object : Struct by f {
-                    override fun childMask(mask: RowMask) = f.childMask(translateMask(mask))
+                    override fun childMask(mask: Mask) = f.childMask(translateMask(mask))
                 }
 
                 is Presence, is List, is Set -> f

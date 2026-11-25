@@ -4,6 +4,8 @@ import io.kotest.matchers.shouldBe
 import org.apache.arrow.memory.BufferAllocator
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
+import xtdb.arrow.VectorIndirection.Companion.selection
+import xtdb.arrow.VectorIndirection.Mask
 import xtdb.test.AllocatorResolver
 
 private const val ROWS = 200
@@ -23,16 +25,30 @@ class MaskedRelationTest {
     @Test
     fun `stacked masks refine to one mask over the unmasked rows`(al: BufferAllocator) {
         al.openRel().use { rel ->
-            val once = MaskedRelation.of(rel, rowMask(ROWS) { it % 3 != 1 })
-            val twice = MaskedRelation.of(once, rowMask(once.rowCount) { it % 2 == 0 || it in 40..45 })
+            val once = rel.select(rowMask(ROWS) { it % 3 != 1 })
+            val twice = once.select(rowMask(once.rowCount) { it % 2 == 0 || it in 40..45 }) as MaskedRelation
             val expected = (0 until ROWS).filter { it % 3 != 1 }.filterIndexed { k, _ -> k % 2 == 0 || k in 40..45 }
 
             twice.mask.rowCount shouldBe ROWS
             twice.mask.toSelection().toList() shouldBe expected
 
             twice.rowCount shouldBe expected.size
-            twice.cols.values.all { it is MaskedVector } shouldBe true
+            twice.cols.values.all { it is IndirectVector && it.sel === twice.mask } shouldBe true
             twice.asMaps shouldBe rel.select(expected.toIntArray()).asMaps
+        }
+    }
+
+    @Test
+    fun `a mask over a selected relation's columns is one selection over each base column`(al: BufferAllocator) {
+        al.openRel().use { rel ->
+            val idxs = IntArray(ROWS / 2) { ROWS - 1 - 2 * it }
+            val mask = rowMask(idxs.size) { it % 3 != 0 }
+            val expected = idxs.filterIndexed { k, _ -> k % 3 != 0 }.toIntArray()
+
+            rel.select(idxs).select(mask).let { masked ->
+                masked.cols.values.all { it is IndirectVector && it.sel == selection(expected) } shouldBe true
+                masked.asMaps shouldBe rel.select(expected).asMaps
+            }
         }
     }
 
@@ -40,13 +56,13 @@ class MaskedRelationTest {
     fun `select resolves to the unmasked rows in one gather`(al: BufferAllocator) {
         al.openRel().use { rel ->
             val mask = rowMask(ROWS) { it % 3 == 0 || it in 60..70 }
-            val masked = MaskedRelation.of(rel, mask)
+            val masked = rel.select(mask)
             val expected = rel.select(mask.toSelection())
 
             val idxs = intArrayOf(masked.rowCount - 1, 0, 21, 21, 22)
             masked.select(idxs).let { sel ->
                 sel.asMaps shouldBe expected.select(idxs).asMaps
-                sel.cols.values.none { it is MaskedVector } shouldBe true
+                sel.cols.values.none { (it as? IndirectVector)?.sel is Mask } shouldBe true
             }
         }
     }
@@ -57,7 +73,7 @@ class MaskedRelationTest {
         val rel = al.openRel()
         val expected = rel.select(mask.toSelection()).asMaps
 
-        MaskedRelation.of(rel, mask).use { masked ->
+        rel.select(mask).use { masked ->
             masked.openSlice(al)
         }.use { slice ->
             slice.rowCount shouldBe mask.cardinality

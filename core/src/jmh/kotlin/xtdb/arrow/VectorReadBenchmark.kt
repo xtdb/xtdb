@@ -6,6 +6,7 @@ import org.apache.arrow.vector.types.TimeUnit.MICROSECOND
 import org.openjdk.jmh.annotations.*
 import java.util.concurrent.TimeUnit
 import kotlin.random.Random
+import xtdb.arrow.VectorIndirection.Mask
 
 private const val ROWS = 1 shl 20
 private const val INNER_ROWS = ROWS / 4 * 5
@@ -68,10 +69,10 @@ open class VectorReadBenchmark {
         )
     }
 
-    private fun rowMask(idxs: IntArray, rowCount: Int): RowMask {
+    private fun rowMask(idxs: IntArray, rowCount: Int): Mask {
         val words = LongArray((rowCount + 63) ushr 6)
         for (idx in idxs) words[idx ushr 6] = words[idx ushr 6] or (1L shl (idx and 63))
-        return RowMask.ofWords(words, rowCount)
+        return Mask.ofWords(words, rowCount)
     }
 
     @Setup
@@ -104,14 +105,14 @@ open class VectorReadBenchmark {
         utf8SelectionNullable = utf8InnerNullable.select(idxs)
 
         val mask = rowMask(idxs, INNER_ROWS)
-        masked = MaskedVector(inner, mask)
-        maskedNullable = MaskedVector(innerNullable, mask)
+        masked = IndirectVector(inner, mask)
+        maskedNullable = IndirectVector(innerNullable, mask)
 
         val sparseInner = longVector(SPARSE_INNER_ROWS, true, rnd)
         vecs += sparseInner
         val sparseIdxs = (0 until SPARSE_INNER_ROWS).shuffled(rnd).take(SPARSE_ROWS).sorted().toIntArray()
         sparseSelectionNullable = sparseInner.select(sparseIdxs)
-        sparseMaskedNullable = MaskedVector(sparseInner, rowMask(sparseIdxs, SPARSE_INNER_ROWS))
+        sparseMaskedNullable = IndirectVector(sparseInner, rowMask(sparseIdxs, SPARSE_INNER_ROWS))
 
         val megaFlat = megaVectors(MEGA_ROWS, rnd)
         val megaInner = megaVectors(MEGA_INNER_ROWS, rnd)
