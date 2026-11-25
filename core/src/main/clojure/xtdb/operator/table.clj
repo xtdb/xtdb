@@ -141,8 +141,9 @@
 
                         out-rel))))}))
 
-(defn- emit-col-table [col-spec table-opts {:keys [param-types schema] :as input-types}]
+(defn- emit-col-table [col-spec table-opts {:keys [param-types schema]}]
   (let [[out-col v] (first col-spec)
+        input-types {:param-types param-types}
         expr (expr/form->expr v input-types)
         {:keys [vec-type ->list-expr]} (expr-list/compile-list-expr expr input-types)
         out-vec-types (-> {out-col vec-type}

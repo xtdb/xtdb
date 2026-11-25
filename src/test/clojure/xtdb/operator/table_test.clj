@@ -1,10 +1,13 @@
 (ns xtdb.operator.table-test
   (:require [clojure.spec.alpha :as s]
             [clojure.test :as t]
+            [xtdb.api :as xt]
             [xtdb.logical-plan :as lp]
             [xtdb.test-util :as tu]
-            [xtdb.time :as time])
-  (:import java.time.Duration))
+            [xtdb.time :as time]
+            [xtdb.util :as util])
+  (:import java.time.Duration
+           java.util.Map))
 
 (t/use-fixtures :each tu/with-allocator tu/with-node)
 
@@ -197,3 +200,19 @@
     (t/is (nil? (:stats (lp/emit-expr (s/conform ::lp/logical-plan
                                                  '[:table {:column {foo [1 2 3 4]}}])
                                       {}))))))
+
+(t/deftest column-table-does-not-key-the-compile-cache-on-node-state
+  (util/clear-known-lru-memo-tables!)
+
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id "a"}]])
+  (t/is (= [{:xt/id "a"}]
+           (xt/q tu/*node* ["SELECT * FROM docs WHERE _id = ANY(?)" ["a"]])))
+
+  (let [node-state-key? (fn [k]
+                          (some #(and (map? %) (or (contains? % :dbs) (contains? % :scan-emitter)))
+                                (tree-seq coll? seq k)))]
+    (t/is (empty? (for [[_ ^Map cache] @#'util/known-memo-tables
+                        k (locking cache (vec (.keySet cache)))
+                        :when (node-state-key? k)]
+                    k))
+          "memoized compile fns are keyed on the types they compile against, not the node's databases")))
