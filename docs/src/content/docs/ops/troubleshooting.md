@@ -2,6 +2,19 @@
 title: Troubleshooting
 ---
 
+<details>
+<summary>Changelog (last updated v2.2.1)</summary>
+
+v2.2.1: the SQL parser cache is bounded
+
+: The SQL parser's prediction cache holds at most 50,000 states by default, and is reset when it passes that — see [SQL parser cache resets](#sql-parser-cache-resets).
+
+  Previously the cache was never evicted, so a workload whose SQL kept varying in structure could grow it until the node ran out of heap.
+
+  No upgrade steps are required; set `XTDB_SQL_PARSER_CACHE_MAX_STATES=-1` to keep the previous unbounded behaviour.
+
+</details>
+
 JUXT provide [enterprise XTDB support](https://xtdb.com/support) for companies looking to adopt or extend their usage of XTDB, including training, consultancy and production support - email <hello@xtdb.com> for more information.
 
 Given XTDB is a public, open-source project, you may also find useful information: - on [Discuss XTDB](https://discuss.xtdb.com) (public forum) - on the [GitHub repository](https://github.com/xtdb/xtdb) (where you can [check existing issues](https://github.com/xtdb/xtdb/issues) or [raise a new issue](https://github.com/xtdb/xtdb/issues/new).)
@@ -83,3 +96,40 @@ Once the nodes have started, you have two recovery paths:
   The database will resume processing from where it left off.
 - **Permanently remove the database** by running `DETACH DATABASE <name>` while the database is dormant.
   This removes the database configuration from future blocks.
+
+## SQL parser cache resets
+
+XTDB's SQL parser caches what it learns about the grammar as it parses, so that later statements of a similar structure parse faster.
+The cache is keyed on the structure of each statement — its sequence of keywords, operators and nesting — not on its values, so it stays small for applications that send the same few statement shapes.
+SQL whose structure keeps varying grows it: most often, literal nested documents in `INSERT … RECORDS` or `VALUES`, whose structure follows the data.
+
+The cache is shared by every node in the JVM, and is reset to empty once it holds more than a fixed number of states.
+Each reset is logged:
+
+```
+SQL parser cache reset at 50,214 states (est. ~490MB) after 1,204,331 parses; see https://docs.xtdb.com/ops/troubleshooting.html#sql-parser-cache-resets
+```
+
+Resetting the cache costs speed, never correctness: statements parse slower until it re-warms.
+
+`XTDB_SQL_PARSER_CACHE_MAX_STATES` (or the `xtdb.sql.parser-cache.max-states` system property)
+
+: The number of states the cache holds before it is reset; default `50000`.
+  `-1` never resets it.
+  The environment variable takes precedence over the system property; a value that isn't a whole number is logged as a warning and the default used.
+
+  Each state takes roughly 10KB of heap, so the default is roughly 500MB.
+  This is an estimate: it varies with the SQL, and memory can briefly reach twice the limit while statements already parsing finish on the previous cache.
+
+### Reading the resets
+
+Occasional resets are the limit working as intended, and need no action.
+
+Frequent resets — few parses between them — mean the workload's statement shapes outgrow the limit:
+
+- If your statements embed literal values whose structure varies, such as nested documents, pass them as query parameters instead.
+  The statement text then has one shape however the values vary, and the cache stops growing.
+- If the shapes are stable but numerous, and the heap has room, raise `XTDB_SQL_PARSER_CACHE_MAX_STATES`.
+
+The cache's size and reset count are exposed as the `xtdb.sql.parser.cache.states` gauge and the `xtdb.sql.parser.cache.resets` counter.
+Both describe the JVM's one cache, so every node in the same JVM reports the same values.

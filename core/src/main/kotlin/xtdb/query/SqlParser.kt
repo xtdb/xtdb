@@ -33,46 +33,49 @@ private fun Recognizer<*, *>.addThrowingErrorListener() = apply {
     })
 }
 
-private fun <T> String.parseWithFallback(parseAction: (Sql) -> T): T {
+internal fun <T> String.parseWithFallback(cache: ParserCache, parseAction: (Sql) -> T): T {
     val lexer = SqlLexer(CharStreams.fromString(this)).also { it.addThrowingErrorListener() }
     val tokens = CommonTokenStream(lexer)
     val parser = Sql(tokens)
 
-    // Try SLL mode first (fast speculative parsing)
-    parser.removeErrorListeners()
-    parser.errorHandler = BailErrorStrategy()
-    parser.interpreter.predictionMode = PredictionMode.SLL
+    return cache.parse(parser) {
+        // Try SLL mode first (fast speculative parsing)
+        parser.removeErrorListeners()
+        parser.errorHandler = BailErrorStrategy()
+        parser.interpreter.predictionMode = PredictionMode.SLL
 
-    return try {
-        parseAction(parser)
-    } catch (e: ParseCancellationException) {
-        // SLL failed due to ambiguity, retry with full LL mode using same parser state
-        tokens.seek(0)
-        parser.reset()
-        parser.addThrowingErrorListener()
-        parser.errorHandler = DefaultErrorStrategy()
-        parser.interpreter.predictionMode = PredictionMode.LL
+        try {
+            parseAction(parser)
+        } catch (e: ParseCancellationException) {
+            // SLL failed due to ambiguity, retry with full LL mode using same parser state
+            tokens.seek(0)
+            parser.reset()
+            parser.addThrowingErrorListener()
+            parser.errorHandler = DefaultErrorStrategy()
+            parser.interpreter.predictionMode = PredictionMode.LL
 
-        parseAction(parser)
+            parseAction(parser)
+        }
     }
 }
 
-fun String.parseExpr(): Sql.ExprContext = parseWithFallback { it.expr() }
+fun String.parseExpr(): Sql.ExprContext = parseWithFallback(ParserCache.global) { it.expr() }
 
-fun String.parseWhere(): Sql.SearchConditionContext = parseWithFallback { it.whereClause().searchCondition() }
+fun String.parseWhere(): Sql.SearchConditionContext =
+    parseWithFallback(ParserCache.global) { it.whereClause().searchCondition() }
 
 // Estimated 400MB max size for each cache, given large SLT queries, observed during SLT between/10/ run.
 // with an inferred value of roughly 100KB per parsed query.
 private val singleQueryCache =
     Caffeine.newBuilder().maximumSize(4096)
         .build(CacheLoader<String, Sql.DirectlyExecutableStatementContext> { sql ->
-            sql.parseWithFallback { it.directSqlStatement().directlyExecutableStatement() }
+            sql.parseWithFallback(ParserCache.global) { it.directSqlStatement().directlyExecutableStatement() }
         })
 
 private val multiQueryCache =
     Caffeine.newBuilder().maximumSize(4096)
         .build(CacheLoader<String, List<Sql.DirectlyExecutableStatementContext>> { sql ->
-            sql.parseWithFallback { it.multiSqlStatement().directlyExecutableStatement() }
+            sql.parseWithFallback(ParserCache.global) { it.multiSqlStatement().directlyExecutableStatement() }
         })
 
 fun String.parseStatementAst() = singleQueryCache[this]
