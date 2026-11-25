@@ -1,5 +1,6 @@
 (ns xtdb.metrics-test
   (:require [clojure.test :as t]
+            [integrant.core :as ig]
             [next.jdbc :as jdbc]
             [xtdb.api :as xt]
             [xtdb.compactor :as c]
@@ -11,7 +12,8 @@
             [xtdb.util :as util])
   (:import (io.micrometer.core.instrument Counter Gauge Timer)
            (java.time Duration)
-           (xtdb.api Xtdb)))
+           (xtdb NodeBase)
+           (xtdb.api Xtdb Xtdb$Config)))
 
 (t/use-fixtures :each tu/with-mock-clock)
 
@@ -292,3 +294,8 @@ $$"])
 
     (t/is (.isClosed registry))
     (t/is (empty? (.getMeters registry)))))
+
+(t/deftest a-node-builds-on-a-base-without-a-meter-registry
+  (with-open [base (NodeBase/open (Xtdb$Config.) false)]
+    (t/is (nil? (:conn-metrics (ig/init-key :xtdb/node {:base base})))
+          "no registry means no connection metrics, rather than a node that fails to build")))
