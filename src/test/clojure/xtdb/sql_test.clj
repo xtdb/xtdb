@@ -3663,6 +3663,37 @@ UNION ALL
   (t/is (= [{:result false}]
            (xt/q tu/*node* "SELECT 10 = ANY(SELECT col1 FROM docs) AS result"))))
 
+(t/deftest test-quantified-comparison-binds-tighter-than-and-or-6481
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id "a" :x 5} {:xt/id "b" :x 1}]
+                            [:put-docs :ids {:xt/id "a"} {:xt/id "b"}]])
+
+  (t/is (= [{:xt/id "a", :x 5}]
+           (xt/q tu/*node* ["SELECT _id, x FROM docs WHERE _id = ANY(?) AND x > 1" ["a" "b"]])))
+
+  (t/is (= [{:xt/id "a", :x 5}]
+           (xt/q tu/*node* ["SELECT _id, x FROM docs WHERE _id = ANY(?) OR x > 10" ["a"]])))
+
+  (t/is (= [{:xt/id "a", :x 5}]
+           (xt/q tu/*node* "SELECT _id, x FROM docs WHERE _id = ANY(ARRAY['a', 'b']) AND x > 1")))
+
+  (t/is (= [{:xt/id "a", :x 5}]
+           (xt/q tu/*node* "SELECT _id, x FROM docs WHERE _id = SOME(ARRAY['a', 'b']) AND x > 1")))
+
+  (t/is (= [{:xt/id "a", :x 5}]
+           (xt/q tu/*node* "SELECT _id, x FROM docs WHERE _id <> ALL(ARRAY['b']) AND x > 1")))
+
+  (t/is (= [{:xt/id "a", :x 5} {:xt/id "b", :x 1}]
+           (xt/q tu/*node* "SELECT _id, x FROM docs WHERE x >= ALL(ARRAY[1]) OR x > 10 ORDER BY _id")))
+
+  (t/is (= [{:xt/id "a", :x 5}]
+           (xt/q tu/*node* ["SELECT _id, x FROM docs WHERE _id = ANY(?) IS TRUE" ["a"]])))
+
+  (t/is (= [{:xt/id "a", :x 5}]
+           (xt/q tu/*node* ["SELECT _id, x FROM docs WHERE NOT _id = ANY(?) AND x > 1" ["b"]])))
+
+  (t/is (= [{:xt/id "a", :x 5}]
+           (xt/q tu/*node* "SELECT _id, x FROM docs WHERE _id = ANY (SELECT _id FROM ids) AND x > 1"))))
+
 (t/deftest test-any-correlated-array-column-4895
   (xt/execute-tx tu/*node* [[:put-docs :docs
                              {:xt/id 1 :col1 [8 9]}

@@ -752,7 +752,7 @@ predicatePart2
 
 quantifiedComparisonPredicatePart3
   : subquery # QuantifiedComparisonSubquery
-  | expr #QuantifiedComparisonExpr
+  | '(' expr ')' #QuantifiedComparisonExpr
   ;
 
 compOp : '=' | '!=' | '<>' | '<' | '>' | '<=' | '>=' ;
