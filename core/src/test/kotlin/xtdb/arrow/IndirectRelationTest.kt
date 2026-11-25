@@ -11,7 +11,7 @@ import xtdb.test.AllocatorResolver
 private const val ROWS = 200
 
 @ExtendWith(AllocatorResolver::class)
-class MaskedRelationTest {
+class IndirectRelationTest {
 
     private fun BufferAllocator.openRel(): RelationReader =
         RelationReader.from(
@@ -26,14 +26,15 @@ class MaskedRelationTest {
     fun `stacked masks refine to one mask over the unmasked rows`(al: BufferAllocator) {
         al.openRel().use { rel ->
             val once = rel.select(rowMask(ROWS) { it % 3 != 1 })
-            val twice = once.select(rowMask(once.rowCount) { it % 2 == 0 || it in 40..45 }) as MaskedRelation
+            val twice = once.select(rowMask(once.rowCount) { it % 2 == 0 || it in 40..45 }) as IndirectRelation
             val expected = (0 until ROWS).filter { it % 3 != 1 }.filterIndexed { k, _ -> k % 2 == 0 || k in 40..45 }
 
-            twice.mask.rowCount shouldBe ROWS
-            twice.mask.toSelection().toList() shouldBe expected
+            val mask = twice.sel as Mask
+            mask.rowCount shouldBe ROWS
+            mask.toSelection().toList() shouldBe expected
 
             twice.rowCount shouldBe expected.size
-            twice.cols.values.all { it is IndirectVector && it.sel === twice.mask } shouldBe true
+            twice.cols.values.all { it is IndirectVector && it.sel === mask } shouldBe true
             twice.asMaps shouldBe rel.select(expected.toIntArray()).asMaps
         }
     }
@@ -63,6 +64,21 @@ class MaskedRelationTest {
             masked.select(idxs).let { sel ->
                 sel.asMaps shouldBe expected.select(idxs).asMaps
                 sel.cols.values.none { (it as? IndirectVector)?.sel is Mask } shouldBe true
+            }
+        }
+    }
+
+    @Test
+    fun `a selection over a selected relation is one selection over the base relation`(al: BufferAllocator) {
+        al.openRel().use { rel ->
+            val idxs = IntArray(ROWS / 2) { ROWS - 1 - 2 * it }
+            val idxs2 = intArrayOf(idxs.size - 1, 0, 7, 7, 30)
+            val expected = IntArray(idxs2.size) { idxs[idxs2[it]] }
+
+            (rel.select(idxs).select(idxs2) as IndirectRelation).let { selected ->
+                selected.sel shouldBe selection(expected)
+                selected.cols.values.all { it is IndirectVector && it.sel == selection(expected) } shouldBe true
+                selected.asMaps shouldBe rel.asMaps.let { maps -> expected.map { maps[it] } }
             }
         }
     }

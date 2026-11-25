@@ -25,6 +25,12 @@ interface VectorIndirection {
      */
     fun select(mask: Mask): VectorIndirection
 
+    /**
+     * [vec]'s rows through this indirection: logical row `i` is [vec]'s row `this[i]`.
+     * Goes through [vec]'s own `select`, so an indirection [vec] already has composes with this one rather than nesting.
+     */
+    fun selectFrom(vec: VectorReader): VectorReader
+
     abstract class Iterator : IntIterator() {
         /**
          * Positions the iterator so that the next [nextInt] returns the index for logical row [idx].
@@ -44,6 +50,8 @@ interface VectorIndirection {
             override fun getIndex(idx: Int): Int = idxs[idx]
 
             override fun select(mask: Mask): VectorIndirection = Selection(select(mask.idxs))
+
+            override fun selectFrom(vec: VectorReader) = vec.select(idxs)
 
             override fun toString(): String = "(Selection {idxs=${this.idxs.contentToString()}})"
 
@@ -91,6 +99,8 @@ interface VectorIndirection {
         override fun getIndex(idx: Int) = idxs[idx]
 
         override fun select(mask: Mask): VectorIndirection = andThen(mask)
+
+        override fun selectFrom(vec: VectorReader) = vec.select(this)
 
         /** Walks the mask a word at a time; only [Iterator.seek] reads [idxs]. */
         override fun iterator(): VectorIndirection.Iterator =
