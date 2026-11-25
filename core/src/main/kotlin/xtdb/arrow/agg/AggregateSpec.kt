@@ -3,8 +3,8 @@ package xtdb.arrow.agg
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.Field
 import xtdb.arrow.RelationReader
-import xtdb.arrow.RowMask
 import xtdb.arrow.Vector
+import xtdb.arrow.VectorIndirection.Mask
 import xtdb.arrow.VectorType
 
 interface AggregateSpec : AutoCloseable {
@@ -14,6 +14,6 @@ interface AggregateSpec : AutoCloseable {
         fun build(al: BufferAllocator, args: RelationReader): AggregateSpec
     }
 
-    fun aggregate(inRel: RelationReader, groupMapping: GroupMapping, mask: RowMask)
+    fun aggregate(inRel: RelationReader, groupMapping: GroupMapping, mask: Mask)
     fun openFinishedVector(): Vector
 }

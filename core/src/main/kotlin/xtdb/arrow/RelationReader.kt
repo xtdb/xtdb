@@ -8,6 +8,8 @@ import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.InternalApi
 import xtdb.api.query.IKeyFn
 import xtdb.api.query.IKeyFn.KeyFn.KEBAB_CASE_KEYWORD
+import xtdb.arrow.VectorIndirection.Companion.selection
+import xtdb.arrow.VectorIndirection.Mask
 import xtdb.util.closeAll
 import xtdb.util.closeAllOnCatch
 import xtdb.util.closeOnCatch
@@ -66,7 +68,9 @@ interface RelationReader : ILookup, Seqable, Counted, AutoCloseable {
         cols.safeMapValues { _, v -> v.openDirectSlice(al) }
             .closeAllOnCatch { slices -> Relation(al, LinkedHashMap(slices), rowCount) }
 
-    fun select(idxs: IntArray): RelationReader = from(cols.mapValuesTo(linkedMapOf()) { it.value.select(idxs) }, idxs.size)
+    fun select(idxs: IntArray): RelationReader = IndirectRelation(this, selection(idxs))
+
+    fun select(mask: Mask): RelationReader = IndirectRelation(this, mask)
 
     fun rowCopier(dest: RelationWriter): RowCopier {
         val colNames = cols.keys + dest.cols.keys

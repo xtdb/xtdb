@@ -8,13 +8,15 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.extension.ExtendWith
 import xtdb.api.query.IKeyFn.KeyFn.SNAKE_CASE_STRING
+import xtdb.arrow.VectorIndirection.Companion.selection
+import xtdb.arrow.VectorIndirection.Mask
 import xtdb.test.AllocatorResolver
 import xtdb.util.Hasher
 
 private const val ROWS = 150
 
 @ExtendWith(AllocatorResolver::class)
-class MaskedVectorTest {
+class IndirectVectorTest {
 
     private class Spec(val open: (BufferAllocator) -> VectorReader, val readable: (Int) -> Boolean = { true })
 
@@ -96,9 +98,9 @@ class MaskedVectorTest {
                 masks.forEach { (maskLabel, set) ->
                     val mask = rowMask(ROWS) { set(it) && spec.readable(it) }
                     val what = "$vecLabel, $maskLabel"
-                    checkAgrees(al, MaskedVector(vec, mask), vec.select(mask.toSelection()), what)
+                    checkAgrees(al, IndirectVector(vec, mask), vec.select(mask.toSelection()), what)
 
-                    MaskedVector(vec, mask).openSlice(al).use { masked ->
+                    IndirectVector(vec, mask).openSlice(al).use { masked ->
                         checkAgrees(al, masked, vec.select(mask.toSelection()), "$what, openSlice")
                     }
                 }
@@ -110,7 +112,7 @@ class MaskedVectorTest {
     fun `a struct's children are masked by the same rows`(al: BufferAllocator) {
         vectors.getValue("struct").open(al).use { vec ->
             val mask = rowMask(ROWS) { it % 3 != 1 }
-            val masked = MaskedVector(vec, mask)
+            val masked = IndirectVector(vec, mask)
             val expected = vec.select(mask.toSelection())
 
             for (key in listOf("fooBar", "baz"))
@@ -122,7 +124,7 @@ class MaskedVectorTest {
     fun `a masked vector's value reader seeks to a logical row and walks on from it`(al: BufferAllocator) {
         vectors.getValue("nullable i64").open(al).use { vec ->
             val mask = rowMask(ROWS) { it % 3 == 0 || it in 60..70 }
-            val masked = MaskedVector(vec, mask)
+            val masked = IndirectVector(vec, mask)
             val expected = masked.asList
 
             val rows = masked.valueReader()
@@ -139,20 +141,35 @@ class MaskedVectorTest {
     }
 
     @Test
-    fun `a mask over a masked vector reads its own rows of the inner mask's`(al: BufferAllocator) {
+    fun `a mask over a masked vector is one mask over the base vector`(al: BufferAllocator) {
         vectors.getValue("nullable i64").open(al).use { vec ->
             val outer = rowMask(ROWS) { it % 2 == 0 }
-            val inner = MaskedVector(vec, outer)
+            val inner = vec.select(outer)
             val mask = rowMask(inner.valueCount) { it % 3 != 0 }
+            val masked = inner.select(mask) as IndirectVector
 
-            checkAgrees(al, MaskedVector(inner, mask), vec.select(outer.toSelection()).select(mask.toSelection()), "nested")
+            assertEquals(outer.andThen(mask).toSelection().toList(), (masked.sel as Mask).toSelection().toList())
+            checkAgrees(al, masked, vec.select(outer.toSelection()).select(mask.toSelection()), "mask over mask")
+        }
+    }
+
+    @Test
+    fun `a mask over a selected vector is one selection over the base vector`(al: BufferAllocator) {
+        vectors.getValue("nullable i64").open(al).use { vec ->
+            val idxs = IntArray(ROWS / 2) { ROWS - 1 - 2 * it }
+            val inner = vec.select(idxs)
+            val mask = rowMask(inner.valueCount) { it % 3 != 0 }
+            val masked = inner.select(mask) as IndirectVector
+
+            assertEquals(selection(idxs.filterIndexed { k, _ -> k % 3 != 0 }.toIntArray()), masked.sel)
+            checkAgrees(al, masked, vec.select(idxs).select(mask.toSelection()), "mask over selection")
         }
     }
 
     @Test
     fun `the value reader is exhausted where the mask's rows run out`(al: BufferAllocator) {
         vectors.getValue("nullable i64").open(al).use { vec ->
-            val rows = MaskedVector(vec, rowMask(ROWS) { it == 64 }).valueReader()
+            val rows = IndirectVector(vec, rowMask(ROWS) { it == 64 }).valueReader()
             assertSame(rows, rows.next())
             assertEquals(640L, rows.readLong())
             assertFalse(rows.hasNext())
@@ -163,7 +180,7 @@ class MaskedVectorTest {
     @Test
     fun `an empty mask over an empty vector walks nothing`(al: BufferAllocator) {
         Vector.fromList(al, emptyList<Long>()).use { vec ->
-            val masked = MaskedVector(vec, rowMask(0) { true })
+            val masked = IndirectVector(vec, rowMask(0) { true })
             assertEquals(0, masked.valueCount)
             assertFalse(masked.valueReader().hasNext())
         }
@@ -172,7 +189,7 @@ class MaskedVectorTest {
     @Test
     fun `closing a masked vector closes its inner vector once`(al: BufferAllocator) {
         val vec = Vector.fromList(al, List(ROWS) { it.toLong() })
-        val masked = MaskedVector(vec, rowMask(ROWS) { it % 2 == 0 })
+        val masked = IndirectVector(vec, rowMask(ROWS) { it % 2 == 0 })
         masked.getLong(3)
         masked.close()
     }

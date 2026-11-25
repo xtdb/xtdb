@@ -5,6 +5,7 @@ import org.apache.arrow.vector.types.FloatingPointPrecision
 import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.arrow.*
 import xtdb.arrow.Vector.Companion.openVector
+import xtdb.arrow.VectorIndirection.Mask
 import xtdb.arrow.VectorType.Companion.F64
 import xtdb.arrow.VectorType.Companion.maybe
 import xtdb.arrow.VectorType.Maybe
@@ -25,7 +26,7 @@ sealed class Variance(
         private val sumx2Agg = Sum("x2", "sumx2", F64, hasZeroRow).build(al, args)
         private val countAgg = Count(fromName, "count", hasZeroRow).build(al, args)
 
-        override fun aggregate(inRel: RelationReader, groupMapping: GroupMapping, mask: RowMask) {
+        override fun aggregate(inRel: RelationReader, groupMapping: GroupMapping, mask: Mask) {
             val inVec = inRel.vectorForOrNull(fromName) ?: return
 
             DoubleVector(al, nullable = true)

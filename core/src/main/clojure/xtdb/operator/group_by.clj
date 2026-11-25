@@ -17,7 +17,7 @@
            (java.util.stream IntStream IntStream$Builder)
            (org.apache.arrow.memory BufferAllocator)
            (xtdb.api ICursor)
-           (xtdb.arrow IntVector MonoVector RelationReader RowMask RowMask$Builder Vector VectorReader VectorType VectorWriter)
+           (xtdb.arrow IntVector MonoVector RelationReader Vector VectorIndirection$Mask VectorIndirection$Mask$Builder VectorReader VectorType VectorWriter)
            (xtdb.arrow.agg AggregateSpec AggregateSpec$Factory Average Count GroupMapper GroupMapper$Mapper GroupMapper$Null RowCount StdDevPop StdDevSamp Sum VarWidthMinMax VariancePop VarianceSamp)
            (xtdb.expression.map IndexHasher RelationMapBuilder)
            xtdb.operator.SelectionSpec
@@ -124,7 +124,7 @@
           {:eval-agg (-> `(fn [~(-> acc-sym (expr/with-tag MonoVector))
                                ~(-> expr/rel-sym (expr/with-tag RelationReader))
                                ~(-> group-mapping-sym (expr/with-tag VectorReader))
-                               ~(-> mask-sym (expr/with-tag RowMask))]
+                               ~(-> mask-sym (expr/with-tag VectorIndirection$Mask))]
                             (let [~@(expr/batch-bindings emitted-expr)]
                               (dotimes [~expr/idx-sym (.getRowCount ~expr/rel-sym)]
                                 (let [~group-idx-sym (.getInt ~group-mapping-sym ~expr/idx-sym)]
@@ -254,7 +254,7 @@
                   builders (ArrayList. (.size rel-maps))
                   in-key-rel (vr/keyed-rel-reader {(str from-name) in-vec} row-count)]
               (.hashTo (IndexHasher. in-key-rel [in-vec]) hashes hash-scratch)
-              (let [mask-builder (RowMask$Builder. row-count)]
+              (let [mask-builder (VectorIndirection$Mask$Builder. row-count)]
                 (dotimes [idx row-count]
                   (when (.isSet mask idx)
                     (let [group-idx (.getInt group-mapping idx)]
@@ -555,7 +555,7 @@
                           (fn [^RelationReader in-rel]
                             (let [group-mapping (.groupMapping group-mapper in-rel)]
                               (doseq [^AggregateSpec agg-spec aggregate-specs]
-                                (.aggregate agg-spec in-rel group-mapping (RowMask/all (.getRowCount in-rel)))))))
+                                (.aggregate agg-spec in-rel group-mapping (VectorIndirection$Mask/all (.getRowCount in-rel)))))))
 
        (util/with-open [agg-cols (map #(.openFinishedVector ^AggregateSpec %) aggregate-specs)]
          (let [gm-rel (.finish group-mapper)

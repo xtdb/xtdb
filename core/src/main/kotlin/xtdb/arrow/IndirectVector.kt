@@ -5,12 +5,12 @@ import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import xtdb.api.query.IKeyFn
-import xtdb.arrow.VectorIndirection.Companion.Selection
+import xtdb.arrow.VectorIndirection.Mask
 import xtdb.arrow.agg.VectorSummer
 import xtdb.util.Hasher
 import java.nio.ByteBuffer
 
-class IndirectVector(private val inner: VectorReader, private val sel: VectorIndirection) : VectorReader, LongLongVectorReader {
+class IndirectVector(private val inner: VectorReader, internal val sel: VectorIndirection) : VectorReader, LongLongVectorReader {
     override val valueCount: Int get() = sel.valueCount()
     override val nullable: Boolean get() = inner.nullable
     override val arrowType: ArrowType get() = inner.arrowType
@@ -52,19 +52,14 @@ class IndirectVector(private val inner: VectorReader, private val sel: VectorInd
     override fun hashCode(idx: Int, hasher: Hasher) = inner.hashCode(sel[idx], hasher)
 
     override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) =
-        inner.hashTo(
-            out, hasher,
-            when {
-                sel != null -> this.sel.select(sel)
-                this.sel is Selection -> this.sel.idxs
-                else -> this.sel.select(0, valueCount)
-            }
-        )
+        inner.hashTo(out, hasher, if (sel != null) this.sel.select(sel) else this.sel.idxs)
 
     override fun openSlice(al: BufferAllocator) = IndirectVector(inner.openSlice(al), sel)
 
     override fun select(idxs: IntArray): VectorReader =
         inner.select(sel.select(idxs))
+
+    override fun select(mask: Mask): VectorReader = IndirectVector(inner, sel.select(mask))
 
     override fun rowCopier(dest: VectorWriter): RowCopier {
         val innerCopier = inner.rowCopier(dest)
@@ -85,16 +80,26 @@ class IndirectVector(private val inner: VectorReader, private val sel: VectorInd
 
     override fun valueReader(): RowValueReader {
         val inner = inner.valueReader()
+        val rows = sel.iterator()
         return object : RowValueReader, ValueReader by inner {
-            val sel = this@IndirectVector.sel
-            private val rowCount = sel.valueCount()
-            override fun hasNext() = pos + 1 < rowCount
+            private var logical = -1
 
-            override var pos: Int = -1
+            override var pos: Int
+                get() = logical
                 set(value) {
-                    field = value
-                    inner.pos = sel[value]
+                    logical = value
+                    rows.seek(value)
+                    inner.pos = rows.nextInt()
                 }
+
+            override fun hasNext() = rows.hasNext()
+
+            override fun next(): RowValueReader {
+                if (!hasNext()) throw NoSuchElementException()
+                logical++
+                inner.pos = rows.nextInt()
+                return this
+            }
         }
     }
 

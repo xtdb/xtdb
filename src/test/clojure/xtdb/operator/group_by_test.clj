@@ -7,7 +7,7 @@
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
-  (:import [xtdb.arrow RowMask Vector]))
+  (:import [xtdb.arrow Vector VectorIndirection$Mask]))
 
 (t/use-fixtures :each tu/with-allocator tu/with-node)
 
@@ -131,8 +131,8 @@
       (t/is (= #xt/type [:? :f64] (.getType sum-factory)))
       (try
 
-        (.aggregate sum-spec v0 gm (RowMask/all (.getRowCount v0)))
-        (.aggregate sum-spec v1 gm (RowMask/all (.getRowCount v1)))
+        (.aggregate sum-spec v0 gm (VectorIndirection$Mask/all (.getRowCount v0)))
+        (.aggregate sum-spec v1 gm (VectorIndirection$Mask/all (.getRowCount v1)))
         (with-open [res (.openFinishedVector sum-spec)]
           (t/is (= [12.0] (.getAsList res))))
         (finally
@@ -422,8 +422,8 @@
       (util/with-open [agg-spec (.build agg-factory tu/*allocator* vw/empty-args)]
         (t/is (= #xt/type [:? :list :i64] (.getType agg-factory)))
 
-        (.aggregate agg-spec (vr/keyed-rel-reader {"k" k0} (.getValueCount k0)) gm0 (RowMask/all (.getValueCount k0)))
-        (.aggregate agg-spec (vr/keyed-rel-reader {"k" k1} (.getValueCount k1)) gm1 (RowMask/all (.getValueCount k1)))
+        (.aggregate agg-spec (vr/keyed-rel-reader {"k" k0} (.getValueCount k0)) gm0 (VectorIndirection$Mask/all (.getValueCount k0)))
+        (.aggregate agg-spec (vr/keyed-rel-reader {"k" k1} (.getValueCount k1)) gm1 (VectorIndirection$Mask/all (.getValueCount k1)))
 
         (with-open [res (.openFinishedVector agg-spec)]
           (t/is (= [[1 3 6] [2 4] [5]] (.getAsList res))))))))

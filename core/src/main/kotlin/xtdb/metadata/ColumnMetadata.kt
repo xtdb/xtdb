@@ -6,9 +6,9 @@ import xtdb.arrow.F64_TYPE
 import xtdb.arrow.I32_TYPE
 import xtdb.arrow.IntVector
 import xtdb.arrow.LIST_TYPE
-import xtdb.arrow.RowMask
 import xtdb.arrow.STRUCT_TYPE
 import xtdb.arrow.VAR_BINARY_TYPE
+import xtdb.arrow.VectorIndirection.Mask
 import xtdb.arrow.VectorReader
 import xtdb.arrow.VectorType
 import xtdb.arrow.VectorType.Companion.BOOL
@@ -70,7 +70,7 @@ class ColumnMetadata(
         typeVec.endStruct()
     }
 
-    private fun writeMetadata(name: String, col: VectorReader, rootCol: Boolean, mask: RowMask): RowIndex {
+    private fun writeMetadata(name: String, col: VectorReader, rootCol: Boolean, mask: Mask): RowIndex {
         val withBloom = calculateBlooms || (name == "_iid" && rootCol)
 
         val childRefWrites = mutableListOf<() -> Unit>()
@@ -86,12 +86,12 @@ class ColumnMetadata(
         for (flavour in col.metadataFlavours) {
             when (flavour) {
                 is MetadataFlavour.List -> {
-                    val childIdx = writeMetadata(LIST_ELS_NAME, flavour.listElements, false, RowMask.all(flavour.listElements.valueCount))
+                    val childIdx = writeMetadata(LIST_ELS_NAME, flavour.listElements, false, Mask.all(flavour.listElements.valueCount))
                     childRefWrites += { colsVec.vectorFor("list", I32_TYPE, true).writeInt(childIdx) }
                 }
 
                 is MetadataFlavour.Set -> {
-                    val childIdx = writeMetadata(LIST_ELS_NAME, flavour.listElements, false, RowMask.all(flavour.listElements.valueCount))
+                    val childIdx = writeMetadata(LIST_ELS_NAME, flavour.listElements, false, Mask.all(flavour.listElements.valueCount))
                     childRefWrites += { colsVec.vectorFor("set", I32_TYPE, true).writeInt(childIdx) }
                 }
 
@@ -138,7 +138,7 @@ class ColumnMetadata(
         return colsVec.valueCount - 1
     }
 
-    fun writeMetadata(name: String, col: VectorReader) = writeMetadata(name, col, true, RowMask.all(col.valueCount))
+    fun writeMetadata(name: String, col: VectorReader) = writeMetadata(name, col, true, Mask.all(col.valueCount))
 }
 
-private fun RowMask.selection(): IntArray? = if (cardinality == rowCount) null else toSelection()
+private fun Mask.selection(): IntArray? = if (cardinality == rowCount) null else toSelection()

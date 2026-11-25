@@ -8,15 +8,16 @@ import io.kotest.property.checkAll
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import xtdb.arrow.VectorIndirection.Companion.selection
+import xtdb.arrow.VectorIndirection.Mask
 
-internal fun rowMask(rowCount: Int, set: (Int) -> Boolean): RowMask {
+internal fun rowMask(rowCount: Int, set: (Int) -> Boolean): Mask {
     val words = LongArray((rowCount + 63) ushr 6)
     for (row in 0 until rowCount)
         if (set(row)) words[row ushr 6] = words[row ushr 6] or (1L shl (row and 63))
-    return RowMask.ofWords(words, rowCount)
+    return Mask.ofWords(words, rowCount)
 }
 
-class RowMaskTest {
+class VectorIndirectionMaskTest {
 
     private fun maskOf(bits: List<Boolean>) = rowMask(bits.size) { bits[it] }
 
@@ -31,7 +32,7 @@ class RowMaskTest {
 
     @Test
     fun `empty mask selects nothing`() {
-        val mask = RowMask.ofWords(LongArray(0), 0)
+        val mask = Mask.ofWords(LongArray(0), 0)
 
         mask.rowCount shouldBe 0
         mask.wordCount shouldBe 0
@@ -60,7 +61,7 @@ class RowMaskTest {
     fun `exactly one full word`() {
         rowMask(64) { true }.toSelection().toList() shouldBe (0 until 64).toList()
         rowMask(64) { it == 63 }.toSelection().toList() shouldBe listOf(63)
-        RowMask.ofWords(longArrayOf(-1L), 64).cardinality shouldBe 64
+        Mask.ofWords(longArrayOf(-1L), 64).cardinality shouldBe 64
     }
 
     @Test
@@ -76,21 +77,21 @@ class RowMaskTest {
 
     @Test
     fun `ofWords rejects a set bit at or past rowCount`() {
-        shouldThrow<IllegalArgumentException> { RowMask.ofWords(longArrayOf(1L shl 5), 5) }
-        shouldThrow<IllegalArgumentException> { RowMask.ofWords(longArrayOf(0L, 1L shl 63), 70) }
+        shouldThrow<IllegalArgumentException> { Mask.ofWords(longArrayOf(1L shl 5), 5) }
+        shouldThrow<IllegalArgumentException> { Mask.ofWords(longArrayOf(0L, 1L shl 63), 70) }
 
-        RowMask.ofWords(longArrayOf(0L, 1L shl 5), 70).toSelection().toList() shouldBe listOf(69)
+        Mask.ofWords(longArrayOf(0L, 1L shl 5), 70).toSelection().toList() shouldBe listOf(69)
     }
 
     @Test
     fun `ofWords rejects a word count that doesn't cover rowCount exactly`() {
-        shouldThrow<IllegalArgumentException> { RowMask.ofWords(LongArray(1), 65) }
-        shouldThrow<IllegalArgumentException> { RowMask.ofWords(LongArray(2), 64) }
-        shouldThrow<IllegalArgumentException> { RowMask.ofWords(LongArray(1), 0) }
-        shouldThrow<IllegalArgumentException> { RowMask.ofWords(LongArray(0), -1) }
+        shouldThrow<IllegalArgumentException> { Mask.ofWords(LongArray(1), 65) }
+        shouldThrow<IllegalArgumentException> { Mask.ofWords(LongArray(2), 64) }
+        shouldThrow<IllegalArgumentException> { Mask.ofWords(LongArray(1), 0) }
+        shouldThrow<IllegalArgumentException> { Mask.ofWords(LongArray(0), -1) }
     }
 
-    private fun checkRefines(mask: RowMask, refinement: RowMask) {
+    private fun checkRefines(mask: Mask, refinement: Mask) {
         val refined = mask.andThen(refinement)
 
         refined.rowCount shouldBe mask.rowCount
@@ -144,13 +145,13 @@ class RowMaskTest {
         Arb.bind(Arb.long(), Arb.long(), Long::or),
     )
 
-    private fun maskOf(words: List<Long>, rowCount: Int): RowMask {
+    private fun maskOf(words: List<Long>, rowCount: Int): Mask {
         val ws = LongArray((rowCount + 63) ushr 6) { words.getOrElse(it) { 0L } }
         if (rowCount and 63 != 0) ws[ws.lastIndex] = ws.last() and ((1L shl (rowCount and 63)) - 1)
-        return RowMask.ofWords(ws, rowCount)
+        return Mask.ofWords(ws, rowCount)
     }
 
-    private fun RowMask.downToWholeWordsSet(): RowMask {
+    private fun Mask.downToWholeWordsSet(): Mask {
         val ws = LongArray(wordCount, ::word)
         var excess = cardinality and 63
         for (w in ws.indices.reversed()) {
@@ -159,7 +160,7 @@ class RowMaskTest {
                 excess--
             }
         }
-        return RowMask.ofWords(ws, rowCount)
+        return Mask.ofWords(ws, rowCount)
     }
 
     @Test
@@ -183,8 +184,8 @@ class RowMaskTest {
         shouldThrow<IllegalArgumentException> { mask.andThen(rowMask(10) { true }) }
     }
 
-    private fun built(rowCount: Int, rows: List<Int>): RowMask =
-        RowMask.Builder(rowCount).apply { rows.forEach(::add) }.build()
+    private fun built(rowCount: Int, rows: List<Int>): Mask =
+        Mask.Builder(rowCount).apply { rows.forEach(::add) }.build()
 
     @Test
     fun `builder sets rows either side of each word boundary`() {
@@ -224,14 +225,14 @@ class RowMaskTest {
 
     @Test
     fun `builder rejects an out-of-order or duplicate add`() {
-        shouldThrow<IllegalStateException> { RowMask.Builder(200).apply { add(65); add(64) } }
-        shouldThrow<IllegalStateException> { RowMask.Builder(200).apply { add(65); add(65) } }
-        shouldThrow<IllegalStateException> { RowMask.Builder(200).apply { add(3); add(2) } }
+        shouldThrow<IllegalStateException> { Mask.Builder(200).apply { add(65); add(64) } }
+        shouldThrow<IllegalStateException> { Mask.Builder(200).apply { add(65); add(65) } }
+        shouldThrow<IllegalStateException> { Mask.Builder(200).apply { add(3); add(2) } }
     }
 
     @Test
     fun `builder rejects a duplicate or out-of-order add within a run`() {
-        val b = RowMask.Builder(200)
+        val b = Mask.Builder(200)
         b.add(1); b.add(2); b.add(3)
         shouldThrow<IllegalStateException> { b.add(3) }
         shouldThrow<IllegalStateException> { b.add(2) }
@@ -239,20 +240,20 @@ class RowMaskTest {
 
     @Test
     fun `builder rejects a row outside rowCount`() {
-        shouldThrow<IllegalArgumentException> { RowMask.Builder(64).add(64) }
-        shouldThrow<IllegalArgumentException> { RowMask.Builder(64).add(-1) }
+        shouldThrow<IllegalArgumentException> { Mask.Builder(64).add(64) }
+        shouldThrow<IllegalArgumentException> { Mask.Builder(64).add(-1) }
     }
 
     @Test
     fun `builder rejects the row after the last, continuing a run`() {
-        val b = RowMask.Builder(10)
+        val b = Mask.Builder(10)
         b.add(8); b.add(9)
         shouldThrow<IllegalArgumentException> { b.add(10) }
     }
 
     @Test
     fun `builder rejects an add after build`() {
-        val builder = RowMask.Builder(64).apply { add(1) }
+        val builder = Mask.Builder(64).apply { add(1) }
         val mask = builder.build()
 
         shouldThrow<IllegalStateException> { builder.add(2) }
@@ -269,7 +270,7 @@ class RowMaskTest {
     @Test
     fun `all sets every row and no more`() {
         for (n in listOf(0, 1, 63, 64, 65, 200)) {
-            val mask = RowMask.all(n)
+            val mask = Mask.all(n)
             mask.rowCount shouldBe n
             mask.cardinality shouldBe n
             mask.toSelection().toList() shouldBe (0 until n).toList()

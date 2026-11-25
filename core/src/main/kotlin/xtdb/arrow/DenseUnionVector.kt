@@ -9,6 +9,7 @@ import org.apache.arrow.vector.types.pojo.Field
 import xtdb.InternalApi
 import xtdb.TaggedValue
 import xtdb.api.query.IKeyFn
+import xtdb.arrow.VectorIndirection.Mask
 import xtdb.arrow.VectorType.Companion.fromLegs
 import xtdb.arrow.agg.VectorSummer
 import xtdb.arrow.metadata.MetadataFlavour
@@ -365,9 +366,9 @@ class DenseUnionVector private constructor(
         return legRows.copyOf(n)
     }
 
-    private fun legMask(typeId: Int, mask: RowMask): RowMask {
+    private fun legMask(typeId: Int, mask: Mask): Mask {
         val legRowCount = legVectors[typeId].valueCount
-        if (mask.cardinality == mask.rowCount) return RowMask.all(legRowCount)
+        if (mask.cardinality == mask.rowCount) return Mask.all(legRowCount)
 
         val legRows = BitSet()
         repeat(valueCount) { idx ->
@@ -375,7 +376,7 @@ class DenseUnionVector private constructor(
         }
 
         // `toLongArray` drops trailing zero words, so pad back out to the one word per 64 leg rows that `ofWords` requires
-        return RowMask.ofWords(legRows.toLongArray().copyOf((legRowCount + 63) ushr 6), legRowCount)
+        return Mask.ofWords(legRows.toLongArray().copyOf((legRowCount + 63) ushr 6), legRowCount)
     }
 
     override fun hashCode(idx: Int, hasher: Hasher) = leg(idx)!!.hashCode(getOffset(idx), hasher)

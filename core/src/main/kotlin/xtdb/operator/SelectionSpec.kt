@@ -2,7 +2,7 @@ package xtdb.operator
 
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.arrow.RelationReader
-import xtdb.arrow.RowMask
+import xtdb.arrow.VectorIndirection.Mask
 
 interface SelectionSpec : AutoCloseable {
     interface Factory {
@@ -12,5 +12,5 @@ interface SelectionSpec : AutoCloseable {
         fun open(al: BufferAllocator, schema: Map<String, Any>, args: RelationReader): SelectionSpec
     }
 
-    fun select(readRelation: RelationReader): RowMask
+    fun select(readRelation: RelationReader): Mask
 }

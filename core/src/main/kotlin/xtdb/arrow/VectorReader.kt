@@ -10,6 +10,7 @@ import xtdb.InternalApi
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.Vector.Companion.openVector
 import xtdb.arrow.VectorIndirection.Companion.selection
+import xtdb.arrow.VectorIndirection.Mask
 import xtdb.arrow.agg.VectorSummer
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.hash.perRowHashes
@@ -123,6 +124,8 @@ interface VectorReader : ILookup, AutoCloseable {
         al.openVector(toField("")).closeOnCatch { outVec -> outVec.also { it.append(this) } }
 
     fun select(idxs: IntArray): VectorReader = IndirectVector(this, selection(idxs))
+
+    fun select(mask: Mask): VectorReader = IndirectVector(this, mask)
 
     val asList get() = toList { it }
     fun toList(keyFn: IKeyFn<*>) = List(valueCount) { getObject(it, keyFn) }

@@ -3,9 +3,9 @@ package xtdb.arrow.agg
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.arrow.FieldName
 import xtdb.arrow.RelationReader
-import xtdb.arrow.RowMask
 import xtdb.arrow.Vector
 import xtdb.arrow.Vector.Companion.openVector
+import xtdb.arrow.VectorIndirection.Mask
 import xtdb.arrow.VectorType
 import xtdb.api.error.Incorrect
 import xtdb.types.leastUpperBound
@@ -23,7 +23,7 @@ class Sum(
     override fun build(al: BufferAllocator, args: RelationReader) = object : AggregateSpec {
         private val outVec = al.openVector(type)
 
-        override fun aggregate(inRel: RelationReader, groupMapping: GroupMapping, mask: RowMask) {
+        override fun aggregate(inRel: RelationReader, groupMapping: GroupMapping, mask: Mask) {
             val inVec = inRel.vectorForOrNull(fromName) ?: return
             val summer = inVec.sumInto(outVec)
 

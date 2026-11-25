@@ -4,6 +4,7 @@ import org.apache.arrow.memory.BufferAllocator
 import xtdb.Bytes
 import xtdb.arrow.*
 import xtdb.arrow.Vector.Companion.openVector
+import xtdb.arrow.VectorIndirection.Mask
 
 class VarWidthMinMax(
     private val fromName: FieldName,
@@ -16,7 +17,7 @@ class VarWidthMinMax(
     override fun build(al: BufferAllocator, args: RelationReader) = object : AggregateSpec {
         private val winners = ArrayList<ByteArray?>()
 
-        override fun aggregate(inRel: RelationReader, groupMapping: GroupMapping, mask: RowMask) {
+        override fun aggregate(inRel: RelationReader, groupMapping: GroupMapping, mask: Mask) {
             val inVec = inRel.vectorForOrNull(fromName) ?: return
 
             repeat(inRel.rowCount) { idx ->

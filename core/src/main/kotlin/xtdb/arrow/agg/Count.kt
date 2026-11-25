@@ -5,9 +5,9 @@ import xtdb.arrow.FieldName
 import xtdb.arrow.LongVector
 import xtdb.arrow.MonoVector
 import xtdb.arrow.RelationReader
-import xtdb.arrow.RowMask
 import xtdb.arrow.Vector
 import xtdb.arrow.Vector.Companion.openVector
+import xtdb.arrow.VectorIndirection.Mask
 import xtdb.arrow.VectorType
 import xtdb.arrow.VectorType.Companion.I64
 
@@ -22,7 +22,7 @@ class Count(
         val outVec = LongVector(al, nullable = false)
         return object : AggregateSpec {
 
-            override fun aggregate(inRel: RelationReader, groupMapping: GroupMapping, mask: RowMask) {
+            override fun aggregate(inRel: RelationReader, groupMapping: GroupMapping, mask: Mask) {
                 val inCol = inRel.vectorForOrNull(fromColName) ?: return
 
                 repeat(inRel.rowCount) { idx ->

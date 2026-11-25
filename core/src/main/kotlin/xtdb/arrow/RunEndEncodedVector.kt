@@ -10,6 +10,7 @@ import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.InternalApi
 import xtdb.api.query.IKeyFn
+import xtdb.arrow.VectorIndirection.Mask
 import xtdb.arrow.metadata.MetadataFlavour.Companion.translatingRows
 import xtdb.hash.perRowHashes
 import xtdb.util.Hasher
@@ -147,8 +148,8 @@ class RunEndEncodedVector private constructor(
 
     private fun runSel(rowSel: IntArray) = IntArray(rowSel.size) { runIdx(rowSel[it]) }
 
-    private fun runMask(rowMask: RowMask): RowMask {
-        val runs = RowMask.Builder(valuesVector.valueCount)
+    private fun runMask(rowMask: Mask): Mask {
+        val runs = Mask.Builder(valuesVector.valueCount)
         for (run in 0 until valuesVector.valueCount)
             if ((runStart(run)..<runEnd(run)).any(rowMask::isSet)) runs.add(run)
         return runs.build()
