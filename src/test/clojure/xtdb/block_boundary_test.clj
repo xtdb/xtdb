@@ -5,14 +5,12 @@
             [honey.sql :as honey-sql]
             [xtdb.api :as xt]
             [xtdb.compactor :as c]
-            [xtdb.db-catalog :as db]
             [xtdb.log :as xt-log]
             [xtdb.node :as xtn]
             [xtdb.node.impl]
             [xtdb.test-generators :as tg]
             [xtdb.test-util :as tu]
-            [xtdb.util :as util])
-  (:import (xtdb.database Database)))
+            [xtdb.util :as util]))
 
 (t/deftest ^:property multiple-writes-to-doc
   (tu/run-property-test
@@ -457,14 +455,8 @@
                                                  :where [:= :_id 1]})]
     [:sql sql-string (vec params)]))
 
-(defn- root-cause [^Throwable t]
-  (loop [t t] (if-let [c (.getCause t)] (recur c) t)))
-
-(defn- ee-method-too-large? [^Database db]
-  (let [root (some-> db .getIngestionError root-cause)]
-    (boolean
-     (and (instance? IndexOutOfBoundsException root)
-          (some-> ^Throwable root .getMessage (.contains "Method code too large"))))))
+(defn- ee-compile-failed? [^Throwable e]
+  (= :xtdb.expression/compile-failed (:xtdb.error/code (ex-data e))))
 
 ;; TODO - Fails when :a is [[#NaN]] or when it contains a set.
 (t/deftest ^:property update-deduplication
@@ -504,8 +496,8 @@
                               (= (tu/->clj expected)
                                  (tu/->clj res))))))
                        (catch Throwable t
-                         ;; discard if the EE blew its bytecode budget — see #5635
-                         (if (ee-method-too-large? (db/primary-db node))
+                         ;; discard an EE compile failure — see #5635
+                         (if (ee-compile-failed? t)
                            true
                            (throw t)))))))))
 
@@ -544,7 +536,7 @@
                               (= (tu/->clj expected)
                                  (tu/->clj res))))))
                        (catch Throwable t
-                         ;; discard if the EE blew its bytecode budget — see #5635
-                         (if (ee-method-too-large? (db/primary-db node))
+                         ;; discard an EE compile failure — see #5635
+                         (if (ee-compile-failed? t)
                            true
                            (throw t)))))))))
