@@ -101,7 +101,7 @@ private class PutDocsWriter(ops: VectorWriter) : TxOpWriter<TxOp.PutDocs> {
         }
         iidsVec.endList()
 
-        tableDocWriter.append(RelationAsStructReader("docs", op.docs))
+        tableDocWriter.appendStructRows(op.docs)
         tableDocsWriter.endList()
 
         op.validFrom?.let { validFromVec.writeObject(it) } ?: validFromVec.writeNull()
@@ -137,7 +137,7 @@ private class PatchDocsWriter(ops: VectorWriter) : TxOpWriter<TxOp.PatchDocs> {
         }
         iidsVec.endList()
 
-        tableDocWriter.append(RelationAsStructReader("patches", op.patches))
+        tableDocWriter.appendStructRows(op.patches)
         tableDocsWriter.endList()
 
         op.validFrom?.let { validFromVec.writeObject(it) } ?: validFromVec.writeNull()

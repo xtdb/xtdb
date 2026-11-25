@@ -153,3 +153,12 @@ interface RelationReader : ILookup, Seqable, Counted, AutoCloseable {
     override fun seq(): ISeq? = RT.seq(vectors)
     override fun count() = vectors.count()
 }
+
+/**
+ * This relation as one struct column: the struct owns [RelationReader.openDirectSlice]s of the columns
+ * (zero-copy for a [Vector], a copy for a selection), so it outlives this relation.
+ */
+internal fun RelationReader.openAsStruct(al: BufferAllocator, name: String): StructVector =
+    vectors.safeMap { it.openDirectSlice(al) }.closeAllOnCatch { cols ->
+        StructVector(al, name, false, cols.associateByTo(LinkedHashMap()) { it.name }, rowCount)
+    }

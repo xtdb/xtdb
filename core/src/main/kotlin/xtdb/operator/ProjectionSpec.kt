@@ -3,8 +3,8 @@ package xtdb.operator
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.Field
 import xtdb.arrow.LongVector
-import xtdb.arrow.RelationAsStructReader
 import xtdb.arrow.RelationReader
+import xtdb.arrow.openAsStruct
 import xtdb.arrow.VectorReader
 import xtdb.arrow.FieldName
 import xtdb.arrow.VectorType
@@ -69,7 +69,7 @@ interface ProjectionSpec : AutoCloseable {
     class Star(override val toName: FieldName, override val type: VectorType) : Factory {
         override fun open(al: BufferAllocator, schema: Map<String, Any>, args: RelationReader) =
             object : ProjectionSpec {
-                override fun project(inRel: RelationReader) = RelationAsStructReader(toName, inRel).openSlice(al)
+                override fun project(inRel: RelationReader) = inRel.openAsStruct(al, toName)
 
                 override fun close() = Unit
             }

@@ -57,8 +57,8 @@ class VectorValueReaderTest {
             RunEndEncodedVector(al, "col", Utf8Vector(al, REE_VALUES_NAME, true))
                 .also { it.writeRun("a", 2); it.writeRun(null, 1); it.writeRun("b", 2) }
         },
-        "relation as struct" to { al ->
-            RelationAsStructReader("col", Relation.openFromRows(al, List(5) { mapOf("fooBar" to it.toLong()) }))
+        "struct opened from a relation" to { al ->
+            Relation.openFromRows(al, List(5) { mapOf("fooBar" to it.toLong()) }).use { it.openAsStruct(al, "col") }
         },
         "renamed" to { al -> Vector.fromList(al, "col", listOf(1L, null, 3L, 4L, 5L)).withName("renamed") },
     )
@@ -155,10 +155,10 @@ class VectorValueReaderTest {
     }
 
     @Test
-    fun `a relation-as-struct's value reader reads each row's children, directly and through selections`(al: BufferAllocator) {
+    fun `a struct opened from a relation reads each row's children, directly and through selections`(al: BufferAllocator) {
         val rows = listOf(mapOf("a" to 0L, "b" to "x"), mapOf("a" to 1L, "b" to null), mapOf("a" to 2L, "b" to "z"))
 
-        RelationAsStructReader("col", Relation.openFromRows(al, rows)).use { vec ->
+        Relation.openFromRows(al, rows).use { it.openAsStruct(al, "col") }.use { vec ->
             fun check(rdr: VectorReader, expected: List<Map<String, Any?>>, how: String) {
                 val actual = rdr.valueReader().asSequence()
                     .map { row -> assertFalse(row.isNull, how); row.snapshot() }
@@ -172,13 +172,13 @@ class VectorValueReaderTest {
     }
 
     @Test
-    fun `a singleton list reads through its value reader, directly and through selections`(al: BufferAllocator) {
-        val docs = Relation.openFromRows(al, List(3) { mapOf("fooBar" to it.toLong()) })
-        SingletonListReader("col", RelationAsStructReader("docs", docs)).use { vec ->
+    fun `a one-row list of structs reads through its value reader, directly and through selections`(al: BufferAllocator) {
+        val docs = List(3) { mapOf("fooBar" to it.toLong()) }
+        Vector.fromList(al, "col", listOf(docs)).use { vec ->
             checkAgainstGetObject(vec, "direct")
             checkAgainstGetObject(vec.select(intArrayOf(0, 0)), "select(IntArray)")
 
-            assertEquals(listOf(List(3) { mapOf("fooBar" to it.toLong()) }), vec.valueReader().asSequence().map { it.snapshot() }.toList())
+            assertEquals(listOf(docs), vec.valueReader().asSequence().map { it.snapshot() }.toList())
         }
     }
 

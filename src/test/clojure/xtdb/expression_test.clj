@@ -1998,8 +1998,6 @@
     (t/is (= [true] (:res (run-projection rel '(== s s))))
           "struct comparison recurses into the field, so the bottom is reached one level down")))
 
-;; `RelationAsStructReader.valueReader()` has no `pos`, so an expression can only ever see a copy -
-;; which is why the read below goes through `rowCopier` rather than reading the view directly.
 (t/deftest a-star-struct-cannot-carry-the-bottom-to-a-read-5948
   (with-open [inner (vr/rel-reader [(doto (NullVector. "a" false 0)
                                       (.writeUndefined)

@@ -11,6 +11,9 @@ import xtdb.arrow.VectorType.Companion.BOOL
 import xtdb.arrow.VectorType.Companion.I64
 import xtdb.arrow.VectorType.Companion.INSTANT
 import xtdb.arrow.VectorType.Companion.TRANSIT
+import xtdb.arrow.Vector.Companion.openVector
+import xtdb.arrow.VectorType.Companion.listTypeOf
+import xtdb.arrow.VectorType.Companion.structOf
 import xtdb.authz.RoleMembership
 import xtdb.database.DatabaseName
 import xtdb.database.PartitionState
@@ -283,15 +286,17 @@ class OpenTx
                                     rel.rowCount,
                                 )
 
-                                val putCols = listOfNotNull(
-                                    rel.vectorFor("_id"),
-                                    RelationAsStructReader("doc", contentRel),
-                                    rel.vectorForOrNull("_valid_from"),
-                                    rel.vectorForOrNull("_valid_to"),
-                                )
+                                contentRel.openAsStruct(allocator, "doc").use { docVec ->
+                                    val putCols = listOfNotNull(
+                                        rel.vectorFor("_id"),
+                                        docVec,
+                                        rel.vectorForOrNull("_valid_from"),
+                                        rel.vectorForOrNull("_valid_to"),
+                                    )
 
-                                table(stmt.table)
-                                    .writePuts(RelationReader.from(putCols, rel.rowCount), currentTimeMicros, MAX_LONG)
+                                    table(stmt.table)
+                                        .writePuts(RelationReader.from(putCols, rel.rowCount), currentTimeMicros, MAX_LONG)
+                                }
                             }
                         }
                     }
@@ -685,16 +690,19 @@ class OpenTx
                 queryCatalog, prepareOpts,
             )
 
-            val patchArgs = RelationReader.from(
-                listOf(SingletonListReader("?patch_docs", RelationAsStructReader("patch_doc", docs)))
-            )
-
             val qOpts = QueryOpts(txKey.systemTime, tracer = tracer)
 
-            // openQuery takes ownership of the sliced args and closes them when the cursor closes —
-            // no separate `.use` on the slice here, or it'd double-free.
-            pq.openQuery(patchArgs.openSlice(allocator), qOpts).use { cursor ->
-                cursor.forEachRemaining { rel -> writePuts(rel, validFromMicros, validToMicros) }
+            allocator.openVector("?patch_docs", listTypeOf(structOf(docs.vectors.associate { it.name to it.type }))).use { patchDocsVec ->
+                patchDocsVec.getListElements(STRUCT_TYPE, false).appendStructRows(docs)
+                patchDocsVec.endList()
+
+                val patchArgs = RelationReader.from(listOf(patchDocsVec))
+
+                // openQuery takes ownership of the sliced args and closes them when the cursor closes —
+                // no separate `.use` on the slice here, or it'd double-free.
+                pq.openQuery(patchArgs.openSlice(allocator), qOpts).use { cursor ->
+                    cursor.forEachRemaining { rel -> writePuts(rel, validFromMicros, validToMicros) }
+                }
             }
         }
 
