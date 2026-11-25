@@ -16,7 +16,6 @@ import org.apache.arrow.memory.ReferenceManager
 import org.apache.arrow.vector.util.DataSizeRoundingUtil.divideBy8Ceil
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
-import xtdb.arrow.VectorIndirection.Companion.Selection
 import xtdb.test.AllocatorResolver
 
 @ExtendWith(AllocatorResolver::class)
@@ -85,11 +84,40 @@ class BitBufferTest {
 
                 BitBuffer(al).use { dest ->
                     destBits.forEach { dest.writeBoolean(it) }
-                    dest.writeBits(srcBuf, Selection(selection))
+                    dest.writeBits(srcBuf, selection)
 
                     BitBuffer(al).use { expected ->
                         destBits.forEach { expected.writeBoolean(it) }
                         selection.forEach { idx -> expected.writeBoolean(srcBits[idx]) }
+
+                        dest.asBooleans shouldBe expected.asBooleans
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun testWriteBitsRangeProps(al: BufferAllocator) = runTest {
+        checkAll(
+            arbitrary {
+                val srcBits = Arb.list(Arb.boolean(), 1..128).bind()
+                val startIdx = Arb.int(0..srcBits.size).bind()
+                val len = Arb.int(0..srcBits.size - startIdx).bind()
+                val destBits = Arb.list(Arb.boolean(), 0..16).bind()
+                tuple(srcBits, startIdx, len, destBits)
+            }
+        ) { (srcBits, startIdx, len, destBits) ->
+            BitBuffer(al).use { srcBuf ->
+                srcBits.forEach { srcBuf.writeBoolean(it) }
+
+                BitBuffer(al).use { dest ->
+                    destBits.forEach { dest.writeBoolean(it) }
+                    dest.writeBits(srcBuf, startIdx, len)
+
+                    BitBuffer(al).use { expected ->
+                        destBits.forEach { expected.writeBoolean(it) }
+                        srcBits.subList(startIdx, startIdx + len).forEach { expected.writeBoolean(it) }
 
                         dest.asBooleans shouldBe expected.asBooleans
                     }

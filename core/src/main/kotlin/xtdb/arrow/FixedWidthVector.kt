@@ -9,8 +9,6 @@ import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import xtdb.InternalApi
 import xtdb.api.query.IKeyFn
 import org.apache.arrow.vector.types.TimeUnit
-import xtdb.arrow.VectorIndirection.Companion.Selection
-import xtdb.arrow.VectorIndirection.Companion.Slice
 import xtdb.arrow.VectorType.Scalar
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.util.Hasher
@@ -218,14 +216,14 @@ sealed class FixedWidthVector : MonoVector() {
 
             override fun copyRows(sel: IntArray) {
                 ensureWriteable(sel.size)
-                destValidity?.writeBits(srcValidity, Selection(sel))
+                destValidity?.writeBits(srcValidity, sel)
                 for (srcIdx in sel) unsafeCopyRange(srcIdx, 1)
                 valueCount += sel.size
             }
 
             override fun copyRange(startIdx: Int, len: Int) {
                 ensureWriteable(len)
-                destValidity?.writeBits(srcValidity, Slice(startIdx, len))
+                destValidity?.writeBits(srcValidity, startIdx, len)
                 unsafeCopyRange(startIdx, len)
                 valueCount += len
             }

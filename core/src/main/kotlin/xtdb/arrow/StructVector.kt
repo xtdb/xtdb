@@ -11,8 +11,6 @@ import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import xtdb.InternalApi
 import xtdb.api.query.IKeyFn
-import xtdb.arrow.VectorIndirection.Companion.Selection
-import xtdb.arrow.VectorIndirection.Companion.Slice
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.api.error.Incorrect
 import xtdb.hash.perRowHashes
@@ -204,13 +202,13 @@ class StructVector private constructor(
             }
 
             override fun copyRows(sel: IntArray) {
-                validityBuffer?.writeBits(src.validityBuffer, Selection(sel))
+                validityBuffer?.writeBits(src.validityBuffer, sel)
                 childCopiers.forEach { it.copyRows(sel) }
                 valueCount += sel.size
             }
 
             override fun copyRange(startIdx: Int, len: Int) {
-                validityBuffer?.writeBits(src.validityBuffer, Slice(startIdx, len))
+                validityBuffer?.writeBits(src.validityBuffer, startIdx, len)
                 childCopiers.forEach { it.copyRange(startIdx, len) }
                 valueCount += len
             }

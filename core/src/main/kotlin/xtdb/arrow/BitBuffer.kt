@@ -114,13 +114,17 @@ internal class BitBuffer private constructor(
         this.writerBitIndex = writerBitIndex
     }
 
-    fun writeBits(src: BitBuffer?, sel: VectorIndirection) {
+    fun writeBits(src: BitBuffer?, sel: IntArray) = writeBits(src, sel.size) { sel[it] }
+
+    fun writeBits(src: BitBuffer?, startIdx: Int, len: Int) = writeBits(src, len) { startIdx + it }
+
+    private inline fun writeBits(src: BitBuffer?, count: Int, srcIdx: (Int) -> Int) {
         if (src == null) {
-            writeOnes(sel.valueCount())
+            writeOnes(count)
             return
         }
 
-        ensureWritable(sel.valueCount())
+        ensureWritable(count)
 
         val srcRdr = src.valueReader()
         val destBuf = buf
@@ -131,10 +135,10 @@ internal class BitBuffer private constructor(
 
         var tailByte = if (writerBitIndex % 8 == 0) 0 else destBuf.getByte(destBuf.writerIndex()).toInt()
 
-        for (selIdx in sel) {
+        for (i in 0 until count) {
             val bitIdx = writerBitIndex % 8
             val mask = 1 shl bitIdx
-            srcRdr.pos = selIdx
+            srcRdr.pos = srcIdx(i)
 
             tailByte = if (srcRdr.readBoolean()) tailByte or mask else tailByte and mask.inv()
 

@@ -8,8 +8,6 @@ import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import xtdb.InternalApi
 import xtdb.api.query.IKeyFn
-import xtdb.arrow.VectorIndirection.Companion.Selection
-import xtdb.arrow.VectorIndirection.Companion.Slice
 import xtdb.arrow.VectorType.Scalar
 import xtdb.util.Hasher
 import java.nio.ByteBuffer
@@ -139,7 +137,7 @@ sealed class VariableWidthVector : MonoVector() {
 
             override fun copyRow(srcIdx: Int) {
                 ensureWriteable(1, srcOffset.getInt(srcIdx + 1) - srcOffset.getInt(srcIdx))
-                destValidity?.writeBits(srcValidity, Slice(srcIdx, 1))
+                destValidity?.writeBits(srcValidity, srcIdx, 1)
 
                 unsafeCopyRange(srcIdx, 1)
             }
@@ -154,7 +152,7 @@ sealed class VariableWidthVector : MonoVector() {
 
                 ensureWriteable(sel.size, totalDataBytes)
 
-                destValidity?.writeBits(srcValidity, Selection(sel))
+                destValidity?.writeBits(srcValidity, sel)
 
                 for (srcIdx in sel)
                     unsafeCopyRange(srcIdx, 1)
@@ -167,7 +165,7 @@ sealed class VariableWidthVector : MonoVector() {
 
                 ensureWriteable(len, totalDataBytes)
 
-                destValidity?.writeBits(srcValidity, Slice(startIdx, len))
+                destValidity?.writeBits(srcValidity, startIdx, len)
 
                 unsafeCopyRange(startIdx, len)
             }
