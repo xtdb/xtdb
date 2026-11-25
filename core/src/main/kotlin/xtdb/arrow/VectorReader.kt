@@ -10,7 +10,6 @@ import xtdb.InternalApi
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.Vector.Companion.openVector
 import xtdb.arrow.VectorIndirection.Companion.selection
-import xtdb.arrow.VectorIndirection.Companion.slice
 import xtdb.arrow.agg.VectorSummer
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.hash.perRowHashes
@@ -35,9 +34,6 @@ interface VectorReader : ILookup, AutoCloseable {
         override fun withName(newName: String) = RenamedVector(inner, newName)
 
         override fun select(idxs: IntArray) = inner.select(idxs).closeOnCatch { RenamedVector(it, name) }
-
-        override fun select(startIdx: Int, len: Int) =
-            inner.select(startIdx, len).closeOnCatch { RenamedVector(it, name) }
 
         override fun openSlice(al: BufferAllocator) =
             inner.openSlice(al).closeOnCatch { RenamedVector(it, name) }
@@ -142,7 +138,6 @@ interface VectorReader : ILookup, AutoCloseable {
         al.openVector(field).closeOnCatch { outVec -> outVec.also { it.append(this) } }
 
     fun select(idxs: IntArray): VectorReader = IndirectVector(this, selection(idxs))
-    fun select(startIdx: Int, len: Int): VectorReader = IndirectVector(this, slice(startIdx, len))
 
     val asList get() = toList { it }
     fun toList(keyFn: IKeyFn<*>) = List(valueCount) { getObject(it, keyFn) }

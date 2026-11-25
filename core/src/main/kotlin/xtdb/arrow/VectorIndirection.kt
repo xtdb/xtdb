@@ -39,22 +39,5 @@ interface VectorIndirection {
 
             override fun hashCode() = idxs.contentHashCode()
         }
-
-        @JvmStatic
-        fun slice(startIdx: Int, len: Int): VectorIndirection = Slice(startIdx, len)
-
-        internal data class Slice(val startIdx: Int, val len: Int) : VectorIndirection {
-            override fun valueCount(): Int = len
-            override fun getIndex(idx: Int): Int = startIdx + idx
-
-            override fun iterator() = object : IntIterator() {
-                private val startIdx = this@Slice.startIdx
-                private val len = this@Slice.len
-                private var idx = 0
-
-                override fun hasNext() = idx < len
-                override fun nextInt() = startIdx + idx++
-            }
-        }
     }
 }

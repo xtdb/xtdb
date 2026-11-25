@@ -48,11 +48,6 @@ class MaskedRelationTest {
                 sel.asMaps shouldBe expected.select(idxs).asMaps
                 sel.vectors.none { it is MaskedVector } shouldBe true
             }
-
-            masked.select(20, 15).let { sel ->
-                sel.asMaps shouldBe expected.select(20, 15).asMaps
-                sel.vectors.none { it is MaskedVector } shouldBe true
-            }
         }
     }
 

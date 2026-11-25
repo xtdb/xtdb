@@ -29,8 +29,6 @@ open class VectorReadBenchmark {
     private lateinit var directNullable: VectorReader
     private lateinit var selection: VectorReader
     private lateinit var selectionNullable: VectorReader
-    private lateinit var slice: VectorReader
-    private lateinit var sliceNullable: VectorReader
     private lateinit var masked: VectorReader
     private lateinit var maskedNullable: VectorReader
     private lateinit var sparseSelectionNullable: VectorReader
@@ -43,7 +41,6 @@ open class VectorReadBenchmark {
 
     private lateinit var megaDirect: List<VectorReader>
     private lateinit var megaSelection: List<VectorReader>
-    private lateinit var megaSlice: List<VectorReader>
 
     private fun longVector(rows: Int, nullable: Boolean, rnd: Random) =
         LongVector(al, "v", nullable).apply {
@@ -89,14 +86,11 @@ open class VectorReadBenchmark {
         vecs = listOf(flat, flatNullable, inner, innerNullable)
 
         val idxs = (0 until INNER_ROWS).shuffled(rnd).take(ROWS).sorted().toIntArray()
-        val sliceStart = (INNER_ROWS - ROWS) / 2
 
         direct = flat
         directNullable = flatNullable
         selection = inner.select(idxs)
         selectionNullable = innerNullable.select(idxs)
-        slice = inner.select(sliceStart, ROWS)
-        sliceNullable = innerNullable.select(sliceStart, ROWS)
 
         val utf8Flat = utf8Vector(ROWS, false, rnd)
         val utf8FlatNullable = utf8Vector(ROWS, true, rnd)
@@ -124,11 +118,9 @@ open class VectorReadBenchmark {
         vecs += megaFlat + megaInner
 
         val megaIdxs = (0 until MEGA_INNER_ROWS).shuffled(rnd).take(MEGA_ROWS).sorted().toIntArray()
-        val megaSliceStart = (MEGA_INNER_ROWS - MEGA_ROWS) / 2
 
         megaDirect = megaFlat
         megaSelection = megaInner.map { it.select(megaIdxs) }
-        megaSlice = megaInner.map { it.select(megaSliceStart, MEGA_ROWS) }
     }
 
     @TearDown
@@ -161,12 +153,6 @@ open class VectorReadBenchmark {
     @Benchmark
     fun selectionNullable() = sumNullable(selectionNullable)
 
-    @Benchmark
-    fun slice() = sum(slice)
-
-    @Benchmark
-    fun sliceNullable() = sumNullable(sliceNullable)
-
     private fun sumReader(v: VectorReader): Long {
         var acc = 0L
         val rows = v.valueReader()
@@ -195,12 +181,6 @@ open class VectorReadBenchmark {
 
     @Benchmark
     fun readerSelectionNullable() = sumNullableReader(selectionNullable)
-
-    @Benchmark
-    fun readerSlice() = sumReader(slice)
-
-    @Benchmark
-    fun readerSliceNullable() = sumNullableReader(sliceNullable)
 
     @Benchmark
     fun masked() = sum(masked)
@@ -237,16 +217,10 @@ open class VectorReadBenchmark {
     fun megaSelection() = megaSelection.sumOf { sumNullable(it) }
 
     @Benchmark
-    fun megaSlice() = megaSlice.sumOf { sumNullable(it) }
-
-    @Benchmark
     fun megaReaderDirect() = megaDirect.sumOf { sumNullableReader(it) }
 
     @Benchmark
     fun megaReaderSelection() = megaSelection.sumOf { sumNullableReader(it) }
-
-    @Benchmark
-    fun megaReaderSlice() = megaSlice.sumOf { sumNullableReader(it) }
 
     private fun countNulls(v: VectorReader): Long {
         var acc = 0L
