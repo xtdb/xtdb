@@ -6,6 +6,12 @@ options {
   tokenVocab = SqlLexer;
 }
 
+// Alternatives of one rule must not share a prefix of unbounded length - e.g. `r : expr X | expr Y`.
+// To choose between them, SLL prediction simulates the whole shared prefix,
+// and ANTLR's DFA cache - static, and never evicted - gains states for every distinct prefix it reads.
+// Parse the prefix once and choose on the token after it: an optional tail (`commonValueExpr betweenTail?`),
+// or, for an operator, a left-recursive `expr` alternative, which ANTLR rewrites into a loop over the prefix (#6495).
+
 /// §22 Direct invocation of SQL
 
 /// §22.1 <direct SQL statement>
