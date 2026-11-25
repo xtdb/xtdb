@@ -191,3 +191,12 @@
                                  "FROM docs FOR ALL VALID_TIME FOR ALL SYSTEM_TIME"
                                  "ORDER BY _id, _valid_from"]
                                 (str/join "\n"))))))
+
+(t/deftest update-no-op-on-mixed-int-float-list-of-structs-6363
+  (xt/execute-tx tu/*node* ["INSERT INTO docs (_id, data) VALUES (1, [{a: 1, b: 2.5}, {a: 1.5, b: 2}])"])
+  (xt/execute-tx tu/*node* ["UPDATE docs SET data = [{a: 1, b: 2.5}, {a: 1.5, b: 2}] WHERE _id = 1"])
+
+  (t/is (= [{:xt/id 1, :data [{:a 1, :b 2.5} {:a 1.5, :b 2}],
+             :xt/valid-from #xt/zdt "2020-01-01Z[UTC]"}]
+           (xt/q tu/*node* "SELECT *, _valid_from, _valid_to FROM docs FOR ALL VALID_TIME WHERE _id = 1"))
+        "update to an unchanged value made of mixed int/float legs is still a no-op"))
