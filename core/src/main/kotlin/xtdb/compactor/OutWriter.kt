@@ -88,7 +88,7 @@ internal interface OutWriter : AutoCloseable {
         internal enum class RecencyColumn { ABSENT, CARRIED, COMPUTED }
 
         private fun RelationReader.withoutRecency() =
-            RelationReader.from(vectors.filter { it.name != Trie.RECENCY_COL }, rowCount)
+            RelationReader.from(cols.filterKeys { it != Trie.RECENCY_COL }, rowCount)
 
         internal inner class OutRel(
             schema: Schema,
@@ -139,7 +139,7 @@ internal interface OutWriter : AutoCloseable {
 
                         // the copier would otherwise fill the recency column with the source's (absent) value
                         val contentRel = object : RelationWriter by outRel {
-                            override val vectors = outRel.vectors.filter { it.name != Trie.RECENCY_COL }
+                            override val cols = outRel.cols.filterKeys { it != Trie.RECENCY_COL }
                             override fun vectorForOrNull(name: String) =
                                 if (name == Trie.RECENCY_COL) null else outRel.vectorForOrNull(name)
                         }

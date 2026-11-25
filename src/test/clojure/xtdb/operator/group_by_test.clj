@@ -121,7 +121,7 @@
           "aggregate without group")))
 
 (t/deftest test-promoting-sum
-  (with-open [gm (tu/open-vec "gm" #xt/type :i32 (map int [0 0 0]))
+  (with-open [gm (tu/open-vec #xt/type :i32 (map int [0 0 0]))
               v0 (tu/open-rel {:v [1 2 3]})
               v1 (tu/open-rel {:v [1 2.0 3]})]
     (let [sum-factory (group-by/->aggregate-factory {:f :sum, :from-name 'v,
@@ -412,18 +412,18 @@
                             FROM docs"))))
 
 (t/deftest test-array-agg
-  (with-open [gm0 (tu/open-vec "gm0" #xt/type :i32 (map int [0 1 0]))
-              gm1 (tu/open-vec "gm1" #xt/type :i32 (map int [1 2 0]))
-              k0 (Vector/fromList tu/*allocator* "k" [1 2 3])
-              k1 (Vector/fromList tu/*allocator* "k" [4 5 6])]
+  (with-open [gm0 (tu/open-vec #xt/type :i32 (map int [0 1 0]))
+              gm1 (tu/open-vec #xt/type :i32 (map int [1 2 0]))
+              k0 (Vector/fromList tu/*allocator* [1 2 3])
+              k1 (Vector/fromList tu/*allocator* [4 5 6])]
 
     (let [agg-factory (group-by/->aggregate-factory {:f :array-agg, :from-name 'k, :from-type #xt/type :i64
                                                      :to-name 'vs, :zero-row? true})]
       (util/with-open [agg-spec (.build agg-factory tu/*allocator* vw/empty-args)]
         (t/is (= #xt/type [:? :list :i64] (.getType agg-factory)))
 
-        (.aggregate agg-spec (vr/rel-reader [k0]) gm0 (RowMask/all (.getValueCount k0)))
-        (.aggregate agg-spec (vr/rel-reader [k1]) gm1 (RowMask/all (.getValueCount k1)))
+        (.aggregate agg-spec (vr/keyed-rel-reader {"k" k0} (.getValueCount k0)) gm0 (RowMask/all (.getValueCount k0)))
+        (.aggregate agg-spec (vr/keyed-rel-reader {"k" k1} (.getValueCount k1)) gm1 (RowMask/all (.getValueCount k1)))
 
         (with-open [res (.openFinishedVector agg-spec)]
           (t/is (= [[1 3 6] [2 4] [5]] (.getAsList res))))))))
@@ -570,6 +570,13 @@
                                           {:k :a, :v 10}]]]]
                                       {:with-types? true})
                          (update :res set))))))
+
+(t/deftest test-distinct-over-renamed-column
+  (t/is (= [{:cnt-distinct 2}]
+           (tu/query-ra '[:group-by {:columns [{cnt-distinct (count-distinct v)}]}
+                          [:rename {:columns {a v}}
+                           [::tu/pages
+                            [[{:a 10} {:a 12} {:a 10}]]]]]))))
 
 (t/deftest test-group-by-with-nils-coerce-to-boolean-npe-regress
   (t/is (= {:res #{{:a 42} {}}

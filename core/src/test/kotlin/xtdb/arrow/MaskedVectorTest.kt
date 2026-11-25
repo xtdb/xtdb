@@ -19,15 +19,15 @@ class MaskedVectorTest {
     private class Spec(val open: (BufferAllocator) -> VectorReader, val readable: (Int) -> Boolean = { true })
 
     private val vectors: Map<String, Spec> = mapOf(
-        "nullable i64" to Spec({ al -> Vector.fromList(al, "col", List(ROWS) { if (it % 7 == 3) null else it * 10L }) }),
-        "nullable utf8" to Spec({ al -> Vector.fromList(al, "col", List(ROWS) { if (it % 5 == 1) null else "s$it" }) }),
+        "nullable i64" to Spec({ al -> Vector.fromList(al, List(ROWS) { if (it % 7 == 3) null else it * 10L }) }),
+        "nullable utf8" to Spec({ al -> Vector.fromList(al, List(ROWS) { if (it % 5 == 1) null else "s$it" }) }),
         "struct" to Spec({ al ->
-            Vector.fromList(al, "col", List(ROWS) { mapOf("fooBar" to it.toLong(), "baz" to if (it % 3 == 0) null else "s$it") })
+            Vector.fromList(al, List(ROWS) { mapOf("fooBar" to it.toLong(), "baz" to if (it % 3 == 0) null else "s$it") })
         }),
-        "list" to Spec({ al -> Vector.fromList(al, "col", List(ROWS) { if (it % 6 == 0) null else listOf(it, it + 1) }) }),
+        "list" to Spec({ al -> Vector.fromList(al, List(ROWS) { if (it % 6 == 0) null else listOf(it, it + 1) }) }),
         "union with absent rows" to Spec(
             { al ->
-                DenseUnionVector(al, "col").apply {
+                DenseUnionVector(al).apply {
                     repeat(ROWS) {
                         when (it % 4) {
                             0 -> writeObject(it.toLong())
@@ -64,7 +64,7 @@ class MaskedVectorTest {
     private fun ValueReader.at(idx: Int) = run { pos = idx; Pair(isNull, read()) }
 
     private fun BufferAllocator.hashes(vec: VectorReader, sel: IntArray?) =
-        IntVector.open(this, "h", false).use { vec.hashTo(it, Hasher.Xx(), sel); it.asList }
+        IntVector.open(this, false).use { vec.hashTo(it, Hasher.Xx(), sel); it.asList }
 
     private fun BufferAllocator.copied(vec: VectorReader) = vec.openDirectSlice(this).use { it.asList }
 
@@ -162,7 +162,7 @@ class MaskedVectorTest {
 
     @Test
     fun `an empty mask over an empty vector walks nothing`(al: BufferAllocator) {
-        Vector.fromList(al, "col", emptyList<Long>()).use { vec ->
+        Vector.fromList(al, emptyList<Long>()).use { vec ->
             val masked = MaskedVector(vec, rowMask(0) { true })
             assertEquals(0, masked.valueCount)
             assertFalse(masked.valueReader().hasNext())
@@ -171,7 +171,7 @@ class MaskedVectorTest {
 
     @Test
     fun `closing a masked vector closes its inner vector once`(al: BufferAllocator) {
-        val vec = Vector.fromList(al, "col", List(ROWS) { it.toLong() })
+        val vec = Vector.fromList(al, List(ROWS) { it.toLong() })
         val masked = MaskedVector(vec, rowMask(ROWS) { it % 2 == 0 })
         masked.getLong(3)
         masked.close()

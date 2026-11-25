@@ -21,7 +21,7 @@ class Sum(
     }
 
     override fun build(al: BufferAllocator, args: RelationReader) = object : AggregateSpec {
-        private val outVec = al.openVector(colName, type)
+        private val outVec = al.openVector(type)
 
         override fun aggregate(inRel: RelationReader, groupMapping: GroupMapping, mask: RowMask) {
             val inVec = inRel.vectorForOrNull(fromName) ?: return

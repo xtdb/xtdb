@@ -80,8 +80,7 @@
                           default)
                :now (-> (expr/current-time) (time/instant->micros))
                :expr (let [param-types (expr/->param-types args)
-                           projection-spec (expr/->expression-projection-spec "_temporal_expression"
-                                                                              (expr/form->expr (list 'cast_tstz arg) {:param-types param-types})
+                           projection-spec (expr/->expression-projection-spec (expr/form->expr (list 'cast_tstz arg) {:param-types param-types})
                                                                               {:param-types param-types})]
                        (util/with-open [projection (.open projection-spec alloc {} args)
                                         res (.project projection vw/empty-args)]

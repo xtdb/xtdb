@@ -17,7 +17,7 @@ private const val DECIMAL_ERROR_KEY = "xtdb.error/decimal-error"
 
 class DecimalVector private constructor(
     override val al: BufferAllocator,
-    override var name: String, override var valueCount: Int,
+    override var valueCount: Int,
     override var validityBuffer: BitBuffer?, override val dataBuffer: ExtensibleBuffer,
     private val decimalType: Decimal
 ) : NumericVector(), MetadataFlavour.Number {
@@ -34,8 +34,8 @@ class DecimalVector private constructor(
         require(bitWidth in BIT_WIDTHS) { "Invalid bit width for DecimalVector: $bitWidth" }
     }
 
-    constructor(al: BufferAllocator, name: String, nullable: Boolean, decimalType: Decimal)
-            : this(al, name, 0, if (nullable) BitBuffer(al) else null, ExtensibleBuffer(al), decimalType)
+    constructor(al: BufferAllocator, nullable: Boolean, decimalType: Decimal)
+            : this(al, 0, if (nullable) BitBuffer(al) else null, ExtensibleBuffer(al), decimalType)
 
     override val byteWidth = (bitWidth / 8)
 
@@ -92,7 +92,7 @@ class DecimalVector private constructor(
     override fun hashCode0(idx: Int, hasher: Hasher) = hasher.hash(getObject0(idx, KEBAB_CASE_KEYWORD).toDouble())
 
     override fun openSlice(al: BufferAllocator) =
-        DecimalVector(al, name, valueCount, validityBuffer?.openSlice(al), dataBuffer.openSlice(al), decimalType)
+        DecimalVector(al, valueCount, validityBuffer?.openSlice(al), dataBuffer.openSlice(al), decimalType)
 
     override fun doublesTo(out: DoubleArrayList, sel: IntArray?) = out.addDoubles(valueCount, sel) { if (isNull(it)) 0.0 else getDecimal(it).toDouble() }
 }

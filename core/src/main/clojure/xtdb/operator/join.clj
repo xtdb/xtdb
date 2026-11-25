@@ -16,7 +16,6 @@
            (xtdb.api ICursor)
            (xtdb.arrow RelationReader VectorType)
            (xtdb.bloom BloomUtils)
-           (xtdb.operator ProjectionSpec$Factory)
            (xtdb.operator.join BuildSide BuildKeyFacts ComparatorFactory DiskHashJoin EveryRowMarkJoin JoinType JoinType$Mark JoinType$Mark$Spec$Compare JoinType$Mark$Spec$Exists JoinType$Mark$Spec$KeyedIn MemoryHashJoin)))
 
 (defmethod lp/ra-expr :cross-join [_]
@@ -291,16 +290,11 @@
                       input-types {:var-types vec-types
                                    :param-types param-types}]
                   {:key-col-name col-name
-                   :projection (expr/->expression-projection-spec col-name (expr/form->expr form input-types)
-                                                                  input-types)})))]
+                   :projection [col-name (expr/->expression-projection-spec (expr/form->expr form input-types)
+                                                                            input-types)]})))]
 
       {:left (equi-projection :left left-expr left-vec-types)
        :right (equi-projection :right right-expr right-vec-types)})))
-
-(defn- projection-specs->vec-types [projection-specs]
-  (->> projection-specs
-       (into {} (map (juxt #(symbol (.getToName ^ProjectionSpec$Factory %))
-                           #(.getType ^ProjectionSpec$Factory %))))))
 
 (def ^:dynamic *disk-join-threshold-rows*
   (or (some-> (System/getenv "XTDB_JOIN_SPILL_THRESHOLD") parse-long)
@@ -353,16 +347,16 @@
 
         left-projections (vec (concat
                                (for [[col-name col-type] left-vec-types]
-                                 (project/->identity-projection-spec col-name col-type))
+                                 [col-name (project/->identity-projection-spec col-name col-type)])
                                (keep (comp :projection :left) equi-specs)))
 
         right-projections (vec (concat
                                 (for [[col-name col-type] right-vec-types]
-                                  (project/->identity-projection-spec col-name col-type))
+                                  [col-name (project/->identity-projection-spec col-name col-type)])
                                 (keep (comp :projection :right) equi-specs)))
 
-        left-vec-types-proj (projection-specs->vec-types left-projections)
-        right-vec-types-proj (projection-specs->vec-types right-projections)
+        left-vec-types-proj (project/projection-specs->vec-types left-projections)
+        right-vec-types-proj (project/projection-specs->vec-types right-projections)
         left-key-col-names (mapv (comp :key-col-name :left) equi-specs)
         right-key-col-names (mapv (comp :key-col-name :right) equi-specs)
 
@@ -385,7 +379,7 @@
                                                       equi-specs))
                                 (mapv (fn [col-name]
                                         (let [col-type (get merged-vec-types col-name)]
-                                          (project/->identity-projection-spec col-name col-type)))))
+                                          [col-name (project/->identity-projection-spec col-name col-type)]))))
         op (case join-type
              ::inner-join :inner-join
              ::left-outer-join :left-join
@@ -402,7 +396,7 @@
      :explain (cond-> {:condition (pr-str (mapv second condition))}
                 mark-condition (assoc :mark (pr-str mark-condition)))
 
-     :vec-types (projection-specs->vec-types output-projections)
+     :vec-types (project/projection-specs->vec-types output-projections)
 
      :->cursor (fn [opts]
                  (project/->project-cursor

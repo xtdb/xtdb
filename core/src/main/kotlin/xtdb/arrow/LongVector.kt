@@ -11,12 +11,12 @@ import xtdb.util.Hasher
 
 class LongVector private constructor(
     override val al: BufferAllocator,
-    override var name: String, override var valueCount: Int,
+    override var valueCount: Int,
     override var validityBuffer: BitBuffer?, override val dataBuffer: ExtensibleBuffer
 ) : IntegerVector(), MetadataFlavour.Number {
 
-    constructor(al: BufferAllocator, name: String, nullable: Boolean)
-            : this(al, name, 0, if (nullable) BitBuffer(al) else null, ExtensibleBuffer(al))
+    constructor(al: BufferAllocator, nullable: Boolean)
+            : this(al, 0, if (nullable) BitBuffer(al) else null, ExtensibleBuffer(al))
 
     override val arrowType: ArrowType = MinorType.BIGINT.type
     override val byteWidth = Long.SIZE_BYTES
@@ -55,7 +55,7 @@ class LongVector private constructor(
     override fun hashCode0(idx: Int, hasher: Hasher) = hasher.hash(getLong(idx).toDouble())
 
     override fun openSlice(al: BufferAllocator) =
-        LongVector(al, name, valueCount, validityBuffer?.openSlice(al), dataBuffer.openSlice(al))
+        LongVector(al, valueCount, validityBuffer?.openSlice(al), dataBuffer.openSlice(al))
 
     override fun doublesTo(out: DoubleArrayList, sel: IntArray?) = out.addDoubles(valueCount, sel) { dataBuffer.getLong(it).toDouble() }
 }

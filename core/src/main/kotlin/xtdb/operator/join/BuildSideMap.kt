@@ -114,8 +114,8 @@ class BuildSideMap private constructor(
             val hashMask = mapSize - 1
             val skipIndex = IntArray(mapSize) { it }
 
-            return IntVector.open(al, "src-idxs", true, mapSize).closeOnCatch { srcIdxs ->
-                IntVector.open(al, "src-hashes", true, mapSize).closeOnCatch { srcHashes ->
+            return IntVector.open(al, true, mapSize).closeOnCatch { srcIdxs ->
+                IntVector.open(al, true, mapSize).closeOnCatch { srcHashes ->
                     repeat(rowCount) { idx ->
                         val hash = hashCol.getInt(idx)
                         val insertionIdx = srcIdxs.insertionIdx(homeIdx(hash, hashShift, hashMask), hashMask, skipIndex)

@@ -42,15 +42,15 @@ class StructVectorTest {
     @Test
     fun structVectorValues() {
         val children = linkedMapOf<String, Vector>(
-            "i32" to IntVector.open(allocator, "i32", false),
-            "utf8" to Utf8Vector(allocator, "utf8", true)
+            "i32" to IntVector.open(allocator, false),
+            "utf8" to Utf8Vector(allocator, true)
         )
 
         val m1 = mapOf("i32" to 4, "utf8" to "Hello")
         val m2 = mapOf("i32" to 8)
         val m3 = mapOf("i32" to 12, "utf8" to "world!")
 
-        StructVector(allocator, "struct", true, children).use { structVec ->
+        StructVector(allocator, true, children).use { structVec ->
             structVec.writeObject(m1)
             structVec.writeObject(m2)
             structVec.writeObject(m3)
@@ -62,11 +62,11 @@ class StructVectorTest {
     @Test
     fun useNestedWriters() {
         val children = linkedMapOf<String, Vector>(
-            "i32" to IntVector.open(allocator, "i32", false),
-            "utf8" to Utf8Vector(allocator, "utf8", true)
+            "i32" to IntVector.open(allocator, false),
+            "utf8" to Utf8Vector(allocator, true)
         )
 
-        StructVector(allocator, "struct", false, children).use { structVec ->
+        StructVector(allocator, false, children).use { structVec ->
             val i32Writer = structVec.vectorFor("i32")
             val utf8Writer = structVec.vectorFor("utf8")
 
@@ -94,7 +94,7 @@ class StructVectorTest {
 
     @Test
     fun createsMissingVectors() {
-        StructVector(allocator, "struct", false).use { structVec ->
+        StructVector(allocator, false).use { structVec ->
             val i32Writer = structVec.vectorFor("i32", I32_TYPE, false)
 
             i32Writer.writeInt(4)
@@ -131,12 +131,12 @@ class StructVectorTest {
         val buf = ByteArrayOutputStream()
 
         val children = linkedMapOf<String, Vector>(
-            "i32" to IntVector.open(allocator, "i32", false),
-            "utf8" to Utf8Vector(allocator, "utf8", true)
+            "i32" to IntVector.open(allocator, false),
+            "utf8" to Utf8Vector(allocator, true)
         )
 
-        StructVector(allocator, "struct", false, children).use { structVec ->
-            val rel = Relation(allocator, listOf(structVec), 0)
+        StructVector(allocator, false, children).use { structVec ->
+            val rel = Relation(allocator, linkedMapOf<String, Vector>("struct" to structVec), 0)
 
             rel.startUnload(Channels.newChannel(buf))
                 .use { unloader ->
@@ -185,15 +185,15 @@ class StructVectorTest {
 
     @Test
     fun `from null into struct vector`() {
-        NullVector("v1" ).use { nullVector ->
+        NullVector().use { nullVector ->
             nullVector.writeNull()
             nullVector.writeNull()
             nullVector.writeNull()
 
-            StructVector(allocator, "v2", true,
+            StructVector(allocator, true,
                 linkedMapOf(
-                    "i32" to IntVector.open(allocator, "i32", false),
-                    "utf8" to Utf8Vector(allocator, "utf8", true)
+                    "i32" to IntVector.open(allocator, false),
+                    "utf8" to Utf8Vector(allocator, true)
                 )).use { copy ->
 
                 nullVector.rowCopier(copy).copyRange(0, 3)
@@ -207,13 +207,13 @@ class StructVectorTest {
     @Test
     fun `use nested writers with DUV and nulls - 3946`() {
         val children = linkedMapOf(
-            "i32" to IntVector.open(allocator, "i32", false),
-            "duv" to DenseUnionVector(allocator, "duv", listOf(
-                IntVector.open(allocator, "i32", false),
-                Utf8Vector(allocator, "utf8", true)
+            "i32" to IntVector.open(allocator, false),
+            "duv" to DenseUnionVector(allocator, listOf("i32", "utf8"), listOf(
+                IntVector.open(allocator, false),
+                Utf8Vector(allocator, true)
             )))
 
-        StructVector(allocator, "struct", false, children).use { structVec ->
+        StructVector(allocator, false, children).use { structVec ->
             val i32Writer = structVec.vectorFor("i32")
             val duvWriter = structVec.vectorFor("duv")
             val nestedUtf8Writer = duvWriter.vectorFor("utf8")
@@ -236,7 +236,7 @@ class StructVectorTest {
 
     @Test
     fun `can add keys to a struct`() {
-        StructVector(allocator, "struct", false).use { structVec ->
+        StructVector(allocator, false).use { structVec ->
             val els = listOf(
                 mapOf("i32" to 4),
                 mapOf("i32" to 8, "utf8" to "Hello"),
@@ -250,14 +250,14 @@ class StructVectorTest {
 
             assertEquals(
                 "struct" ofType structOf("i32" to maybe(I32), "utf8" to maybe(UTF8)),
-                structVec.field
+                structVec.toField("struct")
             )
         }
     }
 
     @Test
     fun `writing null to struct doesn't make the underlying vectors nullable`() {
-        StructVector(allocator, "struct", false).use { structVec ->
+        StructVector(allocator, false).use { structVec ->
             structVec.writeObject(mapOf("i32" to 4, "utf8" to "Hello"))
             structVec.writeNull()
 
@@ -268,14 +268,14 @@ class StructVectorTest {
 
             assertEquals(
                 "struct" ofType maybe(structOf("i32" to I32, "utf8" to UTF8)),
-                structVec.field
+                structVec.toField("struct")
             )
         }
     }
 
     @Test
     fun `promoting a struct key to a union`() {
-        StructVector(allocator, "struct", false).use { structVec ->
+        StructVector(allocator, false).use { structVec ->
             val els = listOf(mapOf("a" to 4), mapOf("a" to "Hello"))
                 .onEach(structVec::writeObject)
 
@@ -288,24 +288,24 @@ class StructVectorTest {
                         Field("utf8", FieldType(false, UTF8_TYPE, null), emptyList())
                     ))
                 )),
-                structVec.field
+                structVec.toField("struct")
             )
         }
     }
 
     @Test
     fun `copy whole struct into empty struct`() {
-        StructVector(allocator, "src", true, linkedMapOf(
-            "i32" to IntVector.open(allocator, "i32", false),
-            "utf8" to Utf8Vector(allocator, "utf8", true)
+        StructVector(allocator, true, linkedMapOf(
+            "i32" to IntVector.open(allocator, false),
+            "utf8" to Utf8Vector(allocator, true)
         )).use { src ->
             src.writeObject(mapOf("i32" to 1, "utf8" to "one"))
             src.writeNull()
             src.writeObject(mapOf("i32" to 3, "utf8" to "three"))
 
-            StructVector(allocator, "dest", true, linkedMapOf(
-                "i32" to IntVector.open(allocator, "i32", false),
-                "utf8" to Utf8Vector(allocator, "utf8", true)
+            StructVector(allocator, true, linkedMapOf(
+                "i32" to IntVector.open(allocator, false),
+                "utf8" to Utf8Vector(allocator, true)
             )).use { dest ->
                 src.rowCopier(dest).copyRange(0, src.valueCount)
 
@@ -317,16 +317,16 @@ class StructVectorTest {
 
     @Test
     fun `copy whole struct into struct with existing rows`() {
-        StructVector(allocator, "src", false, linkedMapOf(
-            "i32" to IntVector.open(allocator, "i32", false),
-            "utf8" to Utf8Vector(allocator, "utf8", true)
+        StructVector(allocator, false, linkedMapOf(
+            "i32" to IntVector.open(allocator, false),
+            "utf8" to Utf8Vector(allocator, true)
         )).use { src ->
             src.writeObject(mapOf("i32" to 10, "utf8" to "ten"))
             src.writeObject(mapOf("i32" to 20, "utf8" to "twenty"))
 
-            StructVector(allocator, "dest", false, linkedMapOf(
-                "i32" to IntVector.open(allocator, "i32", false),
-                "utf8" to Utf8Vector(allocator, "utf8", true)
+            StructVector(allocator, false, linkedMapOf(
+                "i32" to IntVector.open(allocator, false),
+                "utf8" to Utf8Vector(allocator, true)
             )).use { dest ->
                 dest.writeObject(mapOf("i32" to 1, "utf8" to "existing"))
 
@@ -347,9 +347,9 @@ class StructVectorTest {
 
     @Test
     fun `copy partial range from struct`() {
-        StructVector(allocator, "src", true, linkedMapOf(
-            "i32" to IntVector.open(allocator, "i32", false),
-            "utf8" to Utf8Vector(allocator, "utf8", true)
+        StructVector(allocator, true, linkedMapOf(
+            "i32" to IntVector.open(allocator, false),
+            "utf8" to Utf8Vector(allocator, true)
         )).use { src ->
             src.writeObject(mapOf("i32" to 1, "utf8" to "one"))
             src.writeObject(mapOf("i32" to 2, "utf8" to "two"))
@@ -357,9 +357,9 @@ class StructVectorTest {
             src.writeObject(mapOf("i32" to 4, "utf8" to "four"))
             src.writeObject(mapOf("i32" to 5, "utf8" to "five"))
 
-            StructVector(allocator, "dest", true, linkedMapOf(
-                "i32" to IntVector.open(allocator, "i32", false),
-                "utf8" to Utf8Vector(allocator, "utf8", true)
+            StructVector(allocator, true, linkedMapOf(
+                "i32" to IntVector.open(allocator, false),
+                "utf8" to Utf8Vector(allocator, true)
             )).use { dest ->
                 // Copy rows 1-3 (indices 1, 2, 3)
                 src.rowCopier(dest).copyRange(1, 3)
@@ -381,7 +381,7 @@ class StructVectorTest {
     // on this to keep it unreachable - so relaxing the padding here is not a local change (#5948).
     @Test
     fun `a bottom-typed child and a non-null struct row cannot coexist`() {
-        StructVector(allocator, "struct", true, linkedMapOf("a" to NullVector("a", false))).use { structVec ->
+        StructVector(allocator, true, linkedMapOf("a" to NullVector(false))).use { structVec ->
             assertEquals(VectorType.Nothing, structVec.vectorFor("a").type)
 
             structVec.writeNull()
@@ -394,9 +394,9 @@ class StructVectorTest {
 
     @Test
     fun `taking a copier from an empty source leaves the destination alone`() {
-        StructVector(allocator, "dest", false, linkedMapOf("name" to Utf8Vector(allocator, "name", false)))
+        StructVector(allocator, false, linkedMapOf("name" to Utf8Vector(allocator, false)))
             .use { dest ->
-                StructVector(allocator, "src", false).use { src ->
+                StructVector(allocator, false).use { src ->
                     src.rowCopier(dest)
 
                     assertEquals(UTF8, dest.vectorFor("name").type)
@@ -406,9 +406,9 @@ class StructVectorTest {
 
     @Test
     fun `taking a copier from a source with rows widens the destination`() {
-        StructVector(allocator, "dest", false, linkedMapOf("name" to Utf8Vector(allocator, "name", false)))
+        StructVector(allocator, false, linkedMapOf("name" to Utf8Vector(allocator, false)))
             .use { dest ->
-                StructVector(allocator, "src", false).use { src ->
+                StructVector(allocator, false).use { src ->
                     src.endStruct()
 
                     src.rowCopier(dest)
@@ -440,7 +440,7 @@ class StructVectorTest {
             val (firstSel, secondSel) = sels
 
             fun openVec(nullableRows: Pair<Boolean, List<Any?>>) =
-                StructVector(allocator, "docs", nullableRows.first).apply { nullableRows.second.forEach { writeObject(it) } }
+                StructVector(allocator, nullableRows.first).apply { nullableRows.second.forEach { writeObject(it) } }
 
             openVec(srcCase).use { src ->
                 openVec(destCase).use { perRow ->

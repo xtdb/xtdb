@@ -5,9 +5,10 @@
             [xtdb.logical-plan :as lp]
             [xtdb.types :as types]
             [xtdb.util :as util])
-  (:import (org.apache.arrow.vector.types.pojo Field)
+  (:import (java.util LinkedHashMap)
+           (org.apache.arrow.vector.types.pojo Field)
            (xtdb.arrow VectorType)
-           (xtdb.operator ProjectCursor ProjectionSpec$Factory ProjectionSpec$Identity ProjectionSpec$LocalRowNumber ProjectionSpec$Rename ProjectionSpec$RowNumber ProjectionSpec$Star)))
+           (xtdb.operator ProjectCursor ProjectionSpec$Factory ProjectionSpec$Identity ProjectionSpec$LocalRowNumber ProjectionSpec$RowNumber ProjectionSpec$Star)))
 
 (s/def ::append-columns? boolean?)
 
@@ -45,11 +46,28 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(defn ->identity-projection-spec ^ProjectionSpec$Factory [col-name col-type]
-  (ProjectionSpec$Identity. (str col-name) col-type))
+(defn ->identity-projection-spec ^ProjectionSpec$Factory [from-name col-type]
+  (ProjectionSpec$Identity. (str from-name) col-type))
 
-(defn- open-projection-specs [{:keys [allocator args schema]} projection-specs]
-  (util/safe-mapv #(.open ^ProjectionSpec$Factory % allocator schema args) projection-specs))
+(defn projection-specs->vec-types
+  "`projection-specs`: ordered `[col-name ProjectionSpec$Factory]` pairs."
+  [projection-specs]
+  (into {} (map (fn [[col-name ^ProjectionSpec$Factory spec]]
+                  [(symbol col-name) (.getType spec)]))
+        projection-specs))
+
+(defn- open-projection-specs ^LinkedHashMap [{:keys [allocator args schema]} projection-specs]
+  (let [factories (LinkedHashMap.)]
+    (doseq [[col-name spec] projection-specs]
+      (.put factories (str col-name) spec))
+
+    (let [opened (util/safe-mapv (fn [^ProjectionSpec$Factory spec]
+                                   (.open spec allocator schema args))
+                                 (.values factories))
+          out (LinkedHashMap.)]
+      (doseq [[col-name spec] (map vector (.keySet factories) opened)]
+        (.put out col-name spec))
+      out)))
 
 (defn ->project-cursor
   "Takes ownership of `in-cursor`, closing it if opening the specs throws."
@@ -63,39 +81,36 @@
           (fn [{inner-vec-types :vec-types :as inner-rel}]
             (let [projection-specs (concat (when append-columns?
                                              (for [[col-name col-type] inner-vec-types]
-                                               (->identity-projection-spec col-name col-type)))
+                                               [col-name (->identity-projection-spec col-name col-type)]))
                                            (for [[p-type arg] projections]
                                              (case p-type
-                                               :column (->identity-projection-spec arg (get inner-vec-types arg))
+                                               :column [arg (->identity-projection-spec arg (get inner-vec-types arg))]
 
                                                :row-number-column (let [[col-name _form] (first arg)]
-                                                                    (ProjectionSpec$RowNumber. (str col-name)))
+                                                                    [col-name ProjectionSpec$RowNumber/INSTANCE])
 
                                                :local-row-number-column (let [[col-name _form] (first arg)]
-                                                                          (ProjectionSpec$LocalRowNumber. (str col-name)))
+                                                                          [col-name ProjectionSpec$LocalRowNumber/INSTANCE])
 
                                                :star (let [[col-name _star] (first arg)]
-                                                       (ProjectionSpec$Star. (str col-name)
-                                                                             (types/->type (into [:struct (update-keys inner-vec-types str)]))))
+                                                       [col-name (ProjectionSpec$Star. (types/->type (into [:struct (update-keys inner-vec-types str)])))])
 
                                                :rename (let [[to-name from-name] (first arg)
                                                              from-type (get inner-vec-types from-name)]
                                                          (assert from-type (format "Field %s not found in relation, available %s" from-name (pr-str (keys inner-vec-types))))
-                                                         (ProjectionSpec$Rename. (str from-name) (str to-name) from-type))
+                                                         [to-name (->identity-projection-spec from-name from-type)])
 
                                                :extend (let [[col-name form] (first arg)
                                                              input-types {:var-types inner-vec-types
                                                                           :param-types param-types}
                                                              expr (expr/form->expr form input-types)]
-                                                         (expr/->expression-projection-spec col-name expr input-types)))))
+                                                         [col-name (expr/->expression-projection-spec expr input-types)]))))
                   col-mapping (->> projections
                                    (into {} (keep (fn [[p-type arg]]
                                                     (when (= p-type :rename)
                                                       (let [[to-name from-name] (first arg)]
                                                         [to-name from-name]))))))]
-              (let [out-vec-types (->> projection-specs
-                                       (into {} (map (juxt #(symbol (.getToName ^ProjectionSpec$Factory %))
-                                                           #(.getType ^ProjectionSpec$Factory %)))))]
+              (let [out-vec-types (projection-specs->vec-types projection-specs)]
                 {:op :project
                  :children [inner-rel]
                  :explain {:project (pr-str (into [] (map second) projections))

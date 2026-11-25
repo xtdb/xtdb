@@ -80,7 +80,7 @@
     (getToColumnType [_] #xt/type :i64)
 
     (build [_ al]
-      (let [out-vec (LongVector. al (str to-name) false)
+      (let [out-vec (LongVector. al false)
             ^LongLongMap group-to-cnt (LongLongHashMap.)]
         (reify
           IWindowFnSpec
@@ -115,7 +115,7 @@
       (getToColumnType [_] out-type)
 
       (build [_ al]
-        (let [out-vec (Vector/open al (str to-name) out-type)]
+        (let [out-vec (Vector/open al out-type)]
           (reify IWindowFnSpec
             (aggregate [_ group-mapping sort-mapping in-rel]
               (let [from-vec (.vectorFor in-rel (str from-name))
@@ -144,7 +144,7 @@
       (getToColumnType [_] out-type)
 
       (build [_ al]
-        (let [out-vec (Vector/open al (str to-name) out-type)]
+        (let [out-vec (Vector/open al out-type)]
           (reify IWindowFnSpec
             (aggregate [_ group-mapping sort-mapping in-rel]
               (let [from-vec (.vectorFor in-rel (str from-name))
@@ -172,6 +172,7 @@
                          ^GroupMapper group-mapper
                          order-specs
                          ^List window-specs
+                         window-col-names
                          ^:unsynchronized-mutable ^boolean done?]
   ICursor
   (getCursorType [_] "window")
@@ -185,17 +186,17 @@
        (let [window-groups (gensym "window-groups")]
          ;; TODO we likely want to do some retaining here instead of copying
          (util/with-open [out-rel (Relation. allocator ^Map (update-keys static-vec-types str))
-                          group-mapping (IntVector/open allocator (str window-groups) false)]
+                          group-mapping (IntVector/open allocator false)]
 
            (.forEachRemaining in-cursor (fn [^RelationReader in-rel]
                                           (vw/append-rel out-rel in-rel)
                                           (.append group-mapping (.groupMapping group-mapper in-rel))))
 
-           (let [sort-mapping (order-by/sorted-idxs (RelationReader/from (conj (seq out-rel) group-mapping) (.getValueCount group-mapping))
+           (let [sort-mapping (order-by/sorted-idxs (vr/assoc-cols out-rel [[window-groups group-mapping]] (.getValueCount group-mapping))
                                                     (into [[window-groups]] order-specs))]
              (util/with-open [window-cols (->> window-specs
                                                (mapv #(.aggregate ^IWindowFnSpec % group-mapping sort-mapping out-rel)))]
-               (let [out-rel (vr/rel-reader (concat (.select out-rel sort-mapping) window-cols))]
+               (let [out-rel (vr/assoc-cols (.select out-rel sort-mapping) (map vector window-col-names window-cols) (alength sort-mapping))]
                  (if (pos? (.getRowCount out-rel))
                    (do
                      (.accept c out-rel)
@@ -253,4 +254,5 @@
                                           (group-by/->group-mapper allocator (select-keys vec-types partition-cols))
                                           order-specs
                                           (vec window-fn-specs)
+                                          (mapv #(.getToColumnName ^IWindowFnSpecFactory %) window-fn-factories)
                                           false)))})))))

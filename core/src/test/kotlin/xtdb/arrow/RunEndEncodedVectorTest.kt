@@ -50,7 +50,7 @@ class RunEndEncodedVectorTest {
 
     /** Encodes `runs` — (value, run-length) pairs — as an i64 column. */
     private fun openI64Runs(vararg runs: Pair<Long?, Int>) =
-        RunEndEncodedVector(allocator, "vals", LongVector(allocator, REE_VALUES_NAME, true))
+        RunEndEncodedVector(allocator, LongVector(allocator, true))
             .also { vec -> runs.forEach { (value, len) -> vec.writeRun(value, len) } }
 
     private fun expand(vararg runs: Pair<Long?, Int>) = runs.flatMap { (value, len) -> List(len) { value } }
@@ -149,9 +149,9 @@ class RunEndEncodedVectorTest {
             assertEquals(VectorType.maybe(VectorType.I64).runEndEncoded(), vec.type)
             assertEquals(I64_TYPE, vec.arrowType)
 
-            assertEquals(RUN_END_ENCODED_TYPE, vec.field.type)
-            assertEquals(listOf(REE_RUN_ENDS_NAME, REE_VALUES_NAME), vec.field.children.map { it.name })
-            assertEquals(vec.type, vec.field.asType)
+            assertEquals(RUN_END_ENCODED_TYPE, vec.toField("vals").type)
+            assertEquals(listOf(REE_RUN_ENDS_NAME, REE_VALUES_NAME), vec.toField("vals").children.map { it.name })
+            assertEquals(vec.type, vec.toField("vals").asType)
         }
     }
 
@@ -260,10 +260,10 @@ class RunEndEncodedVectorTest {
             VectorType.maybe(VectorType.UTF8).runEndEncoded(RunEndWidth.I16),
             VectorType.structOf("a" to VectorType.I64, "b" to VectorType.maybe(VectorType.UTF8)).runEndEncoded(),
         )) {
-            allocator.openVector("vals", type).use { vec ->
+            allocator.openVector(type).use { vec ->
                 assertTrue(vec is RunEndEncodedVector, "$type: $vec")
                 assertEquals(type, vec.type)
-                assertEquals(type, vec.field.asType)
+                assertEquals(type, vec.toField("vals").asType)
             }
         }
     }
@@ -274,33 +274,33 @@ class RunEndEncodedVectorTest {
             val sel = vec.select(intArrayOf(0, 3))
 
             assertEquals(vec.type, sel.type)
-            assertEquals(vec.field, sel.field)
+            assertEquals(vec.toField("vals"), sel.toField("vals"))
         }
     }
 
     @Test
     fun `plain and encoded columns append into one plain column`() {
         Relation(allocator).use { out ->
-            Relation(allocator, listOf(openI64Runs(10L to 2, 20L to 1)), 3).use { out.append(it) }
-            Relation(allocator, listOf(LongVector(allocator, "vals", true).apply { writeLong(30L) }), 1).use { out.append(it) }
-            Relation(allocator, listOf(openI64Runs(40L to 2)), 2).use { out.append(it) }
+            Relation(allocator, linkedMapOf<String, Vector>("vals" to openI64Runs(10L to 2, 20L to 1)), 3).use { out.append(it) }
+            Relation(allocator, linkedMapOf<String, Vector>("vals" to LongVector(allocator, true).apply { writeLong(30L) }), 1).use { out.append(it) }
+            Relation(allocator, linkedMapOf<String, Vector>("vals" to openI64Runs(40L to 2)), 2).use { out.append(it) }
 
             val vals = out["vals"]
             assertEquals(VectorType.maybe(VectorType.I64), vals.type)
-            assertEquals(I64_TYPE, vals.field.type)
+            assertEquals(I64_TYPE, vals.toField("vals").type)
             assertEquals(listOf(10L, 10L, 20L, 30L, 40L, 40L), vals.asList)
         }
     }
 
     @Test
     fun `an encoded column widens only its nullability`() {
-        RunEndEncodedVector(allocator, "vals", LongVector(allocator, REE_VALUES_NAME, false)).use { vec ->
+        RunEndEncodedVector(allocator, LongVector(allocator, false)).use { vec ->
             assertTrue(vec === vec.maybePromote(allocator, I64_TYPE, false))
             assertFalse(vec.nullable)
 
             assertTrue(vec === vec.maybePromote(allocator, NULL_TYPE, true))
             assertTrue(vec.nullable)
-            assertEquals(I64_TYPE, vec.field.children[1].type)
+            assertEquals(I64_TYPE, vec.toField("vals").children[1].type)
 
             assertThrows<UnsupportedOperationException> { vec.maybePromote(allocator, UTF8_TYPE, false) }
         }
@@ -308,7 +308,7 @@ class RunEndEncodedVectorTest {
 
     @Test
     fun `an encoded column takes plain rows a run apiece`() {
-        LongVector(allocator, "in", false).use { plain ->
+        LongVector(allocator, false).use { plain ->
             listOf(10L, 10L, 20L).forEach { plain.writeLong(it) }
 
             openI64Runs(5L to 2).use { vec ->
@@ -323,17 +323,17 @@ class RunEndEncodedVectorTest {
     @Test
     fun `copies out as the rows it encodes`() {
         openI64Runs(10L to 3, 20L to 1, 30L to 2).use { vec ->
-            LongVector(allocator, "out", true).use { out ->
+            LongVector(allocator, true).use { out ->
                 out.append(vec)
                 assertEquals(vec.asList, out.asList)
             }
 
-            LongVector(allocator, "out", true).use { out ->
+            LongVector(allocator, true).use { out ->
                 out.appendRange(vec, 2, 3)
                 assertEquals(listOf(10L, 20L, 30L), out.asList)
             }
 
-            LongVector(allocator, "out", true).use { out ->
+            LongVector(allocator, true).use { out ->
                 out.appendRows(vec, intArrayOf(5, 0, 3))
                 assertEquals(listOf(30L, 10L, 20L), out.asList)
             }
@@ -343,14 +343,14 @@ class RunEndEncodedVectorTest {
     @Test
     fun `copies into an encoded column a run at a time`() {
         openI64Runs(10L to 3, 20L to 1, 30L to 2).use { vec ->
-            RunEndEncodedVector(allocator, "out", LongVector(allocator, REE_VALUES_NAME, true)).use { out ->
+            RunEndEncodedVector(allocator, LongVector(allocator, true)).use { out ->
                 out.append(vec)
 
                 assertEquals(vec.asList, out.asList)
                 assertEquals(vec.runCount, out.runCount, "a whole-range copy keeps the runs")
             }
 
-            RunEndEncodedVector(allocator, "out", LongVector(allocator, REE_VALUES_NAME, true)).use { out ->
+            RunEndEncodedVector(allocator, LongVector(allocator, true)).use { out ->
                 out.appendRange(vec, 2, 3)
 
                 assertEquals(listOf(10L, 20L, 30L), out.asList)
@@ -380,14 +380,14 @@ class RunEndEncodedVectorTest {
 
     @Test
     fun `nulls copied into an encoded column make it nullable`() {
-        NullVector("in", true, 2).use { nulls ->
-            RunEndEncodedVector(allocator, "vals", LongVector(allocator, REE_VALUES_NAME, false)).use { vec ->
+        NullVector(true, 2).use { nulls ->
+            RunEndEncodedVector(allocator, LongVector(allocator, false)).use { vec ->
                 vec.writeRun(5L, 2)
                 vec.append(nulls)
 
                 assertEquals(listOf(5L, 5L, null, null), vec.asList)
                 assertTrue(vec.nullable)
-                assertTrue(vec.field.children[1].isNullable)
+                assertTrue(vec.toField("vals").children[1].isNullable)
             }
         }
     }
@@ -395,9 +395,9 @@ class RunEndEncodedVectorTest {
     @Test
     fun `an encoded column beside another type promotes to a union by its values' type`() {
         Relation(allocator).use { out ->
-            Relation(allocator, listOf(allocator.openVector("vals", UTF8_TYPE, false).apply { writeObject("a") }), 1)
+            Relation(allocator, linkedMapOf<String, Vector>("vals" to allocator.openVector(UTF8_TYPE, false).apply { writeObject("a") }), 1)
                 .use { out.append(it) }
-            Relation(allocator, listOf(openI64Runs(10L to 2)), 2).use { out.append(it) }
+            Relation(allocator, linkedMapOf<String, Vector>("vals" to openI64Runs(10L to 2)), 2).use { out.append(it) }
 
             val vals = out["vals"]
             assertEquals(setOf("utf8", "i64"), vals.legNames)
@@ -407,7 +407,7 @@ class RunEndEncodedVectorTest {
 
     @Test
     fun `an encoded column unloads in the layout of the schema it's given`() {
-        Relation(allocator, listOf(openI64Runs(10L to 2, null to 1, 20L to 1)), 4).use { rel ->
+        Relation(allocator, linkedMapOf<String, Vector>("vals" to openI64Runs(10L to 2, null to 1, 20L to 1)), 4).use { rel ->
             val plain = Schema(listOf(Field("vals", FieldType.nullable(I64_TYPE), emptyList())))
 
             rel.openArrowRecordBatch(allocator, plain).use { batch ->
@@ -431,10 +431,10 @@ class RunEndEncodedVectorTest {
 
     @Test
     fun `a plain column unloads in the layout of an encoded schema it's given`() {
-        val plain = LongVector(allocator, "vals", true)
+        val plain = LongVector(allocator, true)
             .apply { writeLong(10L); writeLong(10L); writeNull(); writeLong(20L) }
 
-        Relation(allocator, listOf(plain), 4).use { rel ->
+        Relation(allocator, linkedMapOf<String, Vector>("vals" to plain), 4).use { rel ->
             val encoded = Schema(listOf(VectorType.maybe(VectorType.I64).runEndEncoded().toField("vals")))
 
             rel.openArrowRecordBatch(allocator, encoded).use { batch ->
@@ -459,10 +459,10 @@ class RunEndEncodedVectorTest {
             )
         )
 
-        val vec = RunEndEncodedVector(allocator, "vals", LongVector(allocator, REE_VALUES_NAME, false))
+        val vec = RunEndEncodedVector(allocator, LongVector(allocator, false))
             .apply { writeRun(10L, 2); writeRun(20L, 1) }
 
-        Relation(allocator, listOf(vec), 3).use { rel ->
+        Relation(allocator, linkedMapOf<String, Vector>("vals" to vec), 3).use { rel ->
             rel.openArrowRecordBatch(allocator, target).use { batch ->
                 Relation(allocator, target).use { out ->
                     out.load(batch)
@@ -499,7 +499,7 @@ class RunEndEncodedVectorTest {
         val runs = arrayOf(10L to 3, 20L to 1, 30L to 4)
 
         openI64Runs(*runs).use { vec ->
-            LongVector(allocator, "vals", true).use { plain ->
+            LongVector(allocator, true).use { plain ->
                 expand(*runs).forEach { plain.writeObject(it) }
 
                 val flavours = vec.metadataFlavours.filterIsInstance<MetadataFlavour.Number>()
@@ -520,7 +520,7 @@ class RunEndEncodedVectorTest {
         }
 
         openI64Runs(*runs).use { vec ->
-            LongVector(allocator, "vals", true).use { plain ->
+            LongVector(allocator, true).use { plain ->
                 expand(*runs).forEach { plain.writeObject(it) }
 
                 val expected = minMaxOf(plain)
@@ -535,8 +535,8 @@ class RunEndEncodedVectorTest {
         val iids = listOf(1L, 1L, 2L, 3L, 3L, 3L).map { it * 0x0101010101010101L }
 
         fun bloomOf(vec: VectorReader, sel: IntArray?) =
-            IntVector.open(allocator, "xx", false).use { xxHashes ->
-                IntVector.open(allocator, "murmur3", false).use { murmur3Hashes ->
+            IntVector.open(allocator, false).use { xxHashes ->
+                IntVector.open(allocator, false).use { murmur3Hashes ->
                     vec.metadataFlavours.filterIsInstance<MetadataFlavour.Bytes>().forEach {
                         it.hashTo(xxHashes, Hasher.Xx(), sel)
                         it.hashTo(murmur3Hashes, Hasher.Murmur3(), sel)
@@ -547,8 +547,8 @@ class RunEndEncodedVectorTest {
 
         val rowsFromTwo = intArrayOf(2, 3, 4, 5)
 
-        RunEndEncodedVector(allocator, "_iid", FixedSizeBinaryVector(allocator, REE_VALUES_NAME, false, 16)).use { vec ->
-            FixedSizeBinaryVector(allocator, "_iid", false, 16).use { plain ->
+        RunEndEncodedVector(allocator, FixedSizeBinaryVector(allocator, false, 16)).use { vec ->
+            FixedSizeBinaryVector(allocator, false, 16).use { plain ->
                 iids.forEach { iid ->
                     vec.writeLongLong(iid, iid)
                     plain.writeLongLong(iid, iid)
@@ -566,7 +566,7 @@ class RunEndEncodedVectorTest {
         val bytes = ByteArrayOutputStream()
 
         openI64Runs(*runs).use { vec ->
-            val rel = Relation(allocator, listOf(vec), vec.valueCount)
+            val rel = Relation(allocator, linkedMapOf<String, Vector>("vals" to vec), vec.valueCount)
             rel.startUnload(Channels.newChannel(bytes)).use { unloader ->
                 unloader.writePage()
                 unloader.end()
@@ -590,11 +590,11 @@ class RunEndEncodedVectorTest {
     @Test
     fun `reads run-ends of any width`() {
         for (runEnds in listOf(
-            ShortVector(allocator, REE_RUN_ENDS_NAME, false),
-            IntVector.open(allocator, REE_RUN_ENDS_NAME, false),
-            LongVector(allocator, REE_RUN_ENDS_NAME, false)
+            ShortVector(allocator, false),
+            IntVector.open(allocator, false),
+            LongVector(allocator, false)
         )) {
-            RunEndEncodedVector("vals", runEnds, LongVector(allocator, REE_VALUES_NAME, true)).use { vec ->
+            RunEndEncodedVector(runEnds, LongVector(allocator, true)).use { vec ->
                 vec.writeRun(10L, 3)
                 vec.writeRun(20L, 2)
 
@@ -621,7 +621,7 @@ class RunEndEncodedVectorTest {
             ree.writeRun(20L, 1)
 
             assertEquals(listOf(10L, 10L, 20L), ree.asList)
-            assertEquals(structField, structVec.field)
+            assertEquals(structField, structVec.toField("outer"))
         }
     }
 
@@ -696,9 +696,7 @@ class RunEndEncodedVectorTest {
 
     @Test
     fun `refuses more rows than its run-ends can count`() {
-        RunEndEncodedVector(
-            "vals", ShortVector(allocator, REE_RUN_ENDS_NAME, false), LongVector(allocator, REE_VALUES_NAME, true)
-        ).use { vec ->
+        RunEndEncodedVector(ShortVector(allocator, false), LongVector(allocator, true)).use { vec ->
             assertThrows<IllegalArgumentException> { vec.writeRun(10L, Short.MAX_VALUE + 1) }
             assertEquals(0, vec.valueCount, "a rejected run doesn't count towards the rows")
         }
@@ -800,7 +798,7 @@ class RunEndEncodedVectorTest {
             byteArrayOf(0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 4)
         )
 
-        RunEndEncodedVector(allocator, "_iid", FixedSizeBinaryVector(allocator, REE_VALUES_NAME, false, 16))
+        RunEndEncodedVector(allocator, FixedSizeBinaryVector(allocator, false, 16))
             .use { vec ->
                 listOf(iids[0], iids[0], iids[1]).forEach { vec.writeBytes(it) }
 
@@ -815,7 +813,7 @@ class RunEndEncodedVectorTest {
                 }
             }
 
-        RunEndEncodedVector(allocator, "vals", LongVector(allocator, REE_VALUES_NAME, false)).use { vec ->
+        RunEndEncodedVector(allocator, LongVector(allocator, false)).use { vec ->
             listOf(10L, 10L, 20L).forEach { vec.writeLong(it) }
 
             assertEquals(listOf(10L, 10L, 20L), vec.asList)
@@ -824,9 +822,9 @@ class RunEndEncodedVectorTest {
     }
 
     private fun openIidRuns(vararg runs: Pair<ByteArray, Int>) =
-        RunEndEncodedVector(allocator, "_iid", FixedSizeBinaryVector(allocator, REE_VALUES_NAME, false, 16))
+        RunEndEncodedVector(allocator, FixedSizeBinaryVector(allocator, false, 16))
             .also { vec -> runs.forEach { (iid, len) -> vec.writeRun(iid, len) } }
 
     private fun openIidPlain(vararg iids: ByteArray) =
-        FixedSizeBinaryVector(allocator, "_iid", false, 16).also { vec -> iids.forEach { vec.writeObject(it) } }
+        FixedSizeBinaryVector(allocator, false, 16).also { vec -> iids.forEach { vec.writeObject(it) } }
 }

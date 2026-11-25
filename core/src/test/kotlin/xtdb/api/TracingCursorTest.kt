@@ -20,7 +20,7 @@ class TracingCursorTest {
         override fun tryAdvance(c: Consumer<in RelationReader>): Boolean {
             if (pages == 0) return false
             pages--
-            c.accept(RelationReader.from(emptyList(), 3))
+            c.accept(RelationReader.from(emptyMap(), 3))
             return true
         }
     }

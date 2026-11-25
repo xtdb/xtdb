@@ -68,15 +68,15 @@ class OpenTxTest {
         val defaultVf = t(1) - 1
         val ids = listOf(0L, "one", 2L, UUID(0, 3), "four")
 
-        val putCols = listOf(
-            Vector.fromList(allocator, "_id", ids),
-            Vector.fromList(allocator, "doc", List(5) { mapOf("v" to it.toLong()) }),
-            Vector.fromList(allocator, "_valid_from", maybe(INSTANT), listOf(t(1), null, t(3), null, t(5)).map { it?.microsAsInstant }),
+        val putCols = linkedMapOf(
+            "_id" to Vector.fromList(allocator, ids),
+            "doc" to Vector.fromList(allocator, List(5) { mapOf("v" to it.toLong()) }),
+            "_valid_from" to Vector.fromList(allocator, maybe(INSTANT), listOf(t(1), null, t(3), null, t(5)).map { it?.microsAsInstant }),
         )
 
-        val deleteCols = listOf(
-            Vector.fromList(allocator, "_iid", IID, ids.map { it.asIid }),
-            Vector.fromList(allocator, "_valid_to", maybe(INSTANT), listOf(null, t(2), null, t(4), null).map { it?.microsAsInstant }),
+        val deleteCols = linkedMapOf(
+            "_iid" to Vector.fromList(allocator, IID, ids.map { it.asIid }),
+            "_valid_to" to Vector.fromList(allocator, maybe(INSTANT), listOf(null, t(2), null, t(4), null).map { it?.microsAsInstant }),
         )
 
         try {
@@ -105,8 +105,8 @@ class OpenTxTest {
                 )
             }
         } finally {
-            putCols.forEach { it.close() }
-            deleteCols.forEach { it.close() }
+            putCols.values.forEach { it.close() }
+            deleteCols.values.forEach { it.close() }
         }
     }
 }

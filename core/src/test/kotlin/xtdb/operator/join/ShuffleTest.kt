@@ -56,7 +56,7 @@ class ShuffleTest {
     @Test
     fun testShuffle(al: BufferAllocator) {
         Relation(al, schema("id" ofType I32)).use { rel ->
-            al.openVector("hashes", I32).use { hashCol ->
+            al.openVector(I32).use { hashCol ->
                 val shuffleFiles = Shuffle.open(al, rel, listOf("id"), 8, 3).use { shuffle ->
                     shuffle.writeIds(rel, (1..3).toList())
                     shuffle.writeIds(rel, (4..6).toList())
@@ -104,7 +104,7 @@ class ShuffleTest {
     @Test
     fun testLargerShuffle(al: BufferAllocator) {
         Relation(al, schema("id" ofType I32)).use { rel ->
-            al.openVector("hashes", I32).use { hashCol ->
+            al.openVector(I32).use { hashCol ->
                 Shuffle.open(al, rel, listOf("id"), 10000, 4).use { shuffle ->
                     shuffle.writeIds(rel, (0..<2500).toList())
                     shuffle.writeIds(rel, (2500..<5000).toList())
@@ -130,7 +130,7 @@ class ShuffleTest {
     @Test
     fun testEmptyShuffle(al: BufferAllocator) {
         Relation(al, schema("id" ofType I32)).use { rel ->
-            al.openVector("hashes", I32).use { hashCol ->
+            al.openVector(I32).use { hashCol ->
                 Shuffle.open(al, rel, listOf("id"), 1000, 4).use { shuffle ->
                     repeat(4) { shuffle.shuffle() }
                     shuffle.end()
@@ -149,7 +149,7 @@ class ShuffleTest {
     @Test
     fun testMinParts(al: BufferAllocator) {
         Relation(al, schema("id" ofType I32)).use { rel ->
-            al.openVector("hashes", I32).use { hashCol ->
+            al.openVector(I32).use { hashCol ->
                 Shuffle.open(al, rel, listOf("id"), 6, 1).use { shuffle ->
                     shuffle.writeIds(rel, (0..<6).toList())
                     shuffle.end()

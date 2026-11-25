@@ -39,7 +39,7 @@ class VariableWidthVectorTest {
 
     @Test
     fun `a slice appends after the values it already holds`() {
-        Utf8Vector(allocator, "v", false).use { vec ->
+        Utf8Vector(allocator, false).use { vec ->
             vec.writeObject("abc")
             vec.writeObject("de")
 
@@ -55,12 +55,12 @@ class VariableWidthVectorTest {
 
     @Test
     fun `from null into string vector - 3726`() {
-        NullVector("v1" ).use { nullVector ->
+        NullVector().use { nullVector ->
             nullVector.writeNull()
             nullVector.writeNull()
             nullVector.writeNull()
 
-            Utf8Vector(allocator, "v2", true).use { copy ->
+            Utf8Vector(allocator, true).use { copy ->
                 nullVector.rowCopier(copy).copyRange(0, 3)
 
                 assertEquals(3, copy.valueCount)
@@ -75,8 +75,8 @@ class VariableWidthVectorTest {
             val rand = Random(seed)
             val idxs = (0..<strs.size).shuffled(rand).toIntArray()
 
-            Vector.fromList(al, "foo", VectorType.UTF8, strs).use { src ->
-                al.openVector(src.field).use { dest ->
+            Vector.fromList(al, VectorType.UTF8, strs).use { src ->
+                al.openVector(src.type).use { dest ->
                     val copier = src.rowCopier(dest)
                     copier.copyRows(idxs)
 
@@ -94,8 +94,8 @@ class VariableWidthVectorTest {
             val len = Arb.nonNegativeInt(strs.size - 1 - offset).bind()
             Triple(strs, offset, len)
         }) { (strs, offset, len) ->
-            Vector.fromList(al, "foo", VectorType.UTF8, strs).use { src ->
-                al.openVector(src.field).use { dest ->
+            Vector.fromList(al, VectorType.UTF8, strs).use { src ->
+                al.openVector(src.type).use { dest ->
                     val copier = src.rowCopier(dest)
                     copier.copyRange(offset, len)
 
@@ -107,7 +107,7 @@ class VariableWidthVectorTest {
 
     @Test
     fun `a non-numeric vector's getAsLong and getAsDouble are unsupported`() {
-        Utf8Vector(allocator, "v", false).use { v ->
+        Utf8Vector(allocator, false).use { v ->
             v.writeObject("12")
 
             assertThrows<UnsupportedOperationException> { v.getAsLong(0) }

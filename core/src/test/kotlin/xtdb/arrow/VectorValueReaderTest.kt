@@ -30,37 +30,36 @@ class VectorValueReaderTest {
     private fun zdt(sec: Long) = ZonedDateTime.ofInstant(Instant.ofEpochSecond(sec), ZoneId.of("UTC"))
 
     private val vectors: Map<String, (BufferAllocator) -> VectorReader> = mapOf(
-        "i64" to { al -> Vector.fromList(al, "col", listOf(1L, 2L, 3L, 4L, 5L)) },
-        "nullable utf8" to { al -> Vector.fromList(al, "col", listOf("a", null, "c", "d", null)) },
-        "f64" to { al -> Vector.fromList(al, "col", listOf(1.5, 2.5, 3.5, 4.5, 5.5)) },
-        "bool" to { al -> Vector.fromList(al, "col", listOf(true, false, true, true, false)) },
-        "timestamp" to { al -> Vector.fromList(al, "col", List(5) { Instant.ofEpochSecond(it.toLong()) }) },
-        "duration" to { al -> Vector.fromList(al, "col", List(5) { Duration.ofSeconds(it.toLong()) }) },
-        "uuid" to { al -> Vector.fromList(al, "col", List(5) { UUID(0, it.toLong()) }) },
-        "uri" to { al -> Vector.fromList(al, "col", List(5) { URI("https://example.com/$it") }) },
-        "interval" to { al -> Vector.fromList(al, "col", List(5) { Interval(it, it + 1, it * 1_000L) }) },
-        "decimal" to { al -> Vector.fromList(al, "col", List(5) { BigDecimal("$it.25") }) },
-        "list" to { al -> Vector.fromList(al, "col", List(5) { listOf(it, it + 1) }) },
-        "set" to { al -> Vector.fromList(al, "col", List(5) { setOf(it, it + 10) }) },
+        "i64" to { al -> Vector.fromList(al, listOf(1L, 2L, 3L, 4L, 5L)) },
+        "nullable utf8" to { al -> Vector.fromList(al, listOf("a", null, "c", "d", null)) },
+        "f64" to { al -> Vector.fromList(al, listOf(1.5, 2.5, 3.5, 4.5, 5.5)) },
+        "bool" to { al -> Vector.fromList(al, listOf(true, false, true, true, false)) },
+        "timestamp" to { al -> Vector.fromList(al, List(5) { Instant.ofEpochSecond(it.toLong()) }) },
+        "duration" to { al -> Vector.fromList(al, List(5) { Duration.ofSeconds(it.toLong()) }) },
+        "uuid" to { al -> Vector.fromList(al, List(5) { UUID(0, it.toLong()) }) },
+        "uri" to { al -> Vector.fromList(al, List(5) { URI("https://example.com/$it") }) },
+        "interval" to { al -> Vector.fromList(al, List(5) { Interval(it, it + 1, it * 1_000L) }) },
+        "decimal" to { al -> Vector.fromList(al, List(5) { BigDecimal("$it.25") }) },
+        "list" to { al -> Vector.fromList(al, List(5) { listOf(it, it + 1) }) },
+        "set" to { al -> Vector.fromList(al, List(5) { setOf(it, it + 10) }) },
         "fixed-size list" to { al ->
-            Vector.fromList(al, "col", listy(ArrowType.FixedSizeList(2), I64), List(5) { listOf(it.toLong(), it + 1L) })
+            Vector.fromList(al, listy(ArrowType.FixedSizeList(2), I64), List(5) { listOf(it.toLong(), it + 1L) })
         },
         "map" to { al ->
-            Vector.fromList(al, "col", mapTypeOf(I64, UTF8), List(5) { mapOf(it.toLong() to "v$it") })
+            Vector.fromList(al, mapTypeOf(I64, UTF8), List(5) { mapOf(it.toLong() to "v$it") })
         },
-        "struct" to { al -> Vector.fromList(al, "col", List(5) { mapOf("fooBar" to it, "baz" to "s$it") }) },
-        "union" to { al -> Vector.fromList(al, "col", listOf(1L, "two", 3.0, null, listOf(5L))) },
+        "struct" to { al -> Vector.fromList(al, List(5) { mapOf("fooBar" to it, "baz" to "s$it") }) },
+        "union" to { al -> Vector.fromList(al, listOf(1L, "two", 3.0, null, listOf(5L))) },
         "tstz-range" to { al ->
-            Vector.fromList(al, "col", List(5) { ZonedDateTimeRange(zdt(it.toLong()), if (it % 2 == 0) null else zdt(it + 10L)) })
+            Vector.fromList(al, List(5) { ZonedDateTimeRange(zdt(it.toLong()), if (it % 2 == 0) null else zdt(it + 10L)) })
         },
         "run-end encoded" to { al ->
-            RunEndEncodedVector(al, "col", Utf8Vector(al, REE_VALUES_NAME, true))
+            RunEndEncodedVector(al, Utf8Vector(al, true))
                 .also { it.writeRun("a", 2); it.writeRun(null, 1); it.writeRun("b", 2) }
         },
         "struct opened from a relation" to { al ->
-            Relation.openFromRows(al, List(5) { mapOf("fooBar" to it.toLong()) }).use { it.openAsStruct(al, "col") }
+            Relation.openFromRows(al, List(5) { mapOf("fooBar" to it.toLong()) }).use { it.openAsStruct(al) }
         },
-        "renamed" to { al -> Vector.fromList(al, "col", listOf(1L, null, 3L, 4L, 5L)).withName("renamed") },
     )
 
     private fun checkAgainstGetObject(rdr: VectorReader, what: String) {
@@ -138,7 +137,7 @@ class VectorValueReaderTest {
 
     @Test
     fun `a dense union's leg reads through its value reader, directly and through selections`(al: BufferAllocator) {
-        Vector.fromList(al, "col", listOf(1L, "a", 2L, "b", 3L)).use { union ->
+        Vector.fromList(al, listOf(1L, "a", 2L, "b", 3L)).use { union ->
             val leg = union.vectorFor("i64")
             checkAgainstGetObject(leg, "i64 leg, direct")
             checkSelections(leg, "i64 leg")
@@ -147,7 +146,7 @@ class VectorValueReaderTest {
 
     @Test
     fun `an empty vector has no rows`(al: BufferAllocator) {
-        Vector.fromList(al, "col", listOf<Long>()).use { vec ->
+        Vector.fromList(al, listOf<Long>()).use { vec ->
             val rows = vec.valueReader()
             assertFalse(rows.hasNext())
             assertThrows<NoSuchElementException> { rows.next() }
@@ -158,7 +157,7 @@ class VectorValueReaderTest {
     fun `a struct opened from a relation reads each row's children, directly and through selections`(al: BufferAllocator) {
         val rows = listOf(mapOf("a" to 0L, "b" to "x"), mapOf("a" to 1L, "b" to null), mapOf("a" to 2L, "b" to "z"))
 
-        Relation.openFromRows(al, rows).use { it.openAsStruct(al, "col") }.use { vec ->
+        Relation.openFromRows(al, rows).use { it.openAsStruct(al) }.use { vec ->
             fun check(rdr: VectorReader, expected: List<Map<String, Any?>>, how: String) {
                 val actual = rdr.valueReader().asSequence()
                     .map { row -> assertFalse(row.isNull, how); row.snapshot() }
@@ -174,7 +173,7 @@ class VectorValueReaderTest {
     @Test
     fun `a one-row list of structs reads through its value reader, directly and through selections`(al: BufferAllocator) {
         val docs = List(3) { mapOf("fooBar" to it.toLong()) }
-        Vector.fromList(al, "col", listOf(docs)).use { vec ->
+        Vector.fromList(al, listOf(docs)).use { vec ->
             checkAgainstGetObject(vec, "direct")
             checkAgainstGetObject(vec.select(intArrayOf(0, 0)), "select(IntArray)")
 
@@ -203,7 +202,7 @@ class VectorValueReaderTest {
         )
 
         shapes.forEach { (label, values) ->
-            Vector.fromList(al, "col", values).use { vec ->
+            Vector.fromList(al, values).use { vec ->
                 fun check(rdr: VectorReader, how: String) {
                     val expected = rdr.valueReader()
                     rdr.valueReader().forEach { row ->
@@ -225,21 +224,21 @@ class VectorValueReaderTest {
             }
         }
 
-        Vector.fromList(al, "col", listOf((-12).toShort(), Int.MIN_VALUE, null, Long.MAX_VALUE)).use { vec ->
+        Vector.fromList(al, listOf((-12).toShort(), Int.MIN_VALUE, null, Long.MAX_VALUE)).use { vec ->
             assertEquals(
                 listOf(-12L, Int.MIN_VALUE.toLong(), null, Long.MAX_VALUE),
                 vec.valueReader().asSequence().map { if (it.isNull) null else it.readAsLong() }.toList()
             )
         }
 
-        Vector.fromList(al, "col", listOf(1.5f, null, -2.25)).use { vec ->
+        Vector.fromList(al, listOf(1.5f, null, -2.25)).use { vec ->
             assertEquals(
                 listOf(1.5, null, -2.25),
                 vec.select(intArrayOf(0, 1, 2)).valueReader().asSequence().map { if (it.isNull) null else it.readAsDouble() }.toList()
             )
         }
 
-        Vector.fromList(al, "col", listOf(10L, null, 30L)).use { vec ->
+        Vector.fromList(al, listOf(10L, null, 30L)).use { vec ->
             val rows = vec.select(intArrayOf(2, 1, 0)).valueReader()
             assertEquals(30L, rows.next().readLong())
             assertEquals(true, rows.next().isNull)
@@ -249,7 +248,7 @@ class VectorValueReaderTest {
 
     @Test
     fun `a value reader through a selection is one reader, on the logical row`(al: BufferAllocator) {
-        Vector.fromList(al, "col", listOf(10L, 20L, 30L, 40L)).use { vec ->
+        Vector.fromList(al, listOf(10L, 20L, 30L, 40L)).use { vec ->
             val rows = vec.select(intArrayOf(3, 1)).valueReader()
 
             val first = rows.next()

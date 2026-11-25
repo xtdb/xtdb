@@ -14,12 +14,6 @@ import xtdb.util.Hasher
 
 class MapVector(private val listVector: ListVector, private val keysSorted: Boolean) : MonoVector() {
 
-    override var name
-        get() = listVector.name
-        set(value) {
-            listVector.name = value
-        }
-
     override val arrowType = ArrowType.Map(keysSorted)
     override val monoType get() = Listy( ArrowType.Map(keysSorted), listVector.monoType.elType )
 
@@ -30,6 +24,7 @@ class MapVector(private val listVector: ListVector, private val keysSorted: Bool
         }
 
     override val vectors get() = listVector.vectors
+    override val childFields get() = listOf(listVector.listElements.toField(MAP_ENTRIES_NAME))
 
     override var valueCount: Int
         get() = listVector.valueCount

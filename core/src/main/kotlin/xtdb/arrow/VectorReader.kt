@@ -18,31 +18,16 @@ import xtdb.util.closeOnCatch
 import java.nio.ByteBuffer
 
 interface VectorReader : ILookup, AutoCloseable {
-    val name: String
     val valueCount: Int
 
-    /** The values' type, whatever layout they're stored in — [field] is the physical layout, and [type] names both. */
     val arrowType: ArrowType
     val nullable: Boolean
+    /** The fields of this vector's children, each named by this vector. */
     val childFields: List<Field>
     val fieldType: FieldType get() = FieldType(nullable, arrowType, null)
-    val field get() = Field(name, fieldType, childFields)
+    fun toField(name: String) = Field(name, fieldType, childFields)
 
     val type: VectorType
-
-    private class RenamedVector(private val inner: VectorReader, override val name: String) : VectorReader by inner {
-        override fun withName(newName: String) = RenamedVector(inner, newName)
-
-        override fun select(idxs: IntArray) = inner.select(idxs).closeOnCatch { RenamedVector(it, name) }
-
-        override fun openSlice(al: BufferAllocator) =
-            inner.openSlice(al).closeOnCatch { RenamedVector(it, name) }
-
-        override fun openDirectSlice(al: BufferAllocator): Vector =
-            inner.openDirectSlice(al).closeOnCatch { it.name = name; it }
-    }
-
-    fun withName(newName: String): VectorReader = RenamedVector(this, newName)
 
     fun isNull(idx: Int): Boolean
     fun getBoolean(idx: Int): Boolean = unsupported("getBoolean")
@@ -135,7 +120,7 @@ interface VectorReader : ILookup, AutoCloseable {
     fun openSlice(al: BufferAllocator): VectorReader
 
     fun openDirectSlice(al: BufferAllocator): Vector =
-        al.openVector(field).closeOnCatch { outVec -> outVec.also { it.append(this) } }
+        al.openVector(toField("")).closeOnCatch { outVec -> outVec.also { it.append(this) } }
 
     fun select(idxs: IntArray): VectorReader = IndirectVector(this, selection(idxs))
 

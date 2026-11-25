@@ -55,7 +55,7 @@ class MultiIidSelector(private val iids: SortedSet<ByteArray>) : SelectionSpec {
         val iidReader = readRelation["_iid"]
         val res = RowMask.Builder(iidReader.valueCount)
 
-        FixedSizeBinaryVector(allocator, "_iid", false, 16).use { needlesVec ->
+        FixedSizeBinaryVector(allocator, false, 16).use { needlesVec ->
             for (iid in iids) needlesVec.writeBytes(iid)
 
             var haystackIdx = 0

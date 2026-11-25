@@ -42,7 +42,7 @@ class FixedWidthVectorTest {
 
     @Test
     fun testIntVector() {
-        IntVector.open(allocator,"foo", false).use { vector ->
+        IntVector.open(allocator, false).use { vector ->
             vector.writeInt(42)
             vector.writeInt(43)
             vector.writeInt(44)
@@ -57,7 +57,7 @@ class FixedWidthVectorTest {
 
     @Test
     fun `a narrower vector's wider getX is unsupported, its getAsX converts`(al: BufferAllocator) {
-        ShortVector(al, "s", false).use { vec ->
+        ShortVector(al, false).use { vec ->
             vec.writeShort(42)
             assertThrows<UnsupportedOperationException> { vec.getInt(0) }
             assertThrows<UnsupportedOperationException> { vec.getLong(0) }
@@ -65,13 +65,13 @@ class FixedWidthVectorTest {
             vec.getAsLong(0) shouldBe 42L
         }
 
-        IntVector.open(al, "i", false).use { vec ->
+        IntVector.open(al, false).use { vec ->
             vec.writeInt(42)
             assertThrows<UnsupportedOperationException> { vec.getLong(0) }
             vec.getAsLong(0) shouldBe 42L
         }
 
-        FloatVector(al, "f", false).use { vec ->
+        FloatVector(al, false).use { vec ->
             vec.writeFloat(4.5f)
             assertThrows<UnsupportedOperationException> { vec.getDouble(0) }
             vec.getAsDouble(0) shouldBe 4.5
@@ -80,7 +80,7 @@ class FixedWidthVectorTest {
 
     @Test
     fun `a vector's setX is supported only for its own storage type`(al: BufferAllocator) {
-        IntVector.open(al, "i", false).use { vec ->
+        IntVector.open(al, false).use { vec ->
             vec.setInt(0, 42)
             vec[1] = 43
             vec.asList shouldBe listOf(42, 43)
@@ -89,33 +89,33 @@ class FixedWidthVectorTest {
             assertThrows<UnsupportedOperationException> { vec.setDouble(2, 4.5) }
         }
 
-        LongVector(al, "l", false).use { vec ->
+        LongVector(al, false).use { vec ->
             vec.setLong(0, 42L)
             vec.asList shouldBe listOf(42L)
             assertThrows<UnsupportedOperationException> { vec.setInt(1, 43) }
             assertThrows<UnsupportedOperationException> { vec.setDouble(1, 4.5) }
         }
 
-        FloatVector(al, "f", false).use { vec ->
+        FloatVector(al, false).use { vec ->
             vec.setFloat(0, 4.5f)
             vec.asList shouldBe listOf(4.5f)
             assertThrows<UnsupportedOperationException> { vec.setDouble(1, 4.5) }
         }
 
-        DoubleVector(al, "d", false).use { vec ->
+        DoubleVector(al, false).use { vec ->
             vec.setDouble(0, 4.5)
             vec.asList shouldBe listOf(4.5)
             assertThrows<UnsupportedOperationException> { vec.setFloat(1, 4.5f) }
             assertThrows<UnsupportedOperationException> { vec.setLong(1, 42L) }
         }
 
-        ShortVector(al, "s", false).use { vec ->
+        ShortVector(al, false).use { vec ->
             vec.setShort(0, 42)
             vec.asList shouldBe listOf<Short>(42)
             assertThrows<UnsupportedOperationException> { vec.setInt(1, 42) }
         }
 
-        ByteVector(al, "b", false).use { vec ->
+        ByteVector(al, false).use { vec ->
             vec.setByte(0, 42)
             vec.asList shouldBe listOf<Byte>(42)
             assertThrows<UnsupportedOperationException> { vec.setShort(1, 42) }
@@ -124,7 +124,7 @@ class FixedWidthVectorTest {
 
     @Test
     fun `writeBytes is supported only on a fixed-size-binary vector, at its byte width`(al: BufferAllocator) {
-        FixedSizeBinaryVector(al, "b", false, 4).use { vec ->
+        FixedSizeBinaryVector(al, false, 4).use { vec ->
             vec.writeBytes(byteArrayOf(1, 2, 3, 4))
             vec.getObject(0) shouldBe byteArrayOf(1, 2, 3, 4)
             assertThrows<AssertionError> { vec.writeBytes(byteArrayOf(1, 2, 3)) }
@@ -132,24 +132,24 @@ class FixedWidthVectorTest {
             vec.valueCount shouldBe 1
         }
 
-        IntVector.open(al, "i", false).use { vec ->
+        IntVector.open(al, false).use { vec ->
             assertThrows<UnsupportedOperationException> { vec.writeBytes(ByteBuffer.allocate(4)) }
         }
 
-        LongVector(al, "l", false).use { vec ->
+        LongVector(al, false).use { vec ->
             assertThrows<UnsupportedOperationException> { vec.writeBytes(ByteBuffer.allocate(8)) }
         }
     }
 
     @Test
     fun `long-long reads and writes are supported only on a 16-byte fixed-size-binary vector`(al: BufferAllocator) {
-        FixedSizeBinaryVector(al, "iid", false, 16).use { vec ->
+        FixedSizeBinaryVector(al, false, 16).use { vec ->
             vec.writeLongLong(0x0102030405060708L, -1L)
             vec.getLongLongHigh(0) shouldBe 0x0102030405060708L
             vec.getLongLongLow(0) shouldBe -1L
         }
 
-        FixedSizeBinaryVector(al, "b", false, 8).use { vec ->
+        FixedSizeBinaryVector(al, false, 8).use { vec ->
             vec.writeBytes(ByteArray(8))
             assertThrows<AssertionError> { vec.getLongLongHigh(0) }
             assertThrows<AssertionError> { vec.getLongLongLow(0) }
@@ -160,7 +160,7 @@ class FixedWidthVectorTest {
 
     @Test
     fun `reserving capacity leaves the value count alone, setting past the end extends it with nulls`(al: BufferAllocator) {
-        IntVector.open(al, "foo", true).use { vector ->
+        IntVector.open(al, true).use { vector ->
             vector.ensureCapacity(8)
             vector.valueCount shouldBe 0
 
@@ -174,12 +174,12 @@ class FixedWidthVectorTest {
 
     @Test
     fun `from null into Int vector`() {
-        NullVector("v1" ).use { nullVector ->
+        NullVector().use { nullVector ->
             nullVector.writeNull()
             nullVector.writeNull()
             nullVector.writeNull()
 
-            IntVector.open(allocator, "v2", true).use { copy ->
+            IntVector.open(allocator, true).use { copy ->
                 val copier = nullVector.rowCopier(copy)
                 copier.copyRow(0)
                 copier.copyRow(1)
@@ -197,8 +197,8 @@ class FixedWidthVectorTest {
             val rand = Random(seed)
             val idxs = (0..<ints.size).shuffled(rand).toIntArray()
 
-            Vector.fromList(al, "foo", I32, ints).use { src ->
-                al.openVector(src.field).use { dest ->
+            Vector.fromList(al, I32, ints).use { src ->
+                al.openVector(src.type).use { dest ->
                     val copier = src.rowCopier(dest)
                     copier.copyRows(idxs)
 
@@ -216,8 +216,8 @@ class FixedWidthVectorTest {
             val len = Arb.nonNegativeInt(ints.size - 1 - offset).bind()
             Triple(ints, offset, len)
         }) { (ints, offset, len) ->
-            Vector.fromList(al, "foo", I32, ints).use { src ->
-                al.openVector(src.field).use { dest ->
+            Vector.fromList(al, I32, ints).use { src ->
+                al.openVector(src.type).use { dest ->
                     val copier = src.rowCopier(dest)
                     copier.copyRange(offset, len)
 

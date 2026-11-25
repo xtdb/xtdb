@@ -24,7 +24,7 @@ class IntervalVectorTest {
 
     @Test
     fun testIntervalMonthDayNanoReadWrite() {
-        IntervalMonthDayNanoVector(allocator, "imdnv", false).use { iv ->
+        IntervalMonthDayNanoVector(allocator, false).use { iv ->
             iv.writeObject(Interval(0, 0, 1.hours.inWholeNanoseconds))
             iv.writeObject(Interval(1, 0, 0))
 
@@ -36,7 +36,7 @@ class IntervalVectorTest {
 
     @Test
     fun testIntervalMonthDayMicroReadWrite() {
-        IntervalMonthDayMicroVector(IntervalMonthDayNanoVector(allocator, "imdmv", false)).use { iv ->
+        IntervalMonthDayMicroVector(IntervalMonthDayNanoVector(allocator, false)).use { iv ->
             iv.writeObject(Interval(0, 0, 1.hours.inWholeNanoseconds))
             iv.writeObject(Interval(1, 0, 0))
 
@@ -48,7 +48,7 @@ class IntervalVectorTest {
 
     @Test
     fun testIntervalDayTimeReadWrite() {
-        IntervalDayTimeVector(allocator, "idtv", false).use { iv ->
+        IntervalDayTimeVector(allocator, false).use { iv ->
             iv.writeObject(Interval(0, 0, 1.hours.inWholeNanoseconds))
             iv.writeObject(Interval(0, 1, 0))
 

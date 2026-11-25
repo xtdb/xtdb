@@ -33,7 +33,7 @@ interface SqlPlanner {
  * to a cursor that takes ownership of its args (as `openQuery` does), with no copy.
  */
 fun RelationReader.withPositionalParamNames(): RelationReader {
-    val names = vectors.map { it.name }
+    val names = cols.keys.toList()
 
     val ok = names.all { it.isEmpty() }
             || names.withIndex().all { (i, nm) -> nm == "\$${i + 1}" }
@@ -48,5 +48,5 @@ fun RelationReader.withPositionalParamNames(): RelationReader {
             mapOf("names" to names),
         )
 
-    return RelationReader.from(vectors.mapIndexed { idx, v -> v.withName("?_$idx") }, rowCount)
+    return RelationReader.from(cols.values.withIndex().associateTo(linkedMapOf()) { (idx, v) -> "?_$idx" to v }, rowCount)
 }

@@ -79,7 +79,7 @@
                              (let [[_col-name form] (first mark-join-projection)
                                    input-types {:var-types dep-vec-types
                                                 :param-types param-types}
-                                   projection-spec (expr/->expression-projection-spec "_expr" (expr/form->expr form input-types) input-types)]
+                                   projection-spec (expr/->expression-projection-spec (expr/form->expr form input-types) input-types)]
                                (fn [query-opts]
                                  (lp/with-tracing :apply-mark-join query-opts
                                    (fn [{:keys [allocator args] :as query-opts}]
@@ -92,7 +92,7 @@
                                          (tryAdvance [_ c]
                                            (.tryAdvance dep-cursor (fn [in-rel]
                                                                      (with-open [match-vec (.project projection in-rel)]
-                                                                       (.accept c (vr/rel-reader [match-vec]))))))
+                                                                       (.accept c (vr/keyed-rel-reader {"_expr" match-vec} (.getValueCount match-vec)))))))
 
                                          (close [_] (util/close [projection dep-cursor]))))))))
                              ->dependent-cursor)]
@@ -105,9 +105,8 @@
                                             (open-dependent-cursor (-> query-opts
                                                                        (update :args
                                                                                (fn [^RelationReader args]
-                                                                                 (RelationReader/from (concat args
-                                                                                                              (for [[ik dk] columns]
-                                                                                                                (-> (.vectorForOrNull in-rel (str ik))
-                                                                                                                    (.select (int-array [idx]))
-                                                                                                                    (.withName (str dk)))))
-                                                                                                      1)))))))))))})))))
+                                                                                 (vr/assoc-cols args
+                                                                                                (for [[ik dk] columns]
+                                                                                                  [dk (-> (.vectorForOrNull in-rel (str ik))
+                                                                                                          (.select (int-array [idx])))])
+                                                                                                1)))))))))))})))))

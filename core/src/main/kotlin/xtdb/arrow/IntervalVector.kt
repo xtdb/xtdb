@@ -19,15 +19,15 @@ import java.time.Duration
 
 class IntervalYearMonthVector private constructor(
     override val al: BufferAllocator,
-    override var name: String, override var valueCount: Int,
+    override var valueCount: Int,
     override var validityBuffer: BitBuffer?, override val dataBuffer: ExtensibleBuffer
 ) : FixedWidthVector(), MetadataFlavour.Presence {
 
     override val arrowType: ArrowType = MinorType.INTERVALYEAR.type
     override val byteWidth = Int.SIZE_BYTES
 
-    constructor(al: BufferAllocator, name: String, nullable: Boolean)
-            : this(al, name, 0, if (nullable) BitBuffer(al) else null, ExtensibleBuffer(al))
+    constructor(al: BufferAllocator, nullable: Boolean)
+            : this(al, 0, if (nullable) BitBuffer(al) else null, ExtensibleBuffer(al))
 
     override fun getInt(idx: Int) = getInt0(idx)
     override fun writeInt(v: Int) = writeInt0(v)
@@ -51,7 +51,7 @@ class IntervalYearMonthVector private constructor(
     override val metadataFlavours get() = listOf(this)
 
     override fun openSlice(al: BufferAllocator) =
-        IntervalYearMonthVector(al, name, valueCount, validityBuffer?.openSlice(al), dataBuffer.openSlice(al))
+        IntervalYearMonthVector(al, valueCount, validityBuffer?.openSlice(al), dataBuffer.openSlice(al))
 
     override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = rawBytesHashes(this, out, sel, hasher)
 }
@@ -60,7 +60,7 @@ private const val NANOS_PER_MILLI = NANO_HZ / MILLI_HZ
 
 class IntervalDayTimeVector private constructor(
     override val al: BufferAllocator,
-    override var name: String, override var valueCount: Int,
+    override var valueCount: Int,
     override var validityBuffer: BitBuffer?, override val dataBuffer: ExtensibleBuffer
 ) : FixedWidthVector(), MetadataFlavour.Presence {
 
@@ -68,8 +68,8 @@ class IntervalDayTimeVector private constructor(
     override val byteWidth = Long.SIZE_BYTES
 
     constructor(
-        al: BufferAllocator, name: String, nullable: Boolean
-    ) : this(al, name, 0, if (nullable) BitBuffer(al) else null, ExtensibleBuffer(al))
+        al: BufferAllocator, nullable: Boolean
+    ) : this(al, 0, if (nullable) BitBuffer(al) else null, ExtensibleBuffer(al))
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>): Interval {
         val buf = getBytes0(idx).duplicate().order(ByteOrder.LITTLE_ENDIAN)
@@ -109,22 +109,22 @@ class IntervalDayTimeVector private constructor(
     override val metadataFlavours get() = listOf(this)
 
     override fun openSlice(al: BufferAllocator) =
-        IntervalDayTimeVector(al, name, valueCount, validityBuffer?.openSlice(al), dataBuffer.openSlice(al))
+        IntervalDayTimeVector(al, valueCount, validityBuffer?.openSlice(al), dataBuffer.openSlice(al))
 
     override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = rawBytesHashes(this, out, sel, hasher)
 }
 
 class IntervalMonthDayNanoVector private constructor(
     override val al: BufferAllocator,
-    override var name: String, override var valueCount: Int,
+    override var valueCount: Int,
     override var validityBuffer: BitBuffer?, override val dataBuffer: ExtensibleBuffer
 ) : FixedWidthVector(), MetadataFlavour.Presence {
 
     override val arrowType: ArrowType = MinorType.INTERVALMONTHDAYNANO.type
     override val byteWidth = 16
 
-    constructor(al: BufferAllocator, name: String, nullable: Boolean)
-            : this(al, name, 0, if (nullable) BitBuffer(al) else null, ExtensibleBuffer(al))
+    constructor(al: BufferAllocator, nullable: Boolean)
+            : this(al, 0, if (nullable) BitBuffer(al) else null, ExtensibleBuffer(al))
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>): Interval {
         val buf = getBytes0(idx).duplicate().order(ByteOrder.LITTLE_ENDIAN)
@@ -176,7 +176,7 @@ class IntervalMonthDayNanoVector private constructor(
     override val metadataFlavours get() = listOf(this)
 
     override fun openSlice(al: BufferAllocator) =
-        IntervalMonthDayNanoVector(al, name, valueCount, validityBuffer?.openSlice(al), dataBuffer.openSlice(al))
+        IntervalMonthDayNanoVector(al, valueCount, validityBuffer?.openSlice(al), dataBuffer.openSlice(al))
 
     override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = rawBytesHashes(this, out, sel, hasher)
 }

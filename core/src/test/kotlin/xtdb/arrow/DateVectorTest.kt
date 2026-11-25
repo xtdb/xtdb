@@ -36,7 +36,7 @@ class DateVectorTest {
         val min = LocalDate.ofEpochDay(Int.MIN_VALUE.toLong())
         val max = LocalDate.ofEpochDay(Int.MAX_VALUE.toLong())
 
-        DateDayVector(al, "d", false).use { vec ->
+        DateDayVector(al, false).use { vec ->
             vec.writeObject(min)
             vec.writeObject(max)
             assertEquals(listOf(min, max), vec.asList)
@@ -54,7 +54,7 @@ class DateVectorTest {
         val min = LocalDate.ofEpochDay(Long.MIN_VALUE / millisPerDay)
         val max = LocalDate.ofEpochDay(Long.MAX_VALUE / millisPerDay)
 
-        DateMilliVector(al, "d", false).use { vec ->
+        DateMilliVector(al, false).use { vec ->
             vec.writeObject(min)
             vec.writeObject(max)
             assertEquals(listOf(min, max), vec.asList)
@@ -70,7 +70,7 @@ class DateVectorTest {
     fun `a date-milli vector's getLong is its stored epoch millis`() {
         val dates = listOf(LocalDate.of(2023, 5, 17), LocalDate.of(1969, 12, 31))
 
-        Vector.fromList(al, "v", dateMilli, dates).use { vec ->
+        Vector.fromList(al, dateMilli, dates).use { vec ->
             assertEquals(1_684_281_600_000L, vec.getLong(0))
             assertEquals(-86_400_000L, vec.getLong(1))
             assertEquals(dates, vec.asList)
@@ -79,7 +79,7 @@ class DateVectorTest {
 
     @Test
     fun `a date-milli vector reads a part-day millis value as the date it falls on`() {
-        al.openVector("v", dateMilli).use { vec ->
+        al.openVector(dateMilli).use { vec ->
             vec.writeLong(-1)
             vec.writeLong(86_400_000L + 1)
 
@@ -91,8 +91,8 @@ class DateVectorTest {
     fun `date-day and date-milli vectors agree on the metadata double of a date`() {
         val dates = listOf(LocalDate.of(2023, 5, 17), LocalDate.of(1969, 12, 31))
 
-        Vector.fromList(al, "day", DATE_DAY, dates).use { dayVec ->
-            Vector.fromList(al, "milli", dateMilli, dates).use { milliVec ->
+        Vector.fromList(al, DATE_DAY, dates).use { dayVec ->
+            Vector.fromList(al, dateMilli, dates).use { milliVec ->
                 dayVec as DateDayVector
                 milliVec as DateMilliVector
                 for (idx in dates.indices) assertEquals(dayVec.getMetaDouble(idx), milliVec.getMetaDouble(idx))

@@ -26,13 +26,13 @@ class LongLongVectorReaderTest {
         PLAIN, RUNS, SINGLE_ROW_RUNS;
 
         fun open(al: BufferAllocator, iids: List<Int>): Vector = when (this) {
-            PLAIN -> FixedSizeBinaryVector(al, "_iid", false, 16)
+            PLAIN -> FixedSizeBinaryVector(al, false, 16)
                 .also { vec -> iids.forEach { vec.writeObject(ByteArray(16) { _ -> it.toByte() }) } }
 
-            RUNS -> RunEndEncodedVector(al, "_iid", FixedSizeBinaryVector(al, REE_VALUES_NAME, false, 16))
+            RUNS -> RunEndEncodedVector(al, FixedSizeBinaryVector(al, false, 16))
                 .also { vec -> iids.forEach { vec.writeLongLong(it.toLong() * 0x0101010101010101L, it.toLong() * 0x0101010101010101L) } }
 
-            SINGLE_ROW_RUNS -> RunEndEncodedVector(al, "_iid", FixedSizeBinaryVector(al, REE_VALUES_NAME, false, 16))
+            SINGLE_ROW_RUNS -> RunEndEncodedVector(al, FixedSizeBinaryVector(al, false, 16))
                 .also { vec -> iids.forEach { vec.writeRun(ByteArray(16) { _ -> it.toByte() }) } }
         }
     }

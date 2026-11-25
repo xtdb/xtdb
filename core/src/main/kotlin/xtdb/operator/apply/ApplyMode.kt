@@ -73,7 +73,7 @@ sealed interface ApplyMode {
                 idxs.add(inIdx)
                 for ((name, _) in dependentVecTypes) {
                     dependentOutWriter.vectorFor(name, NULL_TYPE, true)
-                        .append(NullVector(name).also { it.valueCount = 1 })
+                        .append(NullVector().also { it.valueCount = 1 })
                 }
             }
         }
@@ -143,7 +143,7 @@ sealed interface ApplyMode {
                 idxs.add(inIdx)
                 for ((name, _) in dependentVecTypes) {
                     dependentOutWriter.vectorFor(name, NULL_TYPE, true)
-                        .append(NullVector(name).also { it.valueCount = 1 })
+                        .append(NullVector().also { it.valueCount = 1 })
                 }
             }
         }

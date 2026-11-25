@@ -31,33 +31,33 @@
              (xt/q tu/*node* '(from :table1 [*]))))))
 
 (t/deftest test-extension-vector-slicing
-  (with-open [vec (tu/open-vec "0" [:A])
+  (with-open [vec (tu/open-vec [:A])
               copied-vec (.openSlice vec tu/*allocator*)]
     (t/is (= #xt/field {"0" :keyword}
-             (.getField copied-vec)))
+             (.toField copied-vec "0")))
     (t/is (= :A (.getObject copied-vec 0)))))
 
 (t/deftest empty-list-with-nested-lists-slicing-3377
   (t/testing "empty list of lists"
-    (with-open [vec (tu/open-vec "0" #xt/type [:list [:list :i64]]
+    (with-open [vec (tu/open-vec #xt/type [:list [:list :i64]]
                                  [[]])
                 copied-vec (.openSlice vec tu/*allocator*)]
       (t/is (= (.getAsList vec) (.getAsList copied-vec)))))
 
   (t/testing "empty set of lists"
-    (with-open [vec (tu/open-vec "0" #xt/type [:set [:list :i64]]
+    (with-open [vec (tu/open-vec #xt/type [:set [:list :i64]]
                                  [#{}])
                 copied-vec (.openSlice vec tu/*allocator*)]
       (= (.getAsList vec) (.getAsList copied-vec))))
 
   (t/testing "empty list of sets"
-    (with-open [vec (tu/open-vec "0" #xt/type [:list [:set :i64]]
+    (with-open [vec (tu/open-vec #xt/type [:list [:set :i64]]
                                  [[] #{}])
                 copied-vec (.openSlice vec tu/*allocator*)]
       (= (.getAsList vec) (.getAsList copied-vec)))))
 
 (t/deftest copy-list-into-empty-rel-4748
-  (with-open [src-vec1 (Vector/fromList tu/*allocator* "0" [[1]])
+  (with-open [src-vec1 (Vector/fromList tu/*allocator* [[1]])
               dest-vec (Vector/open tu/*allocator* #xt/field {"list" :list})]
     (let [copier1 (.rowCopier src-vec1 dest-vec)]
       (.copyRow copier1 0)

@@ -25,7 +25,6 @@ import org.apache.arrow.vector.complex.RunEndEncodedVector as ArrowRunEndEncoded
  * [runIdx] the only place the encoding surfaces.
  */
 class RunEndEncodedVector private constructor(
-    override var name: String,
     private val runEndsVector: IntegerVector,
     private val valuesVector: Vector,
     override var valueCount: Int
@@ -39,11 +38,11 @@ class RunEndEncodedVector private constructor(
         require(!runEndsVector.nullable) { "run-ends must be non-nullable" }
     }
 
-    constructor(name: String, runEndsVector: IntegerVector, valuesVector: Vector)
-            : this(name, runEndsVector, valuesVector, 0)
+    constructor(runEndsVector: IntegerVector, valuesVector: Vector)
+            : this(runEndsVector, valuesVector, 0)
 
-    constructor(al: BufferAllocator, name: String, valuesVector: Vector)
-            : this(name, IntVector.open(al, REE_RUN_ENDS_NAME, false), valuesVector)
+    constructor(al: BufferAllocator, valuesVector: Vector)
+            : this(IntVector.open(al, false), valuesVector)
 
     override val arrowType get() = valuesVector.arrowType
     override val childFields get() = valuesVector.childFields
@@ -61,7 +60,8 @@ class RunEndEncodedVector private constructor(
         }
 
     override val fieldType get() = FieldType(false, RUN_END_ENCODED_TYPE, null)
-    override val field get() = Field(name, fieldType, vectors.map { it.field })
+    override fun toField(name: String) =
+        Field(name, fieldType, listOf(runEndsVector.toField(REE_RUN_ENDS_NAME), valuesVector.toField(REE_VALUES_NAME)))
 
     val runEnds: VectorReader get() = runEndsVector
 
@@ -286,7 +286,7 @@ class RunEndEncodedVector private constructor(
         val runEndsSlice = open { runEndsVector.openSlice(al) }
         val valuesSlice = open { valuesVector.openSlice(al) }
 
-        RunEndEncodedVector(name, runEndsSlice, valuesSlice, valueCount)
+        RunEndEncodedVector(runEndsSlice, valuesSlice, valueCount)
     }
 
     // An REE parent carries no buffers of its own - the encoding lives entirely in its two children.

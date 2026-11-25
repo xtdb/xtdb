@@ -38,18 +38,18 @@ private fun checkNotForbidden(table: TableRef) {
     }
 }
 
-private fun assertTimestampColType(rdr: VectorReader) {
+private fun assertTimestampColType(colName: String, rdr: VectorReader) {
     if (rdr.arrowType != VectorType.INSTANT.arrowType) {
         throw Fault(
             "Invalid timestamp col type",
             "xtdb/invalid-timestamp-col-type",
-            mapOf("field" to rdr.field),
+            mapOf("field" to rdr.toField(colName)),
         )
     }
 }
 
-private fun VectorReader.openRange(al: BufferAllocator, name: String, startIdx: Int, count: Int): Vector =
-    al.openVector(name, type).closeOnCatch { it.apply { appendRange(this@openRange, startIdx, count) } }
+private fun VectorReader.openRange(al: BufferAllocator, startIdx: Int, count: Int): Vector =
+    al.openVector(type).closeOnCatch { it.apply { appendRange(this@openRange, startIdx, count) } }
 
 internal class SourceLogTxIndexer(
     private val allocator: BufferAllocator,
@@ -115,8 +115,8 @@ internal class SourceLogTxIndexer(
 
             val idRdr = if (iidsRdr.isNull(opIdx)) docRdr.vectorFor("_id") else null
 
-            val rowVfRdr = docRdr.vectorForOrNull("_valid_from")?.also { assertTimestampColType(it) }
-            val rowVtRdr = docRdr.vectorForOrNull("_valid_to")?.also { assertTimestampColType(it) }
+            val rowVfRdr = docRdr.vectorForOrNull("_valid_from")?.also { assertTimestampColType("_valid_from", it) }
+            val rowVtRdr = docRdr.vectorForOrNull("_valid_to")?.also { assertTimestampColType("_valid_to", it) }
 
             val validFrom = if (validFromRdr.isNull(opIdx)) opts.systemTime else validFromRdr.getLong(opIdx)
             val validTo = if (validToRdr.isNull(opIdx)) Long.MAX_VALUE else validToRdr.getLong(opIdx)
@@ -243,10 +243,10 @@ internal class SourceLogTxIndexer(
 
                 val iidCount = iidsRdr.getListCount(opIdx)
 
-                iidRdr.openRange(allocator, "_iid", iidsRdr.getListStartIndex(opIdx), iidCount).use { iids ->
-                    docRdr.openRange(allocator, "doc", tableDocsRdr.getListStartIndex(opIdx), tableDocsRdr.getListCount(opIdx))
+                iidRdr.openRange(allocator, iidsRdr.getListStartIndex(opIdx), iidCount).use { iids ->
+                    docRdr.openRange(allocator, tableDocsRdr.getListStartIndex(opIdx), tableDocsRdr.getListCount(opIdx))
                         .use { docVec ->
-                            val docs = RelationReader.from(listOf(iids, docVec), iidCount)
+                            val docs = RelationReader.from(mapOf("_iid" to iids, "doc" to docVec), iidCount)
 
                             tracer.withSpan("xtdb.transaction.patch-docs") { span ->
                                 span?.tag("db", dbName)

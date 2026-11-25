@@ -67,7 +67,7 @@ class VectorHashesTest {
 
     private data class HashCase(val label: String, val open: (BufferAllocator) -> Vector) {
         constructor(label: String, type: VectorType, values: List<Any?>) :
-                this(label, { al -> Vector.fromList(al, "v", type, values) })
+                this(label, { al -> Vector.fromList(al, type, values) })
     }
 
     private val zdt = Instant.parse("2024-03-05T10:15:30.123456Z").atZone(ZoneId.of("UTC"))
@@ -110,7 +110,7 @@ class VectorHashesTest {
         HashCase("tstz-range", maybe(TSTZ_RANGE), listOf(ZonedDateTimeRange(zdt, zdt.plusDays(1)), null, ZonedDateTimeRange(zdt, null))),
         HashCase("transit", maybe(TRANSIT), listOf(clojure.lang.Keyword.intern("a"), null, listOf(1L, "x"))),
         HashCase("run-end-encoded") { al ->
-            RunEndEncodedVector(al, "v", LongVector(al, REE_VALUES_NAME, true))
+            RunEndEncodedVector(al, LongVector(al, true))
                 .also { vec -> listOf(10L to 3, null to 2, 20L to 1).forEach { (value, len) -> vec.writeRun(value, len) } }
         },
         HashCase("all-null", Null, listOf(null, null)),
@@ -120,7 +120,7 @@ class VectorHashesTest {
     private val hashers = listOf(Hasher.Xx(), Hasher.Murmur3())
 
     private fun VectorReader.bulkHashes(al: BufferAllocator, hasher: Hasher, sel: IntArray?) =
-        IntVector.open(al, "out", false).use { out ->
+        IntVector.open(al, false).use { out ->
             hashTo(out, hasher, sel)
             List(out.valueCount) { out.getInt(it) }
         }
@@ -153,11 +153,11 @@ class VectorHashesTest {
     fun `bulk hashes append to what out already holds, and a later write appends after them`(al: BufferAllocator) {
         val xx = Hasher.Xx()
 
-        LongVector(al, "v", false).use { vec ->
+        LongVector(al, false).use { vec ->
             repeat(50) { vec.writeLong(it.toLong()) }
             val perRow = List(vec.valueCount) { vec.hashCode(it, xx) }
 
-            IntVector.open(al, "out", false).use { out ->
+            IntVector.open(al, false).use { out ->
                 out.writeInt(42)
                 vec.hashTo(out, xx)
                 vec.hashTo(out, xx, intArrayOf(3, 1))
@@ -184,7 +184,6 @@ class VectorHashesTest {
                 val n = vec.valueCount
                 if (n > 0) {
                     assertMatchesPerRow(IndirectVector(vec, selection(IntArray(n + 1) { (n - it).coerceAtMost(n - 1) })), al, "$label selection")
-                    assertMatchesPerRow(vec.withName("renamed"), al, "$label renamed")
                 }
             }
         }
@@ -196,11 +195,11 @@ class VectorHashesTest {
         val xx = Hasher.Xx()
 
         Relation.openFromRows(al, rows).use { rel ->
-            IntVector.open(al, "scratch", false).use { scratch ->
+            IntVector.open(al, false).use { scratch ->
                 for (cols in listOf(emptyList(), listOf("a"), listOf("a", "b"), listOf("b", "c", "a"), listOf("c", "b"))) {
                     val expected = List(rel.rowCount) { idx -> cols.fold(0) { acc, col -> combineHashCode(acc, rel[col].hashCode(idx, xx)) } }
 
-                    IntVector.open(al, "out", false).use { out ->
+                    IntVector.open(al, false).use { out ->
                         out.writeInt(42)
                         rel.hasher(cols).hashTo(out, scratch)
                         assertEquals(expected, List(out.valueCount) { out.getInt(it) }, "$cols")

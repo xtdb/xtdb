@@ -11,13 +11,13 @@ import xtdb.util.Hasher
 
 class ByteVector private constructor(
     override val al: BufferAllocator,
-    override var name: String, override var valueCount: Int,
+    override var valueCount: Int,
     override var validityBuffer: BitBuffer?, override val dataBuffer: ExtensibleBuffer
 ) : IntegerVector(), MetadataFlavour.Number {
 
     constructor(
-        al: BufferAllocator, name: String, nullable: Boolean
-    ) : this(al, name, 0, if (nullable) BitBuffer(al) else null, ExtensibleBuffer(al))
+        al: BufferAllocator, nullable: Boolean
+    ) : this(al, 0, if (nullable) BitBuffer(al) else null, ExtensibleBuffer(al))
 
     override val byteWidth = Byte.SIZE_BYTES
     override val arrowType: ArrowType = I8_TYPE
@@ -47,7 +47,7 @@ class ByteVector private constructor(
     override fun hashCode0(idx: Int, hasher: Hasher) = hasher.hash(getByte(idx).toDouble())
 
     override fun openSlice(al: BufferAllocator) =
-        ByteVector(al, name, valueCount, validityBuffer?.openSlice(al), dataBuffer.openSlice(al))
+        ByteVector(al, valueCount, validityBuffer?.openSlice(al), dataBuffer.openSlice(al))
 
     override fun doublesTo(out: DoubleArrayList, sel: IntArray?) = out.addDoubles(valueCount, sel) { dataBuffer.getByte(it).toDouble() }
 }

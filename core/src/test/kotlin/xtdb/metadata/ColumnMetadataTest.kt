@@ -21,12 +21,12 @@ class ColumnMetadataTest {
         al: BufferAllocator, docs: List<Map<String, Any>?>, childName: String, calculateBlooms: Boolean,
         read: (structVec: StructVector, colsVec: VectorReader, idx: Int) -> R
     ): R =
-        StructVector(al, "struct", true).use { structVec ->
+        StructVector(al, true).use { structVec ->
             docs.forEach { structVec.writeObject(it) }
 
             Relation(al, MetadataFileWriter.metaRelSchema(recencyBranches = false)).use { metaRel ->
                 val colsVec = metaRel["nodes"]["leaf"]["columns"].listElements
-                ColumnMetadata(al, colsVec, calculateBlooms).writeMetadata(structVec)
+                ColumnMetadata(al, colsVec, calculateBlooms).writeMetadata("struct", structVec)
 
                 val idx = (0 until colsVec.valueCount).single { colsVec["col-name"].getObject(it) == childName }
                 read(structVec, colsVec, idx)

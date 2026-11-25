@@ -17,8 +17,8 @@ class ProbeSide(
     private val keyColNames: List<FieldName>, private val comparatorFactory: ComparatorFactory,
 ) : AutoCloseable {
 
-    private val lazyHashes = lazy { IntVector.open(al, "probe-hashes", false) }
-    private val lazyHashScratch = lazy { IntVector.open(al, "probe-hash-scratch", false) }
+    private val lazyHashes = lazy { IntVector.open(al, false) }
+    private val lazyHashScratch = lazy { IntVector.open(al, false) }
 
     /**
      * Hashes [probeRel]'s keys into a vector this probe side owns.

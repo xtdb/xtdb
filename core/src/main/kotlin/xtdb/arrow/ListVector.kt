@@ -19,7 +19,6 @@ internal val LIST: ArrowType.List = ArrowType.List.INSTANCE
 
 class ListVector private constructor(
     private val al: BufferAllocator,
-    override var name: String,
     private var elVector: Vector,
     private var validityBuffer: BitBuffer?,
     private val offsetBuffer: ExtensibleBuffer,
@@ -35,9 +34,9 @@ class ListVector private constructor(
 
     @JvmOverloads
     constructor(
-        allocator: BufferAllocator, name: String, nullable: Boolean, elVector: Vector = NullVector("\$data$"),
+        allocator: BufferAllocator, nullable: Boolean, elVector: Vector = NullVector(),
     ) : this(
-        allocator, name, elVector,
+        allocator, elVector,
         if (nullable) BitBuffer(allocator) else null, ExtensibleBuffer(allocator)
     )
 
@@ -45,6 +44,7 @@ class ListVector private constructor(
     override val monoType: Listy get() = Listy(LIST, elVector.type)
 
     override val vectors get() = listOf(elVector)
+    override val childFields get() = listOf(elVector.toField(LIST_ELS_NAME))
 
     /** The element index the last list written ends at — seeded as [VariableWidthVector.lastOffset] is. */
     private var lastOffset = if (valueCount == 0) 0 else offsetBuffer.getInt(valueCount)
@@ -117,7 +117,7 @@ class ListVector private constructor(
             elVector.arrowType == arrowType && elVector.nullable == nullable -> elVector
 
             elVector is NullVector && elVector.valueCount == 0 ->
-                al.openVector("\$data\$", arrowType, nullable).also { elVector = it }
+                al.openVector(arrowType, nullable).also { elVector = it }
 
             else -> elVector.maybePromote(al, arrowType, nullable).also { elVector = it }
         }
@@ -220,7 +220,7 @@ class ListVector private constructor(
 
     override fun openSlice(al: BufferAllocator) =
         ListVector(
-            al, name, elVector.openSlice(al),
+            al, elVector.openSlice(al),
             validityBuffer?.openSlice(al),
             offsetBuffer.openSlice(al),
             valueCount

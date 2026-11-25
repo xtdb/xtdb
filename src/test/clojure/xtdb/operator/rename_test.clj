@@ -35,3 +35,28 @@
                             {:preserve-pages? true
                              :with-types? true
                              :key-fn :snake-case-keyword}))))))
+
+(t/deftest test-renamed-columns-keep-their-names-through-selection-and-slicing
+  (let [batches-expr [::tu/pages
+                      [[{:a 12, :b 10}, {:a 0, :b 15}]
+                       [{:a 100, :b 83}]]]]
+    (t/is (= [{:c 12, :b 10} {:c 100, :b 83}]
+             (tu/query-ra [:select '{:predicate (> c 5)}
+                           [:rename '{:columns {a c}} batches-expr]]))
+          "a selection")
+
+    (t/is (= [{:c 0, :b 15}]
+             (tu/query-ra [:sort '{:skip 1, :limit 1}
+                           [:rename '{:columns {a c}} batches-expr]]))
+          "a slice")
+
+    (t/is (= [{:c 0} {:c 100}]
+             (tu/query-ra [:sort '{:skip 1}
+                           [:project '{:projections [{c a}]} batches-expr]]))
+          "a slice of a projected rename")
+
+    (t/is (= [{:c 100, :b 83} {:c 12, :b 10} {:c 0, :b 15}]
+             (tu/query-ra [:sort '{:order-specs [[c {:direction :desc}]]}
+                           [:rename '{:columns {a c}} batches-expr]]))
+          "a sort")))
+

@@ -143,7 +143,7 @@
    (for [{:keys [value-expr]} (->> (ewalk/expr-seq expr) (filter :bloom-hash-sym))]
      (case (:op value-expr)
        :literal (let [lit (:literal value-expr)]
-                  (with-open [tmp-vec (Vector/fromList allocator "lit", ^List (vector lit))]
+                  (with-open [tmp-vec (Vector/fromList allocator ^List (vector lit))]
                     (BloomUtils/bloomHashes tmp-vec 0)))
 
        :param (BloomUtils/bloomHashes (.vectorFor params (str (:param value-expr))) 0)))))

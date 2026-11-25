@@ -32,19 +32,17 @@ class Relation(
     private val al: BufferAllocator, val vecs: SequencedMap<FieldName, Vector>, override var rowCount: Int
 ) : RelationWriter {
 
-    override val schema get() = Schema(vecs.sequencedValues().map { it.field })
-    override val vectors get() = vecs.values
+    override val schema get() = Schema(vecs.map { (name, v) -> v.toField(name) })
+    override val cols: Map<FieldName, Vector> get() = vecs
 
     constructor(al: BufferAllocator) : this(al, linkedMapOf<FieldName, Vector>(), 0)
 
-    constructor(al: BufferAllocator, vectors: List<Vector>, rowCount: Int)
-            : this(al, vectors.associateByTo(linkedMapOf()) { it.name }, rowCount)
-
     constructor(al: BufferAllocator, schema: Schema) : this(al, schema.fields)
-    constructor(al: BufferAllocator, fields: List<Field>) : this(al, fields.safeMap { al.openVector(it) }, 0)
+    constructor(al: BufferAllocator, fields: List<Field>)
+            : this(al, LinkedHashMap(fields.associateBy { it.name }.safeMapValues { _, f -> al.openVector(f) }), 0)
     constructor(al: BufferAllocator, vararg fields: Field) : this(al, fields.toList())
     constructor(al: BufferAllocator, vecTypes: VectorTypes)
-            : this(al, vecTypes.entries.safeMap { (name, type) -> al.openVector(name, type) }, 0)
+            : this(al, LinkedHashMap(vecTypes.safeMapValues { _, type -> al.openVector(type) }), 0)
 
     override fun vectorForOrNull(name: FieldName) = vecs[name]
     override fun vectorFor(name: FieldName) = vectorForOrNull(name) ?: error("missing vector: $name")
@@ -53,13 +51,13 @@ class Relation(
     override fun vectorFor(name: FieldName, arrowType: ArrowType, nullable: Boolean): Vector =
         vecs.compute(name) { _, v ->
             v?.maybePromote(al, arrowType, nullable)
-                ?: al.openVector(name, arrowType, nullable)
+                ?: al.openVector(arrowType, nullable)
                     .also { vec -> repeat(rowCount) { vec.writeNull() } }
         }!!
 
     override fun endRows(rows: Int) {
         rowCount += rows
-        vectors.forEach { vec -> repeat(rowCount - vec.valueCount) { vec.writeNull() } }
+        vecs.values.forEach { vec -> repeat(rowCount - vec.valueCount) { vec.writeNull() } }
     }
 
     fun loadFromArrow(root: VectorSchemaRoot) {
@@ -255,7 +253,7 @@ class Relation(
 
         @JvmStatic
         fun fromRoot(al: BufferAllocator, vsr: VectorSchemaRoot) =
-            Relation(al, vsr.fieldVectors.map(Vector::fromArrow), vsr.rowCount)
+            Relation(al, vsr.fieldVectors.associateTo(linkedMapOf()) { it.name to Vector.fromArrow(it) }, vsr.rowCount)
 
         @JvmStatic
         fun fromRecordBatch(allocator: BufferAllocator, schema: Schema, recordBatch: ArrowRecordBatch): Relation =
@@ -272,16 +270,17 @@ class Relation(
         @JvmStatic
         @Suppress("unused") // used in test-util
         fun openFromCols(al: BufferAllocator, cols: Map<*, List<*>>): Relation =
-            cols.entries.safeMap { col ->
-                val normalKey = when (val k = col.key) {
+            cols.entries.associate { (k, values) ->
+                val normalKey = when (k) {
                     is String -> k
                     is Symbol -> normalForm(k).toString()
                     is Keyword -> normalForm(k.sym).toString()
                     else -> throw IllegalArgumentException("Column name must be a string, keyword or symbol")
                 }
 
-                Vector.fromList(al, normalKey, col.value)
-            }.closeAllOnCatch { Relation(al, it, it.firstOrNull()?.valueCount ?: 0) }
+                normalKey to values
+            }.safeMapValues { _, values -> Vector.fromList(al, values) }
+                .closeAllOnCatch { Relation(al, LinkedHashMap(it), it.values.firstOrNull()?.valueCount ?: 0) }
 
         @JvmStatic
         fun openFromArrowStream(al: BufferAllocator, bytes: ByteArray): Relation =

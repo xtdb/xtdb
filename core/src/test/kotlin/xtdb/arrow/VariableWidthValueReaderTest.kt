@@ -27,8 +27,8 @@ class VariableWidthValueReaderTest {
     }
 
     private val vectors: Map<String, (BufferAllocator, Boolean) -> VariableWidthVector> = mapOf(
-        "utf8" to { al, n -> Utf8Vector(al, "v", n) },
-        "var-binary" to { al, n -> VarBinaryVector(al, "v", n) },
+        "utf8" to { al, n -> Utf8Vector(al, n) },
+        "var-binary" to { al, n -> VarBinaryVector(al, n) },
     )
 
     private fun outcome(read: () -> Any?): Any? =
@@ -93,7 +93,7 @@ class VariableWidthValueReaderTest {
 
     @Test
     fun `a row reads bytes even when the rows before it weren't read`(al: BufferAllocator) {
-        Utf8Vector(al, "v", true).fill(true).use { vec ->
+        Utf8Vector(al, true).fill(true).use { vec ->
             val readEvery3rd = vec.valueReader().asSequence()
                 .filter { it.pos % 3 == 0 }
                 .map { if (it.isNull) null else Charsets.UTF_8.decode(it.readBytes()).toString() }
@@ -105,7 +105,7 @@ class VariableWidthValueReaderTest {
 
     @Test
     fun `a row reads only bytes and objects, as its vector does`(al: BufferAllocator) {
-        Utf8Vector(al, "v", false).fill(false).use { vec ->
+        Utf8Vector(al, false).fill(false).use { vec ->
             val row = vec.valueReader().next()
             assertEquals("", row.readObject())
             assertThrows<UnsupportedOperationException> { row.readLong() }
@@ -146,7 +146,7 @@ class VariableWidthValueReaderTest {
         val rows = 10
         val values = List(rows) { if (it == 3 || it == 9) null else "v$it" }
 
-        Utf8Vector(al, "v", true).use { vec ->
+        Utf8Vector(al, true).use { vec ->
             al.buffer(2).use { validity ->
                 al.buffer((rows + 1) * 4L).use { offsets ->
                     val bytes = values.joinToString("") { it ?: "" }.toByteArray()
@@ -172,7 +172,7 @@ class VariableWidthValueReaderTest {
 
     @Test
     fun `a value reader reads its rows while the vector grows under it`(al: BufferAllocator) {
-        Utf8Vector(al, "v", true).use { vec ->
+        Utf8Vector(al, true).use { vec ->
             repeat(10) { if (it == 4) vec.writeNull() else vec.writeObject("s$it") }
 
             fun RowValueReader.bytes() = if (isNull) null else readBytes().let { buf -> ByteArray(buf.remaining()).also { buf.get(it) }.toString(Charsets.UTF_8) }
@@ -193,7 +193,7 @@ class VariableWidthValueReaderTest {
     fun `a seek reads the row's offsets afresh, after the vector's page is reloaded`(al: BufferAllocator) {
         fun RowValueReader.string() = Charsets.UTF_8.decode(readBytes()).toString()
 
-        Utf8Vector(al, "v", false).use { vec ->
+        Utf8Vector(al, false).use { vec ->
             listOf("a", "bb", "ccc", "dddd").forEach { vec.writeObject(it) }
 
             val nextRow = vec.valueReader()
@@ -204,7 +204,7 @@ class VariableWidthValueReaderTest {
             sameRow.pos = 2
             assertEquals("ccc", sameRow.string())
 
-            Utf8Vector(al, "src", false).use { src ->
+            Utf8Vector(al, false).use { src ->
                 listOf("wwwww", "xxxxxx", "y", "zz").forEach { src.writeObject(it) }
                 val nodes = mutableListOf<ArrowFieldNode>()
                 val bufs = mutableListOf<ArrowBuf>()

@@ -3711,7 +3711,7 @@
        (try
          (let [ast (.getAst parsed)
                arg-rows (some-> args-rel (.toTuples #xt/key-fn :snake-case-string))
-               arg-fields (mapv VectorReader/.getField (or args-rel []))
+               arg-fields (if args-rel (vec (.getFields (.getSchema ^RelationReader args-rel))) [])
 
                skeleton (if dml-cache
                           (.get dml-cache (DmlCacheKey. ast default-db db-names (boolean tx-scoped?) arg-fields table-info))

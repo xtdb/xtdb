@@ -40,7 +40,7 @@ class DiskHashJoin(
     private var partIdx: Int = -1
     private val probeRel = Relation(al, probeShuffle.schema)
     private val probeColNames = probeRel.schema.fields.map { it.name }
-    private val hashCol = IntVector.open(al, "hashes", false)
+    private val hashCol = IntVector.open(al, false)
     private val probeSide = ProbeSide(al, buildSide, probeKeyColNames, comparatorFactory)
 
     override fun tryAdvance(c: Consumer<in RelationReader>): Boolean {

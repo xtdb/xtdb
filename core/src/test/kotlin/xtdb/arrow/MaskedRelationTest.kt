@@ -13,9 +13,9 @@ class MaskedRelationTest {
 
     private fun BufferAllocator.openRel(): RelationReader =
         RelationReader.from(
-            listOf(
-                Vector.fromList(this, "a", List(ROWS) { it.toLong() }),
-                Vector.fromList(this, "b", List(ROWS) { if (it % 7 == 0) null else "s$it" }),
+            mapOf(
+                "a" to Vector.fromList(this, List(ROWS) { it.toLong() }),
+                "b" to Vector.fromList(this, List(ROWS) { if (it % 7 == 0) null else "s$it" }),
             ),
             ROWS
         )
@@ -31,7 +31,7 @@ class MaskedRelationTest {
             twice.mask.toSelection().toList() shouldBe expected
 
             twice.rowCount shouldBe expected.size
-            twice.vectors.all { it is MaskedVector } shouldBe true
+            twice.cols.values.all { it is MaskedVector } shouldBe true
             twice.asMaps shouldBe rel.select(expected.toIntArray()).asMaps
         }
     }
@@ -46,7 +46,7 @@ class MaskedRelationTest {
             val idxs = intArrayOf(masked.rowCount - 1, 0, 21, 21, 22)
             masked.select(idxs).let { sel ->
                 sel.asMaps shouldBe expected.select(idxs).asMaps
-                sel.vectors.none { it is MaskedVector } shouldBe true
+                sel.cols.values.none { it is MaskedVector } shouldBe true
             }
         }
     }

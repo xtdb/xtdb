@@ -11,15 +11,15 @@ import java.nio.ByteBuffer
 
 class FixedSizeBinaryVector private constructor(
     override val al: BufferAllocator,
-    override var name: String, override var valueCount: Int,
+    override var valueCount: Int,
     override val byteWidth: Int,
     override var validityBuffer: BitBuffer?, override val dataBuffer: ExtensibleBuffer
 ) : FixedWidthVector(), LongLongVectorReader, MetadataFlavour.Bytes {
 
     override val arrowType = ArrowType.FixedSizeBinary(byteWidth)
 
-    constructor(al: BufferAllocator, name: String, nullable: Boolean, byteWidth: Int)
-            : this(al, name, 0, byteWidth, if (nullable) BitBuffer(al) else null, ExtensibleBuffer(al))
+    constructor(al: BufferAllocator, nullable: Boolean, byteWidth: Int)
+            : this(al, 0, byteWidth, if (nullable) BitBuffer(al) else null, ExtensibleBuffer(al))
 
     override fun writeBytes(v: ByteBuffer) {
         assert(v.remaining() == byteWidth) { "Expected $byteWidth bytes for $arrowType, got ${v.remaining()}" }
@@ -61,7 +61,7 @@ class FixedSizeBinaryVector private constructor(
     override val metadataFlavours get() = listOf(this)
 
     override fun openSlice(al: BufferAllocator) =
-        FixedSizeBinaryVector(al, name, valueCount, byteWidth, validityBuffer?.openSlice(al), dataBuffer.openSlice(al))
+        FixedSizeBinaryVector(al, valueCount, byteWidth, validityBuffer?.openSlice(al), dataBuffer.openSlice(al))
 
     override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = rawBytesHashes(this, out, sel, hasher)
 }

@@ -64,7 +64,7 @@ interface JoinType {
      *
      * The returned relation's mark column is reused by the next call, and freed by [close].
      */
-    class Mark(al: BufferAllocator, markColName: String, private val spec: Spec) : JoinType, AutoCloseable {
+    class Mark(al: BufferAllocator, private val markColName: String, private val spec: Spec) : JoinType, AutoCloseable {
 
         /** What decides a probe row's mark, over the build rows that pass `:conditions`. */
         sealed interface Spec {
@@ -86,7 +86,7 @@ interface JoinType {
 
         override val joinTypeName = "mark-join"
 
-        private val markCol = BitVector(al, markColName, true)
+        private val markCol = BitVector(al, true)
 
         /** Gathers what [Spec.KeyedIn] needs from each relation the build phase appends. */
         fun addBuildRel(buildRel: RelationReader) {
@@ -108,7 +108,7 @@ interface JoinType {
                 }
             }
 
-            return RelationReader.from(probeRel.vectors + markCol, probeRel.rowCount)
+            return RelationReader.from(probeRel.cols + (markColName to markCol), probeRel.rowCount)
         }
 
         private fun ProbeSide.ForBatch.markOver(buildIdxs: IntIterator, probeIdx: Int, markCmp: IntBinaryOperator?): Int {

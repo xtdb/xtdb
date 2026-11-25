@@ -18,7 +18,7 @@ import org.apache.arrow.vector.complex.FixedSizeListVector as ArrowFixedSizeList
 
 class FixedSizeListVector private constructor(
     private val al: BufferAllocator,
-    override var name: String, private val listSize: Int,
+    private val listSize: Int,
     private var validityBuffer: BitBuffer?,
     private var elVector: Vector,
     override var valueCount: Int = 0
@@ -32,13 +32,14 @@ class FixedSizeListVector private constructor(
         }
 
     constructor(
-        al: BufferAllocator, name: String, nullable: Boolean, listSize: Int, elVector: Vector, valueCount: Int = 0
-    ) : this(al, name, listSize, if (nullable) BitBuffer(al) else null, elVector, valueCount)
+        al: BufferAllocator, nullable: Boolean, listSize: Int, elVector: Vector, valueCount: Int = 0
+    ) : this(al, listSize, if (nullable) BitBuffer(al) else null, elVector, valueCount)
 
     override val arrowType = ArrowType.FixedSizeList(listSize)
     override val monoType get() = Listy(arrowType, elVector.type)
 
     override val vectors get() = listOf(elVector)
+    override val childFields get() = listOf(elVector.toField(LIST_ELS_NAME))
 
     override fun isNull(idx: Int) = nullable && !validityBuffer!!.getBoolean(idx)
 
@@ -88,7 +89,7 @@ class FixedSizeListVector private constructor(
             elVector.arrowType == arrowType && elVector.nullable == nullable -> elVector
 
             elVector is NullVector && elVector.valueCount == 0 ->
-                al.openVector("\$data\$", arrowType, nullable).also { elVector = it }
+                al.openVector(arrowType, nullable).also { elVector = it }
 
             else -> TODO("promote elVector")
         }
@@ -204,7 +205,7 @@ class FixedSizeListVector private constructor(
     override fun openSlice(al: BufferAllocator) =
         validityBuffer?.openSlice(al).closeOnCatch { validityBuffer ->
             elVector.openSlice(al).closeOnCatch { elVector ->
-                FixedSizeListVector(al, name, listSize, validityBuffer, elVector, valueCount)
+                FixedSizeListVector(al, listSize, validityBuffer, elVector, valueCount)
             }
         }
 

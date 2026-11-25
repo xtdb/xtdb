@@ -38,9 +38,9 @@ class RelationTest {
     fun testScalarRoundTrip() {
         val buf = ByteArrayOutputStream()
 
-        IntVector.open(allocator, "i32", false).use { i32 ->
-            Utf8Vector(allocator, "utf8", true).use { utf8 ->
-                val rel = Relation(allocator, listOf(i32, utf8), 0)
+        IntVector.open(allocator, false).use { i32 ->
+            Utf8Vector(allocator, true).use { utf8 ->
+                val rel = Relation(allocator, linkedMapOf<String, Vector>("i32" to i32, "utf8" to utf8), 0)
 
                 rel.startUnload(Channels.newChannel(buf))
                     .use { unloader ->
@@ -101,14 +101,14 @@ class RelationTest {
     fun testListRoundTrip() {
         val buf = ByteArrayOutputStream()
 
-        val elVector = IntVector.open(allocator, "els", true)
+        val elVector = IntVector.open(allocator, true)
 
         val list0 = listOf(1, 4, null, 12)
         val list1 = listOf(8)
         val list2 = listOf(1, 0, -1, null)
 
-        ListVector(allocator, "list", false, elVector).use { listVec ->
-            val rel = Relation(allocator, listOf(listVec), 0)
+        ListVector(allocator, false, elVector).use { listVec ->
+            val rel = Relation(allocator, linkedMapOf<String, Vector>("list" to listVec), 0)
 
             rel.startUnload(Channels.newChannel(buf))
                 .use { unloader ->
@@ -158,10 +158,11 @@ class RelationTest {
     @Test
     fun testDuvRoundTrip() {
         val duv = DenseUnionVector(
-            allocator, "duv",
+            allocator,
+            listOf("i32", "utf8"),
             listOf(
-                IntVector.open(allocator, "i32", false),
-                Utf8Vector(allocator, "utf8", true)
+                IntVector.open(allocator, false),
+                Utf8Vector(allocator, true)
             )
         )
 
@@ -180,7 +181,7 @@ class RelationTest {
 
         val buf = ByteArrayOutputStream()
 
-        Relation(allocator, listOf(duv), duv.valueCount).use { rel ->
+        Relation(allocator, linkedMapOf<String, Vector>("duv" to duv), duv.valueCount).use { rel ->
             rel.startUnload(Channels.newChannel(buf)).use { unloader ->
                 unloader.writePage()
                 unloader.end()
@@ -198,8 +199,8 @@ class RelationTest {
     fun `a page read that fails mid-channel releases its buffer`() {
         val buf = ByteArrayOutputStream()
 
-        IntVector.open(allocator, "i32", false).use { i32 ->
-            val rel = Relation(allocator, listOf(i32), 0)
+        IntVector.open(allocator, false).use { i32 ->
+            val rel = Relation(allocator, linkedMapOf<String, Vector>("i32" to i32), 0)
             rel.startUnload(Channels.newChannel(buf)).use { unloader ->
                 i32.writeInt(1)
                 rel.endRow()
@@ -321,7 +322,7 @@ class RelationTest {
     // unreachable - so a change to this padding is not a local change (#5948).
     @Test
     fun `endRows takes a short column off the lattice bottom`() {
-        Relation(allocator, listOf(NullVector("a", false)), 0).use { rel ->
+        Relation(allocator, linkedMapOf<String, Vector>("a" to NullVector(false)), 0).use { rel ->
             assertEquals(VectorType.Nothing, rel["a"].type)
 
             rel.endRows(1)

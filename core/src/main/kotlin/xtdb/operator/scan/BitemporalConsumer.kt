@@ -36,7 +36,7 @@ class BitemporalConsumer private constructor(
             ): RelBuilder =
                 mutableListOf<VectorWriter>().closeAllOnCatch { temporalVecs ->
                     fun openTemporalVec(name: String, nullable: Boolean): VectorWriter {
-                        val vec = al.openVector(name, maybe(VectorType.INSTANT, nullable))
+                        val vec = al.openVector(maybe(VectorType.INSTANT, nullable))
                         temporalVecs.add(vec)
                         return vec
                     }
@@ -76,14 +76,19 @@ class BitemporalConsumer private constructor(
                     ?.takeIf { putVec -> !putVec.keyNames.isNullOrEmpty() }
                     ?.select(selArray)
 
-            return RelationReader.from(
-                contentColNames
-                    .map {
-                        if (it == "_iid") rel["_iid"].select(selArray)
-                        else putReader?.vectorForOrNull(it) ?: NullVector(it, true, selArray.size)
-                    }
-                    .plus(listOfNotNull(validFromVec, validToVec, systemFromVec, systemToVec)),
-                selArray.size)
+            val cols = linkedMapOf<String, VectorReader>()
+
+            for (colName in contentColNames)
+                cols[colName] =
+                    if (colName == "_iid") rel["_iid"].select(selArray)
+                    else putReader?.vectorForOrNull(colName) ?: NullVector(true, selArray.size)
+
+            validFromVec?.let { cols["_valid_from"] = it }
+            validToVec?.let { cols["_valid_to"] = it }
+            systemFromVec?.let { cols["_system_from"] = it }
+            systemToVec?.let { cols["_system_to"] = it }
+
+            return RelationReader.from(cols, selArray.size)
         }
 
         override fun close() {

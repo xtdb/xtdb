@@ -16,10 +16,10 @@
             [xtdb.util :as util])
   (:import [java.nio.file Path]
            java.time.Duration
-           [java.util List]
+           [java.util LinkedHashMap List]
            [org.apache.arrow.memory RootAllocator]
            [org.apache.arrow.vector.ipc ArrowFileReader]
-           (xtdb.arrow Relation Vector)
+           (xtdb.arrow Relation StructVector Vector)
            (xtdb.block.proto TableBlock)
            (xtdb.log.proto TrieDetails)
            (xtdb.table TableSlug)
@@ -108,8 +108,8 @@
 (defn write-arrow-file [^Path path, ^List data]
   (with-open [al (RootAllocator.)
               ch (util/->file-channel path #{:write :create})
-              struct-vec (Vector/fromList al #xt/field {"my-struct" :struct} data)]
-    (let [rel (Relation. al ^List (into [] (.getVectors struct-vec)) (.getValueCount struct-vec))]
+              ^StructVector struct-vec (Vector/fromList al data)]
+    (let [rel (Relation. al (LinkedHashMap. (.getChildren struct-vec)) (.getValueCount struct-vec))]
       (with-open [unloader (.startUnload rel ch)]
         (.writePage unloader)
         (.end unloader)))))

@@ -28,9 +28,9 @@ class DoubleVectorTest {
 
     @Test
     fun `divideInto divides doubles by longs`() {
-        Vector.fromList(allocator, "dividend", F64, listOf(100.0, 50.0, 75.0)).use { dividendVec ->
-            Vector.fromList(allocator, "divisor", I32, listOf(4, 2, 3)).use { divisorVec ->
-                allocator.openVector("res", F64).use { resultVec ->
+        Vector.fromList(allocator, F64, listOf(100.0, 50.0, 75.0)).use { dividendVec ->
+            Vector.fromList(allocator, I32, listOf(4, 2, 3)).use { divisorVec ->
+                allocator.openVector(F64).use { resultVec ->
                     dividendVec.divideInto(divisorVec, resultVec)
 
                     assertEquals(3, resultVec.valueCount)
@@ -44,9 +44,9 @@ class DoubleVectorTest {
 
     @Test
     fun `divideInto handles null dividend`() {
-        Vector.fromList(allocator, "dividend", maybe(F64), listOf(null, 50.0)).use { dividendVec ->
-            Vector.fromList(allocator, "divisor", I32, listOf(4, 2)).use { divisorVec ->
-                allocator.openVector("result", maybe(F64)).use { resultVec ->
+        Vector.fromList(allocator, maybe(F64), listOf(null, 50.0)).use { dividendVec ->
+            Vector.fromList(allocator, I32, listOf(4, 2)).use { divisorVec ->
+                allocator.openVector(maybe(F64)).use { resultVec ->
                     dividendVec.divideInto(divisorVec, resultVec)
 
                     assertEquals(2, resultVec.valueCount)
@@ -59,9 +59,9 @@ class DoubleVectorTest {
 
     @Test
     fun `divideInto handles null divisor`() {
-        Vector.fromList(allocator, "dividend", F64, listOf(100.0, 50.0)).use { dividendVec ->
-            Vector.fromList(allocator, "divisor", maybe(I32), listOf(4, null)).use { divisorVec ->
-                allocator.openVector("result", maybe(F64)).use { resultVec ->
+        Vector.fromList(allocator, F64, listOf(100.0, 50.0)).use { dividendVec ->
+            Vector.fromList(allocator, maybe(I32), listOf(4, null)).use { divisorVec ->
+                allocator.openVector(maybe(F64)).use { resultVec ->
                     dividendVec.divideInto(divisorVec, resultVec)
 
                     assertEquals(2, resultVec.valueCount)
@@ -74,9 +74,9 @@ class DoubleVectorTest {
 
     @Test
     fun `divideInto handles division by zero`() {
-        Vector.fromList(allocator, "dividend", F64, listOf(100.0, 50.0, 75.0)).use { dividendVec ->
-            Vector.fromList(allocator, "divisor", I32, listOf(0, 2, 0)).use { divisorVec ->
-                allocator.openVector("result", maybe(F64)).use { resultVec ->
+        Vector.fromList(allocator, F64, listOf(100.0, 50.0, 75.0)).use { dividendVec ->
+            Vector.fromList(allocator, I32, listOf(0, 2, 0)).use { divisorVec ->
+                allocator.openVector(maybe(F64)).use { resultVec ->
                     dividendVec.divideInto(divisorVec, resultVec)
 
                     assertEquals(3, resultVec.valueCount)
@@ -90,8 +90,8 @@ class DoubleVectorTest {
 
     @Test
     fun `squareInto squares values`() {
-        Vector.fromList(allocator, "input", F64, listOf(2.0, 3.0, 5.0)).use { inVec ->
-            allocator.openVector("result", F64).use { resultVec ->
+        Vector.fromList(allocator, F64, listOf(2.0, 3.0, 5.0)).use { inVec ->
+            allocator.openVector(F64).use { resultVec ->
                 inVec.squareInto(resultVec)
 
                 assertEquals(3, resultVec.valueCount)
@@ -104,8 +104,8 @@ class DoubleVectorTest {
 
     @Test
     fun `squareInto handles nulls`() {
-        Vector.fromList(allocator, "input", maybe(F64), listOf(2.0, null, 5.0)).use { inVec ->
-            allocator.openVector("result", maybe(F64)).use { resultVec ->
+        Vector.fromList(allocator, maybe(F64), listOf(2.0, null, 5.0)).use { inVec ->
+            allocator.openVector(maybe(F64)).use { resultVec ->
                 inVec.squareInto(resultVec)
 
                 assertEquals(3, resultVec.valueCount)
@@ -118,8 +118,8 @@ class DoubleVectorTest {
 
     @Test
     fun `sqrtInto takes square root of values`() {
-        Vector.fromList(allocator, "input", F64, listOf(4.0, 9.0, 25.0)).use { inVec ->
-            allocator.openVector("result", F64).use { resultVec ->
+        Vector.fromList(allocator, F64, listOf(4.0, 9.0, 25.0)).use { inVec ->
+            allocator.openVector(F64).use { resultVec ->
                 inVec.sqrtInto(resultVec)
 
                 assertEquals(3, resultVec.valueCount)
@@ -132,8 +132,8 @@ class DoubleVectorTest {
 
     @Test
     fun `sqrtInto handles nulls`() {
-        Vector.fromList(allocator, "input", maybe(F64), listOf(4.0, null, 25.0)).use { inVec ->
-            allocator.openVector("result", maybe(F64)).use { resultVec ->
+        Vector.fromList(allocator, maybe(F64), listOf(4.0, null, 25.0)).use { inVec ->
+            allocator.openVector(maybe(F64)).use { resultVec ->
                 inVec.sqrtInto(resultVec)
 
                 assertEquals(3, resultVec.valueCount)

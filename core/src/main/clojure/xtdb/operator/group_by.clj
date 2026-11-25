@@ -146,14 +146,14 @@
       (getType [_] to-type)
 
       (build [this al _args]
-        (let [out-vec (Vector/open al (.getColName this) (.getType this))]
+        (let [out-vec (Vector/open al (.getType this))]
           (reify
             AggregateSpec
             (aggregate [_ in-rel group-mapping mask]
-              (let [input-opts {:var-types (->> in-rel
-                                                (into {acc-sym to-type}
-                                                      (map (juxt #(symbol (.getName ^VectorReader %))
-                                                                 #(.getType ^VectorReader %)))))}
+              (let [input-opts {:var-types (into {acc-sym to-type}
+                                                (map (fn [[^String col-name ^VectorReader col]]
+                                                       [(symbol col-name) (.getType col)]))
+                                                (.getCols in-rel))}
                     {:keys [eval-agg]} (emit-agg agg-opts input-opts)]
                 (eval-agg out-vec in-rel group-mapping mask)))
 
@@ -244,15 +244,15 @@
     (build [_ al args]
       (let [agg-spec (.build agg-factory al args)
             rel-maps (ArrayList.)
-            hashes (IntVector/open al "distinct-hashes" false)
-            hash-scratch (IntVector/open al "distinct-hash-scratch" false)]
+            hashes (IntVector/open al false)
+            hash-scratch (IntVector/open al false)]
         (reify
           AggregateSpec
           (aggregate [_ in-rel group-mapping mask]
             (let [in-vec (.vectorForOrNull in-rel (str from-name))
                   row-count (.getValueCount in-vec)
                   builders (ArrayList. (.size rel-maps))
-                  in-key-rel (vr/rel-reader [in-vec])]
+                  in-key-rel (vr/keyed-rel-reader {(str from-name) in-vec} row-count)]
               (.hashTo (IndexHasher. in-key-rel [in-vec]) hashes hash-scratch)
               (let [mask-builder (RowMask$Builder. row-count)]
                 (dotimes [idx row-count]
@@ -318,7 +318,7 @@
 (deftype ArrayAggAggregateSpec [^BufferAllocator allocator
                                 from-name to-name ^VectorType to-type
                                 ^VectorWriter acc-col
-                                ^List sort-cols order-specs
+                                ^java.util.Map sort-cols order-specs
                                 ^:unsynchronized-mutable ^long base-idx
                                 ^List group-idxmaps
                                 on-empty]
@@ -328,8 +328,8 @@
           row-count (.getValueCount in-vec)]
       (.append acc-col in-vec)
 
-      (doseq [^VectorWriter sort-col sort-cols]
-        (.append sort-col (.vectorFor in-rel (.getName sort-col))))
+      (doseq [[col-name ^VectorWriter sort-col] sort-cols]
+        (.append sort-col (.vectorFor in-rel ^String col-name)))
 
       (dotimes [idx row-count]
         (let [group-idx (.getInt group-mapping idx)]
@@ -342,11 +342,11 @@
       (set! (.base-idx this) (+ base-idx row-count))))
 
   (openFinishedVector [_]
-    (util/with-close-on-catch [out-vec (Vector/open allocator to-name to-type)]
+    (util/with-close-on-catch [out-vec (Vector/open allocator to-type)]
       (let [el-writer (.getListElements out-vec)
             row-copier (.rowCopier acc-col el-writer)
             sorted (when (seq order-specs)
-                     (order-by/sorted-idxs (vr/rel-reader sort-cols) order-specs))
+                     (order-by/sorted-idxs (vr/keyed-rel-reader sort-cols (.getValueCount acc-col)) order-specs))
             ranks (when sorted
                     (let [ranks (int-array (alength sorted))]
                       (dotimes [i (alength sorted)]
@@ -375,7 +375,7 @@
     (util/close sort-cols)
     (util/close acc-col)))
 
-(defmethod ->aggregate-factory :array_agg [{:keys [from-name from-type to-name zero-row? order-specs order-col-types]}]
+(defmethod ->aggregate-factory :array_agg [{:keys [from-name ^VectorType from-type to-name zero-row? order-specs order-col-types]}]
   (let [to-type (cond-> (types/->type [:list from-type])
                   zero-row? types/->nullable-type)]
     (reify AggregateSpec$Factory
@@ -383,10 +383,10 @@
       (getType [_] to-type)
 
       (build [this al _args]
-        (util/with-close-on-catch [acc-col (Vector/open al "$data$" from-type)
-                                   sort-cols (ArrayList.)]
-          (doseq [[col-name col-type] order-col-types]
-            (.add sort-cols (Vector/open al (str col-name) col-type)))
+        (util/with-close-on-catch [acc-col (Vector/open al from-type)
+                                   sort-cols (java.util.LinkedHashMap.)]
+          (doseq [[col-name ^VectorType col-type] order-col-types]
+            (.put sort-cols (str col-name) (Vector/open al col-type)))
 
           (ArrayAggAggregateSpec. al from-name (.getColName this) (.getType this) acc-col
                                   sort-cols order-specs
@@ -396,14 +396,14 @@
   (-> (->aggregate-factory (assoc agg-opts :f :array_agg))
       (wrap-distinct from-name from-type)))
 
-(defmethod ->aggregate-factory :vec_agg [{:keys [from-name from-type to-name zero-row?]}]
+(defmethod ->aggregate-factory :vec_agg [{:keys [from-name ^VectorType from-type to-name zero-row?]}]
   (let [to-type (types/->type [:list from-type])]
     (reify AggregateSpec$Factory
       (getColName [_] (str to-name))
       (getType [_] to-type)
 
       (build [this al _args]
-        (util/with-close-on-catch [acc-col (Vector/open al "$data$" from-type)]
+        (util/with-close-on-catch [acc-col (Vector/open al from-type)]
           (ArrayAggAggregateSpec. al from-name (.getColName this) (.getType this) acc-col
                                   [] []
                                   0 (ArrayList.) (if zero-row? :empty-vec :empty-rel)))))))
@@ -481,12 +481,12 @@
                               sel-count)))]
       (when (pos? sel-count)
         (let [sel (Arrays/copyOf sel (int sel-count))]
-          (.append sorter (vr/rel-reader [(-> group-mapping (.select sel) (.withName "group-idx"))
-                                          (-> in-vec (.select sel) (.withName "value"))]
-                                         sel-count))))))
+          (.append sorter (vr/keyed-rel-reader {"group-idx" (.select group-mapping sel)
+                                                    "value" (.select in-vec sel)}
+                                                   sel-count))))))
 
   (openFinishedVector [_]
-    (util/with-close-on-catch [out-vec (Vector/open allocator to-name to-type)]
+    (util/with-close-on-catch [out-vec (Vector/open allocator to-type)]
       (write-percentiles! out-vec counts fraction cont? (.finish sorter))
 
       (when (and zero-row? (zero? (.size counts)))
@@ -540,6 +540,7 @@
                         ^ICursor in-cursor
                         ^GroupMapper group-mapper
                         ^List aggregate-specs
+                        agg-col-names
                         ^:unsynchronized-mutable ^boolean done?]
   ICursor
   (getCursorType [_] "group-by")
@@ -558,8 +559,7 @@
 
        (util/with-open [agg-cols (map #(.openFinishedVector ^AggregateSpec %) aggregate-specs)]
          (let [gm-rel (.finish group-mapper)
-               ^RelationReader out-rel (vr/rel-reader (concat (.getVectors gm-rel) agg-cols)
-                                                      (.getRowCount gm-rel))]
+               ^RelationReader out-rel (vr/assoc-cols gm-rel (map vector agg-col-names agg-cols) (.getRowCount gm-rel))]
            (if (pos? (.getRowCount out-rel))
              (do
                (.accept c out-rel)
@@ -656,4 +656,5 @@
                          (GroupByCursor. allocator in-cursor
                                          (->group-mapper allocator (select-keys vec-types group-cols))
                                          (vec agg-specs)
+                                         (mapv #(.getColName ^AggregateSpec$Factory (:factory %)) agg-infos)
                                          false)))})))))

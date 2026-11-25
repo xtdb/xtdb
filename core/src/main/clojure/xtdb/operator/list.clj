@@ -40,9 +40,9 @@
        (let [start current-pos
              end (min (.getSize list-expr) (+ current-pos batch-size))]
          (set! current-pos end)
-         (util/with-open [out-vec (Vector/open allocator col-name vec-type)]
+         (util/with-open [out-vec (Vector/open allocator vec-type)]
            (.writeTo list-expr out-vec start (- end start))
-           (.accept consumer (vr/rel-reader [out-vec]))
+           (.accept consumer (vr/keyed-rel-reader {(str col-name) out-vec} (.getValueCount out-vec)))
            true)))))
 
   (close [_] nil))

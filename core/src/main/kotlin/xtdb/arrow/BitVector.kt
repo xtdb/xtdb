@@ -16,13 +16,13 @@ import org.apache.arrow.vector.types.pojo.ArrowType.Bool.INSTANCE as BIT_TYPE
 
 class BitVector private constructor(
     private val al: BufferAllocator,
-    override var name: String, override var valueCount: Int,
+    override var valueCount: Int,
     private var validityBuffer: BitBuffer?, private val dataBuffer: BitBuffer
 ) : MonoVector(), MetadataFlavour.Presence {
 
     constructor(
-        al: BufferAllocator, name: String, nullable: Boolean
-    ) : this(al, name, 0, if (nullable) BitBuffer(al) else null, BitBuffer(al))
+        al: BufferAllocator, nullable: Boolean
+    ) : this(al, 0, if (nullable) BitBuffer(al) else null, BitBuffer(al))
 
     override var nullable: Boolean
         get() = validityBuffer != null
@@ -142,7 +142,7 @@ class BitVector private constructor(
     }
 
     override fun openSlice(al: BufferAllocator) =
-        BitVector(al, name, valueCount, validityBuffer?.openSlice(al), dataBuffer.openSlice(al))
+        BitVector(al, valueCount, validityBuffer?.openSlice(al), dataBuffer.openSlice(al))
 
     override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = perRowHashes(this, out, sel, hasher)
 }

@@ -24,7 +24,6 @@ internal val STRUCT = ArrowType.Struct.INSTANCE
 
 class StructVector private constructor(
     private val allocator: BufferAllocator,
-    override var name: String,
     private var validityBuffer: BitBuffer?,
     private val childWriters: SequencedMap<String, Vector> = LinkedHashMap(),
     override var valueCount: Int = 0,
@@ -40,11 +39,11 @@ class StructVector private constructor(
     @JvmOverloads
     constructor(
         allocator: BufferAllocator,
-        name: String, nullable: Boolean,
+        nullable: Boolean,
         childWriters: SequencedMap<String, Vector> = LinkedHashMap(),
         valueCount: Int = 0,
     ) : this(
-        allocator, name,
+        allocator,
         if (nullable) BitBuffer(allocator) else null, childWriters, valueCount
     )
 
@@ -52,6 +51,8 @@ class StructVector private constructor(
     override val monoType get() = VectorType.Struct(childWriters.mapValues { it.value.type })
 
     override val vectors: Iterable<Vector> get() = childWriters.sequencedValues()
+    override val children: Map<String, Vector> get() = childWriters
+    override val childFields get() = childWriters.map { (name, child) -> child.toField(name) }
 
     override fun isNull(idx: Int) = nullable && !validityBuffer!!.getBoolean(idx)
 
@@ -71,7 +72,7 @@ class StructVector private constructor(
         childWriters.compute(name) { _, existingChild ->
             when {
                 existingChild == null ->
-                    allocator.openVector(name, arrowType, nullable).also { newVec ->
+                    allocator.openVector(arrowType, nullable).also { newVec ->
                         repeat(valueCount) { if (isNull(it)) newVec.writeUndefined() else newVec.writeNull() }
                     }
 
@@ -187,7 +188,7 @@ class StructVector private constructor(
 
         val childCopiers = colNames.map { colName ->
             // zero rows means no values seen, so this must not widen the destination (#6100)
-            val srcVec = src.vectorForOrNull(colName) ?: NullVector(colName, src.valueCount > 0, src.valueCount)
+            val srcVec = src.vectorForOrNull(colName) ?: NullVector(src.valueCount > 0, src.valueCount)
             srcVec.rowCopier(vectorFor(colName, srcVec.arrowType, srcVec.nullable))
         }
 
@@ -229,7 +230,7 @@ class StructVector private constructor(
         if (target.type != arrowType) return unloader.copy(this, target)
 
         val targetChildren = target.children.associateBy { it.name }
-        childWriters.values.firstOrNull { it.name !in targetChildren }?.let { unloader.notInTarget(it, target) }
+        childWriters.entries.firstOrNull { it.key !in targetChildren }?.let { unloader.notInTarget(it.key, it.value, target) }
 
         unloadOwnPage(unloader.nodes, unloader.buffers)
 
@@ -258,7 +259,7 @@ class StructVector private constructor(
         require(vec is NonNullableStructVector)
         val valCount = vec.valueCount
         validityBuffer?.loadBuffer(vec.validityBuffer, valCount)
-        childWriters.sequencedValues().forEach { it.loadFromArrow(vec.getChild(it.name)) }
+        childWriters.forEach { (name, child) -> child.loadFromArrow(vec.getChild(name)) }
 
         valueCount = valCount
     }
@@ -266,7 +267,7 @@ class StructVector private constructor(
     override fun openSlice(al: BufferAllocator) =
         validityBuffer?.openSlice(al).closeOnCatch { validityBuffer ->
             StructVector(
-                al, name, validityBuffer,
+                al, validityBuffer,
                 LinkedHashMap<String, Vector>().closeAllOnCatch { cws ->
                     childWriters.entries.associateTo(cws) { it.key to it.value.openSlice(al) }
                 },

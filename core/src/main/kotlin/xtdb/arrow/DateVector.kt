@@ -30,12 +30,12 @@ private inline fun <R> LocalDate.inRangeOf(vec: Vector, f: () -> R): R =
 
 class DateDayVector private constructor(
     override val al: BufferAllocator,
-    override var name: String, override var valueCount: Int,
+    override var valueCount: Int,
     override var validityBuffer: BitBuffer?, override val dataBuffer: ExtensibleBuffer
 ) : FixedWidthVector(), MetadataFlavour.DateTime {
 
-    constructor(al: BufferAllocator, name: String, nullable: Boolean)
-            : this(al, name, 0, if (nullable) BitBuffer(al) else null, ExtensibleBuffer(al))
+    constructor(al: BufferAllocator, nullable: Boolean)
+            : this(al, 0, if (nullable) BitBuffer(al) else null, ExtensibleBuffer(al))
 
     override val byteWidth = Int.SIZE_BYTES
     override val arrowType = ArrowType.Date(DAY)
@@ -58,7 +58,7 @@ class DateDayVector private constructor(
     override fun hashCode0(idx: Int, hasher: Hasher) = hasher.hash(getMetaDouble(idx))
 
     override fun openSlice(al: BufferAllocator) =
-        DateDayVector(al, name, valueCount, validityBuffer?.openSlice(al), dataBuffer.openSlice(al))
+        DateDayVector(al, valueCount, validityBuffer?.openSlice(al), dataBuffer.openSlice(al))
 
     override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) =
         doubleHashes(this, out, sel, hasher) { it.addDoubles(valueCount, sel) { idx -> if (isNull(idx)) 0.0 else getMetaDouble(idx) } }
@@ -66,12 +66,12 @@ class DateDayVector private constructor(
 
 class DateMilliVector internal constructor(
     override val al: BufferAllocator,
-    override var name: String, override var valueCount: Int,
+    override var valueCount: Int,
     override var validityBuffer: BitBuffer?, override val dataBuffer: ExtensibleBuffer
 ) : FixedWidthVector(), MetadataFlavour.DateTime {
 
-    constructor(al: BufferAllocator, name: String, nullable: Boolean)
-            : this(al, name, 0, if (nullable) BitBuffer(al) else null, ExtensibleBuffer(al))
+    constructor(al: BufferAllocator, nullable: Boolean)
+            : this(al, 0, if (nullable) BitBuffer(al) else null, ExtensibleBuffer(al))
 
     override val byteWidth = Long.SIZE_BYTES
     override val arrowType = ArrowType.Date(MILLISECOND)
@@ -96,7 +96,7 @@ class DateMilliVector internal constructor(
     override fun hashCode0(idx: Int, hasher: Hasher) = hasher.hash(getMetaDouble(idx))
 
     override fun openSlice(al: BufferAllocator) =
-        DateMilliVector(al, name, valueCount, validityBuffer?.openSlice(al), dataBuffer.openSlice(al))
+        DateMilliVector(al, valueCount, validityBuffer?.openSlice(al), dataBuffer.openSlice(al))
 
     override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) =
         doubleHashes(this, out, sel, hasher) { it.addDoubles(valueCount, sel) { idx -> if (isNull(idx)) 0.0 else getMetaDouble(idx) } }

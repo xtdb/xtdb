@@ -16,7 +16,7 @@ import org.apache.arrow.vector.NullVector as ArrowNullVector
 
 class NullVector(
     // nullable = false used for vectors that only contain 'undefined' values
-    override var name: String, override var nullable: Boolean = true, override var valueCount: Int = 0
+    override var nullable: Boolean = true, override var valueCount: Int = 0
 ) : MonoVector() {
     override val vectors = emptyList<Vector>()
 
@@ -68,7 +68,7 @@ class NullVector(
     override fun maybePromote(al: BufferAllocator, targetType: ArrowType, targetNullable: Boolean): Vector =
         if (targetType == arrowType) this
         else
-            al.openVector(this.name, targetType, targetNullable)
+            al.openVector(targetType, targetNullable)
                 .also { newVec ->
                     repeat(this.valueCount) {
                         // if we've only ever written undefined, write undefineds in the new vec
@@ -109,7 +109,7 @@ class NullVector(
     override fun close() {
     }
 
-    override fun openSlice(al: BufferAllocator) = NullVector(name, nullable, valueCount)
+    override fun openSlice(al: BufferAllocator) = NullVector(nullable, valueCount)
 
     override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = perRowHashes(this, out, sel, hasher)
 }

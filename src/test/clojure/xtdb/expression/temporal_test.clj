@@ -1302,7 +1302,7 @@
         "a null operand gives a null <>, as it does a null ="))
 
 (t/deftest date-minus-date-literal-is-the-days-between
-  (with-open [rel (vr/rel-reader [(tu/open-vec "a" #xt/type [:date :day] [#xt/date "2023-05-11" #xt/date "2023-04-01"])])]
+  (with-open [rel (vr/keyed-rel-reader {"a" (tu/open-vec #xt/type [:date :day] [#xt/date "2023-05-11" #xt/date "2023-04-01"])} 2)]
     (t/is (= {:res [10 -30], :res-type #xt/type :i32}
              (et/run-projection rel '(- a #xt/date "2023-05-01")))
           "column minus literal")
@@ -1312,7 +1312,7 @@
 
 (t/deftest test-date-milli-args
   (letfn [(project-milli [form ^LocalDate a]
-            (with-open [rel (vr/rel-reader [(tu/open-vec "a" #xt/type [:date :milli] [a])])]
+            (with-open [rel (vr/keyed-rel-reader {"a" (tu/open-vec #xt/type [:date :milli] [a])} 1)]
               (-> (et/run-projection rel form)
                   (update :res first))))]
     (t/are [res res-type form a] (= {:res res, :res-type res-type} (project-milli form a))
@@ -1335,14 +1335,15 @@
       "1969-12-15" #xt/type :utf8 (list 'cast 'a #xt/type :utf8) #xt/date "1969-12-15"))
 
   (t/is (anomalous? [:unsupported nil #"date-milli"]
-                    (with-open [rel (vr/rel-reader [(tu/open-vec "a" #xt/type [:date :milli] [#xt/date "2023-05-17"])])]
+                    (with-open [rel (vr/keyed-rel-reader {"a" (tu/open-vec #xt/type [:date :milli] [#xt/date "2023-05-17"])} 1)]
                       (et/run-projection rel '(generate_series a a (single-field-interval 1 "MONTH" 2 0)))))))
 
 (t/deftest test-casts-into-date-milli
   (binding [expr/*default-tz* #xt/zone "UTC"]
-    (with-open [rel (vr/rel-reader [(tu/open-vec "ts" #xt/type [:timestamp-local :micro] [#xt/date-time "1969-12-15T13:00"])
-                                    (tu/open-vec "tstz" #xt/type [:timestamp-tz :micro "UTC"] [#xt/zoned-date-time "1969-12-15T13:00Z"])
-                                    (tu/open-vec "s" #xt/type :utf8 ["1969-12-15"])])]
+    (with-open [rel (vr/keyed-rel-reader {"ts" (tu/open-vec #xt/type [:timestamp-local :micro] [#xt/date-time "1969-12-15T13:00"])
+                                          "tstz" (tu/open-vec #xt/type [:timestamp-tz :micro "UTC"] [#xt/zoned-date-time "1969-12-15T13:00Z"])
+                                          "s" (tu/open-vec #xt/type :utf8 ["1969-12-15"])}
+                                         1)]
       (t/are [form] (= {:res [#xt/date "1969-12-15"], :res-type #xt/type [:date :milli]}
                        (et/run-projection rel form))
         (list 'cast 'ts (types/->type [:date :milli]))

@@ -124,17 +124,17 @@ class MetadataFileWriter(
     fun writeLeaf(): RowIndex {
         val metaPos = nodeWtr.valueCount
 
-        colMetaWriter.writeMetadata(iidVec)
-        colMetaWriter.writeMetadata(validFromVec)
-        colMetaWriter.writeMetadata(validToVec)
-        colMetaWriter.writeMetadata(systemFromVec)
-        recencyVec?.let { colMetaWriter.writeMetadata(it) }
+        colMetaWriter.writeMetadata("_iid", iidVec)
+        colMetaWriter.writeMetadata("_valid_from", validFromVec)
+        colMetaWriter.writeMetadata("_valid_to", validToVec)
+        colMetaWriter.writeMetadata("_system_from", systemFromVec)
+        recencyVec?.let { colMetaWriter.writeMetadata(Trie.RECENCY_COL, it) }
 
         rowCount += dataRel.rowCount
         temporalMetaBuilder?.update(validFromVec, validToVec, systemFromVec)
 
-        for (contentCol in putReader?.keyNames?.mapNotNull { putReader.vectorForOrNull(it) }.orEmpty()) {
-            colMetaWriter.writeMetadata(contentCol)
+        for (colName in putReader?.keyNames.orEmpty()) {
+            putReader?.vectorForOrNull(colName)?.let { colMetaWriter.writeMetadata(colName, it) }
         }
 
         colsVec.endList()

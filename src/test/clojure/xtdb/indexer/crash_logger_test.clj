@@ -58,11 +58,11 @@
 
           (t/is (= {:tree [:leaf [0]], :page-limit 1024, :log-limit 64}
                    (let [path (util/->path (format "crashes/%s/1970-01-01T00:00:00Z/live-trie.binpb" node-id))]
-                     (trie/<-MemoryHashTrie (MemoryHashTrie/fromProto (.getByteArray bp path) (NullVector. "_iid" true 0))))))
+                     (trie/<-MemoryHashTrie (MemoryHashTrie/fromProto (.getByteArray bp path) (NullVector. true 0))))))
 
           (t/is (= {:tree [:leaf [1 0]], :page-limit 1024, :log-limit 64}
                    (let [path (util/->path (format "crashes/%s/1970-01-01T00:00:00Z/open-tx-trie.binpb" node-id))]
-                     (trie/<-MemoryHashTrie (MemoryHashTrie/fromProto (.getByteArray bp path) (NullVector. "_iid" true 0))))))
+                     (trie/<-MemoryHashTrie (MemoryHashTrie/fromProto (.getByteArray bp path) (NullVector. true 0))))))
 
           ;; Committed live-table data
           (let [live-table-path (util/->path (format "crashes/%s/1970-01-01T00:00:00Z/live-table.arrow" node-id))]

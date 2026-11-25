@@ -4,8 +4,8 @@
             [xtdb.logical-plan :as lp]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr])
-  (:import (java.util LinkedList Map)
-           (xtdb.arrow RelationReader VectorReader)
+  (:import (java.util LinkedHashMap Map)
+           (xtdb.arrow RelationReader)
            xtdb.api.ICursor))
 
 (s/def ::prefix ::lp/relation)
@@ -27,13 +27,12 @@
   (tryAdvance [_ c]
     (.tryAdvance in-cursor
                  (fn [^RelationReader in-rel]
-                   (let [out-cols (LinkedList.)]
+                   (let [out-cols (LinkedHashMap.)]
 
-                     (doseq [^VectorReader in-col in-rel
-                             :let [col-name (str (get col-name-mapping (symbol (.getName in-col))))]]
-                       (.add out-cols (.withName in-col col-name)))
+                     (doseq [[^String in-name in-col] (.getCols in-rel)]
+                       (.put out-cols (str (get col-name-mapping (symbol in-name))) in-col))
 
-                     (.accept c (vr/rel-reader out-cols (.getRowCount in-rel)))))))
+                     (.accept c (vr/keyed-rel-reader out-cols (.getRowCount in-rel)))))))
 
   (close [_]
     (util/try-close in-cursor)))

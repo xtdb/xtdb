@@ -25,9 +25,7 @@ class DecimalVectorTest {
 
     @Test
     fun `test DecimalVector`() {
-        DecimalVector(
-            allocator, "dec",
-            true, ArrowType.Decimal(5, 2, 32)
+        DecimalVector(allocator, true, ArrowType.Decimal(5, 2, 32)
         ).use { dec ->
 
             dec.writeObject(BigDecimal("123.45"))
@@ -52,9 +50,7 @@ class DecimalVectorTest {
 
     @Test
     fun `test different precisions`() {
-        DecimalVector(
-            allocator, "dec",
-            true, ArrowType.Decimal(32, 2, 128)
+        DecimalVector(allocator, true, ArrowType.Decimal(32, 2, 128)
         ).use { dec ->
 
             dec.writeObject(BigDecimal("0.01"))
@@ -67,9 +63,7 @@ class DecimalVectorTest {
 
     @Test
     fun `test negative scales`() {
-        DecimalVector(
-            allocator, "dec",
-            true, ArrowType.Decimal(32, -2, 128)
+        DecimalVector(allocator, true, ArrowType.Decimal(32, -2, 128)
         ).use { dec ->
 
             dec.writeObject(BigDecimal("1E+2"))

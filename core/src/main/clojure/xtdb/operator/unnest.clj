@@ -4,7 +4,7 @@
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr])
-  (:import (java.util LinkedList)
+  (:import (java.util LinkedHashMap)
            (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector.types.pojo ArrowType$List ArrowType$Union)
@@ -36,8 +36,8 @@
     (let [advanced? (boolean-array 1)]
       (while (and (.tryAdvance in-cursor
                                (fn [^RelationReader in-rel]
-                                 (with-open [out-vec (Vector/open allocator to-col-name to-vec-type)]
-                                   (let [out-cols (LinkedList.)
+                                 (with-open [out-vec (Vector/open allocator to-vec-type)]
+                                   (let [out-cols (LinkedHashMap.)
 
                                          vec-rdr (.vectorForOrNull in-rel from-column-name)
                                          vec-type (.getArrowType vec-rdr)
@@ -63,9 +63,9 @@
                                          idxs (IntStream/builder)]
 
                                      (util/with-open [ordinal-vec (when ordinality-column
-                                                                    (IntVector/open allocator ordinality-column false 0))]
+                                                                    (IntVector/open allocator false 0))]
                                        (when ordinal-vec
-                                         (.add out-cols ordinal-vec))
+                                         (.put out-cols ordinality-column ordinal-vec))
 
                                        (dotimes [n (.getValueCount vec-rdr)]
                                          (doseq [[^VectorReader coll-rdr, ^RowCopier el-copier] rdrs+copiers]
@@ -80,13 +80,13 @@
 
                                        (let [idxs (.toArray (.build idxs))]
                                          (when (pos? (alength idxs))
-                                           (doseq [^VectorReader in-col in-rel]
-                                             (when (= from-column-name (.getName in-col))
-                                               (.add out-cols out-vec))
+                                           (doseq [[^String in-name ^VectorReader in-col] (.getCols in-rel)]
+                                             (when (= from-column-name in-name)
+                                               (.put out-cols to-col-name out-vec))
 
-                                             (.add out-cols (.select in-col idxs)))
+                                             (.put out-cols in-name (.select in-col idxs)))
 
-                                           (.accept c (vr/rel-reader out-cols (alength idxs)))
+                                           (.accept c (vr/keyed-rel-reader out-cols (alength idxs)))
                                            (aset advanced? 0 true))))))))
 
                   (not (aget advanced? 0))))

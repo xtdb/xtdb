@@ -25,9 +25,9 @@ internal fun RelationReader.rowCopierWithReeIid(dest: RelationWriter): RowCopier
     val destIid = dest[IID] as? RunEndEncodedVector ?: return rowCopier(dest)
     require(destIid.type == RUN_ENCODED_IID) { "can't write iids as runs into ${destIid.type}" }
 
-    val copiers = dest.vectors.map { destVec ->
+    val copiers = dest.cols.map { (name, destVec) ->
         if (destVec === destIid) IidRunsCopier(this[IID] as LongLongVectorReader, destIid)
-        else this[destVec.name].rowCopier(destVec)
+        else this[name].rowCopier(destVec)
     }
 
     return object : RowCopier {
