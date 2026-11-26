@@ -20,8 +20,8 @@
            (org.apache.arrow.vector PeriodDuration)
            (org.apache.arrow.vector.types.pojo ArrowType$Decimal)
            (org.apache.commons.codec.binary Hex)
-           (xtdb.arrow ListValueReader RelationReader ValueBox ValueReader Vector VectorIndirection$Mask VectorReader VectorType VectorType$Listy VectorType$Mono VectorType$Nothing VectorType$Poly VectorType$Struct)
-           (xtdb.expression PgFormat)
+           (xtdb.arrow CmpOp ListValueReader RelationReader ValueBox ValueReader Vector VectorIndirection$Mask VectorReader VectorType VectorType$Listy VectorType$Mono VectorType$Nothing VectorType$Poly VectorType$Struct)
+           (xtdb.expression PgFormat ScalarPredicate ScalarPredicate$Compare ScalarPredicate$Literal$Date ScalarPredicate$Literal$Float64 ScalarPredicate$Literal$Int64 ScalarPredicate$Param ScalarPredicateSelection)
            (xtdb.operator ProjectionSpec ProjectionSpec$Factory SelectionSpec SelectionSpec$Factory)
            (xtdb.pgwire PgTypes)
            xtdb.time.Interval
@@ -2669,7 +2669,7 @@
 (defn- ->predicate-expr [expr]
   {:op :call, :f :boolean, :args [expr]})
 
-(defn ->expression-selection-spec ^SelectionSpec$Factory [expr {:keys [var-types param-types]}]
+(defn- ->generated-selection-spec ^SelectionSpec$Factory [expr {:keys [var-types param-types]}]
   (let [expr (->predicate-expr expr)
         var-syms (->var-syms expr)
         emit-cache (->emit-cache)]
@@ -2694,3 +2694,37 @@
                     :else (.andThen mask (select-all (.select in-rel (.toSelection mask)))))))
 
               (close [_]))))))))
+
+(def ^:private kernel-cmp-ops
+  {:< CmpOp/LT, :<= CmpOp/LTE, :> CmpOp/GT, :>= CmpOp/GTE, :== CmpOp/EQ, :<> CmpOp/NEQ})
+
+(def ^:private mirrored-cmp-ops
+  {:< :>, :<= :>=, :> :<, :>= :<=, :== :==, :<> :<>})
+
+(defn- ->kernel-operand [{:keys [op literal param]}]
+  (case op
+    :literal (cond
+               (instance? Long literal) (ScalarPredicate$Literal$Int64. (long literal))
+               (instance? Double literal) (ScalarPredicate$Literal$Float64. (double literal))
+               (instance? LocalDate literal) (ScalarPredicate$Literal$Date. literal))
+    :param (ScalarPredicate$Param. (str param))
+    nil))
+
+(defn- ->kernel-compare [f [l r]]
+  (letfn [(leaf [{:keys [op variable]} operand-expr f]
+            (when (= :variable op)
+              (when-let [operand (->kernel-operand operand-expr)]
+                (ScalarPredicate$Compare. (str variable) (kernel-cmp-ops f) operand))))]
+    (or (leaf l r f)
+        (leaf r l (mirrored-cmp-ops f)))))
+
+(defn- ->scalar-predicate ^ScalarPredicate [expr]
+  (let [{:keys [op f args]} (prepare-expr expr)]
+    (when (and (= :call op) (contains? kernel-cmp-ops f) (= 2 (count args)))
+      (->kernel-compare f args))))
+
+(defn ->expression-selection-spec ^SelectionSpec$Factory [expr input-types]
+  (let [generated (->generated-selection-spec expr input-types)]
+    (if-let [pred (->scalar-predicate expr)]
+      (ScalarPredicateSelection. pred generated)
+      generated)))

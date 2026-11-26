@@ -17,7 +17,7 @@
            org.apache.arrow.vector.types.TimeUnit
            (xtdb.api.error Incorrect)
            (xtdb.arrow NullVector RelationReader Vector VectorIndirection$Mask VectorIndirection$Mask$Builder VectorReader)
-           (xtdb.operator ProjectionSpec$Star)
+           (xtdb.operator ProjectionSpec$Star SelectionSpec$Factory)
            (xtdb.time Interval)
            (xtdb.util StringUtil)))
 
@@ -141,7 +141,7 @@
   (let [input-types {:var-types '{a #xt/type [:? :i64]}}
         expr (expr/form->expr '(> a 1) input-types)
         n 130]
-    (with-open [selection-spec (-> (expr/->expression-selection-spec expr input-types)
+    (with-open [selection-spec (-> ^SelectionSpec$Factory (#'expr/->generated-selection-spec expr input-types)
                                    (.open tu/*allocator* {} vw/empty-args))]
       (doseq [[batch-name batch] {"i64" {:a (map #(when-not (= 5 (mod % 7)) (mod % 4)) (range n))}
                                   "f64" {:a (map #(when-not (= 5 (mod % 7)) (+ 0.5 (mod % 4))) (range n))}}

@@ -18,6 +18,7 @@ import org.apache.arrow.vector.types.pojo.DictionaryEncoding
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.InternalApi
+import xtdb.arrow.VectorIndirection.Mask
 import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.arrow.extensions.IntervalMDMType
 import xtdb.arrow.extensions.KeywordType
@@ -34,6 +35,7 @@ import xtdb.util.Hasher
 import xtdb.util.closeAllOnCatch
 import xtdb.util.closeOnCatch
 import xtdb.util.safeMap
+import java.time.LocalDate
 import java.time.ZoneId
 import org.apache.arrow.vector.NullVector as ArrowNullVector
 
@@ -57,6 +59,18 @@ sealed class Vector : VectorReader, VectorWriter {
     abstract override var valueCount: Int; internal set
 
     abstract override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?)
+
+    /**
+     * Compares each row of [mask] with [rhs]: the answer has the rows of [mask] that are non-null and compare true.
+     * A null answer means this vector doesn't cover the comparison with that scalar's domain.
+     */
+    open fun compare(op: CmpOp, rhs: Long, mask: Mask): Mask? = null
+
+    /** As the [Long] overload. */
+    open fun compare(op: CmpOp, rhs: Double, mask: Mask): Mask? = null
+
+    /** As the [Long] overload. */
+    open fun compare(op: CmpOp, rhs: LocalDate, mask: Mask): Mask? = null
 
     override fun writeNull() {
         if (!nullable) nullable = true

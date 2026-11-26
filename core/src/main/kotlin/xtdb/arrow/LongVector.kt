@@ -5,6 +5,7 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.Types.MinorType
 import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
+import xtdb.arrow.VectorIndirection.Mask
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.hash.addDoubles
 import xtdb.util.Hasher
@@ -29,6 +30,9 @@ class LongVector private constructor(
     override fun getAsLong(idx: Int) = getLong(idx)
     override fun getAsFloat(idx: Int) = getLong(idx).toFloat()
     override fun getAsDouble(idx: Int) = getLong(idx).toDouble()
+
+    override fun compare(op: CmpOp, rhs: Long, mask: Mask) = cmpLongs(op, rhs, mask) { dataBuffer.getLong(it) }
+    override fun compare(op: CmpOp, rhs: Double, mask: Mask) = cmpDoubles(op, rhs, mask) { dataBuffer.getLong(it).toDouble() }
 
     fun increment(idx: Int, v: Long) {
         ensureCapacity(idx + 1)

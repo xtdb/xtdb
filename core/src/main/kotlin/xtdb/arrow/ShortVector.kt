@@ -5,6 +5,7 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.Types.MinorType
 import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
+import xtdb.arrow.VectorIndirection.Mask
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.hash.addDoubles
 import xtdb.util.Hasher
@@ -29,6 +30,9 @@ class ShortVector private constructor(
     override fun getAsLong(idx: Int) = getShort(idx).toLong()
     override fun getAsFloat(idx: Int) = getShort(idx).toFloat()
     override fun getAsDouble(idx: Int) = getShort(idx).toDouble()
+
+    override fun compare(op: CmpOp, rhs: Long, mask: Mask) = cmpLongs(op, rhs, mask) { dataBuffer.getShort(it).toLong() }
+    override fun compare(op: CmpOp, rhs: Double, mask: Mask) = cmpDoubles(op, rhs, mask) { dataBuffer.getShort(it).toDouble() }
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = getShort(idx)
 
