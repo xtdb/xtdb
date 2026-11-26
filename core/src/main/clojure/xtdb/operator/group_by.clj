@@ -244,7 +244,8 @@
       (let [agg-spec (.build agg-factory al args)
             ^DistinctRelationMap rel-map (distinct/->relation-map al {:build-vec-types {"group-idx" #xt/type :i32
                                                                                          "value" from-type}
-                                                                       :build-key-col-names ["group-idx" "value"]})]
+                                                                       :build-key-col-names ["group-idx" "value"]
+                                                                       :nil-keys-equal? true})]
         (reify
           AggregateSpec
           (aggregate [_ in-rel group-mapping mask]

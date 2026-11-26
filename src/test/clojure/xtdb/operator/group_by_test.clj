@@ -587,6 +587,16 @@
                                  [{:k :b, :v 1} {:k :c, :v 2} {:k :c, :v nil}]]]])))
         "a group's distinct values span pages, and a group first seen on a later page counts from there"))
 
+(t/deftest test-distinct-aggregates-treat-nulls-as-one-value
+  (t/is (= #{{:k :a, :n 1, :s 1, :xs [nil 1]} {:k :b, :n 0, :xs [nil]}}
+           (set (tu/->clj (tu/query-ra '[:group-by {:columns [k
+                                                              {n (count-distinct v)}
+                                                              {s (sum-distinct v)}
+                                                              {xs (array-agg-distinct v)}]}
+                                         [::tu/pages
+                                          [[{:k :a, :v nil} {:k :a, :v 1} {:k :b, :v nil}]
+                                           [{:k :a, :v nil} {:k :b, :v nil} {:k :a, :v 1}]]]]))))))
+
 (t/deftest test-group-by-with-nils-coerce-to-boolean-npe-regress
   (t/is (= {:res #{{:a 42} {}}
             :types '{a #xt/type [:? :i64]}}
