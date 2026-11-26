@@ -73,6 +73,9 @@ sealed class Vector : VectorReader, VectorWriter {
     /** As the [Long] overload. */
     open fun compare(op: CmpOp, rhs: LocalDate, sel: IntArray?, mask: Mask): Mask? = null
 
+    /** As the [Long] overload, comparing [rhs] byte for byte with each row's bytes - a string as its UTF-8 encoding. */
+    open fun compare(op: CmpOp, rhs: ByteArray, sel: IntArray?, mask: Mask): Mask? = null
+
     /** The rows of [mask] that are non-null, with [sel] and [mask] as for [compare]; null where this vector doesn't cover it. */
     open fun notNull(sel: IntArray?, mask: Mask): Mask? = null
 

@@ -4,7 +4,8 @@
             [xtdb.test-util :as tu]
             [xtdb.types :as types]
             [xtdb.vector.reader :as vr])
-  (:import (java.time LocalDate)
+  (:import (java.nio.charset StandardCharsets)
+           (java.time LocalDate)
            (xtdb.arrow RelationReader VectorIndirection$Mask VectorIndirection$Mask$Builder VectorReader)
            (xtdb.expression ScalarPredicate ScalarPredicate$Bound ScalarPredicateSelection)
            (xtdb.operator SelectionSpec$Factory)))
@@ -68,6 +69,11 @@
 (def ^:private flt-vals [0.0 -0.0 1.5 nan -1.5 5.0 nil Double/POSITIVE_INFINITY Double/NEGATIVE_INFINITY 2.5 nan nil 5.0 -0.0 3.25 0.0 nil nan])
 (def ^:private date-vals (concat [nil] (for [d [0 1 18000 18262 18263 -5 19000]] (LocalDate/ofEpochDay d)) (repeat 10 nil)))
 
+(defn- utf8 ^bytes [^String s] (.getBytes s StandardCharsets/UTF_8))
+
+(def ^:private str-vals ["" "abc" "a" nil "é" "日本" "abc" "ab" "abcd" "A" nil "" "abc" "naïve" "abc\u0000" nil "e" "abc"])
+(def ^:private bytes-vals (concat (map #(some-> % utf8) (butlast str-vals)) [(byte-array [-1 0])]))
+
 (def ^:private col-specs
   [['i8 (types/->type '[:? :i8]) (map #(some-> % byte) int-vals)]
    ['i16 (types/->type '[:? :i16]) (map #(some-> % (* 100) short) int-vals)]
@@ -75,17 +81,25 @@
    ['i64 (types/->type '[:? :i64]) (concat (map #(some-> % (* 3000000000)) (butlast int-vals)) [9007199254740993])]
    ['f32 (types/->type '[:? :f32]) (map #(some-> % unchecked-float) flt-vals)]
    ['f64 (types/->type '[:? :f64]) flt-vals]
-   ['d (types/->type '[:? :date :day]) date-vals]])
+   ['d (types/->type '[:? :date :day]) date-vals]
+   ['s (types/->type '[:? :utf8]) str-vals]
+   ['b (types/->type '[:? :varbinary]) bytes-vals]])
 
 (def ^:private scalars
-  [0 5 -3 500 3000000000 15000000000 9007199254740992 2.5 -0.0 0.0 nan 5.0 9.007199254740992E15 0.1 (LocalDate/ofEpochDay 18262)])
+  [0 5 -3 500 3000000000 15000000000 9007199254740992 2.5 -0.0 0.0 nan 5.0 9.007199254740992E15 0.1 (LocalDate/ofEpochDay 18262)
+   "" "abc" "ab" "é" "日本" "abc\u0000" "absent"
+   (byte-array 0) (utf8 "abc") (utf8 "é") (byte-array [-1 0]) (byte-array [-61])])
 
 (defn- scalar-domain [scalar]
-  (condp instance? scalar Long :long, Double :double, LocalDate :date))
+  (condp instance? scalar Long :long, Double :double, LocalDate :date, String :utf8, (Class/forName "[B") :bytes))
 
 (def ^:private covered-pairs
   #{['i8 :long] ['i8 :double] ['i16 :long] ['i16 :double] ['i32 :long] ['i32 :double] ['i64 :long] ['i64 :double]
-    ['f32 :long] ['f32 :double] ['f64 :long] ['f64 :double] ['d :date]})
+    ['f32 :long] ['f32 :double] ['f64 :long] ['f64 :double] ['d :date]
+    ['s :utf8] ['s :bytes] ['b :utf8] ['b :bytes]})
+
+(defn- ops-of [scalar]
+  (if (#{:utf8 :bytes} (scalar-domain scalar)) '[== <>] '[< <= > >= == <>]))
 
 (t/deftest comparisons-equal-generated-code
   (with-open [base (open-rel col-specs)]
@@ -94,7 +108,7 @@
               [col _ _] col-specs
               scalar scalars
               :when (contains? covered-pairs [col (scalar-domain scalar)])
-              op '[< <= > >= == <>]]
+              op (ops-of scalar)]
         (t/testing (str view-name " " col " " op " " (pr-str scalar))
           (with-open [args (tu/open-args {:p scalar})]
             (doseq [form [(list op col scalar)
@@ -126,7 +140,7 @@
 
 (t/deftest combinations-equal-generated-code
   (with-open [base (open-rel col-specs)
-              args (tu/open-args {:p 5 :q 2.5 :dt (LocalDate/ofEpochDay 18262)})]
+              args (tu/open-args {:p 5 :q 2.5 :dt (LocalDate/ofEpochDay 18262) :str "abc" :bin (utf8 "日本")})]
     (doseq [[view-name rel] (views base)
             form '[(and (> i64 0) (< f64 3.0))
                    (or (> i32 300000) (< f64 ?q))
@@ -140,15 +154,38 @@
                    (and (< i32 -1000000) (> f64 0.0))
                    (or (< i64 nil) (> f64 0.0))
                    (not (or (< i64 nil) (> f64 0.0)))
-                   (between i32 0 500000)]]
+                   (between i32 0 500000)
+                   (and (== s ?str) (<> b ?bin))
+                   (or (== s "é") (== b ?bin) (< f64 ?q))
+                   (not (or (<> s "") (== b ?str)))]]
       (t/testing view-name
         (check-form form rel args)
         (t/is (kernel-answers? form rel args) (pr-str form))))))
 
+(t/deftest byte-comparisons-across-mask-words-equal-generated-code
+  (let [str-vals (for [i (range 150)]
+                   (cond
+                     (#{61 63 64 66 127 130} i) "abc"
+                     (#{62 65 128} i) nil
+                     (even? i) "abd"
+                     :else "ab"))]
+    (with-open [base (open-rel [['s (types/->type '[:? :utf8]) str-vals]
+                                ['b (types/->type '[:? :varbinary]) (map #(some-> % utf8) str-vals)]])
+                args (tu/open-args {:p "abc" :q (utf8 "abc")})]
+      (doseq [[view-name rel] (views base)
+              col '[s b]
+              [scalar param] [["abc" '?p] [(utf8 "abc") '?q]]
+              op '[== <>]
+              form [(list op col scalar)
+                    (list op param col)
+                    (list 'not (list op col param))]]
+        (t/testing view-name
+          (check-form form rel args)
+          (t/is (kernel-answers? form rel args) (pr-str form)))))))
+
 (t/deftest non-matching-shapes-keep-generated-code
   (let [input-types {:var-types {'a (types/->type :i64), 'b (types/->type :i64), 's (types/->type :utf8)}, :param-types {}}]
-    (doseq [form '[(< a b) (< (+ a 1) 3) (== s :x) (< s "x") (>= "x" s) (and (< a 1) (< a b)) (nil? a) (< a 1.5M)
-                   (== s "x")]]
+    (doseq [form '[(< a b) (< (+ a 1) 3) (== s :x) (< s "x") (>= "x" s) (and (< a 1) (< a b)) (nil? a) (< a 1.5M)]]
       (t/is (not (instance? ScalarPredicateSelection (kernel-factory form input-types))) (pr-str form)))))
 
 (t/deftest recognised-expressions-the-ee-cannot-compile-throw-at-plan-time
@@ -166,6 +203,18 @@
           (t/is (= (select-rows (generated-factory '(< x ?p) (input-types rel args)) rel args)
                    (select-rows factory rel args))
                 desc))))))
+
+(t/deftest string-orderings-and-keyword-params-take-generated-code
+  (with-open [base (open-rel col-specs)]
+    (doseq [[args forms] [[{:p "abc"} '[(< s ?p) (>= ?p s) (not (<= s ?p))]]
+                          [{:p (utf8 "abc")} '[(> b ?p) (not (< b ?p))]]
+                          [{:p :abc} '[(== s ?p) (<> s ?p)]]]
+            [view-name rel] (views base)
+            form forms]
+      (with-open [args (tu/open-args args)]
+        (t/testing view-name
+          (t/is (nil? (bind form rel args)) (pr-str form))
+          (check-form form rel args))))))
 
 (t/deftest uncovered-params-take-generated-code-for-the-query
   (with-open [rel (open-rel [['x (types/->type '[:? :i64]) [1 nil 3 0]]])

@@ -8,6 +8,7 @@ import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import xtdb.InternalApi
 import xtdb.api.query.IKeyFn
+import xtdb.arrow.VectorIndirection.Mask
 import xtdb.arrow.VectorType.Scalar
 import xtdb.util.Hasher
 import java.nio.ByteBuffer
@@ -223,6 +224,21 @@ sealed class VariableWidthVector : MonoVector() {
         valueCount = 0
         lastOffset = 0
     }
+
+    override fun compare(op: CmpOp, rhs: ByteArray, sel: IntArray?, mask: Mask): Mask? {
+        fun eq(idx: Int): Boolean {
+            val start = offsetBuffer.getInt(idx)
+            return dataBuffer.bytesEqual(start, offsetBuffer.getInt(idx + 1) - start, rhs)
+        }
+
+        return when (op) {
+            CmpOp.EQ -> evalWords(validityBuffer, valueCount, sel, mask) { eq(it) }
+            CmpOp.NEQ -> evalWords(validityBuffer, valueCount, sel, mask) { !eq(it) }
+            CmpOp.LT, CmpOp.LTE, CmpOp.GT, CmpOp.GTE -> null
+        }
+    }
+
+    override fun notNull(sel: IntArray?, mask: Mask) = notNullBits(validityBuffer, valueCount, sel, mask)
 
     override fun close() {
         validityBuffer?.close()

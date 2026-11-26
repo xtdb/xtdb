@@ -118,3 +118,14 @@
                                                                 ["selection" (.vectorFor base (name col)) (VectorIndirection$Mask/all 3) (int-array [0 1])]]]
         (t/is (thrown? Fault (compare-scalar v '>= scalar sel m)) (str col " compare, " label))
         (t/is (thrown? Fault (.notNull v sel m)) (str col " notNull, " label))))))
+
+(t/deftest byte-comparisons-refuse-a-mask-longer-than-the-vector
+  (with-open [^RelationReader base (open-rel [['s (types/->type :utf8) ["a" "" "bc" "" "d" "e" "f"]]
+                                        ['b (types/->type :varbinary) (map #(.getBytes ^String %) ["a" "" "bc" "" "d" "e" "f"])]])]
+    (let [n (.getRowCount base)
+          empty-bytes (byte-array 0)]
+      (doseq [col ["s" "b"]
+              [label ^Vector v ^VectorIndirection$Mask m ^ints sel] [["vector" (.vectorFor base col) (VectorIndirection$Mask/all (inc n)) nil]
+                                                                     ["selection" (.vectorFor base col) (VectorIndirection$Mask/all 3) (int-array [0 1])]]]
+        (t/is (thrown? Fault (.compare v CmpOp/EQ empty-bytes sel m)) (str col " eq, " label))
+        (t/is (thrown? Fault (.notNull v sel m)) (str col " notNull, " label))))))

@@ -45,6 +45,14 @@ sealed interface ScalarPredicate {
         data class Date(val value: LocalDate) : Value {
             override fun compare(vec: Vector, op: CmpOp, sel: IntArray?, mask: Mask) = vec.compare(op, value, sel, mask)
         }
+
+        /** A string, as its UTF-8 encoding, or a byte string: only `==`/`<>` compare with it. */
+        class Bytes(val value: ByteArray) : Value {
+            override fun compare(vec: Vector, op: CmpOp, sel: IntArray?, mask: Mask) = vec.compare(op, value, sel, mask)
+
+            override fun equals(other: Any?) = other is Bytes && value.contentEquals(other.value)
+            override fun hashCode() = value.contentHashCode()
+        }
     }
 
     data class Param(val name: String) : Operand {
@@ -56,6 +64,8 @@ sealed interface ScalarPredicate {
                 is ArrowType.Int -> Literal.Int64((vec.getObject(0) as Number).toLong())
                 is ArrowType.FloatingPoint -> Literal.Float64((vec.getObject(0) as Number).toDouble())
                 ArrowType.Date(DateUnit.DAY) -> Literal.Date(vec.getObject(0) as LocalDate)
+                ArrowType.Utf8.INSTANCE, ArrowType.Binary.INSTANCE ->
+                    Literal.Bytes(vec.getBytes(0).let { buf -> ByteArray(buf.remaining()).also { buf.duplicate().get(it) } })
                 else -> null
             }
         }
@@ -70,6 +80,7 @@ sealed interface ScalarPredicate {
 
             return when (literal) {
                 Literal.Null -> Bound.Unknown(col)
+                is Literal.Bytes if op != CmpOp.EQ && op != CmpOp.NEQ -> null
                 is Literal.Value -> Bound.Compare(col, op, literal, negated)
             }
         }

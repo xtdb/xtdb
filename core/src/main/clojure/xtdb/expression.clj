@@ -21,7 +21,7 @@
            (org.apache.arrow.vector.types.pojo ArrowType$Decimal)
            (org.apache.commons.codec.binary Hex)
            (xtdb.arrow CmpOp ListValueReader RelationReader ValueBox ValueReader Vector VectorIndirection$Mask VectorReader VectorType VectorType$Listy VectorType$Mono VectorType$Nothing VectorType$Poly VectorType$Struct)
-           (xtdb.expression PgFormat ScalarPredicate ScalarPredicate$And ScalarPredicate$Compare ScalarPredicate$Literal$Date ScalarPredicate$Literal$Float64 ScalarPredicate$Literal$Int64 ScalarPredicate$Literal$Null ScalarPredicate$Or ScalarPredicate$Param ScalarPredicateSelection)
+           (xtdb.expression PgFormat ScalarPredicate ScalarPredicate$And ScalarPredicate$Compare ScalarPredicate$Literal$Bytes ScalarPredicate$Literal$Date ScalarPredicate$Literal$Float64 ScalarPredicate$Literal$Int64 ScalarPredicate$Literal$Null ScalarPredicate$Or ScalarPredicate$Param ScalarPredicateSelection)
            (xtdb.operator ProjectionSpec ProjectionSpec$Factory SelectionSpec SelectionSpec$Factory)
            (xtdb.pgwire PgTypes)
            xtdb.time.Interval
@@ -2701,20 +2701,23 @@
 (def ^:private mirrored-cmp-ops
   {:< :>, :<= :>=, :> :<, :>= :<=, :== :==, :<> :<>})
 
-(defn- ->kernel-operand [{:keys [op literal param]}]
+(defn- ->kernel-operand [f {:keys [op literal param]}]
   (case op
     :literal (cond
                (nil? literal) ScalarPredicate$Literal$Null/INSTANCE
                (instance? Long literal) (ScalarPredicate$Literal$Int64. (long literal))
                (instance? Double literal) (ScalarPredicate$Literal$Float64. (double literal))
-               (instance? LocalDate literal) (ScalarPredicate$Literal$Date. literal))
+               (instance? LocalDate literal) (ScalarPredicate$Literal$Date. literal)
+               (not (#{:== :<>} f)) nil
+               (string? literal) (ScalarPredicate$Literal$Bytes. (.getBytes ^String literal StandardCharsets/UTF_8))
+               (bytes? literal) (ScalarPredicate$Literal$Bytes. literal))
     :param (ScalarPredicate$Param. (str param))
     nil))
 
 (defn- ->kernel-compare [f [l r] negated?]
   (letfn [(leaf [{:keys [op variable]} operand-expr f]
             (when (= :variable op)
-              (when-let [operand (->kernel-operand operand-expr)]
+              (when-let [operand (->kernel-operand f operand-expr)]
                 (ScalarPredicate$Compare. (str variable) (kernel-cmp-ops f) operand (boolean negated?)))))]
     (or (leaf l r f)
         (leaf r l (mirrored-cmp-ops f)))))

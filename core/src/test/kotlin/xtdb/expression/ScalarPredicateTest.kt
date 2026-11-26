@@ -71,6 +71,21 @@ class ScalarPredicateTest {
     }
 
     @Test
+    fun `byte comparisons through a mask agree with the selection of the mask's rows`(al: BufferAllocator) {
+        Vector.fromList(al, List(ROWS) { if (it % 5 == 1) null else "s$it" }).use { vec ->
+            checkMaskedAgreesWithSelection(
+                vec,
+                listOf(
+                    Bound.Compare("x", CmpOp.EQ, Literal.Bytes("s30".toByteArray()), false),
+                    Bound.Compare("x", CmpOp.NEQ, Literal.Bytes("s30".toByteArray()), false),
+                    Bound.Compare("x", CmpOp.EQ, Literal.Bytes("s30".toByteArray()), true),
+                    Bound.Unknown("x"),
+                )
+            )
+        }
+    }
+
+    @Test
     fun `a column that is no view of a vector the comparison covers isn't answered`(al: BufferAllocator) {
         Vector.fromList(al, List(ROWS) { if (it % 7 == 3) null else it * 10L }).use { vec ->
             val nested = IndirectVector(IndirectVector(vec, VectorIndirection.selection(IntArray(ROWS) { it })), rowMask(ROWS) { it % 3 == 0 })
