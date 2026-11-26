@@ -5,8 +5,6 @@
   [:mark-join
    {:conditions [], :mark-spec {_sq_2 [true]}}
    [:rename {:prefix f.1} [:scan {:db-name "xtdb", :table #xt/table foo, :columns [a]}]]
-   [:project
-    {:projections [{c foo.3/c}]}
-    [:rename
-     {:prefix foo.3}
-     [:scan {:db-name "xtdb", :table #xt/table foo, :columns [c]}]]]]]]
+   [:rename
+    {:prefix foo.3}
+    [:scan {:db-name "xtdb", :table #xt/table foo, :columns [c]}]]]]]

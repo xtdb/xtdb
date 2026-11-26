@@ -5,18 +5,16 @@
   [[:rename
     {:prefix foo.1}
     [:scan {:db-name "xtdb", :table #xt/table foo, :columns [a]}]]
-   [:select
-    {:predicate _sq_3}
-    [:apply
-     {:mode :mark-join,
-      :columns {bar.2/b ?_sq_b_4, bar.2/c ?_sq_3_needle},
-      :mark-join-projection {_sq_3 (== ?_sq_3_needle b)}}
+   [:map
+    {:projections [{_sq_3 true}]}
+    [:semi-join
+     {:conditions [{bar.2/b foo.4/a} {bar.2/c b}]}
      [:rename
       {:prefix bar.2}
       [:scan {:db-name "xtdb", :table #xt/table bar, :columns [c b]}]]
      [:project
-      {:projections [{b foo.4/b}]}
+      {:projections [{b foo.4/b} foo.4/a]}
       [:rename
        {:prefix foo.4}
        [:scan
-        {:db-name "xtdb", :table #xt/table foo, :columns [{a (== a ?_sq_b_4)} b]}]]]]]]]]
+        {:db-name "xtdb", :table #xt/table foo, :columns [a b]}]]]]]]]]

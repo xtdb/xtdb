@@ -932,6 +932,39 @@
          [:group-by group-by-opts
           relation]]))))
 
+(defn- exists-mark? [{:keys [mark-join-projection]}]
+  (and mark-join-projection
+       (every? true? (vals mark-join-projection))))
+
+(defn- pull-correlated-selection-up-past-apply-project
+  "Only mark mode: it outputs no dependent-side column, so the widened projection isn't seen above the :apply."
+  [z]
+  (r/zmatch z
+    [:apply apply-opts independent-relation
+     [:project project-opts
+      [:select select-opts
+       dependent-relation]]]
+    ;;=>
+    (let [{:keys [mode]} apply-opts
+          {:keys [predicate]} select-opts]
+      (when (and (= mode :mark-join)
+                 (not (exists-mark? apply-opts))
+                 (seq (expr-correlated-symbols predicate)))
+        (let [{:keys [projections]} project-opts
+              output-cols (set (map ->projected-column projections))
+              p-map (->> (for [p projections
+                               :let [[out in] (if (map? p) (first p) [p p])]
+                               :when (column? in)]
+                           [in out])
+                         (into {}))
+              extra-cols (remove p-map (expr-symbols predicate))]
+          (when (and (seq extra-cols)
+                     (not-any? output-cols extra-cols))
+            [:apply apply-opts independent-relation
+             [:select {:predicate (w/postwalk-replace p-map predicate)}
+              [:project {:projections (into projections extra-cols)}
+               dependent-relation]]]))))))
+
 (defn- squash-correlated-selects [z]
   (r/zmatch z
     [:select opts-1
@@ -1232,15 +1265,8 @@
     [:apply opts i
      [:project project-opts dependent-relation]]
     ;;=>
-    (let [{:keys [mode mark-join-projection]} opts
-          {:keys [projections]} project-opts]
-      ;; renames excluded: dropping one leaves push-semi-and-anti-joins-down-test
-      ;; at an :apply where it had been a semi-join (#6012)
-      (when (and (= mode :mark-join)
-                 mark-join-projection
-                 (every? true? (vals mark-join-projection))
-                 (every? #(and (map? %) (not (symbol? (val (first %))))) projections))
-        [:apply (->apply-opts opts) i dependent-relation]))
+    (when (and (= (:mode opts) :mark-join) (exists-mark? opts))
+      [:apply (->apply-opts opts) i dependent-relation])
 
     [:semi-join join-opts i
      [:project project-opts dependent-relation]]
@@ -1500,6 +1526,7 @@
   [#'remove-superseded-projects
    #'pull-correlated-selection-up-towards-apply
    #'remove-redundant-projects
+   #'pull-correlated-selection-up-past-apply-project
    #'push-selection-down-past-apply
    #'push-decorrelated-selection-down-past-join
    #'push-decorrelated-selection-down-past-rename

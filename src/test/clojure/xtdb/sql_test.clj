@@ -479,6 +479,33 @@
                      {:table-info {#xt/table x #{"y" "z"}
                                    #xt/table y #{"z"}}}))))
 
+  (t/testing "correlated IN, NOT IN and ANY decorrelate into a mark join"
+    (let [opts {:table-info {#xt/table x #{"y" "z" "a"}
+                             #xt/table y #{"z" "w"}}}]
+      (t/is (=plan-file
+             "correlated-in-in-where"
+             (sql/plan "SELECT x.y FROM x WHERE x.z IN (SELECT y.w FROM y WHERE y.z = x.y)" opts)))
+
+      (t/is (=plan-file
+             "correlated-not-in-in-where"
+             (sql/plan "SELECT x.y FROM x WHERE x.z NOT IN (SELECT y.w FROM y WHERE y.z = x.y)" opts)))
+
+      (t/is (=plan-file
+             "correlated-in-as-expression-in-select"
+             (sql/plan "SELECT x.z IN (SELECT y.w FROM y WHERE y.z = x.y) AS m FROM x" opts)))
+
+      (t/is (=plan-file
+             "correlated-in-under-or"
+             (sql/plan "SELECT x.y FROM x WHERE x.a OR x.z IN (SELECT y.w FROM y WHERE y.z = x.y)" opts)))
+
+      (t/is (=plan-file
+             "correlated-any-as-expression-in-select"
+             (sql/plan "SELECT x.z = ANY (SELECT y.w FROM y WHERE y.z = x.y) AS m FROM x" opts)))
+
+      (t/is (=plan-file
+             "correlated-in-over-expression"
+             (sql/plan "SELECT x.z IN (SELECT y.w + 1 FROM y WHERE y.z = x.y) AS m FROM x" opts)))))
+
   (t/testing "ALL in WHERE"
     (t/is (=plan-file
            "all-in-where"
@@ -1403,7 +1430,6 @@
 (t/deftest push-semi-and-anti-joins-down-test
   ;;semi-join was previously been pushed down below the cross join
   ;;where the cols it required weren't in scope
-  ;; TODO I think this should be decorr'able?
   (t/is
    (=plan-file
     "push-semi-and-anti-joins-down"
@@ -3784,3 +3810,31 @@ UNION ALL
 
   (t/is (= [{:xt/id 1, :v 1} {:xt/id 2, :v 1.0}]
            (xt/q tu/*node* "SELECT _id, LEAST(a, b) AS v FROM docs ORDER BY _id"))))
+
+(t/deftest correlated-in-marks-are-three-valued-6380
+  (xt/execute-tx tu/*node* [[:put-docs :c
+                             {:xt/id 1, :k 1, :v 1} {:xt/id 2, :k 1, :v 5}
+                             {:xt/id 3, :k 2, :v 5} {:xt/id 4, :k 2, :v 1}
+                             {:xt/id 5, :k 3, :v 1} {:xt/id 6, :k 1, :v nil}
+                             {:xt/id 7, :k 3, :v nil} {:xt/id 8, :k nil, :v 1}]
+                            [:put-docs :o
+                             {:xt/id 10, :k 1, :v 1} {:xt/id 11, :k 1, :v 2}
+                             {:xt/id 12, :k 2, :v 1} {:xt/id 13, :k 2, :v nil}]])
+
+  (t/is (= [{:xt/id 1, :m true} {:xt/id 2, :m false} {:xt/id 3} {:xt/id 4, :m true}
+            {:xt/id 5, :m false} {:xt/id 6} {:xt/id 7, :m false} {:xt/id 8, :m false}]
+           (xt/q tu/*node* "SELECT c._id, c.v IN (SELECT o.v FROM o WHERE o.k = c.k) AS m FROM c ORDER BY c._id")))
+
+  (t/is (= [{:xt/id 1, :m false} {:xt/id 2, :m true} {:xt/id 3} {:xt/id 4, :m false}
+            {:xt/id 5, :m true} {:xt/id 6} {:xt/id 7, :m true} {:xt/id 8, :m true}]
+           (xt/q tu/*node* "SELECT c._id, c.v > ALL (SELECT o.v FROM o WHERE o.k = c.k) AS m FROM c ORDER BY c._id")))
+
+  (t/is (= [{:xt/id 1, :m false} {:xt/id 2, :m true} {:xt/id 3, :m true} {:xt/id 4}
+            {:xt/id 5, :m false} {:xt/id 6} {:xt/id 7, :m false} {:xt/id 8, :m false}]
+           (xt/q tu/*node* "SELECT c._id, c.v IN (SELECT o.v + 4 FROM o WHERE o.k = c.k) AS m FROM c ORDER BY c._id")))
+
+  (t/is (= [{:xt/id 1} {:xt/id 4}]
+           (xt/q tu/*node* "SELECT c._id FROM c WHERE c.v IN (SELECT o.v FROM o WHERE o.k = c.k) ORDER BY c._id")))
+
+  (t/is (= [{:xt/id 2} {:xt/id 5} {:xt/id 7} {:xt/id 8}]
+           (xt/q tu/*node* "SELECT c._id FROM c WHERE c.v NOT IN (SELECT o.v FROM o WHERE o.k = c.k) ORDER BY c._id"))))

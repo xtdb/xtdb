@@ -1,11 +1,9 @@
 [:project
  {:projections [{foo x.1/foo}]}
- [:select
-  {:predicate _sq_3}
-  [:apply
-   {:mode :mark-join,
-    :columns {y.2/biz ?_sq_biz_5, x.1/foo ?_sq_foo_4},
-    :mark-join-projection {_sq_3 true}}
+ [:map
+  {:projections [{_sq_3 true}]}
+  [:semi-join
+   {:conditions [{x.1/foo z.4/bar} {y.2/biz z.4/baz}]}
    [:mega-join
     {:conditions []}
     [[:rename
@@ -14,11 +12,6 @@
      [:rename
       {:prefix y.2}
       [:scan {:db-name "xtdb", :table #xt/table y, :columns [biz]}]]]]
-   [:project
-    {:projections [{bar z.4/bar}]}
-    [:rename
-     {:prefix z.4}
-     [:scan
-      {:db-name "xtdb", :table #xt/table z,
-       :columns
-       [{baz (== baz ?_sq_biz_5)} {bar (== bar ?_sq_foo_4)}]}]]]]]]
+   [:rename
+    {:prefix z.4}
+    [:scan {:db-name "xtdb", :table #xt/table z, :columns [baz bar]}]]]]]
