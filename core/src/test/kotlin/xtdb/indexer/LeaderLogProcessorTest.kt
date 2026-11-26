@@ -25,6 +25,7 @@ import xtdb.api.DatabaseName
 import xtdb.api.TableRef
 import xtdb.api.TransactionResult
 import xtdb.api.error.Fault
+import xtdb.api.log.IngestionStoppedException
 import xtdb.api.log.InMemoryLog
 import xtdb.api.log.Log
 import xtdb.api.log.ReplicaMessage
@@ -153,14 +154,14 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
         val proc = unstartedTerm(watchers).proc
 
-        val fault = assertThrows<Fault> {
+        val fault = assertThrows<IngestionStoppedException> {
             proc.applyReplicaMessage(
                 Log.Record(
                     0, 0, Instant.now(),
                     ReplicaMessage.ResolvedTx(0, Instant.now(), true, null, emptyMap(), srcMsgId = 0, termId = 1)
                 )
             )
-        }
+        }.cause as Fault
 
         assertEquals(
             Keyword.intern("xtdb.indexer", "leader-read-back-mismatch"),
@@ -170,6 +171,27 @@ internal class LeaderLogProcessorTest : LeaderTermTest() {
     }
 
     private fun record(msgId: Long, msg: ReplicaMessage) = Log.Record(0, msgId, Instant.now(), msg)
+
+    @Test
+    fun `a record that fails to apply is named in the error that stops ingestion`() = runTest {
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+        val proc = unstartedTerm(watchers).proc
+
+        val stopped = assertThrows<IngestionStoppedException> {
+            proc.applyReplicaMessage(
+                record(
+                    3,
+                    ReplicaMessage.ResolvedTx(
+                        1, Instant.now(), true, null,
+                        mapOf("public/docs" to ByteString.copyFrom(byteArrayOf(1, 2, 3))),
+                        termId = 0
+                    )
+                )
+            )
+        }
+
+        assertEquals(3L, stopped.msgId)
+    }
 
     private fun sourceRecord(msgId: Long, msg: SourceMessage) = Log.Record(0, msgId, Instant.now(), msg)
 

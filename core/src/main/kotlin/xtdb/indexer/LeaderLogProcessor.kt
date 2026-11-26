@@ -14,6 +14,7 @@ import xtdb.api.TransactionKey
 import xtdb.api.TransactionResult
 import xtdb.api.error.Fault
 import xtdb.api.log.DbOp
+import xtdb.api.log.IngestionStoppedException
 import xtdb.api.log.Log
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.ReplicaMessage.BlockBoundary
@@ -167,6 +168,15 @@ internal class LeaderLogProcessor(
             return
         }
 
+        try {
+            applyRecord(record)
+        } catch (e: Throwable) {
+            if (e.isShutdownSignal) throw e
+            throw IngestionStoppedException(record.msgId, e)
+        }
+    }
+
+    private suspend fun applyRecord(record: Log.Record<ReplicaMessage>) {
         when (val msg = record.message) {
             is ReplicaMessage.ResolvedTx -> {
                 // Ahead of the tx itself, so a caller that submitted an attach can use the database as
