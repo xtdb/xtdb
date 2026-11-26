@@ -8,7 +8,6 @@ import xtdb.arrow.VectorReader
 import xtdb.arrow.VectorTypes
 import xtdb.expression.map.IndexHasher.Companion.hasher
 import xtdb.expression.map.RelationMapBuilder
-import xtdb.trie.MutableMemoryHashTrie
 import java.util.function.IntBinaryOperator
 
 class DistinctRelationMap(
@@ -17,7 +16,6 @@ class DistinctRelationMap(
     val keyColumnNames: List<String>,
     private val storeFullBuildRel: Boolean,
     private val comparatorFactory: ComparatorFactory,
-    pageLimit: Int = 16, levelBits: Int = 2
 ) : AutoCloseable {
 
     interface ComparatorFactory {
@@ -27,14 +25,10 @@ class DistinctRelationMap(
     private val accRel = Relation(allocator, vecTypes)
     private val keyCols = keyColumnNames.map { accRel[it] }
 
-    private val hashColumn = IntVector.open(allocator, false)
     private val batchHashes = IntVector.open(allocator, false)
     private val batchHashScratch = IntVector.open(allocator, false)
 
-    private var buildHashTrie =
-        MutableMemoryHashTrie.builder(hashColumn)
-            .setPageLimit(pageLimit).setLevelBits(levelBits)
-            .build()
+    private val hashMap = GrowableHashMap(allocator)
 
     fun andIBO(p1: IntBinaryOperator, p2: IntBinaryOperator): IntBinaryOperator =
         IntBinaryOperator { l, r ->
@@ -72,26 +66,13 @@ class DistinctRelationMap(
 
         return object : RelationMapBuilder {
             override fun addIfNotPresent(inIdx: Int): Int {
-                val hashCode = hashes.getInt(inIdx)
-
-                val outIdxHashColumn = hashColumn.valueCount
-
-                val (insertedIdx, newTrie) = buildHashTrie.addIfNotPresent(
-                    hashCode,
-                    outIdxHashColumn,
+                val newIdx = accRel.rowCount
+                val idx = hashMap.findOrInsert(
+                    hashes.getInt(inIdx), newIdx,
                     { testIdx -> comparator.applyAsInt(testIdx, inIdx) },
-                    {
-                        hashColumn.writeInt(hashCode)
-                        rowCopier.copyRow(inIdx)
-                    }
+                    { rowCopier.copyRow(inIdx) },
                 )
-
-                return if (insertedIdx == outIdxHashColumn) {
-                    buildHashTrie = newTrie
-                    returnedIdx(outIdxHashColumn)
-                } else {
-                    insertedIdx
-                }
+                return if (idx == newIdx) returnedIdx(newIdx) else idx
             }
         }
     }
@@ -100,7 +81,7 @@ class DistinctRelationMap(
 
     override fun close() {
         accRel.close()
-        hashColumn.close()
+        hashMap.close()
         batchHashes.close()
         batchHashScratch.close()
     }

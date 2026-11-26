@@ -451,8 +451,8 @@ rule ToProto {
 ------------------------------------------------------------
 -- Rules: Lookup operations (MutableMemoryHashTrie variant)
 --
--- MutableMemoryHashTrie is a variant optimized for hash-based lookups
--- (used by DistinctRelationMap for deduplication). Key differences:
+-- MutableMemoryHashTrie is a variant optimized for hash-based lookups.
+-- Key differences:
 --   - Uses integer hash codes instead of 16-byte IIDs
 --   - Provides find/match operations for existence checks
 --   - Mutable internal state (not persistent data structure)

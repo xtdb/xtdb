@@ -68,8 +68,7 @@
                               (emap/->equi-comparator build-col in-col
                                                       args
                                                       {:nil-keys-equal? nil-keys-equal?
-                                                       :param-types param-types})))
-                          64 4)))
+                                                       :param-types param-types}))))))
 
 (defmethod lp/emit-expr :distinct [{:keys [_opts relation]} args]
   (lp/unary-expr (lp/emit-expr relation args)
