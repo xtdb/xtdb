@@ -1234,15 +1234,12 @@
     ;;=>
     (let [{:keys [mode mark-join-projection]} opts
           {:keys [projections]} project-opts]
-      (when (or (and (contains? #{:semi-join :anti-join} mode)
-                     (every? symbol? projections))
-
-                ;; renames excluded: dropping one leaves push-semi-and-anti-joins-down-test
-                ;; at an :apply where it had been a semi-join (#6012)
-                (and (= mode :mark-join)
-                     mark-join-projection
-                     (every? true? (vals mark-join-projection))
-                     (every? #(and (map? %) (not (symbol? (val (first %))))) projections)))
+      ;; renames excluded: dropping one leaves push-semi-and-anti-joins-down-test
+      ;; at an :apply where it had been a semi-join (#6012)
+      (when (and (= mode :mark-join)
+                 mark-join-projection
+                 (every? true? (vals mark-join-projection))
+                 (every? #(and (map? %) (not (symbol? (val (first %))))) projections))
         [:apply (->apply-opts opts) i dependent-relation]))
 
     [:semi-join join-opts i
