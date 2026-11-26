@@ -8,7 +8,7 @@
             [xtdb.time :as time]
             [xtdb.types :as types]
             [xtdb.util :as util])
-  (:import (clojure.lang IPersistentMap Keyword MapEntry)
+  (:import (clojure.lang Compiler$CompilerException IPersistentMap Keyword MapEntry)
            (com.github.benmanes.caffeine.cache Cache Caffeine)
            (java.lang NumberFormatException)
            (java.math RoundingMode)
@@ -2596,7 +2596,11 @@
       (util/lru-memoize)
       wrap-zone-id-cache-buster))
 
-(defmacro ^:private rethrowing-anomalies [& body]
+(defmacro rethrowing-anomalies
+  "Converts a raw Java exception thrown while forcing a generated function's compilation into an
+   `xtdb.error` anomaly - shared by every call site that `eval`s codegen output (expression.clj,
+   expression/list.clj)."
+  [& body]
   `(try
      ~@body
      (catch ArithmeticException e#
@@ -2606,7 +2610,9 @@
      (catch ClassCastException e#
        (throw (err/incorrect :xtdb.expression/class-cast-exception (ex-message e#) {::err/cause e#})))
      (catch IllegalArgumentException e#
-       (throw (err/incorrect :xtdb.expression/illegal-argument-exception (ex-message e#) {::err/cause e#})))))
+       (throw (err/incorrect :xtdb.expression/illegal-argument-exception (ex-message e#) {::err/cause e#})))
+     (catch Compiler$CompilerException e#
+       (throw (err/unsupported :xtdb.expression/compile-failed (ex-message e#) {::err/cause e#})))))
 
 (defn ->param-types [^RelationReader args]
   (->> (.getCols args)

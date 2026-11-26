@@ -14,7 +14,8 @@
               el-type (->> (.getLegs return-type) (keep types/unnest-type) (apply types/merge-types))
               lvr-sym (gensym 'lvr)]
           {:vec-type el-type
-           :->list-expr (eval `(fn [~(-> expr/schema-sym (expr/with-tag IPersistentMap))
+           :->list-expr (expr/rethrowing-anomalies
+                         (eval `(fn [~(-> expr/schema-sym (expr/with-tag IPersistentMap))
                                     ~(-> expr/args-sym (expr/with-tag RelationReader))]
                                  (let [~@(expr/batch-bindings emitted-expr)]
                                    ~(continue (fn [t c]
@@ -27,6 +28,6 @@
                                                          (dotimes [~expr/idx-sym len#]
                                                            (.writeValue ~vec-writer-sym (.nth ~lvr-sym (+ start# ~expr/idx-sym)))))))
 
-                                                  nil))))))}))
+                                                  nil)))))))}))
       (util/lru-memoize) ; <<no-commit>>
       expr/wrap-zone-id-cache-buster))
