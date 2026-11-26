@@ -6,6 +6,7 @@ import kotlinx.coroutines.runBlocking
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.ICursor
 import xtdb.arrow.RelationReader
+import xtdb.arrow.VectorIndirection.Mask
 import xtdb.operator.SelectionSpec
 import xtdb.segment.MergeTask
 import xtdb.segment.Segment
@@ -46,6 +47,14 @@ class ScanCursor(
             else -> select(iidPred.select(this).toSelection())
         }
 
+    private fun RelationReader.selectMatching(colPreds: List<SelectionSpec>): RelationReader {
+        val mask = colPreds.fold(Mask.all(rowCount)) { acc, colPred ->
+            if (acc.cardinality == 0) acc else colPred.select(this, acc)
+        }
+
+        return if (mask.cardinality == rowCount) this else select(mask)
+    }
+
     private val bufferedRels: Queue<RelationReader> = LinkedList()
 
     private fun bufferTask(task: MergeTask) {
@@ -78,9 +87,7 @@ class ScanCursor(
                     .map { it.value }
 
                 bitemporalConsumer.build()
-                    .map { childRel ->
-                        colPreds.fold(childRel) { acc, colPred -> acc.select(colPred.select(acc).toSelection()) }
-                    }
+                    .map { childRel -> childRel.selectMatching(colPreds) }
                     .filter { it.rowCount > 0 }
                     .safeMap { it.openSlice(al) }
                     .also { bufferedRels.addAll(it) }

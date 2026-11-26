@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test
 import xtdb.Bytes
 import xtdb.arrow.IID_TYPE
 import xtdb.arrow.Relation
+import xtdb.arrow.VectorIndirection.Mask
 import xtdb.arrow.VectorWriter
 import xtdb.trie.Bucketer
 import xtdb.arrow.VectorType.Companion.IID
@@ -60,6 +61,25 @@ class MultiIidSelectorTest {
 
             val result = selector.select(rel).toSelection()
             assertArrayEquals(IntArray(0), result, "empty iid set should match nothing")
+        }
+    }
+
+    @Test
+    fun `selects only the matching rows the input mask sets`() {
+        val a = Uuid.parse("80000000-0000-0000-0000-000000000000")
+        val b = Uuid.parse("90000000-0000-0000-0000-000000000000")
+        val other = Uuid.parse("a0000000-0000-0000-0000-000000000000")
+        val selector = MultiIidSelector(createIidSet(a, b))
+
+        Relation(al).use { rel ->
+            val iids = rel.vectorFor("_iid", IID_TYPE, false)
+            for (uuid in listOf(a, a, other, b, b)) {
+                iids.writeUuid(uuid)
+                rel.endRow()
+            }
+
+            val mask = Mask.ofWords(longArrayOf(0b01101), 5)
+            assertArrayEquals(intArrayOf(0, 3), selector.select(rel, mask).toSelection())
         }
     }
 

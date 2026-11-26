@@ -8,6 +8,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import xtdb.arrow.IID_TYPE
 import xtdb.arrow.Relation
+import xtdb.arrow.VectorIndirection.Mask
 import xtdb.arrow.VectorWriter
 import xtdb.arrow.VectorType.Companion.IID
 import java.nio.ByteBuffer
@@ -59,6 +60,23 @@ class SingleIidSelectorTest {
         assertArrayEquals(intArrayOf(1, 2), testUuids(before, search, search), "smaller UUIDs and no larger ones")
         assertArrayEquals(intArrayOf(0, 1), testUuids(search, search, after), "no smaller UUIDs but larger ones")
         assertArrayEquals(intArrayOf(1, 2), testUuids(before, search, search, after), "general case")
+    }
+
+    @Test
+    fun `selects only the matching rows the input mask sets`() {
+        val other = Uuid.parse("00000000-0000-0000-0000-000000000000")
+        val search = Uuid.parse("80000000-0000-0000-0000-000000000000")
+
+        Relation(al).use { rel ->
+            val iids = rel.vectorFor("_iid", IID_TYPE, false)
+            for (uuid in listOf(other, search, search, search)) {
+                iids.writeUuid(uuid)
+                rel.endRow()
+            }
+
+            val mask = Mask.ofWords(longArrayOf(0b1011), 4)
+            assertArrayEquals(intArrayOf(1, 3), SingleIidSelector(search.toByteArray()).select(rel, mask).toSelection())
+        }
     }
 
 }

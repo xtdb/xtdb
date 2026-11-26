@@ -196,6 +196,13 @@ interface VectorIndirection {
             return Mask(out, rowCount)
         }
 
+        private inline fun combine(other: Mask, op: (Long, Long) -> Long): Mask {
+            require(other.rowCount == rowCount) { "masks over $rowCount and ${other.rowCount} rows" }
+            return Mask(LongArray(words.size) { op(words[it], other.words[it]) }, rowCount)
+        }
+
+        infix fun and(other: Mask): Mask = combine(other) { a, b -> a and b }
+
         /**
          * Builds a [Mask] over [rowCount] rows from its set rows, added in strictly ascending order.
          * An out-of-order or duplicate add, a row outside `0 until rowCount`, or an add after [build] throws.

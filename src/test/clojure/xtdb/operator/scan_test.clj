@@ -367,6 +367,25 @@
                           {:db-name "xtdb", :table #xt/table xt_docs, :for-valid-time nil, :for-system-time nil, :columns [{first_name (== first_name "Ivan")} _id]}]
                         {:node tu/*node*}))))
 
+(t/deftest column-predicates-all-hold-on-every-row-a-scan-emits
+  (let [docs (for [i (range 200)]
+               (cond-> {:xt/id i, :s (str (if (even? i) "x" "y") i)}
+                 (pos? (mod i 11)) (assoc :a (mod i 7))
+                 (pos? (mod i 5)) (assoc :b (mod i 13))))
+        scan-ids (fn [col-preds]
+                   (->> (tu/query-ra [:scan {:db-name "xtdb", :table #xt/table docs, :columns (into '[_id] col-preds)}]
+                                     {:node tu/*node*})
+                        (into #{} (map :xt/id))))]
+    (xt/execute-tx tu/*node* (for [doc docs] [:put-docs :docs doc]))
+
+    (t/is (= (->> docs
+                  (filter (fn [{:keys [a b s]}]
+                            (and a (> a 2) b (< (* b 2) 16) (.startsWith ^String s "x"))))
+                  (into #{} (map :xt/id)))
+             (scan-ids '[{a (> a 2)} {b (< (* b 2) 16)} {s (like s "x%")}])))
+
+    (t/is (= #{} (scan-ids '[{a (> a 100)} {b (< (* b 2) 16)} {s (like s "x%")}])))))
+
 (t/deftest test-absent-columns
   (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:xt/id :foo, :col1 "foo1"}]
                            [:put-docs :xt_docs {:xt/id :bar, :col1 "bar1", :col2 "bar2"}]])

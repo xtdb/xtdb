@@ -15,11 +15,11 @@ class MultiIidSelector(private val iids: SortedSet<ByteArray>) : SelectionSpec {
     private val haystackPtr = ArrowBufPointer()
     private val needlePtr = ArrowBufPointer()
 
-    private fun select(readRelation: RelationReader, iids: SortedSet<ByteArray>): Mask {
+    override fun select(readRelation: RelationReader, mask: Mask): Mask {
         val res = Mask.Builder(readRelation.rowCount)
         val iidReader = readRelation["_iid"]
 
-        repeat(readRelation.rowCount) { rowIdx ->
+        for (rowIdx in mask.toSelection()) {
             if (iidReader[rowIdx] in iids) {
                 res.add(rowIdx)
             }
@@ -27,8 +27,6 @@ class MultiIidSelector(private val iids: SortedSet<ByteArray>) : SelectionSpec {
 
         return res.build()
     }
-
-    override fun select(readRelation: RelationReader) = select(readRelation, iids)
 
     private val bucketer = Bucketer.DEFAULT
 

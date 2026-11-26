@@ -16,12 +16,12 @@ class SingleIidSelector(private val iid: ByteArray) : SelectionSpec {
 
     private operator fun ByteArray.compareTo(pointer: ArrowBufPointer) = - (pointer.compareTo(this))
 
-    override fun select(readRelation: RelationReader): Mask {
+    override fun select(readRelation: RelationReader, mask: Mask): Mask {
         val ptr = ArrowBufPointer()
         val iidReader = readRelation["_iid"]
         val valueCount = iidReader.valueCount
-        val mask = Mask.Builder(valueCount)
-        if (valueCount == 0) return mask.build()
+        val res = Mask.Builder(valueCount)
+        if (valueCount == 0) return res.build()
 
         var left = 0
         var right = valueCount - 1
@@ -38,8 +38,8 @@ class SingleIidSelector(private val iid: ByteArray) : SelectionSpec {
                 right++
         }
 
-        for (row in left until right) mask.add(row)
-        return mask.build()
+        for (row in left until right) res.add(row)
+        return res.build() and mask
     }
 
     override fun close() = Unit

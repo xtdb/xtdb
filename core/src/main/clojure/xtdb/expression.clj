@@ -2674,11 +2674,17 @@
     (reify SelectionSpec$Factory
       (open [_ _al schema args]
         (let [param-types (->param-types args)]
-          (reify SelectionSpec
-            (select [_ in-rel]
-              (let [{:keys [!selection-fn]} (emit-for-batch emit-cache emit-selection expr var-syms param-types in-rel)]
-                (VectorIndirection$Mask/ofWords (rethrowing-anomalies
-                                   (@!selection-fn in-rel schema args))
-                                 (.getRowCount in-rel))))
+          (letfn [(select-all ^VectorIndirection$Mask [^RelationReader in-rel]
+                    (let [{:keys [!selection-fn]} (emit-for-batch emit-cache emit-selection expr var-syms param-types in-rel)]
+                      (VectorIndirection$Mask/ofWords (rethrowing-anomalies
+                                                        (@!selection-fn in-rel schema args))
+                                                      (.getRowCount in-rel))))]
+            (reify SelectionSpec
+              (select [_ in-rel mask]
+                (let [selected (.getCardinality mask)]
+                  (cond
+                    (zero? selected) mask
+                    (== selected (.getRowCount in-rel)) (select-all in-rel)
+                    :else (.andThen mask (select-all (.select in-rel (.toSelection mask)))))))
 
-            (close [_])))))))
+              (close [_]))))))))

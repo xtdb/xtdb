@@ -16,7 +16,7 @@
            (java.time.temporal ChronoUnit)
            org.apache.arrow.vector.types.TimeUnit
            (xtdb.api.error Incorrect)
-           (xtdb.arrow NullVector RelationReader Vector VectorReader)
+           (xtdb.arrow NullVector RelationReader Vector VectorIndirection$Mask VectorIndirection$Mask$Builder VectorReader)
            (xtdb.operator ProjectionSpec$Star)
            (xtdb.time Interval)
            (xtdb.util StringUtil)))
@@ -131,6 +131,30 @@
         (with-open [in-rel (tu/open-rel batch)]
           (t/is (= expected (vec (.toSelection (.select selection-spec in-rel))))
                 (pr-str batch)))))))
+
+(defn- mask-of ^VectorIndirection$Mask [n pred]
+  (let [b (VectorIndirection$Mask$Builder. n)]
+    (doseq [i (range n) :when (pred i)] (.add b i))
+    (.build b)))
+
+(t/deftest an-input-mask-keeps-only-the-rows-it-sets
+  (let [input-types {:var-types '{a #xt/type [:? :i64]}}
+        expr (expr/form->expr '(> a 1) input-types)
+        n 130]
+    (with-open [selection-spec (-> (expr/->expression-selection-spec expr input-types)
+                                   (.open tu/*allocator* {} vw/empty-args))]
+      (doseq [[batch-name batch] {"i64" {:a (map #(when-not (= 5 (mod % 7)) (mod % 4)) (range n))}
+                                  "f64" {:a (map #(when-not (= 5 (mod % 7)) (+ 0.5 (mod % 4))) (range n))}}
+              [mask-name pred] {"none" (constantly false)
+                                "all" (constantly true)
+                                "every third" #(zero? (mod % 3))
+                                "all but the first and last" #(< 0 % (dec n))}]
+        (with-open [in-rel (tu/open-rel batch)]
+          (let [mask (mask-of n pred)
+                selected (.select selection-spec in-rel mask)]
+            (t/is (= [n (filterv #(.isSet mask %) (.toSelection (.select selection-spec in-rel)))]
+                     [(.getRowCount selected) (vec (.toSelection selected))])
+                  (str batch-name ", " mask-name))))))))
 
 (t/deftest an-opened-projection-spec-follows-each-batchs-column-types
   (let [input-types {:var-types '{a #xt/type :i64}}
