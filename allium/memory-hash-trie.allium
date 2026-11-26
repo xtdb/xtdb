@@ -2,7 +2,7 @@
 -- memory-hash-trie.allium
 --
 -- Scope: In-memory hierarchical hash trie for row index organization
--- Includes: MemoryHashTrie, MutableMemoryHashTrie, Node (Branch/Leaf), log compaction
+-- Includes: MemoryHashTrie, Node (Branch/Leaf), log compaction
 -- Excludes: Arrow serialization, disk persistence, ArrowHashTrie
 --
 -- Purpose:
@@ -446,53 +446,6 @@ rule ToProto {
     -- Logs are ephemeral and not persisted
 
     ensures: trie.compact_logs().root_node.as_proto()
-}
-
-------------------------------------------------------------
--- Rules: Lookup operations (MutableMemoryHashTrie variant)
---
--- MutableMemoryHashTrie is a variant optimized for hash-based lookups.
--- Key differences:
---   - Uses integer hash codes instead of 16-byte IIDs
---   - Provides find/match operations for existence checks
---   - Mutable internal state (not persistent data structure)
-------------------------------------------------------------
-
-rule FindValue {
-    when: FindValue(trie, hash, comparator)
-
-    -- Find first index matching hash where comparator returns 0
-    -- Returns -1 if not found
-
-    ensures: result = first index in trie.leaves where
-        bucket_matches(index, hash) and comparator(index) = 0
-}
-
-rule ForEachMatch {
-    when: ForEachMatch(trie, hash, consumer)
-
-    -- Iterate all indices that could match the given hash
-    -- (same bucket path). Consumer receives each candidate.
-
-    ensures: for index in trie where bucket_matches(index, hash):
-        consumer(index)
-}
-
-rule AddIfNotPresent {
-    when: AddIfNotPresent(trie, hash, new_idx, comparator, on_add)
-
-    -- Add index only if no existing index matches via comparator
-    -- Returns (added_idx, was_new)
-
-    let existing = FindValue(trie, hash, comparator)
-
-    ensures:
-        if existing >= 0:
-            (existing, false)   -- already present, return existing
-        else:
-            on_add()            -- callback to write hash to vector
-            trie.add(new_idx)
-            (new_idx, true)     -- newly added
 }
 
 ------------------------------------------------------------
