@@ -21,7 +21,7 @@
            (org.apache.arrow.vector.types.pojo ArrowType$Decimal)
            (org.apache.commons.codec.binary Hex)
            (xtdb.arrow CmpOp ListValueReader RelationReader ValueBox ValueReader Vector VectorIndirection$Mask VectorReader VectorType VectorType$Listy VectorType$Mono VectorType$Nothing VectorType$Poly VectorType$Struct)
-           (xtdb.expression PgFormat ScalarPredicate ScalarPredicate$Compare ScalarPredicate$Literal$Date ScalarPredicate$Literal$Float64 ScalarPredicate$Literal$Int64 ScalarPredicate$Param ScalarPredicateSelection)
+           (xtdb.expression PgFormat ScalarPredicate ScalarPredicate$And ScalarPredicate$Compare ScalarPredicate$Literal$Date ScalarPredicate$Literal$Float64 ScalarPredicate$Literal$Int64 ScalarPredicate$Literal$Null ScalarPredicate$Or ScalarPredicate$Param ScalarPredicateSelection)
            (xtdb.operator ProjectionSpec ProjectionSpec$Factory SelectionSpec SelectionSpec$Factory)
            (xtdb.pgwire PgTypes)
            xtdb.time.Interval
@@ -2704,24 +2704,41 @@
 (defn- ->kernel-operand [{:keys [op literal param]}]
   (case op
     :literal (cond
+               (nil? literal) ScalarPredicate$Literal$Null/INSTANCE
                (instance? Long literal) (ScalarPredicate$Literal$Int64. (long literal))
                (instance? Double literal) (ScalarPredicate$Literal$Float64. (double literal))
                (instance? LocalDate literal) (ScalarPredicate$Literal$Date. literal))
     :param (ScalarPredicate$Param. (str param))
     nil))
 
-(defn- ->kernel-compare [f [l r]]
+(defn- ->kernel-compare [f [l r] negated?]
   (letfn [(leaf [{:keys [op variable]} operand-expr f]
             (when (= :variable op)
               (when-let [operand (->kernel-operand operand-expr)]
-                (ScalarPredicate$Compare. (str variable) (kernel-cmp-ops f) operand))))]
+                (ScalarPredicate$Compare. (str variable) (kernel-cmp-ops f) operand (boolean negated?)))))]
     (or (leaf l r f)
         (leaf r l (mirrored-cmp-ops f)))))
 
 (defn- ->scalar-predicate ^ScalarPredicate [expr]
-  (let [{:keys [op f args]} (prepare-expr expr)]
-    (when (and (= :call op) (contains? kernel-cmp-ops f) (= 2 (count args)))
-      (->kernel-compare f args))))
+  (letfn [(->pred [{:keys [op f args]} negated?]
+            (when (= :call op)
+              (case f
+                :not (when (= 1 (count args))
+                       (->pred (first args) (not negated?)))
+
+                (:and :or) (when-let [children (reduce (fn [acc arg]
+                                                         (if-let [child (->pred arg negated?)]
+                                                           (conj acc child)
+                                                           (reduced nil)))
+                                                       []
+                                                       args)]
+                             (if (= negated? (= f :or))
+                               (ScalarPredicate$And. children)
+                               (ScalarPredicate$Or. children)))
+
+                (when (and (contains? kernel-cmp-ops f) (= 2 (count args)))
+                  (->kernel-compare f args negated?)))))]
+    (->pred (prepare-expr expr) false)))
 
 (defn ->expression-selection-spec ^SelectionSpec$Factory [expr input-types]
   (let [generated (->generated-selection-spec expr input-types)]

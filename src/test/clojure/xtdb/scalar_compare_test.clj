@@ -38,8 +38,13 @@
       (instance? Double scalar) (.compare v op (double scalar) sel m)
       :else (.compare v op (long scalar) sel m))))
 
-(defn- vector-select [^Vector v ^ints sel row-count op scalar]
-  (mask-rows (compare-scalar v op scalar sel (VectorIndirection$Mask/all row-count))))
+(defn- vector-select [^Vector v ^ints sel row-count op scalar negated?]
+  (let [all (VectorIndirection$Mask/all row-count)
+        [n cmp-rows] (mask-rows (compare-scalar v op scalar sel all))]
+    (if negated?
+      (let [[_ not-null-rows] (mask-rows (.notNull v sel all))]
+        [n (vec (remove (set cmp-rows) not-null-rows))])
+      [n cmp-rows])))
 
 (def ^:private int-vals [0 1 -1 5 -5 127 -128 nil 3 nil 5 4 6 2 100 nil nil 5])
 (def ^:private flt-vals [0.0 -0.0 1.5 nan -1.5 5.0 nil Double/POSITIVE_INFINITY Double/NEGATIVE_INFINITY 2.5 nan nil 5.0 -0.0 3.25 0.0 nil nan])
@@ -77,10 +82,11 @@
               op '[< <= > >= == <>]
               scalar scalars
               :when (covered? col scalar)
-              :let [form (list op col scalar)]]
+              negated? [false true]
+              :let [form (if negated? (list 'not (list op col scalar)) (list op col scalar))]]
         (vswap! checked inc)
         (t/is (= (generated-select form rel args)
-                 (vector-select (.vectorFor base (name col)) sel (.getRowCount rel) op scalar))
+                 (vector-select (.vectorFor base (name col)) sel (.getRowCount rel) op scalar negated?))
               (pr-str label form)))
       (t/is (pos? @checked)))))
 
@@ -89,10 +95,11 @@
     (with-open [^RelationReader rel (open-rel [['x (types/->type '[:? :i64]) (for [i (range n)] (when-not (= 3 (mod i 7)) (* 10 i)))]])]
       (let [v (.vectorFor rel "x")
             identity-sel (int-array (range n))]
-        (doseq [op '[< >= <>]]
-          (t/is (= (vector-select v identity-sel n op 640)
-                   (vector-select v nil n op 640))
-                (pr-str op)))))))
+        (doseq [op '[< >= <>]
+                negated? [false true]]
+          (t/is (= (vector-select v identity-sel n op 640 negated?)
+                   (vector-select v nil n op 640 negated?))
+                (pr-str op negated?)))))))
 
 (t/deftest uncovered-pairs-answer-nil
   (with-open [^RelationReader base (open-rel (conj col-specs ['dec (types/->type '[:? :decimal 32 2 128]) (repeat (count int-vals) 1.25M)]))]
@@ -109,4 +116,5 @@
               :let [scalar (if (= col 'd) (LocalDate/ofEpochDay 0) 0)]
               [label ^Vector v ^VectorIndirection$Mask m sel] [["vector" (.vectorFor base (name col)) (VectorIndirection$Mask/all (inc n)) nil]
                                                                 ["selection" (.vectorFor base (name col)) (VectorIndirection$Mask/all 3) (int-array [0 1])]]]
-        (t/is (thrown? Fault (compare-scalar v '>= scalar sel m)) (str col " compare, " label))))))
+        (t/is (thrown? Fault (compare-scalar v '>= scalar sel m)) (str col " compare, " label))
+        (t/is (thrown? Fault (.notNull v sel m)) (str col " notNull, " label))))))

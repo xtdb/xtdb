@@ -33,10 +33,11 @@ class ScalarPredicateTest {
     )
 
     private val i64Bounds = listOf(
-        Bound.Compare("x", CmpOp.LT, Literal.Int64(640)),
-        Bound.Compare("x", CmpOp.GTE, Literal.Int64(25)),
-        Bound.Compare("x", CmpOp.EQ, Literal.Int64(320)),
-        Bound.Compare("x", CmpOp.GT, Literal.Float64(100.5)),
+        Bound.Compare("x", CmpOp.LT, Literal.Int64(640), false),
+        Bound.Compare("x", CmpOp.GTE, Literal.Int64(25), false),
+        Bound.Compare("x", CmpOp.EQ, Literal.Int64(320), true),
+        Bound.Compare("x", CmpOp.GT, Literal.Float64(100.5), true),
+        Bound.Unknown("x"),
     )
 
     private fun checkMaskedAgreesWithSelection(vec: Vector, bounds: List<Bound>) {

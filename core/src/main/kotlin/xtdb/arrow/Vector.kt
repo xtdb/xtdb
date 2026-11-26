@@ -73,6 +73,9 @@ sealed class Vector : VectorReader, VectorWriter {
     /** As the [Long] overload. */
     open fun compare(op: CmpOp, rhs: LocalDate, sel: IntArray?, mask: Mask): Mask? = null
 
+    /** The rows of [mask] that are non-null, with [sel] and [mask] as for [compare]; null where this vector doesn't cover it. */
+    open fun notNull(sel: IntArray?, mask: Mask): Mask? = null
+
     override fun writeNull() {
         if (!nullable) nullable = true
         writeUndefined()

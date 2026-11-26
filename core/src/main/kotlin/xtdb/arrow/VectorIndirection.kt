@@ -236,6 +236,8 @@ interface VectorIndirection {
         }
 
         infix fun and(other: Mask): Mask = combine(other) { a, b -> a and b }
+        infix fun or(other: Mask): Mask = combine(other) { a, b -> a or b }
+        infix fun andNot(other: Mask): Mask = combine(other) { a, b -> a and b.inv() }
 
         /**
          * Builds a [Mask] over [rowCount] rows from its set rows, added in strictly ascending order.

@@ -241,6 +241,26 @@ class VectorIndirectionMaskTest {
         shouldThrow<IllegalArgumentException> { rowMask(10) { true }.extract(rowMask(9) { true }) }
     }
 
+    @Test
+    fun `and, or and andNot combine row by row, across word boundaries and a partial last word`() {
+        for (n in listOf(0, 63, 64, 130)) {
+            val a = rowMask(n) { it % 2 == 0 || it in 62..65 }
+            val b = rowMask(n) { it % 3 == 0 }
+
+            (a and b).toSelection().toList() shouldBe (0 until n).filter { a.isSet(it) && b.isSet(it) }
+            (a or b).toSelection().toList() shouldBe (0 until n).filter { a.isSet(it) || b.isSet(it) }
+            (a andNot b).toSelection().toList() shouldBe (0 until n).filter { a.isSet(it) && !b.isSet(it) }
+            (Mask.all(n) andNot b).cardinality shouldBe n - b.cardinality
+        }
+    }
+
+    @Test
+    fun `combining needs masks over the same rows`() {
+        shouldThrow<IllegalArgumentException> { Mask.all(10) and Mask.all(11) }
+        shouldThrow<IllegalArgumentException> { Mask.all(10) or Mask.all(11) }
+        shouldThrow<IllegalArgumentException> { Mask.all(10) andNot Mask.all(11) }
+    }
+
     private fun built(rowCount: Int, rows: List<Int>): Mask =
         Mask.Builder(rowCount).apply { rows.forEach(::add) }.build()
 
@@ -332,20 +352,5 @@ class VectorIndirectionMaskTest {
             mask.cardinality shouldBe n
             mask.toSelection().toList() shouldBe (0 until n).toList()
         }
-    }
-
-    @Test
-    fun `and combines row by row, across word boundaries and a partial last word`() {
-        for (n in listOf(0, 63, 64, 130)) {
-            val a = rowMask(n) { it % 2 == 0 || it in 62..65 }
-            val b = rowMask(n) { it % 3 == 0 }
-
-            (a and b).toSelection().toList() shouldBe (0 until n).filter { a.isSet(it) && b.isSet(it) }
-        }
-    }
-
-    @Test
-    fun `combining needs masks over the same rows`() {
-        shouldThrow<IllegalArgumentException> { Mask.all(10) and Mask.all(11) }
     }
 }

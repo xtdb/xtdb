@@ -73,3 +73,6 @@ internal inline fun FixedWidthVector.cmpDoubles(
     CmpOp.EQ -> evalWords(validityBuffer, valueCount, sel, mask) { read(it) == rhs }
     CmpOp.NEQ -> evalWords(validityBuffer, valueCount, sel, mask) { read(it) != rhs }
 }
+
+internal fun notNullBits(validity: BitBuffer?, valueCount: Int, sel: IntArray?, mask: Mask): Mask =
+    evalWords(validity, valueCount, sel, mask) { true }

@@ -100,17 +100,55 @@
             (doseq [form [(list op col scalar)
                           (list op scalar col)
                           (list op col '?p)
-                          (list op '?p col)]]
+                          (list op '?p col)
+                          (list 'not (list op col scalar))
+                          (list 'not (list op '?p col))]]
               (check-form form rel args)
               (when (kernel-answers? form rel args)
                 (swap! !answered conj [col (scalar-domain scalar)]))))))
 
       (t/is (= covered-pairs @!answered) "every covered pair is answered by the kernel, not the fallback"))))
 
+(t/deftest comparisons-with-null-equal-generated-code
+  (with-open [base (open-rel col-specs)
+              args (tu/open-args {:p nil})]
+    (doseq [[view-name rel] (views base)
+            [col _ _] col-specs
+            op '[< == <>]
+            form [(list op col nil)
+                  (list op nil col)
+                  (list op col '?p)
+                  (list 'not (list op col nil))
+                  (list 'not (list op col '?p))]]
+      (t/testing view-name
+        (check-form form rel args)
+        (t/is (kernel-answers? form rel args) (pr-str form))))))
+
+(t/deftest combinations-equal-generated-code
+  (with-open [base (open-rel col-specs)
+              args (tu/open-args {:p 5 :q 2.5 :dt (LocalDate/ofEpochDay 18262)})]
+    (doseq [[view-name rel] (views base)
+            form '[(and (> i64 0) (< f64 3.0))
+                   (or (> i32 300000) (< f64 ?q))
+                   (and (>= i32 0) (<= i32 500000) (< f64 ?q))
+                   (not (and (>= i32 0) (<= i64 ?p)))
+                   (not (or (== i32 500000) (<> f64 5.0)))
+                   (and (or (< d ?dt) (> d ?dt)) (not (== i32 300000)))
+                   (not (not (< f64 ##NaN)))
+                   (and (not (< f64 5.0)) (not (> f64 5.0)))
+                   (or (and (> i32 0) (< i32 500000)) (not (and (> f64 0.0) (< f64 ?q))))
+                   (and (< i32 -1000000) (> f64 0.0))
+                   (or (< i64 nil) (> f64 0.0))
+                   (not (or (< i64 nil) (> f64 0.0)))
+                   (between i32 0 500000)]]
+      (t/testing view-name
+        (check-form form rel args)
+        (t/is (kernel-answers? form rel args) (pr-str form))))))
+
 (t/deftest non-matching-shapes-keep-generated-code
   (let [input-types {:var-types {'a (types/->type :i64), 'b (types/->type :i64), 's (types/->type :utf8)}, :param-types {}}]
     (doseq [form '[(< a b) (< (+ a 1) 3) (== s :x) (< s "x") (>= "x" s) (and (< a 1) (< a b)) (nil? a) (< a 1.5M)
-                   (< a nil) (not (< a 1)) (and (< a 1) (> a 0)) (or (< a 1) (> a 2)) (== s "x")]]
+                   (== s "x")]]
       (t/is (not (instance? ScalarPredicateSelection (kernel-factory form input-types))) (pr-str form)))))
 
 (t/deftest recognised-expressions-the-ee-cannot-compile-throw-at-plan-time
@@ -130,12 +168,11 @@
                 desc))))))
 
 (t/deftest uncovered-params-take-generated-code-for-the-query
-  (with-open [rel (open-rel [['x (types/->type '[:? :i64]) [1 nil 3 0]]])]
-    (doseq [p [2.5M nil]]
-      (with-open [args (tu/open-args {:p p})]
-        (let [form '(< x ?p)]
-          (t/is (not (kernel-answers? form rel args)) (pr-str p))
-          (check-form form rel args))))))
+  (with-open [rel (open-rel [['x (types/->type '[:? :i64]) [1 nil 3 0]]])
+              args (tu/open-args {:p 2.5M})]
+    (let [form '(< x ?p)]
+      (t/is (not (kernel-answers? form rel args)))
+      (check-form form rel args))))
 
 (defn- select-under [^SelectionSpec$Factory factory ^RelationReader rel args ^VectorIndirection$Mask mask]
   (with-open [spec (.open factory tu/*allocator* {} args)]
@@ -153,7 +190,9 @@
               args (tu/open-args {:p 5 :q 2.5})]
     (doseq [[view-name ^RelationReader rel] (views base)
             form '[(> i32 0)
-                   (< f64 ?q)
+                   (not (<> f64 5.0))
+                   (and (> i64 0) (< f64 ?q))
+                   (or (> i32 300000) (< f64 ?q))
                    (< i64 nil)
                    (nil? f64)]
             :let [input-types (input-types rel args)]
