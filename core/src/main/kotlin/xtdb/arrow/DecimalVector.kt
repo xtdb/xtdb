@@ -48,8 +48,8 @@ class DecimalVector private constructor(
     override fun getAsDouble(idx: Int): Double = getDecimal(idx).toDouble()
 
     // a decimal compares exactly, which comparing its double wouldn't
-    override fun compare(op: CmpOp, rhs: Long, mask: Mask): Mask? = null
-    override fun compare(op: CmpOp, rhs: Double, mask: Mask): Mask? = null
+    override fun compare(op: CmpOp, rhs: Long, sel: IntArray?, mask: Mask): Mask? = null
+    override fun compare(op: CmpOp, rhs: Double, sel: IntArray?, mask: Mask): Mask? = null
 
     override fun setBigDecimal(idx: Int, v: BigDecimal) {
         ensureCapacity(idx + 1)

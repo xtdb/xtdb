@@ -31,15 +31,15 @@
 
 (def ^:private cmp-ops {'< CmpOp/LT, '<= CmpOp/LTE, '> CmpOp/GT, '>= CmpOp/GTE, '== CmpOp/EQ, '<> CmpOp/NEQ})
 
-(defn- compare-scalar ^VectorIndirection$Mask [^Vector v op scalar ^VectorIndirection$Mask m]
+(defn- compare-scalar ^VectorIndirection$Mask [^Vector v op scalar ^ints sel ^VectorIndirection$Mask m]
   (let [^CmpOp op (cmp-ops op)]
     (cond
-      (instance? LocalDate scalar) (.compare v op ^LocalDate scalar m)
-      (instance? Double scalar) (.compare v op (double scalar) m)
-      :else (.compare v op (long scalar) m))))
+      (instance? LocalDate scalar) (.compare v op ^LocalDate scalar sel m)
+      (instance? Double scalar) (.compare v op (double scalar) sel m)
+      :else (.compare v op (long scalar) sel m))))
 
-(defn- vector-select [^Vector v row-count op scalar]
-  (mask-rows (compare-scalar v op scalar (VectorIndirection$Mask/all row-count))))
+(defn- vector-select [^Vector v ^ints sel row-count op scalar]
+  (mask-rows (compare-scalar v op scalar sel (VectorIndirection$Mask/all row-count))))
 
 (def ^:private int-vals [0 1 -1 5 -5 127 -128 nil 3 nil 5 4 6 2 100 nil nil 5])
 (def ^:private flt-vals [0.0 -0.0 1.5 nan -1.5 5.0 nil Double/POSITIVE_INFINITY Double/NEGATIVE_INFINITY 2.5 nan nil 5.0 -0.0 3.25 0.0 nil nan])
@@ -59,33 +59,54 @@
 (defn- covered? [col scalar]
   (if (= col 'd) (instance? LocalDate scalar) (not (instance? LocalDate scalar))))
 
+(defn- cases [^RelationReader base]
+  (let [n (.getRowCount base)]
+    (for [[label idxs] [["vector" nil]
+                        ["sel: even rows" (filter even? (range n))]
+                        ["sel: reversed" (reverse (range n))]
+                        ["sel: each row twice, out of order" (concat (reverse (range n)) (range n))]]
+          :let [^ints sel (some-> idxs int-array)]]
+      {:label label, :rel (if sel (.select base sel) base), :sel sel})))
+
 (t/deftest scalar-comparisons-equal-generated-code
-  (with-open [^RelationReader rel (open-rel col-specs)
+  (with-open [^RelationReader base (open-rel col-specs)
               args (tu/open-args {})]
     (let [checked (volatile! 0)]
-      (doseq [[col _ _] col-specs
+      (doseq [{:keys [label ^RelationReader rel sel]} (cases base)
+              [col _ _] col-specs
               op '[< <= > >= == <>]
               scalar scalars
               :when (covered? col scalar)
               :let [form (list op col scalar)]]
         (vswap! checked inc)
         (t/is (= (generated-select form rel args)
-                 (vector-select (.vectorFor rel (name col)) (.getRowCount rel) op scalar))
-              (pr-str form)))
+                 (vector-select (.vectorFor base (name col)) sel (.getRowCount rel) op scalar))
+              (pr-str label form)))
       (t/is (pos? @checked)))))
+
+(t/deftest whole-validity-words-agree-with-gathered-validity
+  (let [n 150]
+    (with-open [^RelationReader rel (open-rel [['x (types/->type '[:? :i64]) (for [i (range n)] (when-not (= 3 (mod i 7)) (* 10 i)))]])]
+      (let [v (.vectorFor rel "x")
+            identity-sel (int-array (range n))]
+        (doseq [op '[< >= <>]]
+          (t/is (= (vector-select v identity-sel n op 640)
+                   (vector-select v nil n op 640))
+                (pr-str op)))))))
 
 (t/deftest uncovered-pairs-answer-nil
   (with-open [^RelationReader base (open-rel (conj col-specs ['dec (types/->type '[:? :decimal 32 2 128]) (repeat (count int-vals) 1.25M)]))]
     (let [all (VectorIndirection$Mask/all (.getRowCount base))]
-      (t/is (nil? (compare-scalar (.vectorFor base "d") '< 5 all)))
-      (t/is (nil? (compare-scalar (.vectorFor base "i64") '< (LocalDate/ofEpochDay 1) all)))
-      (t/is (nil? (compare-scalar (.vectorFor base "dec") '< 5 all)))
-      (t/is (nil? (compare-scalar (.vectorFor base "dec") '< 2.5 all))))))
+      (t/is (nil? (compare-scalar (.vectorFor base "d") '< 5 nil all)))
+      (t/is (nil? (compare-scalar (.vectorFor base "i64") '< (LocalDate/ofEpochDay 1) nil all)))
+      (t/is (nil? (compare-scalar (.vectorFor base "dec") '< 5 nil all)))
+      (t/is (nil? (compare-scalar (.vectorFor base "dec") '< 2.5 nil all))))))
 
 (t/deftest comparisons-refuse-a-mask-longer-than-the-vector
   (with-open [^RelationReader base (open-rel col-specs)]
     (let [n (.getRowCount base)]
       (doseq [[col _ _] col-specs
-              :let [scalar (if (= col 'd) (LocalDate/ofEpochDay 0) 0)]]
-        (t/is (thrown? Fault (compare-scalar (.vectorFor base (name col)) '>= scalar (VectorIndirection$Mask/all (inc n))))
-              (str col " compare"))))))
+              :let [scalar (if (= col 'd) (LocalDate/ofEpochDay 0) 0)]
+              [label ^Vector v ^VectorIndirection$Mask m sel] [["vector" (.vectorFor base (name col)) (VectorIndirection$Mask/all (inc n)) nil]
+                                                                ["selection" (.vectorFor base (name col)) (VectorIndirection$Mask/all 3) (int-array [0 1])]]]
+        (t/is (thrown? Fault (compare-scalar v '>= scalar sel m)) (str col " compare, " label))))))

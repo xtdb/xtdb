@@ -32,8 +32,8 @@ class ByteVector private constructor(
     override fun getAsFloat(idx: Int) = getByte(idx).toFloat()
     override fun getAsDouble(idx: Int) = getByte(idx).toDouble()
 
-    override fun compare(op: CmpOp, rhs: Long, mask: Mask) = cmpLongs(op, rhs, mask) { dataBuffer.getByte(it).toLong() }
-    override fun compare(op: CmpOp, rhs: Double, mask: Mask) = cmpDoubles(op, rhs, mask) { dataBuffer.getByte(it).toDouble() }
+    override fun compare(op: CmpOp, rhs: Long, sel: IntArray?, mask: Mask) = cmpLongs(op, rhs, sel, mask) { dataBuffer.getByte(it).toLong() }
+    override fun compare(op: CmpOp, rhs: Double, sel: IntArray?, mask: Mask) = cmpDoubles(op, rhs, sel, mask) { dataBuffer.getByte(it).toDouble() }
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = getByte(idx)
 

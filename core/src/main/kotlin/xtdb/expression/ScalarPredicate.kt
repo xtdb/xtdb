@@ -4,9 +4,11 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.DateUnit
 import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.arrow.CmpOp
+import xtdb.arrow.IndirectVector
 import xtdb.arrow.RelationReader
 import xtdb.arrow.Vector
 import xtdb.arrow.VectorIndirection.Mask
+import xtdb.arrow.VectorReader
 import xtdb.operator.SelectionSpec
 import java.time.LocalDate
 
@@ -24,18 +26,18 @@ sealed interface ScalarPredicate {
     sealed interface Operand
 
     sealed interface Literal : Operand {
-        fun compare(vec: Vector, op: CmpOp, mask: Mask): Mask?
+        fun compare(vec: Vector, op: CmpOp, sel: IntArray?, mask: Mask): Mask?
 
         data class Int64(val value: Long) : Literal {
-            override fun compare(vec: Vector, op: CmpOp, mask: Mask) = vec.compare(op, value, mask)
+            override fun compare(vec: Vector, op: CmpOp, sel: IntArray?, mask: Mask) = vec.compare(op, value, sel, mask)
         }
 
         data class Float64(val value: Double) : Literal {
-            override fun compare(vec: Vector, op: CmpOp, mask: Mask) = vec.compare(op, value, mask)
+            override fun compare(vec: Vector, op: CmpOp, sel: IntArray?, mask: Mask) = vec.compare(op, value, sel, mask)
         }
 
         data class Date(val value: LocalDate) : Literal {
-            override fun compare(vec: Vector, op: CmpOp, mask: Mask) = vec.compare(op, value, mask)
+            override fun compare(vec: Vector, op: CmpOp, sel: IntArray?, mask: Mask) = vec.compare(op, value, sel, mask)
         }
     }
 
@@ -77,10 +79,26 @@ sealed interface ScalarPredicate {
 
         data class Compare(val col: String, val op: CmpOp, val value: Literal) : Bound {
             override fun select(rel: RelationReader, mask: Mask): Mask? =
-                (rel.vectorForOrNull(col) as? Vector)?.let { value.compare(it, op, mask) }
+                rel.vectorForOrNull(col)?.onVector(mask) { vec, sel, m -> value.compare(vec, op, sel, m) }
         }
     }
 }
+
+private inline fun VectorReader.onVector(mask: Mask, f: (Vector, IntArray?, Mask) -> Mask?): Mask? =
+    when (this) {
+        is Vector -> f(this, null, mask)
+
+        is IndirectVector -> when (val inner = inner) {
+            is Vector -> when (val ind = sel) {
+                is Mask -> f(inner, null, ind.andThen(mask))?.let(ind::extract)
+                else -> f(inner, ind.idxs, mask)
+            }
+
+            else -> null
+        }
+
+        else -> null
+    }
 
 /**
  * Selects with [predicate] wherever the vectors can answer it, and otherwise with [generated]:

@@ -31,8 +31,8 @@ class LongVector private constructor(
     override fun getAsFloat(idx: Int) = getLong(idx).toFloat()
     override fun getAsDouble(idx: Int) = getLong(idx).toDouble()
 
-    override fun compare(op: CmpOp, rhs: Long, mask: Mask) = cmpLongs(op, rhs, mask) { dataBuffer.getLong(it) }
-    override fun compare(op: CmpOp, rhs: Double, mask: Mask) = cmpDoubles(op, rhs, mask) { dataBuffer.getLong(it).toDouble() }
+    override fun compare(op: CmpOp, rhs: Long, sel: IntArray?, mask: Mask) = cmpLongs(op, rhs, sel, mask) { dataBuffer.getLong(it) }
+    override fun compare(op: CmpOp, rhs: Double, sel: IntArray?, mask: Mask) = cmpDoubles(op, rhs, sel, mask) { dataBuffer.getLong(it).toDouble() }
 
     fun increment(idx: Int, v: Long) {
         ensureCapacity(idx + 1)

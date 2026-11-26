@@ -10,7 +10,7 @@ import xtdb.arrow.agg.VectorSummer
 import xtdb.util.Hasher
 import java.nio.ByteBuffer
 
-class IndirectVector(private val inner: VectorReader, internal val sel: VectorIndirection) : VectorReader, LongLongVectorReader {
+class IndirectVector(internal val inner: VectorReader, internal val sel: VectorIndirection) : VectorReader, LongLongVectorReader {
     override val valueCount: Int get() = sel.valueCount()
     override val nullable: Boolean get() = inner.nullable
     override val arrowType: ArrowType get() = inner.arrowType

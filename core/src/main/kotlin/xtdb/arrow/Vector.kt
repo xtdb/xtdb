@@ -62,15 +62,16 @@ sealed class Vector : VectorReader, VectorWriter {
 
     /**
      * Compares each row of [mask] with [rhs]: the answer has the rows of [mask] that are non-null and compare true.
+     * [sel] picks this vector's rows, and [mask] is over the selection's positions: bit `k` of [mask] is row `sel[k]`, or row `k` where [sel] is null.
      * A null answer means this vector doesn't cover the comparison with that scalar's domain.
      */
-    open fun compare(op: CmpOp, rhs: Long, mask: Mask): Mask? = null
+    open fun compare(op: CmpOp, rhs: Long, sel: IntArray?, mask: Mask): Mask? = null
 
     /** As the [Long] overload. */
-    open fun compare(op: CmpOp, rhs: Double, mask: Mask): Mask? = null
+    open fun compare(op: CmpOp, rhs: Double, sel: IntArray?, mask: Mask): Mask? = null
 
     /** As the [Long] overload. */
-    open fun compare(op: CmpOp, rhs: LocalDate, mask: Mask): Mask? = null
+    open fun compare(op: CmpOp, rhs: LocalDate, sel: IntArray?, mask: Mask): Mask? = null
 
     override fun writeNull() {
         if (!nullable) nullable = true

@@ -1,6 +1,7 @@
 package xtdb.arrow
 
 import java.lang.Long.bitCount
+import java.lang.Long.compress
 import java.lang.Long.expand
 import java.lang.Long.numberOfTrailingZeros
 
@@ -194,6 +195,39 @@ interface VectorIndirection {
                 k += n
             }
             return Mask(out, rowCount)
+        }
+
+        /**
+         * Composition's inverse: the mask over this mask's set rows that keeps what [refined] keeps, so `andThen(extract(refined))` keeps the rows both set.
+         * Where this mask picks a view's rows out of an underlying vector, [andThen] takes a mask over the view's rows down to the vector's, and this brings one back.
+         *
+         * [refined] is over this mask's [rowCount] rows.
+         * Bit `k` of the result is its value at this mask's `k`th set row, and rows of [refined] this mask doesn't set are dropped.
+         */
+        fun extract(refined: Mask): Mask {
+            require(refined.rowCount == rowCount) { "refined mask is over ${refined.rowCount} rows, this over $rowCount" }
+
+            val out = LongArray((cardinality + 63) ushr 6)
+            var k = 0
+            for (w in words.indices) {
+                val word = words[w]
+                // not only a fast path: once `k` has reached `cardinality`, a trailing empty word's `outWord` is past the end of `out`
+                if (word == 0L) continue
+
+                val bits = compress(refined.words[w], word)
+
+                val n = bitCount(word)
+                val outWord = k ushr 6
+                val shift = k and 63
+                out[outWord] = out[outWord] or (bits shl shift)
+
+                // `bits shl shift` drops the top `shift` bits of `bits`; where any of them were in use, they start the next output word.
+                // `shift` is non-zero here (`n` is at most 64), so this never shifts by 64, which the JVM takes mod 64 as a shift by 0.
+                // The next word has nothing in it yet, so this assigns rather than ORs.
+                if (shift + n > 64) out[outWord + 1] = bits ushr (64 - shift)
+                k += n
+            }
+            return Mask(out, cardinality)
         }
 
         private inline fun combine(other: Mask, op: (Long, Long) -> Long): Mask {

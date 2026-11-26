@@ -29,7 +29,7 @@ class DoubleVector private constructor(
     override fun getAsFloat(idx: Int) = getDouble(idx).toFloat()
     override fun getAsDouble(idx: Int) = getDouble(idx)
 
-    override fun compare(op: CmpOp, rhs: Double, mask: Mask) = cmpDoubles(op, rhs, mask) { dataBuffer.getDouble(it) }
+    override fun compare(op: CmpOp, rhs: Double, sel: IntArray?, mask: Mask) = cmpDoubles(op, rhs, sel, mask) { dataBuffer.getDouble(it) }
 
     fun increment(idx: Int, v: Double) {
         ensureCapacity(idx + 1)

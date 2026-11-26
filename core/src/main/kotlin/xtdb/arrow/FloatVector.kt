@@ -34,7 +34,7 @@ class FloatVector private constructor(
     override fun getAsFloat(idx: Int) = getFloat(idx)
     override fun getAsDouble(idx: Int) = getFloat(idx).toDouble()
 
-    override fun compare(op: CmpOp, rhs: Double, mask: Mask) = cmpDoubles(op, rhs, mask) { dataBuffer.getFloat(it).toDouble() }
+    override fun compare(op: CmpOp, rhs: Double, sel: IntArray?, mask: Mask) = cmpDoubles(op, rhs, sel, mask) { dataBuffer.getFloat(it).toDouble() }
 
     fun increment(idx: Int, v: Float) {
         ensureCapacity(idx + 1)

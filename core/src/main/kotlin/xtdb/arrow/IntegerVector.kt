@@ -11,7 +11,7 @@ sealed class IntegerVector : NumericVector() {
 
     abstract override fun openSlice(al: BufferAllocator): IntegerVector
 
-    abstract override fun compare(op: CmpOp, rhs: Long, mask: Mask): Mask
+    abstract override fun compare(op: CmpOp, rhs: Long, sel: IntArray?, mask: Mask): Mask
 
     override fun sumInto(outVec: Vector): VectorSummer =
         when (outVec) {

@@ -56,6 +56,14 @@
     (doseq [i (range n) :when (pred i)] (.add b i))
     (.build b)))
 
+(defn- views [^RelationReader rel]
+  (let [n (.getRowCount rel)]
+    {"rel" rel
+     "selection" (.select rel (int-array (filter even? (range n))))
+     "reversed selection" (.select rel (int-array (reverse (range n))))
+     "selection of each row twice, out of order" (.select rel (int-array (concat (reverse (range n)) (range n))))
+     "masked" (.select rel (mask-of n #(not= 1 (mod % 3))))}))
+
 (def ^:private int-vals [0 1 -1 5 -5 127 -128 nil 3 nil 5 4 6 2 100 nil nil 5])
 (def ^:private flt-vals [0.0 -0.0 1.5 nan -1.5 5.0 nil Double/POSITIVE_INFINITY Double/NEGATIVE_INFINITY 2.5 nan nil 5.0 -0.0 3.25 0.0 nil nan])
 (def ^:private date-vals (concat [nil] (for [d [0 1 18000 18262 18263 -5 19000]] (LocalDate/ofEpochDay d)) (repeat 10 nil)))
@@ -80,13 +88,14 @@
     ['f32 :long] ['f32 :double] ['f64 :long] ['f64 :double] ['d :date]})
 
 (t/deftest comparisons-equal-generated-code
-  (with-open [rel (open-rel col-specs)]
+  (with-open [base (open-rel col-specs)]
     (let [!answered (atom #{})]
-      (doseq [[col _ _] col-specs
+      (doseq [[view-name rel] (views base)
+              [col _ _] col-specs
               scalar scalars
               :when (contains? covered-pairs [col (scalar-domain scalar)])
               op '[< <= > >= == <>]]
-        (t/testing (str col " " op " " (pr-str scalar))
+        (t/testing (str view-name " " col " " op " " (pr-str scalar))
           (with-open [args (tu/open-args {:p scalar})]
             (doseq [form [(list op col scalar)
                           (list op scalar col)
@@ -140,9 +149,10 @@
    "all but the first and last" (mask-of n #(< 0 % (dec n)))})
 
 (t/deftest an-input-mask-keeps-only-the-rows-it-sets
-  (with-open [rel (open-rel col-specs)
+  (with-open [base (open-rel col-specs)
               args (tu/open-args {:p 5 :q 2.5})]
-    (doseq [form '[(> i32 0)
+    (doseq [[view-name ^RelationReader rel] (views base)
+            form '[(> i32 0)
                    (< f64 ?q)
                    (< i64 nil)
                    (nil? f64)]
@@ -153,7 +163,7 @@
       (t/is (= (let [[n rows] (select-rows factory rel args)]
                  [n (filterv #(.isSet mask %) rows)])
                (select-under factory rel args mask))
-            (str factory-name " " (pr-str form) ", " mask-name)))))
+            (str view-name ", " factory-name " " (pr-str form) ", " mask-name)))))
 
 (t/deftest an-input-mask-carries-through-the-per-batch-fallback
   (with-open [planned (open-rel [['x (types/->type '[:? :i64]) [1 nil 3]]])

@@ -61,8 +61,8 @@ class IntVector private constructor(
     override fun getAsFloat(idx: Int) = getInt(idx).toFloat()
     override fun getAsDouble(idx: Int) = getInt(idx).toDouble()
 
-    override fun compare(op: CmpOp, rhs: Long, mask: Mask) = cmpLongs(op, rhs, mask) { dataBuffer.getInt(it).toLong() }
-    override fun compare(op: CmpOp, rhs: Double, mask: Mask) = cmpDoubles(op, rhs, mask) { dataBuffer.getInt(it).toDouble() }
+    override fun compare(op: CmpOp, rhs: Long, sel: IntArray?, mask: Mask) = cmpLongs(op, rhs, sel, mask) { dataBuffer.getInt(it).toLong() }
+    override fun compare(op: CmpOp, rhs: Double, sel: IntArray?, mask: Mask) = cmpDoubles(op, rhs, sel, mask) { dataBuffer.getInt(it).toDouble() }
 
     fun increment(idx: Int, v: Int) {
         ensureCapacity(idx + 1)
