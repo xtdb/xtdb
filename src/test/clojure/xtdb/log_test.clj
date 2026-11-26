@@ -9,9 +9,10 @@
             [xtdb.time :as time]
             [xtdb.tx-ops :as tx-ops]
             [xtdb.util :as util])
-  (:import [java.time Duration Instant InstantSource]
+  (:import com.google.protobuf.ByteString
+           [java.time Duration Instant InstantSource]
            xtdb.api.Xtdb$Config
-           [xtdb.api.log InMemoryLog Log$Factory ReadOnlyLog
+           [xtdb.api.log IngestionStoppedException InMemoryLog Log$Factory ReadOnlyLog
             ReplicaMessage$ResolvedTx SourceMessage$DetachDatabase]
            xtdb.arrow.Relation))
 
@@ -387,3 +388,26 @@
           (t/is (= 1 (.getLatestSourceMsgId watchers)))
           (t/is (nil? (.getException watchers))
                 "no IngestionStoppedException — leader transitioned cleanly"))))))
+
+(t/deftest failed-apply-names-its-record-in-the-ingestion-error-6505
+  (let [source-log (InMemoryLog. (InstantSource/system) 0)
+        replica-log (InMemoryLog. (InstantSource/system) 0)
+        log-factory (reify Log$Factory
+                      (openSourceLog [_ _ _] source-log)
+                      (openReadOnlySourceLog [_ _ _] (ReadOnlyLog. source-log))
+                      (openReplicaLog [_ _ _] replica-log)
+                      (openReadOnlyReplicaLog [_ _ _] (ReadOnlyLog. replica-log))
+                      (writeTo [_ _]))]
+
+    (.appendMessageBlocking replica-log
+                            (ReplicaMessage$ResolvedTx. 0 (Instant/now) true nil
+                                                        {"public/docs" (ByteString/copyFrom (byte-array [1 2 3]))}
+                                                        nil nil nil 0 nil)
+                            0)
+
+    (with-open [node (xtn/start-node (doto (Xtdb$Config.)
+                                       (.log log-factory)
+                                       (.readOnlyDatabases true)))]
+      (let [primary (.databaseOrNull (db/<-node node) "xtdb")]
+        (t/is (thrown? IngestionStoppedException (.awaitTxBlocking primary 0 (Duration/ofSeconds 5))))
+        (t/is (= 0 (.getMsgId (.getIngestionError primary))))))))

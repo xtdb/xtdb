@@ -1,5 +1,6 @@
 package xtdb.indexer
 
+import com.google.protobuf.ByteString
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.mockk
@@ -12,6 +13,7 @@ import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import xtdb.TestPartition
+import xtdb.api.log.IngestionStoppedException
 import xtdb.api.log.Log
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.Watchers
@@ -108,6 +110,26 @@ class FollowerLogProcessorTest {
         )
 
         assertThrows<Fault> { proc.processRecords(records) }    }
+
+    @Test
+    fun `a record that fails to apply is named in the error that stops ingestion`() {
+        val proc = makeProcessor()
+
+        val stopped = assertThrows<IngestionStoppedException> {
+            proc.handleRecord(
+                record(
+                    3,
+                    ReplicaMessage.ResolvedTx(
+                        1, Instant.now(), true, null,
+                        mapOf("public/docs" to ByteString.copyFrom(byteArrayOf(1, 2, 3))),
+                        termId = TERM
+                    )
+                )
+            )
+        }
+
+        assertEquals(3L, stopped.msgId)
+    }
 
     @Test
     fun `the records a block was holding apply when it closes`() =
