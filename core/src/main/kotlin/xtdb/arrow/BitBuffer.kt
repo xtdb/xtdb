@@ -57,6 +57,17 @@ internal class BitBuffer private constructor(
 
     fun getBoolean(idx: Int) = BitVectorHelper.get(buf, idx) == 1
 
+    fun wordAt(w: Int): Long {
+        val off = w.toLong() * 8
+        if (off + 8 <= buf.capacity()) return buf.getLong(off)
+        var word = 0L
+        var b = 0
+        while (off + b < buf.capacity()) {
+            word = word or ((buf.getByte(off + b).toLong() and 0xff) shl (8 * b)); b++
+        }
+        return word
+    }
+
     fun setBit(bitIdx: Int, bit: Int) = BitVectorHelper.setValidityBit(buf, bitIdx, bit)
 
     fun writeBit(bitIdx: Int, bit: Int) {

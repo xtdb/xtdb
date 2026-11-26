@@ -18,6 +18,7 @@ import org.apache.arrow.vector.types.pojo.DictionaryEncoding
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.InternalApi
+import xtdb.arrow.VectorIndirection.Mask
 import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.arrow.extensions.IntervalMDMType
 import xtdb.arrow.extensions.KeywordType
@@ -34,6 +35,7 @@ import xtdb.util.Hasher
 import xtdb.util.closeAllOnCatch
 import xtdb.util.closeOnCatch
 import xtdb.util.safeMap
+import java.time.LocalDate
 import java.time.ZoneId
 import org.apache.arrow.vector.NullVector as ArrowNullVector
 
@@ -57,6 +59,25 @@ sealed class Vector : VectorReader, VectorWriter {
     abstract override var valueCount: Int; internal set
 
     abstract override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?)
+
+    /**
+     * Compares each row of [mask] with [rhs]: the answer has the rows of [mask] that are non-null and compare true.
+     * [sel] picks this vector's rows, and [mask] is over the selection's positions: bit `k` of [mask] is row `sel[k]`, or row `k` where [sel] is null.
+     * A null answer means this vector doesn't cover the comparison with that scalar's domain.
+     */
+    open fun compare(op: CmpOp, rhs: Long, sel: IntArray?, mask: Mask): Mask? = null
+
+    /** As the [Long] overload. */
+    open fun compare(op: CmpOp, rhs: Double, sel: IntArray?, mask: Mask): Mask? = null
+
+    /** As the [Long] overload. */
+    open fun compare(op: CmpOp, rhs: LocalDate, sel: IntArray?, mask: Mask): Mask? = null
+
+    /** As the [Long] overload, comparing [rhs] byte for byte with each row's bytes - a string as its UTF-8 encoding. */
+    open fun compare(op: CmpOp, rhs: ByteArray, sel: IntArray?, mask: Mask): Mask? = null
+
+    /** The rows of [mask] that are non-null, with [sel] and [mask] as for [compare]; null where this vector doesn't cover it. */
+    open fun notNull(sel: IntArray?, mask: Mask): Mask? = null
 
     override fun writeNull() {
         if (!nullable) nullable = true

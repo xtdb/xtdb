@@ -6,6 +6,7 @@ import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.ArrowType.Decimal
 import xtdb.api.query.IKeyFn
 import xtdb.api.query.IKeyFn.KeyFn.KEBAB_CASE_KEYWORD
+import xtdb.arrow.VectorIndirection.Mask
 import xtdb.arrow.agg.VectorSummer
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.api.error.Unsupported
@@ -45,6 +46,10 @@ class DecimalVector private constructor(
 
     override fun getAsFloat(idx: Int): Float = getDecimal(idx).toFloat()
     override fun getAsDouble(idx: Int): Double = getDecimal(idx).toDouble()
+
+    // a decimal compares exactly, which comparing its double wouldn't
+    override fun compare(op: CmpOp, rhs: Long, sel: IntArray?, mask: Mask): Mask? = null
+    override fun compare(op: CmpOp, rhs: Double, sel: IntArray?, mask: Mask): Mask? = null
 
     override fun setBigDecimal(idx: Int, v: BigDecimal) {
         ensureCapacity(idx + 1)

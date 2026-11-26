@@ -6,6 +6,7 @@ import org.apache.arrow.vector.types.DateUnit.MILLISECOND
 import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.error.Incorrect
 import xtdb.api.query.IKeyFn
+import xtdb.arrow.VectorIndirection.Mask
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.hash.addDoubles
 import xtdb.hash.doubleHashes
@@ -62,6 +63,9 @@ class DateDayVector private constructor(
 
     override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) =
         doubleHashes(this, out, sel, hasher) { it.addDoubles(valueCount, sel) { idx -> if (isNull(idx)) 0.0 else getMetaDouble(idx) } }
+
+    override fun compare(op: CmpOp, rhs: LocalDate, sel: IntArray?, mask: Mask) =
+        cmpLongs(op, rhs.toEpochDay(), sel, mask) { dataBuffer.getInt(it).toLong() }
 }
 
 class DateMilliVector internal constructor(

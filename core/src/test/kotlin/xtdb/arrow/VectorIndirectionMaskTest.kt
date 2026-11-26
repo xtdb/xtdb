@@ -184,6 +184,83 @@ class VectorIndirectionMaskTest {
         shouldThrow<IllegalArgumentException> { mask.andThen(rowMask(10) { true }) }
     }
 
+    private fun checkExtracts(mask: Mask, refined: Mask) {
+        val extracted = mask.extract(refined)
+
+        extracted.rowCount shouldBe mask.cardinality
+        extracted.toSelection().toList() shouldBe mask.toSelection().withIndex().filter { refined.isSet(it.value) }.map { it.index }
+        mask.andThen(extracted).toSelection().toList() shouldBe (0 until mask.rowCount).filter { mask.isSet(it) && refined.isSet(it) }
+    }
+
+    private fun checkExtracts(rowCount: Int, outer: (Int) -> Boolean, refined: (Int) -> Boolean) =
+        checkExtracts(rowMask(rowCount, outer), rowMask(rowCount, refined))
+
+    @Test
+    fun `extracting finds each kept row's position among the set rows, across word boundaries`() {
+        checkExtracts(200, { it % 3 != 1 }, { it in setOf(0, 62, 63, 64, 65, 127, 128, 199) })
+        checkExtracts(200, { true }, { it % 2 == 0 })
+        checkExtracts(200, { it >= 70 }, { it < 140 })
+        checkExtracts(130, { it % 2 == 1 }, { it >= 64 })
+        checkExtracts(200, { it < 64 }, { it % 2 == 0 })
+    }
+
+    @Test
+    fun `extracting fills one output word from the set rows of two mask words`() {
+        checkExtracts(128, { it % 64 < 40 }, { true })
+        checkExtracts(128, { it % 64 < 40 }, { it % 7 != 3 })
+        checkExtracts(128, { it % 64 < 32 }, { it % 2 == 0 })
+        checkExtracts(256, { it < 10 || it >= 64 }, { it % 3 != 0 })
+        checkExtracts(300, { it % 64 != 5 }, { it % 5 != 0 })
+    }
+
+    @Test
+    fun `extracting drops refined rows the mask doesn't set`() {
+        checkExtracts(150, { it % 5 == 0 }, { it % 5 != 0 })
+        checkExtracts(150, { it % 5 == 0 }, { true })
+        checkExtracts(150, { false }, { true })
+        checkExtracts(150, { true }, { false })
+    }
+
+    @Test
+    fun `extracting from any mask is undone by composing it back`() = runTest {
+        checkAll(
+            Arb.list(words, 0..6),
+            Arb.choice(Arb.of(1, 63, 64), Arb.int(1..64)),
+            Arb.boolean(),
+            Arb.list(words, 0..6),
+        ) { maskWords, lastWordRows, wholeWordsSet, refinedWords ->
+            val rowCount = if (maskWords.isEmpty()) 0 else (maskWords.size - 1) * 64 + lastWordRows
+            val mask = maskOf(maskWords, rowCount).let { if (wholeWordsSet) it.downToWholeWordsSet() else it }
+
+            checkExtracts(mask, maskOf(refinedWords, rowCount))
+        }
+    }
+
+    @Test
+    fun `extracting needs a mask over the same rows`() {
+        shouldThrow<IllegalArgumentException> { rowMask(10) { true }.extract(rowMask(9) { true }) }
+    }
+
+    @Test
+    fun `and, or and andNot combine row by row, across word boundaries and a partial last word`() {
+        for (n in listOf(0, 63, 64, 130)) {
+            val a = rowMask(n) { it % 2 == 0 || it in 62..65 }
+            val b = rowMask(n) { it % 3 == 0 }
+
+            (a and b).toSelection().toList() shouldBe (0 until n).filter { a.isSet(it) && b.isSet(it) }
+            (a or b).toSelection().toList() shouldBe (0 until n).filter { a.isSet(it) || b.isSet(it) }
+            (a andNot b).toSelection().toList() shouldBe (0 until n).filter { a.isSet(it) && !b.isSet(it) }
+            (Mask.all(n) andNot b).cardinality shouldBe n - b.cardinality
+        }
+    }
+
+    @Test
+    fun `combining needs masks over the same rows`() {
+        shouldThrow<IllegalArgumentException> { Mask.all(10) and Mask.all(11) }
+        shouldThrow<IllegalArgumentException> { Mask.all(10) or Mask.all(11) }
+        shouldThrow<IllegalArgumentException> { Mask.all(10) andNot Mask.all(11) }
+    }
+
     private fun built(rowCount: Int, rows: List<Int>): Mask =
         Mask.Builder(rowCount).apply { rows.forEach(::add) }.build()
 
@@ -275,20 +352,5 @@ class VectorIndirectionMaskTest {
             mask.cardinality shouldBe n
             mask.toSelection().toList() shouldBe (0 until n).toList()
         }
-    }
-
-    @Test
-    fun `and combines row by row, across word boundaries and a partial last word`() {
-        for (n in listOf(0, 63, 64, 130)) {
-            val a = rowMask(n) { it % 2 == 0 || it in 62..65 }
-            val b = rowMask(n) { it % 3 == 0 }
-
-            (a and b).toSelection().toList() shouldBe (0 until n).filter { a.isSet(it) && b.isSet(it) }
-        }
-    }
-
-    @Test
-    fun `combining needs masks over the same rows`() {
-        shouldThrow<IllegalArgumentException> { Mask.all(10) and Mask.all(11) }
     }
 }

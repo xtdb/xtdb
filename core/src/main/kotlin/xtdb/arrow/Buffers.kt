@@ -128,6 +128,12 @@ internal class ExtensibleBuffer private constructor(private val allocator: Buffe
 
     fun getBytes(start: Int, len: Int) = buf.toByteBuffer(start.toLong(), len.toLong())
 
+    fun bytesEqual(start: Int, len: Int, bytes: ByteArray): Boolean {
+        if (len != bytes.size) return false
+        for (i in bytes.indices) if (buf.getByte(start.toLong() + i) != bytes[i]) return false
+        return true
+    }
+
     fun writeBytes(bytes: ByteArray) {
         ensureWritable(bytes.size.toLong())
         buf.writeBytes(bytes)

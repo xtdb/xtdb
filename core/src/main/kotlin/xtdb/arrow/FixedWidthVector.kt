@@ -8,6 +8,7 @@ import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import xtdb.InternalApi
 import xtdb.api.query.IKeyFn
+import xtdb.arrow.VectorIndirection.Mask
 import org.apache.arrow.vector.types.TimeUnit
 import xtdb.arrow.VectorType.Scalar
 import xtdb.arrow.metadata.MetadataFlavour
@@ -42,6 +43,8 @@ sealed class FixedWidthVector : MonoVector() {
     final override fun isNull(idx: Int) = validityBuffer?.getBoolean(idx) == false
 
     final override fun valueReader(): RowValueReader = FixedWidthRows(this)
+
+    override fun notNull(sel: IntArray?, mask: Mask): Mask = notNullBits(validityBuffer, valueCount, sel, mask)
 
     final override fun writeUndefined() {
         validityBuffer?.writeBit(valueCount, 0)
