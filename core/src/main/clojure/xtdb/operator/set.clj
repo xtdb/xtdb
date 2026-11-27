@@ -8,7 +8,8 @@
   (:import java.util.stream.IntStream
            (xtdb.api ICursor)
            (xtdb.arrow RelationReader)
-           (xtdb.operator.join BuildSide ProbeSide)))
+           (xtdb.operator.join BuildSide ProbeSide)
+           (xtdb.operator.set SetOperator$UnionAll)))
 
 (defmethod lp/ra-expr :intersect [_]
   (s/cat :op #{:∩ :intersect}
@@ -40,42 +41,15 @@
   ;; they statically can't intersect - but maybe that's one step too far for now.
   (merge-with types/merge-types left-vec-types right-vec-types))
 
-(deftype UnionAllCursor [^ICursor left-cursor
-                         ^ICursor right-cursor]
-  ICursor
-  (getCursorType [_] "union-all")
-  (getChildCursors [_] [left-cursor right-cursor])
-
-  (tryAdvance [_ c]
-    (let [advanced? (boolean-array 1 false)]
-      (loop []
-        (if (or (.tryAdvance left-cursor
-                             (fn [^RelationReader in-rel]
-                               (when (pos? (.getRowCount in-rel))
-                                 (aset advanced? 0 true)
-                                 (.accept c in-rel))))
-                (.tryAdvance right-cursor
-                             (fn [^RelationReader in-rel]
-                               (when (pos? (.getRowCount in-rel))
-                                 (aset advanced? 0 true)
-                                 (.accept c in-rel)))))
-          (if (aget advanced? 0)
-            true
-            (recur))
-          false))))
-  (close [_]
-    (util/try-close left-cursor)
-    (util/try-close right-cursor)))
-
 (defmethod lp/emit-expr :union-all [{:keys [_opts left right]} args]
   (lp/binary-expr (lp/emit-expr left args) (lp/emit-expr right args)
                   (fn [{left-vec-types :vec-types :as left-rel} {right-vec-types :vec-types :as right-rel}]
-                    (let [out-vec-types (union-vec-types left-vec-types right-vec-types)]
+                    (let [op (SetOperator$UnionAll. (update-keys left-vec-types str) (update-keys right-vec-types str))]
                       {:op :union-all
                        :children [left-rel right-rel]
-                       :vec-types out-vec-types
+                       :vec-types (update-keys (.getVecTypes op) symbol)
                        :->cursor (fn [_ left-cursor right-cursor]
-                                   (UnionAllCursor. left-cursor right-cursor))}))))
+                                   (.openCursor op left-cursor right-cursor))}))))
 
 (deftype IntersectionCursor [^ICursor left-cursor, ^ICursor right-cursor
                              ^BuildSide build-side, ^ProbeSide probe-side
