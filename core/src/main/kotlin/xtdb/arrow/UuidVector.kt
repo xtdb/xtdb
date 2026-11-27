@@ -1,5 +1,6 @@
 package xtdb.arrow
 
+import java.time.ZoneId
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.VectorType.Scalar
@@ -36,4 +37,7 @@ class UuidVector(override val inner: FixedSizeBinaryVector) : ExtensionVector(),
     override fun openSlice(al: BufferAllocator) = UuidVector(inner.openSlice(al))
 
     override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = perRowHashes(this, out, sel, hasher)
+
+    override fun equiRows(other: Vector, zone: ZoneId) = if (other.isBytes) equiBytes(this, other) else null
+    override fun compareRows(other: Vector, zone: ZoneId) = if (other is UuidVector) compareBytes(this, other) else null
 }

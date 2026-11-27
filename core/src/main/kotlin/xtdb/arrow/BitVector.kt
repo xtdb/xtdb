@@ -1,5 +1,7 @@
 package xtdb.arrow
 
+import java.time.ZoneId
+import java.util.function.IntBinaryOperator
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ValueVector
@@ -145,4 +147,7 @@ class BitVector private constructor(
         BitVector(al, valueCount, validityBuffer?.openSlice(al), dataBuffer.openSlice(al))
 
     override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = perRowHashes(this, out, sel, hasher)
+
+    override fun equiRows(other: Vector, zone: ZoneId) = if (other is BitVector) IntBinaryOperator { l, r -> b3(getBoolean(l) == other.getBoolean(r)) } else null
+    override fun compareRows(other: Vector, zone: ZoneId) = if (other is BitVector) IntBinaryOperator { l, r -> getBoolean(l).compareTo(other.getBoolean(r)) } else null
 }

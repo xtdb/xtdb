@@ -17,6 +17,8 @@ import xtdb.hash.perRowHashes
 import xtdb.util.Hasher
 import xtdb.util.closeOnCatch
 import java.nio.ByteBuffer
+import java.time.ZoneId
+import java.util.function.IntBinaryOperator
 
 interface VectorReader : ILookup, AutoCloseable {
     val valueCount: Int
@@ -133,6 +135,28 @@ interface VectorReader : ILookup, AutoCloseable {
     val metadataFlavours: Collection<MetadataFlavour> get() = unsupported("metadataFlavours")
 
     fun rowCopier(dest: VectorWriter): RowCopier
+
+    /**
+     * The three-valued `=` of row `l` of this vector with row `r` of [other]: 1 where they're equal, -1 where they're not, and 0 where a null leaves it unknown.
+     *
+     * With [nullsEqual], two nulls are equal and a null is unequal to any value - at the top level only: a null within a struct or a list is still unknown.
+     * [zone] gives a timestamp with a time zone its local reading, to compare it with a date or a timestamp without one.
+     * Values of types with no `=` between them are unequal.
+     *
+     * @throws xtdb.api.error.Unsupported where both vectors hold sets.
+     */
+    fun equiComparator(other: VectorReader, nullsEqual: Boolean, zone: ZoneId): IntBinaryOperator =
+        equiRowComparator(this, other, nullsEqual, zone)
+
+    /**
+     * Orders row `l` of this vector against row `r` of [other], ascending, with nulls first or last as [nullsFirst] says.
+     * [zone] as for [equiComparator].
+     *
+     * @throws xtdb.api.error.Incorrect where the two vectors hold a pair of types with no order between them,
+     *   or, when called, on a month-day interval with months.
+     */
+    fun orderComparator(other: VectorReader, nullsFirst: Boolean, zone: ZoneId): IntBinaryOperator =
+        orderRowComparator(this, other, nullsFirst, zone)
 
     companion object {
         fun toString(reader: VectorReader): String = reader.run {

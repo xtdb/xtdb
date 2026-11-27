@@ -100,4 +100,6 @@ class DecimalVector private constructor(
         DecimalVector(al, valueCount, validityBuffer?.openSlice(al), dataBuffer.openSlice(al), decimalType)
 
     override fun doublesTo(out: DoubleArrayList, sel: IntArray?) = out.addDoubles(valueCount, sel) { if (isNull(it)) 0.0 else getDecimal(it).toDouble() }
+
+    override fun getAsBigDecimal(idx: Int): BigDecimal = getDecimal(idx)
 }

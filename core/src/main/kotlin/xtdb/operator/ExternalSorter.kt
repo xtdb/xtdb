@@ -13,6 +13,7 @@ import xtdb.util.useAll
 import java.nio.channels.Channels
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.ZoneId
 import java.util.PriorityQueue
 import java.util.function.Consumer
 import java.util.function.Supplier
@@ -22,7 +23,7 @@ import kotlin.io.path.deleteRecursively
 private const val K_WAY = 4
 
 /**
- * Sorts pages with the columns in [vecTypes], keeping only the first [rowLimit] rows.
+ * Sorts pages with the columns in [vecTypes] by [orderSpecs], comparing temporal values in [zone], keeping only the first [rowLimit] rows.
  *
  * [append] copies each page in; call [finish] once, after the last [append].
  * Whenever it holds more than [blockSize] rows, it writes a sorted run to a spill directory, which [openSpillDir] creates on the first spill.
@@ -32,19 +33,12 @@ private const val K_WAY = 4
 class ExternalSorter(
     private val allocator: BufferAllocator,
     private val vecTypes: VectorTypes,
-    private val comparatorFactory: ComparatorFactory,
+    private val orderSpecs: List<OrderSpec>,
+    private val zone: ZoneId,
     private val rowLimit: Long,
     private val blockSize: Int,
     private val openSpillDir: Supplier<Path>,
 ) : AutoCloseable {
-
-    /**
-     * Orders rows of [left] against rows of [right], by row index.
-     * Both relations have the columns in [vecTypes]; [left] and [right] may be the same relation.
-     */
-    fun interface ComparatorFactory {
-        fun build(left: RelationReader, right: RelationReader): Comparator<Int>
-    }
 
     private class Spill(val dir: Path) {
         val runs = mutableListOf<Path>()
@@ -55,7 +49,7 @@ class ExternalSorter(
     private var out: ICursor? = null
 
     private fun topIdxs(rel: RelationReader): IntArray {
-        val idxs = (0 until rel.rowCount).sortedWith(comparatorFactory.build(rel, rel)).toIntArray()
+        val idxs = rel.sortedIdxs(orderSpecs, zone)
         return if (rowLimit < idxs.size) idxs.copyOf(rowLimit.toInt()) else idxs
     }
 
@@ -112,7 +106,7 @@ class ExternalSorter(
                         repeat(k) { loadNextRel(it) }
 
                         val cmps = Array(k) { arrayOfNulls<Comparator<Int>>(k) }
-                        for (i in 0 until k) for (j in 0 until i) cmps[j][i] = comparatorFactory.build(rels[j], rels[i])
+                        for (i in 0 until k) for (j in 0 until i) cmps[j][i] = orderSpecs.comparator(rels[j], rels[i], zone)
 
                         val pq = PriorityQueue<Int> { i, j ->
                             if (i < j) cmps[i][j]!!.compare(positions[i], positions[j])

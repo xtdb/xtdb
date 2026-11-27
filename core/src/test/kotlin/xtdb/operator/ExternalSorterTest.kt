@@ -9,9 +9,12 @@ import org.junit.jupiter.api.io.TempDir
 import xtdb.api.ICursor
 import xtdb.arrow.Relation
 import xtdb.arrow.VectorType.Companion.I64
+import xtdb.operator.OrderSpec.Direction.ASC
+import xtdb.operator.OrderSpec.NullOrdering.NULLS_LAST
 import xtdb.test.AllocatorResolver
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.ZoneOffset
 import kotlin.io.path.listDirectoryEntries
 import kotlin.random.Random
 
@@ -23,14 +26,8 @@ class ExternalSorterTest {
 
     private var spillDirsOpened = 0
 
-    private val byA = ExternalSorter.ComparatorFactory { left, right ->
-        val leftA = left["a"]
-        val rightA = right["a"]
-        Comparator { l, r -> leftA.getLong(l).compareTo(rightA.getLong(r)) }
-    }
-
     private fun sorter(al: BufferAllocator, rowLimit: Long = Long.MAX_VALUE) =
-        ExternalSorter(al, mapOf("a" to I64), byA, rowLimit, blockSize = 10) {
+        ExternalSorter(al, mapOf("a" to I64), listOf(OrderSpec("a", ASC, NULLS_LAST)), ZoneOffset.UTC, rowLimit, blockSize = 10) {
             spillDirsOpened++
             Files.createTempDirectory(spillRoot, "external-sort")
         }

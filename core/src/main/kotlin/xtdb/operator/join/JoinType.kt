@@ -6,7 +6,6 @@ import xtdb.arrow.BitVector
 import xtdb.arrow.RelationReader
 import xtdb.api.error.Incorrect
 import xtdb.arrow.FieldName
-import xtdb.operator.join.ComparatorFactory.Companion.build
 import xtdb.operator.join.JoinType.OuterJoinType.*
 import java.util.function.BiFunction
 import java.util.function.IntBinaryOperator

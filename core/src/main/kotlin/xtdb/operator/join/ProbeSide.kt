@@ -5,7 +5,6 @@ import xtdb.arrow.FieldName
 import xtdb.arrow.IntVector
 import xtdb.arrow.RelationReader
 import xtdb.expression.map.IndexHasher.Companion.hasher
-import xtdb.operator.join.ComparatorFactory.Companion.build
 import java.util.function.BiConsumer
 import java.util.function.IntBinaryOperator
 

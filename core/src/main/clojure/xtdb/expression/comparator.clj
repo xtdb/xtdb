@@ -1,9 +1,6 @@
 (ns xtdb.expression.comparator
   (:require [xtdb.expression :as expr]
-            [xtdb.types :as types]
-            [xtdb.util :as util])
-  (:import java.util.function.IntBinaryOperator
-           xtdb.arrow.VectorReader))
+            [xtdb.util :as util]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -85,37 +82,3 @@
 (doseq [f [:compare_nulls_first :compare_nulls_last]]
   (defmethod expr/codegen-call [f :any :any] [expr]
     (expr/codegen-call (assoc expr :f :compare))))
-
-(def ^:private build-comparator
-  (-> (fn [left-type right-type null-ordering]
-        (let [left-idx-sym (gensym 'left-idx)
-              right-idx-sym (gensym 'right-idx)
-              left-col-sym (gensym 'left_col)
-              right-col-sym (gensym 'right_col)
-
-              {cont :continue, :as emitted-expr}
-              (expr/codegen-expr {:op :call,
-                                  :f (case null-ordering
-                                       :nulls-first :compare_nulls_first
-                                       :nulls-last :compare_nulls_last)
-                                  :args [{:op :variable, :variable left-col-sym, :idx left-idx-sym}
-                                         {:op :variable, :variable right-col-sym, :idx right-idx-sym}]}
-
-                                 {:var-types {left-col-sym left-type, right-col-sym right-type}
-                                  :extract-vecs-from-rel? false})]
-
-          (-> `(fn [~(-> left-col-sym (expr/with-tag VectorReader))
-                    ~(-> right-col-sym (expr/with-tag VectorReader))]
-                 (let [~@(expr/batch-bindings emitted-expr)]
-                   (reify IntBinaryOperator
-                     (~'applyAsInt [_# ~left-idx-sym ~right-idx-sym]
-                      ~(cont (fn [_ code] code))))))
-              #_(doto clojure.pprint/pprint)
-              (eval))))
-      (util/lru-memoize)))
-
-(defn ->comparator ^java.util.function.IntBinaryOperator [^VectorReader left-col, ^VectorReader right-col, null-ordering]
-  (let [f (build-comparator (.getType left-col)
-                            (.getType right-col)
-                            null-ordering)]
-    (f left-col right-col)))

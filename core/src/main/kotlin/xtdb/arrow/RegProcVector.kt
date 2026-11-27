@@ -1,5 +1,6 @@
 package xtdb.arrow
 
+import java.time.ZoneId
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.VectorType.Scalar
@@ -28,4 +29,6 @@ class RegProcVector(override val inner: IntVector) : ExtensionVector(), Metadata
     override fun openSlice(al: BufferAllocator) = RegProcVector(inner.openSlice(al))
 
     override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = perRowHashes(this, out, sel, hasher)
+
+    override fun equiRows(other: Vector, zone: ZoneId) = if (other is RegProcVector) equiObjects(this, other) else null
 }

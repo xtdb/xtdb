@@ -1,6 +1,6 @@
 (ns xtdb.operator.distinct
   (:require [clojure.spec.alpha :as s]
-            [xtdb.expression.map :as emap]
+            [xtdb.expression :as expr]
             [xtdb.logical-plan :as lp]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr])
@@ -9,7 +9,7 @@
            (org.apache.arrow.memory BufferAllocator)
            (xtdb.api ICursor)
            (xtdb.arrow RelationReader)
-           (xtdb.operator.distinct DistinctRelationMap DistinctRelationMap$ComparatorFactory)))
+           (xtdb.operator.distinct DistinctRelationMap)))
 
 (defmethod lp/ra-expr :distinct [_]
   (s/cat :op #{:δ :distinct}
@@ -50,11 +50,9 @@
   [^BufferAllocator allocator,
    {:keys [key-col-names store-full-build-rel?
            build-vec-types
-           nil-keys-equal?
-           param-types args]
+           nil-keys-equal?]
     :as opts}]
-  (let [param-types (update-keys param-types str)
-        build-key-col-names (get opts :build-key-col-names key-col-names)
+  (let [build-key-col-names (get opts :build-key-col-names key-col-names)
 
         vec-types (-> build-vec-types
                       (cond-> (not store-full-build-rel?) (select-keys build-key-col-names))
@@ -63,12 +61,7 @@
     (DistinctRelationMap. allocator ^Map vec-types
                           (map str build-key-col-names)
                           (boolean store-full-build-rel?)
-                          (reify DistinctRelationMap$ComparatorFactory
-                            (buildEqui [_ build-col in-col]
-                              (emap/->equi-comparator build-col in-col
-                                                      args
-                                                      {:nil-keys-equal? nil-keys-equal?
-                                                       :param-types param-types}))))))
+                          (boolean nil-keys-equal?) expr/*default-tz*)))
 
 (defmethod lp/emit-expr :distinct [{:keys [_opts relation]} args]
   (lp/unary-expr (lp/emit-expr relation args)

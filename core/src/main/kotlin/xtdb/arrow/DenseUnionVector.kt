@@ -170,7 +170,7 @@ class DenseUnionVector private constructor(
 
     internal inner class LegVector(
         internal val typeId: Byte, internal val inner: VectorWriter, private val nested: Boolean = false,
-        private val reader: LegReader = LegReader(valueCount, typeBuffer, offsetBuffer, false, typeId, inner, nested)
+        internal val reader: LegReader = LegReader(valueCount, typeBuffer, offsetBuffer, false, typeId, inner, nested)
     ) : VectorReader by reader, VectorWriter {
 
         override val listElements get() = inner.listElements
@@ -236,8 +236,11 @@ class DenseUnionVector private constructor(
     override fun getTypeId(idx: Int) = typeBuffer.getByte(idx)
     internal fun typeIds() = (0 until valueCount).map { typeBuffer.getByte(it) }
 
-    private fun getOffset(idx: Int) = offsetBuffer.getInt(idx)
+    internal fun getOffset(idx: Int) = offsetBuffer.getInt(idx)
     internal fun offsets() = (0 until valueCount).map { offsetBuffer.getInt(it) }
+
+    internal val legCount get() = legVectors.size
+    internal fun legAt(typeId: Int): Vector = legVectors[typeId]
 
     private fun leg(idx: Int) = getTypeId(idx).takeIf { it >= 0 }?.let { legVectors[it.toInt()] }
 

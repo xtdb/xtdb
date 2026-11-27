@@ -16,7 +16,7 @@
            (xtdb.api ICursor)
            (xtdb.arrow RelationReader VectorType)
            (xtdb.bloom BloomUtils)
-           (xtdb.operator.join BuildSide BuildKeyFacts ComparatorFactory DiskHashJoin EveryRowMarkJoin JoinType JoinType$Mark JoinType$Mark$Spec$Compare JoinType$Mark$Spec$Exists JoinType$Mark$Spec$KeyedIn MemoryHashJoin)))
+           (xtdb.operator.join BuildSide BuildKeyFacts ComparatorFactory ComparatorFactory$Theta DiskHashJoin EveryRowMarkJoin JoinType JoinType$Mark JoinType$Mark$Spec$Compare JoinType$Mark$Spec$Exists JoinType$Mark$Spec$KeyedIn MemoryHashJoin)))
 
 (defmethod lp/ra-expr :cross-join [_]
   (s/cat :op #{:⨯ :cross-join}
@@ -312,19 +312,15 @@
                 (boolean with-nil-row?)
                 *disk-join-threshold-rows*)))
 
-(defn ->cmp-factory [{:keys [build-vec-types probe-vec-types theta-expr param-types args with-nil-row?]}]
-  (reify ComparatorFactory
-    (buildEqui [_ build-col probe-col]
-      (emap/->equi-comparator build-col probe-col args
-                              {:nil-keys-equal? with-nil-row?
-                               :param-types param-types}))
-
-    (buildTheta [_ build-rel probe-rel]
-      (when theta-expr
-        (emap/->theta-comparator build-rel probe-rel theta-expr args
-                                 {:build-vec-types build-vec-types
-                                  :probe-vec-types probe-vec-types
-                                  :param-types param-types})))))
+(defn ->cmp-factory [{:keys [build-vec-types probe-vec-types theta-expr param-types args nulls-equal?]}]
+  (ComparatorFactory. (boolean nulls-equal?) expr/*default-tz*
+                      (when theta-expr
+                        (reify ComparatorFactory$Theta
+                          (build [_ build-rel probe-rel]
+                            (emap/->theta-comparator build-rel probe-rel theta-expr args
+                                                     {:build-vec-types build-vec-types
+                                                      :probe-vec-types probe-vec-types
+                                                      :param-types param-types}))))))
 
 (defn- emit-join-expr {:style/indent 2}
   [{:keys [condition mark-condition mark-key left right]}
@@ -431,7 +427,7 @@
                                                              (TreeSet. Bytes/COMPARATOR)))))
                                 cmp-factory (->cmp-factory {:build-vec-types build-vec-types
                                                             :probe-vec-types probe-vec-types
-                                                            :with-nil-row? with-nil-row?
+                                                            :nulls-equal? with-nil-row?
                                                             :key-col-names probe-key-col-names
                                                             :theta-expr theta-expr
                                                             :param-types param-types

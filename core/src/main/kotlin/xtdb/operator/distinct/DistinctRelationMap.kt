@@ -4,10 +4,10 @@ import org.apache.arrow.memory.BufferAllocator
 import xtdb.arrow.IntVector
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
-import xtdb.arrow.VectorReader
 import xtdb.arrow.VectorTypes
 import xtdb.expression.map.IndexHasher.Companion.hasher
 import xtdb.expression.map.RelationMapBuilder
+import java.time.ZoneId
 import java.util.function.IntBinaryOperator
 
 class DistinctRelationMap(
@@ -15,12 +15,9 @@ class DistinctRelationMap(
     val vecTypes: VectorTypes,
     val keyColumnNames: List<String>,
     private val storeFullBuildRel: Boolean,
-    private val comparatorFactory: ComparatorFactory,
+    private val nullsEqual: Boolean,
+    private val zone: ZoneId,
 ) : AutoCloseable {
-
-    interface ComparatorFactory {
-        fun buildEqui(l: VectorReader, r: VectorReader): IntBinaryOperator
-    }
 
     private val accRel = Relation(allocator, vecTypes)
     private val keyCols = keyColumnNames.map { accRel[it] }
@@ -58,7 +55,7 @@ class DistinctRelationMap(
         val inRel = if (storeFullBuildRel) inRel else RelationReader.from(keyColumnNames.zip(inKeyCols).toMap(linkedMapOf()), inRel.rowCount)
 
         val comparator = keyCols.zip(inKeyCols)
-            .map { (buildCol, inCol) -> comparatorFactory.buildEqui(buildCol, inCol) }
+            .map { (buildCol, inCol) -> buildCol.equiComparator(inCol, nullsEqual, zone) }
             .reduceOrNull(::andIBO)
             ?: IntBinaryOperator { _, _ -> 1 }
 

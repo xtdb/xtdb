@@ -1,5 +1,6 @@
 package xtdb.arrow
 
+import java.time.ZoneId
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ValueVector
@@ -115,4 +116,6 @@ class MapVector(private val listVector: ListVector, private val keysSorted: Bool
     override fun close() = listVector.close()
 
     override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = perRowHashes(this, out, sel, hasher)
+
+    override fun equiRows(other: Vector, zone: ZoneId) = if (other is MapVector) equiObjects(this, other) else null
 }
