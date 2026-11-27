@@ -27,7 +27,7 @@
            (org.apache.arrow.vector.types.pojo Field)
            (org.apache.commons.codec.binary Hex)
            (xtdb.tx TxOp$PatchDocs TxOp$PutDocs)
-           (xtdb.antlr Sql$DirectlyExecutableStatementContext Sql$DynamicParameterContext Sql$XtqlQueryContext Sql$GroupByClauseContext Sql$HavingClauseContext Sql$JoinSpecificationContext Sql$JoinTypeContext Sql$ObjectNameAndValueContext Sql$OrderByClauseContext Sql$QualifiedRenameColumnContext Sql$QuerySpecificationContext Sql$QueryTailContext Sql$RenameColumnContext Sql$RowValueListContext Sql$SearchedWhenClauseContext Sql$SelectClauseContext Sql$SetClauseContext Sql$SimpleWhenClauseContext Sql$SortSpecificationContext Sql$SortSpecificationListContext Sql$WhenOperandContext Sql$WhereClauseContext Sql$WithTimeZoneContext SqlLexer SqlVisitor)
+           (xtdb.antlr Sql$CommonValueExpr0Context Sql$DirectlyExecutableStatementContext Sql$DynamicParameterContext Sql$FunctionCallContext Sql$XtqlQueryContext Sql$GroupByClauseContext Sql$HavingClauseContext Sql$JoinSpecificationContext Sql$JoinTypeContext Sql$ObjectNameAndValueContext Sql$OrderByClauseContext Sql$QualifiedRenameColumnContext Sql$QuerySpecificationContext Sql$QueryTailContext Sql$RenameColumnContext Sql$RowValueListContext Sql$SearchedWhenClauseContext Sql$SelectClauseContext Sql$SetClauseContext Sql$SimpleWhenClauseContext Sql$SortSpecificationContext Sql$SortSpecificationListContext Sql$WhenOperandContext Sql$WhereClauseContext Sql$WithTimeZoneContext Sql$WrappedExprContext SqlLexer SqlVisitor)
            (xtdb.arrow RelationReader VectorReader)
            (xtdb.query DmlCacheKey ParsedStatement$Dml SqlParser SqlPlanner)
            (xtdb.xtql QueryWithParams)
@@ -1364,6 +1364,43 @@
             (first disjuncts)
             (list* 'or disjuncts)))))))
 
+(defn- row-operand-exprs
+  [^ParserRuleContext ctx]
+  (when (and (instance? Sql$CommonValueExpr0Context ctx)
+             (nil? (.betweenTail ^Sql$CommonValueExpr0Context ctx)))
+    (let [cve (.commonValueExpr ^Sql$CommonValueExpr0Context ctx)]
+      (condp instance? cve
+        Sql$WrappedExprContext (let [exprs (.expr ^Sql$WrappedExprContext cve)]
+                                 (when (< 1 (count exprs))
+                                   exprs))
+        Sql$FunctionCallContext (let [^Sql$FunctionCallContext cve cve]
+                                  (when (and (nil? (.schemaName cve))
+                                             (= 'row (identifier-sym (.fn cve))))
+                                    (.expr cve)))
+        nil))))
+
+(defn- plan-row-comparison [op lhs rhs plan-expr]
+  (let [lhs-degree (count lhs), rhs-degree (count rhs)]
+    (when-not (and (= lhs-degree rhs-degree) (pos? lhs-degree))
+      (throw (err/incorrect ::row-degree-mismatch
+                            (format "Row comparison degree mismatch: %d vs %d" lhs-degree rhs-degree)
+                            {:lhs-degree lhs-degree, :rhs-degree rhs-degree})))
+    (let [pairs (mapv (fn [l r] [(plan-expr l) (plan-expr r)]) lhs rhs)
+          conjoin (fn [junction]
+                    (let [comparisons (map (fn [[l r]] (list op l r)) pairs)]
+                      (if (= 1 lhs-degree)
+                        (first comparisons)
+                        (list* junction comparisons))))]
+      (case op
+        == (conjoin 'and)
+        <> (conjoin 'or)
+        (let [strict-op ({'< '<, '<= '<, '> '>, '>= '>} op)
+              [[last-l last-r] & leading] (rseq pairs)]
+          (reduce (fn [rest-cmp [l r]]
+                    (list 'or (list strict-op l r) (list 'and (list '== l r) rest-cmp)))
+                  (list op last-l last-r)
+                  leading))))))
+
 (defrecord ExprPlanVisitor [env scope]
   SqlVisitor
   (visitSearchCondition [this ctx] (list* 'and (mapv (partial accept-visitor this) (.expr ctx))))
@@ -1372,7 +1409,12 @@
       (if-let [between-tail (.betweenTail ctx)]
         (.accept between-tail (assoc this :pt1 expr))
         expr)))
-  (visitWrappedExpr [this ctx] (-> (.expr ctx) (.accept this)))
+  (visitWrappedExpr [this ctx]
+    (let [[expr & more] (.expr ctx)]
+      (when more
+        (throw (err/incorrect ::row-value-outside-comparison
+                              "A row value is only supported as an operand of a comparison")))
+      (.accept ^ParserRuleContext expr this)))
 
   (visitLiteralExpr [this ctx] (-> (.literal ctx) (.accept this)))
   (visitFloatLiteral [_ ctx] (parse-double (.getText ctx)))
@@ -1593,10 +1635,15 @@
   (visitUnaryNotExpr [this ctx] (list 'not (-> (.expr ctx) (.accept this))))
 
   (visitComparisonPredicate [this ctx]
-    (list ((some-fn {'!= '<>, '= '==} identity)
-           (symbol (.getText (.compOp ctx))))
-          (-> (.expr ctx 0) (.accept this))
-          (-> (.expr ctx 1) (.accept this))))
+    (let [op ((some-fn {'!= '<>, '= '==} identity)
+              (symbol (.getText (.compOp ctx))))
+          lhs (.expr ctx 0)
+          rhs (.expr ctx 1)
+          lhs-row (row-operand-exprs lhs)
+          rhs-row (row-operand-exprs rhs)]
+      (if (or lhs-row rhs-row)
+        (plan-row-comparison op (or lhs-row [lhs]) (or rhs-row [rhs]) (partial accept-visitor this))
+        (list op (.accept lhs this) (.accept rhs this)))))
 
   (visitComparisonPredicatePart2 [{:keys [pt1] :as this} ctx]
     (list ((some-fn {'!= '<>, '= '==} identity)

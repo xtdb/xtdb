@@ -293,7 +293,7 @@ betweenTail : NOT? 'BETWEEN' (ASYMMETRIC | SYMMETRIC)? commonValueExpr 'AND' com
 // alternative - ANTLR gives each alternative a level of its own.
 commonValueExpr
     : subquery # ScalarSubqueryExpr
-    | '(' expr ')' #WrappedExpr
+    | '(' expr (',' expr)* ')' #WrappedExpr
     | literal # LiteralExpr
     | commonValueExpr '.' fieldName=identifier #FieldAccess
     | commonValueExpr '[' expr ']' #ArrayAccess
@@ -541,10 +541,11 @@ arrayValueConstructor
 
 /// §7.1 <row value constructor>
 
+// The bracketed alternative precedes `expr`, whose `WrappedExpr` also matches `(a, b)`: ANTLR takes the first that matches.
 rowValueConstructor
     : 'ROW' '(' ( expr (',' expr)* )? ')' # MultiExprRowConstructor
-    | expr # SingleExprRowConstructor
     | '(' ( expr (',' expr)+ )? ')'  # MultiExprRowConstructor
+    | expr # SingleExprRowConstructor
     ;
 
 /// §7.3 <table value constructor>
