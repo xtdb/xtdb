@@ -16,7 +16,7 @@ The standard comparators are available:
 - `expr1 = expr2` (equal to)
 - `expr1 <> expr2` | `expr1 != expr2` (not equal to)
 
-## Row comparisons
+## Row comparisons (v2.2.2+)
 
 The comparators also compare row values, written `(expr, ...)` or `ROW(expr, ...)`, column by column:
 
