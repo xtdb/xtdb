@@ -2,10 +2,11 @@
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
             xtdb.serde
-            [xtdb.test-util :as tu]))
+            [xtdb.test-util :as tu])
+  (:import (java.time ZoneId)))
 
 (t/use-fixtures :each
-  (tu/with-opts {:default-tz #xt/zone "Europe/London"})
+  (tu/with-opts {:default-tz (ZoneId/of "Europe/London")})
   tu/with-mock-clock tu/with-node)
 
 (t/deftest can-specify-default-tz-in-query-396
