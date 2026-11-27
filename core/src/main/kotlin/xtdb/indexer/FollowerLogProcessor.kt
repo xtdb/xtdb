@@ -197,7 +197,14 @@ class FollowerLogProcessor @JvmOverloads constructor(
             return
         }
 
-        if (!msg.stale) processRecord(record)
+        if (msg.stale) return
+
+        try {
+            processRecord(record)
+        } catch (e: Throwable) {
+            if (e.isShutdownSignal) throw e
+            throw IngestionStoppedException(record.msgId, e)
+        }
     }
 
     private fun closeBlock(

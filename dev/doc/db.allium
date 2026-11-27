@@ -1321,6 +1321,8 @@ rule ExternalSourceLearnsDurableExtent {
 
 rule ProcessingErrorHaltsNode {
     -- A genuine ingestion fault: the watchers move to a failed state, and every subsequent await throws.
+    -- The error names msg_id, the replica record whose apply raised it.
+    -- A held record applied as its block closes is named by its own id, not the upload's; a failure in closing the block itself names no record.
     --
     -- A SUPERSESSION is not one of these, and neither is an interruption of the term: see LeaderSuperseded.
     -- Poisoning the watchers on a routine leadership handover would surface it to queries as a failed database.

@@ -500,7 +500,7 @@ class LogProcessorTest {
             val cutter = 4L
             val boundarySrcMsgId = sourceLog.latestSubmittedMsgId()
             replicaLog.appendMessage(ReplicaMessage.BlockBoundary(0, boundarySrcMsgId, termId = cutter))
-            replicaLog.appendMessage(
+            val held = replicaLog.appendMessage(
                 ReplicaMessage.ResolvedTx(
                     1, Instant.now(), true, null, mapOf("public/docs" to ByteString.copyFrom(byteArrayOf(1, 2, 3))),
                     srcMsgId = boundarySrcMsgId, termId = cutter
@@ -509,6 +509,8 @@ class LogProcessorTest {
 
             TestNode(sourceLog, replicaLog).use { node ->
                 awaitFailure(node)
+
+                assertEquals(held.msgId, node.watchers.exception?.msgId, "the error names the held record, not the upload that released it")
             }
         }
     }
