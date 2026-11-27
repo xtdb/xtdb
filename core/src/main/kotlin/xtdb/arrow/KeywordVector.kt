@@ -1,5 +1,6 @@
 package xtdb.arrow
 
+import java.time.ZoneId
 import clojure.lang.Keyword
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.query.IKeyFn
@@ -26,4 +27,7 @@ class KeywordVector(override val inner: Utf8Vector): ExtensionVector(), Metadata
     override fun openSlice(al: BufferAllocator) = KeywordVector(inner.openSlice(al))
 
     override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = perRowHashes(this, out, sel, hasher)
+
+    override fun equiRows(other: Vector, zone: ZoneId) = if (other.isBytes) equiBytes(this, other) else null
+    override fun compareRows(other: Vector, zone: ZoneId) = if (other is KeywordVector) compareBytes(this, other) else null
 }

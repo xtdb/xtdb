@@ -550,15 +550,14 @@
 
 (defmethod codegen-expr :variable [{:keys [variable rel idx extract-vec-from-rel?],
                                     :or {rel rel-sym, idx idx-sym, extract-vec-from-rel? true}}
-                                   {:keys [var-types extract-vecs-from-rel?]
-                                    :or {extract-vecs-from-rel? true}}]
+                                   {:keys [var-types]}]
   (let [return-type (.getUnencoded ^VectorType (or (get var-types variable)
                                                    (throw (AssertionError. (str "unknown variable: " variable)))))
         var-rdr-sym (gensym (util/symbol->normal-form-symbol variable))]
 
     ;; NOTE: when used from metadata exprs, incoming vectors might not exist
     {:return-type return-type
-     :batch-bindings [(if (and extract-vecs-from-rel? extract-vec-from-rel?)
+     :batch-bindings [(if extract-vec-from-rel?
                         [var-rdr-sym `(.valueReader (.get ~rel ~(str variable)))]
                         [var-rdr-sym `(some-> ~variable (.valueReader))])]
      :continue (fn [f]
@@ -666,7 +665,7 @@
 
 (def ^:private shortcut-null-args?
   (complement (comp #{:is_true :is_false :is_null :true? :false? :nil? :boolean
-                      :=== :null_eq :compare_nulls_first :compare_nulls_last
+                      :===
                       :distinct_from
                       :period :str :_patch
                       :string_to_array
@@ -869,6 +868,30 @@
   (defmethod codegen-call [:=== col-type col-type] [_]
     {:return-type #xt/type :bool
      :->call-code #(do `(.equals ~@%))}))
+
+(defmethod codegen-call [:<> :any :any] [expr]
+  (let [{:keys [->call-code continue-call] :as eq-call} (codegen-call (assoc expr :f :==))]
+    (cond-> eq-call
+      ->call-code (assoc :->call-code (comp #(do `(not ~%)) ->call-code))
+      continue-call (assoc :continue-call
+                           (fn [f emitted-args]
+                             (continue-call (fn [return-type code]
+                                              (if (= #xt/type :null return-type)
+                                                (f return-type code)
+                                                (f return-type `(not ~code))))
+                                            emitted-args))))))
+
+(defmethod codegen-call [:distinct_from :null :null] [_]
+  {:return-type #xt/type :bool, :->call-code (constantly false)})
+
+(defmethod codegen-call [:distinct_from :null :any] [_]
+  {:return-type #xt/type :bool, :->call-code (constantly true)})
+
+(defmethod codegen-call [:distinct_from :any :null] [_]
+  {:return-type #xt/type :bool, :->call-code (constantly true)})
+
+(defmethod codegen-call [:distinct_from :any :any] [expr]
+  (codegen-call (assoc expr :f :<>)))
 
 (defmethod codegen-call [:not :bool] [_]
   {:return-type #xt/type :bool, :->call-code #(do `(not ~@%))})

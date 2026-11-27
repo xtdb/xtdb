@@ -1745,7 +1745,7 @@
           p2 (-> (.expr ctx 1) (.accept this))]
       (xt/template
        (and (== (lower ~p1) (lower ~p2))
-            (null-eq (upper ~p1) (upper ~p2))))))
+            (not (distinct_from (upper ~p1) (upper ~p2)))))))
 
   (visitPeriodContainsPredicate [this ctx]
     (let [p1 (-> (.expr ctx 0) (.accept this))

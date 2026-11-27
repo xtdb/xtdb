@@ -1,5 +1,8 @@
 package xtdb.arrow
 
+import java.time.ZoneId
+import java.util.function.IntBinaryOperator
+import xtdb.api.error.Unsupported
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
@@ -37,4 +40,7 @@ class SetVector(override val inner: ListVector) : ExtensionVector(), MetadataFla
     override fun openSlice(al: BufferAllocator) = SetVector(inner.openSlice(al))
 
     override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = perRowHashes(this, out, sel, hasher)
+
+    override fun equiRows(other: Vector, zone: ZoneId): IntBinaryOperator? =
+        if (other is SetVector) throw Unsupported("TODO: `==` on sets", "xtdb.expression/set-equality") else null
 }

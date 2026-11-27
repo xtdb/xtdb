@@ -1239,10 +1239,6 @@
       true '(< a b) #xt/date "1969-12-31" #xt/date "1970-01-01"
       true '(> a b) #xt/date "1970-01-01" #xt/date "1969-12-31"
 
-      -1 '(compare_nulls_first a b) #xt/date "2023-01-01" #xt/date "2023-01-02"
-      0 '(compare_nulls_first a b) #xt/date "2023-01-01" #xt/date "2023-01-01"
-      1 '(compare_nulls_first a b) #xt/date "2023-01-02" #xt/date "2023-01-01"
-
       true (list '< a-milli 'b) #xt/date "2023-01-01" #xt/date "2023-01-02"
       true (list '== a-milli 'b) #xt/date "2023-01-01" #xt/date "2023-01-01"
       true (list '> 'b a-milli) #xt/date "2023-01-01" #xt/date "2023-01-02")))

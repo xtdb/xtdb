@@ -1,5 +1,6 @@
 package xtdb.arrow
 
+import java.time.ZoneId
 import clojure.lang.IFn
 import com.cognitect.transit.Reader
 import org.apache.arrow.memory.BufferAllocator
@@ -31,4 +32,6 @@ class TransitVector(override val inner: VarBinaryVector) : ExtensionVector(), Me
     override fun openSlice(al: BufferAllocator) = TransitVector(inner.openSlice(al))
 
     override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = perRowHashes(this, out, sel, hasher)
+
+    override fun equiRows(other: Vector, zone: ZoneId) = if (other is TransitVector) equiObjects(this, other) else null
 }

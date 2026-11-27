@@ -1,5 +1,8 @@
 package xtdb.arrow
 
+import java.time.ZoneId
+import java.util.function.IntBinaryOperator
+import java.math.BigDecimal
 import com.carrotsearch.hppc.DoubleArrayList
 import xtdb.arrow.VectorIndirection.Mask
 import xtdb.arrow.agg.VectorSummer
@@ -37,4 +40,21 @@ sealed class NumericVector : FixedWidthVector() {
 
             else -> unsupported("sumInto ${outVec.arrowType}")
         }
+
+    internal open fun getAsBigDecimal(idx: Int): BigDecimal = BigDecimal.valueOf(getAsDouble(idx))
+
+    private val isFloating get() = this is FloatVector || this is DoubleVector
+
+    override fun equiRows(other: Vector, zone: ZoneId): IntBinaryOperator? = when {
+        other !is NumericVector -> null
+        this is IntegerVector && other is IntegerVector -> IntBinaryOperator { l, r -> b3(getAsLong(l) == other.getAsLong(r)) }
+        isFloating || other.isFloating -> IntBinaryOperator { l, r -> b3(getAsDouble(l) == other.getAsDouble(r)) }
+        else -> IntBinaryOperator { l, r -> b3(getAsBigDecimal(l).compareTo(other.getAsBigDecimal(r)) == 0) }
+    }
+
+    override fun compareRows(other: Vector, zone: ZoneId): IntBinaryOperator? = when {
+        other !is NumericVector -> null
+        this is IntegerVector && other is IntegerVector -> IntBinaryOperator { l, r -> getAsLong(l).compareTo(other.getAsLong(r)) }
+        else -> IntBinaryOperator { l, r -> getAsDouble(l).compareTo(other.getAsDouble(r)) }
+    }
 }

@@ -37,6 +37,7 @@ import xtdb.util.closeOnCatch
 import xtdb.util.safeMap
 import java.time.LocalDate
 import java.time.ZoneId
+import java.util.function.IntBinaryOperator
 import org.apache.arrow.vector.NullVector as ArrowNullVector
 
 internal fun Any.unsupported(op: String): Nothing =
@@ -78,6 +79,15 @@ sealed class Vector : VectorReader, VectorWriter {
 
     /** The rows of [mask] that are non-null, with [sel] and [mask] as for [compare]; null where this vector doesn't cover it. */
     open fun notNull(sel: IntArray?, mask: Mask): Mask? = null
+
+    /**
+     * The three-valued `=` of a row of this vector with a row of [other], neither of them null.
+     * Null where this vector doesn't define `=` against [other]'s type - [other] may, else the two are never equal.
+     */
+    internal open fun equiRows(other: Vector, zone: ZoneId): IntBinaryOperator? = null
+
+    /** Orders a row of this vector against a row of [other], neither of them null; null where the two types have no order. */
+    internal open fun compareRows(other: Vector, zone: ZoneId): IntBinaryOperator? = null
 
     override fun writeNull() {
         if (!nullable) nullable = true

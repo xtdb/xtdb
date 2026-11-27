@@ -1,5 +1,6 @@
 package xtdb.arrow
 
+import java.time.ZoneId
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.Types.MinorType
 import org.apache.arrow.vector.types.pojo.ArrowType
@@ -40,4 +41,7 @@ class Utf8Vector private constructor(
         )
 
     override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = variableWidthHashes(this, out, sel, hasher)
+
+    override fun equiRows(other: Vector, zone: ZoneId) = if (other.isBytes) equiBytes(this, other) else null
+    override fun compareRows(other: Vector, zone: ZoneId) = if (other is Utf8Vector) compareBytes(this, other) else null
 }

@@ -48,4 +48,6 @@ class TsTzRangeVector(override val inner: FixedSizeListVector) : ExtensionVector
     override fun openSlice(al: BufferAllocator) = TsTzRangeVector(inner.openSlice(al))
 
     override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = perRowHashes(this, out, sel, hasher)
+
+    override fun equiRows(other: Vector, zone: ZoneId) = if (other is TsTzRangeVector) equiObjects(this, other) else null
 }

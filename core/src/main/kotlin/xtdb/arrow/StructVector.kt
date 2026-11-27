@@ -1,5 +1,7 @@
 package xtdb.arrow
 
+import java.time.ZoneId
+import java.util.function.IntBinaryOperator
 import clojure.lang.Keyword
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
@@ -288,4 +290,11 @@ class StructVector private constructor(
     }
 
     override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = perRowHashes(this, out, sel, hasher)
+
+    override fun equiRows(other: Vector, zone: ZoneId): IntBinaryOperator? = when {
+        other !is StructVector -> null
+        keyNames != other.keyNames -> IntBinaryOperator { _, _ -> FALSE_3VL }
+        else -> keyNames.map { nestedEquiComparator(vectorFor(it), other.vectorFor(it), zone) }
+            .reduceOrNull(::and3) ?: IntBinaryOperator { _, _ -> TRUE_3VL }
+    }
 }

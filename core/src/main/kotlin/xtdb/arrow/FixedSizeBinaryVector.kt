@@ -1,5 +1,6 @@
 package xtdb.arrow
 
+import java.time.ZoneId
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
@@ -64,4 +65,7 @@ class FixedSizeBinaryVector private constructor(
         FixedSizeBinaryVector(al, valueCount, byteWidth, validityBuffer?.openSlice(al), dataBuffer.openSlice(al))
 
     override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = rawBytesHashes(this, out, sel, hasher)
+
+    override fun equiRows(other: Vector, zone: ZoneId) = if (other.isBytes) equiBytes(this, other) else null
+    override fun compareRows(other: Vector, zone: ZoneId) = if (other is VarBinaryVector || other is FixedSizeBinaryVector) compareBytes(this, other) else null
 }

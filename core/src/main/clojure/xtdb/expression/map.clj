@@ -1,18 +1,15 @@
 (ns xtdb.expression.map
   (:require [xtdb.expression :as expr]
             [xtdb.expression.walk :as ewalk]
-            [xtdb.util :as util]
-            [xtdb.vector.reader :as vr])
+            [xtdb.util :as util])
   (:import (java.util Map)
            java.util.function.IntBinaryOperator
-           (xtdb.arrow RelationReader VectorReader)))
+           (xtdb.arrow RelationReader)))
 
 (def ^:private left-rel (gensym 'left-rel))
-(def ^:private left-vec (gensym 'left-vec))
 (def ^:private left-idx (gensym 'left-idx))
 
 (def ^:private right-rel (gensym 'right-rel))
-(def ^:private right-vec (gensym 'right-vec))
 (def ^:private right-idx (gensym 'right-idx))
 
 (def build-comparator
@@ -36,19 +33,6 @@
 
 (def ^:private pg-class-schema-hack
   {"pg_catalog/pg_class" #{}})
-
-(defn ->equi-comparator [^VectorReader left-col, ^VectorReader right-col, params
-                         {:keys [nil-keys-equal? param-types]}]
-  (let [f (build-comparator {:op :call, :f (if nil-keys-equal? :null-eq :==)
-                             :args [{:op :variable, :variable left-vec, :rel left-rel, :idx left-idx}
-                                    {:op :variable, :variable right-vec, :rel right-rel, :idx right-idx}]}
-                            {:var-types {left-vec (.getType left-col)
-                                         right-vec (.getType right-col)}
-                             :param-types param-types})]
-    (f (vr/keyed-rel-reader {(str left-vec) left-col} (.getValueCount left-col))
-       (vr/keyed-rel-reader {(str right-vec) right-col} (.getValueCount right-col))
-       pg-class-schema-hack
-       params)))
 
 (defn ->theta-comparator [build-rel probe-rel theta-expr params {:keys [build-vec-types probe-vec-types param-types]}]
   (let [var-types (merge build-vec-types probe-vec-types)

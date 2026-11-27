@@ -1,5 +1,6 @@
 package xtdb.arrow
 
+import java.math.BigDecimal
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.arrow.VectorIndirection.Mask
 import xtdb.arrow.agg.VectorSummer
@@ -30,4 +31,6 @@ sealed class IntegerVector : NumericVector() {
 
             else -> super.sumInto(outVec)
         }
+
+    override fun getAsBigDecimal(idx: Int): BigDecimal = BigDecimal.valueOf(getAsLong(idx))
 }

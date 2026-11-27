@@ -1,5 +1,6 @@
 package xtdb.arrow
 
+import java.time.ZoneId
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.DateUnit.DAY
 import org.apache.arrow.vector.types.DateUnit.MILLISECOND
@@ -66,6 +67,9 @@ class DateDayVector private constructor(
 
     override fun compare(op: CmpOp, rhs: LocalDate, sel: IntArray?, mask: Mask) =
         cmpLongs(op, rhs.toEpochDay(), sel, mask) { dataBuffer.getInt(it).toLong() }
+
+    override fun equiRows(other: Vector, zone: ZoneId) = compareDateTimeRows(this, other, zone)?.asEqui()
+    override fun compareRows(other: Vector, zone: ZoneId) = compareDateTimeRows(this, other, zone)
 }
 
 class DateMilliVector internal constructor(
@@ -84,7 +88,7 @@ class DateMilliVector internal constructor(
     override fun writeLong(v: Long) = writeLong0(v)
     override fun setLong(idx: Int, v: Long) = setLong0(idx, v)
 
-    private fun getEpochDay(idx: Int) = Math.floorDiv(getLong(idx), MILLIS_PER_DAY)
+    internal fun getEpochDay(idx: Int) = Math.floorDiv(getLong(idx), MILLIS_PER_DAY)
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = LocalDate.ofEpochDay(getEpochDay(idx))!!
 
@@ -104,4 +108,7 @@ class DateMilliVector internal constructor(
 
     override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) =
         doubleHashes(this, out, sel, hasher) { it.addDoubles(valueCount, sel) { idx -> if (isNull(idx)) 0.0 else getMetaDouble(idx) } }
+
+    override fun equiRows(other: Vector, zone: ZoneId) = compareDateTimeRows(this, other, zone)?.asEqui()
+    override fun compareRows(other: Vector, zone: ZoneId) = compareDateTimeRows(this, other, zone)
 }

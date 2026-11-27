@@ -1,5 +1,6 @@
 package xtdb.arrow
 
+import java.time.ZoneId
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.TimeUnit
 import org.apache.arrow.vector.types.TimeUnit.*
@@ -68,11 +69,14 @@ class Time32Vector private constructor(
         Time32Vector(al, unit, validityBuffer?.openSlice(al), dataBuffer.openSlice(al), valueCount)
 
     override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = rawBytesHashes(this, out, sel, hasher)
+
+    override fun equiRows(other: Vector, zone: ZoneId) = compareTimeRows(this, other)?.asEqui()
+    override fun compareRows(other: Vector, zone: ZoneId) = compareTimeRows(this, other)
 }
 
 class Time64Vector private constructor(
     override val al: BufferAllocator,
-    private val unit: TimeUnit,
+    internal val unit: TimeUnit,
     override var validityBuffer: BitBuffer?, override val dataBuffer: ExtensibleBuffer,
     override var valueCount: Int
 ) : FixedWidthVector(), MetadataFlavour.TimeOfDay {
@@ -107,4 +111,7 @@ class Time64Vector private constructor(
         Time64Vector(al, unit, validityBuffer?.openSlice(al), dataBuffer.openSlice(al), valueCount)
 
     override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = rawBytesHashes(this, out, sel, hasher)
+
+    override fun equiRows(other: Vector, zone: ZoneId) = compareTimeRows(this, other)?.asEqui()
+    override fun compareRows(other: Vector, zone: ZoneId) = compareTimeRows(this, other)
 }

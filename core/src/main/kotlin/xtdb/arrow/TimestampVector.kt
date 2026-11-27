@@ -1,5 +1,6 @@
 package xtdb.arrow
 
+import java.time.ZoneId
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.TimeUnit
 import org.apache.arrow.vector.types.TimeUnit.*
@@ -68,6 +69,9 @@ class TimestampLocalVector private constructor(
 
     override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) =
         doubleHashes(this, out, sel, hasher) { it.addDoubles(valueCount, sel) { idx -> if (isNull(idx)) 0.0 else getMetaDouble(idx) } }
+
+    override fun equiRows(other: Vector, zone: ZoneId) = compareDateTimeRows(this, other, zone)?.asEqui()
+    override fun compareRows(other: Vector, zone: ZoneId) = compareDateTimeRows(this, other, zone)
 }
 
 class TimestampTzVector private constructor(
@@ -129,4 +133,7 @@ class TimestampTzVector private constructor(
 
     override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) =
         doubleHashes(this, out, sel, hasher) { it.addDoubles(valueCount, sel) { idx -> if (isNull(idx)) 0.0 else getMetaDouble(idx) } }
+
+    override fun equiRows(other: Vector, zone: ZoneId) = compareDateTimeRows(this, other, zone)?.asEqui()
+    override fun compareRows(other: Vector, zone: ZoneId) = compareDateTimeRows(this, other, zone)
 }

@@ -1,5 +1,6 @@
 package xtdb.arrow
 
+import java.time.ZoneId
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.PeriodDuration
 import org.apache.arrow.vector.types.Types.MinorType
@@ -54,6 +55,9 @@ class IntervalYearMonthVector private constructor(
         IntervalYearMonthVector(al, valueCount, validityBuffer?.openSlice(al), dataBuffer.openSlice(al))
 
     override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = rawBytesHashes(this, out, sel, hasher)
+
+    override fun equiRows(other: Vector, zone: ZoneId) = if (other.isInterval) equiObjects(this, other) else null
+    override fun compareRows(other: Vector, zone: ZoneId) = compareIntervals(this, other)
 }
 
 private const val NANOS_PER_MILLI = NANO_HZ / MILLI_HZ
@@ -112,6 +116,9 @@ class IntervalDayTimeVector private constructor(
         IntervalDayTimeVector(al, valueCount, validityBuffer?.openSlice(al), dataBuffer.openSlice(al))
 
     override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = rawBytesHashes(this, out, sel, hasher)
+
+    override fun equiRows(other: Vector, zone: ZoneId) = if (other.isInterval) equiObjects(this, other) else null
+    override fun compareRows(other: Vector, zone: ZoneId) = compareIntervals(this, other)
 }
 
 class IntervalMonthDayNanoVector private constructor(
@@ -179,6 +186,9 @@ class IntervalMonthDayNanoVector private constructor(
         IntervalMonthDayNanoVector(al, valueCount, validityBuffer?.openSlice(al), dataBuffer.openSlice(al))
 
     override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = rawBytesHashes(this, out, sel, hasher)
+
+    override fun equiRows(other: Vector, zone: ZoneId) = if (other.isInterval) equiObjects(this, other) else null
+    override fun compareRows(other: Vector, zone: ZoneId) = compareIntervals(this, other)
 }
 
 class IntervalMonthDayMicroVector(
@@ -198,4 +208,7 @@ class IntervalMonthDayMicroVector(
     override fun openSlice(al: BufferAllocator) = IntervalMonthDayMicroVector(inner.openSlice(al))
 
     override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = perRowHashes(this, out, sel, hasher)
+
+    override fun equiRows(other: Vector, zone: ZoneId) = if (other.isInterval) equiObjects(this, other) else null
+    override fun compareRows(other: Vector, zone: ZoneId) = compareIntervals(this, other)
 }

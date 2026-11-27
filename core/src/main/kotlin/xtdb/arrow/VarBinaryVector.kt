@@ -1,5 +1,6 @@
 package xtdb.arrow
 
+import java.time.ZoneId
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.VectorType.Companion.VAR_BINARY
@@ -40,4 +41,7 @@ class VarBinaryVector private constructor(
         )
 
     override fun hashTo(out: IntVector, hasher: Hasher, sel: IntArray?) = variableWidthHashes(this, out, sel, hasher)
+
+    override fun equiRows(other: Vector, zone: ZoneId) = if (other.isBytes) equiBytes(this, other) else null
+    override fun compareRows(other: Vector, zone: ZoneId) = if (other is VarBinaryVector || other is FixedSizeBinaryVector) compareBytes(this, other) else null
 }
