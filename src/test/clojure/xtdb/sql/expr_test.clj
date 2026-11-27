@@ -566,7 +566,6 @@
     "INTERVAL '3' DAY" '(single-field-interval "3" "DAY" 2 6)
     "INTERVAL '-3' DAY" '(single-field-interval "-3" "DAY" 2 6)
     "INTERVAL '+3' DAY" '(single-field-interval "+3" "DAY" 2 6)
-    "INTERVAL '333' DAY(3)" '(single-field-interval "333" "DAY" 2 6)
 
     "INTERVAL '3' HOUR" '(single-field-interval "3" "HOUR" 2 6)
     "INTERVAL '-3' HOUR" '(single-field-interval "-3" "HOUR" 2 6)
@@ -1137,7 +1136,6 @@
     "CURRENT_DATE" '(current-date)
     "CURRENT_DATE()" '(current-date)
     "CURRENT_TIME" '(current-time)
-    "CURRENT_TIME()" '(current-time)
     "CURRENT_TIME(6)" '(current-time 6)
     "CURRENT_TIMESTAMP" '(current-timestamp)
     "CURRENT_TIMESTAMP()" '(current-timestamp)
@@ -1146,10 +1144,8 @@
     "NOW()" '(current-timestamp)
     "NOW(6)" '(current-timestamp 6)
     "LOCALTIME" '(local-time)
-    "LOCALTIME()" '(local-time)
     "LOCALTIME(6)" '(local-time 6)
     "LOCALTIMESTAMP" '(local-timestamp)
-    "LOCALTIMESTAMP()" '(local-timestamp)
     "LOCALTIMESTAMP(6)" '(local-timestamp 6)))
 
 (t/deftest test-current-setting
@@ -2195,6 +2191,13 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
     (t/is (= '(and) (plan-expr "WHERE , ,")))
     (t/is (= '(and (== f/a 1)) (plan-expr "WHERE , a = 1")))
     (t/is (= '(and (== f/a 1) (== f/b 2)) (plan-expr "WHERE a = 1, , b = 2 ,")))))
+
+(t/deftest test-plan-expr-rejects-trailing-input
+  (t/is (anomalous? [:incorrect nil #"Errors parsing SQL statement"]
+                    (sql/plan-expr "1 2")))
+
+  (t/is (anomalous? [:incorrect nil #"Errors parsing SQL statement"]
+                    (sql/plan-expr "WHERE a = 1 b" {:ast-type :where, :scope foo-scope}))))
 
 (t/deftest select-snapshot-token
   (t/is (= [{:token (basis/->time-basis-str {"xtdb" [nil]})}]

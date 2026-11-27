@@ -18,6 +18,8 @@ options {
 
 directSqlStatement : directlyExecutableStatement ';'? EOF ;
 multiSqlStatement : directlyExecutableStatement ( ';' directlyExecutableStatement )* ';'? EOF ;
+exprStatement : expr EOF ;
+whereStatement : whereClause EOF ;
 
 directlyExecutableStatement
     : (EXPLAIN ANALYZE?)? settingQueryVariables? queryExpression #QueryExpr

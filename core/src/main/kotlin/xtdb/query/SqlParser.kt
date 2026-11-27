@@ -57,9 +57,9 @@ private fun <T> String.parseWithFallback(parseAction: (Sql) -> T): T {
     }
 }
 
-fun String.parseExpr(): Sql.ExprContext = parseWithFallback { it.expr() }
+fun String.parseExpr(): Sql.ExprContext = parseWithFallback { it.exprStatement() }.expr()
 
-fun String.parseWhere(): Sql.SearchConditionContext = parseWithFallback { it.whereClause().searchCondition() }
+fun String.parseWhere(): Sql.SearchConditionContext = parseWithFallback { it.whereStatement() }.whereClause().searchCondition()
 
 // Estimated 400MB max size for each cache, given large SLT queries, observed during SLT between/10/ run.
 // with an inferred value of roughly 100KB per parsed query.
