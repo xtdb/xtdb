@@ -16,6 +16,19 @@ The standard comparators are available:
 - `expr1 = expr2` (equal to)
 - `expr1 <> expr2` | `expr1 != expr2` (not equal to)
 
+## Row comparisons
+
+`=`, `<>` and `!=` also compare row values, written `(expr, ...)` or `ROW(expr, ...)`, column by column:
+
+`(a, b) = (x, y)`
+: equivalent to `a = x AND b = y`
+
+`(a, b) <> (x, y)`
+: equivalent to `a <> x OR b <> y`
+
+Both rows must have the same number of columns.
+A NULL column follows the usual three-valued logic: `(1, NULL) = (1, 2)` is null, but `(1, NULL) = (2, 3)` is false, because its first columns already differ.
+
 ## Greatest / Least
 
 These aren't strictly predicates - they return the greatest/least value of their arguments respectively:

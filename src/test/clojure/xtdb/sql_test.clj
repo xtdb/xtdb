@@ -15,6 +15,7 @@
             [xtdb.compactor :as c]
             [xtdb.vector.writer :as vw])
   (:import (java.nio ByteBuffer)
+           (xtdb.api.error Incorrect Unsupported)
            (java.nio.file Files)
            (java.nio.file.attribute FileAttribute)
 ))
@@ -3838,3 +3839,59 @@ UNION ALL
 
   (t/is (= [{:xt/id 2} {:xt/id 5} {:xt/id 7} {:xt/id 8}]
            (xt/q tu/*node* "SELECT c._id FROM c WHERE c.v NOT IN (SELECT o.v FROM o WHERE o.k = c.k) ORDER BY c._id"))))
+
+(t/deftest row-value-comparison-plans-as-its-spelled-out-form-6509
+  (let [opts {:table-info {#xt/table foo #{"a" "b" "c"}, #xt/table bar #{"x" "y"}}}
+        plan #(sql/plan % opts)]
+    (t/are [row spelled] (= (plan spelled) (plan row))
+      "SELECT 1 FROM foo WHERE (a, b) = (1, 2)" "SELECT 1 FROM foo WHERE a = 1 AND b = 2"
+      "SELECT 1 FROM foo WHERE ROW(a, b) = ROW(1, 2)" "SELECT 1 FROM foo WHERE a = 1 AND b = 2"
+      "SELECT 1 FROM foo WHERE (a, b, c) = ROW(?, ?, ?)" "SELECT 1 FROM foo WHERE a = ? AND b = ? AND c = ?"
+      "SELECT 1 FROM foo, bar WHERE (a, b) = (x, y)" "SELECT 1 FROM foo, bar WHERE a = x AND b = y"
+      "SELECT 1 FROM foo WHERE (a, b) <> (1, 2)" "SELECT 1 FROM foo WHERE a <> 1 OR b <> 2"
+      "SELECT 1 FROM foo WHERE ROW(a, b) != (?, ?)" "SELECT 1 FROM foo WHERE a <> ? OR b <> ?"
+      "SELECT 1 FROM foo WHERE ROW(a) = 1" "SELECT 1 FROM foo WHERE a = 1"
+      "SELECT 1 FROM foo WHERE (a) = (1)" "SELECT 1 FROM foo WHERE a = 1")))
+
+(t/deftest row-value-comparison-three-valued-6509
+  (t/is (= [{:eq-unknown true, :eq-false false, :ne-true true, :ne-unknown true}]
+           (xt/q tu/*node* "SELECT ((1, NULL) = (1, 2)) IS UNKNOWN AS eq_unknown,
+                                   ROW(1, NULL) = ROW(2, 3) AS eq_false,
+                                   (1, NULL) <> (2, 3) AS ne_true,
+                                   ((1, NULL) <> (1, 2)) IS UNKNOWN AS ne_unknown"))))
+
+(t/deftest row-value-comparison-filters-rows-6509
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1, :a 1, :b 1} {:xt/id 2, :a 1, :b 2} {:xt/id 3, :a 2, :b 1}]])
+
+  (t/is (= [{:xt/id 2}]
+           (xt/q tu/*node* ["SELECT _id FROM docs WHERE (a, b) = (?, ?)" 1 2])))
+
+  (t/is (= [{:xt/id 1} {:xt/id 3}]
+           (xt/q tu/*node* "SELECT _id FROM docs WHERE ROW(a, b) <> ROW(1, 2) ORDER BY _id"))))
+
+(t/deftest row-value-comparison-errors-6509
+  (let [opts {:table-info {#xt/table foo #{"a" "b"}}}
+        plan-error (fn [sql]
+                     (try
+                       (sql/plan sql opts)
+                       nil
+                       (catch Exception e
+                         [(type e) (ex-message e) (:xtdb.error/code (ex-data e))])))]
+    (t/is (= [Incorrect "Row comparison degree mismatch: 2 vs 3" :xtdb.sql/row-degree-mismatch]
+             (plan-error "SELECT 1 FROM foo WHERE (a, b) = (1, 2, 3)")))
+
+    (t/is (= [Incorrect "Row comparison degree mismatch: 2 vs 1" :xtdb.sql/row-degree-mismatch]
+             (plan-error "SELECT 1 FROM foo WHERE ROW(a, b) = a")))
+
+    (t/is (= [Incorrect "Row comparison degree mismatch: 0 vs 0" :xtdb.sql/row-degree-mismatch]
+             (plan-error "SELECT 1 FROM foo WHERE ROW() = ROW()")))
+
+    (t/is (= [Incorrect "A row value is only supported as an operand of a comparison" :xtdb.sql/row-value-outside-comparison]
+             (plan-error "SELECT (a, b) FROM foo")))
+
+    (t/is (= [Unsupported "Row value comparison with < is not supported" :xtdb.sql/row-value-ordering]
+             (plan-error "SELECT 1 FROM foo WHERE (a, b) < (1, 2)")))))
+
+(t/deftest values-still-takes-bracketed-rows-6509
+  (t/is (= [{:a 1, :b 2} {:a 3, :b 4}]
+           (xt/q tu/*node* "SELECT * FROM (VALUES (1, 2), ROW(3, 4)) AS t (a, b) ORDER BY a"))))
