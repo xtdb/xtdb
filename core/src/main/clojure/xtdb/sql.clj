@@ -1385,15 +1385,21 @@
       (throw (err/incorrect ::row-degree-mismatch
                             (format "Row comparison degree mismatch: %d vs %d" lhs-degree rhs-degree)
                             {:lhs-degree lhs-degree, :rhs-degree rhs-degree})))
-    (let [junction (case op
-                     == 'and
-                     <> 'or
-                     (throw (err/unsupported ::row-value-ordering
-                                             (format "Row value comparison with %s is not supported" op))))
-          comparisons (mapv (fn [l r] (list op (plan-expr l) (plan-expr r))) lhs rhs)]
-      (if (= 1 lhs-degree)
-        (first comparisons)
-        (list* junction comparisons)))))
+    (let [pairs (mapv (fn [l r] [(plan-expr l) (plan-expr r)]) lhs rhs)
+          conjoin (fn [junction]
+                    (let [comparisons (map (fn [[l r]] (list op l r)) pairs)]
+                      (if (= 1 lhs-degree)
+                        (first comparisons)
+                        (list* junction comparisons))))]
+      (case op
+        == (conjoin 'and)
+        <> (conjoin 'or)
+        (let [strict-op ({'< '<, '<= '<, '> '>, '>= '>} op)
+              [[last-l last-r] & leading] (rseq pairs)]
+          (reduce (fn [rest-cmp [l r]]
+                    (list 'or (list strict-op l r) (list 'and (list '== l r) rest-cmp)))
+                  (list op last-l last-r)
+                  leading))))))
 
 (defrecord ExprPlanVisitor [env scope]
   SqlVisitor

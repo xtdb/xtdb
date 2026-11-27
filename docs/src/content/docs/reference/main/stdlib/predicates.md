@@ -18,7 +18,7 @@ The standard comparators are available:
 
 ## Row comparisons
 
-`=`, `<>` and `!=` also compare row values, written `(expr, ...)` or `ROW(expr, ...)`, column by column:
+The comparators also compare row values, written `(expr, ...)` or `ROW(expr, ...)`, column by column:
 
 `(a, b) = (x, y)`
 : equivalent to `a = x AND b = y`
@@ -26,8 +26,17 @@ The standard comparators are available:
 `(a, b) <> (x, y)`
 : equivalent to `a <> x OR b <> y`
 
+`(a, b) < (x, y)`
+: equivalent to `a < x OR (a = x AND b < y)` - rows are ordered lexicographically, by their first column, then by their second where the first are equal, and so on
+
+`(a, b) <= (x, y)`
+: equivalent to `a < x OR (a = x AND b <= y)`
+
+`>` and `>=` follow the same pattern as `<` and `<=`.
+
 Both rows must have the same number of columns.
 A NULL column follows the usual three-valued logic: `(1, NULL) = (1, 2)` is null, but `(1, NULL) = (2, 3)` is false, because its first columns already differ.
+Likewise, `(1, NULL) < (2, 0)` is true, but `(1, 2) < (1, NULL)` is null.
 
 ## Greatest / Least
 
