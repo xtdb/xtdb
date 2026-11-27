@@ -18,7 +18,7 @@ class VarBinaryVector private constructor(
 ) : VariableWidthVector(), MetadataFlavour.Bytes {
 
     constructor(al: BufferAllocator, nullable: Boolean) :
-            this(al, 0, if (nullable) BitBuffer(al) else null, ExtensibleBuffer(al), ExtensibleBuffer(al))
+            this(al, 0, if (nullable) BitBuffer(al) else null, ExtensibleBuffer(al), ExtensibleBuffer.withMaxCapacity(al, MAX_DATA_BYTES))
 
     override var lastOffset = if (valueCount == 0) 0 else offsetBuffer.getInt(valueCount)
 

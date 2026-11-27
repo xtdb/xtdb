@@ -5,33 +5,54 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.memory.util.hash.ArrowBufHasher
 import org.apache.arrow.vector.util.DecimalUtility
+import xtdb.api.error.Unsupported
 import xtdb.arrow.ArrowUtil.toByteBuffer
 import xtdb.util.Hasher
 import java.math.BigDecimal
 import java.nio.ByteBuffer
 import kotlin.math.max
+import kotlin.math.min
 
 internal val NULL_CHECKS =
     System.getenv("XTDB_VECTOR_NULL_CHECKS")?.toBoolean()
         ?: System.getProperty("xtdb.vector.null-checks")?.toBoolean()
         ?: true
 
-internal class ExtensibleBuffer private constructor(private val allocator: BufferAllocator, private var buf: ArrowBuf) :
-    AutoCloseable {
+internal class ExtensibleBuffer private constructor(
+    private val allocator: BufferAllocator, private var buf: ArrowBuf, private val maxCapacity: Long
+) : AutoCloseable {
 
-    constructor(allocator: BufferAllocator) : this(allocator, allocator.empty)
+    init {
+        checkCapacity(buf.capacity())
+    }
+
+    constructor(allocator: BufferAllocator) : this(allocator, allocator.empty, Long.MAX_VALUE)
 
     constructor(
         allocator: BufferAllocator, initialSize: Long
-    ) : this(allocator, allocator.buffer(initialSize).apply { setZero(0, capacity()) })
+    ) : this(allocator, allocator.buffer(initialSize).apply { setZero(0, capacity()) }, Long.MAX_VALUE)
+
+    companion object {
+        fun withMaxCapacity(allocator: BufferAllocator, maxCapacity: Long) =
+            ExtensibleBuffer(allocator, allocator.empty, maxCapacity)
+    }
+
+    private fun checkCapacity(capacity: Long) {
+        if (capacity > maxCapacity)
+            throw Unsupported(
+                "Can't hold more than $maxCapacity bytes in a single vector buffer",
+                errorCode = "xtdb.arrow/buffer-capacity-exceeded",
+            )
+    }
 
     private fun newCapacity(currentCapacity: Long, targetCapacity: Long): Long {
         var newCapacity = max(currentCapacity, 128)
         while (newCapacity < targetCapacity) newCapacity *= 2
-        return newCapacity
+        return min(newCapacity, maxCapacity)
     }
 
     private fun realloc(targetCapacity: Long) {
+        checkCapacity(targetCapacity)
         val currentCapacity = buf.capacity()
 
         val newBuf = allocator.buffer(newCapacity(currentCapacity, targetCapacity)).apply {
@@ -193,6 +214,7 @@ internal class ExtensibleBuffer private constructor(private val allocator: Buffe
         buffers.add(buf.readerIndex(0))
 
     internal fun loadBuffer(arrowBuf: ArrowBuf, writerIndex: Long = arrowBuf.writerIndex()) {
+        checkCapacity(arrowBuf.capacity())
         val oldBuf = buf
         buf = arrowBuf.writerIndex(writerIndex)
             .let { it.referenceManager.transferOwnership(it, allocator).transferredBuffer }
@@ -200,7 +222,7 @@ internal class ExtensibleBuffer private constructor(private val allocator: Buffe
     }
 
     fun openSlice(al: BufferAllocator) =
-        ExtensibleBuffer(al, buf.referenceManager.transferOwnership(buf, al).transferredBuffer)
+        ExtensibleBuffer(al, buf.referenceManager.transferOwnership(buf, al).transferredBuffer, maxCapacity)
 
     fun clear() {
         buf.setZero(0, buf.capacity())
