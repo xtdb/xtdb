@@ -3946,3 +3946,19 @@ UNION ALL
 (t/deftest values-still-takes-bracketed-rows-6509
   (t/is (= [{:a 1, :b 2} {:a 3, :b 4}]
            (xt/q tu/*node* "SELECT * FROM (VALUES (1, 2), ROW(3, 4)) AS t (a, b) ORDER BY a"))))
+
+(t/deftest null-join-keys-dont-match-6339
+  (xt/execute-tx tu/*node* [[:put-docs :l {:xt/id 1, :k nil} {:xt/id 2, :k 1}]
+                            [:put-docs :r {:xt/id 10, :k nil} {:xt/id 11, :k 1}]])
+
+  (t/is (= #{{:l 1} {:l 2, :r 11}}
+           (set (xt/q tu/*node* "SELECT l._id AS l, r._id AS r FROM l LEFT JOIN r ON l.k = r.k"))))
+
+  (t/is (= #{{:l 1} {:r 10} {:l 2, :r 11}}
+           (set (xt/q tu/*node* "SELECT l._id AS l, r._id AS r FROM l FULL OUTER JOIN r ON l.k = r.k"))))
+
+  (t/is (= #{{:l 1, :r 10} {:l 2, :r 11}}
+           (set (xt/q tu/*node* "SELECT l._id AS l, r._id AS r FROM l LEFT JOIN r ON l.k IS NOT DISTINCT FROM r.k"))))
+
+  (t/is (= #{{:l 1, :n 0} {:l 2, :n 1}}
+           (set (xt/q tu/*node* "SELECT l._id AS l, (SELECT COUNT(*) FROM r WHERE r.k = l.k) AS n FROM l")))))

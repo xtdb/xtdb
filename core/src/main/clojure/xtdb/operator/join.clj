@@ -312,8 +312,8 @@
                 (boolean with-nil-row?)
                 *disk-join-threshold-rows*)))
 
-(defn ->cmp-factory [{:keys [build-vec-types probe-vec-types theta-expr param-types args nulls-equal?]}]
-  (ComparatorFactory. (boolean nulls-equal?) expr/*default-tz*
+(defn ->cmp-factory [{:keys [build-vec-types probe-vec-types theta-expr param-types args]}]
+  (ComparatorFactory. false expr/*default-tz*
                       (when theta-expr
                         (reify ComparatorFactory$Theta
                           (build [_ build-rel probe-rel]
@@ -427,7 +427,6 @@
                                                              (TreeSet. Bytes/COMPARATOR)))))
                                 cmp-factory (->cmp-factory {:build-vec-types build-vec-types
                                                             :probe-vec-types probe-vec-types
-                                                            :nulls-equal? with-nil-row?
                                                             :key-col-names probe-key-col-names
                                                             :theta-expr theta-expr
                                                             :param-types param-types

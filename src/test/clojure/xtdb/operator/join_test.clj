@@ -1037,6 +1037,34 @@
                             [::tu/pages [[{:x 0}]]]
                             [::tu/pages {y #xt/type :i64} []]])))))
 
+(t/deftest test-equi-joins-dont-match-null-keys
+  (let [left [:table {:rows [{:a nil, :l 0} {:a 1, :l 1}]}]
+        right [:table {:rows [{:b nil, :r 0} {:b 1, :r 1}]}]
+        bigger-left [:table {:rows [{:a nil, :l 0} {:a 1, :l 1} {:a 2, :l 2}]}]
+        bigger-right [:table {:rows [{:b nil, :r 0} {:b 1, :r 1} {:b 2, :r 2}]}]
+        check-joins (fn []
+                      (t/is (= #{{:a 1, :l 1, :b 1, :r 1}}
+                               (set (tu/query-ra [:join '{:conditions [{a b}]} left right]))))
+
+                      (t/is (= #{{:l 0} {:a 1, :l 1, :b 1, :r 1} {:a 2, :l 2}}
+                               (set (tu/query-ra [:left-outer-join '{:conditions [{a b}]} bigger-left right])))
+                            "left-outer, built on the right")
+
+                      (t/is (= #{{:l 0} {:a 1, :l 1, :b 1, :r 1}}
+                               (set (tu/query-ra [:left-outer-join '{:conditions [{a b}]} left bigger-right])))
+                            "left-outer, built on the left")
+
+                      (t/is (= #{{:l 0} {:r 0} {:a 1, :l 1, :b 1, :r 1}}
+                               (set (tu/query-ra [:full-outer-join '{:conditions [{a b}]} left right]))))
+
+                      (t/is (= #{{:l 0} {:a 1, :l 1, :b 1, :r 1}}
+                               (set (tu/query-ra [:single-join '{:conditions [{a b}]} left right])))))]
+    (check-joins)
+
+    (t/testing "spilled"
+      (binding [join/*disk-join-threshold-rows* 1]
+        (check-joins)))))
+
 (t/deftest test-mega-join
   (t/is (= [{:x1 1, :x2 1, :x4 3, :x3 1}]
            (tu/query-ra

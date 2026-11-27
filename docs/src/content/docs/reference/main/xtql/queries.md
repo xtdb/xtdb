@@ -2,6 +2,20 @@
 title: XTQL Queries
 ---
 
+<details>
+<summary>Changelog (last updated v2.3.0)</summary>
+
+v2.3.0: `left-join` no longer unifies a nil-bound variable
+
+: A [`left-join`](#joins---join-left-join) no longer matches on a logic variable bound to nil on both sides, as `join` already didn't.
+
+  Previously the outer row matched the sub-query's nil-bound rows, so whether nil unified with nil depended on which of the two joins a query used.
+  The outer row is now returned with null values in the sub-query columns.
+
+  There are no upgrade steps.
+
+</details>
+
 XTQL queries consist of composable operators, optionally combined with a pipeline.
 
 ## Operators
