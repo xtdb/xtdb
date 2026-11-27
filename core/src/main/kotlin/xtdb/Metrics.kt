@@ -1,5 +1,6 @@
 package xtdb
 
+import io.micrometer.core.instrument.FunctionCounter
 import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Tag
@@ -13,6 +14,7 @@ import io.netty.util.internal.PlatformDependent
 import org.apache.arrow.memory.AllocationListener
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
+import xtdb.query.ParserCache
 import xtdb.util.closeAll
 import xtdb.util.info
 import xtdb.util.logger
@@ -54,6 +56,12 @@ object Metrics {
                         .baseUnit("bytes")
                         .register(reg)
                 }
+
+            Gauge.builder("xtdb.sql.parser.cache.states", ParserCache.global) { it.states.toDouble() }
+                .register(reg)
+
+            FunctionCounter.builder("xtdb.sql.parser.cache.resets", ParserCache.global) { it.resetCount.toDouble() }
+                .register(reg)
         }
     }
 
