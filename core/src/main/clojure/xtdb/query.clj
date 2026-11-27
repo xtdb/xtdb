@@ -6,7 +6,6 @@
             [xtdb.basis :as basis]
             [xtdb.error :as err]
             [xtdb.expression :as expr]
-            xtdb.expression.comparator
             xtdb.expression.pg
             xtdb.expression.temporal
             xtdb.expression.uri

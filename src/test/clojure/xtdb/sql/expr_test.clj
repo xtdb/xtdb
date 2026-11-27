@@ -1525,12 +1525,13 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
         (period
          #xt/zoned-date-time "2000-01-01T00:00Z"
          #xt/zoned-date-time "2001-01-01T00:00Z")))
-      (null-eq
-       (upper f/_system_time)
-       (upper
-        (period
-         #xt/zoned-date-time "2000-01-01T00:00Z"
-         #xt/zoned-date-time "2001-01-01T00:00Z"))))
+      (not
+       (distinct_from
+        (upper f/_system_time)
+        (upper
+         (period
+          #xt/zoned-date-time "2000-01-01T00:00Z"
+          #xt/zoned-date-time "2001-01-01T00:00Z")))))
     "foo._SYSTEM_TIME EQUALS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
 
     '(<=

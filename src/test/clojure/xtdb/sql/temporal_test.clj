@@ -526,3 +526,15 @@
            (xt/q tu/*node* "SELECT DATE '2020-01-01' = TIMESTAMP '2020-01-01 00:00' AS eq,
                                    DATE '2020-01-01' <> TIMESTAMP '2020-01-01 00:00' AS ne,
                                    DATE '2020-01-01' IS DISTINCT FROM TIMESTAMP '2020-01-01 00:00' AS dist"))))
+
+(t/deftest period-equals-with-an-open-upper-bound
+  (xt/execute-tx tu/*node* [[:sql "INSERT INTO docs RECORDS {_id: 1, p: PERIOD (DATE '2020-01-01', NULL)},
+                                                            {_id: 2, p: PERIOD (DATE '2020-01-01', DATE '2020-01-02')}"]])
+
+  (t/is (= #{{:xt/id 1, :eq-open true, :eq-closed false}
+             {:xt/id 2, :eq-open false, :eq-closed true}}
+           (set (xt/q tu/*node* "SELECT _id,
+                                        p EQUALS PERIOD (DATE '2020-01-01', NULL) AS eq_open,
+                                        p EQUALS PERIOD (DATE '2020-01-01', DATE '2020-01-02') AS eq_closed
+                                 FROM docs")))
+        "a nullable upper bound compares null-equal, whether the null is a literal or a row's value"))
