@@ -2270,6 +2270,22 @@
     (t/is (= [{:x 1}]
              (xt/q tu/*node* "SELECT x FROM foo3 INTERSECT SELECT y FROM bar3")))))
 
+(t/deftest test-intersect-and-except-match-null-rows-6340
+  (xt/execute-tx tu/*node* [[:sql "INSERT INTO a RECORDS {_id: 1, v: NULL, w: 1}, {_id: 2, v: 2, w: 2}, {_id: 3, v: NULL, w: 1}"]
+                            [:sql "INSERT INTO b RECORDS {_id: 10, v: NULL, w: 1}"]])
+
+  (t/is (= [{:w 1}]
+           (xt/q tu/*node* "SELECT v, w FROM a INTERSECT SELECT v, w FROM b")))
+
+  (t/is (= [{:v 2, :w 2}]
+           (xt/q tu/*node* "SELECT v, w FROM a EXCEPT SELECT v, w FROM b")))
+
+  (t/is (= [{:w 1}]
+           (xt/q tu/*node* "SELECT v, w FROM a INTERSECT ALL SELECT v, w FROM b")))
+
+  (t/is (= {{:v 2, :w 2} 1, {:w 1} 1}
+           (frequencies (xt/q tu/*node* "SELECT v, w FROM a EXCEPT ALL SELECT v, w FROM b")))))
+
 (t/deftest test-union-all
   (xt/execute-tx tu/*node* [[:put-docs :foo1 {:xt/id 1 :x 1}]
                             [:put-docs :foo1 {:xt/id 2 :x 2}]

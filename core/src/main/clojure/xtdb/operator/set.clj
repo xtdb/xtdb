@@ -138,7 +138,7 @@
                                                           (ProbeSide. allocator build-side (mapv name key-col-names)
                                                                       (join/->cmp-factory {:build-vec-types left-vec-types
                                                                                            :probe-vec-types right-vec-types
-                                                                                           :nulls-equal? false}))
+                                                                                           :nulls-equal? true}))
                                                           false false)))}))))
 
 (defmethod lp/emit-expr :difference [{:keys [_opts left right]} args]
@@ -159,5 +159,5 @@
                                                           (ProbeSide. allocator build-side (mapv name key-col-names)
                                                                       (join/->cmp-factory {:build-vec-types left-vec-types
                                                                                            :probe-vec-types right-vec-types
-                                                                                           :nulls-equal? false}))
+                                                                                           :nulls-equal? true}))
                                                           true false)))}))))

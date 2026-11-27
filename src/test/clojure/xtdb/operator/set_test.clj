@@ -120,6 +120,26 @@
                                {:preserve-pages? true})
                   (mapv set))))))
 
+(t/deftest test-intersection-matches-null-keys-6340
+  (t/is (= {{:b 1} 2}
+           (-> (tu/query-ra [:intersect {}
+                             [::tu/pages '{a #xt/type [:? :i64], b #xt/type :i64}
+                              [[{:a nil :b 1} {:a nil :b 1} {:a nil :b 1} {:a 2 :b 2}]]]
+                             [::tu/pages '{a #xt/type [:? :i64], b #xt/type :i64}
+                              [[{:a nil :b 1} {:a nil :b 1} {:a 3 :b 2}]]]])
+               (frequencies)))
+        "cardinalities - minimum of the cardinalities in each side"))
+
+(t/deftest test-difference-matches-null-keys-6340
+  (t/is (= {{:b 1} 1, {:a 2 :b 2} 1}
+           (-> (tu/query-ra [:difference {}
+                             [::tu/pages '{a #xt/type [:? :i64], b #xt/type :i64}
+                              [[{:a nil :b 1} {:a nil :b 1} {:a nil :b 1} {:a 2 :b 2}]]]
+                             [::tu/pages '{a #xt/type [:? :i64], b #xt/type :i64}
+                              [[{:a nil :b 1} {:a nil :b 1} {:a 3 :b 2}]]]])
+               (frequencies)))
+        "cardinalities - difference of the cardinalities in each side"))
+
 (t/deftest first-tuple-in-rhs-is-taken-into-account-test
   (t/is
    (= {:res [{:x1 2}], :types '{x1 #xt/type :i64}}
