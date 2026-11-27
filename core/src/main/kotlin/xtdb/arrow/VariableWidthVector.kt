@@ -15,6 +15,10 @@ import java.nio.ByteBuffer
 
 sealed class VariableWidthVector : MonoVector() {
 
+    internal companion object {
+        const val MAX_DATA_BYTES = Int.MAX_VALUE.toLong()
+    }
+
     override val vectors: Iterable<Vector> = emptyList()
     override val monoType get() = Scalar(arrowType)
 
@@ -69,13 +73,13 @@ sealed class VariableWidthVector : MonoVector() {
     }
 
     override fun writeBytes(v: ByteBuffer) {
-        writeNotNull(v.remaining())
         dataBuffer.writeBytes(v.duplicate())
+        writeNotNull(v.remaining())
     }
 
     override fun writeBytes(v: ByteArray) {
-        writeNotNull(v.size)
         dataBuffer.writeBytes(v)
+        writeNotNull(v.size)
     }
 
     override fun writeValue0(v: ValueReader) = writeBytes(v.readBytes())
@@ -109,10 +113,10 @@ sealed class VariableWidthVector : MonoVector() {
             private val destOffset = this@VariableWidthVector.offsetBuffer
             private val destData = this@VariableWidthVector.dataBuffer
 
-            private fun ensureWriteable(len: Int, dataBytes: Int) {
+            private fun ensureWriteable(len: Int, dataBytes: Long) {
                 destValidity?.ensureWritable(len)
                 destOffset.ensureWritable(((len + 1) * Integer.BYTES).toLong())
-                destData.ensureWritable(dataBytes.toLong())
+                destData.ensureWritable(dataBytes)
             }
 
             private fun unsafeCopyRange(startIdx: Int, len: Int) {
@@ -137,14 +141,14 @@ sealed class VariableWidthVector : MonoVector() {
             }
 
             override fun copyRow(srcIdx: Int) {
-                ensureWriteable(1, srcOffset.getInt(srcIdx + 1) - srcOffset.getInt(srcIdx))
+                ensureWriteable(1, (srcOffset.getInt(srcIdx + 1) - srcOffset.getInt(srcIdx)).toLong())
                 destValidity?.writeBits(srcValidity, srcIdx, 1)
 
                 unsafeCopyRange(srcIdx, 1)
             }
 
             override fun copyRows(sel: IntArray) {
-                var totalDataBytes = 0
+                var totalDataBytes = 0L
                 for (srcIdx in sel) {
                     val startOffset = srcOffset.getInt(srcIdx)
                     val endOffset = srcOffset.getInt(srcIdx + 1)
@@ -162,7 +166,7 @@ sealed class VariableWidthVector : MonoVector() {
             override fun copyRange(startIdx: Int, len: Int) {
                 if (len <= 0) return
 
-                val totalDataBytes = srcOffset.getInt(startIdx + len) - srcOffset.getInt(startIdx)
+                val totalDataBytes = (srcOffset.getInt(startIdx + len) - srcOffset.getInt(startIdx)).toLong()
 
                 ensureWriteable(len, totalDataBytes)
 

@@ -15,9 +15,12 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.extension.ExtendWith
+import clojure.lang.Keyword
+import xtdb.api.error.Unsupported
 import xtdb.test.AllocatorResolver
 import xtdb.arrow.Vector.Companion.openVector
 import xtdb.arrow.VectorType.Companion.ofType
@@ -113,6 +116,34 @@ class VariableWidthVectorTest {
             assertThrows<UnsupportedOperationException> { v.getAsLong(0) }
             assertThrows<UnsupportedOperationException> { v.getAsDouble(0) }
             assertThrows<UnsupportedOperationException> { v.valueReader().readAsLong() }
+        }
+    }
+
+    @Test
+    @Tag("integration")
+    fun `writing past 2GiB of data into one vector throws`() {
+        val chunk = "x".repeat(16 shl 20).toByteArray()
+
+        Utf8Vector(allocator, false).use { vec ->
+            val e = assertThrows<Unsupported> { repeat(130) { vec.writeBytes(chunk) } }
+            assertEquals(Keyword.intern("xtdb.arrow", "buffer-capacity-exceeded"), e.data.valAt(Keyword.intern("xtdb.error", "code")))
+            assertEquals(127, vec.valueCount)
+        }
+    }
+
+    @Test
+    @Tag("integration")
+    fun `copying past 2GiB of data into one vector throws`() {
+        val chunk = "x".repeat(16 shl 20)
+
+        Vector.fromList(allocator, VectorType.UTF8, listOf(chunk)).use { src ->
+            Utf8Vector(allocator, false).use { dest ->
+                val copier = src.rowCopier(dest)
+
+                val e = assertThrows<Unsupported> { repeat(130) { copier.copyRow(0) } }
+                assertEquals(Keyword.intern("xtdb.arrow", "buffer-capacity-exceeded"), e.data.valAt(Keyword.intern("xtdb.error", "code")))
+                assertEquals(127, dest.valueCount)
+            }
         }
     }
 }

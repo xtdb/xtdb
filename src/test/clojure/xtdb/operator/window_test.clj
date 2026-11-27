@@ -164,3 +164,15 @@
                           [{:a 1 :b 30}
                            {:a 1 :b 40}]]))
             "lag works across batches"))))
+
+(t/deftest ^:integration test-window-over-2gib-of-strings
+  (let [chunk (apply str (repeat (* 16 1024 1024) \x))
+        window-name (gensym "window")]
+    (t/is (anomalous? [:unsupported :xtdb.arrow/buffer-capacity-exceeded]
+                      (tu/query-ra [:join '{:conditions [{id id}]}
+                                    [:window {:windows {window-name '{:order-specs [[v]]}}
+                                              :projections [{'rn {:window-name window-name
+                                                                  :window-agg '(row-number)}}]}
+                                     [::tu/pages '{id #xt/type :utf8, v #xt/type :i64}
+                                      (mapv (fn [i] [{:id chunk, :v i}]) (range 130))]]
+                                    [::tu/pages '{id #xt/type :utf8} [[{:id "probe"}]]]])))))
