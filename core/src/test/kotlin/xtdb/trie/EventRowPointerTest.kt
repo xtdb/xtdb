@@ -21,6 +21,8 @@ import xtdb.trie.EventOp.DELETE
 import xtdb.trie.EventOp.ERASE
 import xtdb.trie.EventOp.PUT
 import java.nio.ByteBuffer
+import java.util.Arrays
+import kotlin.random.Random
 
 class EventRowPointerTest {
 
@@ -160,6 +162,51 @@ class EventRowPointerTest {
                     val sel = intArrayOf(1, 2, 3, 5, 7, 8)
                     assertEquals(walk(plain.select(sel)), walk(rel.select(sel)))
                     assertEquals(listOf(0, 2, 3, 5), skipIids(rel.select(sel)))
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `a path's events span exactly the iids whose leading buckets match it, at every depth`() {
+        val rnd = Random(0)
+        val base = rnd.nextBytes(16)
+        val iids = buildList {
+            repeat(32) { add(rnd.nextBytes(16)) }
+            for (bit in 0 until 128 step 3) {
+                add(base.copyOf().also { it[bit / 8] = (it[bit / 8].toInt() xor (0x80 ushr (bit % 8))).toByte() })
+            }
+            add(base)
+        }.sortedWith(Arrays::compareUnsigned)
+
+        val bucketer = Bucketer.DEFAULT
+        val paths = buildList {
+            add(ByteArray(0))
+            for (iid in iids) {
+                for (depth in 1..64) {
+                    val path = ByteArray(depth) { bucketer.bucketFor(iid, it) }
+                    add(path)
+                    add(path.copyOf().also { it[depth - 1] = ((it[depth - 1] + 1) and bucketer.levelMask).toByte() })
+                }
+            }
+        }
+
+        RootAllocator().use { al ->
+            Relation(al, Trie.dataRelSchema(putField)).use { rel ->
+                iids.forEachIndexed { idx, iid ->
+                    rel["_iid"].writeBytes(ByteBuffer.wrap(iid))
+                    rel["_system_from"].writeLong(idx.toLong())
+                    rel["_valid_from"].writeLong(0)
+                    rel["_valid_to"].writeLong(10)
+                    rel["op"].vectorFor("put", STRUCT_TYPE, false).writeObject(mapOf("x" to 0L))
+                    rel.endRow()
+                }
+
+                for (path in paths) {
+                    val evPtr = EventRowPointer(rel, path)
+                    val expected = iids.count { bucketer.compareToPath(it, path) < 0 } to
+                            iids.count { bucketer.compareToPath(it, path) <= 0 }
+                    assertEquals(expected, evPtr.index to evPtr.maxIndex, "path ${path.toList()}")
                 }
             }
         }

@@ -6,6 +6,8 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
+import xtdb.api.error.Incorrect
 import xtdb.arrow.IID_TYPE
 import xtdb.arrow.Relation
 import xtdb.arrow.VectorIndirection.Mask
@@ -79,4 +81,26 @@ class SingleIidSelectorTest {
         }
     }
 
+    @Test
+    fun `selects exactly the rows of each iid, where iids differ only in their low half or across a sign bit`() {
+        val uuids = IID_ORDERING_BOUNDARIES
+
+        Relation(al).use { rel ->
+            val iids = rel.vectorFor("_iid", IID_TYPE, false)
+            for (uuid in uuids) repeat(2) {
+                iids.writeUuid(uuid)
+                rel.endRow()
+            }
+
+            uuids.forEachIndexed { idx, uuid ->
+                assertArrayEquals(intArrayOf(idx * 2, idx * 2 + 1), SingleIidSelector(uuid.toByteArray()).select(rel).toSelection(), "$uuid")
+            }
+        }
+    }
+
+    @Test
+    fun `an iid that isn't 16 bytes is rejected`() {
+        assertThrows<Incorrect> { SingleIidSelector(ByteArray(15)) }
+        assertThrows<Incorrect> { SingleIidSelector(ByteArray(17)) }
+    }
 }

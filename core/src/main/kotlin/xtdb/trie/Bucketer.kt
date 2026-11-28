@@ -36,14 +36,6 @@ data class Bucketer(val levelBits: Int = DEFAULT_LEVEL_BITS) {
         return ((b.toInt() ushr ((java.lang.Byte.SIZE - levelBits) - bitOffset)) and levelMask).toByte()
     }
 
-    fun compareToPath(pointer: ArrowBufPointer, path: ByteArray): Int {
-        for (level in path.indices) {
-            val cmp = bucketFor(pointer, level).toInt() compareTo (path[level].toInt())
-            if (cmp != 0) return cmp
-        }
-        return 0
-    }
-
     fun compareToPath(bytes: ByteArray, path: ByteArray): Int {
         for (level in path.indices) {
             val cmp = bucketFor(bytes, level).toInt() compareTo (path[level].toInt())

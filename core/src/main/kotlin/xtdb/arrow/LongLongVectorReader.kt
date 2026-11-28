@@ -1,5 +1,6 @@
 package xtdb.arrow
 
+import java.lang.Long.compareUnsigned
 import kotlin.math.min
 
 interface LongLongVectorReader : VectorReader {
@@ -13,6 +14,17 @@ interface LongLongVectorReader : VectorReader {
      * Requires `0 <= idx < valueCount`.
      */
     fun storedRunEnd(idx: Int): Int = idx + 1
+
+    /**
+     * Compares row [idx] with the value ([high], [low]) in unsigned byte order - the order of the two values' 16 big-endian bytes.
+     * Negative, zero or positive as the row sorts before, equal to or after the value.
+     *
+     * Requires `0 <= idx < valueCount`.
+     */
+    fun compareAt(idx: Int, high: Long, low: Long): Int {
+        val idxHigh = getLongLongHigh(idx)
+        return if (idxHigh != high) compareUnsigned(idxHigh, high) else compareUnsigned(getLongLongLow(idx), low)
+    }
 
     private fun sameValueAt(idx: Int, high: Long, low: Long) =
         getLongLongHigh(idx) == high && getLongLongLow(idx) == low
