@@ -6,6 +6,8 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
+import xtdb.api.error.Incorrect
 import xtdb.Bytes
 import xtdb.arrow.IID_TYPE
 import xtdb.arrow.Relation
@@ -470,5 +472,38 @@ class MultiIidSelectorTest {
             val result = selector.select(al, rel, path).toSelection()
             assertArrayEquals(IntArray(0), result, "should find no matches when needles after haystack")
         }
+    }
+
+    @Test
+    fun `path select finds each iid, where iids differ only in their low half or across a sign bit`() {
+        val uuids = IID_ORDERING_BOUNDARIES
+
+        Relation(al).use { rel ->
+            val iids = rel.vectorFor("_iid", IID_TYPE, false)
+            for (uuid in uuids) repeat(2) {
+                iids.writeUuid(uuid)
+                rel.endRow()
+            }
+
+            uuids.forEachIndexed { idx, uuid ->
+                assertArrayEquals(
+                    intArrayOf(idx * 2, idx * 2 + 1),
+                    MultiIidSelector(createIidSet(uuid)).select(al, rel, ByteArray(0)).toSelection(),
+                    "$uuid"
+                )
+            }
+
+            val everyOther = uuids.filterIndexed { idx, _ -> idx % 2 == 1 }
+            assertArrayEquals(
+                intArrayOf(2, 3, 6, 7, 10, 11, 14, 15),
+                MultiIidSelector(createIidSet(*everyOther.toTypedArray())).select(al, rel, ByteArray(0)).toSelection()
+            )
+        }
+    }
+
+    @Test
+    fun `an iid that isn't 16 bytes is rejected`() {
+        assertThrows<Incorrect> { MultiIidSelector(createIidSet().apply { add(ByteArray(15)) }) }
+        assertThrows<Incorrect> { MultiIidSelector(createIidSet().apply { add(ByteArray(17)) }) }
     }
 }

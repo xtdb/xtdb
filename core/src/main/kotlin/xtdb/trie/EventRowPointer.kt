@@ -5,6 +5,7 @@ import xtdb.api.error.Fault
 import xtdb.arrow.LongLongVectorReader
 import xtdb.arrow.RelationReader
 import java.lang.Long.compareUnsigned
+import java.nio.ByteBuffer
 
 class EventRowPointer(private val relReader: RelationReader, path: ByteArray) {
     private val iidReader = relReader["_iid"] as LongLongVectorReader
@@ -28,12 +29,16 @@ class EventRowPointer(private val relReader: RelationReader, path: ByteArray) {
         private set
 
     private fun indexOf(path: ByteArray): Int {
+        val pathStart = ByteBuffer.wrap(Bucketer.DEFAULT.startIid(path))
+        val startHigh = pathStart.getLong(0)
+        val startLow = pathStart.getLong(8)
+
         var left = 0
         var right = relReader.rowCount
         var mid: Int
         while (left < right) {
             mid = (left + right) / 2
-            if (Bucketer.DEFAULT.compareToPath(iidReader.getPointer(mid), path) < 0) left = mid + 1
+            if (iidReader.compareAt(mid, startHigh, startLow) < 0) left = mid + 1
             else right = mid
         }
 

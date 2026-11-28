@@ -1,24 +1,27 @@
 package xtdb.operator.scan
 
-import org.apache.arrow.memory.util.ArrowBufPointer
-import org.apache.arrow.memory.util.ByteFunctionHelpers
+import xtdb.arrow.LongLongVectorReader
 import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorIndirection.Mask
 import xtdb.operator.SelectionSpec
+import xtdb.util.requireIid
+import java.nio.ByteBuffer
 
-class SingleIidSelector(private val iid: ByteArray) : SelectionSpec {
+class SingleIidSelector(iid: ByteArray) : SelectionSpec {
 
-    private operator fun ArrowBufPointer.compareTo(bytes: ByteArray): Int =
-        ByteFunctionHelpers.compare(
-            this.buf, this.offset.toInt(), this.offset.toInt() + bytes.size,
-            bytes, 0, bytes.size
-        )
+    private val iidHigh: Long
+    private val iidLow: Long
 
-    private operator fun ByteArray.compareTo(pointer: ArrowBufPointer) = - (pointer.compareTo(this))
+    init {
+        requireIid(iid)
+
+        val iidBuf = ByteBuffer.wrap(iid)
+        iidHigh = iidBuf.getLong(0)
+        iidLow = iidBuf.getLong(8)
+    }
 
     override fun select(readRelation: RelationReader, mask: Mask): Mask {
-        val ptr = ArrowBufPointer()
-        val iidReader = readRelation["_iid"]
+        val iidReader = readRelation["_iid"] as LongLongVectorReader
         val valueCount = iidReader.valueCount
         val res = Mask.Builder(valueCount)
         if (valueCount == 0) return res.build()
@@ -29,12 +32,12 @@ class SingleIidSelector(private val iid: ByteArray) : SelectionSpec {
         // lower bound
         while (left < right) {
             val mid = (left + right) / 2
-            if (iid <= iidReader.getPointer(mid, ptr)) right = mid else left = mid + 1
+            if (iidReader.compareAt(mid, iidHigh, iidLow) >= 0) right = mid else left = mid + 1
         }
 
         // upper bound
-        if (iid.compareTo(iidReader.getPointer(left, ptr)) == 0) {
-            while (right < valueCount && iid.compareTo(iidReader.getPointer(right, ptr)) == 0)
+        if (iidReader.compareAt(left, iidHigh, iidLow) == 0) {
+            while (right < valueCount && iidReader.compareAt(right, iidHigh, iidLow) == 0)
                 right++
         }
 

@@ -7,6 +7,11 @@ import xtdb.api.error.Incorrect
 import java.security.MessageDigest
 import java.util.UUID
 
+internal fun requireIid(bytes: ByteArray) {
+    if (bytes.size != 16)
+        throw Incorrect("an iid is 16 bytes, got ${bytes.size}", "xtdb/invalid-iid", mapOf("length" to bytes.size))
+}
+
 private val messageDigest = ThreadLocal.withInitial { MessageDigest.getInstance("SHA-256") }
 
 val Any?.asIid: ByteArray
