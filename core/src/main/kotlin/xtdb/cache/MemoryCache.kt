@@ -2,30 +2,33 @@
 
 package xtdb.cache
 
+import com.github.benmanes.caffeine.cache.AsyncCache
+import com.github.benmanes.caffeine.cache.Caffeine
 import java.net.URI
 import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.Channel
 import kotlinx.serialization.Serializable
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.ForeignAllocation
 import xtdb.api.error.Fault
-import xtdb.cache.MemoryCache.PathSlice
 import xtdb.util.*
 import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
 import java.nio.channels.ClosedByInterruptException
 import java.nio.channels.FileChannel
 import java.nio.file.Path
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executor
+import java.util.concurrent.Future
+import java.util.function.BiFunction
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
-
-private class Awaiter(val pathSlice: PathSlice, val res: CompletableDeferred<ArrowBuf>)
-
-private typealias FetchReqs = MutableMap<Path, MutableList<Awaiter>>
+import java.util.concurrent.atomic.AtomicReference
 
 private val LOGGER = MemoryCache::class.logger
 
@@ -89,11 +92,32 @@ class MemoryCache @JvmOverloads internal constructor(
     }
 
     private class MappedFile(val path: Path, val arena: Arena, val segment: MemorySegment, val onEvict: AutoCloseable?) {
-        // incremented only on the fetch actor, decremented by `release0` on any thread:
-        // so the actor, reading zero, knows no slice can come back to life, and may unmap.
-        val liveSlices = AtomicInteger()
+        // open buffers, plus one for the cache while the file is mapped.
+        // zero means claimed for unmapping, and never goes back up: whoever wins the CAS to zero is the only one who unmaps.
+        private val pins = AtomicInteger(1)
 
-        val isIdle get() = liveSlices.get() == 0
+        @Volatile
+        var lastUsed = System.nanoTime()
+            private set
+
+        val isIdle get() = pins.get() == 1
+
+        fun tryPin(): Boolean {
+            while (true) {
+                val n = pins.get()
+                if (n == 0) return false
+                if (pins.compareAndSet(n, n + 1)) {
+                    lastUsed = System.nanoTime()
+                    return true
+                }
+            }
+        }
+
+        fun unpin() {
+            pins.decrementAndGet()
+        }
+
+        fun tryClaim() = pins.compareAndSet(1, 0)
 
         fun unmap() {
             try {
@@ -108,8 +132,103 @@ class MemoryCache @JvmOverloads internal constructor(
         }
     }
 
-    // owned by the fetch actor, and by close() once the actor is joined; iterates least-recently-used first
-    private val mappedFiles = LinkedHashMap<Path, MappedFile>(16, 0.75f, true)
+    private val scope = CoroutineScope(SupervisorJob() + dispatcher)
+
+    // unbounded: Caffeine's size eviction can't see which files have open buffers, so `evictIdleFiles` evicts instead
+    private val mappedFiles: AsyncCache<Path, MappedFile> = Caffeine.newBuilder().buildAsync()
+
+    private val CompletableFuture<MappedFile>.loaded get() = takeIf { it.state() == Future.State.SUCCESS }?.resultNow()
+
+    private suspend fun load(path: Path, fetch: Fetch): MappedFile {
+        val (localPath, onEvict) = fetch(path)
+        return try {
+            Arena.ofShared().closeOnCatch { arena ->
+                MappedFile(path, arena, pathLoader.load(localPath, arena), onEvict)
+            }
+        } catch (t: Throwable) {
+            onEvict?.close()
+            throw t
+        }
+    }
+
+    private fun closed(cause: Throwable? = null) =
+        Fault("memory cache is closed", "xtdb.memory-cache/closed", cause = cause)
+
+    // removed before it fails, so that no get looks up a failed load it didn't wait on.
+    // a job cancelled after completing its future still ends cancelled, and removing that future would leave its file mapped where neither `close()` nor eviction finds it.
+    private fun failLoad(path: Path, future: CompletableFuture<MappedFile>, t: Throwable) {
+        if (future.state() == Future.State.SUCCESS) return
+        mappedFiles.asMap().remove(path, future)
+        future.completeExceptionally(t)
+    }
+
+    private fun mappedFile(path: Path, fetch: Fetch): CompletableFuture<MappedFile> {
+        var job: Job? = null
+
+        val future = mappedFiles.get(path, BiFunction<Path, Executor, CompletableFuture<MappedFile>> { _, _ ->
+            val future = CompletableFuture<MappedFile>()
+
+            // lazy, so that the load runs outside Caffeine's per-key lock
+            job = scope.launch(CoroutineName("MemoryCache-Fetch-$path"), start = CoroutineStart.LAZY) {
+                try {
+                    val file = load(path, fetch)
+
+                    // `close()` walks the table once this job has ended, so a file loaded after it cancelled the scope is unmapped here
+                    if (!isActive) {
+                        file.unmap()
+                        failLoad(path, future, CancellationException("memory cache is closed"))
+                        return@launch
+                    }
+
+                    // held while the future completes, so a waiter whose callback `complete` runs pins the file before eviction can find it idle
+                    file.tryPin()
+                    try {
+                        future.complete(file)
+                    } finally {
+                        file.unpin()
+                    }
+                } catch (t: Throwable) {
+                    failLoad(path, future, t)
+                }
+            }
+
+            future
+        })
+
+        // outside the mapping function: a job launched on a cancelled scope completes at once, and `failLoad` can't touch the table from inside its compute
+        job?.let { job ->
+            job.invokeOnCompletion { cause -> if (cause != null) failLoad(path, future, cause) }
+            try {
+                job.start()
+            } catch (t: Throwable) {
+                failLoad(path, future, t)
+            }
+        }
+
+        return future
+    }
+
+    /**
+     * Pins the loaded file in the future's completion callback.
+     * Null when the file was already claimed for unmapping.
+     *
+     * Not `CompletableFuture.await`: that cancels the future when its waiter is cancelled, and the load is shared by every waiter.
+     */
+    private suspend fun CompletableFuture<MappedFile>.awaitPinned(): MappedFile? =
+        suspendCancellableCoroutine { cont ->
+            // the callback stays registered until the load ends, so a cancelled waiter drops its continuation from it
+            val waiter = AtomicReference(cont)
+            cont.invokeOnCancellation { waiter.set(null) }
+
+            whenComplete { file, e ->
+                val c = waiter.getAndSet(null) ?: return@whenComplete
+                when {
+                    e != null -> c.resumeWithException(e)
+                    file.tryPin() -> c.resume(file) { _, f, _ -> f.unpin() }
+                    else -> c.resume(null)
+                }
+            }
+        }
 
     private fun wrapSlice(file: MappedFile, pathSlice: PathSlice): ArrowBuf {
         val fileSize = file.segment.byteSize()
@@ -125,210 +244,82 @@ class MemoryCache @JvmOverloads internal constructor(
             // Arrow 19's `wrapForeignAllocation` calls `release0` itself when it fails after reserving the bytes, but not when it fails before.
             private val released = AtomicBoolean()
 
+            // a failed wrap releases from inside `openSlices.compute` on this slice, where touching `openSlices` is a recursive update
+            @Volatile
+            var wrapping = true
+
             public override fun release0() {
                 if (!released.compareAndSet(false, true)) return
-                openSlices.computeIfPresent(pathSlice) { _, buf ->
+                if (!wrapping) openSlices.computeIfPresent(pathSlice) { _, buf ->
                     buf.takeIf { it.referenceManager.refCount > 0 }
                 }
-                file.liveSlices.decrementAndGet()
+                file.unpin()
             }
         }
 
-        file.liveSlices.incrementAndGet()
+        if (!file.tryPin())
+            throw Fault("wrapping a slice of a claimed file: ${file.path}", "xtdb.memory-cache/file-claimed", mapOf("path" to file.path.toString()))
         return try {
-            cacheAl.wrapForeignAllocation(allocation)
+            cacheAl.wrapForeignAllocation(allocation).also { allocation.wrapping = false }
         } catch (t: Throwable) {
             allocation.release0()
             throw t
         }
     }
 
-    private suspend fun serve(file: MappedFile, pathSlice: PathSlice, reqs: List<CompletableDeferred<ArrowBuf>>) {
-        try {
-            val buf = wrapSlice(file, pathSlice)
+    private val evictRequested = AtomicBoolean()
+    private val evicting = AtomicBoolean()
 
+    private fun evictIdleFiles() {
+        evictRequested.set(true)
+        while (evictRequested.get() && evicting.compareAndSet(false, true)) {
             try {
-                openSlices[pathSlice] = buf
-                yieldIfSimulation() // interleave between put and completing awaiters
-                // (size - 1) because we already have refCount 1 from allocation
-                (reqs.size - 1).takeIf { it > 0 }?.let { buf.referenceManager.retain(it) }
-                reqs.forEach {
-                    if (!it.complete(buf)) buf.referenceManager.release()
-                }
-            } catch (t: Throwable) {
-                buf.close()
-                throw t
+                while (evictRequested.getAndSet(false)) evictOnce()
+            } finally {
+                evicting.set(false)
             }
-        } catch (t: Throwable) {
-            reqs.forEach { it.completeExceptionally(t) }
         }
     }
 
-    private fun evictIdleFiles() {
-        val idleFiles = mappedFiles.values.filter { it.isIdle }
-        var idleBytes = idleFiles.sumOf { it.segment.byteSize() }
-        var idleCount = idleFiles.size
+    private fun evictOnce() {
+        val entries = mappedFiles.asMap()
+        // `lastUsed` read once per file: `tryPin` rewrites it concurrently, and a sort whose keys change under it can throw
+        val idle = entries.values.mapNotNull { future -> future.loaded?.takeIf { it.isIdle }?.let { Triple(future, it, it.lastUsed) } }
+        var idleBytes = idle.sumOf { (_, file) -> file.segment.byteSize() }
+        var idleCount = idle.size
         val byteBudget = cacheAl.limit - cacheAl.allocatedMemory
 
-        for (file in idleFiles) {
+        if (idleBytes <= byteBudget && idleCount <= MAX_IDLE_FILES) return
+
+        for ((future, file) in idle.sortedBy { (_, _, lastUsed) -> lastUsed }) {
             if (idleBytes <= byteBudget && idleCount <= MAX_IDLE_FILES) break
-            LOGGER.trace("evicting idle file ${file.path}")
-            mappedFiles.remove(file.path)
             idleBytes -= file.segment.byteSize()
             idleCount--
+            if (!file.tryClaim()) continue
+            LOGGER.trace("evicting idle file ${file.path}")
+            entries.remove(file.path, future)
             file.unmap()
         }
     }
 
+    // XTDB's own `BufferLedger` (core/src/main/java/org/apache/arrow/memory) shadows Arrow's: its retain refuses from zero without raising the count
+    private fun ArrowBuf.tryRetain() =
+        try {
+            also { it.referenceManager.retain() }
+        } catch (_: IllegalArgumentException) {
+            null
+        }
+
     private suspend fun getOpenSlice(pathSlice: PathSlice) =
         openSlices[pathSlice]?.let { buf ->
-            try {
-                yieldIfSimulation() // interleave between lookup and retain
-                buf.also { it.referenceManager.retain() }
-            } catch (_: IllegalArgumentException) {
-                null
-            }
+            yieldIfSimulation()
+            buf.tryRetain()
         }
 
-    private val fetchParentJob = Job()
-    private val scope = CoroutineScope(SupervisorJob(fetchParentJob) + dispatcher)
-
-    private sealed interface FetchChEvent {
-        suspend fun handle(fetchReqs: FetchReqs)
-
-        fun fail(cause: Throwable)
-    }
-
-    private inner class FetchReq(
-        val pathSlice: PathSlice, val fetch: Fetch, val res: CompletableDeferred<ArrowBuf>
-    ) : FetchChEvent {
-        override suspend fun handle(fetchReqs: FetchReqs) {
-            val openSlice = getOpenSlice(pathSlice)
-
-            if (openSlice != null) {
-                LOGGER.trace("FetchReq: Fast path cache hit for $pathSlice")
-                if (!res.complete(openSlice)) openSlice.referenceManager.release()
-                return
-            }
-
-            yieldIfSimulation() // interleave between openSlice check and compute
-            val path = pathSlice.path
-
-            val file = mappedFiles[path]
-            if (file != null) {
-                LOGGER.trace("FetchReq: $path already mapped - serving $pathSlice")
-                serve(file, pathSlice, listOf(res))
-                evictIdleFiles()
-                return
-            }
-
-            fetchReqs.compute(path) { _, awaiters ->
-                if (awaiters != null) {
-                    LOGGER.trace("FetchReq: Fetch in progress for $path - adding to ${awaiters.size} awaiter(s)")
-                    awaiters.also { it.add(Awaiter(pathSlice, res)) }
-                } else {
-                    LOGGER.trace("FetchReq: Starting new fetch for $path")
-                    scope.launch(CoroutineName("MemoryCache-Fetch-$path")) {
-                        val ev = try {
-                            val (localPath, onEvict) = fetch(path)
-                            LOGGER.trace("FetchReq: Fetched $path to $localPath, sending FetchDone message...")
-                            FetchDone(path, localPath, onEvict)
-                        } catch (t: Throwable) {
-                            FetchFailed(path, t)
-                        }
-
-                        try {
-                            withContext(NonCancellable) { fetchCh.send(ev) }
-                        } catch (t: Throwable) {
-                            ev.fail(t)
-                        }
-                    }
-                    mutableListOf(Awaiter(pathSlice, res))
-                }
-            }
-        }
-
-        override fun fail(cause: Throwable) {
-            res.completeExceptionally(cause)
-        }
-    }
-
-    private inner class FetchFailed(
-        val path: Path, val cause: Throwable
-    ) : FetchChEvent {
-        override suspend fun handle(fetchReqs: FetchReqs) {
-            fetchReqs.remove(path).orEmpty().forEach { it.res.completeExceptionally(cause) }
-        }
-
-        override fun fail(cause: Throwable) = Unit
-    }
-
-    private inner class FetchDone(
-        val path: Path, val localPath: Path, val onEvict: AutoCloseable?
-    ) : FetchChEvent {
-        override suspend fun handle(fetchReqs: FetchReqs) {
-            val awaiters = fetchReqs.remove(path).orEmpty()
-            LOGGER.trace("FetchDone: Completing $path for ${awaiters.size} awaiter(s)")
-
-            try {
-                val file = try {
-                    Arena.ofShared().closeOnCatch { arena ->
-                        MappedFile(path, arena, pathLoader.load(localPath, arena), onEvict)
-                    }
-                } catch (t: Throwable) {
-                    onEvict?.close()
-                    throw t
-                }
-
-                mappedFiles[path] = file
-
-                awaiters.groupBy({ it.pathSlice }, { it.res })
-                    .forEach { (pathSlice, reqs) -> serve(file, pathSlice, reqs) }
-
-                evictIdleFiles()
-            } catch (t: Throwable) {
-                awaiters.forEach { it.res.completeExceptionally(t) }
-            }
-        }
-
-        override fun fail(cause: Throwable) {
-            onEvict?.close()
-        }
-    }
-
-    private val fetchCh = Channel<FetchChEvent>()
-
-    init {
-        CoroutineScope(fetchParentJob + dispatcher + CoroutineName("MemoryCache FetchLoop")).launch {
-            val fetchReqs: FetchReqs = mutableMapOf()
-
-            val cause = try {
-                for (ev in fetchCh) {
-                    try {
-                        ev.handle(fetchReqs)
-                    } catch (t: Throwable) {
-                        ev.fail(t)
-                        throw t
-                    }
-                }
-                null
-            } catch (t: Throwable) {
-                t
-            }
-
-            val failure = cause ?: CancellationException("MemoryCache closed")
-            fetchCh.close(cause)
-            withContext(NonCancellable) {
-                while (true) {
-                    val ev = fetchCh.receiveCatching().getOrNull() ?: break
-                    ev.fail(failure)
-                }
-            }
-            fetchReqs.values.flatten().forEach { it.res.completeExceptionally(failure) }
-
-            if (cause != null) throw cause
-        }
-    }
+    private fun openSlice(file: MappedFile, pathSlice: PathSlice, onWrap: () -> Unit): ArrowBuf =
+        openSlices.compute(pathSlice) { _, existing ->
+            existing?.tryRetain() ?: run { onWrap(); wrapSlice(file, pathSlice) }
+        }!!
 
     /**
      * A view of this cache whose keys are namespaced under [prefix].
@@ -347,10 +338,8 @@ class MemoryCache @JvmOverloads internal constructor(
      */
     fun openForDatabase(storageUri: URI?) = ForDatabase(cachePrefix(storageUri))
 
-    @OptIn(ExperimentalCoroutinesApi::class)
-    @Suppress("NAME_SHADOWING")
     internal suspend fun get(key: Path, slice: Slice? = null, fetch: Fetch): ArrowBuf {
-        LOGGER.debug("Sending get for $key / $slice...")
+        LOGGER.debug("get $key / $slice")
         val pathSlice = PathSlice(key, slice)
 
         getOpenSlice(pathSlice)?.let {
@@ -358,32 +347,56 @@ class MemoryCache @JvmOverloads internal constructor(
             return it
         }
 
-        yieldIfSimulation() // interleave between cache check and fetch request
+        yieldIfSimulation()
 
-        val res = CompletableDeferred<ArrowBuf>()
-
-        return try {
-            fetchCh.send(FetchReq(pathSlice, fetch, res))
-            res.await()
-        } catch (e: Throwable) {
-            res.cancel()
-            if (res.isCompleted && !res.isCancelled) {
-                val completedBuf = res.getCompleted()
-                LOGGER.trace("get: Buffer was completed before cancel, releasing (refCnt=${completedBuf.refCnt()})")
-                completedBuf.referenceManager.release()
+        while (true) {
+            val future = mappedFile(key, fetch)
+            val file = try {
+                future.awaitPinned()
+            } catch (t: Throwable) {
+                if (future.isCompletedExceptionally && !scope.isActive) throw closed(t)
+                throw t
             }
-            throw e
+
+            if (file == null) {
+                mappedFiles.asMap().remove(key, future)
+                continue
+            }
+
+            // the load's callback can pin a file after `close()` cancelled the scope, and before `close()` walks the table
+            if (!scope.isActive) {
+                file.unpin()
+                if (file.tryClaim()) file.unmap()
+                throw closed()
+            }
+
+            var wrapped = false
+            try {
+                yieldIfSimulation()
+                return openSlice(file, pathSlice) { wrapped = true }
+            } finally {
+                file.unpin()
+                // after the unpin, or this get's own pin keeps its file from counting as idle
+                if (wrapped) {
+                    // the next wrap evicts again, and throwing here would lose the buffer this get returns
+                    try {
+                        evictIdleFiles()
+                    } catch (e: Exception) {
+                        LOGGER.warn(e, "error evicting idle files")
+                    }
+                }
+            }
         }
     }
 
     override fun close() {
-        fetchCh.close()
-        runBlocking { fetchParentJob.cancelAndJoin() }
+        runBlocking { scope.coroutineContext.job.cancelAndJoin() }
 
-        for (file in mappedFiles.values) {
-            if (file.isIdle) file.unmap() else LOGGER.warn("closing with live slices over ${file.path}")
+        for (future in mappedFiles.asMap().values) {
+            val file = future.loaded ?: continue
+            if (file.tryClaim()) file.unmap() else LOGGER.warn("closing while ${file.path} is still pinned")
         }
-        mappedFiles.clear()
+        mappedFiles.asMap().clear()
 
         cacheAl.close()
     }
