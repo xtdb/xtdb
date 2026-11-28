@@ -272,4 +272,53 @@ class CacheSimulationTest : SimulationTestBase() {
             assertEquals(MemoryCache.Stats(0L, 100L), cache.stats0)
         }
     }
+
+    @RepeatableSimulationTest
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    fun `hits racing eviction never unmap a file under an open buffer`() = runTest {
+        val loader = object : MemoryCache.PathLoader {
+            override fun load(path: Path, arena: Arena): MemorySegment =
+                arena.allocate(1000).also { it.fill(path.fileName.toString().toByte()) }
+        }
+
+        var fetches = 0
+        val openBufs = mutableMapOf<Byte, Int>()
+        val evictedWhileOpen = mutableListOf<Byte>()
+        val evicted = mutableListOf<Byte>()
+
+        val fetch = MemoryCache.Fetch {
+            val id = (++fetches % 100).toByte()
+            Path.of("$id") to AutoCloseable {
+                if ((openBufs[id] ?: 0) > 0) evictedWhileOpen.add(id)
+                evicted.add(id)
+            }
+        }
+
+        // every file outgrows the byte budget on its own, so each get evicts whatever else is idle
+        MemoryCache(allocator, 250, loader, dispatcher).use { cache ->
+            val paths = List(rand.nextInt(2, 5)) { Path.of("f$it") }
+
+            async(dispatcher) {
+                List(rand.nextInt(2, 5)) {
+                    async(dispatcher) {
+                        repeat(rand.nextInt(5, 20)) {
+                            cache.get(paths.random(rand), Slice(rand.nextLong(0, 19) * 50, 50), fetch).use { buf ->
+                                val id = buf.getByte(0)
+                                openBufs.merge(id, 1, Int::plus)
+                                repeat(rand.nextInt(0, 3)) { yield() }
+                                assertEquals(id, buf.getByte(49))
+                                openBufs.merge(id, -1, Int::plus)
+                            }
+                            yield()
+                        }
+                    }
+                }.awaitAll()
+            }.await()
+
+            assertEquals(MemoryCache.Stats(0L, 250L), cache.stats0)
+        }
+
+        assertEquals(emptyList<Byte>(), evictedWhileOpen)
+        assertEquals(fetches, evicted.size, "every mapping is unmapped exactly once")
+    }
 }
